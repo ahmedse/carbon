@@ -1,0 +1,27 @@
+meeting 11 apr 2025
+Dr. Iham, Dr. , eng. 
+
+VBB: verifocation, validation body. لازم شركة مستقلة
+
+E-GAC: كيان حكومي مصري
+
+
+Schema: s/w to generate the report.
+
+
+- IT/AI aspects:
+1- Data bank platform
+2- public website
+3- project/task management
+4- data engineering/analytics 
+
+
+- data aquisatiopn
+- uncertainity - نقل الطلبة مثلا
+
+صانع التقرير غير المدقق 
+
+- iot
+- حساب البصمة الكربونية للاكاديمية
+- continous monitoring: base year -> then annaul 
+- 
