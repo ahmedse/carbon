@@ -1,17 +1,18 @@
 import React from "react";
-import { Button } from "@mui/material";
+import Header from "../components/Header";
+import Footer from "../components/Footer";
+import { Box } from "@mui/material";
 
 const AdminDashboard = () => {
   return (
-    <div>
-      <h1>Admin Dashboard</h1>
-      <Button color="primary" variant="contained">
-        Primary Button
-      </Button>
-      <Button color="secondary" variant="contained">
-        Secondary Button
-      </Button>
-    </div>
+    <Box display="flex" flexDirection="column" minHeight="100vh">
+      <Header />
+      <Box component="main" flexGrow={1} p={3}>
+        {/* Admin dashboard content here */}
+        <h2>Welcome, Admin!</h2>
+      </Box>
+      <Footer />
+    </Box>
   );
 };
 
