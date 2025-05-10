@@ -304,6 +304,179 @@ flowchart TD
 
 ---
 
-### **What's Next?**
-- Let me know if you need additional details or modifications to these diagrams.
-- These workflows can guide us as we develop the **Carbon Management Platform** step by step. When you're ready, we can start implementing **Phase 1: Project Setup**.
+
+# Contextual RBAC & Periodic Project Design
+
+## 1. Overview
+
+This design enables the Carbon platform to:
+
+- Support **recurring (periodic) projects** with non-overlapping, sequential calculation periods (e.g., annual, but flexible).
+- Collect and store **module data** (e.g., water, electricity, vehicle fuel) for each period.
+- Store and manage **calculation results per period** for traceability and reporting.
+- Enforce permissions using a **contextual RBAC** system, with roles such as VVB auditor empowered for active data lookup and calculations.
+
+---
+
+## 2. Core Concepts & Workflows
+
+### 2.1. Entity Relationships
+
+```mermaid
+classDiagram
+    User <|-- RoleAssignment
+    Role <|-- RoleAssignment
+    Context <|-- RoleAssignment
+    Project <|-- Period
+    Period <|-- ModuleData
+    Module <|-- ModuleData
+    ModuleData <|-- CalculationResult
+
+    class User {
+        username
+        ...
+    }
+    class Role {
+        name
+        description
+        permissions : List
+    }
+    class Project {
+        name
+        description
+    }
+    class Period {
+        project
+        start_date
+        end_date
+        name
+        sequence_number
+    }
+    class Module {
+        name
+        description
+    }
+    class ModuleData {
+        period
+        module
+        data_fields...
+    }
+    class CalculationResult {
+        module_data
+        result_fields...
+        calculated_at
+        calculated_by
+    }
+    class Context {
+        type : global/project/period
+        project
+        period
+    }
+    class RoleAssignment {
+        user
+        role
+        context
+    }
+```
+
+---
+
+### 2.2. Workflows
+
+#### **Data Collection and Calculation**
+
+```mermaid
+flowchart TD
+    A[Project created] --> B[Period(s) created for project (no overlaps)]
+    B --> C[User with appropriate role enters Module Data for each period]
+    C --> D[System/Auditor triggers Calculation]
+    D --> E[CalculationResult stored for period/module]
+    E --> F[Report generation for accreditation]
+```
+
+#### **RBAC Enforcement**
+
+```mermaid
+flowchart LR
+    X[User requests action]
+    X --> Y[System checks RoleAssignments for user/context]
+    Y --> Z[Aggregate permissions]
+    Z --> |Permission present| A1[Allow action]
+    Z --> |Permission missing| A2[Deny action]
+```
+
+---
+
+## 3. Model Summaries
+
+| Model              | Key Fields                                                                                           | Purpose                                                     |
+|--------------------|------------------------------------------------------------------------------------------------------|-------------------------------------------------------------|
+| **Role**           | name, description, permissions (JSONField)                                                           | Defines role and capabilities                               |
+| **Project**        | name, description                                                                                    | Represents a VVB project                                    |
+| **Period**         | project, name, start_date, end_date, sequence_number                                                 | Non-overlapping, sequential calculation periods             |
+| **Module**         | name, description                                                                                    | Global list (water, electricity, etc.)                      |
+| **ModuleData**     | period, module, data fields (e.g., readings, measurements)                                           | Stores module-specific data for each period                 |
+| **CalculationResult** | module_data, result fields, calculated_at, calculated_by                                         | Stores results per period/module for reporting              |
+| **Context**        | type (global/project/period), project, period                                                        | Defines RBAC assignment scope                               |
+| **RoleAssignment** | user, role, context                                                                                  | Assigns role to user in context                             |
+
+---
+
+## 4. Permission Model
+
+- Example VVB auditor permissions:
+  - `lookup_data`
+  - `perform_calculation`
+  - `generate_report`
+- Permissions are checked per context (global, project, or period).
+
+---
+
+## 5. Key Rules for Periods
+
+- **Non-overlapping**: Each period within a project must not overlap with others.
+- **Sequential**: Periods are ordered (e.g., 2022, 2023, 2024).
+- **Flexible unit**: Typically annual, but can be set as required (support for future flexibility).
+
+---
+
+## 6. Calculation & Reporting
+
+- **CalculationResults** are stored for every (Period, Module) pair after data acquisition and calculation.
+- **Reports** can be generated from stored CalculationResults to meet accreditation standards.
+
+---
+
+## 7. Example Scenarios
+
+- A project for “Company X 2023” has a Period: Jan 1–Dec 31, 2023.
+- Modules (Water, Electricity, Vehicles) are filled with data for this period.
+- VVB auditor enters and reviews data, triggers calculations, and reviews stored results.
+- At year end, a report is generated for accreditation, based on CalculationResults.
+
+---
+
+## 8. Advantages
+
+- **Auditable & Compliant**: All calculations are tied to specific periods and users.
+- **Traceable**: Historical results and data are preserved for each period.
+- **Modular**: Adding new modules or period types is straightforward.
+- **Role-based**: Clear, context-aware access for each user and role.
+
+---
+
+## 9. Next Steps
+
+1. Implement and migrate models as specified.
+2. Enforce period non-overlap in model/business logic.
+3. Register admin interfaces for management.
+4. Protect workflows via RBAC utility.
+5. Build calculation and reporting pipelines for accreditation.
+
+---
+
+**End of section.**
+
+---
+
+If you need, I can provide Django model code for this structure and walk you through the implementation! Let me know when you're ready.

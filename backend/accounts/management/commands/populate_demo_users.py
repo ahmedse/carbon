@@ -1,0 +1,26 @@
+from django.core.management.base import BaseCommand
+from accounts.models import User
+
+class Command(BaseCommand):
+    help = 'Populate the database with demo users'
+
+    def handle(self, *args, **kwargs):
+        users_data = [
+            {'username': 'admin1', 'password': 'adminpass', 'role': 'admin'},
+            {'username': 'admin2', 'password': 'adminpass', 'role': 'admin'},
+            {'username': 'auditor1', 'password': 'auditorpass', 'role': 'auditor'},
+            {'username': 'auditor2', 'password': 'auditorpass', 'role': 'auditor'},
+            {'username': 'owner1', 'password': 'ownerpass', 'role': 'data-owner'},
+            {'username': 'owner2', 'password': 'ownerpass', 'role': 'data-owner'},
+        ]
+
+        for u in users_data:
+            if not User.objects.filter(username=u['username']).exists():
+                user = User.objects.create_user(
+                    username=u['username'],
+                    password=u['password'],
+                    role=u['role']
+                )
+                self.stdout.write(self.style.SUCCESS(f"Created user {u['username']} [{u['role']}]"))
+            else:
+                self.stdout.write(self.style.WARNING(f"User {u['username']} already exists."))

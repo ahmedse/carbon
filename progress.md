@@ -25,10 +25,18 @@
    - [x] Create schemas for Users and Roles
    - [x] Implement JWT-based authentication
    - [ ] Implement role-based access control
+      - [ ] Create Role model (name, description, permissions)
+      - [ ] Create Context model (type, project, period)
+      - [ ] Create RoleAssignment model (user, role, context)
+      - [ ] Implement permission checking utility
+      - [ ] Register RBAC models with Django admin
+      - [ ] Write unit tests for RBAC logic
+      - [ ] Create API endpoints for roles/contexts/assignments
+      - [ ] Add endpoints for querying user permissions/roles
+      - [ ] Integrate RBAC checks into API views
 
 3. **Deployment Setup**:
    - [x] Configure Docker for containerization
-   - [ ] Create Kubernetes manifests for scalability
    - [ ] Set up CI/CD pipelines for automated builds and deployments
 
 ---

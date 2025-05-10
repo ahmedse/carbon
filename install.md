@@ -57,4 +57,8 @@ docker-compose up --build
 
 test JWT:
 python manage.py createsuperuser
+
 curl -X POST http://127.0.0.1:8000/api/token/ -d "username=ahmed&password=Cup4PWS_101"
+
+populate some data:
+python manage.py populate_demo_users
