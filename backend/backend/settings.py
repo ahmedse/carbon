@@ -49,9 +49,10 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-INSTALLED_APPS += [
+INSTALLED_APPS += [        
+    'accounts',
+    'core',
     'corsheaders',
-    'accounts'
     ]
 
 AUTH_USER_MODEL = 'accounts.User'

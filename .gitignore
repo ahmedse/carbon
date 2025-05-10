@@ -117,3 +117,4 @@ desktop.ini
 *.crt
 *.key
 backend/accounts/migrations/__init__.py
+backend/core/migrations/__init__.py

@@ -62,3 +62,9 @@ curl -X POST http://127.0.0.1:8000/api/token/ -d "username=ahmed&password=Cup4PW
 
 populate some data:
 python manage.py populate_demo_users
+
+python manage.py makemigrations accounts
+python manage.py migrate accounts
+python manage.py makemigrations core
+python manage.py migrate core
+python manage.py migrate

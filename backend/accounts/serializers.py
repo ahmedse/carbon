@@ -1,10 +1,17 @@
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework import serializers
+from .models import Role, Context, RoleAssignment
 
-class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
-    @classmethod
-    def get_token(cls, user):
-        token = super().get_token(user)
-        token['role'] = user.role  # Add custom claim
-        token['username'] = user.username
-        # You can add more claims here (e.g., permissions, project access)
-        return token
+class RoleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Role
+        fields = '__all__'
+
+class ContextSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Context
+        fields = '__all__'
+
+class RoleAssignmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RoleAssignment
+        fields = '__all__'

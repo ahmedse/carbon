@@ -1,22 +1,21 @@
 from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin
-from .models import User
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from .models import User, Role, Context, RoleAssignment
 
-class CustomUserAdmin(UserAdmin):
-    # Display these fields in the user list
-    list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'is_staff', 'is_active')
-    # Add 'role' to the fieldsets so it's editable in the admin
-    fieldsets = UserAdmin.fieldsets + (
-        ('Custom Fields', {'fields': ('role',)}),
-    )
-    add_fieldsets = UserAdmin.add_fieldsets + (
-        ('Custom Fields', {'fields': ('role',)}),
-    )
-    # Add search by role
-    search_fields = UserAdmin.search_fields + ('role',)
-    # Add filtering by role
-    list_filter = UserAdmin.list_filter + ('role',)
+@admin.register(User)
+class UserAdmin(BaseUserAdmin):
+    pass
 
-# Unregister the default User admin, if registered, and register the custom one
-# admin.site.unregister(User)
-admin.site.register(User, CustomUserAdmin)
+@admin.register(Role)
+class RoleAdmin(admin.ModelAdmin):
+    list_display = ('name', 'description')
+
+@admin.register(Context)
+class ContextAdmin(admin.ModelAdmin):
+    list_display = ('type', 'project', 'cycle', 'module')
+    list_filter = ('type', 'project', 'cycle', 'module')
+
+@admin.register(RoleAssignment)
+class RoleAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('user', 'role', 'context')
+    list_filter = ('role', 'context__type', 'context__project', 'context__cycle', 'context__module')

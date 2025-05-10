@@ -479,4 +479,284 @@ flowchart LR
 
 ---
 
-If you need, I can provide Django model code for this structure and walk you through the implementation! Let me know when you're ready.
+Absolutely! Here’s a comprehensive design document for using a NoSQL document database (like MongoDB) for flexible, large-scale module data storage in a multi-tenant, multi-user carbon data platform. This design also covers logging, history/audit, and brings up some critical architectural considerations for SaaS platforms at scale.
+
+---
+
+# NoSQL Data Model & Logging Design for Carbon Platform
+
+## 1. Overview
+
+- **Goal:**  
+  Use MongoDB (or equivalent document store) for storing flexible, high-volume module data, plus logs and history for a multi-tenant, multi-user SaaS carbon platform.
+- **Scope:**  
+  Covers data modeling, multi-tenancy, audit logging, historical records, and SaaS best practices.
+
+---
+
+## 2. Core Data Model in MongoDB
+
+### 2.1. Key Collections
+
+1. **Tenants (Customers)**
+   - Each organization/customer is a “tenant.”
+   - Example:  
+     ```json
+     {
+       "_id": "tenantId",
+       "name": "Acme Corp",
+       "settings": {...}
+     }
+     ```
+
+2. **Users**
+   - Linked to tenant via `tenantId`.
+   - Stores roles, login info, metadata.
+
+3. **Projects**
+   - Belong to a tenant.
+   - Example:  
+     ```json
+     {
+       "_id": "projectId",
+       "tenantId": "tenantId",
+       "name": "2024 GHG Inventory",
+       "description": "...",
+       "createdAt": "...",
+       "createdBy": "userId"
+     }
+     ```
+
+4. **Periods**
+   - Sequential, non-overlapping periods within a project.
+   - Example:  
+     ```json
+     {
+       "_id": "periodId",
+       "projectId": "projectId",
+       "startDate": "2024-01-01",
+       "endDate": "2024-12-31",
+       "sequenceNumber": 1,
+       "name": "2024"
+     }
+     ```
+
+5. **Modules**
+   - Global definitions (water, electricity, etc.), referenced by data.
+
+6. **ModuleSchemas**
+   - Defines per-project/per-module data fields (stored as JSON).
+   - Example:  
+     ```json
+     {
+       "_id": "moduleSchemaId",
+       "tenantId": "tenantId",
+       "projectId": "projectId",
+       "moduleId": "water",
+       "fields": [
+         {"name": "usage_m3", "type": "number", "required": true},
+         {"name": "meter_id", "type": "string", "required": false}
+       ],
+       "version": 2,
+       "createdAt": "...",
+       "createdBy": "userId"
+     }
+     ```
+
+7. **ModuleData**
+   - The main, scalable, flexible document collection.
+   - Example:  
+     ```json
+     {
+       "_id": "moduleDataId",
+       "tenantId": "tenantId",
+       "projectId": "projectId",
+       "periodId": "periodId",
+       "moduleId": "water",
+       "schemaVersion": 2,
+       "data": {
+         "usage_m3": 150,
+         "meter_id": "W-123"
+       },
+       "createdAt": "...",
+       "createdBy": "userId",
+       "lastModifiedAt": "...",
+       "lastModifiedBy": "userId"
+     }
+     ```
+
+8. **CalculationResults**
+   - Stores calculation output per (period, module).
+   - Example:  
+     ```json
+     {
+       "_id": "calcResultId",
+       "tenantId": "tenantId",
+       "projectId": "projectId",
+       "periodId": "periodId",
+       "moduleId": "water",
+       "result": {
+         "carbon_kg": 120,
+         "notes": ""
+       },
+       "calculatedAt": "...",
+       "calculatedBy": "userId"
+     }
+     ```
+
+---
+
+## 3. Logging & History (Audit Trail)
+
+### 3.1. Logging/Audit Collections
+
+1. **AuditLogs**
+   - Stores every change, access, or action for compliance and traceability.
+   - Example:  
+     ```json
+     {
+       "_id": "logId",
+       "tenantId": "tenantId",
+       "userId": "userId",
+       "action": "UPDATE_MODULE_DATA",
+       "targetCollection": "ModuleData",
+       "targetId": "moduleDataId",
+       "timestamp": "...",
+       "details": {
+         "oldValue": {...},
+         "newValue": {...}
+       },
+       "ip": "...",
+       "userAgent": "..."
+     }
+     ```
+
+2. **History Versions (Optional)**
+   - For important data (like ModuleData), keep a history array, or a separate `ModuleDataHistory` collection:
+     ```json
+     {
+       "_id": "historyId",
+       "moduleDataId": "moduleDataId",
+       "version": 3,
+       "data": {...},
+       "modifiedAt": "...",
+       "modifiedBy": "userId"
+     }
+     ```
+   - Allows for “undo,” regulatory audits, and full change tracking.
+
+---
+
+## 4. Multi-Tenancy & Security
+
+- **Every document** includes a `tenantId`.
+- All queries must be filtered/scoped by `tenantId`—enforced at the API/service layer.
+- **Indexes:** Add composite indexes (e.g. `{tenantId, projectId, periodId}`) for fast, secure queries.
+
+---
+
+## 5. SaaS Considerations & Best Practices
+
+- **RBAC Enforcement:**  
+  Continue to enforce RBAC at the service/API layer, not at the DB level.
+- **Schema Versioning:**  
+  Every `ModuleData` references the `ModuleSchema` version used for validation.
+- **Reporting:**  
+  Build aggregations and reporting queries as needed—MongoDB supports rich aggregation pipelines.
+- **Scalability:**  
+  MongoDB scales horizontally via sharding; plan schema and index design for scale.
+- **Backup & DR:**  
+  Use managed MongoDB (like Atlas) or robust backup tools for disaster recovery and compliance.
+- **Data Retention & GDPR:**  
+  Design for easy data purging, user/account deletion, and data export.
+
+---
+
+## 6. What Else Should You Consider?
+
+- **API rate limiting** (per tenant) to prevent abuse.
+- **Data encryption** at rest and in transit.
+- **Automated alerting** for suspicious actions (from AuditLogs).
+- **Multi-region** deployment if your customers are international.
+- **Billing/usage tracking** for true SaaS monetization.
+- **Data anonymization** for test/sandbox environments.
+- **Search:** Consider integrating with Elasticsearch if you need full-text or complex search on module data.
+
+---
+
+## 7. MongoDB: Is it good for logs/history?
+
+**YES.**  
+MongoDB is widely used for audit logs and historical versioning due to:
+- Flexible, nested document model.
+- High write throughput.
+- Good for append-only and time-series data.
+- Easy to index and query by user, targetId, or action.
+
+For compliance, regulatory, and troubleshooting needs, MongoDB is a strong choice for storing logs and history alongside your main data.
+
+---
+
+## 8. Example: Collection Relationships
+
+```mermaid
+erDiagram
+    TENANT ||--o{ USER : has
+    TENANT ||--o{ PROJECT : owns
+    PROJECT ||--o{ PERIOD : contains
+    PROJECT ||--o{ MODULEDATA : collects
+    PERIOD ||--o{ MODULEDATA : belongs_to
+    MODULE ||--o{ MODULEDATA : type
+    MODULEDATA ||--o{ CALCULATIONRESULT : produces
+    MODULEDATA ||--o{ MODULEDATAHISTORY : versions
+    USER ||--o{ AUDITLOG : acts
+```
+
+---
+
+## 9. High-Level Workflow
+
+```mermaid
+flowchart TD
+    A[User logs in] --> B[User selects Project & Period]
+    B --> C[User enters/edits Module Data]
+    C --> D[System validates against ModuleSchema]
+    D -- Valid --> E[ModuleData saved]
+    E --> F[AuditLog written]
+    E --> G[History version created]
+    F --> H[Calculation triggered]
+    H --> I[CalculationResult stored]
+    I --> J[User or auditor generates report]
+```
+
+---
+
+## 10. Summary Table
+
+| Collection         | Purpose                                       | Multi-Tenant? | Versioned? | Indexed by          |
+|--------------------|-----------------------------------------------|---------------|------------|---------------------|
+| Tenants            | Customer orgs                                 | N/A           | No         | _id                 |
+| Users              | Platform users                                | Yes           | No         | tenantId, email     |
+| Projects           | GHG projects                                  | Yes           | No         | tenantId, name      |
+| Periods            | Calculation periods                           | Yes           | No         | projectId, dates    |
+| Modules            | Global module definitions                     | N/A           | Yes        | name                |
+| ModuleSchemas      | Schema per project/module/version             | Yes           | Yes        | tenantId, projectId |
+| ModuleData         | Actual collected data (flexible/document)     | Yes           | Optional   | tenantId, periodId  |
+| CalculationResults | Store calculations for reporting              | Yes           | Yes        | periodId, moduleId  |
+| AuditLogs          | Actions, changes, access for traceability     | Yes           | N/A        | tenantId, userId    |
+| ModuleDataHistory  | Data versioning (optional, or history array)  | Yes           | Yes        | moduleDataId        |
+
+---
+
+## 11. Final Recommendations
+
+- Use MongoDB for both main data and logs/history.
+- Implement strong RBAC and tenant isolation at the API/service layer.
+- Plan schema versioning for flexibility.
+- Index for your most frequent queries (by tenant, project, period).
+- Regularly review audit logs and support compliance use cases.
+- Prepare for future growth (multi-region, sharding, backup).
+
+---
+
+**Let me know if you want sample MongoDB document schemas, aggregation examples, or API patterns for this architecture!**

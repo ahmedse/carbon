@@ -1,16 +1,19 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import jwt_decode from "jwt-decode";
+import * as jwt_decode from "jwt-decode";
+import { Box, Button, TextField, Typography, Alert } from "@mui/material";
 
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
     try {
       const response = await fetch("http://localhost:8000/api/token/", {
         method: "POST",
@@ -21,41 +24,60 @@ const Login = () => {
       if (response.ok) {
         localStorage.setItem("access", data.access);
         localStorage.setItem("refresh", data.refresh);
-        const decoded = jwt_decode(data.access);
-        const role = decoded.role;
-  
-        login({ username, token: data.access, role }); // Save role in context if needed
-  
-        // Redirect based on role
-        if (role === "admin") navigate("/admin");
-        else if (role === "auditor") navigate("/auditor");
-        else if (role === "data-owner") navigate("/data-owner");
-        else navigate("/"); // fallback
+
+        // Decode token to get user info
+        const decoded = jwt_decode.default(data.access);
+
+        // If you include roles in the JWT, extract them here (adjust as needed)
+        // For now, we assume roles are not directly in the token and will fetch them after login
+        login({ username, token: data.access });
+
+        // Redirect to dashboard or landing page
+        navigate("/dashboard");
       } else {
-        alert("Invalid credentials");
+        setError("Invalid credentials");
       }
-    } catch (error) {
-      console.error("Login error:", error);
-      alert("Something went wrong");
+    } catch (err) {
+      setError("Something went wrong. Please try again.");
+      console.error("Login error:", err);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <input
-        type="text"
-        value={username}
-        onChange={e => setUsername(e.target.value)}
-        placeholder="Username"
-      />
-      <input
-        type="password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-        placeholder="Password"
-      />
-      <button type="submit">Login</button>
-    </form>
+    <Box
+      display="flex"
+      justifyContent="center"
+      alignItems="center"
+      minHeight="100vh"
+      flexDirection="column"
+    >
+      <Typography variant="h4" gutterBottom>
+        Login
+      </Typography>
+      <Box
+        component="form"
+        onSubmit={handleSubmit}
+        sx={{ width: 300, display: "flex", flexDirection: "column", gap: 2 }}
+      >
+        <TextField
+          label="Username"
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          required
+        />
+        <TextField
+          label="Password"
+          type="password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          required
+        />
+        <Button variant="contained" type="submit">
+          Login
+        </Button>
+        {error && <Alert severity="error">{error}</Alert>}
+      </Box>
+    </Box>
   );
 };
 

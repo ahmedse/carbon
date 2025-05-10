@@ -1,115 +1,139 @@
+Certainly! Below is an updated, detailed macro/micro tasks progress file that takes into account the tasks already marked as finished in your current `progress.md`. Tasks already completed remain checked, and all actionable items for getting your platform up for a test project (single company, single project/period, RBAC, module data, calculations) are broken down into granular steps.
+
+---
+
 # Carbon Platform Development Progress
 
-## **Phase 1: Project Setup and Foundation**
-### Objective: Establish a robust foundation for the platform.
+## **Phase 1: Core MVP for Test Project (Single Tenant - Internal Use)**
 
-1. **Frontend Setup**:
-   - [x] Initialize React project with Material UI
-   - [x] Set up role-based routing system
-   - [x] Configure Material UI theme
-     - [x] Primary Palette: Green (sustainability)
-     - [x] Secondary Palette: Blue (contrast)
-   - [x] Create base folder structure:
-     - `src/components/`
-     - `src/layouts/`
-     - `src/pages/`
-     - `src/services/`
-     - `src/styles/`
-     - `src/utils/`
-   - [ ] Build layouts for role-based dashboards
-   - [ ] Add placeholder pages for Admin, Auditor, and Data Owner
+### **1. Backend Development**
 
-2. **Backend Setup**:
-   - [x] Create a Django project with Django REST Framework
-   - [x] Set up PostgreSQL database
-   - [x] Create schemas for Users and Roles
-   - [x] Implement JWT-based authentication
-   - [ ] Implement role-based access control
-      - [ ] Create Role model (name, description, permissions)
-      - [ ] Create Context model (type, project, period)
-      - [ ] Create RoleAssignment model (user, role, context)
-      - [ ] Implement permission checking utility
-      - [ ] Register RBAC models with Django admin
-      - [ ] Write unit tests for RBAC logic
-      - [ ] Create API endpoints for roles/contexts/assignments
-      - [ ] Add endpoints for querying user permissions/roles
-      - [ ] Integrate RBAC checks into API views
+#### **1.1. Core Models & Authentication**
+- [x] Scaffold Django project and main apps
+- [x] Implement User model
+- [x] Implement Role model (Admin, Auditor, Data Owner)
+- [x] Implement RoleAssignment model
+- [x] Implement Context model (global/project/period)
+- [x] Implement JWT-based authentication
+- [x] Add initial data migration for users, roles, assignments
 
-3. **Deployment Setup**:
-   - [x] Configure Docker for containerization
-   - [ ] Set up CI/CD pipelines for automated builds and deployments
+#### **1.2. Project, Period, Module Data**
+- [x] Create Project model (single, for your company)
+- [x] Create Period model (e.g., “2024”)
+- [x] Create Module model (Water, Electricity, Vehicles, etc.)
+- [ ] Implement ModuleSchema (hardcoded JSONField for each module, for now)
+- [ ] Implement ModuleData model (JSONField for data, FK to period/module/user)
+- [ ] Implement CalculationResult model (FK to period/module, result JSON)
+- [ ] Seed initial modules and period
 
----
+#### **1.3. API Endpoints**
+- [ ] CRUD for users
+- [ ] CRUD for roles and assignments
+- [ ] CRUD for project, period, modules
+- [ ] CRUD for module data (entry, update, delete)
+- [ ] Calculation endpoint (trigger + result fetch)
+- [ ] RBAC permission checks on all endpoints
 
-## **Phase 2: Core Features**
-### Objective: Build the key features for data entry, dashboards, and visualization.
+#### **1.4. Admin & Utilities**
+- [x] Register all models in Django admin
+- [ ] Write unit tests for RBAC logic
+- [ ] Write utility for permission checking
+- [ ] Seed script for initial users, roles, project, period, modules
 
-1. **Role-Based Dashboards**:
-   - [ ] Admin Dashboard
-   - [ ] Auditor Dashboard
-   - [ ] Data Owner Dashboard
-
-2. **Flexible Data Workflows**:
-   - [ ] Design schema for dynamic modules and data items
-   - [ ] Implement manual data entry forms
-   - [ ] Add raw CSV upload functionality
-   - [ ] Create tabular views for data management
-
-3. **Data Visualization**:
-   - [ ] Implement line charts for time-series trends
-   - [ ] Add bar charts for comparisons
-   - [ ] Add basic filters for visualizations
-
-4. **Bilingual Support**:
-   - [ ] Add English and Arabic language support
-   - [ ] Implement RTL styles for Arabic
+#### **1.5. Logging/Audit (Basic)**
+- [ ] Implement simple logging of user actions (create/update/delete on module data)
+- [ ] Log authentication and role changes
 
 ---
 
-## **Phase 3: MVP Deployment**
-### Objective: Polish the platform and make it production-ready.
+### **2. Frontend Development**
 
-1. **Frontend Polish**:
-   - [ ] Add animations for smooth transitions
-   - [ ] Ensure responsive design for all layouts
+#### **2.1. Project Setup & Auth**
+- [x] Initialize React project with Material UI
+- [x] Set up role-based routing system
+- [x] Configure Material UI theme
+- [x] Create base folder structure:
+  - [x] `src/components/`
+  - [x] `src/layouts/`
+  - [x] `src/pages/`
+  - [x] `src/services/`
+  - [x] `src/styles/`
+  - [x] `src/utils/`
+- [x] Implement login/logout with JWT
+- [ ] Store user/role context in frontend state
 
-2. **Backend Enhancements**:
-   - [ ] Optimize database queries
-   - [ ] Add logging and error handling for APIs
+#### **2.2. Layouts & Navigation**
+- [ ] Build layouts for role-based dashboards
+  - [ ] Design layout wrappers for each role (Admin, Auditor, Data Owner)
+  - [ ] Implement role-based sidebar and nav components
+- [ ] Add placeholder pages for Admin, Auditor, and Data Owner
+  - [ ] Link dashboard routes to placeholders
 
-3. **Containerized Deployment**:
-   - [ ] Finalize Docker Compose for local development
-   - [ ] Deploy to VPS using Kubernetes
-   - [ ] Configure NGINX as a reverse proxy and SSL termination
+#### **2.3. Data Entry & Review**
+- [ ] UI for selecting period and module
+- [ ] Dynamic form for module data entry (fields per module)
+- [ ] Table/list view for module data (view, edit, delete)
+- [ ] Calculation trigger button/UI
+- [ ] Simple results/report view
+
+#### **2.4. Role Management (Admin)**
+- [ ] UI for viewing/assigning roles to users
+
+#### **2.5. Basic Notifications**
+- [ ] Show toast/messages for action success/error
 
 ---
 
-## **Phase 4: Enhancements and Scaling**
-### Objective: Add advanced features and ensure scalability.
+### **3. DevOps & Deployment**
 
-1. **Advanced Dashboards**:
-   - [ ] Add dynamic filters
-   - [ ] Build advanced visualizations
+#### **3.1. Local Development**
+- [x] Configure Docker for containerization
+- [ ] Docker Compose for local stack
+- [ ] Local PostgreSQL setup
 
-2. **Notifications**:
-   - [ ] Add in-app notifications
-   - [ ] Add email notifications for critical events
+#### **3.2. CI/CD**
+- [ ] Set up CI/CD pipelines for automated builds and deployments
+  - [ ] GitHub Actions/GitLab CI for backend tests/linting
+  - [ ] Docker image build and push (staging)
 
-3. **Carbon Calculation Modules**:
-   - [ ] Design formulas for carbon equivalence
-   - [ ] Build carbon analysis dashboards
+#### **3.3. Seed/Test Environment**
+- [ ] Seed script for initial environment
+- [ ] Test login and all flows for each role
 
-4. **Authentication Enhancements**:
-   - [ ] Add Multi-Factor Authentication (MFA)
-   - [ ] Support Single Sign-On (SSO)
+---
 
-5. **IoT Integration**:
-   - [ ] Design APIs for IoT devices
-   - [ ] Build dashboards for live monitoring
+### **4. Testing & Validation**
 
-6. **AI-Powered Analytics**:
-   - [ ] Use AI/ML for trend prediction and anomaly detection
+#### **4.1. Manual QA**
+- [ ] Test login and role switches
+- [ ] Test data entry/review/calculation flows
+- [ ] Test RBAC restrictions (role can/can’t access certain features)
+- [ ] Test logging/audit output
 
-7. **Scalability**:
-   - [ ] Optimize Kubernetes manifests for scaling
-   - [ ] Add multi-tenancy support
+#### **4.2. Automated Testing**
+- [ ] Backend unit tests (RBAC, models, permissions)
+- [ ] Frontend tests (if practical, for login/forms)
+
+---
+
+### **5. Documentation**
+
+- [ ] Update README with setup instructions
+- [ ] Add API documentation (endpoints, RBAC rules)
+- [ ] Document data model (diagram + description)
+- [ ] Add usage guide for internal testers
+
+---
+
+## **Phase 2: Expansion Preparation (to be started after Phase 1)**
+
+- [ ] Design for multi-tenancy (tenant/org model, tenant isolation)
+- [ ] Prepare abstraction for module schemas (to allow dynamic fields)
+- [ ] Plan for NoSQL (MongoDB) migration for module data
+- [ ] Extend logging/audit to full history/versioning
+
+---
+
+**Legend:**  
+[x] = Done  
+[ ] = Pending
