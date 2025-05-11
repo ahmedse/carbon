@@ -27,7 +27,13 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
-    
+
+    def post(self, request, *args, **kwargs):
+        import logging
+        logger = logging.getLogger('django')
+        logger.debug(f"Token request data: {request.data}")
+        return super().post(request, *args, **kwargs)
+
 # accounts/views.py
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated

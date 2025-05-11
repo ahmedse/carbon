@@ -27,10 +27,10 @@ Certainly! Below is an updated, detailed macro/micro tasks progress file that ta
 - [ ] Seed initial modules and period
 
 #### **1.3. API Endpoints**
-- [ ] CRUD for users
-- [ ] CRUD for roles and assignments
-- [ ] CRUD for project, period, modules
-- [ ] CRUD for module data (entry, update, delete)
+- [x] CRUD for users
+- [x] CRUD for roles and assignments
+- [x] CRUD for project, period, modules
+- [x] CRUD for module data (entry, update, delete)
 - [ ] Calculation endpoint (trigger + result fetch)
 - [ ] RBAC permission checks on all endpoints
 
@@ -48,39 +48,53 @@ Certainly! Below is an updated, detailed macro/micro tasks progress file that ta
 
 ### **2. Frontend Development**
 
+## **2. Frontend Development (Updated UX/UI Tasks)**
+
 #### **2.1. Project Setup & Auth**
 - [x] Initialize React project with Material UI
 - [x] Set up role-based routing system
 - [x] Configure Material UI theme
-- [x] Create base folder structure:
-  - [x] `src/components/`
-  - [x] `src/layouts/`
-  - [x] `src/pages/`
-  - [x] `src/services/`
-  - [x] `src/styles/`
-  - [x] `src/utils/`
+- [x] Create base folder structure
 - [x] Implement login/logout with JWT
 - [ ] Store user/role context in frontend state
 
 #### **2.2. Layouts & Navigation**
-- [ ] Build layouts for role-based dashboards
-  - [ ] Design layout wrappers for each role (Admin, Auditor, Data Owner)
-  - [ ] Implement role-based sidebar and nav components
-- [ ] Add placeholder pages for Admin, Auditor, and Data Owner
-  - [ ] Link dashboard routes to placeholders
+- [ ] Design master layout (sidebar, header, responsive)
+- [ ] Implement light/dark mode switch (global)
+- [ ] Add language switcher (UI only, i18n later)
+- [ ] Implement responsive sidebar/drawer (desktop/tablet/mobile)
+- [ ] Role-based menu items (dashboard, modules, settings)
+- [ ] Profile/avatar menu with logout
 
-#### **2.3. Data Entry & Review**
-- [ ] UI for selecting period and module
-- [ ] Dynamic form for module data entry (fields per module)
-- [ ] Table/list view for module data (view, edit, delete)
-- [ ] Calculation trigger button/UI
-- [ ] Simple results/report view
+#### **2.3. Pages**
+- [ ] LoginPage: Centered card, theme toggle, (future: language switcher)
+- [ ] ContextSelectionPage: List/grid of contexts, theme toggle, (future: language switcher)
+- [ ] DashboardHome: Stat widgets, dummy chart, responsive grid
+- [ ] ModulesPage: List of modules (cards), dummy links
+- [ ] Settings/ProfilePage: Placeholder
 
-#### **2.4. Role Management (Admin)**
-- [ ] UI for viewing/assigning roles to users
+#### **2.4. Role-Based Dashboards**
+- [ ] AdminDashboard: Uses DashboardHome + admin module links
+- [ ] AuditorDashboard: Uses DashboardHome + auditor module links
+- [ ] DataOwnerDashboard: Uses DashboardHome + data owner module links
 
-#### **2.5. Basic Notifications**
-- [ ] Show toast/messages for action success/error
+#### **2.5. Data Entry & Review (Skeleton for now)**
+- [ ] ModuleDataForm: Placeholder dynamic form
+- [ ] ModuleDataTable: Placeholder table/list
+
+#### **2.6. Notifications**
+- [ ] Snackbar/Toast for action success/error
+
+#### **2.7. Theming & Customization**
+- [ ] ThemeProvider setup (support for future custom themes)
+- [ ] Structure for RTL support
+
+#### **2.8. Responsive Design**
+- [ ] Mobile-first design for all pages/components
+- [ ] Test breakpoints: mobile, tablet, desktop
+
+#### **2.9. Accessibility**
+- [ ] Ensure keyboard navigation and basic a11y for all interactive components
 
 ---
 

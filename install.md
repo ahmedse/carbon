@@ -22,7 +22,9 @@ npm install
 
 npm install @mui/material @emotion/react @emotion/styled react-router-dom react-i18next
 npm install --save-dev eslint prettier
-
+npm install @mui/icons-material
+npm install @mui/material @mui/icons-material
+npm install recharts
 npm run dev
 
 backend:
@@ -50,15 +52,15 @@ DATABASES = {
 
 python manage.py makemigrations
 python manage.py migrate
-
-python manage.py runserver
-
 docker-compose up --build
 
 test JWT:
-python manage.py createsuperuser
 
 curl -X POST http://127.0.0.1:8000/api/token/ -d "username=ahmed&password=Cup4PWS_101"
+curl -X POST http://localhost:8000/api/token/ -H "Content-Type: application/json" \
+  -d '{"username": "admin1", "password": "T$t12345"}'
+
+users passwd: T$t12345
 
 populate some data:
 python manage.py populate_demo_users
@@ -68,3 +70,7 @@ python manage.py migrate accounts
 python manage.py makemigrations core
 python manage.py migrate core
 python manage.py migrate
+python manage.py createsuperuser
+
+python manage.py runserver
+npm run dev

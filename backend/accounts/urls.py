@@ -11,8 +11,8 @@ router.register(r'contexts', ContextViewSet)
 router.register(r'role-assignments', RoleAssignmentViewSet)
 
 urlpatterns = [
-    path('api/token/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('api/', include(router.urls)),
-    path('api/my-roles/', my_roles),
+    path('token/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('/', include(router.urls)),
+    path('my-roles/', my_roles),
 ]

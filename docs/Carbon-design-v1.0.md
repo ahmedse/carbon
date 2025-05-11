@@ -725,3 +725,93 @@ sequenceDiagram
 ---
 
 ### If you need any diagram in a different style, more detail, or want specific user stories or workflows visualized, just let me know!
+
+Absolutely! Here’s how we’ll proceed, step by step:
+
+---
+
+## 1. UX Complete Design (High-Level)
+
+### **Core Principles**
+- **Modern, clean, and light:** MUI-driven, environmental color palette, beautiful but minimal.
+- **Responsive:** Works seamlessly on web, tablet, and mobile.
+- **Theming:** Light/dark switch; custom themes in future.
+- **Bilingual-ready:** Structure for RTL and language switcher.
+- **Role-based navigation:** Dashboards and modules adapt to user role.
+
+---
+
+### **Page & Component Breakdown**
+
+#### **1. Login Page**
+- Centered card, welcome message, logo
+- Username, password fields (MUI TextField)
+- Login button (MUI Button)
+- "Forgot password?" link (future)
+- Language switcher (future, top-right)
+- Light/dark mode toggle (top-right)
+
+#### **2. Context Selection Page**
+- Header/toolbar: logo, language switcher (future), profile dropdown, theme toggle
+- List/grid of available contexts (card per project/period/role)
+- Click to select context and enter dashboard
+
+#### **3. Main App Layout**
+- **Sidebar/Drawer:**  
+  - Role-based menu items (Dashboard, Modules, Settings)
+  - Collapsible (burger menu on mobile)
+- **Header/AppBar:**  
+  - App name/logo
+  - Theme toggle
+  - Profile menu (logout, future profile/settings)
+- **Content area:**  
+  - Responsive, scrollable
+
+#### **4. Dashboard Pages**
+- **Home:**  
+  - Stat widgets (cards) for key metrics (dummy now)
+  - Placeholder chart (dummy)
+- **Modules:**  
+  - List of modules (cards)
+  - Click to enter data entry/review (dummy for now)
+- **Settings/Profile:**  
+  - Placeholder
+
+#### **5. Role-Based Dashboards**
+- Admin, Auditor, Data Owner dashboards share the same layout but menu/options/widgets adapt by role.
+
+#### **6. Notifications**
+- Toast/snackbar for success/error actions
+
+---
+## 4. File-by-File Implementation Plan
+
+Here’s the order we’ll go in, and for each, I’ll provide a full MUI-based sample:
+
+1. **src/pages/LoginPage.jsx:**  
+   - Centered card, branding, theme toggle, (future: language switcher), MUI TextFields, Button.
+2. **src/pages/ContextSelectionPage.jsx:**  
+   - Header, context cards/grid, select context, theme toggle.
+3. **src/layouts/MainLayout.jsx:**  
+   - Sidebar/Drawer, header, responsive, role-based menu.
+4. **src/pages/DashboardHome.jsx:**  
+   - Stat cards, dummy chart, responsive grid.
+5. **src/pages/ModulesPage.jsx:**  
+   - Dummy module cards/links.
+6. **src/pages/SettingsPage.jsx:**  
+   - Placeholder.
+7. **src/components/RoleDashboards.jsx:**  
+   - Role-based dashboards (Admin, Auditor, Data Owner).
+8. **src/components/Notifications.jsx:**  
+   - Snackbar/toast.
+9. **src/theme/index.js:**  
+   - ThemeProvider setup, light/dark toggle, RTL support structure.
+
+---
+
+### Next Step
+
+**Let's start with `src/pages/LoginPage.jsx`.**  
+Would you like a full code sample and explanation for this file first?  
+Or do you want visual mockups/wireframes before diving into code?  
+Let me know your preference!
