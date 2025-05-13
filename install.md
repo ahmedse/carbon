@@ -52,7 +52,6 @@ DATABASES = {
 
 python manage.py makemigrations
 python manage.py migrate
-docker-compose up --build
 
 test JWT:
 
@@ -74,3 +73,23 @@ python manage.py createsuperuser
 
 python manage.py runserver
 npm run dev
+
+----
+
+Deploy on docker ubuntu
+
+- Clone Repository
+sudo mkdir -p /opt/carbon
+sudo chown $USER:$USER /opt/carbon
+cd /opt/carbon
+git clone https://github.com/ahmedse/carbon.git .
+
+docker-compose up --build
+docker-compose exec backend python manage.py migrate
+docker-compose exec backend python manage.py createsuperuser
+
+vi /etc/nginx/conf.d/carbon.conf
+
+Ensure ports 5173 and 8000 are NOT open to the public
+use the host's PostgreSQL, set in your .env and settings:
+DB_HOST=host.docker.internal
