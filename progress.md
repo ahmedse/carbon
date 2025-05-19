@@ -56,19 +56,19 @@ Certainly! Below is an updated, detailed macro/micro tasks progress file that ta
 - [x] Configure Material UI theme
 - [x] Create base folder structure
 - [x] Implement login/logout with JWT
-- [ ] Store user/role context in frontend state
+- [x] Store user/role context in frontend state
 
 #### **2.2. Layouts & Navigation**
-- [ ] Design master layout (sidebar, header, responsive)
-- [ ] Implement light/dark mode switch (global)
+- [x] Design master layout (sidebar, header, responsive)
+- [x] Implement light/dark mode switch (global)
 - [ ] Add language switcher (UI only, i18n later)
-- [ ] Implement responsive sidebar/drawer (desktop/tablet/mobile)
+- [x] Implement responsive sidebar/drawer (desktop/tablet/mobile)
 - [ ] Role-based menu items (dashboard, modules, settings)
-- [ ] Profile/avatar menu with logout
+- [x] Profile/avatar menu with logout
 
 #### **2.3. Pages**
-- [ ] LoginPage: Centered card, theme toggle, (future: language switcher)
-- [ ] ContextSelectionPage: List/grid of contexts, theme toggle, (future: language switcher)
+- [x] LoginPage: Centered card, theme toggle, (future: language switcher)
+- [x] ContextSelectionPage: List/grid of contexts, theme toggle, (future: language switcher)
 - [ ] DashboardHome: Stat widgets, dummy chart, responsive grid
 - [ ] ModulesPage: List of modules (cards), dummy links
 - [ ] Settings/ProfilePage: Placeholder
@@ -102,8 +102,8 @@ Certainly! Below is an updated, detailed macro/micro tasks progress file that ta
 
 #### **3.1. Local Development**
 - [x] Configure Docker for containerization
-- [ ] Docker Compose for local stack
-- [ ] Local PostgreSQL setup
+- [x] Docker Compose for local stack
+- [x] Local PostgreSQL setup
 
 #### **3.2. CI/CD**
 - [ ] Set up CI/CD pipelines for automated builds and deployments
@@ -119,7 +119,7 @@ Certainly! Below is an updated, detailed macro/micro tasks progress file that ta
 ### **4. Testing & Validation**
 
 #### **4.1. Manual QA**
-- [ ] Test login and role switches
+- [x] Test login and role switches
 - [ ] Test data entry/review/calculation flows
 - [ ] Test RBAC restrictions (role can/can’t access certain features)
 - [ ] Test logging/audit output
