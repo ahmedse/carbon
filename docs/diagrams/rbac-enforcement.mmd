@@ -1,0 +1,7 @@
+%% RBAC Enforcement Workflow
+flowchart LR
+    X[User requests action]
+    X --> Y[Backend checks RoleAssignments for user/context]
+    Y --> Z[Aggregate permissions]
+    Z -- Permission present --> A1[Allow action]
+    Z -- Permission missing --> A2[Deny action]

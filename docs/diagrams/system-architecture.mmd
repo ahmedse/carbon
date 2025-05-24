@@ -1,0 +1,8 @@
+%% System Architecture Diagram - Carbon Management Platform
+graph TD
+  FE[Frontend: React + Material UI] -->|API| BE[Backend: Django REST API]
+  BE -->|DB Ops| DB[(PostgreSQL)]
+  BE -->|Auth| JWT[JWT Token Service]
+  FE -->|Role-Based Routing| RB[Dashboards (Admin/Auditor/Data Owner)]
+  BE -->|Static Files| NGINX[NGINX (Prod)]
+  NGINX -->|Serves| USER[User]

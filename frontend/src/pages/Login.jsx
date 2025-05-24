@@ -1,3 +1,7 @@
+// File: frontend/src/pages/Login.jsx
+// Purpose: Login page component for user authentication.
+// Location: frontend/src/pages/
+
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -13,8 +17,12 @@ import {
   CircularProgress,
 } from "@mui/material";
 
-const LOGO_SRC = "/aast_carbon_logo_.jpg"; // public folder
+const LOGO_SRC = "/aast_carbon_logo_.jpg"; // logo image in public folder
 
+/**
+ * Login component.
+ * Handles user sign-in, authentication, and error display.
+ */
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -23,6 +31,9 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  /**
+   * Handles the login form submit.
+   */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");

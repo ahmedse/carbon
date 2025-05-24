@@ -1,4 +1,3 @@
-// src/pages/AdminDashboard/menuConfig.js
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
@@ -27,9 +26,14 @@ const menuConfig = [
     path: "/admin/reporting",
   },
   {
-    label: "Data Sources",
+    label: "Data Items",
     icon: CloudUploadIcon,
-    path: "/admin/data-sources",
+    path: "/admin/data-items", // updated for consistency
+  },
+  {
+    label: "Data Templates",
+    icon: CloudUploadIcon,
+    path: "/admin/templates", // updated for consistency
   },
   {
     label: "Notifications",

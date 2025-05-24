@@ -1,0 +1,57 @@
+%% Entity-Relationship Diagram - Core Data Model
+classDiagram
+    User <|-- RoleAssignment
+    Role <|-- RoleAssignment
+    Context <|-- RoleAssignment
+    Project <|-- Cycle
+    Cycle <|-- ModuleData
+    Module <|-- ModuleData
+    ModuleData <|-- CalculationResult
+
+    class User {
+        username
+        email
+    }
+    class Role {
+        name
+        permissions : List
+    }
+    class Project {
+        name
+        description
+    }
+    class Cycle {
+        project
+        name
+        start_date
+        end_date
+        sequence_number
+    }
+    class Module {
+        name
+        description
+    }
+    class ModuleData {
+        cycle
+        module
+        data: JSON
+        created_by
+        created_at
+    }
+    class CalculationResult {
+        module_data
+        result: JSON
+        calculated_at
+        calculated_by
+    }
+    class Context {
+        type : global/project/cycle/module
+        project
+        cycle
+        module
+    }
+    class RoleAssignment {
+        user
+        role
+        context
+    }

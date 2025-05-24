@@ -1,4 +1,6 @@
-// src/pages/AdminDashboard/AdminDashboard.jsx
+// File: frontend/src/pages/AdminDashboard/AdminDashboard.jsx
+// Purpose: Main admin dashboard layout and routing for admin modules.
+// Location: frontend/src/pages/AdminDashboard/
 
 import React, { useState } from "react";
 import { Box, Toolbar, useMediaQuery } from "@mui/material";
@@ -9,7 +11,15 @@ import DashboardHome from "./DashboardHome";
 import WaterModule from "./WaterModule";
 import ElectricityModule from "./ElectricityModule";
 import GasModule from "./GasModule";
+// Import new admin pages
+import DataItems from "./DataItems";
+import Templates from "./Templates";
 
+/**
+ * AdminDashboard component.
+ * Provides responsive admin layout (sidebar/topbar) and internal routing for admin modules.
+ * @param {object} context - The current context (project/cycle/module) for the dashboard.
+ */
 const drawerWidth = 220;
 
 const AdminDashboard = ({ context }) => {
@@ -37,6 +47,10 @@ const AdminDashboard = ({ context }) => {
         <Box sx={{ p: { xs: 1, sm: 2, md: 3 }, maxWidth: 1400, mx: "auto", width: "100%" }}>
           <Routes>
             <Route index element={<DashboardHome context={context} />} />
+            {/* Add routes for Data Items and Templates */}
+            <Route path="data-items" element={<DataItems />} />
+            <Route path="templates" element={<Templates />} />
+            {/* Existing module routes */}
             <Route path="water" element={<WaterModule context={context} />} />
             <Route path="electricity" element={<ElectricityModule context={context} />} />
             <Route path="gas" element={<GasModule context={context} />} />

@@ -1,11 +1,13 @@
-// src/pages/AdminDashboard/DashboardHome.jsx
+// File: frontend/src/pages/AdminDashboard/DashboardHome.jsx
+// Purpose: Home view for the admin dashboard, shows stats and charts.
+// Location: frontend/src/pages/AdminDashboard/
 
 import React from "react";
 import { Box, Grid, Typography } from "@mui/material";
 import StatCard from "./components/StatCard";
 import ChartCard from "./components/ChartCard";
 
-// Demo data
+// Demo data for statistics
 const stats = [
   { label: "Total CO₂ Emissions", value: "12,800", unit: "tons/year" },
   { label: "Electricity Usage", value: "6,400", unit: "MWh/year" },
@@ -14,6 +16,11 @@ const stats = [
   { label: "Active Alerts", value: "4", unit: "" },
 ];
 
+/**
+ * DashboardHome component.
+ * Displays summary statistics and charts for the admin dashboard.
+ * @param {object} context - The current context (project/cycle/module).
+ */
 export default function DashboardHome({ context }) {
   return (
     <Box>

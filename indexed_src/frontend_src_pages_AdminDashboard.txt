@@ -1,0 +1,497 @@
+=== frontend/src/pages/AdminDashboard/AdminDashboard.jsx ===
+// File: frontend/src/pages/AdminDashboard/AdminDashboard.jsx
+// Purpose: Main admin dashboard layout and routing for admin modules.
+// Location: frontend/src/pages/AdminDashboard/
+
+import React, { useState } from "react";
+import { Box, Toolbar, useMediaQuery } from "@mui/material";
+import { Routes, Route, Navigate } from "react-router-dom";
+import Sidebar from "./components/Sidebar";
+import Topbar from "./components/Topbar";
+import DashboardHome from "./DashboardHome";
+import WaterModule from "./WaterModule";
+import ElectricityModule from "./ElectricityModule";
+import GasModule from "./GasModule";
+// Import new admin pages
+import DataItems from "./DataItems";
+import Templates from "./Templates";
+
+/**
+ * AdminDashboard component.
+ * Provides responsive admin layout (sidebar/topbar) and internal routing for admin modules.
+ * @param {object} context - The current context (project/cycle/module) for the dashboard.
+ */
+const drawerWidth = 220;
+
+const AdminDashboard = ({ context }) => {
+  // Responsive sidebar drawer state
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const isMdUp = useMediaQuery((theme) => theme.breakpoints.up("md"));
+
+  const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
+
+  const dashboardTitle =
+    context?.project
+      ? `Admin Dashboard (Project: ${context.project})`
+      : context?.cycle
+      ? `Admin Dashboard (Cycle: ${context.cycle})`
+      : context?.module
+      ? `Admin Dashboard (Module: ${context.module})`
+      : "Admin Dashboard";
+
+  return (
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
+      <Sidebar open={isMdUp || mobileOpen} onClose={handleDrawerToggle} />
+      <Box sx={{ flexGrow: 1, ml: { md: `${drawerWidth}px` }, width: "100%" }}>
+        <Topbar title={dashboardTitle} drawerToggle={handleDrawerToggle} />
+        <Toolbar /> {/* Spacer below Topbar */}
+        <Box sx={{ p: { xs: 1, sm: 2, md: 3 }, maxWidth: 1400, mx: "auto", width: "100%" }}>
+          <Routes>
+            <Route index element={<DashboardHome context={context} />} />
+            {/* Add routes for Data Items and Templates */}
+            <Route path="data-items" element={<DataItems />} />
+            <Route path="templates" element={<Templates />} />
+            {/* Existing module routes */}
+            <Route path="water" element={<WaterModule context={context} />} />
+            <Route path="electricity" element={<ElectricityModule context={context} />} />
+            <Route path="gas" element={<GasModule context={context} />} />
+            {/* fallback */}
+            <Route path="*" element={<Navigate to="." replace />} />
+          </Routes>
+        </Box>
+      </Box>
+    </Box>
+  );
+};
+
+export default AdminDashboard;
+
+=== frontend/src/pages/AdminDashboard/DashboardHome.jsx ===
+// File: frontend/src/pages/AdminDashboard/DashboardHome.jsx
+// Purpose: Home view for the admin dashboard, shows stats and charts.
+// Location: frontend/src/pages/AdminDashboard/
+
+import React from "react";
+import { Box, Grid, Typography } from "@mui/material";
+import StatCard from "./components/StatCard";
+import ChartCard from "./components/ChartCard";
+
+// Demo data for statistics
+const stats = [
+  { label: "Total CO₂ Emissions", value: "12,800", unit: "tons/year" },
+  { label: "Electricity Usage", value: "6,400", unit: "MWh/year" },
+  { label: "Water Consumption", value: "58,000", unit: "m³/year" },
+  { label: "Gas Usage", value: "3,200", unit: "GJ/year" },
+  { label: "Active Alerts", value: "4", unit: "" },
+];
+
+/**
+ * DashboardHome component.
+ * Displays summary statistics and charts for the admin dashboard.
+ * @param {object} context - The current context (project/cycle/module).
+ */
+export default function DashboardHome({ context }) {
+  return (
+    <Box>
+      <Typography variant="h5" fontWeight={600} gutterBottom>
+        Welcome, Admin!
+        {context && context.project && <> (Project: {context.project})</>}
+        {context && context.cycle && <> (Cycle: {context.cycle})</>}
+        {context && context.module && <> (Module: {context.module})</>}
+      </Typography>
+
+      <Grid container spacing={2} sx={{ mt: 1, mb: 3 }}>
+        {stats.map((s) => (
+          <Grid item xs={12} sm={6} md={3} key={s.label}>
+            <StatCard label={s.label} value={s.value} unit={s.unit} />
+          </Grid>
+        ))}
+      </Grid>
+
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={7}>
+          <ChartCard
+            title="CO₂ Emissions Trend"
+            type="line"
+            data={[
+              { month: "Jan", value: 1000 },
+              { month: "Feb", value: 1100 },
+              { month: "Mar", value: 1050 },
+              { month: "Apr", value: 1200 },
+              { month: "May", value: 1150 },
+              { month: "Jun", value: 1230 },
+            ]}
+          />
+        </Grid>
+        <Grid item xs={12} md={5}>
+          <ChartCard
+            title="Resource Usage Breakdown"
+            type="pie"
+            data={[
+              { name: "Electricity", value: 54 },
+              { name: "Water", value: 32 },
+              { name: "Gas", value: 14 },
+            ]}
+          />
+        </Grid>
+      </Grid>
+    </Box>
+  );
+}
+
+=== frontend/src/pages/AdminDashboard/DataItems.jsx ===
+import React, { useEffect, useState } from "react";
+import {
+  Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, Table, TableBody, TableCell, TableHead, TableRow, IconButton, Select, MenuItem
+} from "@mui/material";
+import { Add, Edit } from "@mui/icons-material";
+import { useAuth } from "../../context/AuthContext";
+
+const API_URL = "http://localhost:8000/api/item-definitions/";
+
+const dataTypes = [
+  { value: "number", label: "Number" },
+  { value: "string", label: "String" },
+  { value: "date", label: "Date" },
+  { value: "file", label: "File" },
+  { value: "select", label: "Select" },
+];
+
+export default function DataItems() {
+  const { user } = useAuth();
+  const token = user?.token;
+  const [items, setItems] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({
+    name: "", description: "", data_type: "number", required: true, units: "", options: []
+  });
+
+  // Fetch items
+  useEffect(() => {
+    fetch(API_URL, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json()).then(setItems);
+  }, [token]);
+
+  // Handle form input
+  const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleOptionsChange = e => setForm({ ...form, options: e.target.value.split(",") });
+
+  // Open dialog for add/edit
+  const handleOpen = (item = null) => {
+    setEditing(item);
+    setForm(item ? { ...item, options: item.options?.join(",") || "" } : { name: "", description: "", data_type: "number", required: true, units: "", options: "" });
+    setOpen(true);
+  };
+
+  const handleClose = () => { setOpen(false); setEditing(null); };
+
+  // Submit form (add or edit)
+  const handleSubmit = async () => {
+    const method = editing ? "PUT" : "POST";
+    const url = editing ? `${API_URL}${editing.id}/` : API_URL;
+    const body = {
+      ...form,
+      options: form.data_type === "select" ? form.options.split(",").map(opt => opt.trim()) : []
+    };
+    await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(body)
+    });
+    setOpen(false);
+    // Refresh items
+    fetch(API_URL, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json()).then(setItems);
+  };
+
+  return (
+    <Box>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h6">Data Item Definitions</Typography>
+        <Button variant="contained" startIcon={<Add />} onClick={() => handleOpen()}>Add Item</Button>
+      </Box>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Name</TableCell><TableCell>Type</TableCell>
+            <TableCell>Required</TableCell><TableCell>Units</TableCell>
+            <TableCell>Options</TableCell><TableCell>Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {items.map(item => (
+            <TableRow key={item.id}>
+              <TableCell>{item.name}</TableCell>
+              <TableCell>{item.data_type}</TableCell>
+              <TableCell>{item.required ? "Yes" : "No"}</TableCell>
+              <TableCell>{item.units}</TableCell>
+              <TableCell>{item.options?.join(", ")}</TableCell>
+              <TableCell>
+                <IconButton onClick={() => handleOpen(item)}><Edit /></IconButton>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      <Dialog open={open} onClose={handleClose}>
+        <DialogTitle>{editing ? "Edit Data Item" : "Add Data Item"}</DialogTitle>
+        <DialogContent>
+          <TextField margin="dense" fullWidth label="Name" name="name" value={form.name} onChange={handleChange} />
+          <TextField margin="dense" fullWidth label="Description" name="description" value={form.description} onChange={handleChange} />
+          <Select fullWidth name="data_type" value={form.data_type} onChange={handleChange}>
+            {dataTypes.map(dt => (
+              <MenuItem key={dt.value} value={dt.value}>{dt.label}</MenuItem>
+            ))}
+          </Select>
+          <TextField margin="dense" fullWidth label="Units" name="units" value={form.units} onChange={handleChange} />
+          {form.data_type === "select" && (
+            <TextField margin="dense" fullWidth label="Options (comma separated)" name="options" value={form.options} onChange={handleChange} />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose}>Cancel</Button>
+          <Button onClick={handleSubmit} variant="contained">Save</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+=== frontend/src/pages/AdminDashboard/ElectricityModule.jsx ===
+// src/pages/AdminDashboard/ElectricityModule.jsx
+
+import React from "react";
+import { Box, Typography, Paper } from "@mui/material";
+
+const ElectricityModule = ({ context }) => (
+  <Box>
+    <Typography variant="h5" fontWeight={600} mb={2}>
+      Electricity Module
+      {context && context.project && <> (Project: {context.project})</>}
+      {context && context.cycle && <> (Cycle: {context.cycle})</>}
+      {context && context.module && <> (Module: {context.module})</>}
+    </Typography>
+    <Paper sx={{ p: 3 }}>
+      <Typography variant="body1">
+        This is the skeleton for the Electricity module.  
+        Add your Electricity management features, statistics, and charts here.
+      </Typography>
+    </Paper>
+  </Box>
+);
+
+export default ElectricityModule;
+
+=== frontend/src/pages/AdminDashboard/GasModule.jsx ===
+// src/pages/AdminDashboard/GasModule.jsx
+
+import React from "react";
+import { Box, Typography, Paper } from "@mui/material";
+
+const GasModule = ({ context }) => (
+  <Box>
+    <Typography variant="h5" fontWeight={600} mb={2}>
+      Gas Module
+      {context && context.project && <> (Project: {context.project})</>}
+      {context && context.cycle && <> (Cycle: {context.cycle})</>}
+      {context && context.module && <> (Module: {context.module})</>}
+    </Typography>
+    <Paper sx={{ p: 3 }}>
+      <Typography variant="body1">
+        This is the skeleton for the Gas module.  
+        Add your Gas management features, statistics, and charts here.
+      </Typography>
+    </Paper>
+  </Box>
+);
+
+export default GasModule;
+
+=== frontend/src/pages/AdminDashboard/README.md ===
+# AdminDashboard
+
+This folder contains the components and modules for the administrator dashboard.
+
+---
+
+## 📁 Structure
+
+```
+AdminDashboard/
+├── AdminDashboard.jsx         # Main admin dashboard layout and internal router
+├── DashboardHome.jsx          # Home page for admin dashboard (stats, charts)
+├── WaterModule.jsx            # Water-specific admin module (if present)
+├── ElectricityModule.jsx      # Electricity-specific admin module (if present)
+├── GasModule.jsx              # Gas-specific admin module (if present)
+├── components/                # Shared components for admin dashboard (see below)
+└── ...                        # Add more admin modules as needed
+```
+
+---
+
+## 🏗️ Main Files
+
+- **AdminDashboard.jsx**  
+  Main entry point for the admin dashboard, sets up layout (sidebar, topbar), and defines internal routes for admin modules.
+- **DashboardHome.jsx**  
+  The default landing page for admins, showing stats and charts for the selected context (project, cycle, or module).
+- **WaterModule.jsx**, **ElectricityModule.jsx**, **GasModule.jsx**  
+  (If present) Each file implements a dashboard view for a specific resource domain in the project.
+- **components/**  
+  Shared UI components for the admin dashboard (sidebar, menu, cards, etc.).  
+  See [`components/README.md`](./components/README.md).
+
+---
+
+## 📝 Notes
+
+- The admin dashboard is **context-aware**; it adapts its title and contents based on the selected project/cycle/module.
+- Sidebar navigation and internal routing are handled by `AdminDashboard.jsx`.
+- All admin dashboard widgets and menu logic are shared via the `components/` subfolder.
+
+---
+
+**See [`components/README.md`](./components/README.md) for documentation on shared admin dashboard widgets.**
+
+
+=== frontend/src/pages/AdminDashboard/Templates.jsx ===
+import React, { useEffect, useState } from "react";
+import {
+  Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, Table, TableBody, TableCell, TableHead, TableRow, IconButton, MenuItem, Select
+} from "@mui/material";
+import { Add, Edit } from "@mui/icons-material";
+import { useAuth } from "../../context/AuthContext";
+
+const API_URL = "http://localhost:8000/api/templates/";
+const ITEM_DEFS_URL = "http://localhost:8000/api/item-definitions/";
+
+export default function Templates() {
+  const { user } = useAuth();
+  const token = user?.token;
+  const [templates, setTemplates] = useState([]);
+  const [itemDefs, setItemDefs] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({
+    name: "", description: "", fields: []
+  });
+
+  useEffect(() => {
+    fetch(API_URL, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json()).then(setTemplates);
+    fetch(ITEM_DEFS_URL, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json()).then(setItemDefs);
+  }, [token]);
+
+  const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleFieldsChange = e => setForm({ ...form, fields: Array.from(e.target.selectedOptions, opt => parseInt(opt.value)) });
+
+  const handleOpen = (tpl = null) => {
+    setEditing(tpl);
+    setForm(tpl ? { ...tpl, fields: tpl.fields?.map(f => f.id) || [] } : { name: "", description: "", fields: [] });
+    setOpen(true);
+  };
+  const handleClose = () => { setOpen(false); setEditing(null); };
+
+  // Save template (simplified, without field ordering)
+  const handleSubmit = async () => {
+    const method = editing ? "PUT" : "POST";
+    const url = editing ? `${API_URL}${editing.id}/` : API_URL;
+    await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ ...form, fields: form.fields })
+    });
+    setOpen(false);
+    fetch(API_URL, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json()).then(setTemplates);
+  };
+
+  return (
+    <Box>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h6">Templates</Typography>
+        <Button variant="contained" startIcon={<Add />} onClick={() => handleOpen()}>Add Template</Button>
+      </Box>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Name</TableCell><TableCell>Description</TableCell>
+            <TableCell>Fields</TableCell><TableCell>Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {templates.map(tpl => (
+            <TableRow key={tpl.id}>
+              <TableCell>{tpl.name}</TableCell>
+              <TableCell>{tpl.description}</TableCell>
+              <TableCell>{tpl.fields?.map(f => f.name).join(", ")}</TableCell>
+              <TableCell>
+                <IconButton onClick={() => handleOpen(tpl)}><Edit /></IconButton>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <Dialog open={open} onClose={handleClose}>
+        <DialogTitle>{editing ? "Edit Template" : "Add Template"}</DialogTitle>
+        <DialogContent>
+          <TextField margin="dense" fullWidth label="Name" name="name" value={form.name} onChange={handleChange} />
+          <TextField margin="dense" fullWidth label="Description" name="description" value={form.description} onChange={handleChange} />
+          <Select
+            multiple
+            native
+            fullWidth
+            value={form.fields}
+            onChange={handleFieldsChange}
+            inputProps={{ id: "fields-select" }}
+          >
+            {itemDefs.map(def => (
+              <option key={def.id} value={def.id}>{def.name} ({def.data_type})</option>
+            ))}
+          </Select>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose}>Cancel</Button>
+          <Button onClick={handleSubmit} variant="contained">Save</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+=== frontend/src/pages/AdminDashboard/WaterModule.jsx ===
+// src/pages/AdminDashboard/WaterModule.jsx
+
+import React from "react";
+import { Box, Typography, Paper } from "@mui/material";
+
+const WaterModule = ({ context }) => (
+  <Box>
+    <Typography variant="h5" fontWeight={600} mb={2}>
+      Water Module
+      {context && context.project && <> (Project: {context.project})</>}
+      {context && context.cycle && <> (Cycle: {context.cycle})</>}
+      {context && context.module && <> (Module: {context.module})</>}
+    </Typography>
+    <Paper sx={{ p: 3 }}>
+      <Typography variant="body1">
+        This is the skeleton for the Water module.  
+        Add your water management features, statistics, and charts here.
+      </Typography>
+    </Paper>
+  </Box>
+);
+
+export default WaterModule;
+

@@ -1,7 +1,18 @@
-// src/pages/AdminDashboard/components/StatCard.jsx
+// File: frontend/src/pages/AdminDashboard/components/StatCard.jsx
+// Purpose: Card component to display a single statistical value and its label.
+// Location: frontend/src/pages/AdminDashboard/components/
+
 import React from "react";
 import { Card, CardContent, Typography, Box } from "@mui/material";
 
+/**
+ * StatCard component.
+ * Displays a summary statistic with an optional unit.
+ *
+ * @param {string} label - The label for the statistic.
+ * @param {string|number} value - The statistic value.
+ * @param {string} [unit] - Optional unit for the value.
+ */
 const StatCard = ({ label, value, unit }) => (
   <Card
     sx={{

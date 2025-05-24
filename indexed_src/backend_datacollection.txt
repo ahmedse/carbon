@@ -1,0 +1,252 @@
+=== backend/datacollection/__init__.py ===
+
+
+=== backend/datacollection/admin.py ===
+from django.contrib import admin
+
+# Register your models here.
+
+
+=== backend/datacollection/apps.py ===
+from django.apps import AppConfig
+
+class DatacollectionConfig(AppConfig):
+    name = 'datacollection'
+
+=== backend/datacollection/models.py ===
+from django.db import models
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+class ReadingItemDefinition(models.Model):
+    DATA_TYPE_CHOICES = [
+        ('number', 'Number'),
+        ('string', 'String'),
+        ('date', 'Date'),
+        ('file', 'File'),
+        ('select', 'Select'),
+    ]
+
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    data_type = models.CharField(max_length=20, choices=DATA_TYPE_CHOICES)
+    validation_rules = models.JSONField(default=dict, blank=True)
+    required = models.BooleanField(default=True)
+    units = models.CharField(max_length=50, blank=True)
+    options = models.JSONField(default=list, blank=True)  # For select-type
+    category = models.CharField(max_length=50, blank=True)
+    tags = models.JSONField(default=list, blank=True)
+    evidence_rules = models.JSONField(default=dict, blank=True)
+    editable = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+class ReadingTemplate(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    version = models.PositiveIntegerField(default=1)
+    status = models.CharField(max_length=20, default='active')
+    fields = models.ManyToManyField(ReadingItemDefinition, through='ReadingTemplateField')
+    # Add context assignment logic as needed (e.g., FK to Project or a GenericForeignKey)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} v{self.version}"
+
+class ReadingTemplateField(models.Model):
+    template = models.ForeignKey(ReadingTemplate, on_delete=models.CASCADE)
+    field = models.ForeignKey(ReadingItemDefinition, on_delete=models.CASCADE)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('template', 'field')
+        ordering = ['order']
+
+class ReadingEntry(models.Model):
+    template = models.ForeignKey(ReadingTemplate, on_delete=models.CASCADE)
+    template_version = models.PositiveIntegerField()
+    context_id = models.PositiveIntegerField()  # e.g., Project/Branch/Period
+    data = models.JSONField(default=dict)  # {field_id: value}
+    submitted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, default='draft')
+    audit_log = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return f"Entry {self.id} for Template {self.template_id}"
+
+class EvidenceFile(models.Model):
+    reading_entry = models.ForeignKey(ReadingEntry, on_delete=models.CASCADE, related_name='evidence_files')
+    reading_item = models.ForeignKey(ReadingItemDefinition, on_delete=models.CASCADE)
+    file = models.FileField(upload_to='evidence/')
+    file_type = models.CharField(max_length=50)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    covers_period_start = models.DateField(null=True, blank=True)
+    covers_period_end = models.DateField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Evidence for Entry {self.reading_entry_id} - {self.file.name}"
+
+=== backend/datacollection/permissions.py ===
+
+
+=== backend/datacollection/serializers.py ===
+from rest_framework import serializers
+from .models import (
+    ReadingItemDefinition,
+    ReadingTemplate,
+    ReadingTemplateField,
+    ReadingEntry,
+    EvidenceFile,
+)
+from accounts.models import Context
+
+class ContextSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Context
+        fields = '__all__'
+
+class ReadingItemDefinitionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReadingItemDefinition
+        fields = '__all__'
+
+class ReadingTemplateFieldSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReadingTemplateField
+        fields = '__all__'
+
+class ReadingTemplateSerializer(serializers.ModelSerializer):
+    fields = ReadingItemDefinitionSerializer(many=True, read_only=True)
+    context = ContextSerializer(read_only=True)
+    context_id = serializers.PrimaryKeyRelatedField(
+        queryset=Context.objects.all(), source='context', write_only=True, required=False
+    )
+
+    class Meta:
+        model = ReadingTemplate
+        fields = '__all__'
+
+class ReadingEntrySerializer(serializers.ModelSerializer):
+    context = ContextSerializer(read_only=True)
+    context_id = serializers.PrimaryKeyRelatedField(
+        queryset=Context.objects.all(), source='context', write_only=True, required=False
+    )
+
+    class Meta:
+        model = ReadingEntry
+        fields = '__all__'
+
+class EvidenceFileSerializer(serializers.ModelSerializer):
+    context = ContextSerializer(read_only=True)
+    context_id = serializers.PrimaryKeyRelatedField(
+        queryset=Context.objects.all(), source='context', write_only=True, required=False
+    )
+
+    class Meta:
+        model = EvidenceFile
+        fields = '__all__'
+
+=== backend/datacollection/tests.py ===
+from django.test import TestCase
+
+# Create your tests here.
+
+
+=== backend/datacollection/urls.py ===
+from rest_framework.routers import DefaultRouter
+from .views import (
+    ReadingItemDefinitionViewSet,
+    ReadingTemplateViewSet,
+    ReadingTemplateFieldViewSet,
+    ReadingEntryViewSet,
+    EvidenceFileViewSet,
+)
+
+router = DefaultRouter()
+router.register(r'item-definitions', ReadingItemDefinitionViewSet)
+router.register(r'templates', ReadingTemplateViewSet)
+router.register(r'template-fields', ReadingTemplateFieldViewSet)
+router.register(r'entries', ReadingEntryViewSet)
+router.register(r'evidence-files', EvidenceFileViewSet)
+
+urlpatterns = router.urls
+
+=== backend/datacollection/views.py ===
+from django.shortcuts import render
+
+from rest_framework import viewsets
+from accounts.permissions import HasRBACPermission  # Import RBAC permission
+from .models import (
+    ReadingItemDefinition,
+    ReadingTemplate,
+    ReadingTemplateField,
+    ReadingEntry,
+    EvidenceFile,
+)
+from .serializers import (
+    ReadingItemDefinitionSerializer,
+    ReadingTemplateSerializer,
+    ReadingTemplateFieldSerializer,
+    ReadingEntrySerializer,
+    EvidenceFileSerializer,
+)
+
+class ReadingItemDefinitionViewSet(viewsets.ModelViewSet):
+    queryset = ReadingItemDefinition.objects.all()
+    serializer_class = ReadingItemDefinitionSerializer
+    permission_classes = [HasRBACPermission]
+    required_permission = "manage_item_definitions"
+
+    def get_context(self, request):
+        # For global admin actions, context can be None or global
+        return None
+
+class ReadingTemplateViewSet(viewsets.ModelViewSet):
+    queryset = ReadingTemplate.objects.all()
+    serializer_class = ReadingTemplateSerializer
+    permission_classes = [HasRBACPermission]
+    required_permission = "manage_templates"
+
+    def get_context(self, request):
+        return None
+
+class ReadingTemplateFieldViewSet(viewsets.ModelViewSet):
+    queryset = ReadingTemplateField.objects.all()
+    serializer_class = ReadingTemplateFieldSerializer
+    permission_classes = [HasRBACPermission]
+    required_permission = "manage_templates"
+
+    def get_context(self, request):
+        return None
+
+class ReadingEntryViewSet(viewsets.ModelViewSet):
+    queryset = ReadingEntry.objects.all()
+    serializer_class = ReadingEntrySerializer
+    permission_classes = [HasRBACPermission]
+    required_permission = "submit_entry"
+
+    def get_context(self, request):
+        # Example: context could be derived from the entry's template or project
+        # You may need to adjust this logic based on your Context model
+        entry_id = self.kwargs.get('pk')
+        if entry_id:
+            entry = ReadingEntry.objects.filter(pk=entry_id).first()
+            if entry:
+                return entry.template  # Or entry.context if you add FK
+        return None
+
+class EvidenceFileViewSet(viewsets.ModelViewSet):
+    queryset = EvidenceFile.objects.all()
+    serializer_class = EvidenceFileSerializer
+    permission_classes = [HasRBACPermission]
+    required_permission = "upload_evidence"
+
+    def get_context(self, request):
+        return None
+

@@ -1,3 +1,7 @@
+// File: frontend/src/Router.jsx
+// Purpose: Application router, handles route protection and layout structure.
+// Location: frontend/src/
+
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import MainLayout from "./layouts/MainLayout";
@@ -8,13 +12,15 @@ import AuditorDashboard from "./pages/AuditorDashboard";
 import DataOwnerDashboard from "./pages/DataOwnerDashboard";
 import { useAuth } from "./context/AuthContext";
 
+/**
+ * Protects routes based on authenticated user and allowed roles.
+ * Redirects to login if not authenticated or not authorized.
+ */
 const ProtectedRoute = ({ allowedRoles, children }) => {
   const { user } = useAuth();
-  console.log("ProtectedRoute: user", user);
   if (!user) return <Navigate to="/login" replace />;
   if (allowedRoles) {
     const allRoles = (user.roles || []).map(r => r.role);
-    console.log("ProtectedRoute: allRoles", allRoles, "allowedRoles", allowedRoles);
     if (!allRoles.some(r => allowedRoles.includes(r))) {
       return <Navigate to="/login" replace />;
     }
@@ -22,12 +28,18 @@ const ProtectedRoute = ({ allowedRoles, children }) => {
   return children;
 };
 
+/**
+ * Layout wrapper for routes, passing theme mode controls.
+ */
 const LayoutRoute = ({ mode, setMode }) => (
   <MainLayout mode={mode} setMode={setMode}>
     <Outlet />
   </MainLayout>
 );
 
+/**
+ * Root router configuration.
+ */
 const Router = ({ mode, setMode }) => (
   <BrowserRouter>
     <Routes>

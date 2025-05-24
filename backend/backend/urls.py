@@ -1,25 +1,16 @@
-"""
-URL configuration for backend project.
+# File: backend/backend/urls.py
+# Purpose: Main URL configuration for the 'backend' Django project.
+#
+# This file defines the list of URL patterns that route HTTP requests
+# to the appropriate Django views or applications.
 
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
 from django.urls import path, include
 
+# urlpatterns: List of URL patterns that route to views or included URL configs.
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # ... other patterns ...
-    path('api/', include('accounts.urls')),
-    path('api/core/', include('core.urls')),
+    path('api/', include('accounts.urls')),     # Routes API requests to the accounts app
+    path('api/core/', include('core.urls')),    # Routes API requests to the core app
+    path('api/datacollection/', include('datacollection.urls')),
 ]

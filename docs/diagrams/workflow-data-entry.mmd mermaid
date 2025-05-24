@@ -1,0 +1,8 @@
+%% Data Owner Workflow: Data Entry
+flowchart TD
+    A[Data Owner selects context (Project/Cycle/Module)]
+    A --> B[Enter data via form or upload CSV]
+    B --> C[Validate data]
+    C -- Valid --> D[Data saved to DB]
+    C -- Invalid --> E[Error shown, correct and resubmit]
+    D --> F[Notify Auditor (optional)]

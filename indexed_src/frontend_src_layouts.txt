@@ -1,0 +1,38 @@
+=== frontend/src/layouts/MainLayout.jsx ===
+import React from "react";
+import Header from "../components/Header";
+import Footer from "../components/Footer";
+import { Outlet } from "react-router-dom";
+import { Box } from "@mui/material";
+
+function MainLayout({ mode, setMode }) {
+  return (
+    <Box
+      sx={{
+        minHeight: "100vh",
+        bgcolor: "background.default",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <Header mode={mode} setMode={setMode} />
+      <Box
+        sx={{
+          flex: 1,
+          width: "100vw",
+          maxWidth: "100vw",
+          display: "flex",
+          flexDirection: "column",
+          px: 0,
+          py: 0,
+        }}
+      >
+        <Outlet />
+      </Box>
+      <Footer />
+    </Box>
+  );
+}
+
+export default MainLayout;
+

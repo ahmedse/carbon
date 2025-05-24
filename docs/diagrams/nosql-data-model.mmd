@@ -1,0 +1,11 @@
+%% NoSQL/MongoDB Data Model (Future)
+erDiagram
+    TENANT ||--o{ USER : has
+    TENANT ||--o{ PROJECT : owns
+    PROJECT ||--o{ CYCLE : contains
+    PROJECT ||--o{ MODULEDATA : collects
+    CYCLE ||--o{ MODULEDATA : belongs_to
+    MODULE ||--o{ MODULEDATA : type
+    MODULEDATA ||--o{ CALCULATIONRESULT : produces
+    MODULEDATA ||--o{ MODULEDATAHISTORY : versions
+    USER ||--o{ AUDITLOG : acts

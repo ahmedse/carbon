@@ -1,4 +1,5 @@
-# accounts/permissions.py
+# File: accounts/permissions.py
+# Purpose: Custom permission class for RBAC enforcement in DRF views.
 
 from rest_framework.permissions import BasePermission
 from .utils import user_has_permission
@@ -10,6 +11,9 @@ class HasRBACPermission(BasePermission):
     The view must set 'required_permission' and implement 'get_context(request)'.
     """
     def has_permission(self, request, view):
+        """
+        Returns True if the user has the required permission in the context.
+        """
         if not request.user.is_authenticated:
             return False
 

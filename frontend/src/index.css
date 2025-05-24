@@ -1,3 +1,8 @@
+/* File: frontend/src/index.css
+   Purpose: Global CSS for the application, including color schemes and base styles.
+   Location: frontend/src/
+*/
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;

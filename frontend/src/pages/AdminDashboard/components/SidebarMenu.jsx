@@ -1,4 +1,7 @@
-// src/pages/AdminDashboard/components/SidebarMenu.jsx
+// File: frontend/src/pages/AdminDashboard/components/SidebarMenu.jsx
+// Purpose: Renders the navigation menu for the sidebar, including nested submenus.
+// Location: frontend/src/pages/AdminDashboard/components/
+
 import React from "react";
 import {
   List,
@@ -14,6 +17,17 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { Link, useLocation } from "react-router-dom";
 
+/**
+ * SidebarMenu component.
+ * Renders main and sub-menu items, supports collapse and tooltips.
+ *
+ * @param {Array} menuConfig - Array of menu configuration objects.
+ * @param {boolean} collapsed - Whether sidebar is collapsed.
+ * @param {string} expandedMenu - Which submenu is expanded.
+ * @param {function} setExpandedMenu - Setter for expanded menu.
+ * @param {number} fontSize - Font size for menu items.
+ * @param {number} iconSize - Icon size for menu icons.
+ */
 const SidebarMenu = ({
   menuConfig,
   collapsed,

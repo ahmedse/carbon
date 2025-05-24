@@ -1,4 +1,7 @@
-// src/pages/AdminDashboard/components/Topbar.jsx
+// File: frontend/src/pages/AdminDashboard/components/Topbar.jsx
+// Purpose: Top navigation bar for the admin dashboard, with title and menu toggle.
+// Location: frontend/src/pages/AdminDashboard/components/
+
 import React from "react";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
@@ -6,6 +9,13 @@ import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
 import MenuIcon from "@mui/icons-material/Menu";
 
+/**
+ * Topbar component.
+ * Renders an app bar with a title and optional sidebar toggle button.
+ *
+ * @param {string} title - Title to display in the app bar.
+ * @param {function} drawerToggle - Callback for sidebar toggle (for mobile).
+ */
 const Topbar = ({ title = "Dashboard", drawerToggle }) => (
   <AppBar
     position="static"

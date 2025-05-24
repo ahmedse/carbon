@@ -1,4 +1,7 @@
-// src/pages/AdminDashboard/components/ChartCard.jsx
+// File: frontend/src/pages/AdminDashboard/components/ChartCard.jsx
+// Purpose: Card component to render either a line or pie chart using recharts.
+// Location: frontend/src/pages/AdminDashboard/components/
+
 import React from "react";
 import { Card, CardContent, Typography } from "@mui/material";
 import {
@@ -8,6 +11,14 @@ import {
 
 const COLORS = ["#388e3c", "#1976d2", "#ffa726", "#f44336", "#8e24aa"];
 
+/**
+ * ChartCard component.
+ * Renders a line or pie chart with a title.
+ *
+ * @param {string} title - Chart title.
+ * @param {"line"|"pie"} type - Type of chart to render.
+ * @param {array} data - Data array for the chart.
+ */
 const ChartCard = ({ title, type, data }) => (
   <Card sx={{ height: 320, borderRadius: 3, boxShadow: 2 }}>
     <CardContent>

@@ -1,0 +1,551 @@
+=== README.md ===
+# Carbon Management Platform
+
+A robust, extensible system for tracking, calculating, and reporting environmental data (water, electricity, vehicles, etc.) across projects and periods. Built for security, auditability, and future scalability.
+
+---
+
+## 🚀 Overview
+
+- **Multi-project, multi-period, multi-module data collection**
+- **Granular role-based access control (RBAC)**
+- **Auditable calculation and reporting**
+- **Modern React frontend (Material UI) & Django backend**
+- **Supports containerized (Docker) and manual setup**
+- **Designed for extensibility: supports API, advanced analytics, and multi-tenancy**
+
+---
+
+## 🏗️ Architecture
+
+- **Frontend**: React (Vite) + Material UI
+- **Backend**: Django + Django REST Framework + JWT Auth
+- **Database**: PostgreSQL (MongoDB planned)
+- **DevOps**: Docker, Docker Compose
+- **Documentation & Design**: See [`docs/`](./docs) for API specs, workflows, and diagrams
+
+---
+
+## 📂 Main Repository Structure
+
+```
+carbon-management-platform/
+├── backend/      # Django apps (core logic, API, RBAC)
+├── frontend/     # React app (Material UI, routing, dashboards)
+├── docs/         # Design docs, diagrams, API, workflows
+├── install.md    # Installation & deployment guide (manual & Docker)
+├── progress.md   # Live progress and Kanban board
+├── docker-compose.yml
+└── README.md     # This file!
+```
+
+---
+
+## 🛠️ Quick Start
+
+**For details and troubleshooting, see [install.md](./install.md).**
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/your-org/carbon-management-platform.git
+cd carbon-management-platform
+```
+
+### 2. Choose your setup:
+
+- **Docker (recommended for most users)**
+- **Manual (for advanced/local development)**
+
+---
+
+## 📝 Project Progress
+
+Progress and live tasks are tracked in [progress.md](./progress.md).
+
+---
+
+## 🧭 Documentation
+
+- **Design, Data Model, API**: see [`docs/`](./docs)
+- **Deployment & Operations**: see [install.md](./install.md)
+- **Debugging & Testing**: see [`docs/debug.md`](./docs/debug.md) or [backend/README.md](./backend/README.md)
+
+---
+
+## 🤝 Contributing
+
+- All team members (devs, testers, analysts, ops) should check [progress.md](./progress.md) and assign themselves tasks.
+- Issues and feature suggestions welcome—please use GitHub Issues.
+
+---
+
+## 📄 License
+
+See [LICENSE](./LICENSE) for details.
+
+---
+
+**For questions, refer to the [docs/](./docs) folder, or contact the maintainers.**
+
+
+=== docker-compose.yml ===
+version: "3.8"
+services:
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    restart: always
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+
+=== install.md ===
+# Installation & Setup Guide  
+*Carbon Management Platform*
+
+This guide describes how to set up the platform for **development, testing, or demo purposes** on Ubuntu Linux.  
+You can use either **Docker** (recommended for most users) or **manual installation**.
+
+---
+
+## Table of Contents
+
+1. [Quickstart (Docker)](#1-quickstart-docker)
+2. [Manual Setup (Ubuntu)](#2-manual-setup-ubuntu)
+    - [Backend: Django & PostgreSQL](#backend-django--postgresql)
+    - [Frontend: React (Vite)](#frontend-react-vite)
+3. [Post-Install Checks](#3-post-install-checks)
+4. [Common Commands](#4-common-commands)
+5. [Troubleshooting](#5-troubleshooting)
+6. [Resources & Documentation](#6-resources--documentation)
+
+---
+
+## 1. Quickstart (Docker)
+
+**Recommended for most users!**
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/engine/install/ubuntu/)
+- [Docker Compose](https://docs.docker.com/compose/install/)
+
+### Steps
+
+```bash
+git clone https://github.com/your-org/carbon-management-platform.git
+cd carbon-management-platform
+cp .env.example .env  # Edit if needed, see docs/env.md
+docker-compose up --build
+```
+
+- The backend (Django API) will be accessible at [http://localhost:8000](http://localhost:8000)
+- The frontend (React) at [http://localhost:5173](http://localhost:5173)
+
+#### First-time setup:
+
+Initialize the database and create a superuser:
+
+```bash
+docker-compose exec backend python manage.py migrate
+docker-compose exec backend python manage.py createsuperuser
+```
+
+---
+
+## 2. Manual Setup (Ubuntu)
+
+**Advanced: Use if you want to run backend and frontend directly on your system.**
+
+### Prerequisites
+
+- Python 3.10+
+- Node.js 18+ and npm
+- PostgreSQL 13+ (or use Docker for DB only)
+- Git
+
+### Backend: Django & PostgreSQL
+
+#### 1. Install Node.js (if not already)
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+#### 2. Install PostgreSQL
+
+```bash
+sudo apt update
+sudo apt install postgresql postgresql-contrib libpq-dev
+```
+
+#### 3. Create Database and User
+
+```bash
+sudo -u postgres psql
+CREATE DATABASE carbon;
+CREATE USER carbon_user WITH PASSWORD 'securepassword123';
+GRANT ALL PRIVILEGES ON DATABASE carbon TO carbon_user;
+\q
+```
+
+#### 4. Django Backend Setup
+
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+# Or manually:
+# pip install django djangorestframework psycopg2-binary djangorestframework-simplejwt django-cors-headers
+```
+
+- Edit `backend/settings.py` or `.env` to use your database credentials:
+
+```python
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'carbon',
+        'USER': 'carbon_user',
+        'PASSWORD': 'securepassword123',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
+```
+
+#### 5. Run Migrations and Create Superuser
+
+```bash
+python manage.py makemigrations
+python manage.py migrate
+python manage.py createsuperuser
+```
+
+#### 6. Start Backend
+
+```bash
+python manage.py runserver
+# API will be at http://localhost:8000
+```
+
+---
+
+### Frontend: React (Vite)
+
+```bash
+cd ../frontend
+npm install
+npm run dev
+# App will be at http://localhost:5173
+```
+
+---
+
+## 3. Post-Install Checks
+
+- Visit [http://localhost:8000/api/](http://localhost:8000/api/) to check the API is running.
+- Visit [http://localhost:5173](http://localhost:5173) to check the frontend app.
+- Log in with your superuser credentials.
+
+---
+
+## 4. Common Commands
+
+- **Backend shell:**  
+  ```bash
+  docker-compose exec backend python manage.py shell
+  ```
+- **Run backend tests:**  
+  ```bash
+  docker-compose exec backend python manage.py test
+  ```
+- **Run frontend tests (if present):**  
+  ```bash
+  cd frontend && npm test
+  ```
+- **Stop all services:**  
+  ```bash
+  docker-compose down
+  ```
+
+---
+
+## 5. Troubleshooting
+
+- **DB connection errors:**  
+  Make sure PostgreSQL is running and credentials are correct.
+
+- **Port conflicts:**  
+  Change port numbers in `docker-compose.yml` or `.env` if ports 8000/5173 are in use.
+
+- **Static files:**  
+  For production, configure NGINX or serve static files as documented in `docs/deployment.md`.
+
+---
+
+## 6. Resources & Documentation
+
+- **Platform Design & API:** [`docs/`](./docs)
+- **Progress & Tasks:** [`progress.md`](./progress.md)
+- **Debugging:** [`docs/debug.md`](./docs/debug.md)
+- **Environment Variables:** [`docs/env.md`](./docs/env.md)
+- **Deployment:** [`docs/deployment.md`](./docs/deployment.md)
+
+---
+
+*For any issues, please check the [progress.md](./progress.md), [docs/](./docs) folder, or contact the maintainers.*
+```
+
+=== progress.md ===
+# Progress & Task Tracker
+*Carbon Management Platform*
+
+This file helps the team track project progress at both a high level (phases) and a granular level (tasks).  
+**Update this file regularly** as you work!
+
+---
+
+## 🟢 How to Use This File
+
+- **Check a box** `[x]` when you finish a task.
+- **Add notes/dates/links** as needed.
+- Move items between Kanban sections as they progress.
+
+---
+
+## ☑️ Macro Tasks (Phases)
+
+- [x] Core project scaffolding (backend, frontend)
+- [x] Database setup (PostgreSQL, initial schema)
+- [ ] RBAC & authentication (backend)
+- [ ] Core data models (Project, Period, Module, ModuleData)
+- [ ] API endpoints (CRUD, calculations)
+- [ ] Frontend layout & theming
+- [ ] Frontend authentication & routing
+- [ ] Role-based dashboards & pages
+- [ ] Initial DevOps (Docker, Compose)
+- [ ] CI/CD setup
+- [ ] Documentation & API specs
+- [ ] MVP testing & QA
+- [ ] Deployment (staging/production)
+- [ ] Advanced features (multi-tenancy, NoSQL, analytics)
+- [ ] **Dynamic Data Collection & Configuration** (NEW)
+
+---
+
+## 📋 Micro Tasks (Granular)
+
+### Backend
+
+- [x] Scaffold Django project & main apps
+- [x] Implement User & Role models
+- [x] JWT-based authentication
+- [ ] Context & RoleAssignment models
+- [ ] Project, Period, Module models
+- [ ] ModuleData, CalculationResult models
+- [ ] CRUD API endpoints
+- [ ] RBAC permission checks
+- [ ] Calculation endpoint
+- [ ] Unit tests for RBAC, models
+- [ ] Admin registration for all models
+- [ ] Logging/audit trail
+- [ ] Seed script for demo data
+
+#### Dynamic Data Collection & Configuration (Backend)
+
+- [ ] **Data Model Enhancements**
+  - [x] Create ReadingItemDefinition model
+      - [x] name, description, data type, validation rules, required/optional, category, tags, evidence rules, editable flag
+  - [x] Create ReadingTemplate model
+      - [x] name, description, version, status, assigned contexts, fields (with order), M2M with ReadingItemDefinition
+  - [x] Create ReadingEntry model
+      - [x] template, template version, context, data (JSON), submitted_by, submitted_at, status, audit log
+  - [x] Create EvidenceFile model
+      - [x] reading_entry, reading_item, file_path, file_type, uploaded_at, covers_period_start, covers_period_end
+  - [ ] Adapt Context, Project, Module models for assignment logic
+
+- [ ] **API Endpoints**
+  - [ ] CRUD for ReadingItemDefinition
+  - [ ] CRUD for ReadingTemplate (with versioning)
+  - [ ] Assign templates to contexts, assign staff
+  - [ ] CRUD for ReadingEntry (create, update, submit, retrieve)
+  - [ ] Evidence file upload/download (type/size validation)
+  - [ ] Fetch assigned tasks/forms per user/context
+  - [ ] Calculation/reporting endpoint
+
+- [ ] **RBAC & Permissions**
+  - [ ] Admin-only for template/item definition and assignment
+  - [ ] Restrict ReadingEntry endpoints by role/context
+  - [ ] Restrict EvidenceFile actions
+  - [ ] Restrict auditor actions (review, calculation, reporting)
+
+- [ ] **Validation & Evidence Handling**
+  - [ ] Dynamic field validation (min/max, units, required, etc.)
+  - [ ] Evidence file restrictions (type/size, multi-file, period coverage)
+  - [ ] Admin override of validation defaults
+
+- [ ] **Audit & Logging**
+  - [ ] Audit log for all actions (template change, data entry, evidence upload, review)
+  - [ ] Store before/after states and user info
+  - [ ] Reference template version in ReadingEntry
+
+- [ ] **Import/Export**
+  - [ ] Manual and CSV import for data/templates
+  - [ ] Export (CSV, PDF) of submissions/reports
+
+### Frontend
+
+- [x] Setup Vite+React project
+- [x] Material UI integration & theme
+- [ ] Base routing & folder structure
+- [ ] Login/logout with JWT
+- [ ] Store user/role context in state
+- [ ] Role-based navigation (sidebar, dashboards)
+- [ ] Dashboard home widgets
+- [ ] Modules page (list, cards)
+- [ ] Data entry forms (skeleton)
+- [ ] Toast/snackbar notifications
+- [ ] Responsive design for all pages
+- [ ] Accessibility (a11y) basics
+- [ ] Language/i18n structure
+
+#### Dynamic Data Collection & Configuration (Frontend)
+
+- [ ] **Admin UI**
+  - [ ] CRUD for ReadingItemDefinitions (with validation config)
+  - [ ] UI for building/assigning ReadingTemplates (add/reorder fields, assign context)
+  - [ ] UI for assigning Data Owners
+  - [ ] Versioning/audit trail display
+
+- [ ] **Data Owner UI**
+  - [ ] Dashboard: assigned data entry tasks per time unit/context
+  - [ ] Dynamic form rendering (based on template/context)
+  - [ ] Inline field validation
+  - [ ] Evidence upload widget (multi-file, period selection, type/size enforcement)
+  - [ ] Save draft, submit, restrict edits after deadline
+
+- [ ] **Auditor UI**
+  - [ ] Dashboard for reviewing submissions (filter by project/module/branch/period)
+  - [ ] Integrated display of submitted data & evidence
+  - [ ] Approve/reject/resubmit actions
+  - [ ] Calculation/reporting display
+  - [ ] Audit trail view
+
+- [ ] **Notifications & Alarms**
+  - [ ] System triggers for missing/incomplete submissions
+  - [ ] Notification UI for Data Owners/Admins/Auditors
+
+- [ ] **General**
+  - [ ] Full RBAC in UI (conditional rendering/actions)
+  - [ ] Responsive design for new UIs
+  - [ ] Accessibility/i18n for new features
+
+### DevOps
+
+- [x] Dockerize backend & frontend
+- [x] Docker Compose for local dev
+- [ ] NGINX config (for production)
+- [ ] CI/CD pipeline (GitHub Actions, etc.)
+- [ ] Deployment scripts & docs
+- [ ] Migration scripts for new models
+- [ ] Update Docker Compose for dependencies if needed
+- [ ] Automated tests for new endpoints/workflows
+
+### Documentation
+
+- [x] Initial README.md
+- [x] install.md (setup guide)
+- [ ] API documentation (OpenAPI, etc.)
+- [ ] Data model/ER diagrams
+- [ ] Usage/testing guide
+- [ ] Contribution guidelines
+- [ ] Update docs with new data collection flows
+
+---
+
+## 🗂️ Kanban Board
+
+### TODO
+
+- RBAC permission checks (backend)
+- Calculation endpoint
+- CRUD API endpoints
+- Data entry forms (frontend)
+- Dashboard widgets
+- CI/CD pipeline
+- API documentation
+- NGINX config
+- **All new sub-tasks for Dynamic Data Collection & Configuration**
+
+### IN PROGRESS
+
+- ModuleData, CalculationResult models
+- Role-based navigation (frontend)
+- Responsive design (frontend)
+- Any sub-tasks actively being worked on
+
+### DONE
+
+- Project scaffolding
+- Docker Compose setup
+- User & Role models
+- JWT authentication
+- Vite+React setup
+- Material UI integration
+- Any completed sub-tasks for Dynamic Data Collection & Configuration
+
+---
+
+## 🏁 Milestones & Deadlines
+
+| Milestone                         | Target Date | Status      |
+|-----------------------------------|-------------|-------------|
+| Core setup                        | yyyy-mm-dd  | ✅ Complete |
+| Backend MVP                       | yyyy-mm-dd  | ⬜ Pending  |
+| Frontend MVP                      | yyyy-mm-dd  | ⬜ Pending  |
+| Dockerized local dev              | yyyy-mm-dd  | ✅ Complete |
+| Staging deployment                | yyyy-mm-dd  | ⬜ Pending  |
+| User testing                      | yyyy-mm-dd  | ⬜ Pending  |
+| **Dynamic Data Collection Models**| yyyy-mm-dd  | ⬜ Pending  |
+| **Dynamic Data Entry UI MVP**     | yyyy-mm-dd  | ⬜ Pending  |
+| **Auditor/Reporting MVP**         | yyyy-mm-dd  | ⬜ Pending  |
+
+*Update with actual dates as your team sets them!*
+
+---
+
+## 📄 Notes / Blockers
+
+- _Add current blockers or issues here (e.g., “Waiting for API spec,” “Need DB migration script”)_
+
+---
+
+## 🔗 References
+
+- [Design docs & diagrams](./docs/)
+- [API documentation](./docs/api.md)
+- [Install & setup](./install.md)
+- [Debugging](./docs/debug.md)
+
+---
+
+*For major updates, please notify the team or open a pull request.*
+
+---
+
+This progress.md is now enhanced for detailed, feature-level, and sub-task-level tracking, following the best practices and structure recommended in your documentation [[1]](https://poe.com/citation?message_id=395400491407&citation=1)[[3]](https://poe.com/citation?message_id=395400491407&citation=3)[[4]](https://poe.com/citation?message_id=395400491407&citation=4)[[5]](https://poe.com/citation?message_id=395400491407&citation=5).
+

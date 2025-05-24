@@ -1,10 +1,19 @@
-// src/pages/AdminDashboard/components/SidebarHeader.jsx
+// File: frontend/src/pages/AdminDashboard/components/SidebarHeader.jsx
+// Purpose: Header for the sidebar, displaying project and cycle info.
+// Location: frontend/src/pages/AdminDashboard/components/
+
 import React from "react";
 import { Box } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
+/**
+ * SidebarHeader component.
+ * Displays project and cycle information at the top of the sidebar.
+ *
+ * @param {string} project - Project name.
+ * @param {string} cycle - Cycle name.
+ */
 const SidebarHeader = ({ project = "AAST Green Campus", cycle = "1 - 2025" }) => {
-    console.log("SidebarHeader props:", project, cycle);
     return (
     <Box
         sx={{

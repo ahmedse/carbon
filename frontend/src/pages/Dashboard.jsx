@@ -1,3 +1,7 @@
+// File: frontend/src/pages/Dashboard.jsx
+// Purpose: Main dashboard. Selects context and renders role-specific dashboards.
+// Location: frontend/src/pages/
+
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -6,11 +10,13 @@ import DataOwnerDashboard from "./DataOwnerDashboard";
 import AuditorDashboard from "./AuditorDashboard";
 import { Box, CircularProgress, Typography, Alert, MenuItem, Select, FormControl, InputLabel } from "@mui/material";
 
+/**
+ * Main dashboard component.
+ * Lets the user select a context and loads the appropriate dashboard based on their role.
+ */
 const Dashboard = () => {
   const { user } = useAuth();
-  console.log("[Dashboard] User from context:", user);
   const token = user?.token;
-  console.log("[Dashboard] Token for API:", token);
 
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,9 +25,9 @@ const Dashboard = () => {
   const [selectedContext, setSelectedContext] = useState("");
   const navigate = useNavigate();
 
+  // Fetch user roles and available contexts on mount
   useEffect(() => {
     if (!token) {
-      console.log("[Dashboard] No token, redirecting to login");
       navigate("/login");
       return;
     }
@@ -33,7 +39,6 @@ const Dashboard = () => {
         });
         if (response.ok) {
           const data = await response.json();
-          console.log("[Dashboard] Roles fetched:", data);
           setRoles(data.roles || []);
           // Extract available contexts for selection
           const contextList = (data.roles || []).map((r, idx) => ({
@@ -44,11 +49,9 @@ const Dashboard = () => {
           setContexts(contextList);
         } else {
           setError("Failed to fetch roles.");
-          console.warn("[Dashboard] Failed to fetch roles");
         }
       } catch (err) {
         setError("Error fetching roles.");
-        console.error("[Dashboard] Error fetching roles:", err);
       } finally {
         setLoading(false);
       }
@@ -116,7 +119,6 @@ const Dashboard = () => {
       {/* Show dashboard for the selected context */}
       {selectedContext && (() => {
         const ctx = contexts.find(c => c.key === selectedContext);
-        console.log("[Dashboard] Selected context:", ctx);
         if (!ctx) return null;
         if (ctx.role.includes("admin")) return <AdminDashboard context={ctx} />;
         if (ctx.role.includes("data_owner") || ctx.role.includes("data-owner")) return <DataOwnerDashboard context={ctx} />;
