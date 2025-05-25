@@ -1,8 +1,4 @@
-// File: frontend/src/pages/AdminDashboard/components/SidebarMenu.jsx
-// Purpose: Renders the navigation menu for the sidebar, including nested submenus.
-// Location: frontend/src/pages/AdminDashboard/components/
-
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   List,
   ListItem,
@@ -16,18 +12,9 @@ import {
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "../../../context/AuthContext";
+import { apiFetch } from "../../../api";
 
-/**
- * SidebarMenu component.
- * Renders main and sub-menu items, supports collapse and tooltips.
- *
- * @param {Array} menuConfig - Array of menu configuration objects.
- * @param {boolean} collapsed - Whether sidebar is collapsed.
- * @param {string} expandedMenu - Which submenu is expanded.
- * @param {function} setExpandedMenu - Setter for expanded menu.
- * @param {number} fontSize - Font size for menu items.
- * @param {number} iconSize - Icon size for menu icons.
- */
 const SidebarMenu = ({
   menuConfig,
   collapsed,
@@ -37,24 +24,39 @@ const SidebarMenu = ({
   iconSize = 20,
 }) => {
   const location = useLocation();
+  const { user, currentContext } = useAuth();
+  const token = user?.token;
+  const context_type = currentContext?.context_type;
+  const context_name = currentContext?.[context_type];
+  const context = { context_type, context_name };
+
+  // Store all templates fetched from the backend
+  const [templates, setTemplates] = useState([]);
+
+  useEffect(() => {
+    if (token && context_type && context_name) {
+      apiFetch("/api/datacollection/templates/", { token, context })
+        .then((res) => res.json())
+        .then((data) => setTemplates(data || []));
+    }
+  }, [token, context_type, context_name]);
+
+  const getModuleTemplates = (module) =>
+    templates.filter((tpl) => tpl.module && tpl.module.toLowerCase() === module);
 
   return (
     <List sx={{ py: 0 }}>
       {menuConfig.map((item, idx) => {
-        const selected =
-          item.path === "/admin"
-            ? location.pathname === "/admin"
-            : location.pathname.startsWith(item.path);
-
-        // Has submenu
+        // Static submenus (e.g. Data Schema)
         if (item.subMenu) {
           const isOpen = expandedMenu === item.label;
           const IconComponent = item.icon;
-
           const mainMenuListItem = (
             <ListItemButton
               onClick={() => setExpandedMenu(isOpen ? "" : item.label)}
-              selected={selected}
+              selected={
+                item.subMenu.some((sub) => location.pathname.startsWith(sub.path))
+              }
               sx={{
                 justifyContent: collapsed ? "center" : "flex-start",
                 px: collapsed ? 1 : 2,
@@ -168,9 +170,114 @@ const SidebarMenu = ({
                   })}
                 </List>
               </Collapse>
-              {idx === 4 || idx === 7 ? (
-                <Divider sx={{ borderColor: "rgba(255,255,255,0.10)", my: 1 }} />
-              ) : null}
+              <Divider sx={{ borderColor: "rgba(255,255,255,0.10)", my: 1 }} />
+            </React.Fragment>
+          );
+        }
+
+        // Dynamic templates submenu for modules
+        if (item.dynamicTemplates) {
+          const subTemplates = getModuleTemplates(item.moduleName);
+          const isOpen = expandedMenu === item.label;
+          const IconComponent = item.icon;
+          const mainMenuListItem = (
+            <ListItemButton
+              onClick={() => setExpandedMenu(isOpen ? "" : item.label)}
+              selected={location.pathname.startsWith(item.path)}
+              sx={{
+                justifyContent: collapsed ? "center" : "flex-start",
+                px: collapsed ? 1 : 2,
+                minHeight: 40,
+                borderRadius: 2,
+                my: 0.5,
+                fontSize,
+                "&.Mui-selected": {
+                  background: "rgba(76, 175, 80, 0.18)",
+                  color: "#4caf50",
+                  "& .MuiListItemIcon-root": { color: "#4caf50" },
+                },
+                transition: "all 0.2s",
+              }}
+            >
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  color: "inherit",
+                  justifyContent: "center",
+                  fontSize: iconSize,
+                }}
+              >
+                <IconComponent fontSize="small" />
+              </ListItemIcon>
+              {!collapsed && (
+                <>
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{
+                      fontSize,
+                      fontWeight: 500,
+                    }}
+                    sx={{ color: "inherit", ml: 1 }}
+                  />
+                  {isOpen ? (
+                    <ExpandLessIcon fontSize="small" />
+                  ) : (
+                    <ExpandMoreIcon fontSize="small" />
+                  )}
+                </>
+              )}
+            </ListItemButton>
+          );
+
+          return (
+            <React.Fragment key={item.label}>
+              <ListItem disablePadding sx={{ display: "block" }}>
+                {collapsed ? (
+                  <Tooltip title={item.label} placement="right">
+                    {mainMenuListItem}
+                  </Tooltip>
+                ) : (
+                  mainMenuListItem
+                )}
+              </ListItem>
+              <Collapse in={isOpen && !collapsed} timeout="auto" unmountOnExit>
+                <List component="div" disablePadding>
+                  {subTemplates.map((tpl) => {
+                    const subPath = `/admin/${item.moduleName}/template/${tpl.id}`;
+                    const subSelected = location.pathname === subPath;
+                    return (
+                      <ListItem disablePadding key={tpl.id}>
+                        <ListItemButton
+                          component={Link}
+                          to={subPath}
+                          selected={subSelected}
+                          sx={{
+                            pl: 5,
+                            minHeight: 32,
+                            borderRadius: 2,
+                            my: 0.2,
+                            fontSize: fontSize - 1,
+                            "&.Mui-selected": {
+                              background: "rgba(76, 175, 80, 0.12)",
+                              color: "#4caf50",
+                            },
+                            transition: "all 0.2s",
+                          }}
+                        >
+                          <ListItemText
+                            primary={tpl.name}
+                            primaryTypographyProps={{
+                              fontSize: fontSize - 1,
+                            }}
+                            sx={{ color: "inherit", ml: 1 }}
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                    );
+                  })}
+                </List>
+              </Collapse>
+              <Divider sx={{ borderColor: "rgba(255,255,255,0.10)", my: 1 }} />
             </React.Fragment>
           );
         }
@@ -181,7 +288,7 @@ const SidebarMenu = ({
           <ListItemButton
             component={Link}
             to={item.path}
-            selected={selected}
+            selected={location.pathname === item.path}
             sx={{
               justifyContent: collapsed ? "center" : "flex-start",
               px: collapsed ? 1 : 2,
@@ -192,7 +299,6 @@ const SidebarMenu = ({
               "&.Mui-selected": {
                 background: "rgba(76, 175, 80, 0.18)",
                 color: "#4caf50",
-                "& .MuiListItemIcon-root": { color: "#4caf50" },
               },
               transition: "all 0.2s",
             }}
@@ -228,9 +334,6 @@ const SidebarMenu = ({
                 listItem
               )}
             </ListItem>
-            {item.label === "Gas" && (
-              <Divider sx={{ borderColor: "rgba(255,255,255,0.10)", my: 1 }} />
-            )}
           </React.Fragment>
         );
       })}

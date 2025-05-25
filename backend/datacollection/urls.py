@@ -5,6 +5,7 @@ from .views import (
     ReadingTemplateFieldViewSet,
     ReadingEntryViewSet,
     EvidenceFileViewSet,
+    ContextAssignmentViewSet,
 )
 
 router = DefaultRouter()
@@ -13,5 +14,6 @@ router.register(r'templates', ReadingTemplateViewSet)
 router.register(r'template-fields', ReadingTemplateFieldViewSet)
 router.register(r'entries', ReadingEntryViewSet)
 router.register(r'evidence-files', EvidenceFileViewSet)
+router.register(r'context-assignments', ContextAssignmentViewSet)
 
 urlpatterns = router.urls

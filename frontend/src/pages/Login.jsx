@@ -1,8 +1,4 @@
-// File: frontend/src/pages/Login.jsx
-// Purpose: Login page component for user authentication.
-// Location: frontend/src/pages/
-
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
@@ -16,30 +12,30 @@ import {
   Alert,
   CircularProgress,
 } from "@mui/material";
+import { API_BASE_URL, API_ROUTES } from "../config";
 
 const LOGO_SRC = "/aast_carbon_logo_.jpg"; // logo image in public folder
 
-/**
- * Login component.
- * Handles user sign-in, authentication, and error display.
- */
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
 
-  /**
-   * Handles the login form submit.
-   */
+  useEffect(() => {
+    if (user) {
+      navigate("/dashboard");
+    }
+  }, [user, navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/token/", {
+      const response = await fetch(`${API_BASE_URL}${API_ROUTES.token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -52,10 +48,12 @@ const Login = () => {
         const decoded = jwtDecode(data.access);
 
         // Fetch roles after login
-        const rolesResponse = await fetch("http://localhost:8000/api/my-roles/", {
+        const rolesResponse = await fetch(`${API_BASE_URL}${API_ROUTES.myRoles}`, {
           headers: { Authorization: `Bearer ${data.access}` },
         });
         const rolesData = await rolesResponse.json();
+        // In Login.jsx after fetching roles
+        console.log("User roles from backend:", rolesData.roles);
 
         login({
           username: decoded.username,

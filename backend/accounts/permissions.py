@@ -25,3 +25,4 @@ class HasRBACPermission(BasePermission):
         if not context:
             return False
         return user_has_permission(request.user, required_permission, context)
+    

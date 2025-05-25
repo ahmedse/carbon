@@ -1,3 +1,5 @@
+// frontend/src/pages/AdminDashboard/DataItems.jsx
+
 import React, { useEffect, useState } from "react";
 import {
   Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -5,9 +7,10 @@ import {
 } from "@mui/material";
 import { Add, Edit } from "@mui/icons-material";
 import { useAuth } from "../../context/AuthContext";
+import { apiFetch } from "../../api";
+import { API_BASE_URL, API_ROUTES } from "../../config";
 
-// const API_URL = "http://localhost:8000/api/item-definitions/";
-const API_URL = "http://localhost:8000/api/datacollection/item-definitions/";
+const API_URL = `${API_BASE_URL}${API_ROUTES.dataItemDefs}`;
 
 const dataTypes = [
   { value: "number", label: "Number" },
@@ -18,8 +21,13 @@ const dataTypes = [
 ];
 
 export default function DataItems() {
-  const { user } = useAuth();
+  const { user, currentContext } = useAuth();
   const token = user?.token;
+  // extract context_type and context_name from currentContext
+  const context_type = currentContext?.context_type;
+  const context_name = currentContext?.[context_type];
+  const context = { context_type, context_name };
+
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -29,13 +37,13 @@ export default function DataItems() {
 
   // Fetch items
   useEffect(() => {
-    fetch(API_URL, { headers: { Authorization: `Bearer ${token}` } })
+    if (!token || !context_type || !context_name) return;
+    apiFetch("/api/datacollection/item-definitions/", { token, context })
       .then(res => res.json()).then(setItems);
-  }, [token]);
+  }, [token, context_type, context_name]);
 
   // Handle form input
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
-  const handleOptionsChange = e => setForm({ ...form, options: e.target.value.split(",") });
 
   // Open dialog for add/edit
   const handleOpen = (item = null) => {
@@ -49,22 +57,15 @@ export default function DataItems() {
   // Submit form (add or edit)
   const handleSubmit = async () => {
     const method = editing ? "PUT" : "POST";
-    const url = editing ? `${API_URL}${editing.id}/` : API_URL;
+    const endpoint = editing ? `/api/datacollection/item-definitions/${editing.id}/` : "/api/datacollection/item-definitions/";
     const body = {
       ...form,
       options: form.data_type === "select" ? form.options.split(",").map(opt => opt.trim()) : []
     };
-    await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(body)
-    });
+    await apiFetch(endpoint, { method, body, token, context });
     setOpen(false);
     // Refresh items
-    fetch(API_URL, { headers: { Authorization: `Bearer ${token}` } })
+    apiFetch("/api/datacollection/item-definitions/", { token, context })
       .then(res => res.json()).then(setItems);
   };
 

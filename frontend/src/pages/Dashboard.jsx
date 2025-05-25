@@ -1,7 +1,3 @@
-// File: frontend/src/pages/Dashboard.jsx
-// Purpose: Main dashboard. Selects context and renders role-specific dashboards.
-// Location: frontend/src/pages/
-
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +5,7 @@ import AdminDashboard from "./AdminDashboard/AdminDashboard";
 import DataOwnerDashboard from "./DataOwnerDashboard";
 import AuditorDashboard from "./AuditorDashboard";
 import { Box, CircularProgress, Typography, Alert, MenuItem, Select, FormControl, InputLabel } from "@mui/material";
+import { API_BASE_URL, API_ROUTES } from "../config";
 
 /**
  * Main dashboard component.
@@ -34,7 +31,7 @@ const Dashboard = () => {
 
     const fetchRoles = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/my-roles/", {
+        const response = await fetch(`${API_BASE_URL}${API_ROUTES.myRoles}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (response.ok) {

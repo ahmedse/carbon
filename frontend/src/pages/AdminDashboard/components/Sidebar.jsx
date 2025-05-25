@@ -1,6 +1,4 @@
 // File: frontend/src/pages/AdminDashboard/components/Sidebar.jsx
-// Purpose: Responsive, collapsible sidebar navigation for the admin dashboard.
-// Location: frontend/src/pages/AdminDashboard/components/
 
 import React, { useState } from "react";
 import { Drawer, Box, Tooltip, IconButton, Divider } from "@mui/material";
@@ -19,15 +17,6 @@ const footerHeight = 48;
 const sidebarFontSize = 14;
 const sidebarIconSize = 20;
 
-/**
- * Sidebar component.
- * Collapsible, pinnable sidebar with menu and project/cycle header.
- *
- * @param {boolean} open - Whether the sidebar is open (for mobile).
- * @param {function} onClose - Callback to close the sidebar (for mobile).
- * @param {string} currentProject - Project name to display in the header.
- * @param {string} currentCycle - Cycle name to display in the header.
- */
 const Sidebar = ({
   open = true,
   onClose,

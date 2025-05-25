@@ -8,11 +8,6 @@ import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import BoltIcon from "@mui/icons-material/Bolt";
 import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
-import OpacityIcon from "@mui/icons-material/Opacity";
-import SpeedIcon from "@mui/icons-material/Speed";
-import ReportProblemIcon from "@mui/icons-material/ReportProblem";
-import WarningIcon from "@mui/icons-material/Warning";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
 
 const menuConfig = [
   {
@@ -26,60 +21,47 @@ const menuConfig = [
     path: "/admin/reporting",
   },
   {
-    label: "Data Items",
+    label: "Data Schema",
     icon: CloudUploadIcon,
-    path: "/admin/data-items", // updated for consistency
-  },
-  {
-    label: "Data Templates",
-    icon: CloudUploadIcon,
-    path: "/admin/templates", // updated for consistency
-  },
-  {
-    label: "Notifications",
-    icon: NotificationsIcon,
-    path: "/admin/notifications",
-  },
-  {
-    label: "Project Settings",
-    icon: SettingsIcon,
-    path: "/admin/project-settings",
+    path: "/admin/data-schema",
+    subMenu: [
+      {
+        label: "Data Items",
+        icon: CloudUploadIcon,
+        path: "/admin/data-schema/data-items",
+      },
+      {
+        label: "Templates",
+        icon: CloudUploadIcon,
+        path: "/admin/data-schema/templates",
+      },
+    ],
   },
   {
     label: "Water",
     icon: WaterDropIcon,
     path: "/admin/water",
-    subMenu: [
-      { label: "Overview", icon: OpacityIcon, path: "/admin/water/overview" },
-      { label: "Meter Readings", icon: SpeedIcon, path: "/admin/water/meters" },
-      { label: "Import Data", icon: UploadFileIcon, path: "/admin/water/import" },
-      { label: "Module Settings", icon: SettingsIcon, path: "/admin/water/settings" },
-      { label: "Leak Detection", icon: ReportProblemIcon, path: "/admin/water/leaks" },
-    ],
+    dynamicTemplates: true,
+    moduleName: "water",
   },
   {
     label: "Electricity",
     icon: BoltIcon,
     path: "/admin/electricity",
-    subMenu: [
-      { label: "Analytics", icon: AssessmentIcon, path: "/admin/electricity/analytics" },
-      { label: "Meter Readings", icon: SpeedIcon, path: "/admin/electricity/meters" },
-      { label: "Import Data", icon: UploadFileIcon, path: "/admin/electricity/import" },
-      { label: "Module Settings", icon: SettingsIcon, path: "/admin/electricity/settings" },
-      { label: "Outage Reports", icon: WarningIcon, path: "/admin/electricity/outages" },
-    ],
+    dynamicTemplates: true,
+    moduleName: "electricity",
   },
   {
     label: "Gas",
     icon: LocalGasStationIcon,
     path: "/admin/gas",
-    subMenu: [
-      { label: "Trends", icon: AssessmentIcon, path: "/admin/gas/trends" },
-      { label: "Meter Readings", icon: SpeedIcon, path: "/admin/gas/meters" },
-      { label: "Import Data", icon: UploadFileIcon, path: "/admin/gas/import" },
-      { label: "Module Settings", icon: SettingsIcon, path: "/admin/gas/settings" },
-      { label: "Safety Alerts", icon: ReportProblemIcon, path: "/admin/gas/alerts" },
-    ],
+    dynamicTemplates: true,
+    moduleName: "gas",
+  },
+  {
+    label: "Project Settings",
+    icon: SettingsIcon,
+    path: "/admin/project-settings",
   },
   {
     label: "User Management",

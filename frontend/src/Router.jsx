@@ -11,6 +11,7 @@ import AdminDashboard from "./pages/AdminDashboard/AdminDashboard";
 import AuditorDashboard from "./pages/AuditorDashboard";
 import DataOwnerDashboard from "./pages/DataOwnerDashboard";
 import { useAuth } from "./context/AuthContext";
+import NotFound from "./pages/NotFound";
 
 /**
  * Protects routes based on authenticated user and allowed roles.
@@ -79,6 +80,7 @@ const Router = ({ mode, setMode }) => (
         />
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   </BrowserRouter>
 );

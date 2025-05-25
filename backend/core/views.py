@@ -4,8 +4,9 @@ from rest_framework import viewsets
 from .models import Project
 from .serializers import ProjectSerializer
 from accounts.permissions import HasRBACPermission
+from accounts.context_mixin import ContextExtractorMixin  # Import the mixin
 
-class ProjectViewSet(viewsets.ModelViewSet):
+class ProjectViewSet(ContextExtractorMixin, viewsets.ModelViewSet):
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
     # Add RBAC protection
@@ -13,9 +14,5 @@ class ProjectViewSet(viewsets.ModelViewSet):
     required_permission = 'view_project'
 
     def get_context(self, request):
-        # Find the project context for RBAC check
-        project_id = self.kwargs.get('pk')
-        from accounts.models import Context
-        if project_id:
-            return Context.objects.filter(type='project', project_id=project_id).first()
-        return None  # If no context, permission will fail
+        # Use the unified context extraction method from the mixin
+        return self.get_context_from_request(request)

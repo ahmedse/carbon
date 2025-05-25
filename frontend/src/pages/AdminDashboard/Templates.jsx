@@ -1,3 +1,5 @@
+// frontend/src/pages/AdminDashboard/Templates.jsx
+
 import React, { useEffect, useState } from "react";
 import {
   Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -5,13 +7,15 @@ import {
 } from "@mui/material";
 import { Add, Edit } from "@mui/icons-material";
 import { useAuth } from "../../context/AuthContext";
-
-const API_URL = "http://localhost:8000/api/datacollection/templates/";
-const ITEM_DEFS_URL = "http://localhost:8000/api/datacollection/item-definitions/";
+import { apiFetch } from "../../api";
 
 export default function Templates() {
-  const { user } = useAuth();
+  const { user, currentContext } = useAuth();
   const token = user?.token;
+  const context_type = currentContext?.context_type;
+  const context_name = currentContext?.[context_type];
+  const context = { context_type, context_name };
+
   const [templates, setTemplates] = useState([]);
   const [itemDefs, setItemDefs] = useState([]);
   const [open, setOpen] = useState(false);
@@ -21,11 +25,12 @@ export default function Templates() {
   });
 
   useEffect(() => {
-    fetch(API_URL, { headers: { Authorization: `Bearer ${token}` } })
+    if (!token || !context_type || !context_name) return;
+    apiFetch("/api/datacollection/templates/", { token, context })
       .then(res => res.json()).then(setTemplates);
-    fetch(ITEM_DEFS_URL, { headers: { Authorization: `Bearer ${token}` } })
+    apiFetch("/api/datacollection/item-definitions/", { token, context })
       .then(res => res.json()).then(setItemDefs);
-  }, [token]);
+  }, [token, context_type, context_name]);
 
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
   const handleFieldsChange = e => setForm({ ...form, fields: Array.from(e.target.selectedOptions, opt => parseInt(opt.value)) });
@@ -37,20 +42,17 @@ export default function Templates() {
   };
   const handleClose = () => { setOpen(false); setEditing(null); };
 
-  // Save template (simplified, without field ordering)
   const handleSubmit = async () => {
     const method = editing ? "PUT" : "POST";
-    const url = editing ? `${API_URL}${editing.id}/` : API_URL;
-    await fetch(url, {
+    const endpoint = editing ? `/api/datacollection/templates/${editing.id}/` : "/api/datacollection/templates/";
+    await apiFetch(endpoint, {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ ...form, fields: form.fields })
+      body: { ...form, fields: form.fields },
+      token,
+      context
     });
     setOpen(false);
-    fetch(API_URL, { headers: { Authorization: `Bearer ${token}` } })
+    apiFetch("/api/datacollection/templates/", { token, context })
       .then(res => res.json()).then(setTemplates);
   };
 
