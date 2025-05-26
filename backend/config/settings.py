@@ -1,4 +1,4 @@
-# File: backend/backend/settings.py
+# File: backend/config/settings.py
 # Purpose: Django project settings for the 'backend' project.
 #
 # This file contains configuration for Django settings, including installed apps,
@@ -31,16 +31,16 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 # Application definition
 
 INSTALLED_APPS = [
+    'accounts',
+    'core',
+    'datacollection',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',    
-    # Project-specific apps
-    'accounts',
-    'core',
-    'datacollection',
+    # Project-specific apps    
     'corsheaders',
 ]
 
@@ -58,7 +58,7 @@ MIDDLEWARE = [
 ]
 CORS_ALLOW_ALL_ORIGINS = True
 
-ROOT_URLCONF = 'backend.urls'
+ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
     {
@@ -75,7 +75,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'backend.wsgi.application'
+WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 DATABASES = {

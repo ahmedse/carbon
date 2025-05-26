@@ -1,3 +1,5 @@
+# File: core/serializers.py
+
 from rest_framework import serializers
 from .models import Project, Cycle, Module
 

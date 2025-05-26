@@ -1,36 +1,32 @@
 # File: accounts/admin.py
-# Purpose: Admin configuration for User, Role, Context, and RoleAssignment models.
 
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, Role, Context, RoleAssignment
+from .models import Tenant, User, Role, Context, RoleAssignment
+
+@admin.register(Tenant)
+class TenantAdmin(admin.ModelAdmin):
+    list_display = ('name',)
+    search_fields = ('name',)
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    """
-    Custom admin interface for the User model.
-    """
-    pass
+    list_display = ('username', 'email', 'tenant', 'is_staff', 'is_superuser')
+    list_filter = ('tenant', 'is_staff', 'is_superuser')
+    search_fields = ('username', 'email')
 
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
-    """
-    Admin interface for managing roles.
-    """
     list_display = ('name', 'description')
+    search_fields = ('name',)
 
 @admin.register(Context)
 class ContextAdmin(admin.ModelAdmin):
-    """
-    Admin interface for managing contexts.
-    """
-    list_display = ('type', 'project', 'cycle', 'module')
-    list_filter = ('type', 'project', 'cycle', 'module')
+    list_display = ('type', 'project', 'module')
+    list_filter = ('type', 'project', 'module')
 
 @admin.register(RoleAssignment)
 class RoleAssignmentAdmin(admin.ModelAdmin):
-    """
-    Admin interface for managing role assignments.
-    """
     list_display = ('user', 'role', 'context')
-    list_filter = ('role', 'context__type', 'context__project', 'context__cycle', 'context__module')
+    list_filter = ('role', 'context__type', 'context__project', 'context__module', 'user__tenant')
+    search_fields = ('user__username', 'role__name')

@@ -1,36 +1,21 @@
 # File: accounts/utils.py
-# Purpose: Utility functions for RBAC permission checks.
 
 def user_has_permission(user, permission, context):
     """
     Determines whether the user has the specified permission in the provided context.
     Checks the most specific context first, then walks up the hierarchy:
-    module -> cycle -> project -> global.
-
-    Args:
-        user: The user object.
-        permission: The permission string to check (e.g., "add_data").
-        context: The context object representing the scope.
-
-    Returns:
-        bool: True if the user has the permission, otherwise False.
+    module -> project.
     """
     qs = user.role_assignments.filter(role__permissions__contains=[permission])
 
-    # Check exact context
+    # Check exact context (module or project)
     if qs.filter(context=context).exists():
         return True
 
-    # Check parent contexts if available
-    if context.type == 'module':
-        # Check cycle-level
-        if qs.filter(context__type='cycle', context__cycle=context.cycle).exists():
-            return True
-        # Check project-level
+    # If context is a module, check project-level assignment
+    if context.type == 'module' and context.project:
         if qs.filter(context__type='project', context__project=context.project).exists():
             return True
-    if context.type in ['module', 'cycle']:
-        # Check global-level
-        if qs.filter(context__type='global').exists():
-            return True
+
+    # No match found
     return False

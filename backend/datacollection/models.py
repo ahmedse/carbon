@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from accounts.models import Context
+from core.models import Module  # <-- ForeignKey reference
 
 User = get_user_model()
 
@@ -35,7 +36,7 @@ class ReadingItemDefinition(models.Model):
     evidence_rules = models.JSONField(default=dict, blank=True)
     editable = models.BooleanField(default=True)
     context = models.ForeignKey(Context, on_delete=models.CASCADE, related_name='reading_items')
-    module = models.CharField(max_length=100)  # Module selection for filtering
+    module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='reading_items')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)    
 
@@ -49,7 +50,7 @@ class ReadingTemplate(models.Model):
     status = models.CharField(max_length=20, default='active')
     fields = models.ManyToManyField(ReadingItemDefinition, through='ReadingTemplateField')
     context = models.ForeignKey(Context, on_delete=models.CASCADE, related_name='reading_templates')
-    module = models.CharField(max_length=100)  # Module selection for filtering
+    module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='reading_templates')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -71,7 +72,6 @@ class ReadingEntry(models.Model):
     context = models.ForeignKey(Context, on_delete=models.CASCADE, related_name='reading_entries')
     item = models.ForeignKey(ReadingItemDefinition, on_delete=models.CASCADE, related_name='entries')
     data = models.JSONField(default=dict)  # {field_id: value}
-    # If reading always covers a single point in time (e.g., daily reading), you can set both to the same date.
     period_start = models.DateField()
     period_end = models.DateField()
     submitted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)

@@ -82,9 +82,10 @@ sudo apt install postgresql postgresql-contrib libpq-dev
 
 ```bash
 sudo -u postgres psql
-CREATE DATABASE carbon;
+CREATE DATABASE carbon_dev;
 CREATE USER carbon_user WITH PASSWORD 'securepassword123';
-GRANT ALL PRIVILEGES ON DATABASE carbon TO carbon_user;
+ALTER DATABASE carbon_dev OWNER TO carbon_user;
+GRANT ALL PRIVILEGES ON DATABASE carbon_dev TO carbon_user;
 \q
 ```
 
