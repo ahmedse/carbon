@@ -75,8 +75,11 @@ def my_roles(request):
             "role": a.role.name,
             "context_type": a.context.type,
             "project": getattr(a.context.project, 'name', None),
+            "project_id": getattr(a.context.project, 'id', None),
             "cycle": getattr(a.context.cycle, 'name', None),
+            "cycle_id": getattr(a.context.cycle, 'id', None),
             "module": getattr(a.context.module, 'name', None),
+            "module_id": getattr(a.context.module, 'id', None),
             "permissions": a.role.permissions,
         }
         for a in assignments

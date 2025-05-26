@@ -1,3 +1,5 @@
+
+
 import React, { useEffect, useState } from "react";
 import {
   List,
@@ -26,23 +28,32 @@ const SidebarMenu = ({
   const location = useLocation();
   const { user, currentContext } = useAuth();
   const token = user?.token;
-  const context_type = currentContext?.context_type;
-  const context_name = currentContext?.[context_type];
-  const context = { context_type, context_name };
+  const context_id = currentContext?.context_id;
+  const context = { context_id };
 
   // Store all templates fetched from the backend
   const [templates, setTemplates] = useState([]);
 
   useEffect(() => {
-    if (token && context_type && context_name) {
+    if (token && context_id) {
       apiFetch("/api/datacollection/templates/", { token, context })
         .then((res) => res.json())
-        .then((data) => setTemplates(data || []));
+        .then((data) => {
+          if (Array.isArray(data)) setTemplates(data);
+          else setTemplates([]); // Defensive: always an array
+        })
+        .catch(() => setTemplates([]));
+    } else {
+      setTemplates([]);
     }
-  }, [token, context_type, context_name]);
+  }, [token, context_id]);
 
   const getModuleTemplates = (module) =>
-    templates.filter((tpl) => tpl.module && tpl.module.toLowerCase() === module);
+    Array.isArray(templates)
+      ? templates.filter(
+          (tpl) => tpl.module && tpl.module.toLowerCase() === module
+        )
+      : [];
 
   return (
     <List sx={{ py: 0 }}>
@@ -54,9 +65,9 @@ const SidebarMenu = ({
           const mainMenuListItem = (
             <ListItemButton
               onClick={() => setExpandedMenu(isOpen ? "" : item.label)}
-              selected={
-                item.subMenu.some((sub) => location.pathname.startsWith(sub.path))
-              }
+              selected={item.subMenu.some((sub) =>
+                location.pathname.startsWith(sub.path)
+              )}
               sx={{
                 justifyContent: collapsed ? "center" : "flex-start",
                 px: collapsed ? 1 : 2,

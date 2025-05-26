@@ -2,13 +2,11 @@
 
 import React, { useState } from "react";
 import { Box, Toolbar, useMediaQuery } from "@mui/material";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import DashboardHome from "./DashboardHome";
-import DataItems from "./DataItems";
-import Templates from "./Templates";
-import ModuleTemplateEntries from "./ModuleTemplateEntries"; // New: CRUD for entries per template/module
+import ModuleTemplateEntries from "./ModuleTemplateEntries"; // Unified CRUD for both
 
 const drawerWidth = 220;
 
@@ -36,8 +34,10 @@ const AdminDashboard = ({ context }) => {
         <Box sx={{ p: { xs: 1, sm: 2, md: 3 }, maxWidth: 1400, mx: "auto", width: "100%" }}>
           <Routes>
             <Route index element={<DashboardHome context={context} />} />
-            <Route path="data-schema/data-items" element={<DataItems />} />
-            <Route path="data-schema/templates" element={<Templates />} />
+            <Route
+              path="data-schema/:submenu"
+              element={<ModuleTemplateEntries />}
+            />
             <Route
               path=":module/template/:templateId"
               element={<ModuleTemplateEntries />}

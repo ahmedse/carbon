@@ -41,7 +41,8 @@ const Login = () => {
         body: JSON.stringify({ username, password }),
       });
       const data = await response.json();
-      if (response.ok) {
+      if (response.ok && data.access && data.refresh) {
+        // Save tokens to localStorage BEFORE fetching roles
         localStorage.setItem("access", data.access);
         localStorage.setItem("refresh", data.refresh);
 
@@ -51,15 +52,21 @@ const Login = () => {
         const rolesResponse = await fetch(`${API_BASE_URL}${API_ROUTES.myRoles}`, {
           headers: { Authorization: `Bearer ${data.access}` },
         });
+        if (!rolesResponse.ok) {
+          setError("Unable to fetch user roles. Please contact admin.");
+          setLoading(false);
+          return;
+        }
         const rolesData = await rolesResponse.json();
-        // In Login.jsx after fetching roles
-        console.log("User roles from backend:", rolesData.roles);
+        // Defensive: ensure rolesData.roles is an array
+        const roles = Array.isArray(rolesData.roles) ? rolesData.roles : [];
 
+        // Save user in context and localStorage
         login({
           username: decoded.username,
           token: data.access,
           refresh: data.refresh,
-          roles: rolesData.roles || [],
+          roles,
         });
 
         navigate("/dashboard");

@@ -1,10 +1,11 @@
 import React, { createContext, useState, useContext, useEffect, useRef } from "react";
 import { API_BASE_URL, API_ROUTES } from "../config";
+import { isJwtExpired } from "../jwt";
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const inactivityTimeout = 60 * 60 * 1000; // 60 minutes (adjust as needed)
+  const inactivityTimeout = 60 * 60 * 1000; // 60 minutes
   const timerRef = useRef();
 
   // Restore user from localStorage if available
@@ -19,28 +20,24 @@ export const AuthProvider = ({ children }) => {
     return stored ? JSON.parse(stored) : null;
   });
 
-  // Helper: Refresh access token using refresh token
+  // --- Token refresh logic
   const refreshAccessToken = async () => {
     const refresh = localStorage.getItem("refresh");
     if (!refresh) {
       logout();
       throw new Error("No refresh token available.");
     }
-
     const response = await fetch(`${API_BASE_URL}${API_ROUTES.tokenRefresh}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh }),
     });
-
     if (!response.ok) {
       logout();
       throw new Error("Failed to refresh token.");
     }
-
     const data = await response.json();
     if (data.access) {
-      // Update user state and localStorage with new access token
       setUser((prev) => {
         const updatedUser = { ...prev, token: data.access };
         localStorage.setItem("user", JSON.stringify(updatedUser));
@@ -54,29 +51,42 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Reset inactivity timer
+  // --- On load: check token validity
+  useEffect(() => {
+    const checkToken = async () => {
+      const token = user?.token || localStorage.getItem("access");
+      if (token && isJwtExpired(token)) {
+        try {
+          await refreshAccessToken();
+        } catch {
+          logout();
+        }
+      }
+    };
+    checkToken();
+    // eslint-disable-next-line
+  }, []);
+
+  // --- Inactivity timer
   const resetTimer = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       logout();
-      window.location.href = "/login"; // Force redirect
+      window.location.href = "/login";
     }, inactivityTimeout);
   };
 
   useEffect(() => {
-    // Start/reset timer on user activity
     const events = ["mousemove", "keydown", "mousedown", "touchstart"];
     events.forEach(event => window.addEventListener(event, resetTimer));
-    resetTimer(); // Initialize timer
-
+    resetTimer();
     return () => {
       events.forEach(event => window.removeEventListener(event, resetTimer));
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [user]); // Restart timer on user login/logout
+  }, [user]);
 
   const login = (userData) => {
-    console.log("[AuthContext] Logging in user:", userData);
     setUser(userData);
     localStorage.setItem("user", JSON.stringify(userData));
     localStorage.setItem("access", userData.token);
@@ -84,7 +94,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    console.log("[AuthContext] Logging out");
     setUser(null);
     setCurrentContext(null);
     localStorage.removeItem("user");
@@ -96,8 +105,11 @@ export const AuthProvider = ({ children }) => {
   const setContext = (context) => {
     setCurrentContext(context);
     localStorage.setItem("context", JSON.stringify(context));
-    console.log("[AuthContext] Context set:", context);
   };
+
+  // Expose globally (for apiFetch)
+  window.refreshAccessToken = refreshAccessToken;
+  window.logout = logout;
 
   return (
     <AuthContext.Provider
@@ -108,7 +120,7 @@ export const AuthProvider = ({ children }) => {
         token: user?.token,
         currentContext,
         setContext,
-        refreshAccessToken, // Expose the refresh method
+        refreshAccessToken,
       }}
     >
       {children}

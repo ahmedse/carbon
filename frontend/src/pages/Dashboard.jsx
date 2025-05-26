@@ -12,7 +12,7 @@ import { API_BASE_URL, API_ROUTES } from "../config";
  * Lets the user select a context and loads the appropriate dashboard based on their role.
  */
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, setContext } = useAuth(); // <--- Now bringing setContext in!
   const token = user?.token;
 
   const [roles, setRoles] = useState([]);
@@ -37,12 +37,15 @@ const Dashboard = () => {
         if (response.ok) {
           const data = await response.json();
           setRoles(data.roles || []);
-          // Extract available contexts for selection
-          const contextList = (data.roles || []).map((r, idx) => ({
-            key: `${r.context_type}:${r.project || r.cycle || r.module || idx}`,
+          // Extract available contexts (project id) for selection
+          const contextList = (data.roles || [])
+          .map((r, idx) => ({
+            key: `${r.context_type}:${r.project_id || r.cycle_id || r.module_id || idx}`,
             label: `${r.context_type === "project" ? r.project : r.context_type === "cycle" ? r.cycle : r.module} (${r.role})`,
+            context_id: r.project_id || r.cycle_id || r.module_id,
             ...r
-          }));
+          }))
+          .filter(ctx => ctx.context_id); // Only contexts with a valid id
           setContexts(contextList);
         } else {
           setError("Failed to fetch roles.");
@@ -102,7 +105,11 @@ const Dashboard = () => {
               labelId="context-select-label"
               value={selectedContext}
               label="Context"
-              onChange={e => setSelectedContext(e.target.value)}
+              onChange={e => {
+                setSelectedContext(e.target.value);
+                const selected = contexts.find(c => c.key === e.target.value);
+                setContext(selected); // selected now has context_id
+              }}
             >
               {contexts.map(ctx => (
                 <MenuItem key={ctx.key} value={ctx.key}>
