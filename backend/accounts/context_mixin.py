@@ -4,21 +4,18 @@ from accounts.models import Context
 
 class ContextExtractorMixin:
     """
-    Mixin to extract the context (project/module) from the request.
+    Mixin to extract project context from request data or query params.
+    Only allows 'project' as context type.
     """
-
-    def get_context_info(self, request):
-        context_id = request.query_params.get("context_id") or request.headers.get("X-Context-Id")
-        return context_id
-
-    def get_context_from_request(self, request):
-        context_id = request.query_params.get('context_id') or request.headers.get("X-Context-Id")
-        if context_id and str(context_id).isdigit():
+    def get_project_id_from_request(self, request):
+        # Try both data and query params
+        context_id = (
+            request.data.get("context_id")
+            or request.query_params.get("context_id")
+        )
+        if context_id is not None:
             try:
-                context = Context.objects.get(id=int(context_id))
-                return context
-            except Context.DoesNotExist:
-                return None
-        if request.user.is_superuser:
-            return None  # Or handle as you like
+                return int(context_id)
+            except Exception:
+                pass
         return None

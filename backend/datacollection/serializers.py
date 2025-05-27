@@ -8,55 +8,30 @@ from .models import (
     EvidenceFile,
     ContextAssignment
 )
-from accounts.models import Context
-from core.models import Module
+from core.models import Module, Project
 
 User = get_user_model()
 
-class ContextSerializer(serializers.ModelSerializer):
+class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Context
-        fields = '__all__'
+        model = Project
+        fields = ['id', 'name', 'tenant']
 
 class ModuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Module
         fields = ['id', 'name', 'project']
 
-class TenantScopedPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
-    """
-    Restricts related field queryset to the current user's tenant.
-    """
-    def get_queryset(self):
-        request = self.context.get('request', None)
-        if not request or not hasattr(request.user, 'tenant'):
-            return Module.objects.none()
-        # The Module's project must match the user's tenant
-        return Module.objects.filter(project__tenant=request.user.tenant)
-
-class TenantScopedContextRelatedField(serializers.PrimaryKeyRelatedField):
-    """
-    Restricts Context queryset to the current user's tenant.
-    """
-    def get_queryset(self):
-        request = self.context.get('request', None)
-        if not request or not hasattr(request.user, 'tenant'):
-            return Context.objects.none()
-        return Context.objects.filter(project__tenant=request.user.tenant)
-
 class ReadingItemDefinitionSerializer(serializers.ModelSerializer):
-    context = ContextSerializer(read_only=True)
-    context_id = TenantScopedContextRelatedField(
-        source='context', write_only=True
-    )
-    module = ModuleSerializer(read_only=True)
-    module_id = TenantScopedPrimaryKeyRelatedField(
-        source='module', write_only=True
-    )
+    project = ProjectSerializer(read_only=True)
+    # Do NOT require project_id from frontend
 
     class Meta:
         model = ReadingItemDefinition
         fields = '__all__'
+        extra_kwargs = {
+            'project': {'read_only': True}
+        }
 
 class ReadingTemplateFieldSerializer(serializers.ModelSerializer):
     class Meta:
@@ -65,32 +40,21 @@ class ReadingTemplateFieldSerializer(serializers.ModelSerializer):
 
 class ReadingTemplateSerializer(serializers.ModelSerializer):
     fields = ReadingTemplateFieldSerializer(many=True, read_only=True, source='readingtemplatefield_set')
-    context = ContextSerializer(read_only=True)
-    context_id = TenantScopedContextRelatedField(
-        source='context', write_only=True
-    )
+    project = ProjectSerializer(read_only=True)
     module = ModuleSerializer(read_only=True)
-    module_id = TenantScopedPrimaryKeyRelatedField(
-        source='module', write_only=True
+    module_id = serializers.PrimaryKeyRelatedField(
+        queryset=Module.objects.all(), source='module', write_only=True, required=False, allow_null=True
     )
-
-    available_items = serializers.SerializerMethodField(read_only=True)
-
-    def get_available_items(self, obj):
-        if obj.context and obj.module:
-            items = ReadingItemDefinition.objects.filter(context=obj.context, module=obj.module)
-            return ReadingItemDefinitionSerializer(items, many=True, context=self.context).data
-        return []
 
     class Meta:
         model = ReadingTemplate
-        fields = '__all__' 
+        fields = '__all__'
+        extra_kwargs = {
+            'project': {'read_only': True}
+        }
 
 class ReadingEntrySerializer(serializers.ModelSerializer):
-    context = ContextSerializer(read_only=True)
-    context_id = TenantScopedContextRelatedField(
-        source='context', write_only=True
-    )
+    project = ProjectSerializer(read_only=True)
     item = serializers.PrimaryKeyRelatedField(
         queryset=ReadingItemDefinition.objects.all()
     )
@@ -98,24 +62,27 @@ class ReadingEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = ReadingEntry
         fields = '__all__'
+        extra_kwargs = {
+            'project': {'read_only': True}
+        }
 
 class EvidenceFileSerializer(serializers.ModelSerializer):
-    context = ContextSerializer(read_only=True)
-    context_id = TenantScopedContextRelatedField(
-        source='context', write_only=True
-    )
+    project = ProjectSerializer(read_only=True)
 
     class Meta:
         model = EvidenceFile
         fields = '__all__'
+        extra_kwargs = {
+            'project': {'read_only': True}
+        }
 
 class ContextAssignmentSerializer(serializers.ModelSerializer):
-    context = ContextSerializer(read_only=True)
-    context_id = TenantScopedContextRelatedField(
-        source='context', write_only=True
-    )
+    project = ProjectSerializer(read_only=True)
     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
 
     class Meta:
         model = ContextAssignment
         fields = '__all__'
+        extra_kwargs = {
+            'project': {'read_only': True}
+        }

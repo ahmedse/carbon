@@ -1,7 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
-from accounts.models import Context
-from core.models import Module  # <-- ForeignKey reference
+from core.models import Module, Project
 
 User = get_user_model()
 
@@ -30,15 +29,14 @@ class ReadingItemDefinition(models.Model):
     required = models.BooleanField(default=True)
     units = models.CharField(max_length=50, blank=True)
     time_unit = models.CharField(max_length=16, choices=TIME_UNIT_CHOICES, default='month')
-    options = models.JSONField(default=list, blank=True)  # For select-type
+    options = models.JSONField(default=list, blank=True)
     category = models.CharField(max_length=50, blank=True)
     tags = models.JSONField(default=list, blank=True)
     evidence_rules = models.JSONField(default=dict, blank=True)
     editable = models.BooleanField(default=True)
-    context = models.ForeignKey(Context, on_delete=models.CASCADE, related_name='reading_items')
-    module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='reading_items')
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='reading_items')
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)    
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -49,8 +47,13 @@ class ReadingTemplate(models.Model):
     version = models.PositiveIntegerField(default=1)
     status = models.CharField(max_length=20, default='active')
     fields = models.ManyToManyField(ReadingItemDefinition, through='ReadingTemplateField')
-    context = models.ForeignKey(Context, on_delete=models.CASCADE, related_name='reading_templates')
-    module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='reading_templates')
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='reading_templates')
+    module = models.ForeignKey(
+        Module,
+        on_delete=models.CASCADE,
+        related_name='reading_templates',
+        null=True, blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -69,9 +72,9 @@ class ReadingTemplateField(models.Model):
 class ReadingEntry(models.Model):
     template = models.ForeignKey(ReadingTemplate, on_delete=models.CASCADE)
     template_version = models.PositiveIntegerField()
-    context = models.ForeignKey(Context, on_delete=models.CASCADE, related_name='reading_entries')
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='reading_entries')
     item = models.ForeignKey(ReadingItemDefinition, on_delete=models.CASCADE, related_name='entries')
-    data = models.JSONField(default=dict)  # {field_id: value}
+    data = models.JSONField(default=dict)
     period_start = models.DateField()
     period_end = models.DateField()
     submitted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
@@ -85,7 +88,7 @@ class ReadingEntry(models.Model):
 class EvidenceFile(models.Model):
     reading_entry = models.ForeignKey(ReadingEntry, on_delete=models.CASCADE, related_name='evidence_files')
     reading_item = models.ForeignKey(ReadingItemDefinition, on_delete=models.CASCADE)
-    context = models.ForeignKey(Context, on_delete=models.CASCADE, related_name='evidence_files')
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='evidence_files')
     file = models.FileField(upload_to='evidence/')
     file_type = models.CharField(max_length=50)
     uploaded_at = models.DateTimeField(auto_now_add=True)
@@ -94,9 +97,9 @@ class EvidenceFile(models.Model):
 
     def __str__(self):
         return f"Evidence for Entry {self.reading_entry_id} - {self.file.name}"
-    
+
 class ContextAssignment(models.Model):
-    context = models.ForeignKey(Context, on_delete=models.CASCADE, related_name='assignments')
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='assignments')
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     role = models.CharField(max_length=50, choices=[('auditor', 'Auditor'), ('data_owner', 'Data Owner')])
     submitted_at = models.DateTimeField(auto_now_add=True)

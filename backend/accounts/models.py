@@ -87,6 +87,7 @@ class RoleAssignment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='role_assignments')
     role = models.ForeignKey(Role, on_delete=models.CASCADE)
     context = models.ForeignKey(Context, on_delete=models.CASCADE)
+    is_active = models.BooleanField(default=True)  # <-- NEW FIELD
 
     class Meta:
         unique_together = ('user', 'role', 'context')
