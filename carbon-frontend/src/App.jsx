@@ -1,17 +1,14 @@
-// File: src/App.jsx
-// App router. Login page has no header/sidebar/footer.
-
+// src/App.jsx
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams, Outlet } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
-import { useThemeMode } from "./theme/ThemeContext";
 import AdminRoute from "./components/AdminRoute";
-import ItemDefinitionsPage from "./pages/ItemDefinitionsPage";
-import TemplateDefinitionsPage from "./pages/TemplateDefinitionsPage";
+import TableManager from "./pages/TableManager";          // <-- Admin: schema CRUD
+import DataEntryPage from "./pages/DataEntryPage";        // <-- Data row CRUD
 
 function RequireAuth() {
   const { user } = useAuth();
@@ -34,49 +31,35 @@ function RequireContext() {
 }
 
 export default function App() {
-  const { resolvedMode } = useThemeMode();
   return (
-    <BrowserRouter
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true,
-      }}
-    >
+    <BrowserRouter>
       <Routes>
-        {/* Login: no layout */}
         <Route path="/login" element={<Login />} />
-
-        {/* Main app: Require login and project */}
         <Route element={<RequireAuth />}>
           <Route element={<RequireContext />}>
             <Route element={<Layout />}>
               <Route path="/" element={<Dashboard />} />
 
-              {/* ----- Admin-only schema routes ----- */}
+              {/* ---- SCHEMA ADMIN (Admin only) ---- */}
               <Route
-                path="/schema/items"
+                path="/dataschema/manage/tablemanager"
                 element={
                   <AdminRoute>
-                    <ItemDefinitionsPage />
-                  </AdminRoute>
-                }
-              />
-              <Route
-                path="/schema/templates"
-                element={
-                  <AdminRoute>
-                    <TemplateDefinitionsPage />
+                    <TableManager />
                   </AdminRoute>
                 }
               />
 
-              {/* Not found (fallback inside layout) */}
+              {/* ---- DATA ENTRY (Anyone with access; per-table in module) ---- */}
+              <Route
+                path="/dataschema/entry/:moduleName/:tableId"
+                element={<DataEntryPage />}
+              />
+
               <Route path="*" element={<NotFound />} />
             </Route>
           </Route>
         </Route>
-
-        {/* Fallback */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

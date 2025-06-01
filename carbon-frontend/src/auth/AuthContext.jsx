@@ -1,6 +1,4 @@
 // File: src/auth/AuthContext.jsx
-// Handles authentication and automatic project selection (project context only).
-
 import React, { createContext, useState, useContext, useEffect, useRef } from "react";
 import { API_BASE_URL, API_ROUTES } from "../config";
 import { isJwtExpired } from "../jwt";
@@ -21,7 +19,7 @@ export const AuthProvider = ({ children }) => {
     return stored ? JSON.parse(stored) : null;
   });
 
-  // --- Token refresh logic (unchanged) ---
+  // --- Refresh token logic ---
   const refreshAccessToken = async () => {
     const refresh = localStorage.getItem("refresh");
     if (!refresh) {
@@ -52,7 +50,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // --- On load: check token validity
   useEffect(() => {
     const checkToken = async () => {
       const token = user?.token || localStorage.getItem("access");
@@ -65,10 +62,9 @@ export const AuthProvider = ({ children }) => {
       }
     };
     checkToken();
-    // eslint-disable-next-line
   }, []);
 
-  // --- Inactivity timer
+  // --- Inactivity timer ---
   const resetTimer = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
@@ -87,79 +83,79 @@ export const AuthProvider = ({ children }) => {
     };
   }, [user]);
 
-  // --- Project-only selection logic ---
+  // --- Project selection logic ---
   useEffect(() => {
     if (user && user.roles && user.roles.length > 0) {
       let context = localStorage.getItem("context");
-      let defaultProject = null;
 
       if (context) {
         context = JSON.parse(context);
-        // Only allow context if it matches a project the user has via a project-level role
         const hasProject = user.roles.some(
-          r =>
+          (r) =>
             r.context_type === "project" &&
             r.project_id === context.context_id
         );
         if (context && hasProject) {
+          console.log("Restoring context from localStorage:", context);
           setCurrentContext(context);
           localStorage.setItem("context", JSON.stringify(context));
           return;
         }
       }
 
-      // If no saved context or not available, pick first project in roles
       const firstProjectRole = user.roles.find(
-        r => r.context_type === "project" && r.project_id && r.project
+        (r) => r.context_type === "project" && r.project_id && r.project
       );
       if (firstProjectRole) {
-        defaultProject = {
+        const defaultContext = {
           context_id: firstProjectRole.project_id,
-          project: firstProjectRole.project
+          project: firstProjectRole.project,
         };
-        setCurrentContext(defaultProject);
-        localStorage.setItem("context", JSON.stringify(defaultProject));
+        console.log("Setting default context:", defaultContext);
+        setCurrentContext(defaultContext);
+        localStorage.setItem("context", JSON.stringify(defaultContext));
       } else {
+        console.log("No valid project context available.");
         setCurrentContext(null);
         localStorage.removeItem("context");
       }
     } else {
+      console.log("No user or roles available to set context.");
       setCurrentContext(null);
       localStorage.removeItem("context");
     }
   }, [user]);
+
+  // --- Define setContext ---
+  const setContext = (context) => {
+    if (
+      user &&
+      user.roles &&
+      user.roles.some(
+        (r) =>
+          r.context_type === "project" &&
+          r.project_id === context.context_id
+      )
+    ) {
+      console.log("Switching context to:", context);
+      setCurrentContext(context);
+      localStorage.setItem("context", JSON.stringify(context));
+    } else {
+      console.error("Invalid context provided or user does not have access.");
+    }
+  };
 
   const login = (userData) => {
     setUser(userData);
     localStorage.setItem("user", JSON.stringify(userData));
     localStorage.setItem("access", userData.token);
     localStorage.setItem("refresh", userData.refresh || "");
-    // context will be set automatically by useEffect above
   };
 
   const logout = () => {
     setUser(null);
     setCurrentContext(null);
-    localStorage.removeItem("user");
-    localStorage.removeItem("access");
-    localStorage.removeItem("refresh");
-    localStorage.removeItem("context");
-  };
-
-  // Only allow setting a context that is a project the user actually has
-  const setContext = (context) => {
-    if (
-      user &&
-      user.roles &&
-      user.roles.some(
-        r =>
-          r.context_type === "project" &&
-          r.project_id === context.context_id
-      )
-    ) {
-      setCurrentContext(context);
-      localStorage.setItem("context", JSON.stringify(context));
-    }
+    localStorage.clear();
   };
 
   window.refreshAccessToken = refreshAccessToken;
@@ -173,7 +169,7 @@ export const AuthProvider = ({ children }) => {
         logout,
         token: user?.token,
         currentContext,
-        setContext,
+        setContext, // Export setContext
         refreshAccessToken,
       }}
     >

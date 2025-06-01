@@ -33,4 +33,3 @@ class HasRBACPermission(BasePermission):
             return False  # No project context provided
 
         return user_has_permission(request.user, required_permission, project_id)
-    

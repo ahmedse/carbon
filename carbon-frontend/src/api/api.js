@@ -7,10 +7,10 @@ import { isJwtExpired } from "../jwt";
  * apiFetch - universal API call helper with JWT refresh, context, errors, and JSON parsing
  *
  * @param {string} endpoint - relative API endpoint (e.g. "/api/datacollection/item-definitions/")
- * @param {object} opts - { method, body, token }
+ * @param {object} opts - { method, body, token, context_id }
  * @returns {Promise<any>} - parsed JSON response or throws error
  */
-export async function apiFetch(endpoint, { method = "GET", body, token } = {}) {
+export async function apiFetch(endpoint, { method = "GET", body, token, context_id } = {}) {
   let url = `${API_BASE_URL}${endpoint}`;
   let accessToken = token || localStorage.getItem("access");
 
@@ -28,6 +28,21 @@ export async function apiFetch(endpoint, { method = "GET", body, token } = {}) {
     "Content-Type": "application/json",
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
+
+  // --- CONTEXT INJECTION LOGIC ---
+  // Only inject for /api/dataschema/ endpoints if context_id is provided
+  const isDataSchema = /^\/api\/dataschema\//.test(endpoint);
+  if (isDataSchema && context_id) {
+    const hasQuery = url.includes("?");
+    const alreadyHasContext = url.includes("context_id=");
+    if (!alreadyHasContext) {
+      url += (hasQuery ? "&" : "?") + "context_id=" + encodeURIComponent(context_id);
+    }
+    // Also inject into body for POST/PUT/PATCH if not present
+    if (["POST", "PUT", "PATCH"].includes(method) && body && typeof body === "object" && !("context_id" in body)) {
+      body.context_id = context_id;
+    }
+  }
 
   // Helper for making fetch and parsing error+json
   async function doFetch() {

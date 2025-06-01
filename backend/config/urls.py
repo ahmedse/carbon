@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/', include('accounts.urls')),     # Routes API requests to the accounts app
     path('api/core/', include('core.urls')),    # Routes API requests to the core app
     path('api/datacollection/', include('datacollection.urls')),
+    path('api/dataschema/', include('dataschema.urls')),
     # Catch-all: redirect anything else to /admin/
-    re_path(r'^.*$', lambda request: HttpResponseRedirect('/admin/')),
+    # re_path(r'^.*$', lambda request: HttpResponseRedirect('/admin/')),
 ]
