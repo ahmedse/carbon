@@ -4,8 +4,8 @@ from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
-
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.core.files.storage import default_storage
 
 from .models import DataTable, DataField, DataRow, SchemaChangeLog
 from .serializers import (
@@ -16,21 +16,14 @@ from .serializers import (
 
 from accounts.permissions import HasRBACPermission
 from accounts.context_mixin import ContextExtractorMixin
-from core.models import Module, Project  # For context checks
+from core.models import Module, Project
 
 def user_tenant(request):
     return getattr(request.user, 'tenant', None)
 
 class TenantProjectModuleBaseViewSet(ContextExtractorMixin, viewsets.ModelViewSet):
-    """
-    Base viewset: always filters by project_id (from context_id) and tenant.
-    Child classes set:
-      - queryset
-      - serializer_class
-      - required_permission
-    """
     permission_classes = [HasRBACPermission]
-    queryset = None  # Set in child
+    queryset = None
 
     def get_project_id(self):
         return self.get_project_id_from_request(self.request)
@@ -94,10 +87,6 @@ class DataTableViewSet(TenantProjectModuleBaseViewSet):
 
     @action(detail=True, methods=["get"], url_path="fields")
     def fields(self, request, pk=None):
-        """
-        GET /api/dataschema/tables/<table_id>/fields/
-        Returns all fields for the given data table.
-        """
         table = self.get_object()
         fields_qs = DataField.objects.filter(data_table=table, is_archived=False)
         serializer = DataFieldSerializer(fields_qs, many=True)
@@ -159,6 +148,43 @@ class DataRowViewSet(TenantProjectModuleBaseViewSet):
     def perform_destroy(self, instance):
         instance.is_archived = True
         instance.save()
+
+    # PATCH support for partial update
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        try:
+            return self.update(request, *args, **kwargs)
+        except Exception as e:
+            return Response({"detail": f"Update failed: {str(e)}"}, status=400)
+
+    @action(detail=True, methods=['post'], url_path='upload', parser_classes=[MultiPartParser, FormParser])
+    def upload(self, request, pk=None):
+        row = self.get_object()
+        field_name = request.data.get("field")
+        uploaded_file = request.FILES.get("file")
+        if not field_name or not uploaded_file:
+            return Response({"detail": "Missing field or file."}, status=400)
+        field = row.data_table.fields.filter(name=field_name, is_active=True, is_archived=False, type="file").first()
+        if not field:
+            return Response({"detail": "Invalid field for file upload."}, status=400)
+        allowed_types = ["application/pdf", "image/jpeg", "image/png"]
+        max_size = 5 * 1024 * 1024  # 5 MB
+        if uploaded_file.content_type not in allowed_types:
+            return Response({"detail": "Invalid file type."}, status=400)
+        if uploaded_file.size > max_size:
+            return Response({"detail": "File too large."}, status=400)
+        # Use the path from settings, defaulting as needed
+        base_path = getattr(settings, "DATASCHEMA_UPLOAD_PATH", "dataschema_uploads/")
+        filename = default_storage.save(
+            f"{base_path.rstrip('/')}/{row.data_table.id}/{field_name}/{uploaded_file.name}",
+            uploaded_file
+        )
+        file_url = default_storage.url(filename)
+        values = row.values or {}
+        values[field_name] = file_url
+        row.values = values
+        row.save(update_fields=["values", "updated_at"])
+        return Response({"url": file_url})
 
 # --- SchemaChangeLog (ReadOnly) ---
 class SchemaChangeLogViewSet(TenantProjectModuleBaseViewSet, viewsets.ReadOnlyModelViewSet):

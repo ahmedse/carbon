@@ -25,6 +25,8 @@ SECRET_KEY = 'django-insecure-9(mkyr(v_!gbmxt+kb(1z)a=l7vp(g(q4ocn^mo_0k#y_$!!v9
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 print("DEBUG is set to:", DEBUG)
+# File upload path for dataschema files
+DATASCHEMA_UPLOAD_PATH = os.getenv("DATASCHEMA_UPLOAD_PATH", "dataschema_uploads/")
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 

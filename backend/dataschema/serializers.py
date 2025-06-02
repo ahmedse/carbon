@@ -23,7 +23,6 @@ class DataTableDetailSerializer(serializers.ModelSerializer):
     row_count = serializers.SerializerMethodField()
 
     def get_row_count(self, obj):
-        # Use correct related_name ('rows')
         return obj.rows.filter(is_archived=False).count()
 
     class Meta:
@@ -48,6 +47,18 @@ class DataTableSerializer(serializers.ModelSerializer):
         ]
 
 class DataRowSerializer(serializers.ModelSerializer):
+    def to_internal_value(self, data):
+        # Allow PATCH with only 'values'
+        if self.partial and 'values' not in data:
+            data = data.copy()
+            data['values'] = getattr(self.instance, 'values', {}) if self.instance else {}
+        return super().to_internal_value(data)
+
+    def validate_values(self, values):
+        if not isinstance(values, dict):
+            raise serializers.ValidationError("Values must be a JSON object.")
+        return values
+
     class Meta:
         model = DataRow
         fields = [

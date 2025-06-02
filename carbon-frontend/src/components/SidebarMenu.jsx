@@ -55,12 +55,16 @@ export default function SidebarMenu({ open }) {
   // Top-level: Schema Admin with Table Manager only
   const admin = isAdmin(user, currentContext);
 
-  const MenuItem = ({ to, icon, label, tooltip, ...props }) => (
+  // Helper to check if a table is active
+  const isTableActive = (modName, tableId) =>
+    location.pathname === `/dataschema/entry/${modName.toLowerCase()}/${tableId}`;
+
+  const MenuItem = ({ to, icon, label, tooltip, selected, ...props }) => (
     <Tooltip title={tooltip || label} placement="right" arrow disableHoverListener={open ? true : false}>
       <ListItemButton
         component={Link}
         to={to}
-        selected={location.pathname === to}
+        selected={selected}
         sx={{
           minHeight: 36,
           px: open ? 2 : 1.5,
@@ -105,6 +109,7 @@ export default function SidebarMenu({ open }) {
               label="Table Manager"
               tooltip="Manage Tables & Fields"
               sx={{ pl: 4 }}
+              selected={location.pathname === "/dataschema/manage/tablemanager"}
             />
             <MenuItem
               to="/dataschema/manage/tablemanagerpage"
@@ -112,6 +117,7 @@ export default function SidebarMenu({ open }) {
               label="Table Manager 2"
               tooltip="Manage Tables & Fields"
               sx={{ pl: 4 }}
+              selected={location.pathname === "/dataschema/manage/tablemanagerpage"}
             />
           </Collapse>
           <Divider />
@@ -146,17 +152,18 @@ export default function SidebarMenu({ open }) {
               </ListItemButton>
             ) : (
               (moduleTables[mod.name] || [])
-              .filter(table => table.module === mod.id || table.module_id === mod.id)
-              .map(table => (
-                <MenuItem
-                  key={table.id}
-                  to={`/dataschema/entry/${mod.name.toLowerCase()}/${table.id}`}
-                  icon={<TableIcon />}
-                  label={table.title}
-                  tooltip={table.description || table.title}
-                  sx={{ pl: 4 }}
-                />
-              ))
+                .filter(table => table.module === mod.id || table.module_id === mod.id)
+                .map(table => (
+                  <MenuItem
+                    key={table.id}
+                    to={`/dataschema/entry/${mod.name.toLowerCase()}/${table.id}`}
+                    icon={<TableIcon />}
+                    label={table.title}
+                    tooltip={table.description || table.title}
+                    sx={{ pl: 4 }}
+                    selected={isTableActive(mod.name, table.id)}
+                  />
+                ))
             )}
           </Collapse>
         </React.Fragment>
@@ -170,12 +177,14 @@ export default function SidebarMenu({ open }) {
         icon={<HelpIcon />}
         label="Help"
         tooltip="Get Help"
+        selected={location.pathname === "/help"}
       />
       <MenuItem
         to="/settings"
         icon={<ProjectSettingsIcon />}
         label="Project Settings"
         tooltip="Manage Project Settings"
+        selected={location.pathname === "/settings"}
       />
     </List>
   );
