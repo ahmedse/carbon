@@ -28,13 +28,13 @@ def audit_user_permissions(user, project_id):
     Prints a detailed audit of all the user's active roles and permissions for the given project.
     """
     matrix = get_user_permission_matrix(user, project_id)
-    print(f"\n[AUDIT] ===== User '{user}' roles/permissions for project {project_id} =====")
-    if not matrix:
-        print("[AUDIT] No roles found for this project.")
-    for entry in matrix:
-        print(f"[AUDIT] Role: {entry['role']} | Context: {entry['context_type']} (context_id={entry['context_id']}, module_id={entry['module_id']})")
-        print(f"        Permissions: {entry['permissions']}")
-    print("[AUDIT] =============================================================\n")
+    # print(f"\n[AUDIT] ===== User '{user}' roles/permissions for project {project_id} =====")
+    # if not matrix:
+    #     print("[AUDIT] No roles found for this project.")
+    # for entry in matrix:
+    #     print(f"[AUDIT] Role: {entry['role']} | Context: {entry['context_type']} (context_id={entry['context_id']}, module_id={entry['module_id']})")
+    #     print(f"        Permissions: {entry['permissions']}")
+    # print("[AUDIT] =============================================================\n")
 
 def user_has_permission(user, permission, project_id):
     """

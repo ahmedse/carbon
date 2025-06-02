@@ -1,5 +1,5 @@
 // File: src/components/AdminRoute.jsx
-import React from "react";
+import React, { useRef } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useNotification } from "./NotificationProvider";
@@ -10,26 +10,32 @@ function isAdmin(user, currentContext) {
     (r) =>
       r.active &&
       r.role === "admin_role" &&
-      r.project_id === (currentContext?.context_id || currentContext?.project_id)
+      String(r.project_id) === String(currentContext?.context_id)
   );
 }
 
 export default function AdminRoute({ children, redirectTo = "/" }) {
-  const { user, currentContext } = useAuth();
+  const { user, currentContext, loading } = useAuth();
   const { notify } = useNotification();
+  const notifiedRef = useRef(false);
 
   // Wait for auth/context to load
+  if (loading) {
+    return <div style={{ padding: 48, textAlign: "center" }}>Checking admin permissions...</div>;
+  }
   if (!user || !currentContext) {
-    console.log("AdminRoute: Waiting for user or currentContext to load...");
     return null;
   }
 
   if (!isAdmin(user, currentContext)) {
-    notify({
-      message: "Access denied: Admins only.",
-      type: "error",
-    });
-    console.error("Access denied: User is not an admin.");
+    // Only notify once per denial
+    if (!notifiedRef.current) {
+      notify({
+        message: "Access denied: Admins only.",
+        type: "error",
+      });
+      notifiedRef.current = true;
+    }
     return <Navigate to={redirectTo} replace />;
   }
 

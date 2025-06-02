@@ -15,9 +15,9 @@ class HasRBACPermission(BasePermission):
         if not request.user.is_authenticated:
             return False
         
-        print("[DEBUG] HasRBACPermission called")
-        print("[DEBUG] user.is_authenticated:", getattr(request.user, 'is_authenticated', None))
-        print("[DEBUG] user:", getattr(request, 'user', None))
+        # print("[DEBUG] HasRBACPermission called")
+        # print("[DEBUG] user.is_authenticated:", getattr(request.user, 'is_authenticated', None))
+        # print("[DEBUG] user:", getattr(request, 'user', None))
 
         required_permission = getattr(view, 'required_permission', None)
         if not required_permission:

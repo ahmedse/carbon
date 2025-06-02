@@ -90,8 +90,8 @@ export const getTheme = (mode) =>
       fontSize: 11,
       h6: { fontWeight: 700, fontSize: 14, letterSpacing: 0.3 },
       h4: { fontWeight: 800, fontSize: 16 },
-      body1: { fontSize: 10 },
-      body2: { fontSize: 10 }
+      body1: { fontSize: 11 },
+      body2: { fontSize: 12 }
     },
     components: {
       MuiButton: {

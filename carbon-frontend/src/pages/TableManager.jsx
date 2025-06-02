@@ -246,7 +246,7 @@ export default function TableManager() {
   return (
     <Box p={3}>
       <Typography variant="h4" gutterBottom>
-        Table Manager <span style={{ fontWeight: 400, fontSize: 18, color: "#888" }}>(Admin - Schema CRUD)</span>
+        Data Schema Manager <span style={{ fontWeight: 400, fontSize: 18, color: "#888" }}>(Define Data Tables)</span>
       </Typography>
       <Box mb={2} display="flex" justifyContent="flex-end">
         <Button

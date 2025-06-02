@@ -40,6 +40,7 @@ class DataField(models.Model):
     name = models.CharField(max_length=50)
     label = models.CharField(max_length=100)
     type = models.CharField(max_length=20, choices=FIELD_TYPES)
+    default_value = models.JSONField(blank=True, null=True, help_text="Default value for the field")
     order = models.PositiveIntegerField(default=0)
     description = models.TextField(blank=True)
     required = models.BooleanField(default=False)

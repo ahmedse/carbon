@@ -106,6 +106,13 @@ export default function SidebarMenu({ open }) {
               tooltip="Manage Tables & Fields"
               sx={{ pl: 4 }}
             />
+            <MenuItem
+              to="/dataschema/manage/tablemanagerpage"
+              icon={<TableManageIcon />}
+              label="Table Manager 2"
+              tooltip="Manage Tables & Fields"
+              sx={{ pl: 4 }}
+            />
           </Collapse>
           <Divider />
         </>

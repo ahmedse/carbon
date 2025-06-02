@@ -30,6 +30,17 @@ class ModuleViewSet(ContextExtractorMixin, viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        if self.request.user.is_superuser:
-            return Module.objects.all()
-        return Module.objects.filter(project__tenant=self.request.user.tenant)
+        qs = Module.objects.all() if self.request.user.is_superuser else Module.objects.filter(project__tenant=self.request.user.tenant)
+        project_id = self.get_project_id_from_request(self.request)
+        print(f"[DEBUG] project_id {project_id}")
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+            print(f"[DEBUG] Modules list for project {project_id} : {qs}")
+        return qs
+
+    # def get_queryset(self):
+    #     if self.request.user.is_superuser:
+    #         return Module.objects.all()
+    #     return Module.objects.filter(project__tenant=self.request.user.tenant)
+
+    

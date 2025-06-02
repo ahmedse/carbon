@@ -7,7 +7,7 @@ class DataFieldInline(admin.TabularInline):
     model = DataField
     fk_name = "data_table"
     extra = 0
-    fields = ('label', 'name', 'type', 'order', 'required', 'is_active', 'is_archived', 'version')
+    fields = ('label', 'name', 'type', 'order', 'default_value', 'required', 'is_active', 'is_archived', 'version')
     readonly_fields = ('created_at', 'updated_at', 'created_by', 'updated_by')
 
 class DataRowInline(admin.TabularInline):
