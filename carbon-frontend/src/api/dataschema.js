@@ -31,7 +31,7 @@ export function deleteDataSchemaField(token, id, context_id) {
   return apiFetch(`/api/dataschema/fields/${id}/`, { method: "DELETE", token, context_id });
 }
 
-// Batch reorder, now unified with apiFetch
+// Batch reorder
 export function updateDataSchemaFieldOrder(token, tableId, fields, context_id) {
   return apiFetch(`/api/dataschema/fields/reorder/`, {
     method: "POST",
@@ -46,13 +46,33 @@ export function updateDataSchemaFieldOrder(token, tableId, fields, context_id) {
 
 // Fetch rows for a table, with optional filters
 export function fetchDataRows(token, tableId, filters = {}, context_id) {
-  const params = { data_table: tableId, ...filters };
-  const esc = encodeURIComponent;
-  const query = Object.keys(params)
-    .filter(k => params[k] !== undefined && params[k] !== null && params[k] !== "")
-    .map(k => esc(k) + "=" + esc(params[k]))
-    .join("&");
-  return apiFetch(`/api/dataschema/rows/?${query}`, { token, context_id });
+  const params = new URLSearchParams();
+  params.set("data_table", tableId);
+  if (context_id) params.set("context_id", context_id);
+
+  // Add global search parameter
+  if (filters._search) params.set("search", filters._search);
+
+  // Add field-specific filters
+  Object.entries(filters).forEach(([key, value]) => {
+    if (key !== "_search" && value != null && value !== "") {
+      params.set(`field__${key}`, value);
+    }
+  });
+
+  const endpoint = `/api/dataschema/rows/?${params.toString()}`;
+  console.debug("[fetchDataRows] GET", endpoint, { filters, context_id });
+
+  // Use apiFetch for consistent handling of base URL, context, and tokens
+  return apiFetch(endpoint, { token, context_id })
+    .then(data => {
+      console.debug("[fetchDataRows] Success response:", data);
+      return Array.isArray(data) ? data : [];
+    })
+    .catch(err => {
+      console.error("[fetchDataRows] Error:", err);
+      throw err;
+    });
 }
 
 // Create new row
@@ -113,23 +133,31 @@ export function exportRowsToCsv(rows, fields, filename = "export.csv") {
   URL.revokeObjectURL(url);
 }
 
-export async function uploadRowFile(token, rowId, fieldName, file, context_id) {
-  if (!rowId) throw new Error("Row must be created before uploading a file.");
-  const url = `/api/dataschema/rows/${rowId}/upload/` + (context_id ? `?context_id=${encodeURIComponent(context_id)}` : "");
+// --- Robust file upload with debug ---
+export async function uploadRowFile(token, rowId, field, file, context_id) {
   const formData = new FormData();
-  formData.append("field", fieldName);
+  formData.append("field", field);
   formData.append("file", file);
-  const res = await fetch(url, {
+
+  const url = `/api/dataschema/rows/${rowId}/upload/?context_id=${context_id}`;
+  console.debug("[uploadRowFile] POST", url, "field:", field, "file:", file);
+
+  const resp = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
-      // Do NOT set Content-Type to multipart/form-data; browser will set it
+      // Do not set Content-Type when using FormData
     },
-    body: formData
+    body: formData,
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "File upload failed");
+
+  if (!resp.ok) {
+    const errorText = await resp.text();
+    console.error("[uploadRowFile] Error response:", resp.status, errorText);
+    throw new Error(`File upload failed (${resp.status}): ${errorText}`);
   }
-  return await res.json(); // { url: ... }
+
+  const data = await resp.json();
+  console.debug("[uploadRowFile] Success response:", data);
+  return data;
 }

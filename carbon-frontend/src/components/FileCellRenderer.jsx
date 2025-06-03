@@ -10,7 +10,10 @@ export default function FileCellRenderer({
 }) {
   const fileInputRef = useRef();
   const [uploading, setUploading] = useState(false);
-  const notify = useNotification();
+  const notifyCtx = useNotification();
+  const notify = typeof notifyCtx?.notify === "function"
+    ? notifyCtx.notify
+    : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];

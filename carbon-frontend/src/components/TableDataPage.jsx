@@ -25,13 +25,23 @@ export default function TableDataPage({ moduleId, tableId, lang, token, context_
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState({});
   const [selected, setSelected] = useState([]);
-  const notify = useNotification();
+  // const notify = useNotification();
+
+  const notifyCtx = useNotification();
+  const notify = typeof notifyCtx?.notify === "function"
+    ? notifyCtx.notify
+    : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
 
   // Defensive: ensure fetches are always safe
   const fetchRows = useCallback(() => {
     setLoading(true);
     fetchDataRows(token, tableId, filters, context_id)
-      .then(data => { setRows(Array.isArray(data) ? data : []); setLoading(false); })
+      .then(data => {
+        // Defensive: always use an array
+        const safeRows = Array.isArray(data) ? data : [];
+        setRows(safeRows);
+        setLoading(false);
+      })
       .catch(err => {
         setLoading(false);
         notify({ message: err?.message || "Failed to fetch rows", type: "error" });

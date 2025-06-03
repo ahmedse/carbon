@@ -16,7 +16,10 @@ function isAdmin(user, currentContext) {
 
 export default function AdminRoute({ children, redirectTo = "/" }) {
   const { user, currentContext, loading } = useAuth();
-  const { notify } = useNotification();
+  const notifyCtx = useNotification();
+  const notify = typeof notifyCtx?.notify === "function"
+    ? notifyCtx.notify
+    : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
   const notifiedRef = useRef(false);
 
   // Wait for auth/context to load

@@ -6,7 +6,10 @@ import { useNotification } from "./NotificationProvider";
 export default function BulkActionBar({ selected, onDelete, onExport }) {
   const [deleting, setDeleting] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const notify = useNotification();
+  const notifyCtx = useNotification();
+  const notify = typeof notifyCtx?.notify === "function"
+    ? notifyCtx.notify
+    : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
 
   if (!selected?.length) return null;
 

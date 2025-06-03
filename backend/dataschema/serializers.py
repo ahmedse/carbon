@@ -47,6 +47,11 @@ class DataTableSerializer(serializers.ModelSerializer):
         ]
 
 class DataRowSerializer(serializers.ModelSerializer):
+
+    def create(self, validated_data):
+        print("[DEBUG] DataRowSerializer.create: validated_data:", validated_data)
+        return super().create(validated_data)
+
     def to_internal_value(self, data):
         # Allow PATCH with only 'values'
         if self.partial and 'values' not in data:

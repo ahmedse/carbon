@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.core.files.storage import default_storage
+from django.db.models import Q
 
 from .models import DataTable, DataField, DataRow, SchemaChangeLog
 from .serializers import (
@@ -128,6 +129,37 @@ class DataRowViewSet(TenantProjectModuleBaseViewSet):
     serializer_class = DataRowSerializer
     required_permission = "manage_data"
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        data_table_id = self.request.query_params.get("data_table")
+        if data_table_id:
+            qs = qs.filter(data_table_id=data_table_id)
+
+        # Field-specific filtering (for any field in the JSON "values")
+        for key, value in self.request.query_params.items():
+            if key.startswith('field__') and value:
+                field_name = key[7:]  # strip 'field__'
+                qs = qs.filter(**{f"values__{field_name}__icontains": value})
+
+        # Generic search in all values fields
+        search = self.request.query_params.get("search")
+        if search:
+            fields = DataField.objects.filter(data_table_id=data_table_id, type__in=['string', 'text'])
+            if not fields.exists():
+                print("[DEBUG] No searchable fields for search, returning empty queryset")
+                return qs.none()  # return early, don't continue
+            search_q = Q()
+            for field in fields:
+                search_q |= Q(**{f"values__{field.name}__icontains": search})
+            qs = qs.filter(search_q)
+
+        print(
+            "[DEBUG] DataRowViewSet.get_queryset: returning %d rows for table_id=%s (query: %s)"
+            % (qs.count(), data_table_id, str(qs.query))
+        )
+        return qs
+
+
     def perform_create(self, serializer):
         project_id = self.get_project_id()
         tenant = user_tenant(self.request)
@@ -159,27 +191,33 @@ class DataRowViewSet(TenantProjectModuleBaseViewSet):
 
     @action(detail=True, methods=['post'], url_path='upload', parser_classes=[MultiPartParser, FormParser])
     def upload(self, request, pk=None):
+        print("[DEBUG] Upload called for row id:", pk)
         row = self.get_object()
         field_name = request.data.get("field")
         uploaded_file = request.FILES.get("file")
+        print("[DEBUG] field_name:", field_name, "uploaded_file:", uploaded_file)
         if not field_name or not uploaded_file:
+            print("[DEBUG] Missing field or file.")
             return Response({"detail": "Missing field or file."}, status=400)
         field = row.data_table.fields.filter(name=field_name, is_active=True, is_archived=False, type="file").first()
         if not field:
+            print("[DEBUG] Invalid field for file upload.")
             return Response({"detail": "Invalid field for file upload."}, status=400)
         allowed_types = ["application/pdf", "image/jpeg", "image/png"]
         max_size = 5 * 1024 * 1024  # 5 MB
         if uploaded_file.content_type not in allowed_types:
+            print("[DEBUG] Invalid file type:", uploaded_file.content_type)
             return Response({"detail": "Invalid file type."}, status=400)
         if uploaded_file.size > max_size:
+            print("[DEBUG] File too large:", uploaded_file.size)
             return Response({"detail": "File too large."}, status=400)
-        # Use the path from settings, defaulting as needed
         base_path = getattr(settings, "DATASCHEMA_UPLOAD_PATH", "dataschema_uploads/")
         filename = default_storage.save(
             f"{base_path.rstrip('/')}/{row.data_table.id}/{field_name}/{uploaded_file.name}",
             uploaded_file
         )
         file_url = default_storage.url(filename)
+        print("[DEBUG] Saved file to:", file_url)
         values = row.values or {}
         values[field_name] = file_url
         row.values = values
