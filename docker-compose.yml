@@ -1,19 +1,31 @@
 version: "3.8"
 services:
-  frontend:
-    build:
-      context: ./frontend
-    ports:
-      - "5173:5173"
-    restart: always
-
   backend:
-    build:
-      context: ./backend
+    build: ./backend
+    container_name: gigacast-backend
+    restart: always
+    env_file: ./backend/.env.production
+    environment:
+      - DJANGO_ENV=production
+    volumes:
+      - /srv/gigacast/static:/static
+      - /srv/gigacast/media:/media
     ports:
       - "8000:8000"
-    env_file:
-      - ./backend/.env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    expose:
+      - "8000"
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000"
+
+  frontend:
+    build: ./frontend
+    container_name: gigacast-frontend
     restart: always
+    environment:
+      - REACT_APP_API_BASE_URL=http://91.108.121.172/api/
+    depends_on:
+      - backend
+    volumes:
+      - /srv/gigacast/frontend/build:/usr/share/nginx/html

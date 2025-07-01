@@ -1,30 +1,47 @@
-# File: Dockerfile
-# Purpose: Docker configuration for building and running the Django application.
-# Location: (project root)
-#
-# This Dockerfile sets up a Python 3.10 environment, installs dependencies,
-# and runs the Django application using the development server on port 8000.
-# For production, consider using a WSGI server like gunicorn.
+# -- Build a production Django container with Gunicorn --
 
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-# Set the working directory inside the container
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# Create a user for security
+RUN addgroup --system app && adduser --system --ingroup app app
+
+# Install system dependencies, including sudo
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    curl \
+    sudo \
+    && echo 'app ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers \
+    && pip install --upgrade pip
+
+
+
+# Set working directory
 WORKDIR /app
 
-# Copy dependency list
+# Install Python dependencies
 COPY requirements.txt ./
 
-# Install Python dependencies
+#RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all project files into the container
+RUN apt-get update && apt-get install -y libgomp1
+
+# Clean up build dependencies
+#RUN apt-get remove -y build-essential && \
+ #   apt-get autoremove -y && \
+  #  apt-get clean && \
+   # rm -rf /var/lib/apt/lists/*
+
+# Copy app files and set permissions
 COPY . .
+RUN mkdir -p /static /media && chown -R app:app /static /media
 
-# Ensure stdout/stderr are unbuffered (useful for logging)
-ENV PYTHONUNBUFFERED=1
+# Switch to non-root user with sudo privileges
+USER app
 
-# Expose Django's default port
-EXPOSE 8000
-
-# Start the Django development server (not recommended for production)
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Start Gunicorn server
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]

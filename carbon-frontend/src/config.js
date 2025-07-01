@@ -5,7 +5,4 @@ export const API_ROUTES = {
   myRoles: "/api/my-roles/",
   projects: "/api/core/projects/",
   modules: "/api/core/modules/",
-  entries: "/api/datacollection/entries/",
-  templates: "/api/datacollection/templates/",
-  items: "/api/datacollection/item-definitions/",
 };

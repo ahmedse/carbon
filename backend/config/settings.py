@@ -1,12 +1,5 @@
 # File: backend/config/settings.py
 # Purpose: Django project settings for the 'backend' project.
-#
-# This file contains configuration for Django settings, including installed apps,
-# middleware, database, authentication, static files, internationalization,
-# logging, and other global options.
-#
-# For more information, see:
-# https://docs.djangoproject.com/en/5.2/topics/settings/
 
 import os
 from pathlib import Path
@@ -16,36 +9,46 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+# Determine the environment: 'development' or 'production'
+DJANGO_ENV = os.getenv("DJANGO_ENV", "development").lower()
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-9(mkyr(v_!gbmxt+kb(1z)a=l7vp(g(q4ocn^mo_0k#y_$!!v9'
+SECRET_KEY = os.getenv(
+    "DJANGO_SECRET_KEY",
+    'django-insecure-9(mkyr(v_!gbmxt+kb(1z)a=l7vp(g(q4ocn^mo_0k#y_$!!v9'
+)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+# DEBUG/ALLOWED_HOSTS per environment
+if DJANGO_ENV == "development":
+    DEBUG = True
+    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "91.108.121.172,127.0.0.1,localhost").split(",")
+else:
+    DEBUG = False
+    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
+
+print("DJANGO_ENV is set to:", DJANGO_ENV)
 print("DEBUG is set to:", DEBUG)
+
 # File upload path for dataschema files
 DATASCHEMA_UPLOAD_PATH = os.getenv("DATASCHEMA_UPLOAD_PATH", "dataschema_uploads/")
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
-
 # Application definition
-
 INSTALLED_APPS = [
     'accounts',
     'core',
     'dataschema',
-    'datacollection',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',    
-    # Project-specific apps    
+    'django.contrib.staticfiles',
     'corsheaders',
 ]
+
+# Development-only apps
+if DJANGO_ENV == "development":
+    INSTALLED_APPS += ['debug_toolbar']
 
 AUTH_USER_MODEL = 'accounts.User'
 
@@ -59,7 +62,15 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
-CORS_ALLOW_ALL_ORIGINS = True
+
+if DJANGO_ENV == "development":
+    MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+
+# CORS configuration
+if DJANGO_ENV == "development":
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
 
 ROOT_URLCONF = 'config.urls'
 
@@ -119,31 +130,67 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_ROOT = os.getenv("DJANGO_STATIC_ROOT", BASE_DIR / 'staticfiles')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Logging configuration
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "handlers": {
-        "console": {"class": "logging.StreamHandler"},
-    },
-    "root": {
-        "handlers": ["console"],
-        "level": os.getenv("ROOT_LOG_LEVEL", "WARNING"),  # Default: WARNING
-    },
-    "loggers": {
-        "django": {
-            "handlers": ["console"],
-            "level": os.getenv("DJANGO_LOG_LEVEL", "DEBUG"),  # Default: DEBUG
-            "propagate": True,
+# Production-specific secure settings
+if DJANGO_ENV == "production":
+    # Secure settings
+    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() == "true"
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+    # Logging configuration
+    LOGGING = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {
+            "console": {"class": "logging.StreamHandler"},
         },
-        "rest_framework": {
+        "root": {
             "handlers": ["console"],
-            "level": os.getenv("REST_FRAMEWORK_LOG_LEVEL", "DEBUG"),  # Default: DEBUG
-            "propagate": False,
+            "level": os.getenv("ROOT_LOG_LEVEL", "WARNING"),
         },
-    },
-}
+        "loggers": {
+            "django": {
+                "handlers": ["console"],
+                "level": os.getenv("DJANGO_LOG_LEVEL", "INFO"),
+                "propagate": True,
+            },
+            "rest_framework": {
+                "handlers": ["console"],
+                "level": os.getenv("REST_FRAMEWORK_LOG_LEVEL", "INFO"),
+                "propagate": False,
+            },
+        },
+    }
+else:
+    # Development logging (more verbose)
+    LOGGING = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {
+            "console": {"class": "logging.StreamHandler"},
+        },
+        "root": {
+            "handlers": ["console"],
+            "level": os.getenv("ROOT_LOG_LEVEL", "WARNING"),
+        },
+        "loggers": {
+            "django": {
+                "handlers": ["console"],
+                "level": os.getenv("DJANGO_LOG_LEVEL", "DEBUG"),
+                "propagate": True,
+            },
+            "rest_framework": {
+                "handlers": ["console"],
+                "level": os.getenv("REST_FRAMEWORK_LOG_LEVEL", "DEBUG"),
+                "propagate": False,
+            },
+        },
+    }
+
+# Internal IPs for debug toolbar
+if DJANGO_ENV == "development":
+    INTERNAL_IPS = ["127.0.0.1"]
