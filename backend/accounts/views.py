@@ -105,7 +105,11 @@ class MyTokenObtainPairView(TokenObtainPairView):
 @permission_classes([IsAuthenticated])
 def my_roles(request):
     user = request.user
+    print("DEBUG: user =", user)
     assignments = user.role_assignments.select_related('role', 'context', 'context__project', 'context__module').filter(is_active=True)
+    print("DEBUG: assignments =", assignments)
+    for a in assignments:
+        print("DEBUG: a =", a, "role:", a.role.name, "context:", a.context)
     roles = [
         {
             "role": a.role.name,
@@ -115,7 +119,7 @@ def my_roles(request):
             "project_id": a.context.project.id if a.context.project else None,
             "module": a.context.module.name if a.context.module else None,
             "module_id": a.context.module.id if a.context.module else None,
-            "permissions": a.role.permissions,
+            "permissions": [p.code for p in a.role.permissions.all()],
             "active": a.is_active,
         }
         for a in assignments

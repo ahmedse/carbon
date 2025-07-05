@@ -26,6 +26,7 @@ export default function Sidebar() {
     return pinned ? pinned === "true" : true;
   });
 
+  // Extract distinct projects from user roles
   const projects = Array.from(
     new Map(
       (user?.roles || [])
@@ -35,10 +36,21 @@ export default function Sidebar() {
   );
 
   const handleProjectChange = (e) => {
-    const proj = projects.find(p => String(p.id) === String(e.target.value));
-    setContext({ context_id: proj.id, project: proj.name });
+    const selectedValue = e.target.value;
+    const selectedId = Number(selectedValue);
+    console.log("Selected value:", selectedValue, "typeof:", typeof selectedValue);
+    console.log("Converted to number:", selectedId, "typeof:", typeof selectedId);
+    const proj = projects.find(p => p.id === selectedId);
+    console.log("Matched project:", proj);
+    if (proj) {
+      setContext({
+        project_id: proj.id,
+        project: proj.name,
+        context_type: "project",
+      });
+    }
   };
-
+  
   const toggleSidebar = () => {
     if (pinned) return;
     setOpen((prev) => !prev);
@@ -54,7 +66,12 @@ export default function Sidebar() {
 
   if (!projects.length) return null;
   const showDropdown = projects.length > 1;
-  const projectName = projects[0].name;
+  const projectName = (() => {
+    const activeProj = projects.find(p =>
+      currentContext?.project_id && String(p.id) === String(currentContext.project_id)
+    );
+    return activeProj?.name || projects[0].name;
+  })();
 
   return (
     <Drawer
@@ -85,7 +102,7 @@ export default function Sidebar() {
         {open ? (
           showDropdown ? (
             <Select
-              value={currentContext?.context_id || ""}
+              value={currentContext?.project_id || projects[0].id}
               onChange={handleProjectChange}
               size="small"
               variant="standard"

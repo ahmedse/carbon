@@ -26,33 +26,43 @@ class TenantProjectModuleBaseViewSet(ContextExtractorMixin, viewsets.ModelViewSe
     permission_classes = [HasRBACPermission]
     queryset = None
 
-    def get_project_id(self):
-        return self.get_project_id_from_request(self.request)
+    def get_project_and_module_id(self):
+        return self.get_project_and_module_id_from_request(self.request)
 
     def get_queryset(self):
         tenant = user_tenant(self.request)
-        project_id = self.get_project_id()
+        project_id, module_id = self.get_project_and_module_id()
         if not project_id or not tenant:
             return self.queryset.none()
         base = self.queryset.model.objects
         if hasattr(self.queryset.model, "module"):
-            return base.filter(module__project_id=project_id, module__project__tenant=tenant, is_archived=False)
+            qs = base.filter(module__project_id=project_id, module__project__tenant=tenant, is_archived=False)
+            if module_id:
+                qs = qs.filter(module_id=module_id)
+            return qs
         elif hasattr(self.queryset.model, "data_table"):
-            return base.filter(data_table__module__project_id=project_id, data_table__module__project__tenant=tenant, is_archived=False)
+            qs = base.filter(data_table__module__project_id=project_id, data_table__module__project__tenant=tenant, is_archived=False)
+            if module_id:
+                qs = qs.filter(data_table__module_id=module_id)
+            return qs
         elif hasattr(self.queryset.model, "data_field"):
-            return base.filter(data_field__data_table__module__project_id=project_id, data_field__data_table__module__project__tenant=tenant)
+            qs = base.filter(data_field__data_table__module__project_id=project_id, data_field__data_table__module__project__tenant=tenant)
+            if module_id:
+                qs = qs.filter(data_field__data_table__module_id=module_id)
+            return qs
         else:
             return base.none()
 
     def perform_create(self, serializer):
-        project_id = self.get_project_id()
+        project_id, module_id = self.get_project_and_module_id()
         tenant = user_tenant(self.request)
         try:
             project = Project.objects.get(id=project_id, tenant=tenant)
         except Project.DoesNotExist:
             raise PermissionError("Project not found or does not belong to your tenant.")
         if hasattr(serializer.Meta.model, "module"):
-            module_id = self.request.data.get("module")
+            if not module_id:
+                raise PermissionError("Module ID is required.")
             try:
                 module = Module.objects.get(id=module_id, project=project)
             except Module.DoesNotExist:
@@ -74,9 +84,27 @@ class DataTableViewSet(TenantProjectModuleBaseViewSet):
     serializer_class = DataTableSerializer
     required_permission = "manage_schema"
 
+    def get_required_permission(self):
+        # Allow read with view_schema, require manage_schema for write
+        if self.action in ["list", "retrieve", "fields"]:
+            return "view_schema"
+        return self.required_permission
+
+    def perform_destroy(self, instance):
+        print(f"[DEBUG] inside perform_destroy: {instance}")
+        if instance.fields.exists():
+            # Archive if it has fields
+            instance.is_archived = True
+            instance.save()
+        else:
+            print(f"[DEBUG] inside perform_destroy: {instance}")
+            # Delete if no fields
+            instance.delete()
+
     def get_queryset(self):
         qs = super().get_queryset()
-        module_id = self.request.query_params.get('module')
+        # Optionally support ?module_id= for filtering
+        module_id = self.request.query_params.get('module_id')
         if module_id:
             qs = qs.filter(module_id=module_id)
         return qs
@@ -122,6 +150,17 @@ class DataFieldViewSet(TenantProjectModuleBaseViewSet):
             data_table=obj.data_table, data_field=obj, action="archive", before=DataFieldSerializer(obj).data, user=request.user
         )
         return Response({"status": "archived"})
+    
+    def perform_destroy(self, instance):
+        # Check if any DataRow in the table has a value for this field
+        has_data = instance.data_table.rows.filter(values__has_key=instance.name).exists()
+        if has_data:
+            # Archive if used in any DataRow
+            instance.is_archived = True
+            instance.save()
+        else:
+            # Delete if not used
+            instance.delete()
 
 # --- DataRow ---
 class DataRowViewSet(TenantProjectModuleBaseViewSet):
@@ -154,14 +193,12 @@ class DataRowViewSet(TenantProjectModuleBaseViewSet):
             qs = qs.filter(search_q)
 
         print(
-            "[DEBUG] DataRowViewSet.get_queryset: returning %d rows for table_id=%s (query: %s)"
-            % (qs.count(), data_table_id, str(qs.query))
+            # "[DEBUG] DataRowViewSet.get_queryset: returning %d rows for table_id=%s (query: %s)"% (qs.count(), data_table_id, str(qs.query))
         )
         return qs
 
-
     def perform_create(self, serializer):
-        project_id = self.get_project_id()
+        project_id, module_id = self.get_project_and_module_id()
         tenant = user_tenant(self.request)
         try:
             project = Project.objects.get(id=project_id, tenant=tenant)

@@ -15,11 +15,18 @@ import { Link, useLocation } from "react-router-dom";
 import { fetchDataSchemaTables } from "../api/dataschema";
 import { fetchModules } from "../api/modules";
 
-function isAdmin(user, currentContext) {
-  return user?.roles?.some(
-    r => r.project_id === currentContext.context_id &&
+// Helper: check permission in current context with project_id and module_id
+function hasPermission(user, currentContext, perm) {
+  if (!user?.roles || !currentContext) return false;
+  return user.roles.some(
+    r =>
       r.active &&
-      r.role === "admin_role"
+      (
+        (r.context_type === "project" && String(r.project_id) === String(currentContext.project_id))
+        ||
+        (r.context_type === "module" && String(r.module_id) === String(currentContext.module_id))
+      ) &&
+      (r.permissions || []).includes(perm)
   );
 }
 
@@ -31,9 +38,10 @@ export default function SidebarMenu({ open }) {
   const [moduleTables, setModuleTables] = useState({});
   const [loadingTables, setLoadingTables] = useState({});
 
+  // Always use project_id for fetchModules
   useEffect(() => {
-    if (user && currentContext) {
-      fetchModules(user.token, currentContext.context_id)
+    if (user && currentContext?.project_id) {
+      fetchModules(user.token, currentContext.project_id)
         .then(setModules)
         .catch(() => setModules([]));
     }
@@ -41,23 +49,22 @@ export default function SidebarMenu({ open }) {
 
   // Fetch tables for each module (for menu display)
   useEffect(() => {
-    if (!user || !currentContext || !modules.length) return;
+    if (!user || !currentContext?.project_id || !modules.length) return;
     modules.forEach(mod => {
-      setLoadingTables(prev => ({ ...prev, [mod.name]: true }));
-      fetchDataSchemaTables(user.token, currentContext.context_id, mod.id)
+      setLoadingTables(prev => ({ ...prev, [mod.id]: true }));
+      fetchDataSchemaTables(user.token, currentContext.project_id, mod.id)
         .then(tables => {
-          setModuleTables(prev => ({ ...prev, [mod.name]: tables || [] }));
+          setModuleTables(prev => ({ ...prev, [mod.id]: tables || [] }));
         })
-        .finally(() => setLoadingTables(prev => ({ ...prev, [mod.name]: false })));
+        .finally(() => setLoadingTables(prev => ({ ...prev, [mod.id]: false })));
     });
   }, [user, currentContext, modules]);
 
-  // Top-level: Schema Admin with Table Manager only
-  const admin = isAdmin(user, currentContext);
+  // "Schema Admin" menu: show if user has manage_schema permission in this context
+  const canSchemaAdmin = hasPermission(user, currentContext, "manage_schema");
 
-  // Helper to check if a table is active
-  const isTableActive = (modName, tableId) =>
-    location.pathname === `/dataschema/entry/${modName.toLowerCase()}/${tableId}`;
+  const isTableActive = (modId, tableId) =>
+    location.pathname === `/dataschema/entry/${modId}/${tableId}`;
 
   const MenuItem = ({ to, icon, label, tooltip, selected, ...props }) => (
     <Tooltip title={tooltip || label} placement="right" arrow disableHoverListener={open ? true : false}>
@@ -83,8 +90,8 @@ export default function SidebarMenu({ open }) {
 
   return (
     <List sx={{ pt: 1 }}>
-      {/* SCHEMA ADMIN: Only Table Manager */}
-      {admin && (
+      {/* SCHEMA ADMIN: Only Table Manager, permission-based */}
+      {canSchemaAdmin && (
         <>
           <ListItemButton
             onClick={() => setModuleOpens(prev => ({ ...prev, _schemaAdmin: !prev._schemaAdmin }))}
@@ -104,17 +111,9 @@ export default function SidebarMenu({ open }) {
           </ListItemButton>
           <Collapse in={moduleOpens._schemaAdmin && open} timeout="auto" unmountOnExit>
             <MenuItem
-              to="/dataschema/manage/tablemanager"
-              icon={<TableManageIcon />}
-              label="Table Manager"
-              tooltip="Manage Tables & Fields"
-              sx={{ pl: 4 }}
-              selected={location.pathname === "/dataschema/manage/tablemanager"}
-            />
-            <MenuItem
               to="/dataschema/manage/tablemanagerpage"
               icon={<TableManageIcon />}
-              label="Table Manager 2"
+              label="Tables Manager"
               tooltip="Manage Tables & Fields"
               sx={{ pl: 4 }}
               selected={location.pathname === "/dataschema/manage/tablemanagerpage"}
@@ -134,16 +133,16 @@ export default function SidebarMenu({ open }) {
               borderRadius: 1.5,
               justifyContent: open ? "flex-start" : "center"
             }}
-            onClick={() => setModuleOpens(prev => ({ ...prev, [mod.name]: !prev[mod.name] }))}
+            onClick={() => setModuleOpens(prev => ({ ...prev, [mod.id]: !prev[mod.id] }))}
           >
             <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : "auto", justifyContent: "center" }}>
               <TableIcon />
             </ListItemIcon>
             {open && <ListItemText primary={mod.name} />}
-            {open && (moduleOpens[mod.name] ? <ExpandLess /> : <ExpandMore />)}
+            {open && (moduleOpens[mod.id] ? <ExpandLess /> : <ExpandMore />)}
           </ListItemButton>
-          <Collapse in={moduleOpens[mod.name] && open} timeout="auto" unmountOnExit>
-            {loadingTables[mod.name] ? (
+          <Collapse in={moduleOpens[mod.id] && open} timeout="auto" unmountOnExit>
+            {loadingTables[mod.id] ? (
               <ListItemButton disabled sx={{ pl: 4 }}>
                 <ListItemIcon>
                   <CircularProgress size={20} />
@@ -151,17 +150,30 @@ export default function SidebarMenu({ open }) {
                 {open && <ListItemText primary="Loading tables..." />}
               </ListItemButton>
             ) : (
-              (moduleTables[mod.name] || [])
+              (moduleTables[mod.id] || [])
                 .filter(table => table.module === mod.id || table.module_id === mod.id)
+                // Only show if user has view_data or manage_data permission for this module context
+                .filter(table => {
+                  // For module context, check if user has permission in this module
+                  const fakeModuleContext = {
+                    ...currentContext,
+                    module_id: mod.id,
+                    context_type: "module",
+                  };
+                  return (
+                    hasPermission(user, fakeModuleContext, "view_data") ||
+                    hasPermission(user, fakeModuleContext, "manage_data")
+                  );
+                })
                 .map(table => (
                   <MenuItem
                     key={table.id}
-                    to={`/dataschema/entry/${mod.name.toLowerCase()}/${table.id}`}
+                    to={`/dataschema/entry/${mod.id}/${table.id}`} // <-- Always use mod.id, never mod.name or mod.title!
                     icon={<TableIcon />}
                     label={table.title}
                     tooltip={table.description || table.title}
                     sx={{ pl: 4 }}
-                    selected={isTableActive(mod.name, table.id)}
+                    selected={isTableActive(mod.id, table.id)}
                   />
                 ))
             )}

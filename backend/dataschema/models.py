@@ -3,8 +3,18 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from core.models import Module
+import re
 
 User = get_user_model()
+
+def normalize_name(value):
+    """Normalize a string to snake_case, lowercase, no leading/trailing spaces."""
+    if not value:
+        return ""
+    value = value.strip().lower()
+    value = re.sub(r"\s+", "_", value)
+    value = re.sub(r"[^a-z0-9_]", "", value)  # Remove non-alphanum/underscores
+    return value
 
 class DataTable(models.Model):
     """
@@ -54,9 +64,17 @@ class DataField(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_fields')
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_fields')
-
+    
     class Meta:
         ordering = ['order', 'id']
+        unique_together = (("data_table", "name"),)  # Ensure uniqueness within table
+
+    def save(self, *args, **kwargs):
+        if not self.name and self.label:
+            self.name = normalize_name(self.label)
+        else:
+            self.name = normalize_name(self.name)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.label} ({self.type}) in {self.data_table.title}"

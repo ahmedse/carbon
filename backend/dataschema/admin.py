@@ -26,6 +26,21 @@ class DataTableAdmin(admin.ModelAdmin):
     inlines = [DataFieldInline, DataRowInline]
     ordering = ('-created_at',)
 
+    def delete_model(self, request, obj):
+        if obj.fields.exists():
+            obj.is_archived = True
+            obj.save()
+        else:
+            super().delete_model(request, obj)
+    
+    def delete_queryset(self, request, queryset):
+        for obj in queryset:
+            if obj.fields.exists():
+                obj.is_archived = True
+                obj.save()
+            else:
+                obj.delete()
+
 @admin.register(DataField)
 class DataFieldAdmin(admin.ModelAdmin):
     list_display = ('id', 'label', 'name', 'type', 'data_table', 'order', 'is_active', 'is_archived', 'version')
@@ -33,6 +48,23 @@ class DataFieldAdmin(admin.ModelAdmin):
     search_fields = ('label', 'name', 'data_table__title')
     readonly_fields = ('created_at', 'updated_at', 'created_by', 'updated_by', 'version')
     ordering = ('data_table', 'order', 'id')
+
+    def delete_model(self, request, obj):
+        has_data = obj.data_table.rows.filter(values__has_key=obj.name).exists()
+        if has_data:
+            obj.is_archived = True
+            obj.save()
+        else:
+            super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        for obj in queryset:
+            has_data = obj.data_table.rows.filter(values__has_key=obj.name).exists()
+            if has_data:
+                obj.is_archived = True
+                obj.save()
+            else:
+                obj.delete()
 
 @admin.register(DataRow)
 class DataRowAdmin(admin.ModelAdmin):

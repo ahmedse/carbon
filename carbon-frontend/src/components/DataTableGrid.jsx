@@ -25,7 +25,7 @@ function mapRows(rows, fields) {
   });
 }
 
-function buildColumns(fields, editable, token, context_id, uploadRowFile, onEditRow, onDeleteRow) {
+function buildColumns(fields, editable, token, project_id, module_id, uploadRowFile, onEditRow, onDeleteRow) {
   const columns = fields.map(field => {
     const valueOptions = safeArray(field.options).map(opt =>
       typeof opt === "object"
@@ -47,7 +47,8 @@ function buildColumns(fields, editable, token, context_id, uploadRowFile, onEdit
             fieldName={field.name}
             onChange={() => {}}
             token={token}
-            context_id={context_id}
+            project_id={project_id}
+            module_id={module_id}
             uploadRowFile={uploadRowFile}
             disabled
           />
@@ -207,7 +208,8 @@ export default function DataTableGrid({
   filters,
   setFilters,
   token,
-  context_id,
+  project_id,
+  module_id,
   uploadRowFile,
   onSelectionChange,
   onAddNew,
@@ -282,8 +284,8 @@ export default function DataTableGrid({
   };
 
   const columns = useMemo(
-    () => buildColumns(fields, false, token, context_id, uploadRowFile, handleEditRow, handleDeleteRow),
-    [fields, token, context_id, uploadRowFile]
+    () => buildColumns(fields, false, token, project_id, module_id, uploadRowFile, handleEditRow, handleDeleteRow),
+    [fields, token, project_id, module_id, uploadRowFile]
   );
   const mappedRows = useMemo(() => mapRows(rows, fields), [rows, fields]);
 
@@ -362,7 +364,8 @@ export default function DataTableGrid({
             initial={drawerMode === "edit" ? editingRow : null}
             onSubmit={handleDrawerSave}
             token={token}
-            context_id={context_id}
+            project_id={project_id}
+            module_id={module_id}
             uploadRowFile={uploadRowFile}
             rowId={editingRow?.id}
             mode={drawerMode}

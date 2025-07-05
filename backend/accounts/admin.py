@@ -1,6 +1,11 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import Tenant, User, Role, Context, RoleAssignment
+from .models import Tenant, User, Role, Context, Permission, RoleAssignment
+
+@admin.register(Permission)
+class PermissionAdmin(admin.ModelAdmin):
+    list_display = ('code', 'description')
+    search_fields = ('code',)
 
 @admin.register(Tenant)
 class TenantAdmin(admin.ModelAdmin):
@@ -23,6 +28,7 @@ class UserAdmin(BaseUserAdmin):
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
     list_display = ('name', 'description')
+    filter_horizontal = ('permissions',)
     search_fields = ('name',)
 
 @admin.register(Context)

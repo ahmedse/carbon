@@ -17,15 +17,29 @@ import DataTableGrid from "./DataTableGrid";
 import BulkActionBar from "./BulkActionBar";
 import { useNotification } from "./NotificationProvider";
 
-
-export default function TableDataPage({ moduleId, tableId, lang, token, context_id }) {
+/**
+ * TableDataPage
+ * @param {string} project_id - always required, for RBAC and queries
+ * @param {string} module_id - required for module-level tables
+ * @param {string} moduleId - for display/legacy (same as module_id)
+ * @param {string} tableId
+ * @param {string} lang
+ * @param {string} token
+ */
+export default function TableDataPage({
+  project_id,
+  module_id,
+  moduleId,
+  tableId,
+  lang,
+  token
+}) {
   const [fields, setFields] = useState([]);
   const [table, setTable] = useState(null);
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState({});
   const [selected, setSelected] = useState([]);
-  // const notify = useNotification();
 
   const notifyCtx = useNotification();
   const notify = typeof notifyCtx?.notify === "function"
@@ -35,9 +49,8 @@ export default function TableDataPage({ moduleId, tableId, lang, token, context_
   // Defensive: ensure fetches are always safe
   const fetchRows = useCallback(() => {
     setLoading(true);
-    fetchDataRows(token, tableId, filters, context_id)
+    fetchDataRows(token, tableId, filters, project_id, module_id)
       .then(data => {
-        // Defensive: always use an array
         const safeRows = Array.isArray(data) ? data : [];
         setRows(safeRows);
         setLoading(false);
@@ -46,16 +59,16 @@ export default function TableDataPage({ moduleId, tableId, lang, token, context_
         setLoading(false);
         notify({ message: err?.message || "Failed to fetch rows", type: "error" });
       });
-  }, [token, tableId, filters, context_id, notify]);
+  }, [token, tableId, filters, project_id, module_id, notify]);
 
   // Fetch schema on mount
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      fetchDataSchemaTables(token, context_id, moduleId).then(tables =>
+      fetchDataSchemaTables(token, project_id, module_id).then(tables =>
         (tables || []).find(t => String(t.id) === String(tableId))
       ),
-      fetchDataSchemaFields(token, tableId, context_id)
+      fetchDataSchemaFields(token, tableId, project_id, module_id)
     ]).then(([table, fields]) => {
       setTable(table);
       setFields(fields || []);
@@ -65,7 +78,7 @@ export default function TableDataPage({ moduleId, tableId, lang, token, context_
       notify({ message: err?.message || "Failed to fetch schema", type: "error" });
     });
     // eslint-disable-next-line
-  }, [tableId, moduleId, token, context_id]);
+  }, [tableId, moduleId, module_id, project_id, token]);
 
   useEffect(() => {
     if (table) fetchRows();
@@ -76,7 +89,7 @@ export default function TableDataPage({ moduleId, tableId, lang, token, context_
   const handleBulkDelete = async () => {
     setLoading(true);
     try {
-      await bulkDeleteDataRows(token, selected, context_id);
+      await bulkDeleteDataRows(token, selected, project_id, module_id);
       setSelected([]);
       fetchRows();
       notify({ message: "Rows deleted.", type: "success" });
@@ -106,10 +119,10 @@ export default function TableDataPage({ moduleId, tableId, lang, token, context_
       const data_table = values.data_table || tableId;
       const rowValues = values.values || values;
       if (!idOrNull) {
-        await createDataRow(token, rowValues, data_table, context_id);
+        await createDataRow(token, rowValues, data_table, project_id, module_id);
         notify({ message: "Row added.", type: "success" });
       } else {
-        await updateDataRow(token, idOrNull, { values: rowValues }, context_id, true);
+        await updateDataRow(token, idOrNull, { values: rowValues }, project_id, module_id, true);
         notify({ message: "Row updated.", type: "success" });
       }
       fetchRows();
@@ -124,7 +137,7 @@ export default function TableDataPage({ moduleId, tableId, lang, token, context_
     if (!row?.id) return;
     setLoading(true);
     try {
-      await deleteDataRow(token, row.id, context_id);
+      await deleteDataRow(token, row.id, project_id, module_id);
       fetchRows();
       notify({ message: "Row deleted.", type: "success" });
     } catch (err) {
@@ -158,7 +171,8 @@ export default function TableDataPage({ moduleId, tableId, lang, token, context_
         setFilters={handleSetFilters}
         onSelectionChange={setSelected}
         token={token}
-        context_id={context_id}
+        project_id={project_id}
+        module_id={module_id}
         uploadRowFile={uploadRowFile}
         fetchRows={fetchRows}
         editable={false}

@@ -3,6 +3,12 @@
 from rest_framework import serializers
 from .models import Tenant, Role, Context, RoleAssignment, User
 from core.models import Project, Module
+from .models import Permission
+
+class PermissionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Permission
+        fields = ['id', 'code', 'description']
 
 class TenantSerializer(serializers.ModelSerializer):
     class Meta:
@@ -28,10 +34,12 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'tenant']
 
 class RoleSerializer(serializers.ModelSerializer):
+    permissions = PermissionSerializer(many=True, read_only=True)
+
     class Meta:
         model = Role
-        fields = '__all__'
-
+        fields = ['id', 'name', 'description', 'permissions']
+        
 class ContextSerializer(serializers.ModelSerializer):
     project = ProjectSerializer(read_only=True)
     module = ModuleSerializer(read_only=True)

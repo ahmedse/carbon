@@ -28,6 +28,13 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
+class Permission(models.Model):
+    code = models.CharField(max_length=50, unique=True)
+    description = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.code
+    
 # --- Role Model ---
 class Role(models.Model):
     """
@@ -35,7 +42,8 @@ class Role(models.Model):
     """
     name = models.CharField(max_length=50, unique=True)
     description = models.TextField(blank=True)
-    permissions = models.JSONField(default=list)  # e.g. ["manage_project", "view_all_data"]
+    # permissions = models.JSONField(default=list)  # e.g. ["manage_project", "view_all_data"]
+    permissions = models.ManyToManyField(Permission, blank=True)
 
     def __str__(self):
         return self.name
@@ -98,7 +106,12 @@ class RoleAssignment(models.Model):
 # --- Signals for cleanup (optional) ---
 @receiver(signals.post_delete, sender=RoleAssignment)
 def cleanup_empty_contexts(sender, instance, **kwargs):
-    context = instance.context
-    # Only delete if context has no remaining assignments
-    if not RoleAssignment.objects.filter(context=context).exists():
-        context.delete()
+    try:
+        context = instance.context
+    except Context.DoesNotExist:
+        context = None
+    if context:
+        # Only delete if context has no remaining assignments
+        if not RoleAssignment.objects.filter(context=context).exists():
+            context.delete()
+

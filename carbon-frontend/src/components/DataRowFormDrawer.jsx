@@ -2,13 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  Box, TextField, MenuItem, Checkbox, FormControlLabel, Button, Tooltip, Typography
+  Box, TextField, MenuItem, Checkbox, FormControlLabel, Button, Typography
 } from "@mui/material";
 import FileCellRenderer from "./FileCellRenderer";
 import { DatePicker } from "@mui/x-date-pickers";
 import dayjs from "dayjs";
 import { useNotification } from "./NotificationProvider";
-
 
 // Helper to validate a single value based on field config
 function validateField(field, value) {
@@ -82,7 +81,8 @@ export default function DataRowFormDrawer({
   initial,
   onSubmit,
   token,
-  context_id,
+  project_id,
+  module_id,
   uploadRowFile,
   rowId,
   mode,
@@ -288,7 +288,8 @@ export default function DataRowFormDrawer({
                 fieldName={field.name}
                 uploadRowFile={uploadRowFile}
                 token={token}
-                context_id={context_id}
+                project_id={project_id}
+                module_id={module_id}
                 disabled={submitting}
               />
             );

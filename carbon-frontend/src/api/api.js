@@ -1,16 +1,16 @@
-// File: src/api/api.js
+// src/api/api.js
 
 import { API_BASE_URL } from "../config";
 import { isJwtExpired } from "../jwt";
 
 /**
- * apiFetch - universal API call helper with JWT refresh, context, errors, and JSON parsing
+ * apiFetch - universal API call helper with JWT refresh, project/module params, errors, and JSON parsing
  *
- * @param {string} endpoint - relative API endpoint (e.g. "/api/datacollection/item-definitions/")
- * @param {object} opts - { method, body, token, context_id }
+ * @param {string} endpoint - relative API endpoint (e.g. "/dataschema/tables/")
+ * @param {object} opts - { method, body, token, project_id, module_id }
  * @returns {Promise<any>} - parsed JSON response or throws error
  */
-export async function apiFetch(endpoint, { method = "GET", body, token, context_id } = {}) {
+export async function apiFetch(endpoint, { method = "GET", body, token, project_id, module_id } = {}) {
   let url = `${API_BASE_URL}${endpoint}`;
   let accessToken = token || localStorage.getItem("access");
 
@@ -29,18 +29,20 @@ export async function apiFetch(endpoint, { method = "GET", body, token, context_
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
 
-  // --- CONTEXT INJECTION LOGIC ---
-  // Only inject for /api/dataschema/ endpoints if context_id is provided
-  const isDataSchema = /^\/api\/dataschema\//.test(endpoint);
-  if (isDataSchema && context_id) {
-    const hasQuery = url.includes("?");
-    const alreadyHasContext = url.includes("context_id=");
-    if (!alreadyHasContext) {
-      url += (hasQuery ? "&" : "?") + "context_id=" + encodeURIComponent(context_id);
+  // --- PROJECT/MODULE PARAM INJECTION LOGIC ---
+  // For /dataschema/ or /core/ endpoints, always append project_id, module_id if present
+  const isDataSchemaOrCore = /^\/(dataschema|core)\//.test(endpoint) || /^\/api\/(dataschema|core)\//.test(endpoint);
+  if (isDataSchemaOrCore) {
+    const params = [];
+    if (project_id) params.push(`project_id=${encodeURIComponent(project_id)}`);
+    if (module_id) params.push(`module_id=${encodeURIComponent(module_id)}`);
+    if (params.length) {
+      url += (url.includes("?") ? "&" : "?") + params.join("&");
     }
     // Also inject into body for POST/PUT/PATCH if not present
-    if (["POST", "PUT", "PATCH"].includes(method) && body && typeof body === "object" && !("context_id" in body)) {
-      body.context_id = context_id;
+    if (["POST", "PUT", "PATCH"].includes(method) && body && typeof body === "object") {
+      if (project_id && !("project_id" in body)) body.project_id = project_id;
+      if (module_id && !("module_id" in body)) body.module_id = module_id;
     }
   }
 
@@ -56,7 +58,6 @@ export async function apiFetch(endpoint, { method = "GET", body, token, context_
     }
 
     if (!res.ok) {
-      // Prefer backend detail error if available
       if (data && data.detail) throw new Error(data.detail);
       if (typeof data === "string" && data.length < 200) throw new Error(data);
       throw new Error("API error");
@@ -67,7 +68,6 @@ export async function apiFetch(endpoint, { method = "GET", body, token, context_
   try {
     return await doFetch();
   } catch (err) {
-    // If 401, try refresh, once
     if (err.message === "Unauthorized" || /401/.test(err.message)) {
       try {
         accessToken = await window.refreshAccessToken();

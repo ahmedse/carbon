@@ -1,18 +1,18 @@
 // src/pages/TableManager.jsx
 import React, { useEffect, useState } from "react";
 import {
-  Box, Typography, Tabs, Tab, Paper, Divider, Button, Table, TableHead, TableRow, TableCell, TableBody,
+  Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Select, Tooltip, CircularProgress
 } from "@mui/material";
-import { Add, Edit, Delete } from "@mui/icons-material";
+import { Add, Edit, Delete, ExpandLess, ExpandMore } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthContext";
 import { fetchModules } from "../api/modules";
 import {
   fetchDataSchemaTables, createDataSchemaTable, updateDataSchemaTable, deleteDataSchemaTable,
   fetchDataSchemaFields, createDataSchemaField, updateDataSchemaField, deleteDataSchemaField
 } from "../api/dataschema";
-import { ExpandLess, ExpandMore } from "@mui/icons-material";
 import { Collapse } from "@mui/material";
+
 // --- Field Editor ---
 function FieldForm({ open, onClose, onSubmit, initial }) {
   const [name, setName] = useState(initial?.name || "");
@@ -161,15 +161,19 @@ export default function TableManager() {
   const [currentTableId, setCurrentTableId] = useState(null); // For field form
   const [openModuleId, setOpenModuleId] = useState(null);
 
+  // Extract project_id and module_id from context
+  const projectId = currentContext?.project_id;
+  // module_id is not needed for listing modules, but is needed for table fetches
+
   // Load modules and tables
   useEffect(() => {
-    if (!user || !currentContext) return;
+    if (!user || !currentContext || !projectId) return;
     setLoading(true);
-    fetchModules(user.token, currentContext.context_id).then((mods) => {
+    fetchModules(user.token, projectId).then((mods) => {
       setModules(mods || []);
       Promise.all(
         (mods || []).map(mod =>
-          fetchDataSchemaTables(user.token, currentContext.context_id, mod.id).then(tables => ({
+          fetchDataSchemaTables(user.token, projectId, mod.id).then(tables => ({
             module: mod,
             tables: tables || []
           }))
@@ -185,7 +189,7 @@ export default function TableManager() {
         // Preload fields for all tables
         (data || []).forEach(({ tables }) => {
           (tables || []).forEach(table => {
-            fetchDataSchemaFields(user.token, table.id, currentContext.context_id)
+            fetchDataSchemaFields(user.token, table.id, projectId, table.module || table.module_id)
               .then(fields => {
                 setFieldsByTable(prev => ({ ...prev, [table.id]: fields || [] }));
               });
@@ -193,19 +197,18 @@ export default function TableManager() {
         });
       });
     });
-  }, [user, currentContext]);
+  }, [user, currentContext, projectId]);
 
   // Table CRUD
   const handleCreateTable = async (data) => {
-    await createDataSchemaTable(user.token, data, currentContext.context_id);
+    await createDataSchemaTable(user.token, data, projectId, data.module);
     setOpenTableForm(false);
     setEditingTable(null);
-    // reload data
-    // window.location.reload();
+    window.location.reload();
   };
 
   const handleEditTable = async (data) => {
-    await updateDataSchemaTable(user.token, editingTable.id, { ...editingTable, ...data }, currentContext.context_id);
+    await updateDataSchemaTable(user.token, editingTable.id, { ...editingTable, ...data }, projectId, data.module || editingTable.module || editingTable.module_id);
     setOpenTableForm(false);
     setEditingTable(null);
     window.location.reload();
@@ -213,31 +216,38 @@ export default function TableManager() {
 
   const handleDeleteTable = async (table) => {
     if (!window.confirm(`Archive table "${table.title}"?`)) return;
-    await deleteDataSchemaTable(user.token, table.id, currentContext.context_id);
+    await deleteDataSchemaTable(user.token, table.id, projectId, table.module || table.module_id);
     window.location.reload();
   };
 
   // Field CRUD
   const handleCreateField = async (data) => {
-    await createDataSchemaField(user.token, { ...data, data_table: currentTableId }, currentContext.context_id);
+    // currentTableId refers to the table; we need that table's module for module_id param
+    const table = Object.values(tablesByModule).flat().find(t => t.id === currentTableId);
+    const moduleId = table?.module || table?.module_id;
+    await createDataSchemaField(user.token, { ...data, data_table: currentTableId }, projectId, moduleId);
     setOpenFieldForm(false);
     setEditingField(null);
-    fetchDataSchemaFields(user.token, currentTableId, currentContext.context_id)
+    fetchDataSchemaFields(user.token, currentTableId, projectId, moduleId)
       .then(fields => setFieldsByTable(prev => ({ ...prev, [currentTableId]: fields || [] })));
   };
 
   const handleEditField = async (data) => {
-    await updateDataSchemaField(user.token, editingField.id, { ...editingField, ...data }, currentContext.context_id);
+    const table = Object.values(tablesByModule).flat().find(t => t.id === currentTableId);
+    const moduleId = table?.module || table?.module_id;
+    await updateDataSchemaField(user.token, editingField.id, { ...editingField, ...data }, projectId, moduleId);
     setOpenFieldForm(false);
     setEditingField(null);
-    fetchDataSchemaFields(user.token, currentTableId, currentContext.context_id)
+    fetchDataSchemaFields(user.token, currentTableId, projectId, moduleId)
       .then(fields => setFieldsByTable(prev => ({ ...prev, [currentTableId]: fields || [] })));
   };
 
   const handleDeleteField = async (field) => {
     if (!window.confirm(`Archive field "${field.label}"?`)) return;
-    await deleteDataSchemaField(user.token, field.id, currentContext.context_id);
-    fetchDataSchemaFields(user.token, currentTableId, currentContext.context_id)
+    const table = Object.values(tablesByModule).flat().find(t => t.id === currentTableId);
+    const moduleId = table?.module || table?.module_id;
+    await deleteDataSchemaField(user.token, field.id, projectId, moduleId);
+    fetchDataSchemaFields(user.token, currentTableId, projectId, moduleId)
       .then(fields => setFieldsByTable(prev => ({ ...prev, [currentTableId]: fields || [] })));
   };
 

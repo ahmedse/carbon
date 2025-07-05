@@ -20,42 +20,45 @@ export default function Login() {
 
   if (user) return <Navigate to="/" replace />;
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}${API_ROUTES.token}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      if (!res.ok) {
-        setError("Invalid credentials");
-        setLoading(false);
-        return;
-      }
-      const { access, refresh } = await res.json();
-
-      const rolesRes = await fetch(`${API_BASE_URL}${API_ROUTES.myRoles}`, {
-        headers: { Authorization: `Bearer ${access}` },
-      });
-      if (!rolesRes.ok) {
-        setError("Failed to fetch roles");
-        setLoading(false);
-        return;
-      }
-      const { roles } = await rolesRes.json();
-
-      const userObj = { username, token: access, refresh, roles };
-      login(userObj);
-      // context will be auto-set by AuthContext
-    } catch (err) {
-      setError("Network or server error");
-    } finally {
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError("");
+  setLoading(true);
+  try {
+    const res = await fetch(`${API_BASE_URL}${API_ROUTES.token}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) {
+      setError("Invalid credentials");
       setLoading(false);
+      return;
     }
-  };
+    const { access, refresh } = await res.json();
+
+    // Add this debug line:
+    console.log("About to fetch roles with access token:", access);
+
+    const rolesRes = await fetch(`${API_BASE_URL}${API_ROUTES.myRoles}`, {
+      headers: { Authorization: `Bearer ${access}` },
+    });
+    if (!rolesRes.ok) {
+      setError("Failed to fetch roles");
+      setLoading(false);
+      return;
+    }
+    const { roles } = await rolesRes.json();
+
+    const userObj = { username, token: access, refresh, roles };
+    login(userObj);
+    // context will be auto-set by AuthContext
+  } catch (err) {
+    setError("Network or server error");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <Box sx={{ maxWidth: 400, mx: "auto", mt: 10 }}>

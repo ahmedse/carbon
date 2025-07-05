@@ -1,120 +1,111 @@
-// File: src/api/dataschema.js
+// src/api/dataschema.js
 
 import { apiFetch } from "./api";
+import { API_ROUTES } from "../config";
 
 // Tables
-export function fetchDataSchemaTables(token, context_id, module_id) {
-  const query = module_id ? `?module_id=${encodeURIComponent(module_id)}` : "";
-  return apiFetch(`/api/dataschema/tables/${query}`, { token, context_id });
+export function fetchDataSchemaTables(token, project_id, module_id) {
+  // project_id is required, module_id is optional
+  return apiFetch(API_ROUTES.tables, { token, project_id, module_id });
 }
-export function createDataSchemaTable(token, data, context_id) {
-  return apiFetch(`/api/dataschema/tables/`, { method: "POST", token, body: data, context_id });
+export function createDataSchemaTable(token, data, project_id, module_id) {
+  // Send both project_id and module_id
+  return apiFetch(API_ROUTES.tables, { method: "POST", token, body: data, project_id, module_id });
 }
-export function updateDataSchemaTable(token, id, data, context_id) {
-  return apiFetch(`/api/dataschema/tables/${id}/`, { method: "PUT", token, body: data, context_id });
+export function updateDataSchemaTable(token, id, data, project_id, module_id) {
+  return apiFetch(`${API_ROUTES.tables}${id}/`, { method: "PUT", token, body: data, project_id, module_id });
 }
-export function deleteDataSchemaTable(token, id, context_id) {
-  return apiFetch(`/api/dataschema/tables/${id}/`, { method: "DELETE", token, context_id });
+export function deleteDataSchemaTable(token, id, project_id, module_id) {
+  return apiFetch(`${API_ROUTES.tables}${id}/`, { method: "DELETE", token, project_id, module_id });
 }
 
 // Fields
-export function fetchDataSchemaFields(token, table_id, context_id) {
-  return apiFetch(`/api/dataschema/tables/${table_id}/fields/`, { token, context_id });
+export function fetchDataSchemaFields(token, table_id, project_id, module_id) {
+  return apiFetch(`${API_ROUTES.tables}${table_id}/fields/`, { token, project_id, module_id });
 }
-export function createDataSchemaField(token, data, context_id) {
-  return apiFetch(`/api/dataschema/fields/`, { method: "POST", token, body: data, context_id });
+export function createDataSchemaField(token, data, project_id, module_id) {
+  return apiFetch(API_ROUTES.fields, { method: "POST", token, body: data, project_id, module_id });
 }
-export function updateDataSchemaField(token, id, data, context_id) {
-  return apiFetch(`/api/dataschema/fields/${id}/`, { method: "PUT", token, body: data, context_id });
+export function updateDataSchemaField(token, id, data, project_id, module_id) {
+  return apiFetch(`${API_ROUTES.fields}${id}/`, { method: "PUT", token, body: data, project_id, module_id });
 }
-export function deleteDataSchemaField(token, id, context_id) {
-  return apiFetch(`/api/dataschema/fields/${id}/`, { method: "DELETE", token, context_id });
+export function deleteDataSchemaField(token, id, project_id, module_id) {
+  return apiFetch(`${API_ROUTES.fields}${id}/`, { method: "DELETE", token, project_id, module_id });
 }
 
 // Batch reorder
-export function updateDataSchemaFieldOrder(token, tableId, fields, context_id) {
-  return apiFetch(`/api/dataschema/fields/reorder/`, {
+export function updateDataSchemaFieldOrder(token, tableId, fields, project_id, module_id) {
+  return apiFetch(`${API_ROUTES.fields}reorder/`, {
     method: "POST",
     token,
     body: {
       data_table: tableId,
       fields: fields.map(f => ({ id: f.id, order: f.order })),
     },
-    context_id,
+    project_id,
+    module_id,
   });
 }
 
 // Fetch rows for a table, with optional filters
-export function fetchDataRows(token, tableId, filters = {}, context_id) {
+export function fetchDataRows(token, tableId, filters = {}, project_id, module_id) {
   const params = new URLSearchParams();
   params.set("data_table", tableId);
-  if (context_id) params.set("context_id", context_id);
 
-  // Add global search parameter
   if (filters._search) params.set("search", filters._search);
 
-  // Add field-specific filters
   Object.entries(filters).forEach(([key, value]) => {
     if (key !== "_search" && value != null && value !== "") {
       params.set(`field__${key}`, value);
     }
   });
 
-  const endpoint = `/api/dataschema/rows/?${params.toString()}`;
-  console.debug("[fetchDataRows] GET", endpoint, { filters, context_id });
-
-  // Use apiFetch for consistent handling of base URL, context, and tokens
-  return apiFetch(endpoint, { token, context_id })
-    .then(data => {
-      console.debug("[fetchDataRows] Success response:", data);
-      return Array.isArray(data) ? data : [];
-    })
-    .catch(err => {
-      console.error("[fetchDataRows] Error:", err);
-      throw err;
-    });
+  const endpoint = `${API_ROUTES.rows}?${params.toString()}`;
+  return apiFetch(endpoint, { token, project_id, module_id })
+    .then(data => (Array.isArray(data) ? data : []));
 }
 
 // Create new row
-export function createDataRow(token, values, tableId, context_id) {
-  return apiFetch(`/api/dataschema/rows/`, {
+export function createDataRow(token, values, tableId, project_id, module_id) {
+  return apiFetch(API_ROUTES.rows, {
     method: "POST",
     token,
-    context_id,
+    project_id,
+    module_id,
     body: { data_table: tableId, values }
   });
 }
 
 // Edit row (use PATCH for partial update)
-export function updateDataRow(token, rowId, values, context_id, usePatch = false) {
-  return apiFetch(`/api/dataschema/rows/${rowId}/`, {
+export function updateDataRow(token, rowId, values, project_id, module_id, usePatch = false) {
+  return apiFetch(`${API_ROUTES.rows}${rowId}/`, {
     method: usePatch ? "PATCH" : "PUT",
     token,
-    context_id,
+    project_id,
+    module_id,
     body: values
   });
 }
 
 // Delete row(s)
-export function deleteDataRow(token, rowId, context_id) {
-  return apiFetch(`/api/dataschema/rows/${rowId}/`, {
+export function deleteDataRow(token, rowId, project_id, module_id) {
+  return apiFetch(`${API_ROUTES.rows}${rowId}/`, {
     method: "DELETE",
     token,
-    context_id
+    project_id,
+    module_id
   });
 }
 
 // Bulk delete: call deleteDataRow for each selected row
-export function bulkDeleteDataRows(token, rowIds, context_id) {
-  return Promise.all(rowIds.map(id => deleteDataRow(token, id, context_id)));
+export function bulkDeleteDataRows(token, rowIds, project_id, module_id) {
+  return Promise.all(rowIds.map(id => deleteDataRow(token, id, project_id, module_id)));
 }
 
 // Download CSV (client-side)
 export function exportRowsToCsv(rows, fields, filename = "export.csv") {
   const csvRows = [];
-  // Header
   csvRows.push(fields.map(f => `"${f.label.replace(/"/g, '""')}"`).join(","));
-  // Body
   for (const row of rows) {
     csvRows.push(fields.map(f => {
       let val = row.values?.[f.name] ?? "";
@@ -133,31 +124,29 @@ export function exportRowsToCsv(rows, fields, filename = "export.csv") {
   URL.revokeObjectURL(url);
 }
 
-// --- Robust file upload with debug ---
-export async function uploadRowFile(token, rowId, field, file, context_id) {
+// Robust file upload
+export async function uploadRowFile(token, rowId, field, file, project_id, module_id) {
   const formData = new FormData();
   formData.append("field", field);
   formData.append("file", file);
 
-  const url = `/api/dataschema/rows/${rowId}/upload/?context_id=${context_id}`;
-  console.debug("[uploadRowFile] POST", url, "field:", field, "file:", file);
+  const params = [];
+  if (project_id) params.push(`project_id=${encodeURIComponent(project_id)}`);
+  if (module_id) params.push(`module_id=${encodeURIComponent(module_id)}`);
+  const url = `${API_ROUTES.rows}${rowId}/upload/${params.length ? "?" + params.join("&") : ""}`;
 
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
-      // Do not set Content-Type when using FormData
     },
     body: formData,
   });
 
   if (!resp.ok) {
     const errorText = await resp.text();
-    console.error("[uploadRowFile] Error response:", resp.status, errorText);
     throw new Error(`File upload failed (${resp.status}): ${errorText}`);
   }
 
-  const data = await resp.json();
-  console.debug("[uploadRowFile] Success response:", data);
-  return data;
+  return await resp.json();
 }
