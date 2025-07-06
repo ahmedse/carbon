@@ -1,4 +1,4 @@
-# File: accounts/permissions.py
+# accounts/permissions.py
 
 from rest_framework.permissions import BasePermission
 from .utils import user_has_permission
@@ -6,13 +6,18 @@ from .utils import user_has_permission
 class HasRBACPermission(BasePermission):
     """
     Checks if the user has the required RBAC permission for the requested project/module context.
-    The project_id and module_id must be provided by the view via get_project_and_module_id_from_request(request).
     """
     def has_permission(self, request, view):
+        print(f"[PERM DEBUG] Checking permission for action: {getattr(view, 'action', None)}")
+        
         if not request.user.is_authenticated:
             return False
 
-        required_permission = getattr(view, 'required_permission', None)
+        required_permission = getattr(view, 'get_required_permission', None)
+        if callable(required_permission):
+            required_permission = view.get_required_permission()
+        else:
+            required_permission = getattr(view, 'required_permission', None)
         if not required_permission:
             return True  # No specific permission required
 

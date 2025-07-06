@@ -1,5 +1,3 @@
-# File: dataschema/models.py
-
 from django.db import models
 from django.contrib.auth import get_user_model
 from core.models import Module
@@ -13,7 +11,7 @@ def normalize_name(value):
         return ""
     value = value.strip().lower()
     value = re.sub(r"\s+", "_", value)
-    value = re.sub(r"[^a-z0-9_]", "", value)  # Remove non-alphanum/underscores
+    value = re.sub(r"[^a-z0-9_]", "", value)
     return value
 
 class DataTable(models.Model):
@@ -21,6 +19,7 @@ class DataTable(models.Model):
     Represents a dynamic table ("sheet"/"form") within a module.
     """
     title = models.CharField(max_length=255)
+    name = models.SlugField(max_length=64, unique=True)
     description = models.TextField(blank=True)
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='data_tables')
     version = models.PositiveIntegerField(default=1)
@@ -59,15 +58,15 @@ class DataField(models.Model):
     is_active = models.BooleanField(default=True)
     is_archived = models.BooleanField(default=False)
     version = models.PositiveIntegerField(default=1)
-    reference_table = models.ForeignKey(DataTable, null=True, blank=True, on_delete=models.SET_NULL, related_name='referenced_by_fields')  # For reference fields (future)
+    reference_table = models.ForeignKey(DataTable, null=True, blank=True, on_delete=models.SET_NULL, related_name='referenced_by_fields')
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_fields')
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_fields')
-    
+
     class Meta:
         ordering = ['order', 'id']
-        unique_together = (("data_table", "name"),)  # Ensure uniqueness within table
+        unique_together = (("data_table", "name"),)
 
     def save(self, *args, **kwargs):
         if not self.name and self.label:
@@ -93,7 +92,6 @@ class DataRow(models.Model):
     version = models.PositiveIntegerField(default=1)
 
     def save(self, *args, **kwargs):
-        # --- THIS IS THE FIX: ---
         if self.values and isinstance(self.values, dict):
             self.values = {k.lower(): v for k, v in self.values.items()}
         super().save(*args, **kwargs)

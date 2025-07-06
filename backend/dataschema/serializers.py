@@ -1,5 +1,3 @@
-# File: dataschema/serializers.py
-
 from rest_framework import serializers
 from .models import DataTable, DataField, DataRow, SchemaChangeLog
 
@@ -47,13 +45,11 @@ class DataTableSerializer(serializers.ModelSerializer):
         ]
 
 class DataRowSerializer(serializers.ModelSerializer):
-
     def create(self, validated_data):
         print("[DEBUG] DataRowSerializer.create: validated_data:", validated_data)
         return super().create(validated_data)
 
     def to_internal_value(self, data):
-        # Allow PATCH with only 'values'
         if self.partial and 'values' not in data:
             data = data.copy()
             data['values'] = getattr(self.instance, 'values', {}) if self.instance else {}
@@ -63,6 +59,17 @@ class DataRowSerializer(serializers.ModelSerializer):
         if not isinstance(values, dict):
             raise serializers.ValidationError("Values must be a JSON object.")
         return values
+
+    def validate(self, data):
+        # Enforce required fields logic for DataRow
+        data_table = data.get('data_table') or (self.instance.data_table if self.instance else None)
+        if data_table:
+            required_fields = data_table.fields.filter(required=True).values_list('name', flat=True)
+            values = data.get('values', {})
+            missing = [f for f in required_fields if f not in values or values[f] in (None, '', [])]
+            if missing:
+                raise serializers.ValidationError({f: "This field is required." for f in missing})
+        return data
 
     class Meta:
         model = DataRow
