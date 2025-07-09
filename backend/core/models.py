@@ -1,33 +1,34 @@
 # File: core/models.py
+# Core business models for SaaS platform, using string references for ForeignKeys.
 
 from django.db import models
 
 class Project(models.Model):
     """
-    Represents a project entity belonging to a tenant.
-    """
-    name = models.CharField(max_length=100, unique=True)
-    tenant = models.ForeignKey('accounts.Tenant', on_delete=models.CASCADE, related_name='projects')
-
-    def __str__(self):
-        return self.name
-
-class Cycle(models.Model):
-    """
-    Represents a cycle within a project.
+    A project within a tenant.
     """
     name = models.CharField(max_length=100)
-    project = models.ForeignKey(Project, related_name='cycles', on_delete=models.CASCADE, null=True, blank=True)
+    tenant = models.ForeignKey('accounts.Tenant', on_delete=models.CASCADE, related_name='projects')
+
+    class Meta:
+        unique_together = ('tenant', 'name')
+        verbose_name = "Project"
+        verbose_name_plural = "Projects"
 
     def __str__(self):
-        return f"{self.name} ({self.project.name})"
+        return f"{self.name} ({self.tenant.name})"
 
 class Module(models.Model):
     """
-    Represents a module within a project.
+    A module (sub-unit) within a project.
     """
     name = models.CharField(max_length=100)
-    project = models.ForeignKey(Project, related_name='modules', on_delete=models.CASCADE, null=True, blank=True)
+    project = models.ForeignKey('core.Project', on_delete=models.CASCADE, related_name='modules')
+
+    class Meta:
+        unique_together = ('project', 'name')
+        verbose_name = "Module"
+        verbose_name_plural = "Modules"
 
     def __str__(self):
         return f"{self.name} ({self.project.name})"

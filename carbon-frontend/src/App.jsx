@@ -2,14 +2,13 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'; 
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
 import AdminRoute from "./components/AdminRoute";
-import TableManager from "./pages/TableManager";
 import TableManagerPage from "./pages/TableManagerPage";
 import DataEntryPage from "./pages/DataEntryPage";
 
@@ -27,9 +26,9 @@ function RequireAuth() {
  * Protects all routes that require a valid project/module context.
  */
 function RequireContext() {
-  const { currentContext, loading } = useAuth();
+  const { context, loading } = useAuth();
   if (loading) return <div className="centered">Loading project context...</div>;
-  if (!currentContext) {
+  if (!context) {
     return (
       <div className="centered">
         No project context found.<br />
@@ -50,18 +49,9 @@ export default function App() {
             <Route element={<RequireContext />}>
               <Route element={<Layout />}>
                 <Route path="/" element={<Dashboard />} />
-
-                {/* Admin-only: Schema/Table management */}
+                {/* Admin-only: Schema Admin > Table Manager */}
                 <Route
-                  path="/dataschema/manage/tablemanager"
-                  element={
-                    <AdminRoute>
-                      <TableManager />
-                    </AdminRoute>
-                  }
-                />
-                <Route
-                  path="/dataschema/manage/tablemanagerpage"
+                  path="/schema-admin/table-manager"
                   element={
                     <AdminRoute>
                       <TableManagerPage />
@@ -73,7 +63,6 @@ export default function App() {
                   path="/dataschema/entry/:moduleName/:tableId"
                   element={<DataEntryPage />}
                 />
-
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Route>

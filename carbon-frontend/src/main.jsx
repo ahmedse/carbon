@@ -19,7 +19,6 @@ function ThemedApp() {
 
   return (
     <ThemeProvider theme={theme}>
-      {/* DEBUG: NotificationProvider is mounted here */}
       <NotificationProvider>
         <CssBaseline />
         <AuthProvider>

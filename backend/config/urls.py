@@ -1,24 +1,25 @@
 # File: backend/config/urls.py
-# Purpose: Main URL configuration for the 'backend' Django project.
-#
-# This file defines the list of URL patterns that route HTTP requests
-# to the appropriate Django views or applications.
+# Main URL configuration for the 'backend' Django project.
 
-from django.contrib import admin
-from django.urls import path, include, re_path
-from django.http import HttpResponseRedirect
 from django.conf import settings
+from django.contrib import admin
+from django.urls import path, include
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView, TokenRefreshView,
+)
 
-# urlpatterns: List of URL patterns that route to views or included URL configs.
 urlpatterns = [
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('admin/', admin.site.urls),
-    path('api/', include('accounts.urls')),     # Routes API requests to the accounts app
-    path('api/core/', include('core.urls')),    # Routes API requests to the core app
+    path('api/accounts/', include('accounts.urls')),
+    path('api/core/', include('core.urls')),
     path('api/dataschema/', include('dataschema.urls')),
-    # Catch-all: redirect anything else to /admin/
-    # re_path(r'^.*$', lambda request: HttpResponseRedirect('/admin/')),
+    
 ]
 
 if settings.DEBUG:
     import debug_toolbar
-    urlpatterns += [path('__debug__/', include('debug_toolbar.urls'))]
+    urlpatterns += [
+        path('__debug__/', include(debug_toolbar.urls)),
+    ]

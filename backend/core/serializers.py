@@ -1,19 +1,19 @@
 # File: core/serializers.py
+# DRF serializers for Project and Module models.
 
 from rest_framework import serializers
-from .models import Project, Cycle, Module
+from .models import Project, Module
 
 class ProjectSerializer(serializers.ModelSerializer):
+    tenant = serializers.StringRelatedField()
+
     class Meta:
         model = Project
-        fields = '__all__'
-
-class CycleSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Cycle
-        fields = '__all__'
+        fields = ['id', 'name', 'tenant']
 
 class ModuleSerializer(serializers.ModelSerializer):
+    project = serializers.StringRelatedField()
+
     class Meta:
         model = Module
-        fields = '__all__'
+        fields = ['id', 'name', 'project']

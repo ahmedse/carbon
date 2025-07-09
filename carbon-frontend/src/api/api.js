@@ -1,24 +1,32 @@
 // src/api/api.js
+// Universal API client with JWT refresh, error, project/module handling.
 
 import { API_BASE_URL } from "../config";
 import { isJwtExpired } from "../jwt";
 
 /**
- * apiFetch - universal API call helper with JWT refresh, project/module params, errors, and JSON parsing
+ * Universal API call helper with JWT refresh, project/module params, errors, and JSON parsing.
+ * Handles 401, auto-refresh, and robust error messages.
  *
- * @param {string} endpoint - relative API endpoint (e.g. "/dataschema/tables/")
+ * @param {string} endpoint - relative API endpoint
  * @param {object} opts - { method, body, token, project_id, module_id }
- * @returns {Promise<any>} - parsed JSON response or throws error
+ * @returns {Promise<any>}
  */
 export async function apiFetch(endpoint, { method = "GET", body, token, project_id, module_id } = {}) {
   let url = `${API_BASE_URL}${endpoint}`;
   let accessToken = token || localStorage.getItem("access");
 
-  // Refresh expired token
+  // Debug: log initial request
+  if (import.meta.env.DEV) {
+    console.debug(`[apiFetch] ${method} ${url}`, { body, project_id, module_id });
+  }
+
+  // Refresh expired token, using global window.refreshAccessToken if present
   if (isJwtExpired(accessToken) && typeof window.refreshAccessToken === "function") {
     try {
       accessToken = await window.refreshAccessToken();
-    } catch {
+      if (import.meta.env.DEV) console.debug("Access token refreshed.");
+    } catch (err) {
       if (typeof window.logout === "function") window.logout();
       throw new Error("Session expired. Please log in again.");
     }
@@ -29,8 +37,7 @@ export async function apiFetch(endpoint, { method = "GET", body, token, project_
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
 
-  // --- PROJECT/MODULE PARAM INJECTION LOGIC ---
-  // For /dataschema/ or /core/ endpoints, always append project_id, module_id if present
+  // Attach project_id/module_id as query params if /dataschema/ or /core/ endpoint
   const isDataSchemaOrCore = /^\/(dataschema|core)\//.test(endpoint) || /^\/api\/(dataschema|core)\//.test(endpoint);
   if (isDataSchemaOrCore) {
     const params = [];
@@ -46,21 +53,32 @@ export async function apiFetch(endpoint, { method = "GET", body, token, project_
     }
   }
 
-  // Helper for making fetch and parsing error+json
+  // Helper to actually perform the fetch and parse result
   async function doFetch() {
-    const res = await fetch(url, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
-    const isJson = res.headers.get("content-type")?.includes("application/json");
+    let response;
+    try {
+      response = await fetch(url, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+    } catch (networkError) {
+      // Network error (server down, etc)
+      throw new Error(`Network error: ${networkError.message || networkError}`);
+    }
+    const isJson = response.headers.get("content-type")?.includes("application/json");
     let data;
     try {
-      data = isJson ? await res.json() : await res.text();
-    } catch {
+      data = isJson ? await response.json() : await response.text();
+    } catch (parseError) {
       data = null;
     }
 
-    if (!res.ok) {
+    if (!response.ok) {
+      // Debug log for errors
+      if (import.meta.env.DEV) {
+        console.error("[apiFetch] API Error:", { url, method, status: response.status, data });
+      }
+      // Show backend error if available
       if (data && data.detail) throw new Error(data.detail);
       if (typeof data === "string" && data.length < 200) throw new Error(data);
-      throw new Error("API error");
+      throw new Error(`API error (${response.status})`);
     }
     return data;
   }
@@ -68,16 +86,20 @@ export async function apiFetch(endpoint, { method = "GET", body, token, project_
   try {
     return await doFetch();
   } catch (err) {
+    // Try token refresh on Unauthorized
     if (err.message === "Unauthorized" || /401/.test(err.message)) {
       try {
         accessToken = await window.refreshAccessToken();
         headers = { ...headers, Authorization: `Bearer ${accessToken}` };
+        if (import.meta.env.DEV) console.debug("Retrying after token refresh...");
         return await doFetch();
       } catch {
         if (typeof window.logout === "function") window.logout();
         throw new Error("Session expired. Please log in again.");
       }
     }
+    // Debug any other error
+    if (import.meta.env.DEV) console.error("[apiFetch] Final error:", err);
     throw err;
   }
 }

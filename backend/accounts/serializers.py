@@ -1,58 +1,56 @@
 # File: accounts/serializers.py
+# DRF serializers for tenants, users, roles, scoped roles, and audit logs.
 
 from rest_framework import serializers
-from .models import Tenant, Role, Context, RoleAssignment, User
-from core.models import Project, Module
-from .models import Permission
-
-class PermissionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Permission
-        fields = ['id', 'code', 'description']
+from django.contrib.auth.models import Group
+from .models import Tenant, User, ScopedRole, RoleAssignmentAuditLog
 
 class TenantSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tenant
-        fields = '__all__'
-
-class ProjectSerializer(serializers.ModelSerializer):
-    tenant = serializers.StringRelatedField()
-    class Meta:
-        model = Project
-        fields = ['id', 'name', 'tenant']
-
-class ModuleSerializer(serializers.ModelSerializer):
-    project = serializers.StringRelatedField()
-    class Meta:
-        model = Module
-        fields = ['id', 'name', 'project']
+        fields = ['id', 'name', 'created_at']
 
 class UserSerializer(serializers.ModelSerializer):
     tenant = serializers.StringRelatedField()
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'tenant']
+        fields = ['id', 'username', 'email', 'tenant', 'is_active', 'is_staff']
 
-class RoleSerializer(serializers.ModelSerializer):
-    permissions = PermissionSerializer(many=True, read_only=True)
+class GroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = ['id', 'name']
+
+class ScopedRoleSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField()
+    group = serializers.StringRelatedField()
+    tenant = serializers.StringRelatedField()
+    project = serializers.StringRelatedField()
+    module = serializers.StringRelatedField()
 
     class Meta:
-        model = Role
-        fields = ['id', 'name', 'description', 'permissions']
-        
-class ContextSerializer(serializers.ModelSerializer):
-    project = ProjectSerializer(read_only=True)
-    module = ModuleSerializer(read_only=True)
+        model = ScopedRole
+        fields = [
+            'id', 'user', 'group', 'tenant', 'project', 'module', 'is_active', 'created_at'
+        ]
+
+class ScopedRoleCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ScopedRole
+        fields = [
+            'user', 'group', 'tenant', 'project', 'module', 'is_active'
+        ]
+
+class RoleAssignmentAuditLogSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField()
+    group = serializers.StringRelatedField()
+    tenant = serializers.StringRelatedField()
+    project = serializers.StringRelatedField()
+    module = serializers.StringRelatedField()
 
     class Meta:
-        model = Context
-        fields = ['id', 'type', 'project', 'module']
-
-class RoleAssignmentSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    role = RoleSerializer(read_only=True)
-    context = ContextSerializer(read_only=True)
-
-    class Meta:
-        model = RoleAssignment
-        fields = ['id', 'user', 'role', 'context']
+        model = RoleAssignmentAuditLog
+        fields = [
+            'id', 'user', 'group', 'tenant', 'project', 'module', 'action', 'timestamp'
+        ]

@@ -1,43 +1,45 @@
-from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import Tenant, User, Role, Context, Permission, RoleAssignment
+# File: accounts/admin.py
+# Django admin registration for accounts app models.
 
-@admin.register(Permission)
-class PermissionAdmin(admin.ModelAdmin):
-    list_display = ('code', 'description')
-    search_fields = ('code',)
+from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from .models import Tenant, User, ScopedRole, RoleAssignmentAuditLog
 
 @admin.register(Tenant)
 class TenantAdmin(admin.ModelAdmin):
-    list_display = ('name',)
-    search_fields = ('name',)
+    list_display = ['id', 'name', 'created_at']
+    search_fields = ['name']
 
 @admin.register(User)
-class UserAdmin(BaseUserAdmin):
-    # Add 'tenant' to fieldsets and add_fieldsets for editing/creating users
-    fieldsets = BaseUserAdmin.fieldsets + (
-        ('Tenant Info', {'fields': ('tenant',)}),
+class UserAdmin(DjangoUserAdmin):
+    list_display = ['id', 'username', 'email', 'tenant', 'is_staff', 'is_active']
+    list_filter = ['tenant', 'is_staff', 'is_active']
+    search_fields = ['username', 'email']
+    fieldsets = DjangoUserAdmin.fieldsets + (
+        ("Tenant Info", {"fields": ("tenant",)}),
     )
-    add_fieldsets = BaseUserAdmin.add_fieldsets + (
-        ('Tenant Info', {'fields': ('tenant',)}),
+    add_fieldsets = DjangoUserAdmin.add_fieldsets + (
+        ("Tenant Info", {"fields": ("tenant",)}),
     )
-    list_display = ('username', 'email', 'tenant', 'is_staff', 'is_superuser')
-    list_filter = ('tenant', 'is_staff', 'is_superuser')
-    search_fields = ('username', 'email')
 
-@admin.register(Role)
-class RoleAdmin(admin.ModelAdmin):
-    list_display = ('name', 'description')
-    filter_horizontal = ('permissions',)
-    search_fields = ('name',)
 
-@admin.register(Context)
-class ContextAdmin(admin.ModelAdmin):
-    list_display = ('type', 'project', 'module')
-    list_filter = ('type', 'project', 'module')
+# @admin.register(User)
+# class UserAdmin(DjangoUserAdmin):
+#     list_display = ['id', 'username', 'email', 'tenant', 'is_staff', 'is_active']
+#     list_filter = ['tenant', 'is_staff', 'is_active']
+#     search_fields = ['username', 'email']
+#     fieldsets = DjangoUserAdmin.fieldsets + (
+#         ("Tenant Info", {"fields": ("tenant",)}),
+#     )
 
-@admin.register(RoleAssignment)
-class RoleAssignmentAdmin(admin.ModelAdmin):
-    list_display = ('user', 'role', 'context')
-    list_filter = ('role', 'context__type', 'context__project', 'context__module', 'user__tenant')
-    search_fields = ('user__username', 'role__name')
+@admin.register(ScopedRole)
+class ScopedRoleAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user', 'group', 'tenant', 'project', 'module', 'is_active', 'created_at']
+    list_filter = ['tenant', 'group', 'is_active']
+    search_fields = ['user__username', 'group__name']
+
+@admin.register(RoleAssignmentAuditLog)
+class RoleAssignmentAuditLogAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user', 'group', 'tenant', 'project', 'module', 'action', 'timestamp']
+    list_filter = ['tenant', 'group', 'action']
+    search_fields = ['user__username', 'group__name']

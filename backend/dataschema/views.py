@@ -1,117 +1,74 @@
 # File: dataschema/views.py
+"""
+ViewSets for dataschema with role-based, scoped RBAC.
+Roles:
+    - admin: Everything in the project (schema+data, all modules).
+    - audit: Everything for data rows in all modules of the project (no schema).
+    - dataowner: Everything for data rows, but ONLY in allowed modules (no schema).
+RBAC enforced via HasScopedRole from accounts app.
+"""
 
-from rest_framework import viewsets, status
-from rest_framework.response import Response
-from rest_framework.decorators import action
+from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser
-from django.core.files.storage import default_storage
-from django.db.models import Q
-from django.conf import settings
-
 from .models import DataTable, DataField, DataRow, SchemaChangeLog
 from .serializers import (
     DataTableSerializer, DataTableDetailSerializer,
     DataFieldSerializer, DataRowSerializer,
     SchemaChangeLogSerializer
 )
-
-from accounts.permissions import HasRBACPermission
-from accounts.context_mixin import ContextExtractorMixin
+from accounts.permissions import HasScopedRole
 from core.models import Module, Project
 
-def user_tenant(request):
+def get_tenant(request):
     return getattr(request.user, 'tenant', None)
 
-class TenantProjectModuleBaseViewSet(ContextExtractorMixin, viewsets.ModelViewSet):
+class ScopedViewSet(viewsets.ModelViewSet):
     """
-    Base ViewSet with multi-tenant/project/module scoping & RBAC.
+    Base ViewSet for RBAC: sets self.project and self.module for HasScopedRole.
+    Subclasses must set required_role or override get_required_role().
     """
-    permission_classes = [HasRBACPermission]
-    queryset = None
+    permission_classes = [IsAuthenticated, HasScopedRole]
+    required_role = None  # override or use get_required_role
 
-    def get_project_and_module_id(self):
-        return self.get_project_and_module_id_from_request(self.request)
-
-    def get_queryset(self):
-        tenant = user_tenant(self.request)
-        project_id, module_id = self.get_project_and_module_id()
-        if not project_id or not tenant:
-            return self.queryset.none()
-        base = self.queryset.model.objects
-        if hasattr(self.queryset.model, "module"):
-            qs = base.filter(module__project_id=project_id, module__project__tenant=tenant, is_archived=False)
-            if module_id:
-                qs = qs.filter(module_id=module_id)
-            return qs
-        elif hasattr(self.queryset.model, "data_table"):
-            qs = base.filter(data_table__module__project_id=project_id, data_table__module__project__tenant=tenant, is_archived=False)
-            if module_id:
-                qs = qs.filter(data_table__module_id=module_id)
-            return qs
-        elif hasattr(self.queryset.model, "data_field"):
-            qs = base.filter(data_field__data_table__module__project_id=project_id, data_field__data_table__module__project__tenant=tenant)
-            if module_id:
-                qs = qs.filter(data_field__data_table__module_id=module_id)
-            return qs
-        else:
-            return base.none()
-
-    def perform_create(self, serializer):
-        project_id, module_id = self.get_project_and_module_id()
-        tenant = user_tenant(self.request)
-        try:
-            project = Project.objects.get(id=project_id, tenant=tenant)
-        except Project.DoesNotExist:
-            raise PermissionError("Project not found or does not belong to your tenant.")
-        if hasattr(serializer.Meta.model, "module"):
-            if not module_id:
-                raise PermissionError("Module ID is required.")
+    def get_permissions(self):
+        # Set project and module context before checking permissions
+        project_id = self.request.query_params.get('project_id') or self.request.data.get('project_id')
+        module_id = self.request.query_params.get('module_id') or self.request.data.get('module_id')
+        tenant = get_tenant(self.request)
+        self.project = self.module = None
+        if project_id and tenant:
             try:
-                module = Module.objects.get(id=module_id, project=project)
+                self.project = Project.objects.get(pk=project_id, tenant=tenant)
+            except Project.DoesNotExist:
+                self.project = None
+        if module_id and self.project:
+            try:
+                self.module = Module.objects.get(pk=module_id, project=self.project)
             except Module.DoesNotExist:
-                raise PermissionError("Module not found or does not belong to this project.")
-            serializer.save(module=module, created_by=self.request.user, updated_by=self.request.user)
-        else:
-            serializer.save(created_by=self.request.user, updated_by=self.request.user)
+                self.module = None
+        self.required_role = self.get_required_role()
+        return super().get_permissions()
 
-    def perform_update(self, serializer):
-        serializer.save(updated_by=self.request.user)
+    def get_required_role(self):
+        return self.required_role
 
-    def perform_destroy(self, instance):
-        instance.is_archived = True
-        instance.save()
-
-# --- DataTable ---
-class DataTableViewSet(TenantProjectModuleBaseViewSet):
+# --- DataTable (Schema) ---
+class DataTableViewSet(ScopedViewSet):
+    """
+    Only 'admin' or 'admins_group' can access schema (tables).
+    """
     queryset = DataTable.objects.all()
     serializer_class = DataTableSerializer
-    required_permission = "manage_schema"
-
-    def get_required_permission(self):
-        print(f"[DEBUG] DataTableViewSet action: {self.action}")
-        if self.action in ["list", "retrieve", "fields"]:
-            return "view_schema"
-        if self.action in ["update", "partial_update", "create", "destroy", "archive"]:
-            return "manage_schema"
-        return "manage_schema"
-
-
-    def perform_destroy(self, instance):
-        if instance.fields.exists():
-            # Archive if it has fields
-            instance.is_archived = True
-            instance.save()
-        else:
-            # Delete if no fields
-            instance.delete()
+    required_role = ("admin", "admins_group")
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        # Optionally support ?module_id= for further filtering
-        module_id = self.request.query_params.get('module_id')
-        if module_id:
-            qs = qs.filter(module_id=module_id)
+        qs = DataTable.objects.all()
+        if self.project:
+            qs = qs.filter(module__project=self.project, is_archived=False)
+            if self.module:
+                qs = qs.filter(module=self.module)
+        else:
+            qs = qs.none()
         return qs
 
     def get_serializer_class(self):
@@ -119,164 +76,64 @@ class DataTableViewSet(TenantProjectModuleBaseViewSet):
             return DataTableDetailSerializer
         return DataTableSerializer
 
-    @action(detail=True, methods=["get"], url_path="fields")
-    def fields(self, request, pk=None):
-        table = self.get_object()
-        fields_qs = DataField.objects.filter(data_table=table, is_archived=False)
-        serializer = DataFieldSerializer(fields_qs, many=True)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=["post"], url_path="archive")
-    def archive(self, request, pk=None):
-        obj = self.get_object()
-        if not request.user.is_superuser and not request.user.has_perm('manage_schema'):
-            return Response({"detail": "Only admin can archive tables."}, status=403)
-        obj.is_archived = True
-        obj.save()
-        SchemaChangeLog.objects.create(
-            data_table=obj, action="archive", before=DataTableSerializer(obj).data, user=request.user
-        )
-        return Response({"status": "archived"})
-
-# --- DataField ---
-class DataFieldViewSet(TenantProjectModuleBaseViewSet):
+# --- DataField (Schema) ---
+class DataFieldViewSet(ScopedViewSet):
+    """
+    Only 'admin' or 'admins_group' can access schema (fields).
+    """
     queryset = DataField.objects.all()
     serializer_class = DataFieldSerializer
-    required_permission = "manage_schema"
-
-    def get_required_permission(self):
-        if self.action in ["list", "retrieve"]:
-            return "view_schema"
-        if self.action in ["update", "partial_update", "create", "destroy", "archive"]:
-            return "manage_schema"
-        return self.required_permission
-    
-    @action(detail=True, methods=["post"], url_path="archive")
-    def archive(self, request, pk=None):
-        obj = self.get_object()
-        if not request.user.is_superuser and not request.user.has_perm('manage_schema'):
-            return Response({"detail": "Only admin can archive fields."}, status=403)
-        obj.is_archived = True
-        obj.save()
-        SchemaChangeLog.objects.create(
-            data_table=obj.data_table, data_field=obj, action="archive", before=DataFieldSerializer(obj).data, user=request.user
-        )
-        return Response({"status": "archived"})
-    
-    def perform_destroy(self, instance):
-        # Check if any DataRow in the table has a value for this field
-        has_data = instance.data_table.rows.filter(values__has_key=instance.name).exists()
-        if has_data:
-            # Archive if used in any DataRow
-            instance.is_archived = True
-            instance.save()
-        else:
-            # Delete if not used
-            instance.delete()
-
-# --- DataRow ---
-class DataRowViewSet(TenantProjectModuleBaseViewSet):
-    queryset = DataRow.objects.all()
-    serializer_class = DataRowSerializer
-    required_permission = "manage_data"
-
-    def get_required_permission(self):
-        if self.action in ["list", "retrieve"]:
-            return "view_data"
-        if self.action in ["update", "partial_update", "create", "destroy", "upload"]:
-            return "manage_data"
-        return self.required_permission
+    required_role = ("admin", "admins_group")
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        data_table_id = self.request.query_params.get("data_table")
-        if data_table_id:
-            qs = qs.filter(data_table_id=data_table_id)
-
-        # Field-specific filtering (for any field in the JSON "values")
-        for key, value in self.request.query_params.items():
-            if key.startswith('field__') and value:
-                field_name = key[7:]  # strip 'field__'
-                qs = qs.filter(**{f"values__{field_name}__icontains": value})
-
-        # Generic search in all values fields
-        search = self.request.query_params.get("search")
-        if search:
-            fields = DataField.objects.filter(data_table_id=data_table_id, type__in=['string', 'text'])
-            if not fields.exists():
-                return qs.none()  # early return
-            search_q = Q()
-            for field in fields:
-                search_q |= Q(**{f"values__{field.name}__icontains": search})
-            qs = qs.filter(search_q)
+        qs = DataField.objects.all()
+        if self.project:
+            qs = qs.filter(data_table__module__project=self.project, is_archived=False)
+            if self.module:
+                qs = qs.filter(data_table__module=self.module)
+        else:
+            qs = qs.none()
         return qs
 
-    def perform_create(self, serializer):
-        project_id, module_id = self.get_project_and_module_id()
-        tenant = user_tenant(self.request)
-        try:
-            project = Project.objects.get(id=project_id, tenant=tenant)
-        except Project.DoesNotExist:
-            raise PermissionError("Project not found or does not belong to your tenant.")
-        data_table_id = self.request.data.get("data_table")
-        try:
-            data_table = DataTable.objects.get(id=data_table_id, module__project=project)
-        except DataTable.DoesNotExist:
-            raise PermissionError("DataTable not found or does not belong to this project.")
-        serializer.save(data_table=data_table, created_by=self.request.user, updated_by=self.request.user)
+# --- DataRow (Data) ---
+class DataRowViewSet(ScopedViewSet):
+    """
+    - 'admin'/'admins_group' can CRUD all data rows for the project.
+    - 'audit' can CRUD all data rows for the project.
+    - 'dataowner' can CRUD data rows ONLY in allowed modules (where user has dataowner role).
+    """
+    queryset = DataRow.objects.all()
+    serializer_class = DataRowSerializer
 
-    def perform_update(self, serializer):
-        serializer.save(updated_by=self.request.user)
+    def get_required_role(self):
+        # Allow if user is admin, admins_group, audit, or dataowner (HasScopedRole will check scope).
+        return ["admin", "admins_group", "audit", "dataowner"]
 
-    def perform_destroy(self, instance):
-        instance.is_archived = True
-        instance.save()
+    def get_queryset(self):
+        qs = DataRow.objects.all()
+        if self.project:
+            qs = qs.filter(data_table__module__project=self.project, is_archived=False)
+            if self.module:
+                qs = qs.filter(data_table__module=self.module)
+        else:
+            qs = qs.none()
+        return qs
 
-    # PATCH support for partial update
-    def partial_update(self, request, *args, **kwargs):
-        kwargs['partial'] = True
-        try:
-            return self.update(request, *args, **kwargs)
-        except Exception as e:
-            return Response({"detail": f"Update failed: {str(e)}"}, status=400)
-
-    @action(detail=True, methods=['post'], url_path='upload', parser_classes=[MultiPartParser, FormParser])
-    def upload(self, request, pk=None):
-        row = self.get_object()
-        field_name = request.data.get("field")
-        uploaded_file = request.FILES.get("file")
-        if not field_name or not uploaded_file:
-            return Response({"detail": "Missing field or file."}, status=400)
-        field = row.data_table.fields.filter(name=field_name, is_active=True, is_archived=False, type="file").first()
-        if not field:
-            return Response({"detail": "Invalid field for file upload."}, status=400)
-        allowed_types = ["application/pdf", "image/jpeg", "image/png"]
-        max_size = 5 * 1024 * 1024  # 5 MB
-        if uploaded_file.content_type not in allowed_types:
-            return Response({"detail": "Invalid file type."}, status=400)
-        if uploaded_file.size > max_size:
-            return Response({"detail": "File too large."}, status=400)
-        base_path = getattr(settings, "DATASCHEMA_UPLOAD_PATH", "dataschema_uploads/")
-        filename = default_storage.save(
-            f"{base_path.rstrip('/')}/{row.data_table.id}/{field_name}/{uploaded_file.name}",
-            uploaded_file
-        )
-        file_url = default_storage.url(filename)
-        values = row.values or {}
-        values[field_name] = file_url
-        row.values = values
-        row.save(update_fields=["values", "updated_at"])
-        return Response({"url": file_url})
-
-# --- SchemaChangeLog (ReadOnly) ---
-class SchemaChangeLogViewSet(TenantProjectModuleBaseViewSet, viewsets.ReadOnlyModelViewSet):
+# --- SchemaChangeLog (ReadOnly, admin/admins_group only) ---
+class SchemaChangeLogViewSet(ScopedViewSet, viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only: Only 'admin' or 'admins_group' can view schema change logs.
+    """
     queryset = SchemaChangeLog.objects.all()
     serializer_class = SchemaChangeLogSerializer
-    required_permission = "manage_schema"
+    required_role = ("admin", "admins_group")
 
-    def get_required_permission(self):
-        return "view_schema"
-    
     def get_queryset(self):
-        base = super().get_queryset()
-        return base.select_related("data_table", "data_field", "user")
+        qs = SchemaChangeLog.objects.all()
+        if self.project:
+            qs = qs.filter(data_table__module__project=self.project)
+            if self.module:
+                qs = qs.filter(data_table__module=self.module)
+        else:
+            qs = qs.none()
+        return qs

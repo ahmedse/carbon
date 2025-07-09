@@ -1,73 +1,20 @@
-import React, { useState, useEffect } from "react";
+// src/components/SidebarMenu.jsx
+import React, { useState } from "react";
 import {
-  List, ListItemButton, ListItemIcon, ListItemText, Collapse, Tooltip, Divider, CircularProgress,
+  List, ListItemButton, ListItemIcon, ListItemText, Tooltip, Divider, Collapse,
 } from "@mui/material";
 import {
-  ExpandLess, ExpandMore,
-  TableChart as TableIcon,
-  ListAlt as TableManageIcon,
-  SettingsApplications as SchemaAdminIcon,
-  Help as HelpIcon,
-  Settings as ProjectSettingsIcon,
+  TableChart as TableIcon, SettingsApplications as SchemaAdminIcon,
+  Help as HelpIcon, Settings as ProjectSettingsIcon, Dashboard as DashboardIcon,
+  ExpandLess, ExpandMore, TableRows as TableRowsIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthContext";
 import { Link, useLocation } from "react-router-dom";
-import { fetchDataSchemaTables } from "../api/dataschema";
-import { fetchModules } from "../api/modules";
 
-// Helper: check permission in current context with project_id and module_id
-function hasPermission(user, currentContext, perm) {
-  if (!user?.roles || !currentContext) return false;
-  return user.roles.some(
-    r =>
-      r.active &&
-      (
-        (r.context_type === "project" && String(r.project_id) === String(currentContext.project_id))
-        ||
-        (r.context_type === "module" && String(r.module_id) === String(currentContext.module_id))
-      ) &&
-      (r.permissions || []).includes(perm)
-  );
-}
-
-export default function SidebarMenu({ open }) {
-  const { user, currentContext } = useAuth();
-  const location = useLocation();
-  const [modules, setModules] = useState([]);
-  const [moduleOpens, setModuleOpens] = useState({});
-  const [moduleTables, setModuleTables] = useState({});
-  const [loadingTables, setLoadingTables] = useState({});
-
-  // Always use project_id for fetchModules
-  useEffect(() => {
-    if (user && currentContext?.project_id) {
-      fetchModules(user.token, currentContext.project_id)
-        .then(setModules)
-        .catch(() => setModules([]));
-    }
-  }, [user, currentContext]);
-
-  // Fetch tables for each module (for menu display)
-  useEffect(() => {
-    if (!user || !currentContext?.project_id || !modules.length) return;
-    modules.forEach(mod => {
-      setLoadingTables(prev => ({ ...prev, [mod.id]: true }));
-      fetchDataSchemaTables(user.token, currentContext.project_id, mod.id)
-        .then(tables => {
-          setModuleTables(prev => ({ ...prev, [mod.id]: tables || [] }));
-        })
-        .finally(() => setLoadingTables(prev => ({ ...prev, [mod.id]: false })));
-    });
-  }, [user, currentContext, modules]);
-
-  // "Schema Admin" menu: show if user has manage_schema permission in this context
-  const canSchemaAdmin = hasPermission(user, currentContext, "manage_schema");
-
-  const isTableActive = (modId, tableId) =>
-    location.pathname === `/dataschema/entry/${modId}/${tableId}`;
-
-  const MenuItem = ({ to, icon, label, tooltip, selected, ...props }) => (
-    <Tooltip title={tooltip || label} placement="right" arrow disableHoverListener={open ? true : false}>
+// Generic MenuItem for all menu links
+function MenuItem({ to, icon, label, tooltip, selected, open, ...props }) {
+  return (
+    <Tooltip title={tooltip || label} placement="right" arrow disableHoverListener={open}>
       <ListItemButton
         component={Link}
         to={to}
@@ -76,7 +23,8 @@ export default function SidebarMenu({ open }) {
           minHeight: 36,
           px: open ? 2 : 1.5,
           borderRadius: 1.5,
-          justifyContent: open ? "flex-start" : "center"
+          justifyContent: open ? "flex-start" : "center",
+          ...props.sx,
         }}
         {...props}
       >
@@ -87,117 +35,183 @@ export default function SidebarMenu({ open }) {
       </ListItemButton>
     </Tooltip>
   );
+}
+
+export default function SidebarMenu({ open }) {
+  const location = useLocation();
+  const {
+    context, canSchemaAdmin, canManageAllModules, canManageAssignedModules,
+  } = useAuth();
+  // Collapsible menu state
+  const [openMenus, setOpenMenus] = useState({ schemaManager: true });
+  const [openModuleMenus, setOpenModuleMenus] = useState({});
+
+  const handleMenuClick = (menu) => {
+    setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
+  };
+  const handleModuleMenuClick = (modId) => {
+    setOpenModuleMenus(prev => ({ ...prev, [modId]: !prev[modId] }));
+  };
+
+  // Get modules and roles from context
+  const modules = context?.modules || [];
+  const projectRoles = context?.projectRoles || [];
+  const tablesByModule = context?.tablesByModule || {}; // { [moduleId]: [{id, title}] }
+
+  // Show modules based on role
+  let visibleModules = [];
+  if (canSchemaAdmin() || canManageAllModules()) {
+    visibleModules = modules;
+  } else if (canManageAssignedModules()) {
+    const moduleIds = projectRoles
+      .filter(r => r.role === "dataowners_group" && r.module_id)
+      .map(r => r.module_id);
+    visibleModules = modules.filter(m => moduleIds.includes(m.id));
+  }
+
+  const isSchemaManagerActive = location.pathname.startsWith("/schema-admin");
+
+  const menu = [
+    {
+      type: "menu",
+      to: "/dashboard",
+      icon: <DashboardIcon />,
+      label: "Dashboard",
+      tooltip: "Dashboard",
+      match: path => path === "/dashboard",
+    },
+    ...visibleModules.map(mod => ({
+      type: "module",
+      module: mod,
+      to: `/modules/${mod.id}`,
+      icon: <TableIcon />,
+      label: mod.name,
+      tooltip: mod.description || mod.name,
+      match: path => path.startsWith(`/modules/${mod.id}`),
+      tables: tablesByModule[mod.id] || [],
+    })),
+    { type: "divider" },
+    {
+      type: "menu",
+      to: "/help",
+      icon: <HelpIcon />,
+      label: "Help",
+      tooltip: "Get Help",
+      match: path => path === "/help",
+    },
+    {
+      type: "menu",
+      to: "/settings",
+      icon: <ProjectSettingsIcon />,
+      label: "Project Settings",
+      tooltip: "Manage Project Settings",
+      match: path => path === "/settings",
+    },
+  ].filter(Boolean);
 
   return (
     <List sx={{ pt: 1 }}>
-      {/* SCHEMA ADMIN: Only Table Manager, permission-based */}
-      {canSchemaAdmin && (
+      {/* --- Schema Manager parent --- */}
+      {canSchemaAdmin() && (
         <>
           <ListItemButton
-            onClick={() => setModuleOpens(prev => ({ ...prev, _schemaAdmin: !prev._schemaAdmin }))}
+            onClick={() => handleMenuClick("schemaManager")}
             sx={{
               minHeight: 36,
               px: open ? 2 : 1.5,
               borderRadius: 1.5,
-              justifyContent: open ? "flex-start" : "center"
+              justifyContent: open ? "flex-start" : "center",
+              bgcolor: isSchemaManagerActive ? "action.selected" : "transparent"
             }}
-            selected={location.pathname.startsWith("/dataschema/manage/tablemanager")}
           >
             <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : "auto", justifyContent: "center" }}>
-              <SchemaAdminIcon />
+              <Tooltip title="Schema Manager" placement="right" arrow disableHoverListener={open}>
+                <SchemaAdminIcon />
+              </Tooltip>
             </ListItemIcon>
-            {open && <ListItemText primary="Schema Admin" />}
-            {open && (moduleOpens._schemaAdmin ? <ExpandLess /> : <ExpandMore />)}
+            {open && <ListItemText primary="Schema Manager" />}
+            {open && (openMenus.schemaManager ? <ExpandLess /> : <ExpandMore />)}
           </ListItemButton>
-          <Collapse in={moduleOpens._schemaAdmin && open} timeout="auto" unmountOnExit>
-            <MenuItem
-              to="/dataschema/manage/tablemanagerpage"
-              icon={<TableManageIcon />}
-              label="Tables Manager"
-              tooltip="Manage Tables & Fields"
-              sx={{ pl: 4 }}
-              selected={location.pathname === "/dataschema/manage/tablemanagerpage"}
-            />
+          <Collapse in={open && openMenus.schemaManager} timeout="auto" unmountOnExit>
+            <List component="div" disablePadding>
+              <MenuItem
+                to="/schema-admin/table-manager"
+                icon={<TableRowsIcon />}
+                label="Table Manager"
+                selected={location.pathname.startsWith("/schema-admin/table-manager")}
+                open={open}
+                sx={{ pl: open ? 4 : 1.5 }}
+              />
+              {/* Add more schema-related submenus here if needed */}
+            </List>
           </Collapse>
-          <Divider />
         </>
       )}
 
-      {/* MODULES: Only Data Entry (Rows) for each table */}
-      {modules.map((mod) => (
-        <React.Fragment key={mod.id}>
-          <ListItemButton
-            sx={{
-              minHeight: 36,
-              pl: open ? 2 : 1.5,
-              borderRadius: 1.5,
-              justifyContent: open ? "flex-start" : "center"
-            }}
-            onClick={() => setModuleOpens(prev => ({ ...prev, [mod.id]: !prev[mod.id] }))}
-          >
-            <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : "auto", justifyContent: "center" }}>
-              <TableIcon />
-            </ListItemIcon>
-            {open && <ListItemText primary={mod.name} />}
-            {open && (moduleOpens[mod.id] ? <ExpandLess /> : <ExpandMore />)}
-          </ListItemButton>
-          <Collapse in={moduleOpens[mod.id] && open} timeout="auto" unmountOnExit>
-            {loadingTables[mod.id] ? (
-              <ListItemButton disabled sx={{ pl: 4 }}>
-                <ListItemIcon>
-                  <CircularProgress size={20} />
+      {/* --- Render Modules and their tables --- */}
+      {menu.map((item, idx) => {
+        if (item.type === "divider") return <Divider key={`div-${idx}`} />;
+        if (item.type === "module") {
+          const { module, tables, ...rest } = item;
+          const isActiveModule = location.pathname.startsWith(`/modules/${module.id}`);
+          const hasTables = tables && tables.length > 0;
+
+          return (
+            <React.Fragment key={module.id}>
+              <ListItemButton
+                onClick={() => hasTables ? handleModuleMenuClick(module.id) : undefined}
+                component={Link}
+                to={hasTables ? undefined : `/modules/${module.id}`}
+                selected={isActiveModule && !hasTables}
+                sx={{
+                  minHeight: 36,
+                  px: open ? 2 : 1.5,
+                  borderRadius: 1.5,
+                  justifyContent: open ? "flex-start" : "center",
+                  ...(open && hasTables ? { fontWeight: 500 } : {}),
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : "auto", justifyContent: "center" }}>
+                  {item.icon}
                 </ListItemIcon>
-                {open && <ListItemText primary="Loading tables..." />}
+                {open && <ListItemText primary={item.label} />}
+                {open && hasTables && (openModuleMenus[module.id] ? <ExpandLess /> : <ExpandMore />)}
               </ListItemButton>
-            ) : (
-              (moduleTables[mod.id] || [])
-                .filter(table => table.module === mod.id || table.module_id === mod.id)
-                // Only show if user has view_data or manage_data permission for this module context
-                .filter(table => {
-                  // For module context, check if user has permission in this module
-                  const fakeModuleContext = {
-                    ...currentContext,
-                    module_id: mod.id,
-                    context_type: "module",
-                  };
-                  return (
-                    hasPermission(user, fakeModuleContext, "view_data") ||
-                    hasPermission(user, fakeModuleContext, "manage_data")
-                  );
-                })
-                .map(table => (
-                  <MenuItem
-                    key={table.id}
-                    to={`/dataschema/entry/${mod.id}/${table.id}`} // <-- Always use mod.id, never mod.name or mod.title!
-                    icon={<TableIcon />}
-                    label={table.title}
-                    tooltip={table.description || table.title}
-                    sx={{ pl: 4 }}
-                    selected={isTableActive(mod.id, table.id)}
-                  />
-                ))
-            )}
-          </Collapse>
-        </React.Fragment>
-      ))}
-
-      <Divider />
-
-      {/* Help and Project Settings */}
-      <MenuItem
-        to="/help"
-        icon={<HelpIcon />}
-        label="Help"
-        tooltip="Get Help"
-        selected={location.pathname === "/help"}
-      />
-      <MenuItem
-        to="/settings"
-        icon={<ProjectSettingsIcon />}
-        label="Project Settings"
-        tooltip="Manage Project Settings"
-        selected={location.pathname === "/settings"}
-      />
+              {/* Tables under this module */}
+              {hasTables && (
+                <Collapse in={open && openModuleMenus[module.id]} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding>
+                    {tables.map(table => (
+                      <MenuItem
+                        key={table.id}
+                        to={`/dataschema/entry/${module.id}/${table.id}`}
+                        icon={<TableRowsIcon />}
+                        label={table.title}
+                        tooltip={table.title}
+                        selected={location.pathname === `/dataschema/entry/${module.id}/${table.id}`}
+                        open={open}
+                        sx={{ pl: open ? 4 : 1.5 }}
+                      />
+                    ))}
+                  </List>
+                </Collapse>
+              )}
+            </React.Fragment>
+          );
+        }
+        // Normal menu items
+        return (
+          <MenuItem
+            key={item.to}
+            to={item.to}
+            icon={item.icon}
+            label={item.label}
+            tooltip={item.tooltip}
+            selected={item.match(location.pathname)}
+            open={open}
+          />
+        );
+      })}
     </List>
   );
 }

@@ -6,3 +6,4 @@ django-cors-headers
 pytest-django
 python-dotenv
 pytest-html
+drf-yasg

@@ -1,8 +1,11 @@
+// src/pages/TableManagerPage.jsx
+
 import React, { useEffect, useState, useCallback } from "react";
 import {
-  Box, Typography, IconButton, Button, CircularProgress, Tooltip, TextField, MenuItem
+  Box, Typography, IconButton, Button, CircularProgress, Tooltip, TextField, MenuItem, Alert
 } from "@mui/material";
 import { Add, Edit, Delete, TableRows } from "@mui/icons-material";
+
 import { DataGrid } from "@mui/x-data-grid";
 import { useAuth } from "../auth/AuthContext";
 import { fetchModules } from "../api/modules";
@@ -15,12 +18,16 @@ import TableFormDrawer from "../components/TableFormDrawer";
 import FieldManagerDrawer from "../components/FieldManagerDrawer";
 
 export default function TableManagerPage() {
-  const { user, currentContext } = useAuth();
+  // You must be wrapped by <AdminRoute> in your routes!
+  // Do not check RBAC here.
+
+  const { user, context } = useAuth();
   const lang = "en";
   const [modules, setModules] = useState([]);
   const [tablesByModule, setTablesByModule] = useState({});
   const [fieldsByTable, setFieldsByTable] = useState({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // UI state
   const [openTableDrawer, setOpenTableDrawer] = useState(false);
@@ -30,50 +37,63 @@ export default function TableManagerPage() {
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState(localStorage.getItem("moduleFilter") || "");
 
+  const projectId = context?.projectId;
   const validModuleFilterIds = modules.map(m => String(m.id));
   const safeModuleFilter =
     moduleFilter === "" || validModuleFilterIds.includes(String(moduleFilter))
       ? moduleFilter
       : "";
 
-  // --- Refetch all modules, tables, and fields ---
+  // --- Fetch all modules, tables, and fields ---
   const refetchAll = useCallback(() => {
+    if (!user || !projectId) return;
     setLoading(true);
-    fetchModules(user.token, currentContext.context_id).then((mods) => {
-      setModules(mods || []);
-      Promise.all(
-        (mods || []).map(mod =>
-          fetchDataSchemaTables(user.token, currentContext.context_id, mod.id).then(tables => ({
-            module: mod,
-            tables: tables || []
-          }))
-        )
-      ).then(data => {
+    setError(null);
+
+    fetchModules(user.token, projectId)
+      .then((mods) => {
+        setModules(mods || []);
+        return Promise.all(
+          (mods || []).map(mod =>
+            fetchDataSchemaTables(user.token, projectId, mod.id).then(tables => ({
+              module: mod,
+              tables: tables || []
+            }))
+          )
+        );
+      })
+      .then((data) => {
         const byMod = {};
         data.forEach(({ module, tables }) => {
           byMod[module.id] = tables;
         });
         setTablesByModule(byMod);
-        setLoading(false);
 
         // Preload fields for all tables
         (data || []).forEach(({ tables }) => {
           (tables || []).forEach(table => {
-            fetchDataSchemaFields(user.token, table.id, currentContext.context_id)
+            fetchDataSchemaFields(user.token, table.id, projectId, table.module_id || table.module)
               .then(fields => {
                 setFieldsByTable(prev => ({ ...prev, [table.id]: fields || [] }));
+              })
+              .catch(() => {
+                // Ignore field fetch errors for now
               });
           });
         });
+
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err?.message || "Failed to load data");
+        setLoading(false);
       });
-    });
-  }, [user, currentContext]);
+  }, [user, projectId]);
 
   // --- Initial load ---
   useEffect(() => {
-    if (!user || !currentContext) return;
     refetchAll();
-  }, [user, currentContext, refetchAll]);
+  }, [refetchAll]);
 
   // --- Persist module filter ---
   const handleModuleFilterChange = (value) => {
@@ -101,7 +121,7 @@ export default function TableManagerPage() {
 
   // --- Apply search and filter ---
   const filteredTables = allTables.filter(table =>
-    (!moduleFilter || String(table.moduleId) === String(moduleFilter)) &&
+    (!safeModuleFilter || String(table.moduleId) === String(safeModuleFilter)) &&
     (
       (table.title || "").toLowerCase().includes(search.toLowerCase()) ||
       (table.description || "").toLowerCase().includes(search.toLowerCase())
@@ -175,45 +195,77 @@ export default function TableManagerPage() {
 
   // --- Table CRUD ---
   const handleCreateTable = async (data) => {
-    await createDataSchemaTable(user.token, data, currentContext.context_id);
-    setOpenTableDrawer(false);
-    setEditingTable(null);
-    refetchAll();
+    try {
+      await createDataSchemaTable(user.token, data, projectId, data.module || data.module_id);
+      setOpenTableDrawer(false);
+      setEditingTable(null);
+      refetchAll();
+    } catch (err) {
+      setError(err?.message || "Failed to create table");
+    }
   };
 
   const handleEditTable = async (data) => {
-    await updateDataSchemaTable(user.token, editingTable.id, { ...editingTable, ...data }, currentContext.context_id);
-    setOpenTableDrawer(false);
-    setEditingTable(null);
-    refetchAll();
+    try {
+      await updateDataSchemaTable(user.token, editingTable.id, { ...editingTable, ...data }, projectId, data.module || data.module_id);
+      setOpenTableDrawer(false);
+      setEditingTable(null);
+      refetchAll();
+    } catch (err) {
+      setError(err?.message || "Failed to update table");
+    }
   };
 
   const handleDeleteTable = async (table) => {
     if (!window.confirm(`Archive table "${table.title}"?`)) return;
-    await deleteDataSchemaTable(user.token, table.id, currentContext.context_id);
-    refetchAll();
+    try {
+      await deleteDataSchemaTable(user.token, table.id, projectId, table.module || table.module_id);
+      refetchAll();
+    } catch (err) {
+      setError(err?.message || "Failed to delete table");
+    }
   };
 
   // --- Field CRUD ---
   const handleAddField = async (data) => {
-    await createDataSchemaField(user.token, { ...data, data_table: editingFieldsTableId }, currentContext.context_id);
-    refetchAll();
-  };
-  const handleEditField = async (oldField, data) => {
-    await updateDataSchemaField(user.token, oldField.id, { ...oldField, ...data }, currentContext.context_id);
-    refetchAll();
-  };
-  const handleDeleteField = async (field) => {
-    if (!window.confirm(`Archive field "${field.label}"?`)) return;
-    await deleteDataSchemaField(user.token, field.id, currentContext.context_id);
-    refetchAll();
-  };
-  const handleSaveFieldOrder = async (fields) => {
-    await updateDataSchemaFieldOrder(user.token, editingFieldsTableId, fields, currentContext.context_id);
-    refetchAll();
+    try {
+      await createDataSchemaField(user.token, { ...data, data_table: editingFieldsTableId }, projectId, data.module || data.module_id);
+      refetchAll();
+    } catch (err) {
+      setError(err?.message || "Failed to add field");
+    }
   };
 
-  if (loading) return <CircularProgress sx={{ m: 4 }} />;
+  const handleEditField = async (oldField, data) => {
+    try {
+      await updateDataSchemaField(user.token, oldField.id, { ...oldField, ...data }, projectId, oldField.module || oldField.module_id);
+      refetchAll();
+    } catch (err) {
+      setError(err?.message || "Failed to update field");
+    }
+  };
+
+  const handleDeleteField = async (field) => {
+    if (!window.confirm(`Archive field "${field.label}"?`)) return;
+    try {
+      await deleteDataSchemaField(user.token, field.id, projectId, field.module || field.module_id);
+      refetchAll();
+    } catch (err) {
+      setError(err?.message || "Failed to delete field");
+    }
+  };
+
+  const handleSaveFieldOrder = async (fields) => {
+    try {
+      await updateDataSchemaFieldOrder(user.token, editingFieldsTableId, fields, projectId);
+      refetchAll();
+    } catch (err) {
+      setError(err?.message || "Failed to save field order");
+    }
+  };
+
+  if (loading) return <Box sx={{ p: 4, textAlign: "center" }}><CircularProgress /><div>Loading…</div></Box>;
+  if (error) return <Box sx={{ p: 4 }}><Alert severity="error">{error}</Alert></Box>;
 
   return (
     <Box p={3}>
@@ -270,7 +322,6 @@ export default function TableManagerPage() {
         initial={editingTable}
         modules={modules}
         lang={lang}
-        // --- Fix for top bar overlap ---
         PaperProps={{ sx: { mt: { xs: '56px', sm: '64px' } } }}
       />
       <FieldManagerDrawer
@@ -282,7 +333,6 @@ export default function TableManagerPage() {
         onAddField={handleAddField}
         onDeleteField={handleDeleteField}
         lang={lang}
-        // --- Fix for top bar overlap ---
         PaperProps={{ sx: { mt: { xs: '56px', sm: '64px' } } }}
       />
     </Box>

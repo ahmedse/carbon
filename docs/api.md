@@ -1,291 +1,332 @@
-# 🚀 Developer Guide: Multi-Tenant RBAC Django Platform
+Absolutely! Here’s a **comprehensive developer guide** for your `dataschema` API, including authentication, endpoints, request/response formats, validation, and best practices.  
+This is written so frontend developers (React, Vue, etc.) can easily integrate with your backend.
 
 ---
 
-## **1. Project Structure Overview**
+# 🗂️ DataSchema API Developer Guide
 
+## Table of Contents
+
+1. [Authentication](#authentication)
+2. [General Conventions](#general-conventions)
+3. [Endpoints Overview](#endpoints-overview)
+4. [Data Table APIs](#data-table-apis)
+5. [Data Field APIs](#data-field-apis)
+6. [Data Row APIs](#data-row-apis)
+7. [Validation Rules](#validation-rules)
+8. [Error Responses](#error-responses)
+9. [RBAC/Permissions](#rbacpermissions)
+10. [Changelog & Schema Management](#changelog--schema-management)
+11. [Examples](#examples)
+
+---
+
+## Authentication
+
+All endpoints require authentication via **JWT Bearer tokens**.
+
+- **How to authenticate:**  
+  - Obtain a token via `/api/token/` (or your login endpoint).
+  - Attach header to every request:  
+    ```
+    Authorization: Bearer <your_token_here>
+    ```
+
+---
+
+## General Conventions
+
+- **All requests/response bodies:** JSON
+- **All endpoints are under `/api/dataschema/`** (or as routed in your project)
+- **Timestamps:** ISO8601, UTC
+- **IDs:** Always refer to entities by integer `id`
+
+---
+
+## Endpoints Overview
+
+| Entity      | List             | Detail           | Create           | Update           | Delete           |
+|-------------|------------------|------------------|------------------|------------------|------------------|
+| DataTable   | `GET /tables/`   | `GET /tables/:id/` | `POST /tables/` | `PUT/PATCH /tables/:id/` | `DELETE /tables/:id/` |
+| DataField   | `GET /fields/`   | `GET /fields/:id/` | `POST /fields/` | `PUT/PATCH /fields/:id/` | `DELETE /fields/:id/` |
+| DataRow     | `GET /rows/`     | `GET /rows/:id/`   | `POST /rows/`   | `PUT/PATCH /rows/:id/`   | `DELETE /rows/:id/`   |
+
+*Changelog, versioning, and module/project filtering also available.*
+
+---
+
+## Data Table APIs
+
+### 1. **List Tables**
+```http
+GET /api/dataschema/tables/?module_id=1
 ```
-project/
-│
-├── accounts/   # Users, roles, permissions, RBAC context, assignment, auth
-├── core/       # Tenants, Projects, Cycles, Modules (business structure)
-├── dataschema/ # Dynamic tables, fields, rows, schema change logs
-├── manage.py
-└── ...
-```
+**Query params:**
+- `module_id`: (optional) Filter by module
 
----
-
-## **2. RBAC Data Model Summary**
-
-- **Tenant**: Top-level organization (customer). All data is isolated per tenant.
-- **User**: Linked to one tenant.
-- **Project**: Belongs to one tenant.
-- **Module**: Belongs to one project.
-- **Roles**: `admin` (project), `auditor` (project), `dataowner` (module)
-- **Permissions**: Assigned to roles (e.g., `manage_schema`, `manage_data`, etc.)
-- **Context**: Defines where a role applies (`project` or `module`).
-- **RoleAssignment**: A user, a role, and a context (active/inactive).
-
----
-
-## **3. Authentication and Authorization**
-
-### **Authentication**
-
-- Use JWT (`/accounts/token/` to obtain, `/accounts/token/refresh/` to refresh).
-- Always send `Authorization: Bearer <token>` header in API calls.
-
-### **Authorization**
-
-- All sensitive API endpoints use `HasRBACPermission` to enforce per-context permissions.
-- Role assignments are managed via the Django admin interface.
-- Tenants, projects, modules, and all related data are strictly tenant-isolated (except for superusers).
-
----
-
-## **4. Key API Endpoints and Usage**
-
-### **Authentication**
-
-| Endpoint                       | Method | Description                 |
-|--------------------------------|--------|-----------------------------|
-| `/accounts/token/`             | POST   | Obtain JWT token            |
-| `/accounts/token/refresh/`     | POST   | Refresh access token        |
-| `/accounts/my-roles/`          | GET    | Get current user's roles    |
-
-**Usage:**  
-Login with username/password via `/accounts/token/`.  
-Store and use the JWT access token for all requests.
-
----
-
-### **User, Tenant, Project, Module Info**
-
-| Endpoint                     | Method | Description                  |
-|------------------------------|--------|------------------------------|
-| `/accounts/tenants/`         | GET    | List own tenant info         |
-| `/accounts/users/`           | GET    | List users in own tenant     |
-| `/accounts/projects/`        | GET    | List projects (tenant)       |
-| `/accounts/modules/`         | GET    | List modules (tenant)        |
-
----
-
-### **RBAC Management**
-
-- Role assignments are done **only via Django admin**.
-- Frontend queries `/accounts/my-roles/` to get role/context/permissions for the logged-in user.
-
----
-
-### **Dataschema (Tables, Fields, Rows)**
-
-| Action                     | Endpoint                                    | Method | Permission Required      | Notes                                         |
-|----------------------------|---------------------------------------------|--------|-------------------------|-----------------------------------------------|
-| List tables in module      | `/dataschema/tables/?module={id}`           | GET    | view_schema             |                                               |
-| Create table               | `/dataschema/tables/`                       | POST   | manage_schema           | Set `module` in POST body                     |
-| Update table               | `/dataschema/tables/{id}/`                  | PATCH  | manage_schema           |                                               |
-| Archive table              | `/dataschema/tables/{id}/archive/`          | POST   | manage_schema           | Only admin/dataowner                          |
-| List fields in table       | `/dataschema/fields/?data_table={id}`       | GET    | view_schema             |                                               |
-| Create field               | `/dataschema/fields/`                       | POST   | manage_schema           | Set `data_table` in POST body                 |
-| Archive field              | `/dataschema/fields/{id}/archive/`          | POST   | manage_schema           | Only admin/dataowner                          |
-| List rows in table         | `/dataschema/rows/?data_table={id}`         | GET    | view_data               | Can filter/search by field                    |
-| Create row                 | `/dataschema/rows/`                         | POST   | manage_data             | Set `data_table` and `values` in POST body    |
-| Update row                 | `/dataschema/rows/{id}/`                    | PATCH  | manage_data             |                                               |
-| Upload file to row field   | `/dataschema/rows/{id}/upload/`             | POST   | manage_data             | `multipart/form-data`, `field`, `file`        |
-| Schema change logs         | `/dataschema/schema-logs/`                  | GET    | manage_schema           | For audit/history                             |
-
----
-
-### **Core Business Structure**
-
-| Endpoint                | Method | Description                       |
-|-------------------------|--------|-----------------------------------|
-| `/core/projects/`       | GET    | List all projects (tenant)        |
-| `/core/cycles/`         | GET    | List all cycles (tenant)          |
-| `/core/modules/`        | GET    | List all modules (tenant/project) |
-
----
-
-## **5. Permission Codes and Role Matrix**
-
-| Role      | Context   | Permissions                                                      |
-|-----------|-----------|------------------------------------------------------------------|
-| admin     | project   | manage_schema, manage_data, view_schema, view_data, manage_project, manage_module |
-| auditor   | project   | view_schema, view_data, manage_data                              |
-| dataowner | module    | manage_schema, manage_data, view_schema, view_data, manage_module |
-
-- "admin" and "auditor" assigned at project context.
-- "dataowner" assigned at module context.
-
----
-
-## **6. Frontend Integration Patterns**
-
-### **a. Fetch and Store Role/Permission Data**
-
-- On login or context switch, call `/accounts/my-roles/`.
-- Store roles and permissions per context.
-- Use this to drive available UI functionality.
-
-**Example:**  
-If user has `manage_schema` for current module/project → show "create table" button.
-
----
-
-### **b. Context-aware API Calls**
-
-- Always include required context (project/module ID) in API parameters or body as described.
-- For table/field/row creation, ensure you pass the IDs as required.
-
----
-
-### **c. Error Handling**
-
-- **403 Forbidden:** User lacks permission. Show a clear message.
-- **404 Not Found:** Resource doesn't exist or is inaccessible by tenant/is archived.
-
----
-
-### **d. File Uploads**
-
-- Use `/dataschema/rows/{row_id}/upload/` for file fields.
-- Use `multipart/form-data` with `field` (field name) and `file` (file object).
-
----
-
-### **e. Search and Filtering**
-
-- Rows: `/dataschema/rows/?data_table={id}&search={value}` for full-text search.
-- Filter by individual field: `/dataschema/rows/?data_table={id}&field__fieldname=value`.
-
----
-
-### **f. Schema Change Logs**
-
-- `/dataschema/schema-logs/` for audit/history per table/field.
-
----
-
-## **7. Django Admin Usage**
-
-- **Role assignments** (user, role, context) are managed via Django admin only.
-- Only assign `admin` and `auditor` to project contexts.
-- Only assign `dataowner` to module contexts.
-- Maintain tenants, users, roles, and permissions as needed.
-
----
-
-## **8. Developer Best Practices**
-
-- **Never expose cross-tenant data.**  
-  Always filter by tenant in views, serializers, and admin.
-- **Always use RBAC permission checks in views.**
-- **Document any new permission code and assign it to the right roles via admin.**
-- **Test with multiple users, roles, and tenants.**
-- **Log all critical actions (e.g., schema changes) for auditability.**
-- **Use signals to clean up empty contexts when RoleAssignments are deleted.**
-
----
-
-## **9. Example: Role/Permission Check in Frontend**
-
-```js
-// Pseudocode for checking if user can manage schema in current module
-const canManageSchema = myRoles.some(role =>
-    ((role.context_type === 'project' && role.project_id === currentProjectId) ||
-     (role.context_type === 'module' && role.module_id === currentModuleId)) &&
-    role.permissions.includes('manage_schema')
-);
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "title": "Customers",
+    "description": "Customer information",
+    "module": 2,
+    "version": 1,
+    "is_archived": false,
+    "created_at": "...",
+    "fields": [
+      { ... see DataField ... }
+    ],
+    "row_count": 10
+  },
+  ...
+]
 ```
 
----
-
-## **10. Frequently Used Endpoints (Cheat Sheet)**
-
-| Action                   | Endpoint                                | Method | Notes                               |
-|--------------------------|-----------------------------------------|--------|-------------------------------------|
-| Login                    | /accounts/token/                        | POST   | JWT                                |
-| List My Roles            | /accounts/my-roles/                     | GET    |                                    |
-| List Projects            | /core/projects/                         | GET    |                                    |
-| List Modules             | /core/modules/                          | GET    |                                    |
-| List Tables in Module    | /dataschema/tables/?module={id}         | GET    |                                    |
-| Create Table             | /dataschema/tables/                     | POST   |                                    |
-| List Fields in Table     | /dataschema/fields/?data_table={id}     | GET    |                                    |
-| Create Field             | /dataschema/fields/                     | POST   |                                    |
-| List Rows in Table       | /dataschema/rows/?data_table={id}       | GET    |                                    |
-| Create Row               | /dataschema/rows/                       | POST   |                                    |
-| Upload File to Row Field | /dataschema/rows/{row_id}/upload/       | POST   | multipart/form-data                |
-| Schema Change Logs       | /dataschema/schema-logs/                | GET    |                                    |
-
----
-
-## **11. Adding New Features**
-
-1. **Add new permission code** to the `Permission` table.
-2. **Assign permission** to appropriate roles in Django admin.
-3. **Use new permission** in API views (`required_permission = 'new_permission'`).
-4. **Document new roles/permissions** for the frontend team.
-
----
-
-## **12. Testing**
-
-- Write tests for all new endpoints and business logic.
-- Use Django's `TestCase` to check tenant isolation, RBAC enforcement, and data integrity.
-- Example: see `core/tests.py` for model tests.
-
----
-
-## **13. Gotchas & Reminders**
-
-- **Superusers** see everything; all others are restricted to their tenant.
-- **“is_archived”** is used instead of delete for most objects for audit/history.
-- **Only use the official permissions codes and assign via admin**—no ad hoc codes.
-- **Never show actions in UI that user doesn’t have rights for.**
-
----
-
-## **14. Onboarding Checklist for New Developers**
-
-- Clone repo, set up virtualenv, install requirements.
-- Run migrations.
-- Create superuser, log into Django admin.
-- Add tenants, users, projects, modules, roles, permissions via admin.
-- Assign roles to users in context.
-- Run test suite.
-- Review `/accounts/my-roles/` API to understand role/context/permissions structure.
-
----
-
-## **15. Support**
-
-For questions about:
-- **Authentication/JWT:** See `accounts/urls.py` and DRF SimpleJWT docs.
-- **RBAC:** See `accounts/models.py`, `accounts/permissions.py`, and Django admin.
-- **Data structure:** See `core/models.py` and `dataschema/models.py`.
-- **API integration:** See `urls.py`, `views.py`, and corresponding serializers.
-
----
-
-# **Summary Diagram**
-
+### 2. **Table Detail**
+```http
+GET /api/dataschema/tables/1/
 ```
-Tenant
- └─ User
-      ├─ RoleAssignment (user, role, context)
-      │    └─ Context (type: project/module, project, module)
-      │         └─ Role (name, permissions)
-      │              └─ Permission (code, description)
- └─ Project
-      └─ Module
-           └─ DataTable
-                └─ DataField
-                └─ DataRow
+**Response:**
+Same as above, single object.
+
+### 3. **Create Table**
+```http
+POST /api/dataschema/tables/
+Content-Type: application/json
+
+{
+  "title": "Customers",
+  "description": "Customer information",
+  "module": 2
+}
+```
+**Response:**  
+201, the created DataTable object.
+
+---
+
+## Data Field APIs
+
+### 1. **List Fields**
+```http
+GET /api/dataschema/fields/?data_table_id=1
+```
+**Query params:**
+- `data_table_id`: (optional) Filter by data table
+
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "data_table": 1,
+    "name": "first_name",
+    "label": "First Name",
+    "type": "string",         // string | number | boolean | select | multiselect | reference
+    "order": 1,
+    "description": "",
+    "required": true,
+    "options": [ {"value": "red"}, {"value": "blue"} ],   // for select/multiselect
+    "validation": null,       // e.g. regex
+    "is_active": true,
+    "reference_table": null,
+    "created_at": "...",
+    "version": 1
+  },
+  ...
+]
+```
+
+### 2. **Create Field**
+```http
+POST /api/dataschema/fields/
+Content-Type: application/json
+
+{
+  "data_table": 1,
+  "name": "email",
+  "label": "Email",
+  "type": "string",
+  "required": true,
+  "order": 2
+}
+```
+#### Special notes:
+- **Unique constraint:** `name` must be unique within the table.
+- **Select/multiselect:** You **must** provide `options` as a list of `{ "value": ... }` objects.
+
+---
+
+## Data Row APIs
+
+### 1. **List Rows**
+```http
+GET /api/dataschema/rows/?data_table_id=1
+```
+**Query params:**
+- `data_table_id`: (required) For which table
+- Filtering, pagination, and search may be available
+
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "data_table": 1,
+    "values": {
+      "first_name": "Alice",
+      "age": 30,
+      "favorite_color": "red"
+    },
+    "created_at": "...",
+    "version": 1
+  },
+  ...
+]
+```
+
+### 2. **Create Row**
+```http
+POST /api/dataschema/rows/
+Content-Type: application/json
+
+{
+  "data_table": 1,
+  "values": {
+    "first_name": "Bob",
+    "age": 22,
+    "favorite_color": "blue"
+  }
+}
+```
+- **All `required` fields must be present in `values`.**
+- **Type checking** is enforced per field.
+
+#### Example errors:
+```json
+{
+  "age": "This field is required."
+}
 ```
 
 ---
 
-**If you follow this guide, your team will develop and maintain a robust, secure, and scalable multi-tenant SaaS platform with strong RBAC and data isolation.**
+## Validation Rules
 
-For additional onboarding docs or OpenAPI/Swagger generation, let me know!
+- **Required fields:** Must be present and not empty/null.
+- **Types:**
+  - `string`: Must be string.
+  - `number`: Must be integer or float.
+  - `boolean`: Must be true/false.
+  - `select`: Value must match one of the allowed options.
+  - `multiselect`: Must be a list of allowed values.
+- **Uniqueness:** Field `name` per table is unique.
+- **Reference fields:** Value must point to a valid row in the referenced table.
+
+**Example error:**
+```json
+{
+  "favorite_color": "Value must be one of ['red', 'blue']."
+}
+```
+
+---
+
+## Error Responses
+
+- **400 Bad Request**: Validation failed.  
+  Example:
+  ```json
+  {
+    "age": "This field is required.",
+    "favorite_color": "Value must be one of ['red', 'blue']."
+  }
+  ```
+- **401 Unauthorized**: Not authenticated.
+- **403 Forbidden**: No permission for the operation (RBAC).
+
+---
+
+## RBAC/Permissions
+
+- **All APIs check your JWT and RBAC permissions.**
+- **You need appropriate role (admin, dataowner, audit, etc.) in the project/module scope.**
+- **If you get 403:** Your token is valid but you lack permission for the table/module/project.
+
+---
+
+## Changelog & Schema Management
+
+- **Schema changes** (fields, tables) are versioned.
+- **Changelog endpoint** logs all schema changes for audit/history.
+
+```http
+GET /api/dataschema/changelog/?data_table_id=1
+```
+
+---
+
+## Examples
+
+### Create a new table, add fields, and upload row
+
+1. **Create table**
+   ```http
+   POST /api/dataschema/tables/
+   {
+     "title": "Customers",
+     "module": 2
+   }
+   ```
+
+2. **Add fields**
+   ```http
+   POST /api/dataschema/fields/
+   {
+     "data_table": 1,
+     "name": "email",
+     "label": "Email",
+     "type": "string",
+     "required": true
+   }
+   ```
+
+3. **Add row**
+   ```http
+   POST /api/dataschema/rows/
+   {
+     "data_table": 1,
+     "values": {
+       "email": "alice@example.com"
+     }
+   }
+   ```
+
+---
+
+## Tips for Frontend
+
+- **Always GET table schema (fields) before building forms.**
+- **For select/multiselect fields, use the `options` array to build dropdowns.**
+- **Show validation errors inline using the error response JSON.**
+- **Handle 401/403 globally (redirect to login or show "no permission").**
+- **Display field `label` not just the `name`.**
+- **Support pagination for large row sets.**
+
+---
+
+## Feedback & Debugging
+
+- If you get **unexpected 403**: double-check roles.
+- If **validation fails**, use the error keys to highlight the relevant fields.
+- For any API problem, check the server logs for traceback.
+
+---
+
+**For anything custom (file uploads, reference fields, etc.), ask your backend team for the exact API contract.**
+
+---
+
+**If you want this as a downloadable Markdown or want OpenAPI/Swagger docs, just let me know!**

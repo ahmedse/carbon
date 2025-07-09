@@ -15,6 +15,17 @@ class DataFieldSerializer(serializers.ModelSerializer):
             'id', 'created_at', 'created_by', 'updated_at', 'updated_by', 'version'
         ]
 
+    def validate(self, data):
+        data_table = data.get('data_table') or (self.instance.data_table if self.instance else None)
+        name = data.get('name') or (self.instance.name if self.instance else None)
+        if DataField.objects.filter(data_table=data_table, name=name).exclude(pk=self.instance.pk if self.instance else None).exists():
+            raise serializers.ValidationError("Field name must be unique within the table.")
+        if data.get('type') in ['select', 'multiselect']:
+            options = data.get('options')
+            if not options or not isinstance(options, list) or not all('value' in opt for opt in options):
+                raise serializers.ValidationError("Options must be a list of dicts with a 'value' key for select/multiselect fields.")
+        return data
+
 class DataTableDetailSerializer(serializers.ModelSerializer):
     fields = DataFieldSerializer(many=True, read_only=True)
     module_name = serializers.CharField(source='module.name', read_only=True)
@@ -45,23 +56,12 @@ class DataTableSerializer(serializers.ModelSerializer):
         ]
 
 class DataRowSerializer(serializers.ModelSerializer):
-    def create(self, validated_data):
-        print("[DEBUG] DataRowSerializer.create: validated_data:", validated_data)
-        return super().create(validated_data)
-
-    def to_internal_value(self, data):
-        if self.partial and 'values' not in data:
-            data = data.copy()
-            data['values'] = getattr(self.instance, 'values', {}) if self.instance else {}
-        return super().to_internal_value(data)
-
     def validate_values(self, values):
         if not isinstance(values, dict):
             raise serializers.ValidationError("Values must be a JSON object.")
         return values
 
     def validate(self, data):
-        # Enforce required fields logic for DataRow
         data_table = data.get('data_table') or (self.instance.data_table if self.instance else None)
         if data_table:
             required_fields = data_table.fields.filter(required=True).values_list('name', flat=True)
@@ -69,6 +69,25 @@ class DataRowSerializer(serializers.ModelSerializer):
             missing = [f for f in required_fields if f not in values or values[f] in (None, '', [])]
             if missing:
                 raise serializers.ValidationError({f: "This field is required." for f in missing})
+            for f in data_table.fields.all():
+                if f.name in values:
+                    val = values[f.name]
+                    # Type: number
+                    if f.type == 'number' and not isinstance(val, (int, float)):
+                        raise serializers.ValidationError({f.name: "Must be a number."})
+                    # Type: boolean
+                    if f.type == 'boolean' and not isinstance(val, bool):
+                        raise serializers.ValidationError({f.name: "Must be true or false."})
+                    # Type: select
+                    if f.type == 'select':
+                        allowed = [opt['value'] for opt in f.options or []]
+                        if val not in allowed:
+                            raise serializers.ValidationError({f.name: f"Value must be one of {allowed}."})
+                    # Type: multiselect
+                    if f.type == 'multiselect':
+                        allowed = [opt['value'] for opt in f.options or []]
+                        if not isinstance(val, list) or not all(v in allowed for v in val):
+                            raise serializers.ValidationError({f.name: f"All values must be in {allowed}."})
         return data
 
     class Meta:

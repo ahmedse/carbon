@@ -1,117 +1,104 @@
 # File: accounts/models.py
-# Purpose: Robust multi-tenant RBAC models for Carbon Platform, referencing core business models.
+# Production-ready multi-tenant RBAC models for SaaS with scoped project/module roles.
 
 from django.db import models
-from django.contrib.auth.models import AbstractUser
-from django.db.models import Q, signals
-from django.dispatch import receiver
+from django.contrib.auth.models import AbstractUser, Group
+from django.core.exceptions import ValidationError
+from django.utils import timezone
 
-from core.models import Project, Module  # <-- Import only; do not redefine
+# --- TENANT ---
 
-# --- Tenant Model ---
 class Tenant(models.Model):
     """
-    Represents a customer (tenant) in the multi-tenant system.
+    Each customer organization in the SaaS system.
     """
     name = models.CharField(max_length=128, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.name
 
-# --- User Model ---
+# --- USER ---
+
 class User(AbstractUser):
     """
-    Custom user model for the application, linked to a tenant.
+    Custom user model linked to a tenant.
     """
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, null=True, blank=True)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, default=0, related_name="users")
 
     def __str__(self):
-        return self.username
+        return f"{self.username} ({self.tenant.name})"
 
-class Permission(models.Model):
-    code = models.CharField(max_length=50, unique=True)
-    description = models.TextField(blank=True)
+# --- SCOPED ROLE ASSIGNMENT ---
 
-    def __str__(self):
-        return self.code
-    
-# --- Role Model ---
-class Role(models.Model):
+class ScopedRole(models.Model):
     """
-    Represents a role with a name, optional description, and a list of permissions.
+    Assigns a role (Group) to a user for a specific tenant/project/module scope.
+    - If project/module are null, role applies at tenant level.
+    - If project is set and module is null: project-level role.
+    - If module is set: module-level role (project auto-inferred).
+    Enforces tenant isolation.
     """
-    name = models.CharField(max_length=50, unique=True)
-    description = models.TextField(blank=True)
-    # permissions = models.JSONField(default=list)  # e.g. ["manage_project", "view_all_data"]
-    permissions = models.ManyToManyField(Permission, blank=True)
-
-    def __str__(self):
-        return self.name
-
-# --- Context Model (project/module only) ---
-class Context(models.Model):
-    """
-    Represents a context for RBAC assignments, either a project or a module.
-    """
-    CONTEXT_TYPES = [
-        ('project', 'Project'),
-        ('module', 'Module'),
-    ]
-    type = models.CharField(max_length=10, choices=CONTEXT_TYPES)
-    project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.CASCADE)
-    module = models.ForeignKey(Module, null=True, blank=True, on_delete=models.CASCADE)
-
-    def __str__(self):
-        parts = [self.type]
-        if self.project: parts.append(f"Project:{self.project}")
-        if self.module: parts.append(f"Module:{self.module}")
-        return ' / '.join(parts)
-
-    def eligible_users_for_role(self, role_name):
-        try:
-            role = Role.objects.get(name=role_name)
-        except Role.DoesNotExist:
-            return User.objects.none()
-        q = Q(role=role, context=self)
-        if self.type == 'module':
-            if self.project:
-                q |= Q(role=role, context__type='project', context__project=self.project)
-        elif self.type == 'project':
-            pass  # only itself
-        user_ids = RoleAssignment.objects.filter(q).values_list('user_id', flat=True).distinct()
-        return User.objects.filter(id__in=user_ids)
-
-    def list_role_assignments(self):
-        return RoleAssignment.objects.filter(context=self)
-
-    def list_roles(self):
-        return Role.objects.filter(roleassignment__context=self).distinct()
-
-# --- RoleAssignment Model ---
-class RoleAssignment(models.Model):
-    """
-    Associates a user with a role within a specific context (project/module).
-    """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='role_assignments')
-    role = models.ForeignKey(Role, on_delete=models.CASCADE)
-    context = models.ForeignKey(Context, on_delete=models.CASCADE)
-    is_active = models.BooleanField(default=True)  # <-- NEW FIELD
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="scoped_roles")
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="scoped_roles")  # Role
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="scoped_roles")
+    project = models.ForeignKey(
+        "core.Project", null=True, blank=True, on_delete=models.CASCADE, related_name="scoped_roles"
+    )
+    module = models.ForeignKey(
+        "core.Module", null=True, blank=True, on_delete=models.CASCADE, related_name="scoped_roles"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = ('user', 'role', 'context')
+        unique_together = ("user", "group", "tenant", "project", "module")
+        verbose_name = "Scoped Role Assignment"
+        verbose_name_plural = "Scoped Role Assignments"
 
     def __str__(self):
-        return f"{self.user} as {self.role} in {self.context}"
+        scope = []
+        if self.project:
+            scope.append(f"Project:{self.project}")
+        if self.module:
+            scope.append(f"Module:{self.module}")
+        return f"{self.user} as {self.group.name} in {'/'.join(scope) or self.tenant.name}"
 
-# --- Signals for cleanup (optional) ---
-@receiver(signals.post_delete, sender=RoleAssignment)
-def cleanup_empty_contexts(sender, instance, **kwargs):
-    try:
-        context = instance.context
-    except Context.DoesNotExist:
-        context = None
-    if context:
-        # Only delete if context has no remaining assignments
-        if not RoleAssignment.objects.filter(context=context).exists():
-            context.delete()
+    def clean(self):
+        # Enforce tenant consistency
+        if self.project and self.project.tenant_id != self.tenant_id:
+            raise ValidationError("Project must belong to the same tenant as the assignment.")
+        if self.module and self.module.project.tenant_id != self.tenant_id:
+            raise ValidationError("Module must belong to the same tenant as the assignment.")
 
+# --- AUDIT LOGGING ---
+
+class RoleAssignmentAuditLog(models.Model):
+    """
+    Audit log for all scoped role assignments.
+    """
+    ACTIONS = (
+        ("assigned", "Assigned"),
+        ("removed", "Removed"),
+        ("modified", "Modified"),
+    )
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="role_audit_logs")
+    actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="role_audit_actions")
+    group = models.ForeignKey(Group, on_delete=models.SET_NULL, null=True)
+    tenant = models.ForeignKey(Tenant, on_delete=models.SET_NULL, null=True)
+    project = models.ForeignKey("core.Project", null=True, blank=True, on_delete=models.SET_NULL)
+    module = models.ForeignKey("core.Module", null=True, blank=True, on_delete=models.SET_NULL)
+    action = models.CharField(max_length=16, choices=ACTIONS)
+    timestamp = models.DateTimeField(default=timezone.now)
+    extra = models.JSONField(default=dict, blank=True)
+
+    def __str__(self):
+        return f"{self.timestamp}: {self.action} {self.group} for {self.user} ({self.tenant})"
+
+# --- SYSTEM ROLE NAMES (constants for code clarity) ---
+
+SYSTEM_ROLES = {
+    "admin": "admin",
+    "audit": "audit",
+    "dataowner": "dataowner",
+}

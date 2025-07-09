@@ -1,9 +1,13 @@
 // src/api/modules.js
+// Module API wrappers.
 
 import { apiFetch } from "./api";
 import { API_ROUTES } from "../config";
 
-// Helper to build query string (if needed for other calls)
+/**
+ * Helper to build a query string from params object.
+ * Not currently used, but available for future expansion.
+ */
 function buildQuery(params) {
   const esc = encodeURIComponent;
   return (
@@ -15,7 +19,7 @@ function buildQuery(params) {
 }
 
 /**
- * Fetch modules, always sending project_id (and module_id if needed).
+ * Fetch modules for a given project (and optional module_id).
  * @param {string} token 
  * @param {string|number} project_id 
  * @param {string|number} [module_id] 

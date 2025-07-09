@@ -1,25 +1,29 @@
+"""
+Virtual schema management for multi-tenant, modular, RBAC-controlled data tables.
+"""
+import re
 from django.db import models
 from django.contrib.auth import get_user_model
 from core.models import Module
-import re
 
 User = get_user_model()
 
 def normalize_name(value):
-    """Normalize a string to snake_case, lowercase, no leading/trailing spaces."""
+    """
+    Normalize a string: lowercase, replace spaces/non-alphanumeric with underscores.
+    """
     if not value:
         return ""
     value = value.strip().lower()
-    value = re.sub(r"\s+", "_", value)
-    value = re.sub(r"[^a-z0-9_]", "", value)
+    value = re.sub(r"\s+", "_", value)           # spaces to underscores
+    value = re.sub(r"[^a-z0-9_]", "_", value)    # non-alphanum to underscores
+    value = re.sub(r"_+", "_", value)            # collapse multiple underscores
+    value = value.strip("_")
     return value
 
 class DataTable(models.Model):
-    """
-    Represents a dynamic table ("sheet"/"form") within a module.
-    """
     title = models.CharField(max_length=255)
-    name = models.SlugField(max_length=64, unique=True)
+    name = models.SlugField(max_length=64)
     description = models.TextField(blank=True)
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='data_tables')
     version = models.PositiveIntegerField(default=1)
@@ -29,8 +33,16 @@ class DataTable(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_data_tables')
 
+    def save(self, *args, **kwargs):
+        # Standardize the table name
+        self.name = normalize_name(self.name or self.title)
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.title} (Module: {self.module})"
+        return f"{self.title} ({self.module})"
+
+    class Meta:
+        unique_together = ("module", "name")
 
 class DataField(models.Model):
     FIELD_TYPES = [
@@ -44,17 +56,16 @@ class DataField(models.Model):
         ('file', 'File'),
         ('reference', 'Reference (Future)'),
     ]
-
     data_table = models.ForeignKey(DataTable, on_delete=models.CASCADE, related_name='fields')
     name = models.CharField(max_length=50)
     label = models.CharField(max_length=100)
     type = models.CharField(max_length=20, choices=FIELD_TYPES)
-    default_value = models.JSONField(blank=True, null=True, help_text="Default value for the field")
+    default_value = models.JSONField(blank=True, null=True)
     order = models.PositiveIntegerField(default=0)
     description = models.TextField(blank=True)
     required = models.BooleanField(default=False)
-    options = models.JSONField(blank=True, null=True, help_text="For select/multiselect: list of option dicts")
-    validation = models.JSONField(blank=True, null=True, help_text="Flexible JSON validation rules")
+    options = models.JSONField(blank=True, null=True)
+    validation = models.JSONField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
     is_archived = models.BooleanField(default=False)
     version = models.PositiveIntegerField(default=1)
@@ -64,26 +75,22 @@ class DataField(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_fields')
 
+    def save(self, *args, **kwargs):
+        # Standardize the field name
+        self.name = normalize_name(self.name or self.label)
+        super().save(*args, **kwargs)
+
     class Meta:
         ordering = ['order', 'id']
         unique_together = (("data_table", "name"),)
 
-    def save(self, *args, **kwargs):
-        if not self.name and self.label:
-            self.name = normalize_name(self.label)
-        else:
-            self.name = normalize_name(self.name)
-        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.label} ({self.type}) in {self.data_table.title}"
 
 class DataRow(models.Model):
-    """
-    Represents a single row of data, storing values as JSON.
-    """
     data_table = models.ForeignKey(DataTable, on_delete=models.CASCADE, related_name='rows')
-    values = models.JSONField(help_text="Field values as {field_name: value}")
+    values = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_rows')
     updated_at = models.DateTimeField(auto_now=True)
@@ -100,9 +107,6 @@ class DataRow(models.Model):
         return f"Row {self.id} in {self.data_table.title}"
 
 class SchemaChangeLog(models.Model):
-    """
-    Logs all changes to tables/fields (schema), for audit/version/history.
-    """
     ACTIONS = [
         ('add', 'Add'),
         ('edit', 'Edit'),
@@ -117,7 +121,7 @@ class SchemaChangeLog(models.Model):
     after = models.JSONField(null=True, blank=True)
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     timestamp = models.DateTimeField(auto_now_add=True)
-    notes = models.TextField(blank=True, help_text="Optional reason/comment")
+    notes = models.TextField(blank=True)
 
     class Meta:
         ordering = ['-timestamp']
