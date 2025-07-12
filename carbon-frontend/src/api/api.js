@@ -10,7 +10,7 @@ import { isJwtExpired } from "../jwt";
  *
  * @param {string} endpoint - relative API endpoint
  * @param {object} opts - { method, body, token, project_id, module_id }
- * @returns {Promise<any>}
+ * @returns {Promise<any|undefined>} Returns data on success, undefined on error.
  */
 export async function apiFetch(endpoint, { method = "GET", body, token, project_id, module_id } = {}) {
   let url = `${API_BASE_URL}${endpoint}`;
@@ -27,8 +27,9 @@ export async function apiFetch(endpoint, { method = "GET", body, token, project_
       accessToken = await window.refreshAccessToken();
       if (import.meta.env.DEV) console.debug("Access token refreshed.");
     } catch (err) {
+      console.error("Session expired, logging out:", err);
       if (typeof window.logout === "function") window.logout();
-      throw new Error("Session expired. Please log in again.");
+      return;
     }
   }
 
@@ -59,8 +60,8 @@ export async function apiFetch(endpoint, { method = "GET", body, token, project_
     try {
       response = await fetch(url, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
     } catch (networkError) {
-      // Network error (server down, etc)
-      throw new Error(`Network error: ${networkError.message || networkError}`);
+      console.error("Network error:", networkError);
+      return;
     }
     const isJson = response.headers.get("content-type")?.includes("application/json");
     let data;
@@ -71,14 +72,13 @@ export async function apiFetch(endpoint, { method = "GET", body, token, project_
     }
 
     if (!response.ok) {
-      // Debug log for errors
-      if (import.meta.env.DEV) {
-        console.error("[apiFetch] API Error:", { url, method, status: response.status, data });
+      console.error("[apiFetch] API Error:", { url, method, status: response.status, data });
+      if (data && typeof data === "object") {
+        Object.entries(data).forEach(([key, value]) => {
+          console.error(`[apiFetch] API error field: ${key} =`, value);
+        });
       }
-      // Show backend error if available
-      if (data && data.detail) throw new Error(data.detail);
-      if (typeof data === "string" && data.length < 200) throw new Error(data);
-      throw new Error(`API error (${response.status})`);
+      return;
     }
     return data;
   }
@@ -93,13 +93,14 @@ export async function apiFetch(endpoint, { method = "GET", body, token, project_
         headers = { ...headers, Authorization: `Bearer ${accessToken}` };
         if (import.meta.env.DEV) console.debug("Retrying after token refresh...");
         return await doFetch();
-      } catch {
+      } catch (refreshErr) {
+        console.error("Session expired during retry, logging out:", refreshErr);
         if (typeof window.logout === "function") window.logout();
-        throw new Error("Session expired. Please log in again.");
+        return;
       }
     }
-    // Debug any other error
-    if (import.meta.env.DEV) console.error("[apiFetch] Final error:", err);
-    throw err;
+    // Log any other error
+    console.error("[apiFetch] Final error:", err);
+    return;
   }
 }

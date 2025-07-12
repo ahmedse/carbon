@@ -9,6 +9,7 @@ export const AuthProvider = ({ children }) => {
   const [projects, setProjects] = useState([]);
   const [context, setContext] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [tablesByModule, setTablesByModule] = useState({});
 
   // Debug helper
   const debug = (...args) => { if (import.meta.env.DEV) console.log("[Auth]", ...args); };
@@ -37,6 +38,13 @@ export const AuthProvider = ({ children }) => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [user]);
+
+  useEffect(() => {
+  if (user && context?.modules && context?.projectId) {
+    refetchTables();
+  }
+  // eslint-disable-next-line
+}, [user, context?.modules, context?.projectId]);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -167,7 +175,38 @@ export const AuthProvider = ({ children }) => {
     setProjects([]);
     setContext(null);
     localStorage.clear();
+    window.location.href = "/login";
   };
+
+  const refetchTables = async () => {
+    if (!user || !context?.projectId || !context?.modules) return;
+    try {
+      const grouped = {};
+      await Promise.all(
+        context.modules.map(async (mod) => {
+          const res = await fetch(
+            `${API_BASE_URL}${API_ROUTES.tables}?project_id=${context.projectId}&module_id=${mod.id}`,
+            { headers: { Authorization: `Bearer ${user.token}` } }
+          );
+          if (res.ok) {
+            const tables = await res.json();
+            grouped[String(mod.id)] = tables;
+          }
+        })
+      );
+
+      console.log("refetchTables: user", user);
+console.log("refetchTables: context", context);
+console.log("refetchTables: context.modules", context?.modules);
+console.log("refetchTables: context.projectId", context?.projectId);
+console.log("refetchTables: grouped", grouped);
+
+      setTablesByModule(grouped);
+    } catch (err) {
+      setTablesByModule({});
+      if (import.meta.env.DEV) console.error("Failed to fetch tables", err);
+    }
+};
 
   // Role helpers
 // src/auth/AuthContext.jsx
@@ -196,6 +235,9 @@ const canManageAssignedModules = () =>
         canSchemaAdmin,
         canManageAllModules,
         canManageAssignedModules,
+        tablesByModule,     // <-- add this
+        refetchTables,      // <-- add this
+        
       }}
     >
       {children}

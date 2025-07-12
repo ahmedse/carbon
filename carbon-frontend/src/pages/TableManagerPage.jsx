@@ -1,6 +1,6 @@
 // src/pages/TableManagerPage.jsx
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box, Typography, IconButton, Button, CircularProgress, Tooltip, TextField, MenuItem, Alert
 } from "@mui/material";
@@ -8,9 +8,8 @@ import { Add, Edit, Delete, TableRows } from "@mui/icons-material";
 
 import { DataGrid } from "@mui/x-data-grid";
 import { useAuth } from "../auth/AuthContext";
-import { fetchModules } from "../api/modules";
 import {
-  fetchDataSchemaTables, createDataSchemaTable, updateDataSchemaTable, deleteDataSchemaTable,
+  createDataSchemaTable, updateDataSchemaTable, deleteDataSchemaTable,
   fetchDataSchemaFields, createDataSchemaField, updateDataSchemaField, deleteDataSchemaField,
   updateDataSchemaFieldOrder
 } from "../api/dataschema";
@@ -21,10 +20,9 @@ export default function TableManagerPage() {
   // You must be wrapped by <AdminRoute> in your routes!
   // Do not check RBAC here.
 
-  const { user, context } = useAuth();
+  const { user, context, tablesByModule, refetchTables } = useAuth();
   const lang = "en";
   const [modules, setModules] = useState([]);
-  const [tablesByModule, setTablesByModule] = useState({});
   const [fieldsByTable, setFieldsByTable] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -44,58 +42,17 @@ export default function TableManagerPage() {
       ? moduleFilter
       : "";
 
-  // --- Fetch all modules, tables, and fields ---
-  const refetchAll = useCallback(() => {
-    if (!user || !projectId) return;
-    setLoading(true);
-    setError(null);
-
-    fetchModules(user.token, projectId)
-      .then((mods) => {
-        setModules(mods || []);
-        return Promise.all(
-          (mods || []).map(mod =>
-            fetchDataSchemaTables(user.token, projectId, mod.id).then(tables => ({
-              module: mod,
-              tables: tables || []
-            }))
-          )
-        );
-      })
-      .then((data) => {
-        const byMod = {};
-        data.forEach(({ module, tables }) => {
-          byMod[module.id] = tables;
-        });
-        setTablesByModule(byMod);
-
-        // Preload fields for all tables
-        (data || []).forEach(({ tables }) => {
-          (tables || []).forEach(table => {
-            fetchDataSchemaFields(user.token, table.id, projectId, table.module_id || table.module)
-              .then(fields => {
-                setFieldsByTable(prev => ({ ...prev, [table.id]: fields || [] }));
-              })
-              .catch(() => {
-                // Ignore field fetch errors for now
-              });
-          });
-        });
-
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err?.message || "Failed to load data");
-        setLoading(false);
-      });
-  }, [user, projectId]);
-
-  // --- Initial load ---
+  // Sync modules from context
   useEffect(() => {
-    refetchAll();
-  }, [refetchAll]);
+    if (context?.modules) setModules(context.modules);
+  }, [context?.modules]);
 
-  // --- Persist module filter ---
+  // Set loading to false when tables are loaded
+  useEffect(() => {
+    setLoading(false);
+  }, [tablesByModule]);
+
+  // Persist module filter
   const handleModuleFilterChange = (value) => {
     setModuleFilter(value);
     localStorage.setItem("moduleFilter", value);
@@ -104,10 +61,10 @@ export default function TableManagerPage() {
   // --- Only include tables that actually belong to the module ---
   const allTables = [];
   modules.forEach(mod => {
-    (tablesByModule[mod.id] || []).forEach(table => {
+    (tablesByModule[String(mod.id)] || []).forEach(table => {
       if (
-        (table.module && (table.module === mod.id || table.module === mod.name || table.module === mod.slug)) ||
-        (table.module_id && table.module_id === mod.id)
+        (table.module && (String(table.module) === String(mod.id) || table.module === mod.name || table.module === mod.slug)) ||
+        (table.module_id && String(table.module_id) === String(mod.id))
       ) {
         allTables.push({
           ...table,
@@ -119,6 +76,11 @@ export default function TableManagerPage() {
     });
   });
 
+  // Debug logs
+  console.log("modules", modules);
+  console.log("tablesByModule", tablesByModule);
+  console.log("allTables", allTables);
+
   // --- Apply search and filter ---
   const filteredTables = allTables.filter(table =>
     (!safeModuleFilter || String(table.moduleId) === String(safeModuleFilter)) &&
@@ -127,6 +89,8 @@ export default function TableManagerPage() {
       (table.description || "").toLowerCase().includes(search.toLowerCase())
     )
   );
+
+  console.log("filteredTables", filteredTables);
 
   // --- DataGrid columns ---
   const columns = [
@@ -199,7 +163,7 @@ export default function TableManagerPage() {
       await createDataSchemaTable(user.token, data, projectId, data.module || data.module_id);
       setOpenTableDrawer(false);
       setEditingTable(null);
-      refetchAll();
+      await refetchTables(); 
     } catch (err) {
       setError(err?.message || "Failed to create table");
     }
@@ -210,7 +174,7 @@ export default function TableManagerPage() {
       await updateDataSchemaTable(user.token, editingTable.id, { ...editingTable, ...data }, projectId, data.module || data.module_id);
       setOpenTableDrawer(false);
       setEditingTable(null);
-      refetchAll();
+      await refetchTables(); 
     } catch (err) {
       setError(err?.message || "Failed to update table");
     }
@@ -220,7 +184,7 @@ export default function TableManagerPage() {
     if (!window.confirm(`Archive table "${table.title}"?`)) return;
     try {
       await deleteDataSchemaTable(user.token, table.id, projectId, table.module || table.module_id);
-      refetchAll();
+      await refetchTables(); 
     } catch (err) {
       setError(err?.message || "Failed to delete table");
     }
@@ -230,7 +194,6 @@ export default function TableManagerPage() {
   const handleAddField = async (data) => {
     try {
       await createDataSchemaField(user.token, { ...data, data_table: editingFieldsTableId }, projectId, data.module || data.module_id);
-      refetchAll();
     } catch (err) {
       setError(err?.message || "Failed to add field");
     }
@@ -239,7 +202,6 @@ export default function TableManagerPage() {
   const handleEditField = async (oldField, data) => {
     try {
       await updateDataSchemaField(user.token, oldField.id, { ...oldField, ...data }, projectId, oldField.module || oldField.module_id);
-      refetchAll();
     } catch (err) {
       setError(err?.message || "Failed to update field");
     }
@@ -249,7 +211,6 @@ export default function TableManagerPage() {
     if (!window.confirm(`Archive field "${field.label}"?`)) return;
     try {
       await deleteDataSchemaField(user.token, field.id, projectId, field.module || field.module_id);
-      refetchAll();
     } catch (err) {
       setError(err?.message || "Failed to delete field");
     }
@@ -258,7 +219,6 @@ export default function TableManagerPage() {
   const handleSaveFieldOrder = async (fields) => {
     try {
       await updateDataSchemaFieldOrder(user.token, editingFieldsTableId, fields, projectId);
-      refetchAll();
     } catch (err) {
       setError(err?.message || "Failed to save field order");
     }

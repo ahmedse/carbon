@@ -11,6 +11,10 @@ export const helpTexts = {
     "field.type": "The type determines input (text, number, date, etc). 'Select' will show options.",
     "field.label": "Label seen by users on forms.",
     "field.name": "Internal name (English, no spaces). Used as the key in data.",
+    "field.desc": "Internal description (English, no spaces). Used as the field desc in data.",
+    "table.desc": "Internal description (English, no spaces). Used as the table desc in data.",
+    "table.title": "Internal title (English, no spaces). Used as the table title in data.",
+    
     // ...add more keys as needed
   },
   ar: {

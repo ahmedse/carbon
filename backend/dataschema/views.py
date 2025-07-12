@@ -57,18 +57,23 @@ class DataTableViewSet(ScopedViewSet):
     """
     Only 'admin' or 'admins_group' can access schema (tables).
     """
+
     queryset = DataTable.objects.all()
     serializer_class = DataTableSerializer
     required_role = ("admin", "admins_group")
 
     def get_queryset(self):
         qs = DataTable.objects.all()
+        print("[DEBUG] All DataTables:", list(qs.values('id', 'module_id')))
         if self.project:
             qs = qs.filter(module__project=self.project, is_archived=False)
-            if self.module:
-                qs = qs.filter(module=self.module)
+            # Only filter by module for list/retrieve actions (not for update/delete)
+            if self.action in ["list", "retrieve"]:
+                if self.module:
+                    qs = qs.filter(module=self.module)
         else:
             qs = qs.none()
+        print("[DEBUG] Filtered DataTables:", list(qs.values('id', 'module_id')))
         return qs
 
     def get_serializer_class(self):

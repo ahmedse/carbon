@@ -1,5 +1,6 @@
 // src/components/SidebarMenu.jsx
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import {
   List, ListItemButton, ListItemIcon, ListItemText, Tooltip, Divider, Collapse,
 } from "@mui/material";
@@ -42,21 +43,15 @@ export default function SidebarMenu({ open }) {
   const {
     context, canSchemaAdmin, canManageAllModules, canManageAssignedModules,
   } = useAuth();
+
   // Collapsible menu state
   const [openMenus, setOpenMenus] = useState({ schemaManager: true });
   const [openModuleMenus, setOpenModuleMenus] = useState({});
 
-  const handleMenuClick = (menu) => {
-    setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
-  };
-  const handleModuleMenuClick = (modId) => {
-    setOpenModuleMenus(prev => ({ ...prev, [modId]: !prev[modId] }));
-  };
-
   // Get modules and roles from context
   const modules = context?.modules || [];
   const projectRoles = context?.projectRoles || [];
-  const tablesByModule = context?.tablesByModule || {}; // { [moduleId]: [{id, title}] }
+  const { tablesByModule = {} } = useAuth();
 
   // Show modules based on role
   let visibleModules = [];
@@ -68,6 +63,23 @@ export default function SidebarMenu({ open }) {
       .map(r => r.module_id);
     visibleModules = modules.filter(m => moduleIds.includes(m.id));
   }
+
+  console.log("SidebarMenu: modules", modules);
+  console.log("SidebarMenu: tablesByModule", tablesByModule);
+  modules.forEach(mod => {
+    console.log("Module", mod.id, mod.name, "tables:", tablesByModule[mod.id]);
+  });
+
+  // --- Auto-expand module if current route is viewing one of its tables ---
+  useEffect(() => {
+    const path = location.pathname;
+    // Pattern: /dataschema/entry/<moduleId>/<tableId>
+    const match = path.match(/^\/dataschema\/entry\/(\d+)\/(\d+)/);
+    if (match) {
+      const moduleId = parseInt(match[1]);
+      setOpenModuleMenus(prev => ({ ...prev, [moduleId]: true }));
+    }
+  }, [location.pathname]);
 
   const isSchemaManagerActive = location.pathname.startsWith("/schema-admin");
 
@@ -88,7 +100,7 @@ export default function SidebarMenu({ open }) {
       label: mod.name,
       tooltip: mod.description || mod.name,
       match: path => path.startsWith(`/modules/${mod.id}`),
-      tables: tablesByModule[mod.id] || [],
+      tables: tablesByModule[String(mod.id)] || [],
     })),
     { type: "divider" },
     {
@@ -115,7 +127,7 @@ export default function SidebarMenu({ open }) {
       {canSchemaAdmin() && (
         <>
           <ListItemButton
-            onClick={() => handleMenuClick("schemaManager")}
+            onClick={() => setOpenMenus(prev => ({ ...prev, schemaManager: !prev.schemaManager }))}
             sx={{
               minHeight: 36,
               px: open ? 2 : 1.5,
@@ -142,7 +154,6 @@ export default function SidebarMenu({ open }) {
                 open={open}
                 sx={{ pl: open ? 4 : 1.5 }}
               />
-              {/* Add more schema-related submenus here if needed */}
             </List>
           </Collapse>
         </>
@@ -153,14 +164,15 @@ export default function SidebarMenu({ open }) {
         if (item.type === "divider") return <Divider key={`div-${idx}`} />;
         if (item.type === "module") {
           const { module, tables, ...rest } = item;
-          const isActiveModule = location.pathname.startsWith(`/modules/${module.id}`);
+          const isActiveModule = location.pathname.startsWith(`/modules/${module.id}`) ||
+            (location.pathname.startsWith("/dataschema/entry/") && location.pathname.includes(`/${module.id}/`));
           const hasTables = tables && tables.length > 0;
 
           return (
             <React.Fragment key={module.id}>
               <ListItemButton
-                onClick={() => hasTables ? handleModuleMenuClick(module.id) : undefined}
-                component={Link}
+                onClick={() => hasTables ? setOpenModuleMenus(prev => ({ ...prev, [module.id]: !prev[module.id] })) : undefined}
+                component={hasTables ? undefined : Link}
                 to={hasTables ? undefined : `/modules/${module.id}`}
                 selected={isActiveModule && !hasTables}
                 sx={{
