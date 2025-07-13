@@ -5,6 +5,8 @@ import {
 } from "@mui/material";
 import { Navigate, useNavigate } from "react-router-dom";
 import aastLogo from "../assets/aast_carbon_logo_.jpg";
+import { useLocation } from "react-router-dom";
+
 
 export default function Login() {
   const {
@@ -15,6 +17,9 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [projectSelection, setProjectSelection] = useState("");
   const [requireProject, setRequireProject] = useState(false);
+
+  const location = useLocation();
+  const expired = location.search.includes("expired=1");
 
   const navigate = useNavigate();
 
@@ -109,6 +114,13 @@ export default function Login() {
             autoComplete="current-password"
           />
           {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+          {/* {(expired || error) && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+              {expired
+                ? "Your session expired. Please log in again."
+                : error}
+            </Alert>
+          )} */}
           <Button
             fullWidth
             variant="contained"
@@ -120,6 +132,7 @@ export default function Login() {
             {busy || loading ? <CircularProgress size={24} /> : "Login"}
           </Button>
         </form>
+        
       </Paper>
     </Box>
   );

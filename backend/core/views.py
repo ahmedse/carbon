@@ -1,9 +1,12 @@
 # File: core/views.py
 
-from rest_framework import viewsets
 from .models import Project, Module
 from .serializers import ProjectSerializer, ModuleSerializer
 from accounts.permissions import HasScopedRole
+from accounts.rbac_utils import get_allowed_project_ids, get_allowed_module_ids, user_has_project_role
+from .models import Feedback
+from .serializers import FeedbackSerializer
+from rest_framework import mixins, viewsets
 
 class ProjectViewSet(viewsets.ModelViewSet):
     """
@@ -14,53 +17,12 @@ class ProjectViewSet(viewsets.ModelViewSet):
     permission_classes = [HasScopedRole]
     required_role = ("dataowner", "admins_group", "dataowners_group")
 
-    def get_permissions(self):
-        project_id = self.request.query_params.get("project_id")
-        print("[DEBUG] get_permissions called")
-        print("[DEBUG] Query params in get_permissions:", self.request.query_params)
-        print("[DEBUG] project_id from query params:", project_id)
-        if project_id:
-            try:
-                self.project = Project.objects.get(pk=project_id)
-                print("[DEBUG] Set self.project in get_permissions:", self.project)
-            except Project.DoesNotExist:
-                print("[DEBUG] Project.DoesNotExist in get_permissions for id", project_id)
-                self.project = None
-        else:
-            print("[DEBUG] No project_id in query params in get_permissions!")
-            self.project = None
-        return super().get_permissions()
-    
     def get_queryset(self):
         user = self.request.user
-        from accounts.models import ScopedRole
-
-        # Only within the user's tenant
-        tenant = user.tenant
-
-        # Projects where user has a ScopedRole (project or module scope)
-        # Get IDs from project-scoped or module-scoped roles
-        project_ids = set(
-            ScopedRole.objects.filter(
-                user=user,
-                tenant=tenant,
-                is_active=True,
-            )
-            .exclude(project=None)
-            .values_list('project_id', flat=True)
+        tenant = getattr(user, "tenant", None)
+        return Project.objects.filter(
+            id__in=get_allowed_project_ids(user, tenant, self.required_role), tenant=tenant
         )
-        # Add projects from module-scoped roles
-        module_projects = Module.objects.filter(
-            id__in=ScopedRole.objects.filter(
-                user=user,
-                tenant=tenant,
-                is_active=True,
-            ).exclude(module=None).values_list('module_id', flat=True)
-        ).values_list('project_id', flat=True)
-        project_ids.update(module_projects)
-
-        # Return only projects the user can access in their tenant
-        return Project.objects.filter(id__in=project_ids, tenant=tenant)
 
 class ModuleViewSet(viewsets.ModelViewSet):
     """
@@ -71,58 +33,38 @@ class ModuleViewSet(viewsets.ModelViewSet):
     permission_classes = [HasScopedRole]
     required_role = ("admin", "admins_group", "dataowners_group")
 
-    def get_permissions(self):
-        # Set project context before checking permissions
-        project_id = self.request.query_params.get("project_id")
-        if project_id:
-            try:
-                self.project = Project.objects.get(pk=project_id)
-            except Project.DoesNotExist:
-                self.project = None
-        else:
-            self.project = None
-        return super().get_permissions()
-
     def get_queryset(self):
         user = self.request.user
-        from accounts.models import ScopedRole
-
-        tenant = user.tenant
+        tenant = getattr(user, "tenant", None)
         project_id = self.request.query_params.get("project_id")
+        module_id = self.request.query_params.get("module_id")
 
-        # Only module-level ScopedRoles
-        module_ids = list(
-            ScopedRole.objects.filter(
-                user=user,
-                tenant=tenant,
-                is_active=True,
-            ).exclude(module=None).values_list('module_id', flat=True)
-        )
-        print("[DEBUG] module_ids:", module_ids)
+        if not project_id:
+            return Module.objects.none()
 
-        # Only project-level ScopedRoles (module__isnull=True)
-        project_ids = list(
-            ScopedRole.objects.filter(
-                user=user,
-                tenant=tenant,
-                is_active=True,
-                module__isnull=True
-            ).exclude(project=None).values_list('project_id', flat=True)
-        )
-        print("[DEBUG] project_ids:", project_ids)
+        # Admins or project-level roles: see all modules in the project
+        if user_has_project_role(user, project_id, ["admin", "admins_group"]):
+            return Module.objects.filter(project_id=project_id, project__tenant=tenant)
 
-        if project_id:
-            project_id = int(project_id)
-            print("[DEBUG] Filtering with project_id:", project_id)
-            if project_id in project_ids:
-                print("[DEBUG] User has project-level role for this project")
-                return Module.objects.filter(project_id=project_id, project__tenant=tenant)
-            else:
-                print("[DEBUG] User does NOT have project-level role, only module-level")
-                return Module.objects.filter(id__in=module_ids, project_id=project_id, project__tenant=tenant)
+        # dataowners_group: only modules where user has module-level scoped role
+        allowed_ids = get_allowed_module_ids(user, project_id, ["dataowners_group"])
+        if allowed_ids:
+            return Module.objects.filter(id__in=allowed_ids, project_id=project_id, project__tenant=tenant)
+        return Module.objects.none()
 
-        modules_by_project = Module.objects.filter(project_id__in=project_ids, project__tenant=tenant)
-        modules_by_module = Module.objects.filter(id__in=module_ids, project__tenant=tenant)
-        print("[DEBUG] modules_by_project:", list(modules_by_project.values_list('id', flat=True)))
-        print("[DEBUG] modules_by_module:", list(modules_by_module.values_list('id', flat=True)))
-        return (modules_by_project | modules_by_module).distinct()
+class FeedbackViewSet(mixins.CreateModelMixin,
+                      mixins.ListModelMixin,
+                      viewsets.GenericViewSet):
+    """
+    API for submitting and listing feedback.
+    Only staff can list; anyone can submit.
+    """
+    queryset = Feedback.objects.all()
+    serializer_class = FeedbackSerializer
+
+    def get_permissions(self):
+        # Only allow listing for staff, allow create for anyone (or customize as needed)
+        from rest_framework.permissions import IsAdminUser, AllowAny
+        if self.action == 'list':
+            return [IsAdminUser()]
+        return [AllowAny()]

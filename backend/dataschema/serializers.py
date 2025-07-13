@@ -73,8 +73,11 @@ class DataRowSerializer(serializers.ModelSerializer):
                 if f.name in values:
                     val = values[f.name]
                     # Type: number
-                    if f.type == 'number' and not isinstance(val, (int, float)):
-                        raise serializers.ValidationError({f.name: "Must be a number."})
+                    if f.type == 'number':
+                        if not isinstance(val, (int, float)):
+                            raise serializers.ValidationError({f.name: "Must be a number."})
+                        if val < 0:
+                            raise serializers.ValidationError({f.name: "Negative values are not allowed. Please enter zero or a positive number."})
                     # Type: boolean
                     if f.type == 'boolean' and not isinstance(val, bool):
                         raise serializers.ValidationError({f.name: "Must be true or false."})

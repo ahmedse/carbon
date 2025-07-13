@@ -7,18 +7,23 @@ import TableDataPage from "../components/TableDataPage";
 
 export default function DataEntryPage() {
   const { moduleName, tableId } = useParams();
-  const { user, currentContext } = useAuth();
+  const { user, context } = useAuth();
 
-  if (!user || !currentContext) {
+  if (!user || !context) {
     return <div style={{ padding: 48, textAlign: "center" }}>Loading context...</div>;
   }
 
-  // Always use project_id from context
-  const projectId = currentContext.project_id;
+  // DEBUG: Show full context and projectId
+  console.log("DataEntryPage context:", context);
+
+  // Get project ID robustly
+  const projectId = context.project_id || context.projectId;
+  console.log("projectId for TableDataPage:", projectId);
+
   // Prefer module_id from context, else fallback to moduleName (from URL)
-  let moduleId = currentContext.module_id;
-  if (!moduleId && currentContext.context_type === "module") {
-    moduleId = currentContext.context_id;
+  let moduleId = context.module_id;
+  if (!moduleId && context.context_type === "module") {
+    moduleId = context.context_id;
   }
   if (!moduleId && moduleName) {
     moduleId = moduleName;
@@ -30,7 +35,7 @@ export default function DataEntryPage() {
       module_id={moduleId}
       moduleId={moduleId}
       tableId={tableId}
-      lang={currentContext.language || "en"}
+      lang={context.language || "en"}
       token={user.token}
     />
   );

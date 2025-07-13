@@ -6,7 +6,7 @@ import {
 } from "@mui/material";
 import {
   TableChart as TableIcon, SettingsApplications as SchemaAdminIcon,
-  Help as HelpIcon, Settings as ProjectSettingsIcon, Dashboard as DashboardIcon,
+  Help as HelpIcon, Feedback as FeedbackIcon, Dashboard as DashboardIcon,
   ExpandLess, ExpandMore, TableRows as TableRowsIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthContext";
@@ -64,16 +64,9 @@ export default function SidebarMenu({ open }) {
     visibleModules = modules.filter(m => moduleIds.includes(m.id));
   }
 
-  console.log("SidebarMenu: modules", modules);
-  console.log("SidebarMenu: tablesByModule", tablesByModule);
-  modules.forEach(mod => {
-    console.log("Module", mod.id, mod.name, "tables:", tablesByModule[mod.id]);
-  });
-
   // --- Auto-expand module if current route is viewing one of its tables ---
   useEffect(() => {
     const path = location.pathname;
-    // Pattern: /dataschema/entry/<moduleId>/<tableId>
     const match = path.match(/^\/dataschema\/entry\/(\d+)\/(\d+)/);
     if (match) {
       const moduleId = parseInt(match[1]);
@@ -108,16 +101,16 @@ export default function SidebarMenu({ open }) {
       to: "/help",
       icon: <HelpIcon />,
       label: "Help",
-      tooltip: "Get Help",
+      tooltip: "Help and Documentation",
       match: path => path === "/help",
     },
     {
       type: "menu",
-      to: "/settings",
-      icon: <ProjectSettingsIcon />,
-      label: "Project Settings",
-      tooltip: "Manage Project Settings",
-      match: path => path === "/settings",
+      to: "/feedback",
+      icon: <FeedbackIcon />,
+      label: "Feedback",
+      tooltip: "Send us your feedback",
+      match: path => path === "/feedback",
     },
   ].filter(Boolean);
 
@@ -211,7 +204,6 @@ export default function SidebarMenu({ open }) {
             </React.Fragment>
           );
         }
-        // Normal menu items
         return (
           <MenuItem
             key={item.to}

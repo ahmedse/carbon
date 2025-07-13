@@ -111,6 +111,8 @@ export const AuthProvider = ({ children }) => {
       setProjects(projectsArr);
       localStorage.setItem("user", JSON.stringify(userObj));
       localStorage.setItem("projects", JSON.stringify(projectsArr));
+      localStorage.setItem("access", access);    // <--- Add this
+      localStorage.setItem("refresh", refresh);  // <--- Add this
       localStorage.removeItem("context");
       setContext(null);
 
@@ -175,7 +177,7 @@ export const AuthProvider = ({ children }) => {
     setProjects([]);
     setContext(null);
     localStorage.clear();
-    window.location.href = "/login";
+    window.location.href = "/login?expired=1";
   };
 
   const refetchTables = async () => {

@@ -46,37 +46,77 @@ export default function TableDataPage({
     ? notifyCtx.notify
     : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
 
+  // Helper to handle and notify all errors
+  function handleError(err, defaultMsg) {
+    // Log all error details for developers
+    console.error("[TableDataPage] Error:", err);
+
+    // User-friendly, respectful notification
+    if (
+      err?.message?.toLowerCase().includes("permission") ||
+      err?.message?.includes("403") ||
+      err?.detail?.toLowerCase?.().includes("permission")
+    ) {
+      notify({
+        message:
+          "You do not have permission to perform this action. If you believe this is an error, please contact your administrator.",
+        type: "error",
+      });
+    } else if (
+      err?.message?.includes("NetworkError") ||
+      err?.message?.includes("Failed to fetch") ||
+      err?.message?.includes("Network error")
+    ) {
+      notify({
+        message:
+          "Could not connect to the server. Please check your internet connection or try again later.",
+        type: "error",
+      });
+    } else {
+      notify({
+        message:
+          err?.message ||
+          err?.detail ||
+          defaultMsg ||
+          "An error occurred. Please try again or contact support.",
+        type: "error",
+      });
+    }
+  }
+
   // Defensive: ensure fetches are always safe
   const fetchRows = useCallback(() => {
     setLoading(true);
     fetchDataRows(token, tableId, filters, project_id, module_id)
-      .then(data => {
+      .then((data) => {
         const safeRows = Array.isArray(data) ? data : [];
         setRows(safeRows);
         setLoading(false);
       })
-      .catch(err => {
+      .catch((err) => {
         setLoading(false);
-        notify({ message: err?.message || "Failed to fetch rows", type: "error" });
+        handleError(err, "Failed to fetch rows");
       });
-  }, [token, tableId, filters, project_id, module_id, notify]);
+  }, [token, tableId, filters, project_id, module_id]);
 
   // Fetch schema on mount
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      fetchDataSchemaTables(token, project_id, module_id).then(tables =>
-        (tables || []).find(t => String(t.id) === String(tableId))
+      fetchDataSchemaTables(token, project_id, module_id).then((tables) =>
+        (tables || []).find((t) => String(t.id) === String(tableId))
       ),
-      fetchDataSchemaFields(token, tableId, project_id, module_id)
-    ]).then(([table, fields]) => {
-      setTable(table);
-      setFields(fields || []);
-      setLoading(false);
-    }).catch(err => {
-      setLoading(false);
-      notify({ message: err?.message || "Failed to fetch schema", type: "error" });
-    });
+      fetchDataSchemaFields(token, tableId, project_id, module_id),
+    ])
+      .then(([table, fields]) => {
+        setTable(table);
+        setFields(fields || []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setLoading(false);
+        handleError(err, "Failed to fetch schema");
+      });
     // eslint-disable-next-line
   }, [tableId, moduleId, module_id, project_id, token]);
 
@@ -94,7 +134,7 @@ export default function TableDataPage({
       fetchRows();
       notify({ message: "Rows deleted.", type: "success" });
     } catch (err) {
-      notify({ message: err?.message || "Bulk delete failed", type: "error" });
+      handleError(err, "Bulk delete failed");
       setLoading(false);
     }
   };
@@ -103,12 +143,12 @@ export default function TableDataPage({
   const handleExport = () => {
     try {
       const exportRows = selected.length
-        ? rows.filter(row => selected.includes(row.id))
+        ? rows.filter((row) => selected.includes(row.id))
         : rows;
       exportRowsToCsv(exportRows, fields);
       notify({ message: "Exported to CSV.", type: "success" });
     } catch (err) {
-      notify({ message: err?.message || "CSV export failed", type: "error" });
+      handleError(err, "CSV export failed");
     }
   };
 
@@ -127,7 +167,7 @@ export default function TableDataPage({
       }
       fetchRows();
     } catch (err) {
-      notify({ message: err?.message || "Failed to save row", type: "error" });
+      handleError(err, "Failed to save row");
       setLoading(false);
     }
   };
@@ -141,7 +181,7 @@ export default function TableDataPage({
       fetchRows();
       notify({ message: "Row deleted.", type: "success" });
     } catch (err) {
-      notify({ message: err?.message || "Failed to delete row", type: "error" });
+      handleError(err, "Failed to delete row");
       setLoading(false);
     }
   };

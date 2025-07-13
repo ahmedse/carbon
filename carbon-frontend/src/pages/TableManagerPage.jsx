@@ -1,6 +1,4 @@
-// src/pages/TableManagerPage.jsx
-
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Box, Typography, IconButton, Button, CircularProgress, Tooltip, TextField, MenuItem, Alert
 } from "@mui/material";
@@ -17,9 +15,6 @@ import TableFormDrawer from "../components/TableFormDrawer";
 import FieldManagerDrawer from "../components/FieldManagerDrawer";
 
 export default function TableManagerPage() {
-  // You must be wrapped by <AdminRoute> in your routes!
-  // Do not check RBAC here.
-
   const { user, context, tablesByModule, refetchTables } = useAuth();
   const lang = "en";
   const [modules, setModules] = useState([]);
@@ -35,7 +30,8 @@ export default function TableManagerPage() {
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState(localStorage.getItem("moduleFilter") || "");
 
-  const projectId = context?.projectId;
+  // Robust projectId handling
+  const projectId = context?.project_id || context?.projectId;
   const validModuleFilterIds = modules.map(m => String(m.id));
   const safeModuleFilter =
     moduleFilter === "" || validModuleFilterIds.includes(String(moduleFilter))
@@ -48,9 +44,7 @@ export default function TableManagerPage() {
   }, [context?.modules]);
 
   // Set loading to false when tables are loaded
-  useEffect(() => {
-    setLoading(false);
-  }, [tablesByModule]);
+  useEffect(() => { setLoading(false); }, [tablesByModule]);
 
   // Persist module filter
   const handleModuleFilterChange = (value) => {
@@ -58,7 +52,7 @@ export default function TableManagerPage() {
     localStorage.setItem("moduleFilter", value);
   };
 
-  // --- Only include tables that actually belong to the module ---
+  // Compose all tables
   const allTables = [];
   modules.forEach(mod => {
     (tablesByModule[String(mod.id)] || []).forEach(table => {
@@ -76,12 +70,7 @@ export default function TableManagerPage() {
     });
   });
 
-  // Debug logs
-  console.log("modules", modules);
-  console.log("tablesByModule", tablesByModule);
-  console.log("allTables", allTables);
-
-  // --- Apply search and filter ---
+  // Search and filter
   const filteredTables = allTables.filter(table =>
     (!safeModuleFilter || String(table.moduleId) === String(safeModuleFilter)) &&
     (
@@ -90,7 +79,25 @@ export default function TableManagerPage() {
     )
   );
 
-  console.log("filteredTables", filteredTables);
+  // --- Fetch fields for a table and update only that table ---
+  const loadFieldsForTable = useCallback(
+    async (tableId, moduleId) => {
+      if (!tableId) return;
+      setLoading(true);
+      try {
+        const fields = await fetchDataSchemaFields(user.token, tableId, projectId, moduleId);
+        setFieldsByTable(prev => ({
+          ...prev,
+          [tableId]: fields
+        }));
+      } catch (err) {
+        setError(err?.message || "Failed to load fields");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [user.token, projectId]
+  );
 
   // --- DataGrid columns ---
   const columns = [
@@ -118,7 +125,8 @@ export default function TableManagerPage() {
                   size="small"
                   color="primary"
                   disabled={hasData}
-                  onClick={() => {
+                  onClick={async () => {
+                    await loadFieldsForTable(params.row.id, params.row.moduleId);
                     setEditingFieldsTableId(params.row.id);
                     setOpenFieldDrawer(true);
                   }}
@@ -159,78 +167,170 @@ export default function TableManagerPage() {
 
   // --- Table CRUD ---
   const handleCreateTable = async (data) => {
+    setLoading(true);
     try {
       await createDataSchemaTable(user.token, data, projectId, data.module || data.module_id);
       setOpenTableDrawer(false);
       setEditingTable(null);
-      await refetchTables(); 
+      await refetchTables();
     } catch (err) {
       setError(err?.message || "Failed to create table");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleEditTable = async (data) => {
+    setLoading(true);
     try {
-      await updateDataSchemaTable(user.token, editingTable.id, { ...editingTable, ...data }, projectId, data.module || data.module_id);
+      await updateDataSchemaTable(
+        user.token,
+        editingTable.id,
+        { ...editingTable, ...data },
+        projectId,
+        data.module || data.module_id
+      );
       setOpenTableDrawer(false);
       setEditingTable(null);
-      await refetchTables(); 
+      await refetchTables();
     } catch (err) {
       setError(err?.message || "Failed to update table");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDeleteTable = async (table) => {
     if (!window.confirm(`Archive table "${table.title}"?`)) return;
+    setLoading(true);
     try {
-      await deleteDataSchemaTable(user.token, table.id, projectId, table.module || table.module_id);
-      await refetchTables(); 
+      await deleteDataSchemaTable(
+        user.token,
+        table.id,
+        projectId,
+        table.module || table.module_id
+      );
+      await refetchTables();
+      // Remove its fields from state
+      setFieldsByTable(prev => {
+        const next = { ...prev };
+        delete next[table.id];
+        return next;
+      });
     } catch (err) {
       setError(err?.message || "Failed to delete table");
+    } finally {
+      setLoading(false);
     }
   };
 
   // --- Field CRUD ---
   const handleAddField = async (data) => {
+    setLoading(true);
     try {
-      await createDataSchemaField(user.token, { ...data, data_table: editingFieldsTableId }, projectId, data.module || data.module_id);
+      await createDataSchemaField(
+        user.token,
+        { ...data, data_table: editingFieldsTableId },
+        projectId,
+        data.module || data.module_id
+      );
+      await loadFieldsForTable(editingFieldsTableId, data.module || data.module_id);
     } catch (err) {
       setError(err?.message || "Failed to add field");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleEditField = async (oldField, data) => {
+    setLoading(true);
     try {
-      await updateDataSchemaField(user.token, oldField.id, { ...oldField, ...data }, projectId, oldField.module || oldField.module_id);
+      await updateDataSchemaField(
+        user.token,
+        oldField.id,
+        { ...oldField, ...data },
+        projectId,
+        oldField.module || oldField.module_id
+      );
+      await loadFieldsForTable(editingFieldsTableId, oldField.module || oldField.module_id);
     } catch (err) {
       setError(err?.message || "Failed to update field");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDeleteField = async (field) => {
     if (!window.confirm(`Archive field "${field.label}"?`)) return;
+    setLoading(true);
     try {
-      await deleteDataSchemaField(user.token, field.id, projectId, field.module || field.module_id);
+      await deleteDataSchemaField(
+        user.token,
+        field.id,
+        projectId,
+        field.module || field.module_id
+      );
+      await loadFieldsForTable(editingFieldsTableId, field.module || field.module_id);
     } catch (err) {
       setError(err?.message || "Failed to delete field");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSaveFieldOrder = async (fields) => {
+    setLoading(true);
     try {
-      await updateDataSchemaFieldOrder(user.token, editingFieldsTableId, fields, projectId);
+      await updateDataSchemaFieldOrder(
+        user.token,
+        editingFieldsTableId,
+        fields,
+        projectId
+      );
+      await loadFieldsForTable(
+        editingFieldsTableId,
+        fields[0]?.module || fields[0]?.module_id
+      );
     } catch (err) {
       setError(err?.message || "Failed to save field order");
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (loading) return <Box sx={{ p: 4, textAlign: "center" }}><CircularProgress /><div>Loading…</div></Box>;
-  if (error) return <Box sx={{ p: 4 }}><Alert severity="error">{error}</Alert></Box>;
+  // --- Drawer close handler: reset state for safety ---
+  const handleCloseFieldDrawer = () => {
+    setOpenFieldDrawer(false);
+    setEditingFieldsTableId(null);
+  };
+  const handleCloseTableDrawer = () => {
+    setOpenTableDrawer(false);
+    setEditingTable(null);
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ p: 4, textAlign: "center" }}>
+        <CircularProgress />
+        <div>Loading…</div>
+      </Box>
+    );
+  }
+  if (error) {
+    return (
+      <Box sx={{ p: 4 }}>
+        <Alert severity="error">{error}</Alert>
+      </Box>
+    );
+  }
 
   return (
     <Box p={3}>
       <Typography variant="h4" gutterBottom>
-        Data Schema Manager <span style={{ fontWeight: 400, fontSize: 18, color: "#888" }}>(Define Data Tables)</span>
+        Data Schema Manager{" "}
+        <span style={{ fontWeight: 400, fontSize: 18, color: "#888" }}>
+          (Define Data Tables)
+        </span>
       </Typography>
       <Box display="flex" gap={2} mb={2} alignItems="center">
         <TextField
@@ -242,7 +342,9 @@ export default function TableManagerPage() {
         >
           <MenuItem value="">All Modules</MenuItem>
           {modules.map(mod => (
-            <MenuItem key={mod.id} value={mod.id}>{mod.name}</MenuItem>
+            <MenuItem key={mod.id} value={mod.id}>
+              {mod.name}
+            </MenuItem>
           ))}
         </TextField>
         <TextField
@@ -255,7 +357,10 @@ export default function TableManagerPage() {
         <Button
           startIcon={<Add />}
           variant="contained"
-          onClick={() => { setEditingTable(null); setOpenTableDrawer(true); }}
+          onClick={() => {
+            setEditingTable(null);
+            setOpenTableDrawer(true);
+          }}
         >
           New Table
         </Button>
@@ -277,7 +382,7 @@ export default function TableManagerPage() {
       />
       <TableFormDrawer
         open={openTableDrawer}
-        onClose={() => { setOpenTableDrawer(false); setEditingTable(null); }}
+        onClose={handleCloseTableDrawer}
         onSubmit={editingTable ? handleEditTable : handleCreateTable}
         initial={editingTable}
         modules={modules}
@@ -286,7 +391,7 @@ export default function TableManagerPage() {
       />
       <FieldManagerDrawer
         open={openFieldDrawer}
-        onClose={() => setOpenFieldDrawer(false)}
+        onClose={handleCloseFieldDrawer}
         fields={fieldsByTable[editingFieldsTableId] || []}
         onSaveOrder={handleSaveFieldOrder}
         onEditField={handleEditField}

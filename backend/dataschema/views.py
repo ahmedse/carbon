@@ -17,6 +17,7 @@ from .serializers import (
     SchemaChangeLogSerializer
 )
 from accounts.permissions import HasScopedRole
+from accounts.rbac_utils import get_allowed_module_ids, user_has_project_role
 from core.models import Module, Project
 
 def get_tenant(request):
@@ -31,7 +32,6 @@ class ScopedViewSet(viewsets.ModelViewSet):
     required_role = None  # override or use get_required_role
 
     def get_permissions(self):
-        # Set project and module context before checking permissions
         project_id = self.request.query_params.get('project_id') or self.request.data.get('project_id')
         module_id = self.request.query_params.get('module_id') or self.request.data.get('module_id')
         tenant = get_tenant(self.request)
@@ -57,23 +57,34 @@ class DataTableViewSet(ScopedViewSet):
     """
     Only 'admin' or 'admins_group' can access schema (tables).
     """
-
     queryset = DataTable.objects.all()
     serializer_class = DataTableSerializer
-    required_role = ("admin", "admins_group")
+    required_role = ("admin", "admins_group", "dataowners_group")
 
     def get_queryset(self):
-        qs = DataTable.objects.all()
-        print("[DEBUG] All DataTables:", list(qs.values('id', 'module_id')))
-        if self.project:
-            qs = qs.filter(module__project=self.project, is_archived=False)
-            # Only filter by module for list/retrieve actions (not for update/delete)
-            if self.action in ["list", "retrieve"]:
-                if self.module:
-                    qs = qs.filter(module=self.module)
+        user = self.request.user
+        project_id = self.request.query_params.get("project_id")
+        module_id = self.request.query_params.get("module_id")
+
+        if not project_id:
+            return DataTable.objects.none()
+
+        qs = DataTable.objects.filter(module__project_id=project_id, is_archived=False)
+        # Admins: all tables in project
+        if user_has_project_role(user, project_id, ["admin", "admins_group"]):
+            if module_id:
+                qs = qs.filter(module_id=module_id)
+            return qs
+
+        # dataowners_group: only tables in modules user has access to
+        allowed_module_ids = get_allowed_module_ids(user, project_id, ["dataowners_group"])
+        if module_id:
+            if int(module_id) in allowed_module_ids:
+                qs = qs.filter(module_id=module_id)
+            else:
+                return DataTable.objects.none()
         else:
-            qs = qs.none()
-        print("[DEBUG] Filtered DataTables:", list(qs.values('id', 'module_id')))
+            qs = qs.filter(module_id__in=allowed_module_ids)
         return qs
 
     def get_serializer_class(self):
@@ -88,7 +99,7 @@ class DataFieldViewSet(ScopedViewSet):
     """
     queryset = DataField.objects.all()
     serializer_class = DataFieldSerializer
-    required_role = ("admin", "admins_group")
+    required_role = ("admin", "admins_group", "auditors_group", "dataowners_group")
 
     def get_queryset(self):
         qs = DataField.objects.all()
@@ -96,6 +107,15 @@ class DataFieldViewSet(ScopedViewSet):
             qs = qs.filter(data_table__module__project=self.project, is_archived=False)
             if self.module:
                 qs = qs.filter(data_table__module=self.module)
+            # Filter by data_table if specified
+            table_id = (
+                self.request.query_params.get("data_table") or
+                self.request.query_params.get("table_id") or
+                self.request.data.get("data_table") or
+                self.request.data.get("table_id")
+            )
+            if table_id:
+                qs = qs.filter(data_table_id=table_id)
         else:
             qs = qs.none()
         return qs
@@ -111,17 +131,18 @@ class DataRowViewSet(ScopedViewSet):
     serializer_class = DataRowSerializer
 
     def get_required_role(self):
-        # Allow if user is admin, admins_group, audit, or dataowner (HasScopedRole will check scope).
-        return ["admin", "admins_group", "audit", "dataowner"]
+        return ["admin", "admins_group", "auditors_group", "dataowners_group"]
 
     def get_queryset(self):
-        qs = DataRow.objects.all()
-        if self.project:
-            qs = qs.filter(data_table__module__project=self.project, is_archived=False)
-            if self.module:
-                qs = qs.filter(data_table__module=self.module)
-        else:
-            qs = qs.none()
+        user = self.request.user
+        project_id = self.request.query_params.get("project_id")
+        module_id = self.request.query_params.get("module_id")
+
+        if not project_id:
+            return DataRow.objects.none()
+        qs = DataRow.objects.filter(data_table__module__project_id=project_id, is_archived=False)
+        if module_id:
+            qs = qs.filter(data_table__module_id=module_id)
         return qs
 
 # --- SchemaChangeLog (ReadOnly, admin/admins_group only) ---
@@ -134,11 +155,11 @@ class SchemaChangeLogViewSet(ScopedViewSet, viewsets.ReadOnlyModelViewSet):
     required_role = ("admin", "admins_group")
 
     def get_queryset(self):
+        project_id = self.request.query_params.get("project_id")
+        module_id = self.request.query_params.get("module_id")
         qs = SchemaChangeLog.objects.all()
-        if self.project:
-            qs = qs.filter(data_table__module__project=self.project)
-            if self.module:
-                qs = qs.filter(data_table__module=self.module)
-        else:
-            qs = qs.none()
+        if project_id:
+            qs = qs.filter(data_table__module__project_id=project_id)
+        if module_id:
+            qs = qs.filter(data_table__module_id=module_id)
         return qs

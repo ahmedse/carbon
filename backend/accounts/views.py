@@ -1,10 +1,6 @@
 # File: accounts/views.py
 # DRF views for tenants, users, scoped roles, and audit logs.
 
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from .models import ScopedRole
 from rest_framework import viewsets
 from rest_framework.permissions import BasePermission
 from django.contrib.auth.models import Group
@@ -15,6 +11,57 @@ from .serializers import (
     RoleAssignmentAuditLogSerializer
 )
 from .permissions import HasScopedRole
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_roles(request):
+    """
+    Returns the current user's scoped roles in a flat format for the frontend.
+    """
+    user = request.user
+    scoped_roles = user.scoped_roles.filter(is_active=True).select_related('tenant', 'project', 'module', 'group')
+
+    roles = []
+    for sr in scoped_roles:
+        # Determine context type
+        if sr.module:
+            context_type = "module"
+            module_id = sr.module.id
+            module_name = str(sr.module)
+            project_id = sr.project.id if sr.project else sr.module.project.id if sr.module.project else None
+            project_name = str(sr.project) if sr.project else str(sr.module.project) if sr.module.project else None
+        elif sr.project:
+            context_type = "project"
+            module_id = None
+            module_name = None
+            project_id = sr.project.id
+            project_name = str(sr.project)
+        else:
+            context_type = "tenant"
+            project_id = None
+            project_name = None
+            module_id = None
+            module_name = None
+
+        roles.append({
+            "role": sr.group.name,
+            "tenant": str(sr.tenant),
+            "tenant_id": sr.tenant.id,
+            "context_type": context_type,
+            "project": project_name,
+            "project_id": project_id,
+            "module": module_name,
+            "module_id": module_id,
+            "active": sr.is_active,  # <-- add this line
+        })
+
+    return Response({
+        "username": user.username,
+        "roles": roles,   # <<--- this is what your frontend expects
+    })
 
 class IsSuperuser(BasePermission):
     """
@@ -71,29 +118,4 @@ class RoleAssignmentAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [HasScopedRole]
     required_role = "audit"  # Only users with 'audit' ScopedRole can view audit logs
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def my_roles(request):
-    """
-    Return all active roles (group names) for the current user,
-    with context (tenant/project/module).
-    """
-    roles = []
-    for r in ScopedRole.objects.filter(user=request.user, is_active=True).select_related('group', 'tenant', 'project', 'module'):
-        roles.append({
-            "id": r.id,
-            "role": r.group.name,            # The role name (group name)
-            "tenant_id": r.tenant_id,
-            "tenant": str(r.tenant),
-            "project_id": r.project_id,
-            "project": str(r.project) if r.project else None,
-            "module_id": r.module_id,
-            "module": str(r.module) if r.module else None,
-            "context_type": (
-                "module" if r.module_id else
-                "project" if r.project_id else
-                "tenant"
-            ),
-            "active": r.is_active,
-        })
-    return Response({"roles": roles})
+    

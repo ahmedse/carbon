@@ -11,6 +11,8 @@ import Layout from "./components/Layout";
 import AdminRoute from "./components/AdminRoute";
 import TableManagerPage from "./pages/TableManagerPage";
 import DataEntryPage from "./pages/DataEntryPage";
+import Help from "./pages/Help";
+import Feedback from "./pages/Feedback";
 
 /**
  * Protects all routes that require authentication.
@@ -48,6 +50,8 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route element={<RequireContext />}>
               <Route element={<Layout />}>
+                <Route path="help" element={<Help />} />
+                <Route path="feedback" element={<Feedback />} />
                 <Route path="/" element={<Dashboard />} />
                 {/* Admin-only: Schema Admin > Table Manager */}
                 <Route

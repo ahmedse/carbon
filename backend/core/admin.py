@@ -3,6 +3,7 @@
 
 from django.contrib import admin
 from .models import Project, Module
+from .models import Feedback
 
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
@@ -13,3 +14,9 @@ class ProjectAdmin(admin.ModelAdmin):
 class ModuleAdmin(admin.ModelAdmin):
     list_display = ['id', 'name', 'project']
     search_fields = ['name']
+
+@admin.register(Feedback)
+class FeedbackAdmin(admin.ModelAdmin):
+    list_display = ['id', 'name', 'email', 'rating', 'submitted_at']
+    search_fields = ['name', 'email', 'message']
+    list_filter = ['rating', 'submitted_at']
