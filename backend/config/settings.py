@@ -27,6 +27,7 @@ ALLOWED_HOSTS = get_env("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(","
 FORCE_SCRIPT_NAME = os.environ.get('FORCE_SCRIPT_NAME', None)
 
 print("FORCE_SCRIPT_NAME =", FORCE_SCRIPT_NAME)
+print("FORCE_SCRIPT_NAME =", repr(FORCE_SCRIPT_NAME))
 
 # Path for API (configurable, e.g. /api/v1/, /carbon/api/)
 API_PREFIX = get_env("DJANGO_API_PREFIX", "/api/v1/")
