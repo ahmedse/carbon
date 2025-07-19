@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+print("Loaded SECRET_KEY:", os.getenv("SECRET_KEY"))
+print("Loaded ALLOWED_HOSTS:", os.getenv("DJANGO_ALLOWED_HOSTS"))
+
 # Determine the environment: 'development' or 'production'
 DJANGO_ENV = os.getenv("DJANGO_ENV", "development").lower()
 
@@ -21,10 +24,10 @@ SECRET_KEY = os.getenv(
 # DEBUG/ALLOWED_HOSTS per environment
 if DJANGO_ENV == "development":
     DEBUG = True
-    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "91.108.121.172,127.0.0.1,localhost").split(",")
+    ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "91.108.121.172,127.0.0.1,localhost").split(",")
 else:
     DEBUG = False
-    ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
+    ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",")
 
 print("DJANGO_ENV is set to:", DJANGO_ENV)
 print("DEBUG is set to:", DEBUG)

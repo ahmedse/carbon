@@ -1,9 +1,43 @@
-django 
-djangorestframework 
-psycopg2-binary 
-djangorestframework-simplejwt 
-django-cors-headers
-pytest-django
-python-dotenv
-pytest-html
-drf-yasg
+# Core Django Dependencies
+Django==5.2.3                          # Main framework
+djangorestframework==3.16.0           # REST API framework
+django-cors-headers==4.7.0            # CORS support
+django-filter==25.1                   # Filtering utilities
+django-debug-toolbar==5.2.0           # Development debugging
+djangorestframework-simplejwt==5.5.0  # JWT Authentication
+drf-yasg                              # Swagger/OpenAPI generation
+
+# ASGI/WGI Server
+gunicorn                              # WSGI HTTP server
+
+# Database
+psycopg2-binary==2.9.10               # PostgreSQL adapter
+sqlparse==0.5.3                       # SQL formatting
+SQLAlchemy==2.0.41                    # Optional ORM (used with Alembic)
+alembic==1.16.2                       # DB migrations for SQLAlchemy
+
+# Machine Learning
+numpy==2.2.6                          # Numerical computations
+pandas==2.3.0                         # Data manipulation
+scikit-learn==1.7.0                   # ML models and utilities
+xgboost==3.0.2                        # XGBoost model
+lightgbm==4.6.0                       # LightGBM model
+shap==0.48.0                          # SHAP explainability
+scipy==1.16.0                         # Scientific calculations
+
+# Visualization
+matplotlib==3.10.3                    # Plots and charts
+seaborn==0.13.2                       # Statistical visualization
+
+# Environment and Utilities
+python-dotenv==1.1.0                  # Env variable management
+joblib==1.5.1                         # Model serialization
+hijri-converter==2.3.1                # Islamic date conversion
+GitPython==3.1.44                     # Git integration
+
+# Logging and Reliability
+colorlog==6.9.0                       # Colorful logging
+tenacity==9.1.2                       # Retry strategy
+
+# Testing
+pytest

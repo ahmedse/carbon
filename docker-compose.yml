@@ -2,30 +2,31 @@ version: "3.8"
 services:
   backend:
     build: ./backend
-    container_name: gigacast-backend
+    container_name: carbon-backend
     restart: always
     env_file: ./backend/.env.production
     environment:
       - DJANGO_ENV=production
     volumes:
-      - /srv/gigacast/static:/static
-      - /srv/gigacast/media:/media
+      - /srv/carbon/static:/static
+      - /srv/carbon/media:/media
     ports:
-      - "8000:8000"
-    expose:
-      - "8000"
+      - "8001:8000"
+        #command: sleep infinity
     command: >
       sh -c "python manage.py migrate &&
              python manage.py collectstatic --noinput &&
              gunicorn config.wsgi:application --bind 0.0.0.0:8000"
 
   frontend:
-    build: ./frontend
-    container_name: gigacast-frontend
+    build: ./carbon-frontend
+    ports:
+      - "3001:80"
+    container_name: carbon-frontend
     restart: always
     environment:
-      - REACT_APP_API_BASE_URL=http://91.108.121.172/api/
+      - REACT_APP_API_BASE_URL=http://91.108.121.172/carbon-api/
     depends_on:
       - backend
     volumes:
-      - /srv/gigacast/frontend/build:/usr/share/nginx/html
+      - /srv/carbon/carbon-frontend/dist:/usr/share/nginx/html

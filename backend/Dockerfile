@@ -38,7 +38,8 @@ RUN apt-get update && apt-get install -y libgomp1
 
 # Copy app files and set permissions
 COPY . .
-RUN mkdir -p /static /media && chown -R app:app /static /media
+RUN mkdir -p /static /media && chown -R app:app /app /static /media
+
 
 # Switch to non-root user with sudo privileges
 USER app
