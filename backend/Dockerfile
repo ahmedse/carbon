@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     curl \
     sudo \
+    vim nano netcat iputils-ping git less \
     && echo 'app ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers \
     && pip install --upgrade pip
 

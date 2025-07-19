@@ -2,7 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  Box, TextField, MenuItem, Checkbox, FormControlLabel, Button, Typography
+  Box,
+  TextField,
+  MenuItem,
+  Checkbox,
+  FormControlLabel,
+  Button,
+  Typography,
 } from "@mui/material";
 import FileCellRenderer from "./FileCellRenderer";
 import { DatePicker } from "@mui/x-date-pickers";
@@ -33,7 +39,6 @@ function coerceValue(field, value) {
 // Helper to validate a single value based on field config and type
 function validateField(field, value, values) {
   if (field.required) {
-    // Handle emptiness for each field type
     if (
       value === "" ||
       value === null ||
@@ -64,19 +69,21 @@ function validateField(field, value, values) {
     }
   }
   if (field.type === "select") {
-    const allowed = (field.options || []).map(opt => opt.value);
+    const allowed = (field.options || []).map((opt) => opt.value);
     if (value && !allowed.includes(value)) {
-      return `${field.label} must be one of: ${allowed.join(', ')}.`;
+      return `${field.label} must be one of: ${allowed.join(", ")}.`;
     }
   }
   if (field.type === "multiselect") {
-    const allowed = (field.options || []).map(opt => opt.value);
+    const allowed = (field.options || []).map((opt) => opt.value);
     if (!Array.isArray(value)) {
       return `${field.label} must be a list (select one or more).`;
     }
-    const invalid = value.filter(v => !allowed.includes(v));
+    const invalid = value.filter((v) => !allowed.includes(v));
     if (invalid.length > 0) {
-      return `${field.label} contains invalid values: ${invalid.join(', ')}. Allowed: ${allowed.join(', ')}.`;
+      return `${field.label} contains invalid values: ${invalid.join(
+        ", "
+      )}. Allowed: ${allowed.join(", ")}.`;
     }
   }
   if (field.type === "date") {
@@ -94,11 +101,15 @@ function validateField(field, value, values) {
       // Regex for string input
       if (rules.regex && typeof value === "string" && value) {
         const re = new RegExp(rules.regex);
-        if (!re.test(value))
-          return rules.message || `Invalid format.`;
+        if (!re.test(value)) return rules.message || `Invalid format.`;
       }
       // Number: min/max
-      if (field.type === "number" && value !== null && value !== undefined && value !== "") {
+      if (
+        field.type === "number" &&
+        value !== null &&
+        value !== undefined &&
+        value !== ""
+      ) {
         const num = Number(value);
         if (rules.min !== undefined && num < rules.min)
           return `${field.label} must be at least ${rules.min}.`;
@@ -156,29 +167,39 @@ export default function DataRowFormDrawer({
   const [submitting, setSubmitting] = useState(false);
   const notifyContext = useNotification();
   // Defensive: ensure notify is always a function
-  const notify = (notifyContext && typeof notifyContext.notify === "function")
-    ? notifyContext.notify
-    : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
+  const notify =
+    notifyContext && typeof notifyContext.notify === "function"
+      ? notifyContext.notify
+      : (msg) =>
+          window.alert(
+            typeof msg === "string"
+              ? msg
+              : msg?.message ?? "Notification"
+          );
 
   useEffect(() => {
     // Coerce all initial values to correct types
-    const initialVals = (initial?.values || {});
+    const initialVals = initial?.values || {};
     const newVals = {};
-    (fields || []).forEach(field => {
+    (fields || []).forEach((field) => {
       newVals[field.name] = coerceValue(field, initialVals[field.name]);
     });
     setValues(newVals);
     setErrors({});
+    // eslint-disable-next-line
   }, [initial, fields]);
 
   const handleChange = (fieldName, value) => {
-    const field = fields.find(f => f.name === fieldName);
+    const field = fields.find((f) => f.name === fieldName);
     if (!field) return;
     // Always coerce value to correct type before storing
     const coerced = coerceValue(field, value);
     setValues((prev) => ({ ...prev, [fieldName]: coerced }));
     // Re-validate the field
-    setErrors((prev) => ({ ...prev, [fieldName]: validateField(field, coerced, values) }));
+    setErrors((prev) => ({
+      ...prev,
+      [fieldName]: validateField(field, coerced, values),
+    }));
   };
 
   const validateAll = () => {
@@ -196,7 +217,11 @@ export default function DataRowFormDrawer({
   const handleSubmit = async () => {
     const newErrors = validateAll();
     if (Object.keys(newErrors).length) {
-      notify({ message: "Please fix the errors in the form (see highlighted fields).", type: "error" });
+      notify({
+        message:
+          "Please fix the errors in the form (see highlighted fields).",
+        type: "error",
+      });
       return;
     }
     setSubmitting(true);
@@ -217,7 +242,10 @@ export default function DataRowFormDrawer({
         }
         // For number: send as number, or null
         if (f.type === "number") {
-          val = val === "" || val === null || val === undefined ? null : Number(val);
+          val =
+            val === "" || val === null || val === undefined
+              ? null
+              : Number(val);
         }
         // For boolean: ensure boolean
         if (f.type === "boolean") {
@@ -227,15 +255,26 @@ export default function DataRowFormDrawer({
       });
       await onSubmit(submitVals, rowId);
     } catch (err) {
-      // Parse backend error for user-friendly message
+      // Improved: Parse all backend field errors and show them
       let msg = err?.message || "Failed to save row";
       if (err?.response?.data) {
-        // DRF error: {field: [error]}
         const backendErrors = err.response.data;
-        const firstField = Object.keys(backendErrors)[0];
-        const firstErr = backendErrors[firstField]?.[0];
-        msg = `${firstField}: ${firstErr}`;
-        setErrors(prev => ({ ...prev, [firstField]: firstErr }));
+        setErrors((prev) => ({
+          ...prev,
+          ...Object.fromEntries(
+            Object.entries(backendErrors).map(([field, errs]) => [
+              field,
+              errs[0] || "Invalid value",
+            ])
+          ),
+        }));
+        const msgFields = Object.entries(backendErrors)
+          .map(
+            ([f, errs]) =>
+              `${f}: ${errs[0] || "Invalid"}`
+          )
+          .join("; ");
+        msg = `Validation error: ${msgFields}`;
       }
       notify({ message: msg, type: "error" });
     }
@@ -247,7 +286,54 @@ export default function DataRowFormDrawer({
       <Box display="flex" flexDirection="column" gap={2} p={1}>
         {(fields || []).map((field) => {
           if (!field.is_active) return null;
+
           const fieldError = errors[field.name];
+
+          // Helper text: error, or range/format hints
+          let helper = fieldError;
+          if (!helper) {
+            let rangeHint = "";
+            if (field.validation) {
+              try {
+                const rules =
+                  typeof field.validation === "string"
+                    ? JSON.parse(field.validation)
+                    : field.validation;
+                if (field.type === "number") {
+                  if (
+                    rules.min !== undefined &&
+                    rules.max !== undefined
+                  )
+                    rangeHint = `(min: ${rules.min}, max: ${rules.max})`;
+                  else if (rules.min !== undefined)
+                    rangeHint = `(min: ${rules.min})`;
+                  else if (rules.max !== undefined)
+                    rangeHint = `(max: ${rules.max})`;
+                }
+                if (
+                  field.type === "string" &&
+                  (rules.minLength || rules.maxLength)
+                ) {
+                  rangeHint = `(${
+                    rules.minLength
+                      ? `min: ${rules.minLength}`
+                      : ""
+                  }${
+                    rules.minLength && rules.maxLength ? ", " : ""
+                  }${
+                    rules.maxLength
+                      ? `max: ${rules.maxLength}`
+                      : ""
+                  })`;
+                }
+                if (rules.hint) {
+                  rangeHint = rules.hint;
+                }
+              } catch {}
+            }
+            helper = rangeHint || undefined;
+          }
+
           const commonProps = {
             label: field.label + (field.required ? " *" : ""),
             value:
@@ -263,7 +349,7 @@ export default function DataRowFormDrawer({
                   : e.target.value
               ),
             error: !!fieldError,
-            helperText: fieldError,
+            helperText: helper,
             fullWidth: true,
             required: !!field.required,
             disabled: submitting,
@@ -286,11 +372,7 @@ export default function DataRowFormDrawer({
           }
           if (field.type === "text") {
             return (
-              <TextField
-                key={field.name}
-                {...commonProps}
-                multiline
-              />
+              <TextField key={field.name} {...commonProps} multiline />
             );
           }
           if (field.type === "boolean") {
@@ -318,12 +400,14 @@ export default function DataRowFormDrawer({
                     ? dayjs(values[field.name])
                     : null
                 }
-                onChange={(val) => handleChange(field.name, val)}
+                onChange={(val) =>
+                  handleChange(field.name, val)
+                }
                 slotProps={{
                   textField: {
                     fullWidth: true,
                     error: !!fieldError,
-                    helperText: fieldError,
+                    helperText: helper,
                     required: !!field.required,
                   },
                 }}
@@ -333,11 +417,7 @@ export default function DataRowFormDrawer({
           }
           if (field.type === "select") {
             return (
-              <TextField
-                key={field.name}
-                {...commonProps}
-                select
-              >
+              <TextField key={field.name} {...commonProps} select>
                 {(field.options || []).map((opt) => (
                   <MenuItem value={opt.value} key={opt.value}>
                     {opt.label}
@@ -372,7 +452,10 @@ export default function DataRowFormDrawer({
                   alignItems="center"
                   gap={2}
                 >
-                  <Typography variant="body2" color="textSecondary">
+                  <Typography
+                    variant="body2"
+                    color="textSecondary"
+                  >
                     {field.label}: Save row before uploading file.
                   </Typography>
                 </Box>

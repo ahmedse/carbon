@@ -24,7 +24,7 @@ class User(AbstractUser):
     """
     Custom user model linked to a tenant.
     """
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, default=0, related_name="users")
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="users")
 
     def __str__(self):
         return f"{self.username} ({self.tenant.name})"

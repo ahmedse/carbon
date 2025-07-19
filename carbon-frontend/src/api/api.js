@@ -3,14 +3,47 @@
 import { API_BASE_URL } from "../config";
 import { isJwtExpired } from "../jwt";
 
-/**
- * Refresh the access token using refresh token in localStorage.
- * Returns new access token string or throws.
- */
+/** Joins base URL and path, stripping duplicate slashes. */
+function joinUrl(base, path) {
+  return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+}
+
+/** Builds a query string from params object (ignores undefined/null/empty). */
+function buildQuery(params) {
+  return Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join("&");
+}
+
+/** Returns true if endpoint should receive project/module params. */
+function needsProjectModuleParams(endpoint) {
+  const ep = endpoint.replace(/^\/+/, "");
+  return (
+    ep.startsWith("core/") ||
+    ep.startsWith("dataschema/") ||
+    ep.startsWith("api/core/") ||
+    ep.startsWith("api/dataschema/")
+  );
+}
+
+/** Sanitizes URL: merges all query params after all '?', ensures only one '?'. */
+function sanitizeUrl(url) {
+  const [base, ...rest] = url.split("?");
+  const params = new URLSearchParams();
+  rest.forEach(queryPart => {
+    for (const [k, v] of new URLSearchParams(queryPart).entries()) {
+      params.append(k, v);
+    }
+  });
+  return params.toString() ? `${base}?${params.toString()}` : base;
+}
+
+/** Refreshes the access token using refresh token in localStorage. */
 async function refreshAccessToken() {
   const refresh = localStorage.getItem("refresh");
   if (!refresh) throw new Error("No refresh token");
-  const res = await fetch(`${API_BASE_URL}/api/token/refresh/`, {
+  const res = await fetch(joinUrl(API_BASE_URL, "api/token/refresh/"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh }),
@@ -22,34 +55,42 @@ async function refreshAccessToken() {
   return data.access;
 }
 
-/**
- * Logs out globally: clears user storage and redirects to login with expired param.
- */
+/** Logs out globally: clears user storage and redirects to login with expired param. */
 function globalLogout() {
   localStorage.clear();
   window.location.href = "/login?expired=1";
 }
 
 /**
- * Universal API call helper with JWT refresh, project/module params, errors, and JSON parsing.
- * Handles 401, auto-refresh, and robust error messages.
+ * Universal API call helper with JWT refresh, robust param handling, errors, JSON parsing, and optional timeout.
+ * @param {string} endpoint - API endpoint, relative to API_BASE_URL
+ * @param {object} opts - Options: method, body, token, project_id, module_id, timeoutMs, headers
  */
 export async function apiFetch(
   endpoint,
-  { method = "GET", body, token, project_id, module_id } = {}
+  {
+    method = "GET",
+    body,
+    token,
+    project_id,
+    module_id,
+    timeoutMs = 15000, // 15s default timeout
+    headers: customHeaders = {},
+  } = {}
 ) {
-  let url = `${API_BASE_URL}${endpoint}`;
+  let url = joinUrl(API_BASE_URL, endpoint);
   let accessToken = token || localStorage.getItem("access");
 
-  // Attach project_id/module_id as query params if needed
-  const isDataSchemaOrCore = /^\/(dataschema|core)\//.test(endpoint) || /^\/api\/(dataschema|core)\//.test(endpoint);
-  if (isDataSchemaOrCore) {
-    const params = [];
-    if (project_id) params.push(`project_id=${encodeURIComponent(project_id)}`);
-    if (module_id) params.push(`module_id=${encodeURIComponent(module_id)}`);
-    if (params.length) {
-      url += (url.includes("?") ? "&" : "?") + params.join("&");
-    }
+  // Build query params robustly
+  if (needsProjectModuleParams(endpoint)) {
+    // Collect params from both the endpoint and the function call
+    const [basePath, existingParams] = url.split("?");
+    const merged = new URLSearchParams(existingParams || "");
+    if (project_id) merged.set("project_id", project_id);
+    if (module_id) merged.set("module_id", module_id);
+    url = merged.toString() ? `${basePath}?${merged.toString()}` : basePath;
+
+    // For mutating methods, add to body too (but do not overwrite explicitly set values)
     if (
       ["POST", "PUT", "PATCH"].includes(method) &&
       body &&
@@ -60,80 +101,97 @@ export async function apiFetch(
     }
   }
 
-  // Always ensure access token is fresh
-  if (isJwtExpired(accessToken)) {
+  // Final robust cleanup: remove duplicate/malformed ? in case of legacy code
+  url = sanitizeUrl(url);
+
+  // Debug logging (only in development)
+  if (
+    typeof process !== "undefined" &&
+    process.env.NODE_ENV === "development"
+  ) {
+    // Do NOT log sensitive tokens
+    console.debug("[apiFetch]", { endpoint, method, url, project_id, module_id, body });
+  }
+
+  // Ensure access token is fresh
+  if (accessToken && isJwtExpired(accessToken)) {
     try {
       accessToken = await refreshAccessToken();
     } catch (e) {
       globalLogout();
-      return;
+      throw new Error("Session expired");
     }
   }
 
-  let headers = {
+  const headers = {
     "Content-Type": "application/json",
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...customHeaders,
   };
 
-  async function doFetch() {
-    let response;
-    try {
-      response = await fetch(url, {
-        method,
-        headers,
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      });
-    } catch (networkError) {
-      console.error("Network error:", networkError);
+  // Use AbortController for timeout
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  let responseData;
+
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      signal: controller.signal,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    clearTimeout(timeout);
+
+    const isJson = response.headers.get("content-type")?.includes("application/json");
+    responseData = isJson ? await response.json() : await response.text();
+
+    // Handle token errors: try refresh exactly once
+    if (
+      !response.ok &&
+      response.status === 401 &&
+      accessToken // don't retry if no token at all
+    ) {
+      try {
+        accessToken = await refreshAccessToken();
+        headers.Authorization = `Bearer ${accessToken}`;
+        // Retry request after token refresh
+        response = await fetch(url, {
+          method,
+          headers,
+          signal: controller.signal,
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        });
+        clearTimeout(timeout);
+        const retryIsJson = response.headers.get("content-type")?.includes("application/json");
+        responseData = retryIsJson ? await response.json() : await response.text();
+      } catch (refreshError) {
+        globalLogout();
+        throw new Error("Session expired");
+      }
+    }
+
+    // Check for fatal errors and propagate with detail
+    if (!response.ok) {
+      const detail =
+        (responseData && (responseData.detail || responseData.message)) ||
+        `API Error: ${response.status}`;
+      throw new Error(detail);
+    }
+
+    return responseData;
+
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error.name === "AbortError") {
+      throw new Error("Request timed out");
+    }
+    if (error.message === "Failed to fetch") {
       throw new Error("Network error");
     }
-    const isJson = response.headers.get("content-type")?.includes("application/json");
-    let data;
-    try {
-      data = isJson ? await response.json() : await response.text();
-    } catch (parseError) {
-      data = null;
-    }
-
-    // Check for token errors
-    if (!response.ok) {
-      if (
-        data &&
-        (data.code === "token_not_valid" ||
-          data.detail === "Given token not valid for any token type" ||
-          response.status === 401)
-      ) {
-        // Try to refresh and retry **once**
-        try {
-          accessToken = await refreshAccessToken();
-          headers.Authorization = `Bearer ${accessToken}`;
-          // retry
-          response = await fetch(url, {
-            method,
-            headers,
-            ...(body ? { body: JSON.stringify(body) } : {}),
-          });
-          const retryData = response.headers.get("content-type")?.includes("application/json")
-            ? await response.json()
-            : await response.text();
-          if (!response.ok) {
-            globalLogout();
-            return;
-          }
-          return retryData;
-        } catch (refreshErr) {
-          globalLogout();
-          return;
-        }
-      }
-      // Other errors: propagate
-      throw new Error(
-        (data && (data.detail || data.message)) ||
-          `API Error: ${response.status}`
-      );
-    }
-    return data;
+    // If not already logged out, propagate error message
+    throw error;
   }
-
-  return await doFetch();
 }

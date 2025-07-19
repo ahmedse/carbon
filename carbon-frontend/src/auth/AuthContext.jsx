@@ -2,6 +2,24 @@ import React, { createContext, useState, useContext, useEffect, useRef } from "r
 import { API_BASE_URL, API_ROUTES } from "../config";
 import { fetchModules } from "../api/modules";
 
+// --- Helpers for token management ---
+async function refreshAccessToken() {
+  const refresh = localStorage.getItem("refresh");
+  if (!refresh) throw new Error("No refresh token");
+  const res = await fetch(`${API_BASE_URL}${API_ROUTES.tokenRefresh}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh }),
+  });
+  if (!res.ok) throw new Error("Session expired or invalid refresh token");
+  const data = await res.json();
+  if (!data.access) throw new Error("No access token in refresh response");
+  localStorage.setItem("access", data.access);
+  // Optionally update user state if needed
+  return data.access;
+}
+
+// --- Auth Context ---
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
@@ -11,42 +29,16 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [tablesByModule, setTablesByModule] = useState({});
 
+  // --- Timers and refs ---
+  const inactivityTimeout = 60 * 60 * 1000; // 1 hour
+  const refreshIntervalMs = 10 * 60 * 1000; // 10 minutes
+  const inactivityTimerRef = useRef();
+  const refreshTimerRef = useRef();
+
   // Debug helper
   const debug = (...args) => { if (import.meta.env.DEV) console.log("[Auth]", ...args); };
-  debug("[DEBUG] projects", projects);
-  // Inactivity logout timer
-  const inactivityTimeout = 60 * 60 * 1000; // 1 hour
-  const timerRef = useRef();
 
-  useEffect(() => {
-    if (!user) return;
-    const reset = () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
-        logout();
-        window.location.href = "/login";
-      }, inactivityTimeout);
-    };
-    ["mousemove", "keydown", "mousedown", "touchstart"].forEach(e =>
-      window.addEventListener(e, reset)
-    );
-    reset();
-    return () => {
-      ["mousemove", "keydown", "mousedown", "touchstart"].forEach(e =>
-        window.removeEventListener(e, reset)
-      );
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [user]);
-
-  useEffect(() => {
-  if (user && context?.modules && context?.projectId) {
-    refetchTables();
-  }
-  // eslint-disable-next-line
-}, [user, context?.modules, context?.projectId]);
-
-  // Load from localStorage on mount
+  // --- Local Storage Sync on mount ---
   useEffect(() => {
     try {
       const storedUser = JSON.parse(localStorage.getItem("user"));
@@ -59,7 +51,58 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  // Login: fetch roles, extract projects, no modules yet
+  // --- Inactivity & periodic token refresh logic ---
+  useEffect(() => {
+    if (!user) return;
+
+    // --- Reset inactivity timer and periodic refresh ---
+    const resetTimers = () => {
+      // Inactivity logout timer
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = setTimeout(() => {
+        debug("Logging out due to inactivity");
+        logout("inactivity");
+      }, inactivityTimeout);
+
+      // Background token refresh
+      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+      refreshTimerRef.current = setInterval(async () => {
+        try {
+          debug("Background access token refresh...");
+          await refreshAccessToken();
+        } catch (err) {
+          debug("Token refresh failed:", err);
+          logout("refreshError");
+        }
+      }, refreshIntervalMs);
+    };
+
+    // --- Listen for user activity ---
+    ["mousemove", "keydown", "mousedown", "touchstart"].forEach(e =>
+      window.addEventListener(e, resetTimers)
+    );
+    resetTimers();
+
+    // --- Cleanup on unmount/logout ---
+    return () => {
+      ["mousemove", "keydown", "mousedown", "touchstart"].forEach(e =>
+        window.removeEventListener(e, resetTimers)
+      );
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+    };
+    // eslint-disable-next-line
+  }, [user]);
+
+  // --- Refetch tables when context changes ---
+  useEffect(() => {
+    if (user && context?.modules && context?.projectId) {
+      refetchTables();
+    }
+    // eslint-disable-next-line
+  }, [user, context?.modules, context?.projectId]);
+
+  // --- Login: fetch tokens, user roles, and build project list ---
   const login = async ({ username, password }) => {
     setLoading(true);
     try {
@@ -71,39 +114,31 @@ export const AuthProvider = ({ children }) => {
       if (!res.ok) throw new Error("Invalid credentials");
       const { access, refresh } = await res.json();
 
+      // Fetch roles
       const rolesRes = await fetch(`${API_BASE_URL}${API_ROUTES.myRoles}`, {
         headers: { Authorization: `Bearer ${access}` },
       });
       if (!rolesRes.ok) throw new Error("Failed to fetch user roles");
       const { roles } = await rolesRes.json();
 
-      // Build a map of unique projects from both project and module scoped roles
+      // Build project map
       const projectMap = {};
-
-      // Add projects where user has a project-level role
       for (const r of roles) {
         if (
           r.project_id &&
           r.project &&
           (r.context_type === "project" || r.context_type === "module")
         ) {
-          // Use project_id as key to deduplicate
           projectMap[r.project_id] = { id: r.project_id, name: r.project };
         }
       }
-
-      // If backend ever sends module roles without project info, log a warning
       for (const r of roles) {
-        if (
-          r.context_type === "module" &&
-          (!r.project_id || !r.project)
-        ) {
+        if (r.context_type === "module" && (!r.project_id || !r.project)) {
           if (import.meta.env.DEV) {
             console.warn("[Auth] Module-level role missing project info:", r);
           }
         }
       }
-
       const projectsArr = Object.values(projectMap);
 
       const userObj = { username, token: access, refresh, roles };
@@ -111,17 +146,15 @@ export const AuthProvider = ({ children }) => {
       setProjects(projectsArr);
       localStorage.setItem("user", JSON.stringify(userObj));
       localStorage.setItem("projects", JSON.stringify(projectsArr));
-      localStorage.setItem("access", access);    // <--- Add this
-      localStorage.setItem("refresh", refresh);  // <--- Add this
+      localStorage.setItem("access", access);
+      localStorage.setItem("refresh", refresh);
       localStorage.removeItem("context");
       setContext(null);
 
       debug("Login success", userObj, projectsArr);
-      debug("[DEBUG] projectsArr", projectsArr);
 
       // If only one project, auto-select it
       if (projectsArr.length === 1) {
-        debug("[DEBUG] projectsArr", projectsArr);
         await selectProject(projectsArr[0].id, userObj, projectsArr);
         setLoading(false);
         return { requireProjectSelection: false };
@@ -137,20 +170,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Select project: fetch modules for this project only, build context
+  // --- Select a project: build context, fetch modules ---
   const selectProject = async (projectId, _user = user, _projects = projects) => {
     setLoading(true);
     try {
       const project = (_projects || projects).find(p => String(p.id) === String(projectId));
       if (!project) throw new Error("Invalid project selection");
 
-      // Get roles for this project only
       const projectRoles = (_user || user).roles.filter(r =>
         ((r.context_type === "project" && String(r.project_id) === String(projectId)) ||
-        (r.context_type === "module" && String(r.project_id) === String(projectId)))
+          (r.context_type === "module" && String(r.project_id) === String(projectId)))
       );
-
-      // Fetch modules for this project only
       const modules = await fetchModules((_user || user).token, projectId);
 
       const ctx = {
@@ -161,7 +191,6 @@ export const AuthProvider = ({ children }) => {
       };
       setContext(ctx);
       localStorage.setItem("context", JSON.stringify(ctx));
-      debug("[DEBUG] Project selected and context built", ctx);
       debug("Project selected and context built", ctx);
       setLoading(false);
       return true;
@@ -171,15 +200,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout: clear all state and storage
-  const logout = () => {
+  // --- Logout: clear all state, timers, and storage ---
+  const logout = (reason) => {
+    debug("Logout called:", reason);
     setUser(null);
     setProjects([]);
     setContext(null);
+    setTablesByModule({});
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
     localStorage.clear();
     window.location.href = "/login?expired=1";
   };
 
+  // --- Fetch tables by module ---
   const refetchTables = async () => {
     if (!user || !context?.projectId || !context?.modules) return;
     try {
@@ -196,32 +230,25 @@ export const AuthProvider = ({ children }) => {
           }
         })
       );
-
-      console.log("refetchTables: user", user);
-console.log("refetchTables: context", context);
-console.log("refetchTables: context.modules", context?.modules);
-console.log("refetchTables: context.projectId", context?.projectId);
-console.log("refetchTables: grouped", grouped);
-
       setTablesByModule(grouped);
     } catch (err) {
       setTablesByModule({});
       if (import.meta.env.DEV) console.error("Failed to fetch tables", err);
     }
-};
+  };
 
-  // Role helpers
-// src/auth/AuthContext.jsx
-const hasRole = (roleName) => context?.projectRoles?.some(r => r.role === roleName);
+  // --- Role helpers ---
+  const hasRole = (roleName) =>
+    context?.projectRoles?.some(r => r.role === roleName);
 
-const canSchemaAdmin = () =>
-  context?.projectRoles?.some(r => r.role === "admins_group" || r.role === "admin");
+  const canSchemaAdmin = () =>
+    context?.projectRoles?.some(r => r.role === "admins_group" || r.role === "admin");
 
-const canManageAllModules = () =>
-  context?.projectRoles?.some(r => ["admins_group", "admin", "auditors_group", "auditor"].includes(r.role));
+  const canManageAllModules = () =>
+    context?.projectRoles?.some(r => ["admins_group", "admin", "auditors_group", "auditor"].includes(r.role));
 
-const canManageAssignedModules = () =>
-  context?.projectRoles?.some(r => r.role === "dataowners_group" || r.role === "dataowner");
+  const canManageAssignedModules = () =>
+    context?.projectRoles?.some(r => r.role === "dataowners_group" || r.role === "dataowner");
 
   return (
     <AuthContext.Provider
@@ -237,9 +264,8 @@ const canManageAssignedModules = () =>
         canSchemaAdmin,
         canManageAllModules,
         canManageAssignedModules,
-        tablesByModule,     // <-- add this
-        refetchTables,      // <-- add this
-        
+        tablesByModule,
+        refetchTables,
       }}
     >
       {children}

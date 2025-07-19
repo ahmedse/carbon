@@ -1,39 +1,35 @@
 # File: backend/config/settings.py
-# Purpose: Django project settings for the 'backend' project.
 
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load default .env, then override with .env.production if needed
 load_dotenv(os.path.join(BASE_DIR, ".env"))
+if os.getenv("DJANGO_ENV") == "production":
+    load_dotenv(os.path.join(BASE_DIR, ".env.production"), override=True)
 
-print("Loaded SECRET_KEY:", os.getenv("SECRET_KEY"))
-print("Loaded ALLOWED_HOSTS:", os.getenv("DJANGO_ALLOWED_HOSTS"))
-
-# Determine the environment: 'development' or 'production'
+# Environment
 DJANGO_ENV = os.getenv("DJANGO_ENV", "development").lower()
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv(
-    "DJANGO_SECRET_KEY",
-    'django-insecure-9(mkyr(v_!gbmxt+kb(1z)a=l7vp(g(q4ocn^mo_0k#y_$!!v9'
-)
+def get_env(name, default=None, required=False):
+    v = os.getenv(name, default)
+    if required and v is None:
+        raise Exception(f"Environment variable {name} is required!")
+    return v
 
-# DEBUG/ALLOWED_HOSTS per environment
-if DJANGO_ENV == "development":
-    DEBUG = True
-    ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "91.108.121.172,127.0.0.1,localhost").split(",")
-else:
-    DEBUG = False
-    ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",")
+# Key settings
+SECRET_KEY = get_env("SECRET_KEY", required=True)
+DEBUG = get_env("DJANGO_DEBUG", "False").lower() == "true"
+ALLOWED_HOSTS = get_env("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 
-print("DJANGO_ENV is set to:", DJANGO_ENV)
-print("DEBUG is set to:", DEBUG)
+# Path for API (configurable, e.g. /api/v1/, /carbon/api/)
+API_PREFIX = get_env("DJANGO_API_PREFIX", "/api/v1/")
 
 # File upload path for dataschema files
-DATASCHEMA_UPLOAD_PATH = os.getenv("DATASCHEMA_UPLOAD_PATH", "dataschema_uploads/")
+DATASCHEMA_UPLOAD_PATH = get_env("DATASCHEMA_UPLOAD_PATH", "dataschema_uploads/")
 
 # Application definition
 INSTALLED_APPS = [
@@ -46,11 +42,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
     'corsheaders',
     'drf_yasg',
 ]
 
-# Development-only apps
 if DJANGO_ENV == "development":
     INSTALLED_APPS += ['debug_toolbar']
 
@@ -70,11 +66,27 @@ MIDDLEWARE = [
 if DJANGO_ENV == "development":
     MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
 
-# CORS configuration
+# CORS
 if DJANGO_ENV == "development":
     CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOWED_ORIGINS = []
 else:
     CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS = [x.strip() for x in get_env("CORS_ALLOWED_ORIGINS", "").split(",") if x.strip()]
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
+CORS_EXPOSE_HEADERS = ["Content-Disposition"]
 
 ROOT_URLCONF = 'config.urls'
 
@@ -99,11 +111,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv("DB_NAME"),
-        'USER': os.getenv("DB_USER"),
-        'PASSWORD': os.getenv("DB_PASSWORD"),
-        'HOST': os.getenv("DB_HOST", "localhost"),
-        'PORT': os.getenv("DB_PORT", "5433"),
+        'NAME': get_env("DB_NAME", required=True),
+        'USER': get_env("DB_USER", required=True),
+        'PASSWORD': get_env("DB_PASSWORD", required=True),
+        'HOST': get_env("DB_HOST", "localhost"),
+        'PORT': get_env("DB_PORT", "5432"),
+        "ATOMIC_REQUESTS": True,
     }
 }
 
@@ -133,68 +146,55 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
-STATIC_ROOT = os.getenv("DJANGO_STATIC_ROOT", BASE_DIR / 'staticfiles')
+STATIC_URL = '/static/'
+STATIC_ROOT = get_env("DJANGO_STATIC_ROOT", BASE_DIR / 'staticfiles')
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = get_env("DJANGO_MEDIA_ROOT", BASE_DIR / 'mediafiles')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Production-specific secure settings
+# SSL and Security settings
 if DJANGO_ENV == "production":
-    # Secure settings
-    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() == "true"
+    SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-
-    # Logging configuration
-    LOGGING = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "handlers": {
-            "console": {"class": "logging.StreamHandler"},
-        },
-        "root": {
-            "handlers": ["console"],
-            "level": os.getenv("ROOT_LOG_LEVEL", "WARNING"),
-        },
-        "loggers": {
-            "django": {
-                "handlers": ["console"],
-                "level": os.getenv("DJANGO_LOG_LEVEL", "INFO"),
-                "propagate": True,
-            },
-            "rest_framework": {
-                "handlers": ["console"],
-                "level": os.getenv("REST_FRAMEWORK_LOG_LEVEL", "INFO"),
-                "propagate": False,
-            },
-        },
-    }
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 else:
-    # Development logging (more verbose)
-    LOGGING = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "handlers": {
-            "console": {"class": "logging.StreamHandler"},
-        },
-        "root": {
-            "handlers": ["console"],
-            "level": os.getenv("ROOT_LOG_LEVEL", "WARNING"),
-        },
-        "loggers": {
-            "django": {
-                "handlers": ["console"],
-                "level": os.getenv("DJANGO_LOG_LEVEL", "DEBUG"),
-                "propagate": True,
-            },
-            "rest_framework": {
-                "handlers": ["console"],
-                "level": os.getenv("REST_FRAMEWORK_LOG_LEVEL", "DEBUG"),
-                "propagate": False,
-            },
-        },
-    }
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
 
-# Internal IPs for debug toolbar
+# Logging
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": get_env("ROOT_LOG_LEVEL", "WARNING"),
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": get_env("DJANGO_LOG_LEVEL", "DEBUG" if DJANGO_ENV == "development" else "INFO"),
+            "propagate": True,
+        },
+        "rest_framework": {
+            "handlers": ["console"],
+            "level": get_env("REST_FRAMEWORK_LOG_LEVEL", "DEBUG" if DJANGO_ENV == "development" else "INFO"),
+            "propagate": False,
+        },
+    },
+}
+
+# Debug Toolbar
 if DJANGO_ENV == "development":
     INTERNAL_IPS = ["127.0.0.1"]
+
+# Custom API prefix (used in urls.py)
+API_PREFIX = API_PREFIX

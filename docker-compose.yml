@@ -14,9 +14,13 @@ services:
       - "8001:8000"
         #command: sleep infinity
     command: >
-      sh -c "python manage.py migrate &&
-             python manage.py collectstatic --noinput &&
-             gunicorn config.wsgi:application --bind 0.0.0.0:8000"
+      sh -c "until nc -z -v -w30 91.108.121.172 5432; do
+              echo 'Waiting for Postgres connection...'; sleep 2;
+            done &&
+            python manage.py migrate &&
+            python manage.py initialize_tenant &&
+            python manage.py collectstatic --noinput &&
+            gunicorn config.wsgi:application --bind 0.0.0.0:8000"
 
   frontend:
     build: ./carbon-frontend

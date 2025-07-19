@@ -1,8 +1,7 @@
 # File: core/urls.py
 
 from rest_framework.routers import DefaultRouter
-from .views import ProjectViewSet, ModuleViewSet
-from .views import FeedbackViewSet
+from .views import ProjectViewSet, ModuleViewSet, FeedbackViewSet
 
 router = DefaultRouter()
 router.register(r'projects', ProjectViewSet)

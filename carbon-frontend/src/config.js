@@ -5,15 +5,14 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localho
 
 // All backend API routes.
 export const API_ROUTES = {
-  token: "/api/token/",
-  tokenRefresh: "/api/token/refresh/",
-  myRoles: "/api/accounts/my-roles/",
-  projects: "/api/core/projects/",
-  modules: "/api/core/modules/",
-  tables: "/api/dataschema/tables/",
-  fields: "/api/dataschema/fields/",
-  rows: "/api/dataschema/rows/",
-  schemaLogs: "/api/dataschema/schema-logs/",
-  feedback: "/api/core/feedback/",
-  // Add other endpoints as needed.
+  token: "token/",
+  tokenRefresh: "token/refresh/",
+  myRoles: "accounts/my-roles/",
+  projects: "core/projects/",
+  modules: "core/modules/",
+  tables: "dataschema/tables/",
+  fields: "dataschema/fields/",
+  rows: "dataschema/rows/",
+  schemaLogs: "dataschema/schema-logs/",
+  feedback: "core/feedback/",
 };
