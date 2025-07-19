@@ -58,7 +58,7 @@ async function refreshAccessToken() {
 /** Logs out globally: clears user storage and redirects to login with expired param. */
 function globalLogout() {
   localStorage.clear();
-  window.location.href = "/login?expired=1";
+  window.location.href = `${import.meta.env.VITE_BASE}login?expired=1`;
 }
 
 /**

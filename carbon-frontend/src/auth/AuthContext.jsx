@@ -210,7 +210,8 @@ export const AuthProvider = ({ children }) => {
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
     localStorage.clear();
-    window.location.href = "/login?expired=1";
+    // window.location.href = "/login?expired=1";
+    window.location.href = `${import.meta.env.VITE_BASE}login?expired=1`;
   };
 
   // --- Fetch tables by module ---
