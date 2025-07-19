@@ -24,10 +24,13 @@ def get_env(name, default=None, required=False):
 SECRET_KEY = get_env("SECRET_KEY", required=True)
 DEBUG = get_env("DJANGO_DEBUG", "False").lower() == "true"
 ALLOWED_HOSTS = get_env("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
-FORCE_SCRIPT_NAME = os.environ.get('FORCE_SCRIPT_NAME', None)
+FORCE_SCRIPT_NAME = get_env('FORCE_SCRIPT_NAME', None)
 
 print("FORCE_SCRIPT_NAME =", FORCE_SCRIPT_NAME)
-print("FORCE_SCRIPT_NAME =", repr(FORCE_SCRIPT_NAME))
+
+CSRF_TRUSTED_ORIGINS = [x.strip() for x in get_env("CSRF_TRUSTED_ORIGINS", "").split(",") if x.strip()]
+
+print("CSRF_TRUSTED_ORIGINS =", repr(CSRF_TRUSTED_ORIGINS))
 
 # Path for API (configurable, e.g. /api/v1/, /carbon/api/)
 API_PREFIX = get_env("DJANGO_API_PREFIX", "/api/v1/")
