@@ -32,6 +32,9 @@ CSRF_TRUSTED_ORIGINS = [x.strip() for x in get_env("CSRF_TRUSTED_ORIGINS", "").s
 
 print("CSRF_TRUSTED_ORIGINS =", repr(CSRF_TRUSTED_ORIGINS))
 
+print("DEBUG =", repr(DEBUG))
+
+
 # Path for API (configurable, e.g. /api/v1/, /carbon/api/)
 API_PREFIX = get_env("DJANGO_API_PREFIX", "/api/v1/")
 
