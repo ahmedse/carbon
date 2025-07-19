@@ -24,6 +24,7 @@ def get_env(name, default=None, required=False):
 SECRET_KEY = get_env("SECRET_KEY", required=True)
 DEBUG = get_env("DJANGO_DEBUG", "False").lower() == "true"
 ALLOWED_HOSTS = get_env("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+FORCE_SCRIPT_NAME = os.environ.get('FORCE_SCRIPT_NAME', None)
 
 # Path for API (configurable, e.g. /api/v1/, /carbon/api/)
 API_PREFIX = get_env("DJANGO_API_PREFIX", "/api/v1/")
