@@ -44,7 +44,7 @@ function RequireContext() {
 export default function App() {
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <BrowserRouter>
+     <BrowserRouter basename={import.meta.env.VITE_BASE}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route element={<RequireAuth />}>
