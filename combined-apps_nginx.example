@@ -1,0 +1,117 @@
+# =======================
+#   GIGACAST (LEAVE AS IS)
+# =======================
+
+server {
+    listen 80;
+    server_name 91.108.121.172;
+    # Redirect all HTTP to HTTPS
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name 91.108.121.172;
+
+    # --- SSL SETTINGS ---
+    ssl_certificate           /etc/nginx/ssl/gigacast.crt;
+    ssl_certificate_key       /etc/nginx/ssl/gigacast.key;
+    ssl_dhparam               /etc/nginx/ssl/dhparam.pem;
+    ssl_protocols             TLSv1.2 TLSv1.3;
+    ssl_ciphers               'EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH';
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache         shared:SSL:10m;
+    ssl_session_tickets       off;
+
+    client_max_body_size 50M;
+
+    # --- GIGACAST FRONTEND (React) ---
+    root /srv/gigacast/frontend/build;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # --- GIGACAST API (Django) ---
+    location /api/ {
+        proxy_pass         http://127.0.0.1:8000/api/;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300;
+        proxy_connect_timeout 300;
+    }
+
+    # --- GIGACAST ADMIN (Django) ---
+    location /admin/ {
+        proxy_pass       http://127.0.0.1:8000/admin/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # --- GIGACAST STATIC FILES ---
+    location /static/ {
+        alias /srv/gigacast/static/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        autoindex off;
+    }
+
+    # --- GIGACAST MEDIA FILES ---
+    location /media/ {
+        alias /srv/gigacast/media/;
+        autoindex off;
+    }
+
+# ===============================================
+# ================ CARBON APP ===================
+# ===============================================
+
+    # --- CARBON FRONTEND (React) ---
+    location ^~ /carbon/assets/ {
+        alias /srv/carbon/carbon-frontend/dist/assets/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        autoindex off;
+    }
+    location /carbon/ {
+        alias /srv/carbon/carbon-frontend/dist/;
+        try_files $uri $uri/ /carbon/index.html;
+        autoindex off;
+    }
+
+    # --- CARBON API (Django) ---
+    location /carbon-api/ {
+        proxy_pass         http://127.0.0.1:8001/;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300;
+        proxy_connect_timeout 300;
+        client_max_body_size 50M;
+    }
+
+    # --- CARBON STATIC FILES ---
+    location /carbon-static/ {
+        alias /srv/carbon/static/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        autoindex off;
+    }
+
+    # --- CARBON MEDIA FILES ---
+    location /carbon-media/ {
+        alias /srv/carbon/media/;
+        autoindex off;
+    }
+
+    # --- SECURITY: Deny access to hidden and backup files ---
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+    location ~* (\.bak|\.swp|~)$ {
+        deny all;
+    }
+}
