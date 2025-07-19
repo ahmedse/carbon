@@ -154,18 +154,26 @@ MEDIA_ROOT = get_env("DJANGO_MEDIA_ROOT", BASE_DIR / 'mediafiles')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# SSL and Security settings
-if DJANGO_ENV == "production":
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+# SSL and Security settings (controlled by the environment)
+SECURE_SSL_REDIRECT = get_env(
+    "DJANGO_SECURE_SSL_REDIRECT",
+    "True" if DJANGO_ENV == "production" else "False"
+).lower() == "true"
+
+SESSION_COOKIE_SECURE = get_env(
+    "DJANGO_SESSION_COOKIE_SECURE",
+    str(SECURE_SSL_REDIRECT)
+).lower() == "true"
+
+CSRF_COOKIE_SECURE = get_env(
+    "DJANGO_CSRF_COOKIE_SECURE",
+    str(SECURE_SSL_REDIRECT)
+).lower() == "true"
+
+if SECURE_SSL_REDIRECT:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-else:
-    SECURE_SSL_REDIRECT = False
-    SESSION_COOKIE_SECURE = False
-    CSRF_COOKIE_SECURE = False
 
 # Logging
 LOGGING = {
