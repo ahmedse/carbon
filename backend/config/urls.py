@@ -16,9 +16,11 @@ def health_check(request):
     return JsonResponse({"status": "ok"})
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    # path('admin/', admin.site.urls),
+    path(f'{api_prefix}/admin/', admin.site.urls),
     # Health check (not under API prefix for load balancer/infra)
-    path('health/', health_check),
+    path(f'{api_prefix}/health/', health_check),
+    # path('health/', health_check),
 
     # JWT Auth endpoints under API prefix
     path(f'{api_prefix}/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
