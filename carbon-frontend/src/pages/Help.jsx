@@ -53,7 +53,7 @@ export default function Help() {
               secondary={
                 <>
                   • Please use the <b>Feedback</b> page (see sidebar) to report bugs or suggest improvements.<br />
-                  • You can also contact the support team at <a href="mailto:support@yourdomain.com">support@yourdomain.com</a>.
+                  • You can also contact the support team at <a href="mailto:ahmed.saied@aast.edu">ahmed.saied@aast.edu</a>.
                 </>
               }
             />
