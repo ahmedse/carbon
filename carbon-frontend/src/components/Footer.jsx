@@ -9,7 +9,7 @@ export default function Footer() {
   return (
     <Box sx={{ py: 2, textAlign: "center", fontSize: 13, color: "grey.600" }}>
       <Typography variant="body2" color="text.secondary">
-        &copy; {new Date().getFullYear()} Carbon Platform. All rights reserved.
+        &copy; {new Date().getFullYear()} AASTMT Carbon Platform. All rights reserved.
       </Typography>
     </Box>
   );

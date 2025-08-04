@@ -12,7 +12,7 @@ class ProjectAdmin(admin.ModelAdmin):
 
 @admin.register(Module)
 class ModuleAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'project']
+    list_display = ['id', 'name', 'project', 'scope']
     search_fields = ['name']
 
 @admin.register(Feedback)

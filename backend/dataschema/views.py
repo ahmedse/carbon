@@ -65,26 +65,31 @@ class DataTableViewSet(ScopedViewSet):
         user = self.request.user
         project_id = self.request.query_params.get("project_id")
         module_id = self.request.query_params.get("module_id")
+        pk = self.kwargs.get('pk')  # Only present on detail view
 
         if not project_id:
             return DataTable.objects.none()
 
         qs = DataTable.objects.filter(module__project_id=project_id, is_archived=False)
-        # Admins: all tables in project
+
+        # RBAC: restrict to what user can see
         if user_has_project_role(user, project_id, ["admin", "admins_group"]):
             if module_id:
                 qs = qs.filter(module_id=module_id)
-            return qs
-
-        # dataowners_group: only tables in modules user has access to
-        allowed_module_ids = get_allowed_module_ids(user, project_id, ["dataowners_group"])
-        if module_id:
-            if int(module_id) in allowed_module_ids:
-                qs = qs.filter(module_id=module_id)
-            else:
-                return DataTable.objects.none()
         else:
-            qs = qs.filter(module_id__in=allowed_module_ids)
+            allowed_module_ids = get_allowed_module_ids(user, project_id, ["dataowners_group"])
+            if module_id:
+                if int(module_id) in allowed_module_ids:
+                    qs = qs.filter(module_id=module_id)
+                else:
+                    return DataTable.objects.none()
+            else:
+                qs = qs.filter(module_id__in=allowed_module_ids)
+
+        # If this is a detail view, further restrict to pk
+        if pk:
+            qs = qs.filter(pk=pk)
+
         return qs
 
     def get_serializer_class(self):
@@ -137,12 +142,15 @@ class DataRowViewSet(ScopedViewSet):
         user = self.request.user
         project_id = self.request.query_params.get("project_id")
         module_id = self.request.query_params.get("module_id")
+        data_table_id = self.request.query_params.get("data_table")  # or "table_id"
 
         if not project_id:
             return DataRow.objects.none()
         qs = DataRow.objects.filter(data_table__module__project_id=project_id, is_archived=False)
         if module_id:
             qs = qs.filter(data_table__module_id=module_id)
+        if data_table_id:
+            qs = qs.filter(data_table_id=data_table_id)
         return qs
 
 # --- SchemaChangeLog (ReadOnly, admin/admins_group only) ---

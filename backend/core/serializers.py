@@ -23,4 +23,4 @@ class ModuleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Module
-        fields = ['id', 'name', 'project']
+        fields = ['id', 'name', 'project', 'scope']

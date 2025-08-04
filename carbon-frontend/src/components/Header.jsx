@@ -46,7 +46,7 @@ export default function Header() {
         <Box sx={{ display: "flex", alignItems: "center" }}>
           <img src={aastLogo} alt="Logo" style={{ height: 32, marginRight: 12, borderRadius: 5 }} />
           <Typography variant="h6" fontWeight={800} sx={{ letterSpacing: 0.5 }}>
-            Carbon Platform
+            AASTMT Carbon Platform
           </Typography>
         </Box>
         <Box sx={{ flexGrow: 1 }} />

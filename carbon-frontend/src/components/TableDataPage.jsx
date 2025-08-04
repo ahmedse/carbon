@@ -87,9 +87,12 @@ export default function TableDataPage({
   // Defensive: ensure fetches are always safe
   const fetchRows = useCallback(() => {
     setLoading(true);
-    fetchDataRows(token, tableId, filters, project_id, module_id)
+   fetchDataRows(token, tableId, filters, project_id, module_id)
       .then((data) => {
-        const safeRows = Array.isArray(data) ? data : [];
+        const safeRows = (Array.isArray(data) ? data : []).filter(
+          row => row && row.id && typeof row.id !== "undefined"
+        );
+        console.log("Fetched rows", data);
         setRows(safeRows);
         setLoading(false);
       })

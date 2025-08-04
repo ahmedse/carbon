@@ -13,6 +13,8 @@ import TableManagerPage from "./pages/TableManagerPage";
 import DataEntryPage from "./pages/DataEntryPage";
 import Help from "./pages/Help";
 import Feedback from "./pages/Feedback";
+import ModuleLandingPage from "./pages/ModuleLandingPage";
+import ScopeInfoPage from "./pages/ScopeInfoPage";
 
 /**
  * Protects all routes that require authentication.
@@ -53,6 +55,7 @@ export default function App() {
                 <Route path="help" element={<Help />} />
                 <Route path="feedback" element={<Feedback />} />
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/dashboard" element={<Dashboard />} />
                 {/* Admin-only: Schema Admin > Table Manager */}
                 <Route
                   path="/schema-admin/table-manager"
@@ -62,6 +65,8 @@ export default function App() {
                     </AdminRoute>
                   }
                 />
+                 <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
+                 <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />
                 {/* Data entry */}
                 <Route
                   path="/dataschema/entry/:moduleName/:tableId"

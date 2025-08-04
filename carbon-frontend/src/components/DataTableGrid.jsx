@@ -287,7 +287,11 @@ export default function DataTableGrid({
     () => buildColumns(fields, false, token, project_id, module_id, uploadRowFile, handleEditRow, handleDeleteRow),
     [fields, token, project_id, module_id, uploadRowFile]
   );
-  const mappedRows = useMemo(() => mapRows(rows, fields), [rows, fields]);
+  console.log("rows in DataTableGrid", rows);
+  const mappedRows = useMemo(
+    () => mapRows(rows.filter(row => row && row.id), fields),
+    [rows, fields]
+  );
 
   return (
     <div style={{ width: "100%", minHeight: 600, position: "relative" }}>

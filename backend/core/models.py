@@ -22,8 +22,15 @@ class Module(models.Model):
     """
     A module (sub-unit) within a project.
     """
+
+    SCOPE_CHOICES = [
+        (1, 'Scope 1'),
+        (2, 'Scope 2'),
+        (3, 'Scope 3'),
+    ]
     name = models.CharField(max_length=100)
     project = models.ForeignKey('core.Project', on_delete=models.CASCADE, related_name='modules')
+    scope = models.PositiveSmallIntegerField(choices=SCOPE_CHOICES, default=1) 
 
     class Meta:
         unique_together = ('project', 'name')
@@ -31,7 +38,7 @@ class Module(models.Model):
         verbose_name_plural = "Modules"
 
     def __str__(self):
-        return f"{self.name} ({self.project.name})"
+        return f"{self.name} ({self.project.name}) - Scope {self.scope}"
     
 class Feedback(models.Model):
     """

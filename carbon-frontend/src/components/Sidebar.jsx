@@ -8,8 +8,8 @@ import { useTheme } from "@mui/material/styles";
 import { useAuth } from "../auth/AuthContext";
 import SidebarMenu from "./SidebarMenu";
 
-const drawerWidth = 210;
-const miniWidth = 54;
+const drawerWidth = 250;
+const miniWidth = 80;
 
 export default function Sidebar() {
   const theme = useTheme();

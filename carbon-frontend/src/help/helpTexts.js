@@ -14,6 +14,9 @@ export const helpTexts = {
     "field.desc": "Internal description (English, no spaces). Used as the field desc in data.",
     "table.desc": "Internal description (English, no spaces). Used as the table desc in data.",
     "table.title": "Internal title (English, no spaces). Used as the table title in data.",
+    scope1_microhelp: "Scope 1: Direct greenhouse gas emissions from sources owned or controlled by your organization (e.g., company vehicles, on-site fuel use).",
+    scope2_microhelp: "Scope 2: Indirect emissions from the generation of purchased electricity, steam, heating, or cooling consumed by your organization.",
+    scope3_microhelp: "Scope 3: All other indirect emissions that occur in your value chain, such as from suppliers, transportation, or product use.",
     
     // ...add more keys as needed
   },

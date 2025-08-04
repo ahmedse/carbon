@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useRef } from "react";
 import { API_BASE_URL, API_ROUTES } from "../config";
 import { fetchModules } from "../api/modules";
+import { apiFetch } from "../api/api"; // <-- Add this import
 
 // --- Helpers for token management ---
 async function refreshAccessToken() {
@@ -210,24 +211,28 @@ export const AuthProvider = ({ children }) => {
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
     localStorage.clear();
-    // window.location.href = "/login?expired=1";
     window.location.href = `${import.meta.env.VITE_BASE}login?expired=1`;
   };
 
-  // --- Fetch tables by module ---
+  // --- Fetch tables by module (fixed to use apiFetch with auto token refresh) ---
   const refetchTables = async () => {
     if (!user || !context?.projectId || !context?.modules) return;
     try {
       const grouped = {};
       await Promise.all(
         context.modules.map(async (mod) => {
-          const res = await fetch(
-            `${API_BASE_URL}${API_ROUTES.tables}?project_id=${context.projectId}&module_id=${mod.id}`,
-            { headers: { Authorization: `Bearer ${user.token}` } }
-          );
-          if (res.ok) {
-            const tables = await res.json();
+          try {
+            // Use apiFetch for auto JWT refresh
+            const tables = await apiFetch(API_ROUTES.tables, {
+              project_id: context.projectId,
+              module_id: mod.id,
+              token: user.token, // optional, apiFetch can also use localStorage
+            });
             grouped[String(mod.id)] = tables;
+          } catch (err) {
+            // Optionally, handle unauthorized (if still fails), or set as empty
+            grouped[String(mod.id)] = [];
+            if (import.meta.env.DEV) console.error("Failed to fetch tables for module", mod.id, err);
           }
         })
       );
