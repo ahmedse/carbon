@@ -13,7 +13,7 @@ services:
     ports:
       - "8001:8000"
     command: >
-      sh -c "until nc -z -v -w30 91.108.121.172 5432; do
+      sh -c "until nc -z -v -w30 72.60.83.189 5432; do
               echo 'Waiting for Postgres connection...'; sleep 2;
             done &&
             python manage.py migrate &&
