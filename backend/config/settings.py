@@ -23,7 +23,7 @@ def get_env(name, default=None, required=False):
 # Key settings
 SECRET_KEY = get_env("SECRET_KEY", required=True)
 DEBUG = get_env("DJANGO_DEBUG", "False").lower() == "true"
-ALLOWED_HOSTS = get_env("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+ALLOWED_HOSTS = get_env("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,72.60.83.189,clearturn.tech,gigacast.clearturn.tech").split(",")
 #FORCE_SCRIPT_NAME = get_env('FORCE_SCRIPT_NAME', None)
 #print("FORCE_SCRIPT_NAME =", FORCE_SCRIPT_NAME)
 
