@@ -13,8 +13,9 @@ services:
     ports:
       - "8001:8000"
     command: >
-      sh -c "python manage.py migrate &&
-            python manage.py collectstatic --noinput &&
+      sh -c "until nc -z -v -w30 91.108.121.172 5432; do
+            echo 'Waiting for Postgres connection...'; sleep 2;
+            done &&
             gunicorn config.wsgi:application --bind 0.0.0.0:8000"
 networks:
   prod_net:
