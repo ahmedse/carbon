@@ -1,8 +1,10 @@
 # File: accounts/views.py
 # DRF views for tenants, users, scoped roles, and audit logs.
 
-from rest_framework import viewsets
-from rest_framework.permissions import BasePermission
+from rest_framework import status, viewsets
+from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.throttling import AnonRateThrottle
+from rest_framework.views import APIView
 from django.contrib.auth.models import Group
 from .models import Tenant, User, ScopedRole, RoleAssignmentAuditLog
 from .serializers import (
@@ -13,7 +15,21 @@ from .serializers import (
 from .permissions import HasScopedRole
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.exceptions import TokenError
+
+
+class LoginRateThrottle(AnonRateThrottle):
+    """Limit login attempts per IP to reduce brute-force attacks."""
+
+    scope = 'login'
+
+
+class ThrottledTokenObtainPairView(TokenObtainPairView):
+    """JWT obtain view with request throttling."""
+
+    throttle_classes = [LoginRateThrottle]
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -117,5 +133,30 @@ class RoleAssignmentAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RoleAssignmentAuditLogSerializer
     permission_classes = [HasScopedRole]
     required_role = "audit"  # Only users with 'audit' ScopedRole can view audit logs
+
+
+class LogoutView(APIView):
+    """Blacklist refresh tokens on logout to prevent reuse."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return Response(
+                {'detail': 'refresh token required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except TokenError:
+            return Response(
+                {'detail': 'invalid or expired refresh token'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({'detail': 'Logout successful'}, status=status.HTTP_200_OK)
 
     

@@ -16,6 +16,21 @@ async function refreshAccessToken() {
   const data = await res.json();
   if (!data.access) throw new Error("No access token in refresh response");
   localStorage.setItem("access", data.access);
+  // If backend rotates refresh tokens, persist the new refresh token too.
+  if (data.refresh) {
+    localStorage.setItem("refresh", data.refresh);
+    try {
+      const storedUser = JSON.parse(localStorage.getItem("user"));
+      if (storedUser && typeof storedUser === "object") {
+        localStorage.setItem(
+          "user",
+          JSON.stringify({ ...storedUser, refresh: data.refresh })
+        );
+      }
+    } catch {
+      // Ignore storage sync errors.
+    }
+  }
   // Optionally update user state if needed
   return data.access;
 }
@@ -35,6 +50,7 @@ export const AuthProvider = ({ children }) => {
   const refreshIntervalMs = 10 * 60 * 1000; // 10 minutes
   const inactivityTimerRef = useRef();
   const refreshTimerRef = useRef();
+  const loginInFlightRef = useRef(false);
 
   // Debug helper
   const debug = (...args) => { if (import.meta.env.DEV) console.log("[Auth]", ...args); };
@@ -105,6 +121,12 @@ export const AuthProvider = ({ children }) => {
 
   // --- Login: fetch tokens, user roles, and build project list ---
   const login = async ({ username, password }) => {
+    // Prevent duplicate concurrent login attempts
+    if (loginInFlightRef.current) {
+      debug("Login already in progress - ignoring duplicate request");
+      return { requireProjectSelection: true };
+    }
+    loginInFlightRef.current = true;
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}${API_ROUTES.token}`, {
@@ -157,16 +179,19 @@ export const AuthProvider = ({ children }) => {
       // If only one project, auto-select it
       if (projectsArr.length === 1) {
         await selectProject(projectsArr[0].id, userObj, projectsArr);
+        loginInFlightRef.current = false;
         setLoading(false);
         return { requireProjectSelection: false };
       } else {
         setContext(null);
         localStorage.removeItem("context");
+        loginInFlightRef.current = false;
         setLoading(false);
         return { requireProjectSelection: true };
       }
     } catch (err) {
       setLoading(false);
+      loginInFlightRef.current = false;
       throw err;
     }
   };
@@ -202,8 +227,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   // --- Logout: clear all state, timers, and storage ---
-  const logout = (reason) => {
+  const logout = async (reason) => {
     debug("Logout called:", reason);
+
+    // Best-effort backend logout (blacklist refresh token). Always continue local logout.
+    try {
+      const refresh = localStorage.getItem("refresh");
+      const access = localStorage.getItem("access");
+      if (refresh && access && API_ROUTES.logout) {
+        await fetch(`${API_BASE_URL}${API_ROUTES.logout}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${access}`,
+          },
+          body: JSON.stringify({ refresh }),
+        });
+      }
+    } catch {
+      // Ignore network/token errors during logout.
+    }
+
     setUser(null);
     setProjects([]);
     setContext(null);

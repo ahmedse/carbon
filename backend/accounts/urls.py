@@ -4,9 +4,9 @@ from rest_framework.routers import DefaultRouter
 from django.urls import path
 from .views import (
     TenantViewSet, UserViewSet, GroupViewSet,
-    ScopedRoleViewSet, RoleAssignmentAuditLogViewSet
+    ScopedRoleViewSet, RoleAssignmentAuditLogViewSet,
+    LogoutView, my_roles,
 )
-from .views import my_roles
 
 router = DefaultRouter()
 router.register(r'tenants', TenantViewSet)
@@ -17,6 +17,7 @@ router.register(r'role-audit-logs', RoleAssignmentAuditLogViewSet, basename='rol
 
 urlpatterns = [
     path('my-roles/', my_roles, name='my-roles'),
+    path('logout/', LogoutView.as_view(), name='logout'),
 ]
 
 urlpatterns += router.urls

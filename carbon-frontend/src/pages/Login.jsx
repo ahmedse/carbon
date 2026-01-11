@@ -73,14 +73,16 @@ export default function Login() {
     try {
       const { requireProjectSelection } = await login(form);
       setRequireProject(requireProjectSelection);
-      // If only one project, context will be set and redirect will happen automatically
-      if (!requireProjectSelection && projects.length === 1) {
+      // If single project, login already selected it and set context - navigate now
+      if (!requireProjectSelection) {
         navigate("/dashboard", { replace: true });
       }
+      // Otherwise, show project selection UI (handled by component render above)
     } catch (err) {
       setError(err.message || "Login failed");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   return (

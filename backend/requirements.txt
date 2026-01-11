@@ -23,7 +23,7 @@ scikit-learn==1.7.0                   # ML models and utilities
 xgboost==3.0.2                        # XGBoost model
 lightgbm==4.6.0                       # LightGBM model
 shap==0.48.0                          # SHAP explainability
-scipy==1.16.0                         # Scientific calculations
+scipy>=1.10.0,<2.0.0                  # Scientific calculations
 
 # Visualization
 matplotlib==3.10.3                    # Plots and charts

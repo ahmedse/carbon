@@ -1,21 +1,37 @@
-version: "3.8"
 services:
   backend:
     build: ./backend
     container_name: carbon-backend
-    restart: always
-    env_file: ./backend/.env.production
-    environment:
-      - DJANGO_ENV=production
+    restart: unless-stopped
+    env_file: ./backend/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      - /srv/carbon/static:/static
-      - /srv/carbon/media:/media
+      - ./backend:/app
+      - carbon_static:/static
+      - carbon_media:/media
     ports:
       - "8001:8000"
     command: >
-      sh -c "python manage.py collectstatic --noinput && 
-        gunicorn config.wsgi:application --bind 0.0.0.0:8000"
-networks:
-  prod_net:
-    external: true
-    name: prod_net            
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput && 
+             python manage.py runserver 0.0.0.0:8000"
+
+  frontend:
+    build:
+      context: ./carbon-frontend
+      dockerfile: Dockerfile
+    container_name: carbon-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./carbon-frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8001/api/v1
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  carbon_static:
+  carbon_media:            

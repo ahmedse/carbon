@@ -1,6 +1,6 @@
 // src/api/api.js
 
-import { API_BASE_URL } from "../config";
+import { API_BASE_URL, API_ROUTES } from "../config";
 import { isJwtExpired } from "../jwt";
 
 /** Joins base URL and path, stripping duplicate slashes. */
@@ -43,7 +43,7 @@ function sanitizeUrl(url) {
 async function refreshAccessToken() {
   const refresh = localStorage.getItem("refresh");
   if (!refresh) throw new Error("No refresh token");
-  const res = await fetch(joinUrl(API_BASE_URL, "api/token/refresh/"), {
+  const res = await fetch(joinUrl(API_BASE_URL, API_ROUTES.tokenRefresh), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh }),
@@ -52,6 +52,7 @@ async function refreshAccessToken() {
   const data = await res.json();
   if (!data.access) throw new Error("No new access token");
   localStorage.setItem("access", data.access);
+  if (data.refresh) localStorage.setItem("refresh", data.refresh);
   return data.access;
 }
 

@@ -1,6 +1,7 @@
 # File: backend/config/settings.py
 
 import os
+from datetime import timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -22,8 +23,14 @@ def get_env(name, default=None, required=False):
 
 # Key settings
 SECRET_KEY = get_env("SECRET_KEY", required=True)
-DEBUG = get_env("DJANGO_DEBUG", "False").lower() == "true"
-ALLOWED_HOSTS = get_env("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,72.60.83.189,clearturn.tech,gigacast.clearturn.tech").split(",")
+DEBUG = get_env("DJANGO_DEBUG", get_env("DEBUG", "False")).lower() == "true"
+ALLOWED_HOSTS = get_env(
+    "DJANGO_ALLOWED_HOSTS",
+    get_env(
+        "ALLOWED_HOSTS",
+        "127.0.0.1,localhost,72.60.83.189,clearturn.tech,gigacast.clearturn.tech",
+    ),
+).split(",")
 #FORCE_SCRIPT_NAME = get_env('FORCE_SCRIPT_NAME', None)
 #print("FORCE_SCRIPT_NAME =", FORCE_SCRIPT_NAME)
 
@@ -45,6 +52,7 @@ INSTALLED_APPS = [
     'accounts',
     'core',
     'dataschema',
+    'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -133,6 +141,34 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',
+        'user': '1000/hour',
+        'login': '5/minute',
+    },
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
+    'ALGORITHM': 'HS256',
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -141,12 +177,18 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 12,
+        }
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
     },
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
+    {
+        'NAME': 'accounts.validators.PasswordComplexityValidator',
     },
 ]
 
