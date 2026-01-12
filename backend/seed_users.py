@@ -60,16 +60,12 @@ def main():
     print("FIXED USER SEEDING - AASTMT Carbon Platform")
     print("="*70 + "\n")
 
-    # Get or create AAST tenant
-    tenant, _ = Tenant.objects.get_or_create(
-        name='AAST'
-    )
-    print(f"✓ Tenant: {tenant.name}")
-
-    # Get AAST Carbon project
+    # Get AAST Carbon project and use its tenant
     try:
         project = Project.objects.get(name='AAST Carbon')
-        print(f"✓ Project: {project.name}")
+        tenant = project.tenant  # Use the project's tenant
+        print(f"✓ Tenant: {tenant.name} (ID: {tenant.id})")
+        print(f"✓ Project: {project.name} (ID: {project.id})")
     except Project.DoesNotExist:
         print("ERROR: AAST Carbon project not found. Please run seed_rbac first.")
         return
