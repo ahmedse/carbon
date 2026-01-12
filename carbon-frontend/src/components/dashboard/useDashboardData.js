@@ -2,7 +2,7 @@
 // Custom hook for fetching real dashboard data from API
 
 import { useState, useEffect } from "react";
-import { apiFetch } from "../../api/client";
+import { apiFetch } from "../../api/api";
 
 export function useDashboardData(projectId, token) {
   const [data, setData] = useState(null);
