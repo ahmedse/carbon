@@ -46,40 +46,50 @@ const SCOPE_META = {
   },
 };
 
-function MenuItem({ to, icon, label, tooltip, selected, open, sx = {}, secondary, arrow, ...props }) {
-  // arrow: { expanded: boolean, onClick: fn }  (optional)
+function MenuItem({ to, icon, label, tooltip, selected, collapsed, sx = {}, secondary, arrow, ...props }) {
+  const isExpanded = !collapsed;
   return (
-    <Tooltip title={tooltip || label} placement="right" arrow disableHoverListener={open}>
+    <Tooltip title={tooltip || label} placement="right" arrow disableHoverListener={isExpanded}>
       <ListItemButton
         component={Link}
         to={to}
         selected={selected}
         sx={{
-          minHeight: 40,
-          pl: open ? 4 : 1.5,
-          borderRadius: 2,
-          bgcolor: selected ? "primary.lighter" : "transparent",
-          color: selected ? "primary.main" : "inherit",
-          transition: "background 0.2s",
+          minHeight: 36,
+          py: 0.75,
+          px: collapsed ? 1.5 : 1.5,
+          mx: 0.5,
+          borderRadius: 1,
+          justifyContent: collapsed ? "center" : "flex-start",
+          color: selected ? "#16a34a" : "#374151",
+          bgcolor: selected ? "#f0fdf4" : "transparent",
+          "&:hover": { bgcolor: "#f3f4f6" },
           ...sx,
         }}
         {...props}
       >
-        <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : "auto", justifyContent: "center" }}>
+        <ListItemIcon sx={{ 
+          minWidth: 0, 
+          mr: collapsed ? 0 : 1.5, 
+          justifyContent: "center", 
+          color: selected ? "#16a34a" : "#6b7280",
+        }}>
           {icon}
         </ListItemIcon>
-        {open && (
+        {isExpanded && (
           <>
             <ListItemText
               primary={label}
               secondary={secondary}
               primaryTypographyProps={{
                 fontWeight: selected ? 600 : 500,
-                fontSize: 15,
+                fontSize: "0.8125rem",
+                noWrap: true,
+                color: selected ? "#16a34a" : "#374151",
               }}
               secondaryTypographyProps={{
-                fontSize: 12,
-                color: "text.secondary",
+                fontSize: "0.6875rem",
+                color: "#9ca3af",
               }}
             />
             {arrow && (
@@ -91,9 +101,9 @@ function MenuItem({ to, icon, label, tooltip, selected, open, sx = {}, secondary
                   e.stopPropagation();
                   arrow.onClick?.();
                 }}
-                sx={{ ml: 1 }}
+                sx={{ p: 0.25, ml: 0.5, color: "#9ca3af" }}
               >
-                {arrow.expanded ? <ExpandLess /> : <ExpandMore />}
+                {arrow.expanded ? <ExpandLess sx={{ fontSize: 16 }} /> : <ExpandMore sx={{ fontSize: 16 }} />}
               </IconButton>
             )}
           </>
@@ -102,8 +112,8 @@ function MenuItem({ to, icon, label, tooltip, selected, open, sx = {}, secondary
     </Tooltip>
   );
 }
-
-export default function SidebarMenu({ open }) {
+export default function SidebarMenu({ collapsed }) {
+  const open = !collapsed;
   const location = useLocation();
   const navigate = useNavigate();
   const {
@@ -207,15 +217,15 @@ export default function SidebarMenu({ open }) {
   ].filter(Boolean);
 
   return (
-    <List sx={{ pt: 1, pb: 2, minWidth: open ? 250 : 64 }}>
+    <List sx={{ pt: 0.5, pb: 2, px: 0.5 }}>
       {/* --- Dashboard always on top --- */}
       <MenuItem
         to="/dashboard"
-        icon={<DashboardIcon />}
+        icon={<DashboardIcon sx={{ fontSize: 20 }} />}
         label="Dashboard"
         tooltip="Dashboard"
-        selected={location.pathname === "/dashboard"}
-        open={open}
+        selected={location.pathname === "/dashboard" || location.pathname === "/"}
+        collapsed={collapsed}
         sx={{ mb: 0.5 }}
       />
 
@@ -225,46 +235,38 @@ export default function SidebarMenu({ open }) {
           <ListItemButton
             onClick={() => setOpenMenus(prev => ({ ...prev, schemaManager: !prev.schemaManager }))}
             sx={{
-              minHeight: 40,
-              px: open ? 2 : 1.5,
-              borderRadius: 2,
+              minHeight: 36,
+              py: 0.75,
+              px: 1.5,
+              mx: 0.5,
+              borderRadius: 1,
               justifyContent: open ? "flex-start" : "center",
-              bgcolor: isSchemaManagerActive ? "action.selected" : "transparent"
+              color: isSchemaManagerActive ? "#7c3aed" : "#374151",
+              bgcolor: isSchemaManagerActive ? "#f5f3ff" : "transparent",
+              "&:hover": { bgcolor: "#f3f4f6" },
             }}
           >
-            <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : "auto", justifyContent: "center" }}>
+            <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
               <Tooltip title="Schema Manager" placement="right" arrow disableHoverListener={open}>
-                <SchemaAdminIcon sx={{ color: "#7b1fa2" }} />
+                <SchemaAdminIcon sx={{ fontSize: 20, color: isSchemaManagerActive ? "#7c3aed" : "#6b7280" }} />
               </Tooltip>
             </ListItemIcon>
-            {open && <ListItemText primary="Schema Manager" primaryTypographyProps={{ fontWeight: 600 }} />}
-            {open && (
-              <IconButton
-                edge="end"
-                size="small"
-                onClick={e => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setOpenMenus(prev => ({ ...prev, schemaManager: !prev.schemaManager }));
-                }}
-              >
-                {openMenus.schemaManager ? <ExpandLess /> : <ExpandMore />}
-              </IconButton>
-            )}
+            {open && <ListItemText primary="Schema Manager" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem" }} />}
+            {open && (openMenus.schemaManager ? <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} /> : <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />)}
           </ListItemButton>
           <Collapse in={open && openMenus.schemaManager} timeout="auto" unmountOnExit>
             <List component="div" disablePadding>
               <MenuItem
                 to="/schema-admin/table-manager"
-                icon={<TableRowsIcon sx={{ color: "#7b1fa2" }} />}
+                icon={<TableRowsIcon sx={{ fontSize: 18, color: "#7c3aed" }} />}
                 label="Table Manager"
                 selected={location.pathname.startsWith("/schema-admin/table-manager")}
-                open={open}
-                sx={{ pl: open ? 6 : 1.5 }}
+                collapsed={collapsed}
+                sx={{ pl: 4.5 }}
               />
             </List>
           </Collapse>
-          <Divider sx={{ my: 1 }} />
+          <Divider sx={{ my: 1, mx: 1 }} />
         </>
       )}
 
@@ -272,195 +274,115 @@ export default function SidebarMenu({ open }) {
       {Object.entries(modulesByScope).map(([scope, mods]) =>
         mods.length > 0 ? (
           <React.Fragment key={`scope-${scope}`}>
-            <Box
+            {/* Scope Header */}
+            <ListItemButton
+              onClick={() => setOpenScopeMenus(prev => ({ ...prev, [scope]: !prev[scope] }))}
               sx={{
-                bgcolor: open ? SCOPE_META[scope].color : "transparent",
-                borderRadius: 2,
-                mx: open ? 1 : 0,
-                my: 0.5,
-                boxShadow: open ? 1 : 0,
+                minHeight: 36,
+                py: 0.75,
+                px: 1.5,
+                mx: 0.5,
+                mt: 0.5,
+                borderRadius: 1,
+                justifyContent: open ? "flex-start" : "center",
+                bgcolor: openScopeMenus[scope] ? "#f9fafb" : "transparent",
+                "&:hover": { bgcolor: "#f3f4f6" },
               }}
             >
-              {/* Scope Group Header */}
-              <ListItemButton
-                onClick={e => {
-                  // Only expand/collapse on arrow click
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setOpenScopeMenus(prev => ({ ...prev, [scope]: !prev[scope] }));
-                }}
-                sx={{
-                  minHeight: 42,
-                  px: open ? 2 : 1.5,
-                  borderRadius: 2,
-                  justifyContent: open ? "flex-start" : "center",
-                  fontWeight: 700,
-                  bgcolor: "transparent",
-                  color: "#222",
-                  cursor: "pointer",
-                }}
-                disableRipple
-              >
-                <ListItemIcon
-                  sx={{ minWidth: 0, mr: open ? 2 : "auto", justifyContent: "center", cursor: "pointer" }}
-                  onClick={e => { e.stopPropagation(); navigate(`/scopes/${scope}`); }}
-                >
-                  {SCOPE_META[scope].icon}
-                </ListItemIcon>
-                {open && (
+              <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
+                <Tooltip title={SCOPE_META[scope].label} placement="right" arrow disableHoverListener={open}>
+                  {React.cloneElement(SCOPE_META[scope].icon, { sx: { fontSize: 20 } })}
+                </Tooltip>
+              </ListItemIcon>
+              {open && (
+                <>
                   <ListItemText
-                    primary={
-                      <Box display="flex" alignItems="center">
-                        <span
-                          style={{ cursor: "pointer", fontWeight: 700 }}
-                          onClick={e => { e.stopPropagation(); navigate(`/scopes/${scope}`); }}
-                        >
-                          {SCOPE_META[scope].label}
-                        </span>
-                        <MicroHelp
-                          helpKey={SCOPE_META[scope].helpKey}
-                          lang="en"
-                          sx={{ ml: 1 }}
-                          onClick={e => {
-                            e.stopPropagation();
-                            navigate(`/scopes/${scope}`);
-                          }}
-                        />
-                      </Box>
-                    }
+                    primary={SCOPE_META[scope].label}
                     secondary={SCOPE_META[scope].desc}
-                    primaryTypographyProps={{ fontWeight: 700, fontSize: 16 }}
-                    secondaryTypographyProps={{ fontSize: 11, color: "#888" }}
+                    primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem", color: "#111827" }}
+                    secondaryTypographyProps={{ fontSize: "0.6875rem", color: "#9ca3af" }}
                   />
-                )}
-                {open && mods.length > 0 && (
-                  <IconButton
-                    edge="end"
-                    size="small"
-                    sx={{ ml: 1 }}
-                    onClick={e => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setOpenScopeMenus(prev => ({ ...prev, [scope]: !prev[scope] }));
-                    }}
-                  >
-                    {openScopeMenus[scope] ? <ExpandLess /> : <ExpandMore />}
-                  </IconButton>
-                )}
-              </ListItemButton>
-              <Collapse in={open && openScopeMenus[scope]} timeout="auto" unmountOnExit>
-                <List component="div" disablePadding>
-                  {mods.map(mod => {
-                    const tables = (tablesByModule[String(mod.id)] || []).filter(t => t.is_active !== false);
-                    const isActiveModule = location.pathname.startsWith(`/modules/${mod.id}`) ||
-                      (location.pathname.startsWith("/dataschema/entry/") && location.pathname.includes(`/${mod.id}/`));
-                    const hasTables = tables && tables.length > 0;
-                    return (
-                      <React.Fragment key={mod.id}>
-                        {/* Module Menu */}
-                        <ListItemButton
-                          onClick={e => {
-                            // Navigate on label/icon click, expand/collapse on arrow click
-                            e.preventDefault();
-                            e.stopPropagation();
-                            navigate(`/modules/${mod.id}`);
-                          }}
-                          selected={isActiveModule && !hasTables}
-                          sx={{
-                            minHeight: 38,
-                            pl: open ? 6 : 1.5,
-                            borderRadius: 2,
-                            justifyContent: open ? "flex-start" : "center",
-                            fontWeight: open && hasTables ? 600 : 500,
-                            bgcolor: isActiveModule ? "action.selected" : "transparent",
-                            mb: 0.5,
-                            color: isActiveModule ? "primary.main" : "#444",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : "auto", justifyContent: "center", cursor: "pointer" }}>
-                            <TableIcon sx={{ color: "#757575" }} />
-                          </ListItemIcon>
-                          {open && (
-                            <ListItemText
-                              primary={
-                                <span
-                                  style={{ cursor: "pointer" }}
-                                  onClick={e => { e.stopPropagation(); navigate(`/modules/${mod.id}`); }}
-                                >
-                                  {mod.name}
-                                </span>
-                              }
-                              secondary={mod.description}
-                              primaryTypographyProps={{ fontWeight: 500 }}
-                              secondaryTypographyProps={{ fontSize: 11, color: "#aaa" }}
-                            />
-                          )}
-                          {open && hasTables && (
-                            <IconButton
-                              edge="end"
-                              size="small"
-                              sx={{ ml: 1 }}
-                              onClick={e => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setOpenModuleMenus(prev => ({
-                                  ...prev,
-                                  [mod.id]: !prev[mod.id]
-                                }));
-                              }}
-                            >
-                              {openModuleMenus[mod.id] ? <ExpandLess /> : <ExpandMore />}
-                            </IconButton>
-                          )}
-                        </ListItemButton>
-                        {/* Tables under this module */}
-                        {hasTables && (
-                          <Collapse in={open && openModuleMenus[mod.id]} timeout="auto" unmountOnExit>
-                            <List component="div" disablePadding>
-                              {tables.map(table => (
-                                <MenuItem
+                  {openScopeMenus[scope] ? <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} /> : <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />}
+                </>
+              )}
+            </ListItemButton>
+
+            {/* Scope Modules */}
+            <Collapse in={open && openScopeMenus[scope]} timeout="auto" unmountOnExit>
+              <List component="div" disablePadding sx={{ pl: 1 }}>
+                {mods.map(mod => {
+                  const tables = (tablesByModule[String(mod.id)] || []).filter(t => t.is_active !== false);
+                  const isActiveModule = location.pathname.startsWith(`/modules/${mod.id}`) ||
+                    (location.pathname.startsWith("/dataschema/entry/") && location.pathname.includes(`/${mod.id}/`));
+                  const hasTables = tables && tables.length > 0;
+                  return (
+                    <React.Fragment key={mod.id}>
+                      {/* Module */}
+                      <ListItemButton
+                        onClick={() => hasTables ? setOpenModuleMenus(prev => ({ ...prev, [mod.id]: !prev[mod.id] })) : navigate(`/modules/${mod.id}`)}
+                        sx={{
+                          minHeight: 32,
+                          py: 0.5,
+                          pl: 3,
+                          pr: 1.5,
+                          mx: 0.5,
+                          borderRadius: 1,
+                          color: isActiveModule ? "#16a34a" : "#4b5563",
+                          bgcolor: isActiveModule ? "#f0fdf4" : "transparent",
+                          "&:hover": { bgcolor: "#f3f4f6" },
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 0, mr: 1.5, color: isActiveModule ? "#16a34a" : "#9ca3af" }}>
+                          <TableIcon sx={{ fontSize: 16 }} />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={mod.name}
+                          primaryTypographyProps={{ fontSize: "0.8125rem", fontWeight: isActiveModule ? 600 : 500, noWrap: true }}
+                        />
+                        {hasTables && (openModuleMenus[mod.id] ? <ExpandLess sx={{ fontSize: 14, color: "#9ca3af" }} /> : <ExpandMore sx={{ fontSize: 14, color: "#9ca3af" }} />)}
+                      </ListItemButton>
+
+                      {/* Tables under module */}
+                      {hasTables && (
+                        <Collapse in={openModuleMenus[mod.id]} timeout="auto" unmountOnExit>
+                          <List component="div" disablePadding>
+                            {tables.map(table => {
+                              const isTableActive = location.pathname === `/dataschema/entry/${mod.id}/${table.id}`;
+                              return (
+                                <ListItemButton
                                   key={table.id}
+                                  component={Link}
                                   to={`/dataschema/entry/${mod.id}/${table.id}`}
-                                  icon={<TableRowsIcon sx={{ color: "#2196f3" }} />}
-                                  label={table.title}
-                                  tooltip={table.title}
-                                  selected={location.pathname === `/dataschema/entry/${mod.id}/${table.id}`}
-                                  open={open}
-                                  sx={{ pl: open ? 10 : 1.5, mb: 0.5 }}
-                                />
-                              ))}
-                            </List>
-                          </Collapse>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </List>
-              </Collapse>
-            </Box>
+                                  sx={{
+                                    minHeight: 28,
+                                    py: 0.25,
+                                    pl: 5.5,
+                                    pr: 1.5,
+                                    mx: 0.5,
+                                    borderRadius: 1,
+                                    color: isTableActive ? "#16a34a" : "#6b7280",
+                                    bgcolor: isTableActive ? "#f0fdf4" : "transparent",
+                                    "&:hover": { bgcolor: "#f3f4f6" },
+                                  }}
+                                >
+                                  <ListItemText
+                                    primary={table.title || table.name}
+                                    primaryTypographyProps={{ fontSize: "0.75rem", fontWeight: isTableActive ? 600 : 400, noWrap: true }}
+                                  />
+                                </ListItemButton>
+                              );
+                            })}
+                          </List>
+                        </Collapse>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </List>
+            </Collapse>
           </React.Fragment>
         ) : null
       )}
-
-      <Divider sx={{ my: 1, mx: open ? 1 : 0 }} />
-
-      {/* --- Static Menu (Help, Feedback) --- */}
-      {staticMenu.slice(1).map((item, idx) => {
-        if (item.type === "divider") return <Divider key={`div-${idx}`} />;
-        return (
-          <MenuItem
-            key={item.to}
-            to={item.to}
-            icon={item.icon}
-            label={item.label}
-            tooltip={item.tooltip}
-            selected={item.match(location.pathname)}
-            open={open}
-            sx={{ mb: 0.5 }}
-          />
-        );
-      })}
     </List>
   );
 }

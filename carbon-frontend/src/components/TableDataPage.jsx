@@ -92,7 +92,6 @@ export default function TableDataPage({
         const safeRows = (Array.isArray(data) ? data : []).filter(
           row => row && row.id && typeof row.id !== "undefined"
         );
-        console.log("Fetched rows", data);
         setRows(safeRows);
         setLoading(false);
       })
@@ -196,8 +195,8 @@ export default function TableDataPage({
   };
 
   return (
-    <Box p={3}>
-      <Typography variant="h4" gutterBottom>
+    <Box>
+      <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
         {table?.title}
       </Typography>
 

@@ -52,8 +52,8 @@ export const AuthProvider = ({ children }) => {
   const refreshTimerRef = useRef();
   const loginInFlightRef = useRef(false);
 
-  // Debug helper
-  const debug = (...args) => { if (import.meta.env.DEV) console.log("[Auth]", ...args); };
+  // Debug helper (disabled by default, enable for debugging)
+  const debug = (...args) => { /* if (import.meta.env.DEV) console.log("[Auth]", ...args); */ };
 
   // --- Local Storage Sync on mount ---
   useEffect(() => {

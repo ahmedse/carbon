@@ -14,6 +14,10 @@ import {
   Paper,
   LinearProgress,
   Tooltip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  IconButton,
 } from "@mui/material";
 import InsertChartIcon from "@mui/icons-material/InsertChart";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
@@ -24,6 +28,8 @@ import EmojiNatureIcon from "@mui/icons-material/EmojiNature";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import WbSunnyIcon from "@mui/icons-material/WbSunny";
 import EmojiEmotionsIcon from "@mui/icons-material/EmojiEmotions";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import { Line, Bar, Pie, Doughnut } from "react-chartjs-2";
 import { Chart, ArcElement, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip as ChartTooltip, Legend } from "chart.js";
 
@@ -78,6 +84,14 @@ function Gauge({ value, label, min = 0, max = 100, color = "#1976d2" }) {
 }
 
 export default function Dashboard() {
+  const [openPanels, setOpenPanels] = React.useState(["impact", "trends", "quality"]);
+
+  const togglePanel = (panel) => {
+    setOpenPanels((prev) =>
+      prev.includes(panel) ? prev.filter((p) => p !== panel) : [...prev, panel]
+    );
+  };
+
   // IMAGINARY DEMO DATA for AASTMT (2025), one year cycle
   const summary = {
     emissions: 5340, // last month
@@ -207,6 +221,45 @@ export default function Dashboard() {
   ];
 
   const cardStyle = { borderRadius: 4, boxShadow: 4 };
+
+  const metricCards = [
+    {
+      key: "emissions",
+      title: "CO₂ Emissions",
+      value: `${summary.emissions.toLocaleString()} t`,
+      target: `${summary.emissionsTarget.toLocaleString()} t target`,
+      change: `${summary.emissionsChange}% ↓`,
+      changeColor: "success",
+      icon: <EmojiNatureIcon />,
+      barValue: Math.min(100, ((summary.emissionsStart - summary.emissions) / (summary.emissionsStart - summary.emissionsTarget)) * 100),
+      barColor: "#43a047",
+      context: "Significant progress; keep momentum.",
+    },
+    {
+      key: "energy",
+      title: "Energy Consumption",
+      value: `${summary.energy.toLocaleString()} kWh`,
+      target: `${summary.energyGoal.toLocaleString()} kWh goal`,
+      change: `${summary.energyChange}% ↓`,
+      changeColor: "success",
+      icon: <BoltIcon />,
+      barValue: Math.min(100, ((187000 - summary.energy) / (187000 - summary.energyGoal)) * 100),
+      barColor: "#fbc02d",
+      context: "Efficiency initiatives paying off.",
+    },
+    {
+      key: "water",
+      title: "Water Usage",
+      value: `${summary.water.toLocaleString()} m³`,
+      target: "Conservation programs active",
+      change: `${summary.waterChange}% ↓`,
+      changeColor: "success",
+      icon: <WaterDropIcon />,
+      barValue: 100,
+      barColor: "#43a047",
+      context: "Steady decline across sites.",
+    },
+  ];
 
   return (
     <Box sx={{ maxWidth: 1350, mx: "auto", mt: 4, mb: 10, px: { xs: 1, sm: 3 } }}>

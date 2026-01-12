@@ -13,12 +13,8 @@ export default function DataEntryPage() {
     return <div style={{ padding: 48, textAlign: "center" }}>Loading context...</div>;
   }
 
-  // DEBUG: Show full context and projectId
-  console.log("DataEntryPage context:", context);
-
   // Get project ID robustly
   const projectId = context.project_id || context.projectId;
-  console.log("projectId for TableDataPage:", projectId);
 
   // Prefer module_id from context, else fallback to moduleName (from URL)
   let moduleId = context.module_id;

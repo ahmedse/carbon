@@ -9,7 +9,11 @@ import DataRowFormDrawer from "./DataRowFormDrawer";
 import { useNotification } from "./NotificationProvider";
 
 function safeArray(arr) {
-  return Array.isArray(arr) ? arr : [];
+  if (Array.isArray(arr)) return arr;
+  if (typeof arr === 'string') {
+    try { return JSON.parse(arr); } catch { return []; }
+  }
+  return [];
 }
 
 function mapRows(rows, fields) {
@@ -154,18 +158,34 @@ function buildColumns(fields, editable, token, project_id, module_id, uploadRowF
 }
 
 function FilterBar({ fields, filters, setFilters, onAddNew, onSearchChange }) {
-  // Only allow filter on string, number, select fields
   const filterFields = fields.filter(
     f => ["string", "number", "select"].includes(f.type)
   );
+  
+  const inputStyle = {
+    padding: "8px 12px",
+    borderRadius: 6,
+    border: "1px solid #e2e8f0",
+    fontSize: "0.8125rem",
+    outline: "none",
+    transition: "border-color 0.15s",
+  };
+  
   return (
-    <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
+    <div style={{ 
+      display: "flex", 
+      gap: 12, 
+      marginBottom: 16, 
+      padding: "12px 0",
+      flexWrap: "wrap",
+      alignItems: "center"
+    }}>
       <input
         type="text"
         placeholder="Search..."
         value={filters._search || ""}
         onChange={e => onSearchChange(e.target.value)}
-        style={{ width: 180, padding: "6px", borderRadius: 4, border: "1px solid #bbb" }}
+        style={{ ...inputStyle, width: 200 }}
       />
       {filterFields.map(f => {
         if (f.type === "select") {
@@ -174,10 +194,10 @@ function FilterBar({ fields, filters, setFilters, onAddNew, onSearchChange }) {
               key={f.name}
               value={filters[f.name] ?? ""}
               onChange={e => setFilters(filters => ({ ...filters, [f.name]: e.target.value }))}
-              style={{ width: 160, padding: "6px", borderRadius: 4, border: "1px solid #bbb" }}
+              style={{ ...inputStyle, width: 150, cursor: "pointer" }}
             >
-              <option value="">(All)</option>
-              {(f.options || []).map(opt =>
+              <option value="">{f.label}</option>
+              {safeArray(f.options).map(opt =>
                 <option value={opt.value} key={opt.value}>{opt.label}</option>
               )}
             </select>
@@ -190,12 +210,12 @@ function FilterBar({ fields, filters, setFilters, onAddNew, onSearchChange }) {
             value={filters[f.name] ?? ""}
             placeholder={f.label}
             onChange={e => setFilters(filters => ({ ...filters, [f.name]: e.target.value }))}
-            style={{ width: 140, padding: "6px", borderRadius: 4, border: "1px solid #bbb" }}
+            style={{ ...inputStyle, width: 130 }}
           />
         );
       })}
       <span style={{ flex: 1 }} />
-      <Button variant="contained" startIcon={<AddIcon />} onClick={onAddNew}>
+      <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={onAddNew}>
         Add Row
       </Button>
     </div>
@@ -287,7 +307,6 @@ export default function DataTableGrid({
     () => buildColumns(fields, false, token, project_id, module_id, uploadRowFile, handleEditRow, handleDeleteRow),
     [fields, token, project_id, module_id, uploadRowFile]
   );
-  console.log("rows in DataTableGrid", rows);
   const mappedRows = useMemo(
     () => mapRows(rows.filter(row => row && row.id), fields),
     [rows, fields]
