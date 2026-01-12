@@ -44,9 +44,7 @@ Chart.register(
   ChartTooltip,
   Legend
 );
-  const circumference = 2 * Math.PI * radius;
-  const percent = Math.min(1, Math.max(0, (value - min) / (max - min)));
-  const offset = circumference * (1 - percent);
+
 export default function Dashboard() {
   const { user, context } = useAuth();
   const [openPanels, setOpenPanels] = useState(["impact", "trends", "quality"]);
