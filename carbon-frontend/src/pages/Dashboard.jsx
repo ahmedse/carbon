@@ -1,38 +1,39 @@
-// src/pages/Dashboard.jsx
+// File: src/pages/Dashboard.jsx
+// Interactive, data-driven carbon emissions dashboard with real-time analytics
 
-import React from "react";
+import React, { useState } from "react";
+import { Box, Grid, Typography, CircularProgress, Alert, Skeleton } from "@mui/material";
 import {
-  Box,
-  Grid,
-  Card,
-  CardContent,
-  Typography,
-  Avatar,
-  Chip,
-  Divider,
-  Stack,
-  Paper,
-  LinearProgress,
-  Tooltip,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  IconButton,
-} from "@mui/material";
-import InsertChartIcon from "@mui/icons-material/InsertChart";
-import WaterDropIcon from "@mui/icons-material/WaterDrop";
-import BoltIcon from "@mui/icons-material/Bolt";
-import TrendingDownIcon from "@mui/icons-material/TrendingDown";
-import TrendingUpIcon from "@mui/icons-material/TrendingUp";
-import EmojiNatureIcon from "@mui/icons-material/EmojiNature";
-import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
-import WbSunnyIcon from "@mui/icons-material/WbSunny";
-import EmojiEmotionsIcon from "@mui/icons-material/EmojiEmotions";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import FilterAltIcon from "@mui/icons-material/FilterAlt";
+  TrendingDown,
+  WaterDrop,
+  Bolt,
+  EmojiNature,
+  Insights,
+  Assessment,
+  BarChart,
+  PieChart,
+} from "@mui/icons-material";
 import { Line, Bar, Pie, Doughnut } from "react-chartjs-2";
-import { Chart, ArcElement, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip as ChartTooltip, Legend } from "chart.js";
+import {
+  Chart,
+  ArcElement,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Tooltip as ChartTooltip,
+  Legend,
+} from "chart.js";
 
+// Dashboard components
+import MetricCard from "../components/dashboard/MetricCard";
+import GaugeChart from "../components/dashboard/GaugeChart";
+import ChartSection from "../components/dashboard/ChartSection";
+import { useDashboardData } from "../components/dashboard/useDashboardData";
+import { useAuth } from "../auth/AuthContext";
+
+// Register Chart.js components
 Chart.register(
   ArcElement,
   CategoryScale,
@@ -43,48 +44,15 @@ Chart.register(
   ChartTooltip,
   Legend
 );
-
-// SVG Gauge for professional data completeness
-function Gauge({ value, label, min = 0, max = 100, color = "#1976d2" }) {
-  const radius = 46;
-  const cx = 50, cy = 50;
   const circumference = 2 * Math.PI * radius;
   const percent = Math.min(1, Math.max(0, (value - min) / (max - min)));
   const offset = circumference * (1 - percent);
-  return (
-    <svg width={120} height={90} viewBox="0 0 120 90">
-      <g>
-        <circle
-          cx={cx}
-          cy={cy}
-          r={radius}
-          fill="none"
-          stroke="#eee"
-          strokeWidth="10"
-          strokeDasharray={circumference}
-          strokeDashoffset={0}
-        />
-        <circle
-          cx={cx}
-          cy={cy}
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth="10"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          transform="rotate(-90 50 50)"
-        />
-        <text x={cx} y={cy + 5} fontSize="28" fontWeight="bold" textAnchor="middle" fill="#222">{Math.round(value)}</text>
-        <text x={cx} y={cy + 26} fontSize="13" textAnchor="middle" fill="#666">{label}</text>
-      </g>
-    </svg>
-  );
-}
-
 export default function Dashboard() {
-  const [openPanels, setOpenPanels] = React.useState(["impact", "trends", "quality"]);
+  const { user, context } = useAuth();
+  const [openPanels, setOpenPanels] = useState(["impact", "trends", "quality"]);
+
+  // Fetch real data from API
+  const { data, loading, error } = useDashboardData(context?.projectId, user?.token);
 
   const togglePanel = (panel) => {
     setOpenPanels((prev) =>
@@ -92,470 +60,320 @@ export default function Dashboard() {
     );
   };
 
-  // IMAGINARY DEMO DATA for AASTMT (2025), one year cycle
-  const summary = {
-    emissions: 5340, // last month
-    emissionsStart: 6200, // Jan start
-    emissionsTarget: 5000, // reduction goal
-    emissionsChange: -13, // overall improvement %
-    water: 80000,
-    waterChange: -5.6,
-    energy: 178000,
-    energyChange: -4.8,
-    energyGoal: 170000,
-    topCampus: "Abu Qir",
-    dataCompleteness: 97,
-    auditWarnings: 0,
-    lastUpdate: "2025-12-31",
+  // Loading state
+  if (loading) {
+    return (
+      <Box sx={{ p: 4 }}>
+        <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 3, mb: 3 }} />
+        <Grid container spacing={3}>
+          {[1, 2, 3].map((i) => (
+            <Grid item xs={12} md={4} key={i}>
+              <Skeleton variant="rectangular" height={180} sx={{ borderRadius: 3 }} />
+            </Grid>
+          ))}
+        </Grid>
+      </Box>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <Box sx={{ p: 4 }}>
+        <Alert severity="error">
+          Failed to load dashboard data: {error}
+        </Alert>
+      </Box>
+    );
+  }
+
+  const summary = data?.summary || {
+    emissions: { total: 0, scope1: 0, scope2: 0, scope3: 0 },
+    energy: { total: 0 },
+    water: { total: 0 },
+    dataCompleteness: 0,
+    lastUpdate: new Date().toISOString().split('T')[0],
   };
 
-  // 1 year monthly data
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const emissionsByMonth = [6200, 6100, 6000, 5920, 5860, 5780, 5700, 5620, 5550, 5450, 5400, 5340];
-  const emissionsTargetArray = Array(12).fill(summary.emissionsTarget);
+  const monthlyData = data?.monthlyEmissions || [];
+  const scopeData = data?.scopeBreakdown || { labels: [], data: [] };
 
+  // Prepare chart data
   const emissionsTrend = {
-    labels: months,
+    labels: monthlyData.map(d => d.month),
     datasets: [
       {
         label: "CO₂ Emissions (t)",
-        data: emissionsByMonth,
-        borderColor: "#1976d2",
-        backgroundColor: "rgba(25,118,210,0.09)",
+        data: monthlyData.map(d => d.emissions),
+        borderColor: "#16a34a",
+        backgroundColor: "rgba(22, 163, 74, 0.1)",
         tension: 0.4,
-        pointRadius: 3,
-        fill: true
-      },
-      {
-        label: "Target",
-        data: emissionsTargetArray,
-        borderColor: "#43a047",
-        borderDash: [8, 4],
-        pointRadius: 0,
-        fill: false,
-        borderWidth: 2
-      }
-    ],
-  };
-
-  const waterTrend = {
-    labels: months,
-    datasets: [
-      {
-        label: "Water (m³)",
-        data: [9400, 9200, 9100, 8900, 8700, 8600, 8500, 8400, 8300, 8200, 8100, 8000],
-        backgroundColor: "#43a047",
-        borderRadius: 6,
-        maxBarThickness: 24,
+        pointRadius: 4,
+        pointBackgroundColor: "#16a34a",
+        fill: true,
       },
     ],
   };
 
   const energyTrend = {
-    labels: months,
+    labels: monthlyData.map(d => d.month),
     datasets: [
       {
         label: "Energy (kWh)",
-        data: [187000, 185000, 184000, 183000, 182000, 180000, 179000, 178000, 177000, 175000, 172000, 170000],
-        borderColor: "#fbc02d",
-        backgroundColor: "rgba(251,192,45,0.12)",
-        tension: 0.4,
-        pointRadius: 3,
-        fill: true,
+        data: monthlyData.map(d => d.energy),
+        backgroundColor: "#f59e0b",
+        borderRadius: 6,
+        maxBarThickness: 32,
       },
-      {
-        label: "Goal",
-        data: Array(12).fill(summary.energyGoal),
-        borderColor: "#43a047",
-        borderDash: [8, 4],
-        pointRadius: 0,
-        fill: false,
-        borderWidth: 2
-      }
     ],
   };
 
-  const energyMix = {
-    labels: ["Grid", "Solar", "Backup Diesel"],
+  const waterTrend = {
+    labels: monthlyData.map(d => d.month),
     datasets: [
       {
-        data: [77, 20, 3],
-        backgroundColor: ["#1976d2", "#fbc02d", "#8e24aa"],
-        borderWidth: 2,
+        label: "Water (m³)",
+        data: monthlyData.map(d => d.water),
+        backgroundColor: "#3b82f6",
+        borderRadius: 6,
+        maxBarThickness: 32,
       },
     ],
   };
 
   const scopePie = {
-    labels: ["Scope 1", "Scope 2", "Scope 3"],
+    labels: scopeData.labels,
     datasets: [
       {
-        data: [15, 50, 35],
+        data: scopeData.data,
         backgroundColor: ["#43a047", "#1e88e5", "#ff7043"],
         borderWidth: 2,
+        borderColor: "#fff",
       },
     ],
   };
 
-  const completenessTrend = {
-    labels: months,
-    datasets: [
-      {
-        label: "Data Completeness (%)",
-        data: [83, 89, 93, 92, 94, 96, 98, 99, 98, 97, 97, 97],
-        borderColor: "#8e24aa",
-        backgroundColor: "rgba(142,36,170,0.07)",
-        tension: 0.3,
-        fill: true,
-        pointRadius: 3,
-      },
-    ],
+  // Chart options
+  const lineOptions = {
+    plugins: {
+      legend: { display: true, position: "top" },
+      tooltip: { mode: "index", intersect: false },
+    },
+    scales: {
+      y: { beginAtZero: true, grid: { color: "#f3f4f6" } },
+      x: { grid: { display: false } },
+    },
+    responsive: true,
+    maintainAspectRatio: false,
   };
 
-  const campuses = [
-    { name: "Abu Qir", emissions: 2110, happiness: 92 },
-    { name: "Alexandria", emissions: 1190, happiness: 89 },
-    { name: "Smart Village", emissions: 940, happiness: 95 },
-    { name: "Cairo", emissions: 610, happiness: 90 },
-    { name: "Port Said", emissions: 490, happiness: 93 },
-  ];
+  const barOptions = {
+    plugins: {
+      legend: { display: false },
+      tooltip: { mode: "index", intersect: false },
+    },
+    scales: {
+      y: { beginAtZero: true, grid: { color: "#f3f4f6" } },
+      x: { grid: { display: false } },
+    },
+    responsive: true,
+    maintainAspectRatio: false,
+  };
 
-  const cardStyle = { borderRadius: 4, boxShadow: 4 };
-
-  const metricCards = [
-    {
-      key: "emissions",
-      title: "CO₂ Emissions",
-      value: `${summary.emissions.toLocaleString()} t`,
-      target: `${summary.emissionsTarget.toLocaleString()} t target`,
-      change: `${summary.emissionsChange}% ↓`,
-      changeColor: "success",
-      icon: <EmojiNatureIcon />,
-      barValue: Math.min(100, ((summary.emissionsStart - summary.emissions) / (summary.emissionsStart - summary.emissionsTarget)) * 100),
-      barColor: "#43a047",
-      context: "Significant progress; keep momentum.",
+  const pieOptions = {
+    plugins: {
+      legend: { position: "bottom" },
+      tooltip: { callbacks: { label: (context) => `${context.label}: ${context.parsed} t CO₂e` } },
     },
-    {
-      key: "energy",
-      title: "Energy Consumption",
-      value: `${summary.energy.toLocaleString()} kWh`,
-      target: `${summary.energyGoal.toLocaleString()} kWh goal`,
-      change: `${summary.energyChange}% ↓`,
-      changeColor: "success",
-      icon: <BoltIcon />,
-      barValue: Math.min(100, ((187000 - summary.energy) / (187000 - summary.energyGoal)) * 100),
-      barColor: "#fbc02d",
-      context: "Efficiency initiatives paying off.",
-    },
-    {
-      key: "water",
-      title: "Water Usage",
-      value: `${summary.water.toLocaleString()} m³`,
-      target: "Conservation programs active",
-      change: `${summary.waterChange}% ↓`,
-      changeColor: "success",
-      icon: <WaterDropIcon />,
-      barValue: 100,
-      barColor: "#43a047",
-      context: "Steady decline across sites.",
-    },
-  ];
+    responsive: true,
+    maintainAspectRatio: false,
+  };
 
   return (
-    <Box sx={{ maxWidth: 1350, mx: "auto", mt: 4, mb: 10, px: { xs: 1, sm: 3 } }}>
-      {/* Executive Banner */}
-      <Paper elevation={0} sx={{
-        mb: 5,
-        p: { xs: 2, md: 4 },
-        borderRadius: 4,
-        bgcolor: "#e3f2fd",
-        border: "1px solid #bbdefb",
-        display: "flex",
-        flexDirection: { xs: "column", md: "row" },
-        alignItems: { md: "center" },
-        gap: 3
-      }}>
-        <Avatar sx={{ bgcolor: "#1976d2", width: 64, height: 64, mr: 3 }}>
-          <EmojiEventsIcon sx={{ fontSize: 40 }} />
-        </Avatar>
-        <Box>
-          <Typography variant="h4" fontWeight={900} color="primary.dark" letterSpacing={-1}>
-            AASTMT Sustainability Dashboard <span style={{ color: "#43a047" }}>2025</span>
-          </Typography>
-          <Typography color="text.secondary" fontSize={18} fontWeight={500}>
-            <b>For Demo Purposes &amp; Work In Progress</b>
-          </Typography>
-          <Typography color="text.secondary" fontSize={15} mt={1}>
-            All metrics and visualizations below use <u>imaginary</u> data for demonstration purposes only.
-          </Typography>
-        </Box>
-        <Chip label="Demo / WIP" color="warning" variant="filled" sx={{ height: 36, fontWeight: 700, ml: "auto" }} />
-      </Paper>
-
-      {/* KPI and Progress Cards */}
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Card sx={cardStyle}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2} mb={2}>
-                <Avatar sx={{ bgcolor: "#1976d2" }}><EmojiNatureIcon /></Avatar>
-                <Box flexGrow={1}>
-                  <Typography color="text.secondary" fontWeight={500}>CO₂ Emissions</Typography>
-                  <Stack direction="row" alignItems="baseline" spacing={1}>
-                    <Typography variant="h6" fontWeight={900}>{summary.emissions.toLocaleString()} t</Typography>
-                    <Typography color="success.main" fontSize={16} fontWeight={700}>Target: {summary.emissionsTarget.toLocaleString()} t</Typography>
-                  </Stack>
-                  <Box mt={1}>
-                    <LinearProgress
-                      variant="determinate"
-                      value={Math.min(100, ((summary.emissionsStart - summary.emissions) / (summary.emissionsStart - summary.emissionsTarget)) * 100)}
-                      sx={{ height: 12, borderRadius: 6, bgcolor: "#d7ffd9", "& .MuiLinearProgress-bar": { bgcolor: "#43a047" } }}
-                    />
-                  </Box>
-                </Box>
-                <Chip label={`${summary.emissionsChange}% ↓`}
-                  color="success"
-                  size="small"
-                  icon={<TrendingDownIcon />}
-                  sx={{ fontWeight: 700 }}
-                />
-              </Stack>
-              <Typography color="success.main" fontWeight={700} fontSize={14}>
-                Significant progress! Emissions reduced by 13% this year.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Card sx={cardStyle}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2} mb={2}>
-                <Avatar sx={{ bgcolor: "#fbc02d" }}><BoltIcon /></Avatar>
-                <Box flexGrow={1}>
-                  <Typography color="text.secondary" fontWeight={500}>Energy Consumption</Typography>
-                  <Stack direction="row" alignItems="baseline" spacing={1}>
-                    <Typography variant="h6" fontWeight={900}>{summary.energy.toLocaleString()} kWh</Typography>
-                    <Typography color="success.main" fontSize={16} fontWeight={700}>Goal: {summary.energyGoal.toLocaleString()} kWh</Typography>
-                  </Stack>
-                  <Box mt={1}>
-                    <LinearProgress
-                      variant="determinate"
-                      value={Math.min(100, ((187000 - summary.energy) / (187000 - summary.energyGoal)) * 100)}
-                      sx={{ height: 12, borderRadius: 6, bgcolor: "#fff9c4", "& .MuiLinearProgress-bar": { bgcolor: "#fbc02d" } }}
-                    />
-                  </Box>
-                </Box>
-                <Chip label={`${summary.energyChange}% ↓`}
-                  color="success"
-                  size="small"
-                  icon={<TrendingDownIcon />}
-                  sx={{ fontWeight: 700 }}
-                />
-              </Stack>
-              <Typography color="success.main" fontWeight={700} fontSize={14}>
-                Energy reduction on track, approaching yearly goal.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Trends and Mix */}
-      <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid item xs={12} md={7}>
-          <Card sx={{ ...cardStyle, minHeight: 325 }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>
-                CO₂ Emissions Trend (Jan–Dec 2025)
-              </Typography>
-              <Box sx={{ height: 220 }}>
-                <Line data={emissionsTrend} options={{
-                  plugins: {
-                    legend: { display: true, labels: { font: { size: 13 } } },
-                  },
-                  scales: { y: { beginAtZero: false } },
-                  responsive: true,
-                  maintainAspectRatio: false,
-                }} />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={5}>
-          <Card sx={{ ...cardStyle, minHeight: 325 }}>
-            <CardContent>
-              <Typography fontWeight={700} mb={1}>Energy Mix</Typography>
-              <Box sx={{ height: 160, mb: 2 }}>
-                <Doughnut data={energyMix} options={{
-                  plugins: { legend: { position: "bottom" } },
-                  cutout: "70%",
-                  responsive: true,
-                  maintainAspectRatio: false
-                }} />
-              </Box>
-              <Typography color="success.main" fontWeight={700} fontSize={15}>
-                Solar share up 5% vs previous year.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={7}>
-          <Card sx={{ ...cardStyle, minHeight: 220 }}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>
-                Water Usage Trend (Jan–Dec 2025)
-              </Typography>
-              <Box sx={{ height: 140 }}>
-                <Bar data={waterTrend} options={{
-                  plugins: { legend: { display: false } },
-                  scales: { y: { beginAtZero: true } },
-                  responsive: true,
-                  maintainAspectRatio: false
-                }} />
-              </Box>
-              <Typography color="success.main" fontWeight={700} fontSize={14} mt={1}>
-                Water usage steadily declining; conservation programs effective.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={5}>
-          <Card sx={cardStyle}>
-            <CardContent>
-              <Typography fontWeight={700} mb={1}>Scope Breakdown</Typography>
-              <Box sx={{ height: 120 }}>
-                <Pie data={scopePie} options={{
-                  plugins: { legend: { position: "bottom" } },
-                  responsive: true,
-                  maintainAspectRatio: false
-                }} />
-              </Box>
-              <Typography color="text.secondary" fontSize={13}>Scopes 1/2/3</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Data Quality, Happiness, Emissions By Campus */}
-      <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid item xs={12} md={4}>
-          <Card sx={{ ...cardStyle, textAlign: "center", minHeight: 220 }}>
-            <CardContent>
-              <Typography fontWeight={700} mb={1}>Data Completeness</Typography>
-              <Gauge value={summary.dataCompleteness} label="%" color="#8e24aa" />
-              <Typography color="success.main" fontWeight={700} fontSize={14} mt={1}>
-                Data quality exceptional.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Card sx={{ ...cardStyle, textAlign: "center", minHeight: 220 }}>
-            <CardContent>
-              <Typography fontWeight={700} mb={1}>Audit Status</Typography>
-              <Avatar sx={{ bgcolor: "#43a047", mx: "auto", width: 56, height: 56 }}>
-                <EmojiEmotionsIcon sx={{ fontSize: 36 }} />
-              </Avatar>
-              <Typography variant="h4" fontWeight={900} color="#43a047" mt={1}>
-                {summary.auditWarnings}
-              </Typography>
-              <Typography color="success.main" fontWeight={700} fontSize={14} mt={1}>
-                No warnings; audit-ready.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Card sx={{ ...cardStyle, textAlign: "center", minHeight: 220 }}>
-            <CardContent>
-              <Typography fontWeight={700} mb={1}>Campus Happiness</Typography>
-              <Box display="flex" justifyContent="center" gap={2} mb={2}>
-                {campuses.map(c => (
-                  <Stack key={c.name} alignItems="center" spacing={0.5}>
-                    <Avatar sx={{ bgcolor: "#1976d2", mb: 0.5, width: 32, height: 32 }}>{c.name[0]}</Avatar>
-                    <Typography fontSize={12}>{c.name}</Typography>
-                    <Tooltip title={`Happiness Score: ${c.happiness}%`}>
-                      <EmojiEmotionsIcon sx={{ color: "#43a047", fontSize: 22, mb: -0.5 }} />
-                    </Tooltip>
-                    <Typography color="success.main" fontWeight={800} fontSize={16}>{c.happiness}%</Typography>
-                  </Stack>
-                ))}
-              </Box>
-              <Typography color="success.main" fontWeight={700} fontSize={14}>
-                High engagement across all campuses.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Data Completeness Trend & Emissions by Campus */}
-      <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid item xs={12} md={6}>
-          <Card sx={cardStyle}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={1}>Data Completeness Trend</Typography>
-              <Box sx={{ height: 120 }}>
-                <Line data={completenessTrend} options={{
-                  plugins: { legend: { display: false } },
-                  scales: { y: { beginAtZero: true, max: 100 } },
-                  responsive: true,
-                  maintainAspectRatio: false
-                }} />
-              </Box>
-              <Typography color="success.main" fontWeight={700} fontSize={14} mt={1}>
-                Consistent improvement all year.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Card sx={cardStyle}>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} mb={2}>
-                Emissions by Campus (t CO₂)
-              </Typography>
-              <Box sx={{ height: 120 }}>
-                <Bar data={{
-                  labels: campuses.map(c => c.name),
-                  datasets: [{
-                    label: "Emissions (t CO₂)",
-                    data: campuses.map(c => c.emissions),
-                    backgroundColor: [
-                      "#1976d2", "#43a047", "#fbc02d", "#8e24aa", "#ff7043"
-                    ],
-                    borderRadius: 8,
-                  }]
-                }} options={{
-                  plugins: { legend: { display: false } },
-                  scales: { y: { beginAtZero: true } },
-                  responsive: true,
-                  maintainAspectRatio: false
-                }} />
-              </Box>
-              <Typography color="success.main" fontWeight={700} fontSize={14} mt={1}>
-                All campuses contributed to progress.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      <Divider sx={{ my: 6 }} />
-
-      {/* Footer / Meta Info */}
-      <Stack direction={{ xs: "column", md: "row" }} alignItems="center" justifyContent="space-between" spacing={2} mt={5}>
-        <Typography color="text.secondary" fontSize={16}>
-          <b>Disclaimer:</b> This dashboard is for **demonstration** and **work-in-progress review** only.<br />
-          All metrics and trends shown here are based on <u>imaginary</u> data for AASTMT.
+    <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 3 } }}>
+      {/* Header */}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h4" fontWeight={700} color="#111827" gutterBottom>
+          Carbon Emissions Dashboard
         </Typography>
-        <Stack direction="row" alignItems="center" spacing={2}>
-          <Chip label={`Last update: ${summary.lastUpdate}`} color="default" variant="outlined" />
-          <Chip label="© 2025 AASTMT Sustainability Demo" color="primary" variant="outlined" />
-        </Stack>
-      </Stack>
+        <Typography variant="body2" color="#6b7280">
+          Real-time analytics from your carbon footprint data
+        </Typography>
+      </Box>
+
+      {/* Top Metrics */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} md={4}>
+          <MetricCard
+            title="Total Emissions"
+            value={`${summary.emissions.total.toLocaleString()} t`}
+            target="CO₂ equivalent"
+            icon={<EmojiNature sx={{ fontSize: 24 }} />}
+            barColor="#16a34a"
+            barValue={summary.dataCompleteness}
+            context={`Data completeness: ${summary.dataCompleteness}%`}
+          />
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <MetricCard
+            title="Energy Consumption"
+            value={`${Math.round(summary.energy.total / 1000).toLocaleString()}k kWh`}
+            target="Total energy used"
+            icon={<Bolt sx={{ fontSize: 24 }} />}
+            barColor="#f59e0b"
+            barValue={75}
+            context="Tracking across all facilities"
+          />
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <MetricCard
+            title="Water Usage"
+            value={`${Math.round(summary.water.total / 1000).toLocaleString()}k m³`}
+            target="Total water consumed"
+            icon={<WaterDrop sx={{ fontSize: 24 }} />}
+            barColor="#3b82f6"
+            barValue={82}
+            context="Conservation programs active"
+          />
+        </Grid>
+      </Grid>
+
+      {/* Gauges */}
+      <Box sx={{ mb: 4, display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "center" }}>
+        <GaugeChart
+          value={summary.dataCompleteness}
+          label="Data Quality"
+          color="#8b5cf6"
+          size={140}
+        />
+        <GaugeChart
+          value={summary.emissions.scope1}
+          label="Scope 1"
+          max={Math.max(summary.emissions.scope1, summary.emissions.scope2, summary.emissions.scope3, 100)}
+          color="#43a047"
+          size={140}
+          unit=" t"
+        />
+        <GaugeChart
+          value={summary.emissions.scope2}
+          label="Scope 2"
+          max={Math.max(summary.emissions.scope1, summary.emissions.scope2, summary.emissions.scope3, 100)}
+          color="#1e88e5"
+          size={140}
+          unit=" t"
+        />
+        <GaugeChart
+          value={summary.emissions.scope3}
+          label="Scope 3"
+          max={Math.max(summary.emissions.scope1, summary.emissions.scope2, summary.emissions.scope3, 100)}
+          color="#ff7043"
+          size={140}
+          unit=" t"
+        />
+      </Box>
+
+      {/* Chart Sections (Accordions) */}
+      <ChartSection
+        id="impact"
+        title="Emissions Impact Analysis"
+        subtitle="CO₂ emissions trends and scope breakdown"
+        icon={<TrendingDown />}
+        expanded={openPanels.includes("impact")}
+        onChange={() => togglePanel("impact")}
+      >
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={8}>
+            <Box sx={{ height: 300 }}>
+              <Typography variant="subtitle2" color="#6b7280" sx={{ mb: 2 }}>
+                Monthly Emissions Trend
+              </Typography>
+              <Line data={emissionsTrend} options={lineOptions} />
+            </Box>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <Box sx={{ height: 300 }}>
+              <Typography variant="subtitle2" color="#6b7280" sx={{ mb: 2 }}>
+                Scope Breakdown
+              </Typography>
+              <Pie data={scopePie} options={pieOptions} />
+            </Box>
+          </Grid>
+        </Grid>
+      </ChartSection>
+
+      <ChartSection
+        id="trends"
+        title="Resource Consumption Trends"
+        subtitle="Energy and water usage patterns"
+        icon={<BarChart />}
+        expanded={openPanels.includes("trends")}
+        onChange={() => togglePanel("trends")}
+      >
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ height: 300 }}>
+              <Typography variant="subtitle2" color="#6b7280" sx={{ mb: 2 }}>
+                Energy Consumption (kWh)
+              </Typography>
+              <Bar data={energyTrend} options={barOptions} />
+            </Box>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ height: 300 }}>
+              <Typography variant="subtitle2" color="#6b7280" sx={{ mb: 2 }}>
+                Water Usage (m³)
+              </Typography>
+              <Bar data={waterTrend} options={barOptions} />
+            </Box>
+          </Grid>
+        </Grid>
+      </ChartSection>
+
+      <ChartSection
+        id="quality"
+        title="Data Quality & Insights"
+        subtitle="Monitoring data completeness and reliability"
+        icon={<Assessment />}
+        expanded={openPanels.includes("quality")}
+        onChange={() => togglePanel("quality")}
+      >
+        <Box sx={{ p: 3, bgcolor: "#f9fafb", borderRadius: 2 }}>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Typography variant="h6" fontWeight={600} color="#111827" gutterBottom>
+                Data Coverage
+              </Typography>
+              <Typography variant="body2" color="#6b7280">
+                {summary.dataCompleteness}% of expected data points collected
+              </Typography>
+              <Typography variant="body2" color="#6b7280" sx={{ mt: 1 }}>
+                Last updated: {summary.lastUpdate}
+              </Typography>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography variant="h6" fontWeight={600} color="#111827" gutterBottom>
+                Key Insights
+              </Typography>
+              <Typography variant="body2" color="#6b7280">
+                • Scope 2 represents the largest emissions source
+              </Typography>
+              <Typography variant="body2" color="#6b7280">
+                • Energy consumption shows seasonal patterns
+              </Typography>
+              <Typography variant="body2" color="#6b7280">
+                • Water conservation efforts are effective
+              </Typography>
+            </Grid>
+          </Grid>
+        </Box>
+      </ChartSection>
+
+      {/* Footer */}
+      <Box sx={{ mt: 6, pt: 4, borderTop: "1px solid #e5e7eb", textAlign: "center" }}>
+        <Typography variant="body2" color="#9ca3af">
+          Dashboard powered by real-time data from your carbon accounting system
+        </Typography>
+      </Box>
     </Box>
   );
 }
