@@ -41,3 +41,17 @@ tenacity==9.1.2                       # Retry strategy
 
 # Testing
 pytest
+pytest-django
+pytest-asyncio
+pytest-cov
+factory-boy
+
+# AI Copilot Dependencies
+fastapi-poe==0.0.36              # POE API client
+chromadb==0.4.22                 # Vector database
+redis==5.0.1                     # Memory cache
+langchain==0.1.20                # LLM orchestration
+langchain-community==0.0.38      # LangChain community integrations
+sentence-transformers==2.5.1     # Embeddings
+tiktoken==0.6.0                  # Token counting
+openai==1.12.0                   # OpenAI compatibility

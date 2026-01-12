@@ -29,6 +29,7 @@ urlpatterns = [
     path(f'{api_prefix}/accounts/', include('accounts.urls')),
     path(f'{api_prefix}/core/', include('core.urls')),
     path(f'{api_prefix}/dataschema/', include('dataschema.urls')),
+    path(f'{api_prefix}/ai/', include('ai_copilot.urls')),
 ]
 
 if settings.DEBUG:
