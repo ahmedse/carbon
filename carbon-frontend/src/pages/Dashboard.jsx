@@ -144,7 +144,7 @@ export default function Dashboard() {
     datasets: [
       {
         data: scopeData.data,
-        backgroundColor: ["#43a047", "#1e88e5", "#ff7043"],
+        backgroundColor: ["#10b981", "#3b82f6", "#f97316"],
         borderWidth: 2,
         borderColor: "#fff",
       },
@@ -248,7 +248,7 @@ export default function Dashboard() {
           value={summary.emissions.scope1}
           label="Scope 1"
           max={Math.max(summary.emissions.scope1, summary.emissions.scope2, summary.emissions.scope3, 100)}
-          color="#43a047"
+          color="#10b981"
           size={140}
           unit=" t"
         />
@@ -256,7 +256,7 @@ export default function Dashboard() {
           value={summary.emissions.scope2}
           label="Scope 2"
           max={Math.max(summary.emissions.scope1, summary.emissions.scope2, summary.emissions.scope3, 100)}
-          color="#1e88e5"
+          color="#3b82f6"
           size={140}
           unit=" t"
         />
@@ -264,7 +264,7 @@ export default function Dashboard() {
           value={summary.emissions.scope3}
           label="Scope 3"
           max={Math.max(summary.emissions.scope1, summary.emissions.scope2, summary.emissions.scope3, 100)}
-          color="#ff7043"
+          color="#f97316"
           size={140}
           unit=" t"
         />

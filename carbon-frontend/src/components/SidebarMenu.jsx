@@ -25,22 +25,22 @@ import { useAuth } from "../auth/AuthContext";
 const SCOPE_META = {
   1: {
     label: "Scope 1",
-    icon: <Scope1Icon sx={{ color: "#43a047" }} />,
-    color: "#eafaf1",
+    icon: <Scope1Icon sx={{ color: "#10b981" }} />,
+    color: "#d1fae5",
     desc: "Direct emissions",
     helpKey: "scope1_microhelp",
   },
   2: {
     label: "Scope 2",
-    icon: <Scope2Icon sx={{ color: "#1e88e5" }} />,
-    color: "#e3f2fd",
+    icon: <Scope2Icon sx={{ color: "#3b82f6" }} />,
+    color: "#dbeafe",
     desc: "Indirect energy",
     helpKey: "scope2_microhelp",
   },
   3: {
     label: "Scope 3",
-    icon: <Scope3Icon sx={{ color: "#ff7043" }} />,
-    color: "#fff3e0",
+    icon: <Scope3Icon sx={{ color: "#f97316" }} />,
+    color: "#ffedd5",
     desc: "Value chain emissions",
     helpKey: "scope3_microhelp",
   },
