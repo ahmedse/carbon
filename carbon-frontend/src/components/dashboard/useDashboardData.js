@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { apiFetch } from "../../api/api";
+import { API_ROUTES } from "../../config";
 
 export function useDashboardData(projectId, token) {
   const [data, setData] = useState(null);
@@ -17,10 +18,10 @@ export function useDashboardData(projectId, token) {
       setError(null);
 
       try {
-        // Fetch all data rows from all modules
-        // This is a simplified approach - in production you'd want specific endpoints
-        const modules = await apiFetch(`/api/projects/${projectId}/modules/`, {
-          headers: { Authorization: `Bearer ${token}` },
+        // Fetch all data rows from all modules using API_ROUTES (no hardcoded paths)
+        const modules = await apiFetch(API_ROUTES.modules, {
+          token,
+          project_id: projectId,
         });
 
         const allRows = [];
@@ -28,18 +29,20 @@ export function useDashboardData(projectId, token) {
         // Fetch rows from each module
         for (const module of modules || []) {
           try {
-            const tables = await apiFetch(`/api/dataschema/${projectId}/${module.id}/tables/`, {
-              headers: { Authorization: `Bearer ${token}` },
+            const tables = await apiFetch(API_ROUTES.tables, {
+              token,
+              project_id: projectId,
+              module_id: module.id,
             });
 
             for (const table of tables || []) {
               try {
-                const rows = await apiFetch(
-                  `/api/dataschema/${projectId}/${module.id}/${table.id}/rows/`,
-                  {
-                    headers: { Authorization: `Bearer ${token}` },
-                  }
-                );
+                const rows = await apiFetch(API_ROUTES.rows, {
+                  token,
+                  project_id: projectId,
+                  module_id: module.id,
+                  table_id: table.id,
+                });
                 
                 allRows.push({
                   moduleId: module.id,
