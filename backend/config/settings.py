@@ -1,9 +1,14 @@
 # File: backend/config/settings.py
 
 import os
+import warnings
 from datetime import timedelta
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Suppress ONNX Runtime GPU warnings (harmless - we don't need GPU)
+warnings.filterwarnings('ignore', category=UserWarning, module='onnxruntime')
+os.environ['ORT_LOGGING_LEVEL'] = '3'  # Error level only
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
