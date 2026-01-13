@@ -255,11 +255,20 @@ start_backend() {
     nohup "$python" manage.py runserver 0.0.0.0:$BACKEND_PORT > "$BACKEND_LOG" 2>&1 &
     echo $! > "$BACKEND_PID"
     
-    # Verify
-    sleep 3
+    # Verify (wait longer for AI models to load)
+    log_info "Waiting for backend to be ready..."
+    sleep 8
+    
+    # Check if port is open AND API responds
     if port_in_use "$BACKEND_PORT"; then
-        log_success "Backend started (PID: $(cat "$BACKEND_PID"), Port: $BACKEND_PORT)"
-        return 0
+        # Try to hit health endpoint
+        if curl -s --max-time 5 "http://localhost:$BACKEND_PORT${DJANGO_API_PREFIX}health/" > /dev/null 2>&1; then
+            log_success "Backend started (PID: $(cat "$BACKEND_PID"), Port: $BACKEND_PORT)"
+            return 0
+        else
+            log_warn "Backend port open but API not responding yet (may still be loading)"
+            return 0  # Don't fail, just warn
+        fi
     else
         log_error "Backend failed to start"
         echo ""
