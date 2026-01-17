@@ -5,9 +5,12 @@ Low-cost LLM access via POE platform
 
 import os
 import asyncio
+import logging
 from typing import List, Dict, AsyncIterator
 import fastapi_poe as fp
 from django.conf import settings
+
+logger = logging.getLogger('ai_copilot')
 
 
 class POEClient:
@@ -39,6 +42,7 @@ class POEClient:
         Returns:
             Assistant's response text
         """
+        logger.info(f"POE: Calling API with model={self.model}, messages={len(messages)}")
         # Convert to POE message format
         poe_messages = [
             fp.ProtocolMessage(role=msg["role"], content=msg["content"])
@@ -47,14 +51,22 @@ class POEClient:
         
         # Collect streaming response
         response_text = ""
+        chunk_count = 0
         
-        async for partial in fp.get_bot_response(
-            messages=poe_messages,
-            bot_name=self.model,
-            api_key=self.api_key,
-            temperature=temperature
-        ):
-            response_text += partial.text
+        try:
+            async for partial in fp.get_bot_response(
+                messages=poe_messages,
+                bot_name=self.model,
+                api_key=self.api_key,
+                temperature=temperature
+            ):
+                response_text += partial.text
+                chunk_count += 1
+            
+            logger.info(f"POE: Response complete, {len(response_text)} chars in {chunk_count} chunks")
+        except Exception as e:
+            logger.error(f"POE: API call failed: {e}")
+            raise
         
         return response_text
     

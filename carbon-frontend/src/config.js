@@ -84,8 +84,10 @@ export const API_ROUTES = {
   aiChat: "ai/chat/send_message/",
   aiChatHistory: "ai/chat/history/",
   aiChatClear: "ai/chat/clear_history/",
+  aiChatReact: "ai/chat/{id}/react/",
   aiInsights: "ai/insights/",
   aiInsightAck: "ai/insights/{id}/acknowledge/",
   aiPreferences: "ai/preferences/me/",
   aiPreferencesUpdate: "ai/preferences/update_me/",
+  aiQaRun: "ai/qa/run/",
 };

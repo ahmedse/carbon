@@ -236,22 +236,36 @@ if SECURE_SSL_REDIRECT:
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {message}",
+            "style": "{",
+        },
+    },
     "handlers": {
-        "console": {"class": "logging.StreamHandler"},
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
     },
     "root": {
         "handlers": ["console"],
-        "level": get_env("ROOT_LOG_LEVEL", "WARNING"),
+        "level": get_env("ROOT_LOG_LEVEL", "INFO"),
     },
     "loggers": {
         "django": {
             "handlers": ["console"],
-            "level": get_env("DJANGO_LOG_LEVEL", "DEBUG" if DJANGO_ENV == "development" else "INFO"),
+            "level": get_env("DJANGO_LOG_LEVEL", "INFO"),
             "propagate": True,
         },
         "rest_framework": {
             "handlers": ["console"],
-            "level": get_env("REST_FRAMEWORK_LOG_LEVEL", "DEBUG" if DJANGO_ENV == "development" else "INFO"),
+            "level": get_env("REST_FRAMEWORK_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+        "ai_copilot": {
+            "handlers": ["console"],
+            "level": "DEBUG",
             "propagate": False,
         },
     },

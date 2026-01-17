@@ -24,6 +24,7 @@ class ConversationMessage(models.Model):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     content = models.TextField()
     metadata = models.JSONField(default=dict, blank=True)  # tokens, model used, etc.
+    token_count = models.IntegerField(default=0)
     
     created_at = models.DateTimeField(auto_now_add=True)
     

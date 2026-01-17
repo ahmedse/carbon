@@ -24,9 +24,10 @@ class ProactiveInsightSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProactiveInsight
         fields = [
-            'id', 'user', 'project', 'insight_type', 'urgency',
-            'title', 'description', 'actions', 'acknowledged',
-            'acknowledged_at', 'created_at'
+            'id', 'user', 'project', 'type', 'urgency',
+            'title', 'description', 'action_label', 'action_url',
+            'metadata', 'acknowledged', 'acknowledged_at',
+            'created_at', 'expires_at'
         ]
         read_only_fields = ['id', 'user', 'created_at', 'acknowledged_at']
 
@@ -37,11 +38,11 @@ class UserAIPreferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserAIPreference
         fields = [
-            'id', 'user', 'enable_notifications', 'notification_frequency',
-            'response_detail', 'preferred_models', 'custom_prompts',
-            'copilot_panel_open', 'panel_width', 'created_at', 'updated_at'
+            'id', 'user', 'enable_proactive_insights', 'insight_types',
+            'response_detail_level', 'allow_conversation_learning',
+            'panel_collapsed', 'panel_width', 'updated_at'
         ]
-        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'updated_at']
 
 
 class ChatRequestSerializer(serializers.Serializer):
@@ -60,4 +61,5 @@ class ChatResponseSerializer(serializers.Serializer):
     conversation_id = serializers.IntegerField()
     tokens_used = serializers.IntegerField()
     cost_estimate = serializers.FloatField()
+    created_at = serializers.DateTimeField()
     sources = serializers.ListField(child=serializers.DictField(), required=False)

@@ -40,10 +40,13 @@ export const getChatHistory = async (projectId = null, limit = 20) => {
 
 export const clearChatHistory = async (projectId = null) => {
   const token = localStorage.getItem('access');
-  const response = await apiFetch(API_ROUTES.aiChatClear, {
+  const params = {};
+  if (projectId) params.project_id = projectId;
+  const queryString = new URLSearchParams(params).toString();
+  const url = `${API_ROUTES.aiChatClear}${queryString ? '?' + queryString : ''}`;
+  const response = await apiFetch(url, {
     method: 'DELETE',
     token,
-    body: { project_id: projectId },
   });
   return response;
 };
@@ -73,6 +76,17 @@ export const acknowledgeInsight = async (insightId) => {
   return response;
 };
 
+export const reactToMessage = async (messageId, reaction) => {
+  const token = localStorage.getItem('access');
+  const route = API_ROUTES.aiChatReact.replace('{id}', messageId);
+  const response = await apiFetch(route, {
+    method: 'POST',
+    token,
+    body: { reaction },
+  });
+  return response;
+};
+
 /**
  * Preferences API
  */
@@ -88,6 +102,16 @@ export const updatePreferences = async (preferences) => {
     method: 'PATCH',
     token,
     body: preferences,
+  });
+  return response;
+};
+
+export const runQA = async (projectId) => {
+  const token = localStorage.getItem('access');
+  const response = await apiFetch(API_ROUTES.aiQaRun, {
+    method: 'POST',
+    token,
+    body: { project_id: projectId },
   });
   return response;
 };
@@ -126,8 +150,10 @@ export default {
   clearChatHistory,
   getInsights,
   acknowledgeInsight,
+  reactToMessage,
   getPreferences,
   updatePreferences,
+  runQA,
   formatMessage,
   formatInsight,
 };

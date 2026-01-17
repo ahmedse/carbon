@@ -111,9 +111,9 @@ export default function Layout() {
   const currentAIWidth = aiPanelCollapsed ? AI_PANEL_COLLAPSED_WIDTH : aiPanelWidth;
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh", bgcolor: "#f5f5f5" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", bgcolor: "#f5f5f5", overflow: "hidden" }}>
       <Header collapsed={collapsed} onToggleCollapse={toggleCollapse} />
-      <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
+      <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden", isolation: "isolate" }}>
         {/* Sidebar */}
         <Box
           sx={{
@@ -177,11 +177,12 @@ export default function Layout() {
             display: "flex",
             flexDirection: "column",
             minWidth: 0,
+            minHeight: 0,
             bgcolor: "#fff",
-            overflow: "auto",
+            overflow: "hidden",
           }}
         >
-          <Box sx={{ flex: 1, p: 3 }}>
+          <Box sx={{ flex: 1, p: 3, overflow: "auto", overscrollBehavior: "contain" }}>
             <Outlet />
           </Box>
         </Box>
@@ -230,6 +231,7 @@ export default function Layout() {
             width: currentAIWidth,
             minWidth: currentAIWidth,
             maxWidth: currentAIWidth,
+            height: '100%',
             transition: isResizingAI ? "none" : "width 0.2s ease",
             bgcolor: "#fff",
             borderLeft: aiPanelCollapsed ? "none" : "1px solid #e5e7eb",

@@ -345,6 +345,19 @@ cmd_start() {
         sudo systemctl start postgresql 2>/dev/null || log_warn "Could not start PostgreSQL automatically"
     fi
     
+    # Check and start Redis
+    if redis-cli ping &>/dev/null; then
+        log_success "Redis running"
+    else
+        log_warn "Redis not running - starting..."
+        redis-server --daemonize yes &>/dev/null && sleep 1
+        if redis-cli ping &>/dev/null; then
+            log_success "Redis started"
+        else
+            log_warn "Could not start Redis automatically"
+        fi
+    fi
+    
     if [[ "$deps_ok" == false ]]; then
         log_error "Missing dependencies. Cannot start."
         return 1

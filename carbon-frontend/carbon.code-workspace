@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		}
+	],
+	"settings": {
+		"terminal.integrated.env.linux": {
+			"VIRTUAL_ENV": "${workspaceFolder}/venv"
+		},
+		"terminal.integrated.profiles.linux": {
+			"bash (venv)": {
+				"path": "bash",
+				"args": [
+					"-c",
+					"source ${workspaceFolder}/venv/bin/activate && exec bash"
+				]
+			}
+		},
+		"terminal.integrated.defaultProfile.linux": "bash (venv)"
+	}
+}

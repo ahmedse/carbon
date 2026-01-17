@@ -1,8 +1,8 @@
-# 🚀 AI Copilot MVP - Backend Implementation Complete
+# 🚀 AI Copilot MVP - Backend Scaffold Complete (Phase 0)
 
 ## 🎯 Milestone Achieved
 
-**Backend MVP for AI-Native Carbon Intelligence System is 100% complete!**
+**Backend MVP scaffold is complete. Contract alignment and token tracking fixes are required in Phase 1.**
 
 Branch: `feature/ai-copilot-mvp`  
 Commit: `a5beb1e`  
@@ -44,7 +44,7 @@ A complete AI-powered backend system using:
 ### Django Integration
 
 **Models** (`models.py`) - 117 lines
-- `ConversationMessage`: Chat history with role, content, metadata
+- `ConversationMessage`: Chat history with role, content, metadata (token_count added in Phase 1)
 - `ProactiveInsight`: AI-generated insights with urgency levels
 - `UserAIPreference`: User preferences and UI state
 
@@ -80,6 +80,16 @@ All under `/api/v1/ai/`:
 **Preferences:**
 - `GET /preferences/me/` - Get current user preferences
 - `PATCH /preferences/update_me/` - Update preferences
+
+---
+
+## ⚠️ Known Gaps (Phase 1)
+
+- Model/serializer/view field mismatches (preferences + insights)
+- Token tracking field missing in initial migration
+- Chat response payload missing `created_at` and consistent IDs
+- Streaming flag accepted but not implemented
+- Insight filtering uses wrong field name in query
 
 ### Database Schema
 

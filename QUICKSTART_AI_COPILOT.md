@@ -1,5 +1,7 @@
 # 🚀 AI Copilot - Quick Start Guide
 
+> **Status Note (Jan 2026):** UI is ready, backend contract alignment is in progress. Streaming responses are available via SSE, but the UI currently uses non-streaming requests.
+
 ## Launch in 3 Steps
 
 ### Step 1: Start Backend
