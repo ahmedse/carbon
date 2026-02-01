@@ -15,6 +15,17 @@ import Help from "./pages/Help";
 import Feedback from "./pages/Feedback";
 import ModuleLandingPage from "./pages/ModuleLandingPage";
 import ScopeInfoPage from "./pages/ScopeInfoPage";
+import EmissionsDashboard from "./pages/EmissionsDashboard";
+import EmissionsReport from "./pages/EmissionsReport";
+
+// New Dashboard Architecture
+import {
+  ExecutiveSummary,
+  AnalyticsDashboard,
+  TargetsDashboard,
+  DataQualityDashboard,
+  ReportingDashboard,
+} from "./pages/dashboards";
 
 /**
  * Protects all routes that require authentication.
@@ -54,8 +65,23 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route path="help" element={<Help />} />
                 <Route path="feedback" element={<Feedback />} />
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/" element={<ExecutiveSummary />} />
+                <Route path="/dashboard" element={<ExecutiveSummary />} />
+                
+                {/* New Dashboard Architecture */}
+                <Route path="/dashboards/executive" element={<ExecutiveSummary />} />
+                <Route path="/dashboards/analytics" element={<AnalyticsDashboard />} />
+                <Route path="/dashboards/targets" element={<TargetsDashboard />} />
+                <Route path="/dashboards/data-quality" element={<DataQualityDashboard />} />
+                <Route path="/dashboards/reporting" element={<ReportingDashboard />} />
+                
+                {/* Legacy Dashboard (keeping for backwards compatibility) */}
+                <Route path="/dashboard-legacy" element={<Dashboard />} />
+                
+                {/* Emissions Calculator Routes */}
+                <Route path="/emissions" element={<EmissionsDashboard />} />
+                <Route path="/emissions/dashboard" element={<EmissionsDashboard />} />
+                <Route path="/emissions/report" element={<EmissionsReport />} />
                 {/* Admin-only: Schema Admin > Table Manager */}
                 <Route
                   path="/schema-admin/table-manager"

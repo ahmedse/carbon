@@ -19,6 +19,12 @@ import {
   LocalShippingRounded as Scope3Icon,
   DatasetRounded as TableIcon,
   ArrowForwardIos as ArrowIcon,
+  CalculateRounded as CalculateIcon,
+  AssessmentRounded as ReportIcon,
+  ShowChartRounded as AnalyticsIcon,
+  TrackChangesRounded as TargetsIcon,
+  VerifiedUserRounded as QualityIcon,
+  DescriptionRounded as ReportingIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthContext";
 
@@ -120,7 +126,7 @@ export default function SidebarMenu({ collapsed }) {
     context, canSchemaAdmin, canManageAllModules, canManageAssignedModules,
   } = useAuth();
 
-  const [openMenus, setOpenMenus] = useState({ schemaManager: true });
+  const [openMenus, setOpenMenus] = useState({ schemaManager: true, dashboards: true });
   const [openScopeMenus, setOpenScopeMenus] = useState({ 1: true, 2: true, 3: true });
   const [openModuleMenus, setOpenModuleMenus] = useState({});
 
@@ -218,13 +224,97 @@ export default function SidebarMenu({ collapsed }) {
 
   return (
     <List sx={{ pt: 0.5, pb: 2, px: 0.5 }}>
-      {/* --- Dashboard always on top --- */}
+      {/* --- Dashboard Section with Collapsible Sub-items --- */}
+      <ListItemButton
+        onClick={() => setOpenMenus(prev => ({ ...prev, dashboards: !prev.dashboards }))}
+        sx={{
+          minHeight: 36,
+          py: 0.75,
+          px: 1.5,
+          mx: 0.5,
+          borderRadius: 1,
+          justifyContent: open ? "flex-start" : "center",
+          color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#16a34a" : "#374151",
+          bgcolor: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#f0fdf4" : "transparent",
+          "&:hover": { bgcolor: "#f3f4f6" },
+        }}
+      >
+        <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
+          <Tooltip title="Dashboards" placement="right" arrow disableHoverListener={open}>
+            <DashboardIcon sx={{ fontSize: 20, color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#16a34a" : "#6b7280" }} />
+          </Tooltip>
+        </ListItemIcon>
+        {open && <ListItemText primary="Dashboards" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem" }} />}
+        {open && (openMenus.dashboards ? <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} /> : <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />)}
+      </ListItemButton>
+      <Collapse in={open && openMenus.dashboards} timeout="auto" unmountOnExit>
+        <List component="div" disablePadding>
+          <MenuItem
+            to="/dashboard"
+            icon={<DashboardIcon sx={{ fontSize: 18, color: "#16a34a" }} />}
+            label="Executive Summary"
+            tooltip="Overview of your carbon footprint"
+            selected={location.pathname === "/dashboard" || location.pathname === "/" || location.pathname === "/dashboards/executive"}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+          <MenuItem
+            to="/dashboards/analytics"
+            icon={<AnalyticsIcon sx={{ fontSize: 18, color: "#3b82f6" }} />}
+            label="Analytics"
+            tooltip="Deep dive with date range analysis"
+            selected={location.pathname === "/dashboards/analytics"}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+          <MenuItem
+            to="/dashboards/targets"
+            icon={<TargetsIcon sx={{ fontSize: 18, color: "#f59e0b" }} />}
+            label="Targets & Progress"
+            tooltip="Track SBTi and net-zero goals"
+            selected={location.pathname === "/dashboards/targets"}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+          <MenuItem
+            to="/dashboards/data-quality"
+            icon={<QualityIcon sx={{ fontSize: 18, color: "#8b5cf6" }} />}
+            label="Data Quality"
+            tooltip="Data completeness and audit readiness"
+            selected={location.pathname === "/dashboards/data-quality"}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+          <MenuItem
+            to="/dashboards/reporting"
+            icon={<ReportingIcon sx={{ fontSize: 18, color: "#06b6d4" }} />}
+            label="Reporting"
+            tooltip="Framework compliance and reports"
+            selected={location.pathname === "/dashboards/reporting"}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+        </List>
+      </Collapse>
+      
+      <Divider sx={{ my: 1, mx: 1 }} />
+      
+      {/* --- Emissions Calculator --- */}
       <MenuItem
-        to="/dashboard"
-        icon={<DashboardIcon sx={{ fontSize: 20 }} />}
-        label="Dashboard"
-        tooltip="Dashboard"
-        selected={location.pathname === "/dashboard" || location.pathname === "/"}
+        to="/emissions"
+        icon={<CalculateIcon sx={{ fontSize: 20, color: "#10b981" }} />}
+        label="Emissions Dashboard"
+        tooltip="Carbon Emissions Calculator"
+        selected={location.pathname === "/emissions" || location.pathname === "/emissions/dashboard"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+      <MenuItem
+        to="/emissions/report"
+        icon={<ReportIcon sx={{ fontSize: 20, color: "#3b82f6" }} />}
+        label="Emissions Report"
+        tooltip="GHG Protocol Report"
+        selected={location.pathname === "/emissions/report"}
         collapsed={collapsed}
         sx={{ mb: 0.5 }}
       />

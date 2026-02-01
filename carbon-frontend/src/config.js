@@ -90,4 +90,15 @@ export const API_ROUTES = {
   aiPreferences: "ai/preferences/me/",
   aiPreferencesUpdate: "ai/preferences/update_me/",
   aiQaRun: "ai/qa/run/",
+  
+  // Emissions Calculator
+  emissionsDashboard: "emissions/dashboard/",
+  emissionsYearlyComparison: "emissions/yearly-comparison/",
+  emissionsReport: "emissions/report/",
+  emissionsCalculate: "emissions/calculate/",
+  emissionsPeriods: "emissions/periods/",
+  emissionsFactors: "emissions/factors/",
+  emissionsCalculations: "emissions/calculations/",
+  emissionsRules: "emissions/rules/",
+  emissionsGWP: "emissions/gwp/",
 };

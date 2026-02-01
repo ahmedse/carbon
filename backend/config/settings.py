@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'accounts',
     'core',
     'dataschema',
+    'emissions',
     'ai_copilot',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',

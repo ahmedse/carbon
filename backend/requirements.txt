@@ -55,3 +55,9 @@ langchain-community==0.0.38      # LangChain community integrations
 sentence-transformers==2.5.1     # Embeddings
 tiktoken==0.6.0                  # Token counting
 openai==1.12.0                   # OpenAI compatibility
+
+# Knowledge Ingestion Pipeline
+pypdf>=4.0.0                     # PDF document loading
+beautifulsoup4>=4.12.0           # HTML parsing
+markdown>=3.5.0                  # Markdown processing
+lxml>=5.0.0                      # XML/HTML parsing (optional)

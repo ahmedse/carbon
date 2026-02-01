@@ -30,6 +30,7 @@ urlpatterns = [
     path(f'{api_prefix}/core/', include('core.urls')),
     path(f'{api_prefix}/dataschema/', include('dataschema.urls')),
     path(f'{api_prefix}/ai/', include('ai_copilot.urls')),
+    path(f'{api_prefix}/emissions/', include('emissions.urls')),
 ]
 
 if settings.DEBUG:

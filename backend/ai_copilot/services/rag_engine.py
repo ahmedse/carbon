@@ -4,8 +4,11 @@ Carbon domain knowledge base with semantic search
 """
 
 import os
+import uuid
 from typing import List, Dict, Optional
 from pathlib import Path
+from datetime import datetime
+from collections import defaultdict
 
 try:
     import chromadb
@@ -29,14 +32,15 @@ class RAGEngine:
         # Initialize embedding model
         self.embedder = SentenceTransformer('all-MiniLM-L6-v2')
         
-        # Initialize ChromaDB
+        # Initialize ChromaDB with persistence
         persist_dir = os.getenv('CHROMA_PERSIST_DIR', './chroma_db')
         Path(persist_dir).mkdir(parents=True, exist_ok=True)
         
-        self.client = chromadb.Client(Settings(
-            persist_directory=persist_dir,
-            anonymized_telemetry=False
-        ))
+        # Use PersistentClient for data persistence
+        self.client = chromadb.PersistentClient(
+            path=persist_dir,
+            settings=Settings(anonymized_telemetry=False)
+        )
         
         # Get or create collection
         self.collection = self.client.get_or_create_collection(
@@ -165,6 +169,298 @@ class RAGEngine:
             total_chars += len(snippet)
         
         return "\n".join(context_parts)
+    
+    # ============ New Ingestion Methods ============
+    
+    def ingest_document(
+        self,
+        content: str,
+        metadata: Dict,
+        chunk: bool = True,
+        chunk_size: int = 1000,
+        chunk_overlap: int = 200
+    ) -> int:
+        """
+        Ingest a document into ChromaDB.
+        
+        Args:
+            content: Document text
+            metadata: Document metadata (source, title, category)
+            chunk: Whether to chunk the document
+            chunk_size: Target chunk size in characters
+            chunk_overlap: Overlap between chunks
+            
+        Returns:
+            Number of chunks/documents added
+        """
+        if chunk:
+            from .text_chunker import TextChunker
+            chunker = TextChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+            chunks = chunker.chunk(content, metadata)
+            
+            return self.ingest_chunks([
+                {'content': c.content, 'metadata': c.metadata}
+                for c in chunks
+            ], category=metadata.get('category', 'general'))
+        else:
+            # Add as single document
+            doc_id = f"{metadata.get('source_file', 'doc')}_{uuid.uuid4().hex[:8]}"
+            self.add_document(doc_id, content, metadata)
+            return 1
+    
+    def ingest_chunks(
+        self,
+        chunks: List[Dict],
+        category: str = 'general'
+    ) -> int:
+        """
+        Ingest pre-chunked documents.
+        
+        Args:
+            chunks: List of {content, metadata}
+            category: Category for organization
+            
+        Returns:
+            Number of chunks added
+        """
+        if not chunks:
+            return 0
+        
+        documents = []
+        for i, chunk in enumerate(chunks):
+            content = chunk.get('content', '')
+            if not content.strip():
+                continue
+            
+            metadata = chunk.get('metadata', {})
+            metadata['category'] = category
+            metadata['ingested_at'] = datetime.now().isoformat()
+            
+            # Generate unique ID
+            source = metadata.get('source_file', 'chunk')
+            chunk_idx = metadata.get('chunk_index', i)
+            doc_id = f"{source}_{chunk_idx}_{uuid.uuid4().hex[:8]}"
+            
+            documents.append({
+                'id': doc_id,
+                'text': content,
+                'metadata': metadata
+            })
+        
+        if documents:
+            self.add_documents_batch(documents)
+        
+        return len(documents)
+    
+    def get_statistics(self) -> Dict:
+        """
+        Get ingestion statistics.
+        
+        Returns:
+            {
+                'total_documents': int,
+                'total_chunks': int,
+                'categories': {'ghg_protocol': 50, ...},
+                'sources': ['ghg_corporate.pdf', ...],
+                'last_updated': datetime
+            }
+        """
+        try:
+            # Get all documents from collection
+            result = self.collection.get(include=['metadatas'])
+            
+            total = len(result['ids']) if result['ids'] else 0
+            
+            categories = defaultdict(int)
+            sources = set()
+            last_updated = None
+            
+            if result['metadatas']:
+                for metadata in result['metadatas']:
+                    if metadata:
+                        # Count categories
+                        cat = metadata.get('category', 'unknown')
+                        categories[cat] += 1
+                        
+                        # Collect sources
+                        source = metadata.get('source_file')
+                        if source:
+                            sources.add(source)
+                        
+                        # Track latest ingestion
+                        ingested = metadata.get('ingested_at')
+                        if ingested:
+                            if last_updated is None or ingested > last_updated:
+                                last_updated = ingested
+            
+            return {
+                'total_documents': len(sources),
+                'total_chunks': total,
+                'categories': dict(categories),
+                'sources': sorted(sources),
+                'last_updated': last_updated
+            }
+        except Exception as e:
+            return {
+                'total_documents': 0,
+                'total_chunks': 0,
+                'categories': {},
+                'sources': [],
+                'last_updated': None,
+                'error': str(e)
+            }
+    
+    def search_with_sources(
+        self,
+        query: str,
+        n_results: int = 5,
+        category: str = None
+    ) -> List[Dict]:
+        """
+        Search and return results with source citations.
+        
+        Args:
+            query: Search query
+            n_results: Number of results to return
+            category: Optional category filter
+            
+        Returns:
+            [
+                {
+                    'content': str,
+                    'score': float,
+                    'source': str,
+                    'source_file': str,
+                    'title': str,
+                    'category': str,
+                    'section': str,
+                    'chunk_index': int
+                }
+            ]
+        """
+        # Generate query embedding
+        query_embedding = self.embedder.encode(query).tolist()
+        
+        # Build filter
+        where_filter = None
+        if category:
+            where_filter = {"category": category}
+        
+        # Search
+        results = self.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=n_results,
+            where=where_filter,
+            include=['documents', 'metadatas', 'distances']
+        )
+        
+        # Format results with source citations
+        retrieved = []
+        if results['documents'] and results['documents'][0]:
+            for i, doc in enumerate(results['documents'][0]):
+                metadata = results['metadatas'][0][i] if results['metadatas'] else {}
+                distance = results['distances'][0][i] if results['distances'] else 0.0
+                
+                # Convert distance to similarity score (cosine distance to similarity)
+                score = 1 - distance  # For cosine distance
+                
+                # Build source citation
+                source_file = metadata.get('source_file', 'Unknown')
+                title = metadata.get('title', source_file)
+                section = metadata.get('section', '')
+                
+                source_citation = title
+                if section:
+                    source_citation += f" - {section}"
+                
+                retrieved.append({
+                    'content': doc,
+                    'score': round(score, 4),
+                    'source': source_citation,
+                    'source_file': source_file,
+                    'title': title,
+                    'category': metadata.get('category', 'unknown'),
+                    'section': section,
+                    'chunk_index': metadata.get('chunk_index', 0)
+                })
+        
+        return retrieved
+    
+    def delete_by_source(self, source_file: str) -> int:
+        """
+        Delete all chunks from a specific source file.
+        
+        Args:
+            source_file: Source file name to delete
+            
+        Returns:
+            Number of chunks deleted
+        """
+        try:
+            # Get IDs of documents from this source
+            result = self.collection.get(
+                where={"source_file": source_file},
+                include=['metadatas']
+            )
+            
+            if result['ids']:
+                self.collection.delete(ids=result['ids'])
+                return len(result['ids'])
+            return 0
+        except Exception:
+            return 0
+    
+    def delete_by_category(self, category: str) -> int:
+        """
+        Delete all chunks in a category.
+        
+        Args:
+            category: Category to delete
+            
+        Returns:
+            Number of chunks deleted
+        """
+        try:
+            result = self.collection.get(
+                where={"category": category},
+                include=['metadatas']
+            )
+            
+            if result['ids']:
+                self.collection.delete(ids=result['ids'])
+                return len(result['ids'])
+            return 0
+        except Exception:
+            return 0
+    
+    def clear_all(self) -> int:
+        """
+        Clear all documents from the knowledge base.
+        
+        Returns:
+            Number of documents deleted
+        """
+        try:
+            result = self.collection.get()
+            count = len(result['ids']) if result['ids'] else 0
+            
+            if result['ids']:
+                self.collection.delete(ids=result['ids'])
+            
+            return count
+        except Exception:
+            return 0
+    
+    def has_source(self, source_file: str) -> bool:
+        """Check if a source file has already been ingested."""
+        try:
+            result = self.collection.get(
+                where={"source_file": source_file},
+                limit=1
+            )
+            return bool(result['ids'])
+        except Exception:
+            return False
     
     def seed_ghg_protocol_basics(self):
         """
