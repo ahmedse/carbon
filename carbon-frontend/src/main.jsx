@@ -6,7 +6,11 @@ import { AuthProvider } from "./auth/AuthContext";
 import { CssBaseline, ThemeProvider } from "@mui/material";
 import { ThemeModeProvider, useThemeMode, getTheme } from "./theme/ThemeContext";
 import { NotificationProvider } from "./components/NotificationProvider";
-import "@fontsource/inter/index.css";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/inter/800.css";
 
 function ThemedApp() {
   const { mode } = useThemeMode();
