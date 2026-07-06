@@ -23,8 +23,8 @@ export default function Login() {
 
   const navigate = useNavigate();
 
-  // Already logged in and project selected? Go to dashboard.
-  if (user && context?.projectId) return <Navigate to="/dashboard" replace />;
+  // Already logged in? Redirect to appropriate landing page.
+  if (user && context?.projectId) return <Navigate to={context?.landingPath || "/dashboard"} replace />;
 
   // Project selection UI only at login
   if (user && projects.length > 1 && requireProject) {
@@ -71,11 +71,11 @@ export default function Login() {
     setError(""); setBusy(true);
 
     try {
-      const { requireProjectSelection } = await login(form);
+      const { requireProjectSelection, landingPath } = await login(form);
       setRequireProject(requireProjectSelection);
       // If single project, login already selected it and set context - navigate now
       if (!requireProjectSelection) {
-        navigate("/dashboard", { replace: true });
+        navigate(landingPath || "/dashboard", { replace: true });
       }
       // Otherwise, show project selection UI (handled by component render above)
     } catch (err) {

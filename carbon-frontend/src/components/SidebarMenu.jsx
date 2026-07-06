@@ -354,6 +354,30 @@ export default function SidebarMenu({ collapsed }) {
                 collapsed={collapsed}
                 sx={{ pl: 4.5 }}
               />
+              <MenuItem
+                to="/admin/org-units"
+                icon={<TableRowsIcon sx={{ fontSize: 18, color: "#0ea5e9" }} />}
+                label="Org Units"
+                selected={location.pathname.startsWith("/admin/org-units")}
+                collapsed={collapsed}
+                sx={{ pl: 4.5 }}
+              />
+              <MenuItem
+                to="/admin/access"
+                icon={<TableRowsIcon sx={{ fontSize: 18, color: "#f59e0b" }} />}
+                label="Access Control"
+                selected={location.pathname.startsWith("/admin/access")}
+                collapsed={collapsed}
+                sx={{ pl: 4.5 }}
+              />
+              <MenuItem
+                to="/admin/users"
+                icon={<TableRowsIcon sx={{ fontSize: 18, color: "#8b5cf6" }} />}
+                label="Users"
+                selected={location.pathname.startsWith("/admin/users")}
+                collapsed={collapsed}
+                sx={{ pl: 4.5 }}
+              />
             </List>
           </Collapse>
           <Divider sx={{ my: 1, mx: 1 }} />

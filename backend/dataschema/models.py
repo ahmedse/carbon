@@ -70,6 +70,7 @@ class DataField(models.Model):
     is_archived = models.BooleanField(default=False)
     version = models.PositiveIntegerField(default=1)
     reference_table = models.ForeignKey(DataTable, null=True, blank=True, on_delete=models.SET_NULL, related_name='referenced_by_fields')
+    reference_set = models.ForeignKey('mdm.ReferenceSet', null=True, blank=True, on_delete=models.SET_NULL, related_name='bound_fields')
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_fields')
     updated_at = models.DateTimeField(auto_now=True)

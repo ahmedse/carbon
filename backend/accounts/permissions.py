@@ -1,13 +1,16 @@
 # File: accounts/permissions.py
 
+# File: accounts/permissions.py
 from rest_framework import permissions
 from .rbac_utils import (
-    user_has_project_role, user_has_module_role, get_allowed_module_ids
+    user_has_global_role, user_has_module_role, get_allowed_org_unit_ids,
 )
+
 
 class HasScopedRole(permissions.BasePermission):
     """
-    Centralized, robust RBAC for project/module roles.
+    RBAC: superusers and global admins pass everything. Otherwise access is granted at
+    module level OR when the target module's org_unit is within the user's allowed org subtree.
     """
     def has_permission(self, request, view):
         user = request.user
@@ -17,22 +20,33 @@ class HasScopedRole(permissions.BasePermission):
         required_roles = getattr(view, 'required_role', None)
         if not required_roles:
             return False
+        if isinstance(required_roles, str):
+            required_roles = (required_roles,)
 
-        project_id = request.query_params.get("project_id")
-        module_id = request.query_params.get("module_id")
-
-        # Admins: allow all in project
-        if user_has_project_role(user, project_id, ["admin", "admins_group"]):
+        if user.is_superuser:
+            return True
+        if user_has_global_role(user, ["admin", "admins_group"]):
             return True
 
-        # dataowners_group logic
-        if "dataowners_group" in required_roles:
-            if view.__class__.__name__ == "ModuleViewSet" and getattr(view, "action", None) == "list":
-                allowed = get_allowed_module_ids(user, project_id, ["dataowners_group"])
-                return bool(allowed)
-            if not module_id:
-                return False
-            return user_has_module_role(user, project_id, module_id, ["dataowners_group"])
+        module_id = request.query_params.get("module_id") or request.data.get("module_id")
+        if module_id:
+            if user_has_module_role(user, module_id, ["admin", "admins_group"]):
+                return True
+            if user_has_module_role(user, module_id, required_roles):
+                return True
+            from core.models import Module
+            try:
+                mod = Module.objects.get(pk=module_id)
+            except Module.DoesNotExist:
+                mod = None
+            if mod and mod.org_unit_id:
+                allowed_orgs = get_allowed_org_unit_ids(
+                    user, list(required_roles) + ["admin", "admins_group"]
+                )
+                if mod.org_unit_id in allowed_orgs:
+                    return True
 
-        # Other roles (e.g., audit, dataowner)
-        return user_has_project_role(user, project_id, required_roles)
+        if user_has_global_role(user, required_roles):
+            return True
+
+        return False

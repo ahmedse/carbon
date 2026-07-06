@@ -58,6 +58,9 @@ INSTALLED_APPS = [
     'core',
     'dataschema',
     'emissions',
+    'catalog',
+    'mdm',
+    'dq',
     'ai_copilot',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',
@@ -130,6 +133,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+APPEND_SLASH = False
 
 # Database
 DATABASES = {

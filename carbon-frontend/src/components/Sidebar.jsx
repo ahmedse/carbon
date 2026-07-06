@@ -2,26 +2,21 @@
 // Clean sidebar with collapsible support
 
 import React from "react";
-import { Box, Typography, Tooltip, Divider } from "@mui/material";
+import { Box, Typography, Tooltip } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import SidebarMenu from "./SidebarMenu";
 
 export default function Sidebar({ collapsed = false }) {
-  const { projects, context, loading } = useAuth();
+  const { projects, context, loading, user } = useAuth();
 
   if (loading) return null;
 
-  if (!projects.length) {
-    return (
-      <Box sx={{ p: 2, textAlign: "center" }}>
-        <Typography color="error" fontSize="0.75rem" fontWeight={600}>
-          No projects
-        </Typography>
-      </Box>
-    );
-  }
-
-  const project = projects.find(p => String(p.id) === String(context?.projectId)) || projects[0];
+  const project = projects.find(p => String(p.id) === String(context?.projectId)) || projects[0] || { name: "AASTMT Carbon Platform" };
+  const isAdmin = user?.roles?.some((role) => role?.active && role?.role === "admins_group");
+  // Show the user's org unit (from their roles) as the workspace subtitle.
+  const orgUnitName = user?.roles?.find(r => r?.org_unit)?.org_unit
+    || (isAdmin ? "Admin / Global access" : "Workspace");
+  const subtitle = orgUnitName;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -85,7 +80,7 @@ export default function Sidebar({ collapsed = false }) {
                 {project.name}
               </Typography>
               <Typography fontSize="0.6875rem" color="#6b7280" noWrap>
-                Carbon Project
+                {subtitle}
               </Typography>
             </Box>
           </Box>

@@ -30,8 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 django.setup()
 
 from django.contrib.auth import get_user_model
-from accounts.models import Tenant
-from core.models import Project, Module
+from core.models import Module
 from dataschema.models import DataTable, DataField, DataRow
 
 User = get_user_model()
@@ -976,7 +975,7 @@ def main():
         print("ERROR: No admin user found. Please create one first.")
         return
     
-    project = Project.objects.get(name='AAST Carbon')
+    module = Module.objects.first()
     
     # Clear existing rows (optional - comment out to append)
     print("Clearing existing data rows...")

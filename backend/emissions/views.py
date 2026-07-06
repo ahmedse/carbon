@@ -41,15 +41,8 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        """Filter by tenant for multi-tenancy."""
-        user = self.request.user
-        
-        # Get tenant from user's tenant association
-        if hasattr(user, 'tenant_associations'):
-            tenant_ids = user.tenant_associations.values_list('tenant_id', flat=True)
-            return ReportingPeriod.objects.filter(tenant_id__in=tenant_ids)
-        
-        return ReportingPeriod.objects.none()
+        """Return all reporting periods for authenticated users."""
+        return ReportingPeriod.objects.all()
     
     @action(detail=False, methods=['get'])
     def active(self, request):
@@ -152,13 +145,8 @@ class CalculationViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = Calculation.objects.select_related(
-            'project', 'module', 'emission_factor', 'reporting_period'
+            'module', 'emission_factor', 'reporting_period'
         )
-        
-        # Apply filters
-        project_id = self.request.query_params.get('project_id')
-        if project_id:
-            queryset = queryset.filter(project_id=project_id)
         
         module_id = self.request.query_params.get('module_id')
         if module_id:
@@ -239,15 +227,11 @@ class DashboardAPIView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        project_id = request.query_params.get('project_id')
         period_id = request.query_params.get('reporting_period_id')
         year = request.query_params.get('year', timezone.now().year)
         
         # Base queryset
         queryset = Calculation.objects.all()
-        
-        if project_id:
-            queryset = queryset.filter(project_id=project_id)
         
         reporting_period = None
         if period_id:
@@ -356,7 +340,6 @@ class YearlyComparisonAPIView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        project_id = request.query_params.get('project_id')
         years_param = request.query_params.get('years', '')
         
         # Default to all years from 2020 to current year
@@ -370,8 +353,6 @@ class YearlyComparisonAPIView(APIView):
             years = list(range(2020, current_year + 1))
         
         queryset = Calculation.objects.all()
-        if project_id:
-            queryset = queryset.filter(project_id=project_id)
         
         # Get yearly totals
         yearly_data = queryset.filter(reporting_year__in=years).values('reporting_year').annotate(
@@ -476,18 +457,14 @@ class ReportAPIView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        project_id = request.query_params.get('project_id')
         period_id = request.query_params.get('reporting_period_id')
         year = request.query_params.get('year', timezone.now().year)
         report_format = request.query_params.get('format', 'json')
         
         # Base queryset
         queryset = Calculation.objects.select_related(
-            'project', 'module', 'emission_factor', 'data_row', 'data_row__data_table'
+            'module', 'emission_factor', 'data_row', 'data_row__data_table'
         )
-        
-        if project_id:
-            queryset = queryset.filter(project_id=project_id)
         
         reporting_period = None
         if period_id:
@@ -627,17 +604,9 @@ class CalculateAPIView(APIView):
                 'errors': errors
             })
         
-        elif project_id:
-            # Execute all rules for project's data tables
-            from dataschema.models import DataTable
-            from core.models import Module
-            
-            modules = Module.objects.filter(project_id=project_id)
-            tables = DataTable.objects.filter(module__in=modules)
-            rules = CalculationRule.objects.filter(
-                data_table__in=tables,
-                is_active=True
-            )
+        else:
+            # Execute all active rules across all data tables
+            rules = CalculationRule.objects.filter(is_active=True)
             
             for rule in rules:
                 created, skipped, errors = rule.calculate_for_table(
@@ -651,9 +620,6 @@ class CalculateAPIView(APIView):
                     'skipped': skipped,
                     'errors': errors
                 })
-        
-        else:
-            return Response({'error': 'Provide rule_id or project_id'}, status=400)
         
         total_created = sum(r['created'] for r in results)
         total_skipped = sum(r['skipped'] for r in results)

@@ -10,17 +10,17 @@ class ReportingPeriodAdmin(admin.ModelAdmin):
     """Admin interface for reporting periods/cycles."""
     
     list_display = [
-        'name', 'tenant', 'project', 'start_date', 'end_date', 
+        'name', 'start_date', 'end_date', 
         'period_type', 'status', 'is_baseline'
     ]
-    list_filter = ['status', 'period_type', 'is_baseline', 'tenant']
-    search_fields = ['name', 'description', 'tenant__name', 'project__name']
+    list_filter = ['status', 'period_type', 'is_baseline']
+    search_fields = ['name', 'description']
     ordering = ['-start_date']
     date_hierarchy = 'start_date'
     
     fieldsets = (
         ('Identity', {
-            'fields': ('name', 'tenant', 'project')
+            'fields': ('name',)
         }),
         ('Period Dates', {
             'fields': ('start_date', 'end_date', 'period_type')
@@ -112,17 +112,17 @@ class CalculationAdmin(admin.ModelAdmin):
     """Admin interface for emission calculations."""
     
     list_display = [
-        'id', 'project', 'module', 'scope', 'category',
+        'id', 'module', 'scope', 'category',
         'activity_value', 'activity_unit', 'co2e_kg',
         'reporting_period', 'reporting_year', 'calculated_at'
     ]
     list_filter = ['scope', 'category', 'reporting_year', 'reporting_period', 'calculation_method']
-    search_fields = ['project__name', 'module__name', 'emission_factor__name']
+    search_fields = ['module__name', 'emission_factor__name']
     ordering = ['-calculated_at']
     date_hierarchy = 'calculated_at'
     
     readonly_fields = [
-        'data_row', 'project', 'module', 'emission_factor',
+        'data_row', 'module', 'emission_factor',
         'activity_value', 'activity_unit', 'co2e_kg', 'co2_kg', 
         'ch4_kg', 'n2o_kg', 'scope', 'category', 'reporting_period',
         'reporting_year', 'reporting_month', 'activity_date',
@@ -131,7 +131,7 @@ class CalculationAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Source Data', {
-            'fields': ('data_row', 'project', 'module')
+            'fields': ('data_row', 'module')
         }),
         ('Calculation Details', {
             'fields': ('emission_factor', 'activity_value', 'activity_unit')
@@ -167,7 +167,7 @@ class CalculationRuleAdmin(admin.ModelAdmin):
         'name', 'data_table', 'activity_field', 'emission_factor', 
         'rule_type', 'auto_calculate', 'is_active'
     ]
-    list_filter = ['rule_type', 'is_active', 'auto_calculate', 'data_table__module__project']
+    list_filter = ['rule_type', 'is_active', 'auto_calculate', 'data_table__module']
     search_fields = ['name', 'description', 'data_table__title', 'emission_factor__code']
     ordering = ['data_table', 'name']
     

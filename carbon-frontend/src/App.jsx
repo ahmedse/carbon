@@ -10,6 +10,9 @@ import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
 import AdminRoute from "./components/AdminRoute";
 import TableManagerPage from "./pages/TableManagerPage";
+import OrgUnitsPage from "./pages/admin/OrgUnitsPage";
+import AccessControlPage from "./pages/admin/AccessControlPage";
+import UsersPage from "./pages/admin/UsersPage";
 import DataEntryPage from "./pages/DataEntryPage";
 import Help from "./pages/Help";
 import Feedback from "./pages/Feedback";
@@ -41,16 +44,9 @@ function RequireAuth() {
  * Protects all routes that require a valid project/module context.
  */
 function RequireContext() {
-  const { context, loading } = useAuth();
-  if (loading) return <div className="centered">Loading project context...</div>;
-  if (!context) {
-    return (
-      <div className="centered">
-        No project context found.<br />
-        Please select a project or contact your administrator.
-      </div>
-    );
-  }
+  const { user, loading } = useAuth();
+  if (loading) return <div className="centered">Loading…</div>;
+  if (!user) return <Navigate to="/login" replace />;
   return <Outlet />;
 }
 
@@ -88,6 +84,30 @@ export default function App() {
                   element={
                     <AdminRoute>
                       <TableManagerPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/org-units"
+                  element={
+                    <AdminRoute>
+                      <OrgUnitsPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/access"
+                  element={
+                    <AdminRoute>
+                      <AccessControlPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/users"
+                  element={
+                    <AdminRoute>
+                      <UsersPage />
                     </AdminRoute>
                   }
                 />

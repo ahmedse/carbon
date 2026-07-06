@@ -5,11 +5,11 @@ from django.urls import reverse
 
 @pytest.fixture
 def setup_schema(db, create_tenant):
-    from core.models import Project, Module
+    from core.models import Module
     from dataschema.models import DataTable, DataField, DataRow
 
     tenant = create_tenant()
-    project = Project.objects.create(name="Test Project", tenant=tenant)
+    # project removed
     module = Module.objects.create(name="Test Module", project=project)
     table = DataTable.objects.create(title="Test Table", name="test_table", module=module)
     field = DataField.objects.create(data_table=table, name="value", label="Value", type="string")

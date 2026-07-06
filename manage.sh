@@ -44,8 +44,12 @@ readonly LOGS_DIR="$PROJECT_ROOT/logs"
 readonly PIDS_DIR="$PROJECT_ROOT/.pids"
 
 # Ports
-readonly BACKEND_PORT=8001
-readonly FRONTEND_PORT=5173
+readonly BACKEND_PORT=8009
+readonly FRONTEND_PORT=5179
+
+# Load API prefix from backend .env (default to /carbon-api/ if not set)
+DJANGO_API_PREFIX=$(grep -E '^DJANGO_API_PREFIX=' "$BACKEND_DIR/.env" 2>/dev/null | cut -d'=' -f2 || true)
+DJANGO_API_PREFIX=${DJANGO_API_PREFIX:-/carbon-api/}
 
 # Log files
 readonly BACKEND_LOG="$LOGS_DIR/backend.log"
@@ -368,7 +372,43 @@ cmd_start() {
     echo ""
     
     local all_ok=true
-    
+
+    # Ensure the admin user is always correct before starting services.
+    # This is the canonical superuser — never change username/password.
+    local python
+    python=$(get_python)
+    if [[ -n "$python" ]]; then
+        log_step "Ensuring admin user (ahmed)..."
+        cd "$BACKEND_DIR" || true
+        "$python" manage.py shell -c "
+from django.contrib.auth import get_user_model
+from accounts.models import ScopedRole
+from django.contrib.auth.models import Group
+from core.models import Project
+
+U = get_user_model()
+u, created = U.objects.get_or_create(username='ahmed')
+u.set_password('AdminPa_132')
+u.is_staff = True
+u.is_superuser = True
+u.is_active = True
+u.save()
+
+# Ensure at least one project and admin role assignment exist
+project = Project.objects.first()
+if project:
+    group, _ = Group.objects.get_or_create(name='admins_group')
+    ScopedRole.objects.get_or_create(
+        user=u, group=group, project=project, module=None,
+        defaults={'is_active': True}
+    )
+
+action = 'created' if created else 'verified'
+print(f'Admin user ahmed {action}.')
+" 2>/dev/null && log_success "Admin user ahmed verified" || log_warn "Could not verify admin user (DB may not be ready yet)"
+        cd "$PROJECT_ROOT" || true
+    fi
+
     start_backend || all_ok=false
     start_frontend || all_ok=false
     

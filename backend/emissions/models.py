@@ -34,22 +34,6 @@ class ReportingPeriod(models.Model):
     # Identity
     name = models.CharField(max_length=100, help_text="e.g., 'FY 2025', 'Q1 2025'")
     
-    # Tenant/Project scope
-    tenant = models.ForeignKey(
-        'accounts.Tenant',
-        on_delete=models.CASCADE,
-        related_name='reporting_periods',
-        help_text="Tenant this period belongs to"
-    )
-    project = models.ForeignKey(
-        'core.Project',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='reporting_periods',
-        help_text="Optional: specific project (if null, applies to all tenant projects)"
-    )
-    
     # Period dates
     start_date = models.DateField(help_text="Start date of the reporting period")
     end_date = models.DateField(help_text="End date of the reporting period")
@@ -76,7 +60,7 @@ class ReportingPeriod(models.Model):
         verbose_name = "Reporting Period"
         verbose_name_plural = "Reporting Periods"
         indexes = [
-            models.Index(fields=['tenant', 'start_date', 'end_date']),
+            models.Index(fields=['start_date', 'end_date']),
             models.Index(fields=['status']),
         ]
         constraints = [
@@ -314,12 +298,6 @@ class Calculation(models.Model):
         related_name='calculations',
         help_text="The source data row for this calculation"
     )
-    project = models.ForeignKey(
-        'core.Project', 
-        on_delete=models.CASCADE, 
-        related_name='calculations',
-        help_text="The project this calculation belongs to"
-    )
     module = models.ForeignKey(
         'core.Module', 
         on_delete=models.CASCADE, 
@@ -420,7 +398,7 @@ class Calculation(models.Model):
         verbose_name = "Emission Calculation"
         verbose_name_plural = "Emission Calculations"
         indexes = [
-            models.Index(fields=['project', 'scope', 'reporting_year']),
+            models.Index(fields=['module', 'scope', 'reporting_year']),
             models.Index(fields=['module', 'reporting_year']),
             models.Index(fields=['category', 'reporting_year']),
             models.Index(fields=['reporting_period']),
@@ -474,7 +452,6 @@ class Calculation(models.Model):
         
         return cls.objects.create(
             data_row=data_row,
-            project=data_row.data_table.module.project,
             module=data_row.data_table.module,
             emission_factor=emission_factor,
             activity_value=activity_decimal,

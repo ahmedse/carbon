@@ -8,15 +8,15 @@ from .models import ConversationMessage, ProactiveInsight, UserAIPreference
 
 @admin.register(ConversationMessage)
 class ConversationMessageAdmin(admin.ModelAdmin):
-    list_display = ['user', 'role', 'created_at', 'project']
-    list_filter = ['role', 'created_at', 'project']
-    search_fields = ['user__email', 'content', 'project__name']
+    list_display = ['user', 'role', 'created_at']
+    list_filter = ['role', 'created_at']
+    search_fields = ['user__email', 'content']
     readonly_fields = ['created_at']
     ordering = ['-created_at']
     
     fieldsets = (
         ('Message Info', {
-            'fields': ('user', 'project', 'role', 'content')
+            'fields': ('user', 'role', 'content')
         }),
         ('Metadata', {
             'fields': ('metadata', 'created_at'),
@@ -29,14 +29,14 @@ class ConversationMessageAdmin(admin.ModelAdmin):
 class ProactiveInsightAdmin(admin.ModelAdmin):
     list_display = ['title', 'user', 'urgency', 'acknowledged', 'created_at']
     list_filter = ['urgency', 'acknowledged', 'created_at']
-    search_fields = ['title', 'description', 'user__email', 'project__name']
+    search_fields = ['title', 'description', 'user__email']
     readonly_fields = ['created_at', 'acknowledged_at']
     actions = ['mark_acknowledged']
     ordering = ['-created_at']
     
     fieldsets = (
         ('Insight Details', {
-            'fields': ('user', 'project', 'urgency', 'title', 'description')
+            'fields': ('user', 'urgency', 'title', 'description')
         }),
         ('Actions', {
             'fields': ('actions',)

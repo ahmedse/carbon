@@ -70,9 +70,16 @@ export const API_ROUTES = {
   myRoles: "accounts/my-roles/",
   
   // Core
-  projects: "core/projects/",
   modules: "core/modules/",
   feedback: "core/feedback/",
+
+  // Accounts / access control
+  users: "accounts/users/",
+  groups: "accounts/roles/",
+  scopedRoles: "accounts/scoped-roles/",
+
+  // Organisation (MDM)
+  orgUnits: "mdm/org-units/",
   
   // Data Schema
   tables: "dataschema/tables/",

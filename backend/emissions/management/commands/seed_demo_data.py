@@ -55,35 +55,28 @@ class Command(BaseCommand):
     
     def _clear_demo_data(self):
         """Remove existing demo data."""
-        from accounts.models import Tenant
         from emissions.models import ReportingPeriod, Calculation, CalculationRule
+        from dataschema.models import DataTable
         
         if self.dry_run:
-            self.stdout.write('Would clear demo tenant and related data...')
+            self.stdout.write('Would clear demo data...')
             return
         
-        # First delete calculations that reference the demo tenant
-        demo_tenant = Tenant.objects.filter(name='Acme Corporation').first()
-        if demo_tenant:
-            # Delete calculations first (they have PROTECT on project/module)
-            Calculation.objects.filter(project__tenant=demo_tenant).delete()
-            # Delete calculation rules
-            CalculationRule.objects.filter(data_table__module__project__tenant=demo_tenant).delete()
-            # Delete reporting periods
-            ReportingPeriod.objects.filter(tenant=demo_tenant).delete()
-        
-        # Now we can safely delete the tenant (cascades to projects, modules, etc.)
-        Tenant.objects.filter(name__icontains='Acme').delete()
-        Tenant.objects.filter(name__icontains='Demo').delete()
+        # Delete demo-created tables (by name pattern)
+        demo_tables = DataTable.objects.filter(title__icontains='Demo')
+        for t in demo_tables:
+            Calculation.objects.filter(data_row__data_table=t).delete()
+            CalculationRule.objects.filter(data_table=t).delete()
+        demo_tables.delete()
+        ReportingPeriod.objects.filter(name='FY 2025').delete()
         
         self.stdout.write(self.style.WARNING('Cleared existing demo data'))
     
     def _seed_all(self):
         """Seed all demo data in order."""
-        tenant = self._create_tenant()
-        admin_user = self._create_demo_user(tenant)
-        project = self._create_project(tenant, admin_user)
-        reporting_period = self._create_reporting_period(tenant, project, admin_user)
+        admin_user = self._create_demo_user()
+        project = self._create_project(admin_user)
+        reporting_period = self._create_reporting_period(project, admin_user)
         
         # Create modules with data tables
         modules = self._create_modules(project, admin_user)
@@ -101,23 +94,7 @@ class Command(BaseCommand):
         
         self._print_summary()
     
-    def _create_tenant(self):
-        """Create Acme Corporation tenant."""
-        from accounts.models import Tenant
-        
-        if self.dry_run:
-            self.stdout.write('Would create tenant: Acme Corporation')
-            return None
-        
-        tenant, created = Tenant.objects.get_or_create(
-            name='Acme Corporation',
-        )
-        
-        action = 'Created' if created else 'Found existing'
-        self.stdout.write(f'  {action} tenant: {tenant.name}')
-        return tenant
-    
-    def _create_demo_user(self, tenant):
+    def _create_demo_user(self):
         """Create or get demo admin user."""
         from accounts.models import User
         from django.contrib.auth.models import Group
@@ -128,7 +105,6 @@ class Command(BaseCommand):
         
         user, created = User.objects.get_or_create(
             email='demo_admin@acme.com',
-            tenant=tenant,
             defaults={
                 'username': 'demo_admin',
                 'first_name': 'Demo',
@@ -149,7 +125,6 @@ class Command(BaseCommand):
             ScopedRole.objects.get_or_create(
                 user=user,
                 group=admin_group,
-                tenant=tenant,
                 defaults={'is_active': True}
             )
         
@@ -157,24 +132,24 @@ class Command(BaseCommand):
         self.stdout.write(f'  {action} user: {user.email}')
         return user
     
-    def _create_project(self, tenant, user):
-        """Create FY 2025 Carbon Footprint project."""
-        from core.models import Project
+    def _create_project(self, user):
+        """Create FY 2025 Carbon Footprint module."""
         
         if self.dry_run:
             self.stdout.write('Would create project: FY 2025 Carbon Footprint')
             return None
         
-        project, created = Project.objects.get_or_create(
-            tenant=tenant,
+        from core.models import Module
+        project, created = Module.objects.get_or_create(
             name='FY 2025 Carbon Footprint',
+            defaults={'scope': 1}
         )
         
         action = 'Created' if created else 'Found existing'
         self.stdout.write(f'  {action} project: {project.name}')
         return project
     
-    def _create_reporting_period(self, tenant, project, user):
+    def _create_reporting_period(self, project, user):
         """Create FY 2025 reporting period."""
         from emissions.models import ReportingPeriod
         
@@ -183,7 +158,6 @@ class Command(BaseCommand):
             return None
         
         period, created = ReportingPeriod.objects.get_or_create(
-            tenant=tenant,
             name='FY 2025',
             defaults={
                 'project': project,
@@ -829,7 +803,7 @@ class Command(BaseCommand):
     def _print_summary(self):
         """Print summary of created data."""
         from accounts.models import Tenant
-        from core.models import Project, Module
+        from core.models import Module
         from dataschema.models import DataTable, DataRow
         from emissions.models import ReportingPeriod, Calculation, CalculationRule
         
@@ -840,17 +814,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('DEMO DATA SUMMARY'))
         self.stdout.write('='*60)
         
-        tenant = Tenant.objects.filter(name='Acme Corporation').first()
-        if tenant:
-            self.stdout.write(f'\nTenant: {tenant.name}')
-            
-            projects = Project.objects.filter(tenant=tenant)
-            for project in projects:
-                self.stdout.write(f'\n  Project: {project.name}')
-                
-                modules = Module.objects.filter(project=project)
-                for module in modules:
-                    self.stdout.write(f'\n    Module: {module.name} (Scope {module.scope})')
+        modules = Module.objects.all()
+        for module in modules:
+            self.stdout.write(f'\n  Module: {module.name} (Scope {module.scope})')
                     
                     tables = DataTable.objects.filter(module=module)
                     for table in tables:

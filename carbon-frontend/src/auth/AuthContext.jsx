@@ -111,13 +111,21 @@ export const AuthProvider = ({ children }) => {
     // eslint-disable-next-line
   }, [user]);
 
+  // --- Ensure a working context exists whenever the user is present ---
+  useEffect(() => {
+    if (user && !context) {
+      buildContext(user);
+    }
+    // eslint-disable-next-line
+  }, [user, context]);
+
   // --- Refetch tables when context changes ---
   useEffect(() => {
-    if (user && context?.modules && context?.projectId) {
+    if (user && context?.modules) {
       refetchTables();
     }
     // eslint-disable-next-line
-  }, [user, context?.modules, context?.projectId]);
+  }, [user, context?.modules]);
 
   // --- Login: fetch tokens, user roles, and build project list ---
   const login = async ({ username, password }) => {
@@ -144,51 +152,19 @@ export const AuthProvider = ({ children }) => {
       if (!rolesRes.ok) throw new Error("Failed to fetch user roles");
       const { roles } = await rolesRes.json();
 
-      // Build project map
-      const projectMap = {};
-      for (const r of roles) {
-        if (
-          r.project_id &&
-          r.project &&
-          (r.context_type === "project" || r.context_type === "module")
-        ) {
-          projectMap[r.project_id] = { id: r.project_id, name: r.project };
-        }
-      }
-      for (const r of roles) {
-        if (r.context_type === "module" && (!r.project_id || !r.project)) {
-          if (import.meta.env.DEV) {
-            console.warn("[Auth] Module-level role missing project info:", r);
-          }
-        }
-      }
-      const projectsArr = Object.values(projectMap);
-
       const userObj = { username, token: access, refresh, roles };
       setUser(userObj);
-      setProjects(projectsArr);
       localStorage.setItem("user", JSON.stringify(userObj));
-      localStorage.setItem("projects", JSON.stringify(projectsArr));
       localStorage.setItem("access", access);
       localStorage.setItem("refresh", refresh);
-      localStorage.removeItem("context");
-      setContext(null);
 
-      debug("Login success", userObj, projectsArr);
+      // Build context + get landing path for smart redirect.
+      const ctx = await buildContext(userObj);
 
-      // If only one project, auto-select it
-      if (projectsArr.length === 1) {
-        await selectProject(projectsArr[0].id, userObj, projectsArr);
-        loginInFlightRef.current = false;
-        setLoading(false);
-        return { requireProjectSelection: false };
-      } else {
-        setContext(null);
-        localStorage.removeItem("context");
-        loginInFlightRef.current = false;
-        setLoading(false);
-        return { requireProjectSelection: true };
-      }
+      debug("Login success", userObj);
+      loginInFlightRef.current = false;
+      setLoading(false);
+      return { requireProjectSelection: false, landingPath: ctx?.landingPath || '/dashboard' };
     } catch (err) {
       setLoading(false);
       loginInFlightRef.current = false;
@@ -196,35 +172,48 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // --- Select a project: build context, fetch modules ---
-  const selectProject = async (projectId, _user = user, _projects = projects) => {
+  // --- Build the working context (the modules the user can access). No project concept. ---
+  const buildContext = async (_user = user) => {
     setLoading(true);
     try {
-      const project = (_projects || projects).find(p => String(p.id) === String(projectId));
-      if (!project) throw new Error("Invalid project selection");
+      const u = _user || user;
+      let modules = [];
+      try {
+        const res = await fetchModules(u.token);
+        modules = Array.isArray(res) ? res : (res?.results || []);
+      } catch (e) {
+        modules = [];
+        if (import.meta.env.DEV) console.error("[Auth] Failed to fetch modules", e);
+      }
 
-      const projectRoles = (_user || user).roles.filter(r =>
-        ((r.context_type === "project" && String(r.project_id) === String(projectId)) ||
-          (r.context_type === "module" && String(r.project_id) === String(projectId)))
-      );
-      const modules = await fetchModules((_user || user).token, projectId);
+      // Determine landing path: data-owners with no admin role go straight to their first module.
+      const isAdmin = (u.roles || []).some(r => r.active !== false && r.role === 'admins_group');
+      const isDataOwner = (u.roles || []).some(r => r.active !== false && r.role === 'dataowners_group');
+      let landingPath = '/dashboard';
+      if (!isAdmin && isDataOwner && modules.length > 0) {
+        landingPath = `/modules/${modules[0].id}`;
+      }
 
       const ctx = {
-        projectId,
-        project,
-        projectRoles,
+        projectId: "carbon",
+        project: { id: "carbon", name: "Carbon" },
+        projectRoles: u.roles || [],
         modules,
+        landingPath,
       };
       setContext(ctx);
+      setProjects([ctx.project]);
       localStorage.setItem("context", JSON.stringify(ctx));
-      debug("Project selected and context built", ctx);
       setLoading(false);
-      return true;
+      return ctx;
     } catch (err) {
       setLoading(false);
       throw err;
     }
   };
+
+  // Backward-compatible alias — older components still call selectProject().
+  const selectProject = async (_projectId, _user = user) => buildContext(_user);
 
   // --- Logout: clear all state, timers, and storage ---
   const logout = async (reason) => {
@@ -289,15 +278,19 @@ export const AuthProvider = ({ children }) => {
 
   // --- Role helpers ---
   const hasRole = (roleName) =>
+    (user?.roles || []).some(r => r?.active && r.role === roleName) ||
     context?.projectRoles?.some(r => r.role === roleName);
 
   const canSchemaAdmin = () =>
+    (user?.roles || []).some(r => r?.active && (r.role === "admins_group" || r.role === "admin")) ||
     context?.projectRoles?.some(r => r.role === "admins_group" || r.role === "admin");
 
   const canManageAllModules = () =>
+    (user?.roles || []).some(r => r?.active && ["admins_group", "admin", "auditors_group", "auditor"].includes(r.role)) ||
     context?.projectRoles?.some(r => ["admins_group", "admin", "auditors_group", "auditor"].includes(r.role));
 
   const canManageAssignedModules = () =>
+    (user?.roles || []).some(r => r?.active && (r.role === "dataowners_group" || r.role === "dataowner")) ||
     context?.projectRoles?.some(r => r.role === "dataowners_group" || r.role === "dataowner");
 
   return (
@@ -323,4 +316,18 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => useContext(AuthContext) || {
+  user: null,
+  projects: [],
+  context: null,
+  loading: false,
+  login: async () => ({ requireProjectSelection: false }),
+  selectProject: async () => true,
+  logout: async () => {},
+  hasRole: () => false,
+  canSchemaAdmin: () => false,
+  canManageAllModules: () => false,
+  canManageAssignedModules: () => false,
+  tablesByModule: {},
+  refetchTables: async () => {},
+};

@@ -1,14 +1,14 @@
 # File: accounts/views.py
-# DRF views for tenants, users, scoped roles, and audit logs.
+# DRF views for users, scoped roles, and audit logs.
 
 from rest_framework import status, viewsets
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from django.contrib.auth.models import Group
-from .models import Tenant, User, ScopedRole, RoleAssignmentAuditLog
+from .models import User, ScopedRole, RoleAssignmentAuditLog
 from .serializers import (
-    TenantSerializer, UserSerializer, GroupSerializer,
+    UserSerializer, GroupSerializer,
     ScopedRoleSerializer, ScopedRoleCreateSerializer,
     RoleAssignmentAuditLogSerializer
 )
@@ -38,40 +38,20 @@ def my_roles(request):
     Returns the current user's scoped roles in a flat format for the frontend.
     """
     user = request.user
-    scoped_roles = user.scoped_roles.filter(is_active=True).select_related('tenant', 'project', 'module', 'group')
+    scoped_roles = user.scoped_roles.filter(is_active=True).select_related(
+        'org_unit', 'module', 'group'
+    )
 
     roles = []
     for sr in scoped_roles:
-        # Determine context type
-        if sr.module:
-            context_type = "module"
-            module_id = sr.module.id
-            module_name = str(sr.module)
-            project_id = sr.project.id if sr.project else sr.module.project.id if sr.module.project else None
-            project_name = str(sr.project) if sr.project else str(sr.module.project) if sr.module.project else None
-        elif sr.project:
-            context_type = "project"
-            module_id = None
-            module_name = None
-            project_id = sr.project.id
-            project_name = str(sr.project)
-        else:
-            context_type = "tenant"
-            project_id = None
-            project_name = None
-            module_id = None
-            module_name = None
-
         roles.append({
             "role": sr.group.name,
-            "tenant": str(sr.tenant),
-            "tenant_id": sr.tenant.id,
-            "context_type": context_type,
-            "project": project_name,
-            "project_id": project_id,
-            "module": module_name,
-            "module_id": module_id,
-            "active": sr.is_active,  # <-- add this line
+            "context_type": "module" if sr.module_id else ("org_unit" if sr.org_unit_id else "global"),
+            "org_unit": str(sr.org_unit) if sr.org_unit else None,
+            "org_unit_id": sr.org_unit_id,
+            "module": str(sr.module) if sr.module else None,
+            "module_id": sr.module_id,
+            "active": sr.is_active,
         })
 
     return Response({
@@ -85,14 +65,6 @@ class IsSuperuser(BasePermission):
     """
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_superuser)
-
-class TenantViewSet(viewsets.ModelViewSet):
-    """
-    CRUD for tenants. Only Django superuser can manage tenants.
-    """
-    queryset = Tenant.objects.all()
-    serializer_class = TenantSerializer
-    permission_classes = [IsSuperuser]
 
 class UserViewSet(viewsets.ModelViewSet):
     """

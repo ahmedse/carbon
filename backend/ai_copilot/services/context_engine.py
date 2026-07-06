@@ -16,9 +16,9 @@ class ContextEngine:
     """
     
     @staticmethod
-    async def get_project_context(user, project_id: Optional[int] = None) -> Dict:
-        """Get comprehensive project context."""
-        from core.models import Project, Module
+    async def get_project_context(user, project_id=None) -> Dict:
+        """Get context for the AI copilot (project concept removed)."""
+        from core.models import Module
         from dataschema.models import DataTable, DataField, DataRow
         from accounts.models import ScopedRole
         
@@ -35,22 +35,12 @@ class ContextEngine:
             "date_range": {},
         }
         
-        # Get user's current project
-        if project_id:
-            try:
-                project = await sync_to_async(Project.objects.get)(id=project_id)
-            except Project.DoesNotExist:
-                project = None
-        else:
-            # Get user's first project through their scoped roles
-            projects = await sync_to_async(lambda: list(
-                Project.objects.filter(
-                    scoped_roles__user=user
-                ).distinct()[:1]
-            ))()
-            project = projects[0] if projects else None
-        
-        if not project:
+        # Get user's current module (project concept removed)
+        module = None
+        modules = await sync_to_async(lambda: list(Module.objects.all()[:1]))()
+        module = modules[0] if modules else None
+
+        if not module:
             return context
         
         # Get user role
@@ -66,12 +56,10 @@ class ContextEngine:
         except:
             context["user"]["role"] = "viewer"
         
-        # Project info (wrap tenant.name access)
-        tenant_name = await sync_to_async(lambda: project.tenant.name)()
+        # Project info
         context["project"] = {
             "id": project.id,
             "name": project.name,
-            "tenant": tenant_name,
         }
         
         # Get modules for this project
@@ -183,44 +171,31 @@ class ContextEngine:
         return context
     
     @staticmethod
-    async def get_data_quality_context(user, project_id: Optional[int] = None) -> str:
+    async def get_data_quality_context(user, project_id=None) -> str:
         """Get human-readable data quality summary."""
-        from core.models import Project
         from dataschema.models import DataTable, DataField, DataRow
-        
-        if not project_id:
-            return "No project selected."
-        
-        try:
-            project = await sync_to_async(Project.objects.get)(id=project_id)
-        except:
-            return "Project not found."
-        
-        # Get tables with missing required data
-        tables = await sync_to_async(lambda p=project: list(
-            DataTable.objects.filter(
-                module__project=p
-            ).select_related('module')
+
+        tables = await sync_to_async(lambda: list(
+            DataTable.objects.all().select_related('module')
         ))()
-        
+
         issues = []
         for table in tables:
-            # Get table and module names safely
             table_title = await sync_to_async(lambda t=table: t.title)()
             module_name = await sync_to_async(lambda t=table: t.module.name)()
-            
+
             required_fields = await sync_to_async(lambda t=table: list(
                 DataField.objects.filter(
                     data_table=t,
                     required=True
                 ).values_list('name', flat=True)
             ))()
-            
+
             if required_fields:
                 rows = await sync_to_async(lambda t=table: list(
                     DataRow.objects.filter(data_table=t).values('id', 'values')
                 ))()
-                
+
                 missing_count = 0
                 for row in rows:
                     data = row['values'] or {}
@@ -230,17 +205,17 @@ class ContextEngine:
                     )
                     if has_missing:
                         missing_count += 1
-                
+
                 if missing_count > 0:
                     issues.append(
                         f"- {module_name} / {table_title}: "
                         f"{missing_count} rows with missing required fields"
                     )
-        
+
         if not issues:
-            return f"Project '{project.name}': All data complete ✓"
-        
-        return f"Project '{project.name}' data quality issues:\n" + "\n".join(issues)
+            return "All data complete ✓"
+
+        return "Data quality issues:\n" + "\n".join(issues)
     
     @staticmethod
     def format_context_for_prompt(context: Dict) -> str:
@@ -252,11 +227,7 @@ class ContextEngine:
         lines.append("CARBON EMISSIONS DATA CONTEXT")
         lines.append("=" * 60)
         
-        if context.get("project"):
-            proj = context["project"]
-            lines.append(f"\n📊 PROJECT: {proj['name']}")
-            lines.append(f"   Organization: {proj['tenant']}")
-        
+
         if context.get("user"):
             user = context["user"]
             lines.append(f"\n👤 USER: {user['name']} ({user['role']})")

@@ -2,18 +2,14 @@
 # Django admin registration for core app models.
 
 from django.contrib import admin
-from .models import Project, Module
-from .models import Feedback
+from .models import Module, Feedback
 
-@admin.register(Project)
-class ProjectAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'tenant']
-    search_fields = ['name']
 
 @admin.register(Module)
 class ModuleAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'project', 'scope']
+    list_display = ['id', 'name', 'scope', 'org_unit']
     search_fields = ['name']
+
 
 @admin.register(Feedback)
 class FeedbackAdmin(admin.ModelAdmin):

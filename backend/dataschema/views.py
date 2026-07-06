@@ -17,11 +17,8 @@ from .serializers import (
     SchemaChangeLogSerializer
 )
 from accounts.permissions import HasScopedRole
-from accounts.rbac_utils import get_allowed_module_ids, user_has_project_role
-from core.models import Module, Project
-
-def get_tenant(request):
-    return getattr(request.user, 'tenant', None)
+from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role
+from core.models import Module
 
 class ScopedViewSet(viewsets.ModelViewSet):
     """
@@ -32,18 +29,11 @@ class ScopedViewSet(viewsets.ModelViewSet):
     required_role = None  # override or use get_required_role
 
     def get_permissions(self):
-        project_id = self.request.query_params.get('project_id') or self.request.data.get('project_id')
         module_id = self.request.query_params.get('module_id') or self.request.data.get('module_id')
-        tenant = get_tenant(self.request)
-        self.project = self.module = None
-        if project_id and tenant:
+        self.module = None
+        if module_id:
             try:
-                self.project = Project.objects.get(pk=project_id, tenant=tenant)
-            except Project.DoesNotExist:
-                self.project = None
-        if module_id and self.project:
-            try:
-                self.module = Module.objects.get(pk=module_id, project=self.project)
+                self.module = Module.objects.get(pk=module_id)
             except Module.DoesNotExist:
                 self.module = None
         self.required_role = self.get_required_role()
@@ -63,33 +53,19 @@ class DataTableViewSet(ScopedViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        project_id = self.request.query_params.get("project_id")
         module_id = self.request.query_params.get("module_id")
-        pk = self.kwargs.get('pk')  # Only present on detail view
+        pk = self.kwargs.get('pk')
 
-        if not project_id:
-            return DataTable.objects.none()
-
-        qs = DataTable.objects.filter(module__project_id=project_id, is_archived=False)
-
-        # RBAC: restrict to what user can see
-        if user_has_project_role(user, project_id, ["admin", "admins_group"]):
-            if module_id:
-                qs = qs.filter(module_id=module_id)
-        else:
-            allowed_module_ids = get_allowed_module_ids(user, project_id, ["dataowners_group"])
-            if module_id:
-                if int(module_id) in allowed_module_ids:
-                    qs = qs.filter(module_id=module_id)
-                else:
-                    return DataTable.objects.none()
-            else:
-                qs = qs.filter(module_id__in=allowed_module_ids)
-
-        # If this is a detail view, further restrict to pk
+        qs = DataTable.objects.filter(is_archived=False)
+        if not (user.is_superuser or user_has_global_role(user, ["admin", "admins_group"])):
+            allowed = get_allowed_module_ids(
+                user, ["admin", "admins_group", "dataowners_group", "auditors_group"]
+            )
+            qs = qs.filter(module_id__in=allowed)
+        if module_id:
+            qs = qs.filter(module_id=module_id)
         if pk:
             qs = qs.filter(pk=pk)
-
         return qs
 
     def get_serializer_class(self):
@@ -108,21 +84,18 @@ class DataFieldViewSet(ScopedViewSet):
 
     def get_queryset(self):
         qs = DataField.objects.all()
-        if self.project:
-            qs = qs.filter(data_table__module__project=self.project, is_archived=False)
-            if self.module:
-                qs = qs.filter(data_table__module=self.module)
-            # Filter by data_table if specified
-            table_id = (
-                self.request.query_params.get("data_table") or
-                self.request.query_params.get("table_id") or
-                self.request.data.get("data_table") or
-                self.request.data.get("table_id")
-            )
-            if table_id:
-                qs = qs.filter(data_table_id=table_id)
+        if self.module:
+            qs = qs.filter(data_table__module=self.module, is_archived=False)
         else:
-            qs = qs.none()
+            qs = qs.filter(is_archived=False)
+        table_id = (
+            self.request.query_params.get("data_table") or
+            self.request.query_params.get("table_id") or
+            self.request.data.get("data_table") or
+            self.request.data.get("table_id")
+        )
+        if table_id:
+            qs = qs.filter(data_table_id=table_id)
         return qs
 
 # --- DataRow (Data) ---
@@ -140,13 +113,15 @@ class DataRowViewSet(ScopedViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        project_id = self.request.query_params.get("project_id")
         module_id = self.request.query_params.get("module_id")
-        data_table_id = self.request.query_params.get("data_table")  # or "table_id"
+        data_table_id = self.request.query_params.get("data_table")
 
-        if not project_id:
-            return DataRow.objects.none()
-        qs = DataRow.objects.filter(data_table__module__project_id=project_id, is_archived=False)
+        qs = DataRow.objects.filter(is_archived=False)
+        if not (user.is_superuser or user_has_global_role(user, ["admin", "admins_group"])):
+            allowed = get_allowed_module_ids(
+                user, ["admin", "admins_group", "dataowners_group", "auditors_group"]
+            )
+            qs = qs.filter(data_table__module_id__in=allowed)
         if module_id:
             qs = qs.filter(data_table__module_id=module_id)
         if data_table_id:
@@ -163,11 +138,8 @@ class SchemaChangeLogViewSet(ScopedViewSet, viewsets.ReadOnlyModelViewSet):
     required_role = ("admin", "admins_group")
 
     def get_queryset(self):
-        project_id = self.request.query_params.get("project_id")
         module_id = self.request.query_params.get("module_id")
         qs = SchemaChangeLog.objects.all()
-        if project_id:
-            qs = qs.filter(data_table__module__project_id=project_id)
         if module_id:
             qs = qs.filter(data_table__module_id=module_id)
         return qs

@@ -7,7 +7,6 @@ from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, Calculati
 
 class ReportingPeriodSerializer(serializers.ModelSerializer):
     """Serializer for reporting periods."""
-    tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     duration_days = serializers.IntegerField(read_only=True)
     is_active = serializers.BooleanField(read_only=True)
@@ -15,7 +14,7 @@ class ReportingPeriodSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReportingPeriod
         fields = [
-            'id', 'name', 'tenant', 'tenant_name', 'project', 'project_name',
+            'id', 'name', 'project', 'project_name',
             'start_date', 'end_date', 'period_type', 'status',
             'description', 'is_baseline', 'duration_days', 'is_active',
             'created_at', 'updated_at'

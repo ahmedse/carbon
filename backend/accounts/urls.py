@@ -3,13 +3,12 @@
 from rest_framework.routers import DefaultRouter
 from django.urls import path
 from .views import (
-    TenantViewSet, UserViewSet, GroupViewSet,
+    UserViewSet, GroupViewSet,
     ScopedRoleViewSet, RoleAssignmentAuditLogViewSet,
     LogoutView, my_roles,
 )
 
 router = DefaultRouter()
-router.register(r'tenants', TenantViewSet)
 router.register(r'users', UserViewSet)
 router.register(r'roles', GroupViewSet, basename='role')
 router.register(r'scoped-roles', ScopedRoleViewSet, basename='scopedrole')

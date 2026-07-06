@@ -21,8 +21,8 @@ django.setup()
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from accounts.models import Tenant, ScopedRole
-from core.models import Project
+from accounts.models import ScopedRole
+from core.models import Module
 
 User = get_user_model()
 
@@ -60,11 +60,9 @@ def main():
     print("FIXED USER SEEDING - AASTMT Carbon Platform")
     print("="*70 + "\n")
 
-    # Get AAST Carbon project and use its tenant
+    # Get AAST Carbon project
     try:
-        project = Project.objects.get(name='AAST Carbon')
-        tenant = project.tenant  # Use the project's tenant
-        print(f"✓ Tenant: {tenant.name} (ID: {tenant.id})")
+        module = Module.objects.first()
         print(f"✓ Project: {project.name} (ID: {project.id})")
     except Project.DoesNotExist:
         print("ERROR: AAST Carbon project not found. Please run seed_rbac first.")
@@ -88,7 +86,6 @@ def main():
                 'email': email,
                 'is_superuser': is_superuser,
                 'is_staff': is_staff,
-                'tenant': tenant,
             }
         )
 
@@ -102,7 +99,6 @@ def main():
             user.email = email
             user.is_superuser = is_superuser
             user.is_staff = is_staff
-            user.tenant = tenant
 
         # ALWAYS reset password to ensure it's correct
         user.set_password(password)
@@ -114,7 +110,6 @@ def main():
         # Assign project role using ScopedRole
         scoped_role, _ = ScopedRole.objects.get_or_create(
             user=user,
-            tenant=tenant,
             project=project,
             module=None,  # Project-level role
             defaults={

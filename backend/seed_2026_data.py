@@ -17,24 +17,13 @@ django.setup()
 
 from emissions.models import ReportingPeriod, Calculation, EmissionFactor
 from dataschema.models import DataRow, DataTable
-from core.models import Project, Module
-from accounts.models import Tenant, User
+from core.models import Module
+from accounts.models import User
 
 def seed_2026_data():
     """Seed 2026 emissions data for January (first month of year)."""
     
     print("=== Seeding 2026 Emissions Data ===\n")
-    
-    # Get first tenant and project
-    tenant = Tenant.objects.first()
-    if not tenant:
-        print("Error: No tenant found.")
-        return
-    
-    project = Project.objects.first()
-    if not project:
-        print("Error: No project found.")
-        return
     
     user = User.objects.first()
     
@@ -76,7 +65,6 @@ def seed_2026_data():
     
     # Create reporting period for 2026
     period, created = ReportingPeriod.objects.get_or_create(
-        tenant=tenant,
         name='FY 2026',
         defaults={
             'start_date': date(2026, 1, 1),
@@ -125,7 +113,6 @@ def seed_2026_data():
         )
         
         Calculation.objects.create(
-            project=project,
             module=modules[1],
             emission_factor=natural_gas_ef,
             data_row=data_row,
@@ -154,7 +141,6 @@ def seed_2026_data():
         )
         
         Calculation.objects.create(
-            project=project,
             module=modules[1],
             emission_factor=mobile_ef,
             data_row=data_row,
@@ -183,7 +169,6 @@ def seed_2026_data():
         )
         
         Calculation.objects.create(
-            project=project,
             module=modules[2],
             emission_factor=electricity_ef,
             data_row=data_row,
@@ -212,7 +197,6 @@ def seed_2026_data():
         )
         
         Calculation.objects.create(
-            project=project,
             module=modules[3],
             emission_factor=transport_ef,
             data_row=data_row,

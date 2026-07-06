@@ -20,24 +20,13 @@ django.setup()
 
 from emissions.models import ReportingPeriod, Calculation, EmissionFactor
 from dataschema.models import DataRow, DataTable
-from core.models import Project, Module
-from accounts.models import Tenant, User
+from core.models import Module
+from accounts.models import User
 
 def seed_historical_data():
     """Seed multi-year historical emissions data."""
     
     print("=== Seeding Historical Emissions Data ===\n")
-    
-    # Get first tenant and project
-    tenant = Tenant.objects.first()
-    if not tenant:
-        print("Error: No tenant found. Run initial seed first.")
-        return
-    
-    project = Project.objects.first()
-    if not project:
-        print("Error: No project found. Run initial seed first.")
-        return
     
     user = User.objects.first()
     
@@ -115,7 +104,6 @@ def seed_historical_data():
         
         # Create or get reporting period
         period, created = ReportingPeriod.objects.get_or_create(
-            tenant=tenant,
             name=config['name'],
             defaults={
                 'start_date': date(year, 1, 1),
@@ -151,7 +139,6 @@ def seed_historical_data():
                 scope1_kg = baseline_monthly['scope1_base'] * reduction_factor * seasonal * random_variance
                 Calculation.objects.create(
                     data_row=data_row,
-                    project=project,
                     module=modules[1],
                     scope=1,
                     category='stationary_combustion',
@@ -182,7 +169,6 @@ def seed_historical_data():
                 
                 Calculation.objects.create(
                     data_row=data_row2,
-                    project=project,
                     module=modules[2],
                     scope=2,
                     category='electricity',
@@ -214,7 +200,6 @@ def seed_historical_data():
                 
                 Calculation.objects.create(
                     data_row=data_row3,
-                    project=project,
                     module=modules[3],
                     scope=3,
                     category='transport',
