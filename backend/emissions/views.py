@@ -13,6 +13,7 @@ from decimal import Decimal
 from collections import defaultdict
 
 from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule
+from accounts.rbac_utils import get_visible_module_ids
 from .serializers import (
     ReportingPeriodSerializer,
     EmissionFactorSerializer,
@@ -23,6 +24,15 @@ from .serializers import (
     DashboardSummarySerializer,
     EmissionReportSerializer,
 )
+
+
+def _scope_calcs(user, queryset):
+    """Restrict a Calculation queryset to the modules the user may see.
+    Superusers / global admins are unrestricted (get_visible_module_ids returns None)."""
+    allowed = get_visible_module_ids(user)
+    if allowed is None:
+        return queryset
+    return queryset.filter(module_id__in=allowed)
 
 
 class ReportingPeriodViewSet(viewsets.ModelViewSet):
@@ -168,7 +178,15 @@ class CalculationViewSet(viewsets.ModelViewSet):
         if year:
             queryset = queryset.filter(reporting_year=year)
         
+        queryset = _scope_calcs(self.request.user, queryset)
         return queryset
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        return Response({
+            'count': queryset.count(),
+            'results': list(queryset.values('id', 'module_id', 'reporting_year', 'scope', 'co2e_kg'))
+        })
 
 
 class CalculationRuleViewSet(viewsets.ModelViewSet):
@@ -230,8 +248,9 @@ class DashboardAPIView(APIView):
         period_id = request.query_params.get('reporting_period_id')
         year = request.query_params.get('year', timezone.now().year)
         
-        # Base queryset
-        queryset = Calculation.objects.all()
+        # Base queryset (org-scoped to the requesting user)
+        base_queryset = _scope_calcs(request.user, Calculation.objects.all())
+        queryset = base_queryset
         
         reporting_period = None
         if period_id:
@@ -322,7 +341,7 @@ class DashboardAPIView(APIView):
             'category_breakdown': category_breakdown,
             'monthly_trend': monthly_trend,
             'data_quality_score': data_quality,
-            'calculation_count': queryset.count(),
+            'calculation_count': base_queryset.count(),
             'last_updated': queryset.order_by('-calculated_at').values_list('calculated_at', flat=True).first()
         }
         
@@ -352,7 +371,7 @@ class YearlyComparisonAPIView(APIView):
         else:
             years = list(range(2020, current_year + 1))
         
-        queryset = Calculation.objects.all()
+        queryset = _scope_calcs(request.user, Calculation.objects.all())
         
         # Get yearly totals
         yearly_data = queryset.filter(reporting_year__in=years).values('reporting_year').annotate(
@@ -461,10 +480,10 @@ class ReportAPIView(APIView):
         year = request.query_params.get('year', timezone.now().year)
         report_format = request.query_params.get('format', 'json')
         
-        # Base queryset
-        queryset = Calculation.objects.select_related(
+        # Base queryset (org-scoped to the requesting user)
+        queryset = _scope_calcs(request.user, Calculation.objects.select_related(
             'module', 'emission_factor', 'data_row', 'data_row__data_table'
-        )
+        ))
         
         reporting_period = None
         if period_id:

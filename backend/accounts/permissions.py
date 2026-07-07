@@ -4,6 +4,7 @@
 from rest_framework import permissions
 from .rbac_utils import (
     user_has_global_role, user_has_module_role, get_allowed_org_unit_ids,
+    ADMIN_ROLES, get_steward_org_unit_ids,
 )
 
 
@@ -50,3 +51,18 @@ class HasScopedRole(permissions.BasePermission):
             return True
 
         return False
+
+
+class CanManageScopedRoles(permissions.BasePermission):
+    """Allows superusers, global admins, and org-scoped stewards (admins_group on any org unit).
+    Subtree enforcement + anti-escalation is done in the viewset (get_queryset / perform_*)."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_superuser:
+            return True
+        if user_has_global_role(user, ADMIN_ROLES):
+            return True
+        return bool(get_steward_org_unit_ids(user))

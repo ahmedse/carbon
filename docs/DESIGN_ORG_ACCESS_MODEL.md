@@ -83,6 +83,54 @@ A `ScopedRole` grants a role at one of:
 
 ---
 
+## 4.5 The three meanings of "scope" — do NOT conflate them
+
+> Grounded in the **GHG Protocol Corporate Standard** and **Microsoft Sustainability Manager**. This is the single most important modeling clarification for the platform.
+
+| # | "Scope" | What it is | Where it lives | Authority |
+|---|---|---|---|---|
+| 1 | **GHG Scope 1/2/3** | An **emissions taxonomy**. 1 = direct combustion, 2 = purchased energy, 3 = value chain. | A property of the **`EmissionFactor`**, copied onto each **`Calculation`**. | GHG Protocol (fixed) |
+| 2 | **Access scope** | Which **OrgUnit subtree** a user may see. | `ScopedRole.org_unit` + `get_allowed_org_unit_ids`. | Our RBAC |
+| 3 | **Module** | A **dataset/schema** container of activity data (e.g. `monthly_electricity`). | `core.Module`. | Our data model |
+
+**Rule (locked):** the **authoritative GHG scope of any reported number comes from the `EmissionFactor` at calculation time** — never from a dataset. `Calculation.scope` already follows this; dashboards aggregate `Calculation.scope`. ✅
+
+**Design smell to avoid:** `Module.scope` (1/2/3) currently tags a whole dataset as one GHG scope. That is a **convenience label only** — a single dataset can feed multiple scopes (e.g. a fleet table with on-site diesel = Scope 1 *and* EV-charging electricity = Scope 2). Treat `Module.scope` as an advisory default for UI grouping; **never** use it as the source of truth for reporting.
+
+---
+
+## 4.6 Dashboard & report org-scoping (engineering)
+
+> Direct lesson from Microsoft Sustainability Manager: *"security roles don't impact Power BI views… dashboards are only governed by organization scope."* **Row-level security does NOT automatically flow into aggregations.** If a list endpoint is org-filtered but a dashboard `SUM()` is not, the total silently leaks data outside the user's scope. This must be engineered explicitly.
+
+**The chain already exists:** `Calculation → module (FK) → org_unit (FK)`. So every aggregate must start from a scoped queryset:
+
+```python
+# accounts/rbac_utils.py — reusable helpers
+ADMIN_ROLES      = ["admin", "admins_group"]
+VISIBILITY_ROLES = ["admins_group", "dataowners_group", "auditors_group"]
+
+def user_is_global_admin(user):        # superuser or global admins_group
+    ...
+def get_visible_module_ids(user):      # None => unrestricted; else the allowed set
+    return None if user_is_global_admin(user) else get_allowed_module_ids(user, VISIBILITY_ROLES)
+```
+
+```python
+# emissions/views.py — apply to EVERY aggregate + the calculations list
+def _scope(user, qs):
+    allowed = get_visible_module_ids(user)
+    return qs if allowed is None else qs.filter(module_id__in=allowed)
+```
+
+Apply `_scope()` to: **DashboardAPIView, YearlyComparisonAPIView, ReportAPIView, CalculationViewSet**. Superuser / global-admin bypass (`allowed is None`).
+
+**Reference data stays GLOBAL — never org-scoped.** MSM: *"reference data is scoped at the org level by default… if you block it from a sibling business unit, calculations fail."* So **do NOT** scope `EmissionFactor`, `GWP`, `ReportingPeriod`, or `ReferenceSet`. Only **activity data + calculations** are org-scoped.
+
+**Consequence:** the same code delivers steward *read* visibility — a Facilities steward's dashboard total = Facilities-only tonnes; a super-admin still sees the consolidated total.
+
+---
+
 ## 5. Portal strategy (one app, role-adaptive)
 
 **No separate admin console.** The existing React app renders different sections by role:
@@ -100,9 +148,10 @@ A `ScopedRole` grants a role at one of:
 
 ## 6. Phasing
 
-- **Phase A (backend — this next RUN):** `Module.org_unit` FK, org-scoped RBAC (permission + querysets + subtree expansion), `campus` org type, and a seed command building the AASTMT slice + the Transportation Gas Bills scenario + a department data-owner user. Prove isolation over HTTP.
-- **Phase B (frontend):** org context in `AuthContext`; sidebar/nav naturally scoped by the server-filtered module list; org-unit + user-role admin screens (steward-scoped).
-- **Phase C:** stewardship workflows, org-based governance/lineage in the catalog, dashboards scoped by org unit.
+- **Phase A (backend) — ✅ DONE (RUN 6):** `Module.org_unit` FK, org-scoped RBAC (permission + querysets + subtree expansion), `campus` org type, seed AASTMT slice + department data-owner. Isolation proven over HTTP (403).
+- **Phase B (frontend) — ✅ DONE (RUN 7–9):** org context in `AuthContext`; server-filtered module sidebar; Org Units, Access Control, and Users admin screens; data-owner landing UX.
+- **Phase C (org-scoped visibility) — ▶️ RUN 11:** apply the user's allowed-module set to **all emissions read endpoints** (dashboard, yearly comparison, report, calculations list) per §4.6. Fixes the aggregation leak and gives every steward/data-owner a subtree-scoped dashboard. Reference data stays global. Superuser/global-admin bypass.
+- **Phase D (steward-scoped admin) — ⏭️ RUN 12:** let an **org-scoped `admins_group` steward** manage Users + ScopedRoles **only within their allowed subtree**, with hard anti-privilege-escalation guards (cannot grant global roles or roles outside their subtree).
 
 ---
 

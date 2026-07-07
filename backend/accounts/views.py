@@ -12,7 +12,10 @@ from .serializers import (
     ScopedRoleSerializer, ScopedRoleCreateSerializer,
     RoleAssignmentAuditLogSerializer
 )
-from .permissions import HasScopedRole
+from .permissions import HasScopedRole, CanManageScopedRoles
+from .rbac_utils import user_is_global_admin, get_steward_org_unit_ids
+from rest_framework.exceptions import PermissionDenied
+from django.db.models import Q
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -87,16 +90,63 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
 class ScopedRoleViewSet(viewsets.ModelViewSet):
     """
     CRUD for scoped role assignments.
+
+    - Superusers / global admins: full access.
+    - Org-scoped stewards (admins_group on an org unit): may list/create/delete role
+      assignments ONLY within their own org subtree, and NEVER global roles.
     """
     queryset = ScopedRole.objects.all()
-    permission_classes = [HasScopedRole]
-    required_role = "admin"  # Only users with 'admin' ScopedRole can manage scoped roles
+    permission_classes = [CanManageScopedRoles]
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return ScopedRoleCreateSerializer
         return ScopedRoleSerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        if user_is_global_admin(user):
+            return ScopedRole.objects.all()
+        allowed = get_steward_org_unit_ids(user)
+        # Only assignments whose target org (directly or via module) is in the steward's subtree.
+        return ScopedRole.objects.filter(
+            Q(org_unit_id__in=allowed) | Q(module__org_unit_id__in=allowed)
+        )
+
+    def _assert_within_subtree(self, org_unit, module):
+        """Anti-escalation guard: a steward may only target an org unit inside their subtree,
+        never a global role (org_unit=None AND module=None) and never a foreign subtree."""
+        user = self.request.user
+        if user_is_global_admin(user):
+            return
+        allowed = get_steward_org_unit_ids(user)
+        target_org_id = None
+        if org_unit is not None:
+            target_org_id = org_unit.id if hasattr(org_unit, 'id') else org_unit
+        elif module is not None:
+            target_org_id = getattr(module, 'org_unit_id', None)
+        if not target_org_id or target_org_id not in allowed:
+            raise PermissionDenied(
+                "You can only manage role assignments within your own organization units."
+            )
+
+    def perform_create(self, serializer):
+        self._assert_within_subtree(
+            serializer.validated_data.get('org_unit'),
+            serializer.validated_data.get('module'),
+        )
+        serializer.save()
+
+    def perform_update(self, serializer):
+        self._assert_within_subtree(
+            serializer.validated_data.get('org_unit'),
+            serializer.validated_data.get('module'),
+        )
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._assert_within_subtree(instance.org_unit, instance.module)
+        instance.delete()
 class RoleAssignmentAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Read-only view for role assignment audit logs.

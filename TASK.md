@@ -1,239 +1,320 @@
-# TASK.md — Active Task (Executor Control File)
+# TASK.md — STEWARD-ADMIN-1 (RUN 12): Steward-scoped role assignment
 
-**Master (planner):** GitHub Copilot
-**Executor:** Sonnet (worker)
-**Date:** 2026-07-06
-**Task ID:** APP-CARBON-1 — **RUN 10: Carbon (Emissions) app wires itself onto the trusted data**
-**Goal:** The **Carbon app** (the `emissions` Django app) consumes the platform's real Facilities data tables and produces CO₂e, so the emissions dashboards show real numbers. This is APP logic, not platform/core logic — everything lives in the `emissions` app.
-**Report to:** `TASK-RESULT.md` (create/overwrite for this run).
-
-> ⚠️ **You may be a smaller/cheaper model. Read this WHOLE file first. Do steps IN ORDER. Copy code VERBATIM. Run §4 checks and paste real output into TASK-RESULT.md.**
+> **Role:** worker/executor. Do **exactly** this task. This is a **security-sensitive** change —
+> follow the code verbatim, do not "improve" or generalize it. When done, write `TASK-RESULT.md` and STOP.
 
 ---
 
-## 0. 🚫 STRICT GUARD RAILS
+## 0. Context (read first)
 
-### Architecture principle (do not violate)
-- **Carbon = a hosted APP** on the platform. Its logic (emission factors, calculation rules, CO₂e) lives ONLY in the `emissions` app.
-- The `emissions` app MAY import platform core (`dataschema`, `core`, `mdm`, `catalog`). The core apps must NEVER import `emissions` — do not add any such import.
+Carbon is a platform with an OrgUnit tree and `ScopedRole` (user + group + org_unit + module) RBAC.
+Today only **global admins / superusers** can manage role assignments. We want an **org-scoped steward**
+(a user who holds an `admins_group` role on an OrgUnit) to be able to **assign roles to EXISTING users
+within their own org subtree only** — and never escalate beyond it.
 
-### Files you MAY create/edit — EXACTLY these 1:
-1. `backend/emissions/management/commands/setup_carbon_app.py` (**create new**)
+**Locked decisions:**
+- A steward may **only assign/list/delete role assignments** (`ScopedRole`). A steward may **NOT create users**
+  (the Users endpoint stays global-admin-only — do NOT touch `UserViewSet`).
+- **Anti-escalation (hard rule):** a steward can NEVER
+  - create/edit/delete a **global** role (`org_unit=None` AND `module=None`), nor
+  - target an org unit **outside** their allowed subtree (directly via `org_unit`, or indirectly via a `module`'s org unit).
 
-### You MUST NOT:
-- ❌ Edit any model, migration, view, serializer, url, or settings file (NO schema change, NO migration).
-- ❌ Edit any file in `catalog/`, `mdm/`, `dq/`, `dataschema/`, `core/`, `accounts/`, or the frontend.
-- ❌ Reintroduce `project` / `projectId` / `project_id`.
-- ✅ If you think you need to change a model or any file other than the one new command, STOP and write a BLOCKED note.
+Org tree (for reference): AAST(1) → Abu Qir Campus(3) → Transportation/Fleet(4), **Facilities & Utilities(5)**, Procurement & Finance(6); College of Engineering(2) under AAST(1).
 
----
-
-## 1. Context — the trusted data this app consumes (already seeded, do NOT recreate)
-
-Real AASTMT Abu Qir data already exists in the platform's `dataschema` tables (owned by the "Facilities & Utilities" org unit):
-
-| DataTable `name` | Activity field (`name`) | Date field (`name`) | Unit |
-|---|---|---|---|
-| `monthly_electricity` | `total_kwh` | `month` | kWh |
-| `monthly_water` | `total_m3` | `month` | m³ |
-| `monthly_chilled_water` | `total_tr` | `month` | TR |
-
-The emissions engine models (already exist — do NOT change them):
-- `EmissionFactor(name, code, category, scope, factor_value, factor_unit, activity_unit, source, valid_from, is_active)`
-- `CalculationRule(data_table, activity_field, date_field, emission_factor, name, rule_type='direct', is_active, auto_calculate)`
-- `CalculationRule.calculate_for_table(reporting_period=None, user=None, recalculate=False)` → `(created, skipped, errors)`.
-
-This run: seed the app's **emission factors**, create **calculation rules** binding the tables' activity fields to those factors, and **run the calculations**. The dashboards already read `Calculation` rows — no view/frontend change needed.
+**This task changes NO models → NO migration.** If `makemigrations --check` reports changes, STOP.
 
 ---
 
-## 2. STEP 1 — Create the Carbon app setup command
+## 1. Files you MAY edit (EXACTLY 3)
 
-**Create new file:** `backend/emissions/management/commands/setup_carbon_app.py`
-**Content (verbatim, entire file):**
+1. `backend/accounts/rbac_utils.py` — append 2 helpers (STEP 1).
+2. `backend/accounts/permissions.py` — extend one import line + add one permission class (STEP 2).
+3. `backend/accounts/views.py` — extend imports + replace the `ScopedRoleViewSet` class body (STEP 3).
+
+## 1b. Files you MUST NOT touch
+- Any `models.py`, any migration, any serializer, any frontend, any other app.
+- **`UserViewSet`, `GroupViewSet`, `HasScopedRole`** (leave exactly as-is).
+- Do NOT reintroduce `project` / `project_id` / `tenant`.
+
+---
+
+## STEP 1 — `backend/accounts/rbac_utils.py`
+
+**Append** to the END of the file (after `get_visible_module_ids`). `ADMIN_ROLES` already exists in this file.
+
 ```python
-# emissions/management/commands/setup_carbon_app.py
-# Carbon (emissions) APP self-setup: seeds emission factors, binds calculation
-# rules to the platform's trusted data tables, and computes CO2e.
-# The emissions app MAY import platform core; core never imports this app.
-# Idempotent + additive. NO model/schema changes.
-from datetime import date
-from decimal import Decimal
-
-from django.core.management.base import BaseCommand
-
-from dataschema.models import DataTable, DataField
-from emissions.models import EmissionFactor, CalculationRule
 
 
-# Emission factors this app uses (Egypt context). Values are documented, editable later.
-FACTORS = [
-    # code, name, category, scope, factor_value, activity_unit, source
-    ("EG_GRID_2024", "Egypt National Grid (Electricity)", "electricity", 2, "0.4584", "kWh",
-     "Egypt national grid average (IFI/IEA-based)"),
-    ("EG_WATER_2024", "Water Supply + Treatment (Egypt)", "water", 3, "0.3440", "m3",
-     "Water supply + treatment (DEFRA-based proxy)"),
-]
-
-# Which table's activity field maps to which factor.
-# (table_name, activity_field_name, date_field_name, factor_code, rule_name)
-RULE_BINDINGS = [
-    ("monthly_electricity", "total_kwh", "month", "EG_GRID_2024", "Electricity → CO2e"),
-    ("monthly_water",       "total_m3",  "month", "EG_WATER_2024", "Water → CO2e"),
-    # NOTE: monthly_chilled_water (TR) is intentionally NOT wired yet — the CO2e
-    # methodology for district chilled water (TR) needs to be decided separately.
-]
+def get_steward_org_unit_ids(user):
+    """Org units (incl. all descendants) where the user holds an admins_group role.
+    Empty set => the user is not a steward anywhere."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return set()
+    return get_allowed_org_unit_ids(user, ADMIN_ROLES)
 
 
-class Command(BaseCommand):
-    help = "Carbon app setup: seed emission factors, bind calculation rules to trusted tables, compute CO2e."
-
-    def add_arguments(self, parser):
-        parser.add_argument('--recalculate', action='store_true',
-                            help='Delete existing calculations for these rules and recompute.')
-
-    def handle(self, *args, **options):
-        # 1. Emission factors
-        for code, name, category, scope, value, unit, source in FACTORS:
-            ef, created = EmissionFactor.objects.get_or_create(
-                code=code,
-                defaults={
-                    'name': name, 'category': category, 'scope': scope,
-                    'factor_value': Decimal(value), 'factor_unit': 'kg CO2e',
-                    'activity_unit': unit, 'source': source,
-                    'valid_from': date(2023, 1, 1), 'is_active': True,
-                },
-            )
-            self.stdout.write(f"  Factor {code}: {'created' if created else 'exists'} "
-                              f"({value} kg CO2e/{unit}, scope {scope})")
-
-        # 2. Calculation rules bound to the trusted data tables
-        total_created = 0
-        for table_name, activity_name, date_name, factor_code, rule_name in RULE_BINDINGS:
-            table = DataTable.objects.filter(name=table_name, is_archived=False).first()
-            if not table:
-                self.stdout.write(self.style.WARNING(f"  SKIP: table '{table_name}' not found"))
-                continue
-            activity_field = DataField.objects.filter(data_table=table, name=activity_name).first()
-            date_field = DataField.objects.filter(data_table=table, name=date_name).first()
-            factor = EmissionFactor.objects.filter(code=factor_code).first()
-            if not (activity_field and factor):
-                self.stdout.write(self.style.WARNING(
-                    f"  SKIP: missing field/factor for '{table_name}'"))
-                continue
-
-            rule, _ = CalculationRule.objects.get_or_create(
-                data_table=table, activity_field=activity_field, emission_factor=factor,
-                defaults={
-                    'name': rule_name, 'date_field': date_field,
-                    'rule_type': 'direct', 'is_active': True, 'auto_calculate': True,
-                },
-            )
-            if rule.date_field_id != (date_field.id if date_field else None):
-                rule.date_field = date_field
-                rule.save(update_fields=['date_field'])
-
-            created, skipped, errors = rule.calculate_for_table(
-                recalculate=options['recalculate']
-            )
-            total_created += created
-            self.stdout.write(f"  Rule '{rule_name}': created={created} skipped={skipped} errors={errors}")
-
-        # 3. Summary
-        from emissions.models import Calculation
-        total = Calculation.objects.count()
-        tonnes = sum(float(c.co2e_kg) for c in Calculation.objects.all()) / 1000.0
-        self.stdout.write(self.style.SUCCESS(
-            f"\nCarbon app ready. Calculations in system: {total}. "
-            f"Total ≈ {tonnes:,.1f} tonnes CO2e (created {total_created} this run)."
-        ))
+def user_is_steward(user):
+    """True if the user administers at least one org subtree (but is not necessarily global)."""
+    return bool(get_steward_org_unit_ids(user))
 ```
-**Deliverable:** file exists at that path.
 
 ---
 
-## 3. STEP 2 — Run the command + restart
+## STEP 2 — `backend/accounts/permissions.py`
+
+### 2.1 Replace the import block
+
+Find:
+
+```python
+from .rbac_utils import (
+    user_has_global_role, user_has_module_role, get_allowed_org_unit_ids,
+)
+```
+
+Replace with:
+
+```python
+from .rbac_utils import (
+    user_has_global_role, user_has_module_role, get_allowed_org_unit_ids,
+    ADMIN_ROLES, get_steward_org_unit_ids,
+)
+```
+
+### 2.2 Append this permission class to the END of the file
+
+```python
+
+
+class CanManageScopedRoles(permissions.BasePermission):
+    """Allows superusers, global admins, and org-scoped stewards (admins_group on any org unit).
+    Subtree enforcement + anti-escalation is done in the viewset (get_queryset / perform_*)."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_superuser:
+            return True
+        if user_has_global_role(user, ADMIN_ROLES):
+            return True
+        return bool(get_steward_org_unit_ids(user))
+```
+
+---
+
+## STEP 3 — `backend/accounts/views.py`
+
+### 3.1 Extend imports
+
+Find:
+
+```python
+from .permissions import HasScopedRole
+```
+
+Replace with:
+
+```python
+from .permissions import HasScopedRole, CanManageScopedRoles
+from .rbac_utils import user_is_global_admin, get_steward_org_unit_ids
+from rest_framework.exceptions import PermissionDenied
+from django.db.models import Q
+```
+
+### 3.2 Replace the whole `ScopedRoleViewSet` class
+
+Find (replace the ENTIRE class, from `class ScopedRoleViewSet` down to the end of its `get_serializer_class` method):
+
+```python
+class ScopedRoleViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for scoped role assignments.
+    """
+    queryset = ScopedRole.objects.all()
+    permission_classes = [HasScopedRole]
+    required_role = "admin"  # Only users with 'admin' ScopedRole can manage scoped roles
+
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return ScopedRoleCreateSerializer
+        return ScopedRoleSerializer
+```
+
+Replace with:
+
+```python
+class ScopedRoleViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for scoped role assignments.
+
+    - Superusers / global admins: full access.
+    - Org-scoped stewards (admins_group on an org unit): may list/create/delete role
+      assignments ONLY within their own org subtree, and NEVER global roles.
+    """
+    queryset = ScopedRole.objects.all()
+    permission_classes = [CanManageScopedRoles]
+
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return ScopedRoleCreateSerializer
+        return ScopedRoleSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user_is_global_admin(user):
+            return ScopedRole.objects.all()
+        allowed = get_steward_org_unit_ids(user)
+        # Only assignments whose target org (directly or via module) is in the steward's subtree.
+        return ScopedRole.objects.filter(
+            Q(org_unit_id__in=allowed) | Q(module__org_unit_id__in=allowed)
+        )
+
+    def _assert_within_subtree(self, org_unit, module):
+        """Anti-escalation guard: a steward may only target an org unit inside their subtree,
+        never a global role (org_unit=None AND module=None) and never a foreign subtree."""
+        user = self.request.user
+        if user_is_global_admin(user):
+            return
+        allowed = get_steward_org_unit_ids(user)
+        target_org_id = None
+        if org_unit is not None:
+            target_org_id = org_unit.id if hasattr(org_unit, 'id') else org_unit
+        elif module is not None:
+            target_org_id = getattr(module, 'org_unit_id', None)
+        if not target_org_id or target_org_id not in allowed:
+            raise PermissionDenied(
+                "You can only manage role assignments within your own organization units."
+            )
+
+    def perform_create(self, serializer):
+        self._assert_within_subtree(
+            serializer.validated_data.get('org_unit'),
+            serializer.validated_data.get('module'),
+        )
+        serializer.save()
+
+    def perform_update(self, serializer):
+        self._assert_within_subtree(
+            serializer.validated_data.get('org_unit'),
+            serializer.validated_data.get('module'),
+        )
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._assert_within_subtree(instance.org_unit, instance.module)
+        instance.delete()
+```
+
+> Do NOT change `UserViewSet` or `GroupViewSet`. They keep `HasScopedRole` + `required_role="admin"`,
+> which correctly keeps user creation restricted to global admins (a steward gets 403 there).
+
+---
+
+## 4. Run
+
 ```bash
-cd backend && source venv/bin/activate
-python manage.py check          # must be 0 issues, NO migration prompt
-python manage.py setup_carbon_app --recalculate
+cd /home/ahmed/aast/carbon/backend && source venv/bin/activate
+python manage.py check
+python manage.py makemigrations --check --dry-run
 cd /home/ahmed/aast/carbon && ./manage.sh restart
 ```
 
 ---
 
-## 4. Acceptance checks (run; paste into TASK-RESULT.md)
+## 5. Acceptance — setup the steward fixture
 
-### 4.1 No schema change
 ```bash
-cd backend && source venv/bin/activate
-python manage.py makemigrations --check --dry-run 2>&1 | tail -3
-```
-**Condition:** "No changes detected".
-
-### 4.2 Calculations produced
-```bash
+cd /home/ahmed/aast/carbon/backend && source venv/bin/activate
 python manage.py shell -c "
-from emissions.models import EmissionFactor, CalculationRule, Calculation
-print('factors', EmissionFactor.objects.count(), '| rules', CalculationRule.objects.count(), '| calcs', Calculation.objects.count())
-by_scope = {}
-for c in Calculation.objects.all():
-    by_scope[c.scope] = by_scope.get(c.scope, 0) + float(c.co2e_kg)
-print('tonnes by scope:', {k: round(v/1000,1) for k,v in sorted(by_scope.items())})
-" 2>&1 | grep -E "factors|tonnes"
+from accounts.models import User, ScopedRole
+from django.contrib.auth.models import Group
+from mdm.models import OrgUnit
+u,_ = User.objects.get_or_create(username='fac.steward', defaults={'is_active':True})
+u.is_active=True; u.set_password('Steward_123'); u.save()
+g = Group.objects.get(name='admins_group')
+ou = OrgUnit.objects.get(name='Facilities & Utilities')  # id 5
+ScopedRole.objects.get_or_create(user=u, group=g, org_unit=ou, module=None)
+tu = User.objects.get(username='transport.officer')
+print('READY steward=%s trans_user=%s fac_org=%s trans_org=%s' % (u.id, tu.id, ou.id, OrgUnit.objects.get(name='Transportation / Fleet').id))
+" 2>&1 | grep READY
 ```
-**Condition:** factors ≥ 2, rules ≥ 2, calcs > 0; scope 2 (electricity) and scope 3 (water) both show non-zero tonnes.
+Record the printed ids: `TRANS_USER`, `FAC_ORG` (=5), `TRANS_ORG` (=4).
 
-### 4.3 Dashboard returns real numbers (HTTP)
+## 6. Acceptance — checks (paste all outputs into TASK-RESULT.md)
+
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:8009/carbon-api/token/ -H "Content-Type: application/json" -d '{"username":"ahmed","password":"AdminPa_132"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['access'])")
-curl -s "http://localhost:8009/carbon-api/emissions/dashboard/?year=2023" -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json;d=json.load(sys.stdin);print(json.dumps(d, indent=2)[:600])"
+cd /home/ahmed/aast/carbon
+tok() { curl -s -X POST http://localhost:8009/carbon-api/token/ -H "Content-Type: application/json" \
+  -d "{\"username\":\"$1\",\"password\":\"$2\"}" | python3 -c "import sys,json;print(json.load(sys.stdin).get('access',''))"; }
+ST=$(tok fac.steward Steward_123)
+AD=$(tok ahmed AdminPa_132)
+# helper: POST a scoped role, print HTTP status
+mkrole() { curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8009/carbon-api/scoped-roles/ \
+  -H "Authorization: Bearer $1" -H "Content-Type: application/json" -d "$2"; }
 ```
-**Condition:** dashboard responds 200 with non-zero total CO₂e for 2023.
 
-### 4.4 Idempotency
+Use `TRANS_USER` from setup, `FAC_ORG=5`, `TRANS_ORG=4`.
+
+**6.1 — steward list is subtree-scoped**
 ```bash
-python manage.py setup_carbon_app 2>&1 | tail -3   # WITHOUT --recalculate
+curl -s http://localhost:8009/carbon-api/scoped-roles/ -H "Authorization: Bearer $ST" \
+  | python3 -c "import sys,json;d=json.load(sys.stdin);r=d.get('results',d);print('orgs seen:', sorted({x['org_unit'] for x in r}))"
 ```
-**Condition:** re-run without `--recalculate` reports `skipped` > 0 and does NOT duplicate calculations (calc count unchanged from 4.2).
+Expected: only Facilities & Utilities roles — must **NOT** contain `Transportation / Fleet` or a global (`None`) role.
 
-### PASS BAR
-- [ ] 4.1 no migration needed.
-- [ ] 4.2 factors ≥ 2, rules ≥ 2, calcs > 0; scope 2 + scope 3 non-zero.
-- [ ] 4.3 dashboard 200 with non-zero total.
-- [ ] 4.4 re-run is idempotent (no duplicates).
-- [ ] Only the 1 new command file was added; no model/migration/core/frontend change.
+**6.2 — steward CAN assign an existing user within subtree (org 5)** → expect `201`
+```bash
+echo "create-in-subtree: $(mkrole "$ST" "{\"user\":TRANS_USER,\"group\":2,\"org_unit\":5,\"module\":null,\"is_active\":true}")"
+```
+> Replace `TRANS_USER` with the id and `\"group\":2` with the id of `dataowners_group`
+> (find it: `curl -s http://localhost:8009/carbon-api/roles/ -H "Authorization: Bearer $AD"`).
+
+**6.3 — steward CANNOT create a GLOBAL role** → expect `403`
+```bash
+echo "create-global: $(mkrole "$ST" "{\"user\":TRANS_USER,\"group\":2,\"org_unit\":null,\"module\":null,\"is_active\":true}")"
+```
+
+**6.4 — steward CANNOT target a foreign subtree (org 4)** → expect `403`
+```bash
+echo "create-foreign: $(mkrole "$ST" "{\"user\":TRANS_USER,\"group\":2,\"org_unit\":4,\"module\":null,\"is_active\":true}")"
+```
+
+**6.5 — steward CANNOT delete a foreign role (role id 3 = transport.officer @ org 4)** → expect `404` or `403`
+```bash
+echo "delete-foreign: $(curl -s -o /dev/null -w '%{http_code}' -X DELETE http://localhost:8009/carbon-api/scoped-roles/3/ -H "Authorization: Bearer $ST")"
+```
+
+**6.6 — steward CANNOT create users** → expect `403`
+```bash
+echo "steward-create-user: $(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8009/carbon-api/users/ \
+  -H "Authorization: Bearer $ST" -H "Content-Type: application/json" -d '{"username":"x.hacker","password":"Zzz_12345"}')"
+```
+
+**6.7 — global admin still has full access** → expect `200`
+```bash
+echo "admin-list: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:8009/carbon-api/scoped-roles/ -H "Authorization: Bearer $AD")"
+```
 
 ---
 
-## 5. Report to `TASK-RESULT.md`
-```markdown
-# TASK-RESULT.md — APP-CARBON-1 (RUN 10: Carbon app wired to real data)
+## 7. PASS BAR (all must hold)
+1. `manage.py check` clean; `makemigrations --check` = **No changes detected**.
+2. 6.1: steward sees **only Facilities & Utilities** roles (no Transportation, no global).
+3. 6.2: **201** (assign existing user within subtree works).
+4. 6.3: **403** (no global role).
+5. 6.4: **403** (no foreign subtree).
+6. 6.5: **404 or 403** (cannot delete foreign role).
+7. 6.6: **403** (steward cannot create users).
+8. 6.7: **200** (global admin unaffected).
+9. Exactly **3 files changed**; no migration, no frontend, no model, `UserViewSet` untouched.
 
-## File created
-- backend/emissions/management/commands/setup_carbon_app.py
+## 8. STOP conditions (report and halt)
+- Any migration would be created.
+- Any acceptance status differs from expected (especially any 403 that returns 201 — that is a
+  privilege-escalation failure; STOP immediately).
+- You need to edit any file beyond the 3 listed.
 
-## Command output
-<paste setup_carbon_app --recalculate output>
-
-## 4.1 no-migration
-<paste>
-## 4.2 calculations by scope
-<paste>
-## 4.3 dashboard
-<paste>
-## 4.4 idempotency
-<paste>
-
-## Deviations / Blockers
-- none / <describe>
-
-## Final status: PASS / PARTIAL / BLOCKED
-```
-
----
-
-## 6. Hard stops
-- If `makemigrations --check` says a migration is needed → you edited a model; STOP and report.
-- If you need to touch any file other than the one new command → STOP and report.
-- When all PASS BAR items pass, write Final status = PASS and STOP.
+## 9. Report
+Write `TASK-RESULT.md` with: files changed, the setup ids, exact outputs for §6.1–6.7, deviations
+(should be none), and `Final status: PASS` or `FAIL`.

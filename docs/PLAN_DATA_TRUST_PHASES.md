@@ -14,10 +14,27 @@
 - ✅ RUN 1–3: Data Trust core — `catalog`, `mdm`, `dq` apps (built + verified).
 - ✅ RUN 4: Carbon wired onto the core (reference data + catalog + DQ).
 - ✅ RUN 5: `Project` removed; replaced by `OrgUnit` (self-referencing MDM tree in `mdm/`).
-- ▶️ **RUN 6 (current): Org Access — Phase A.** Link `OrgUnit → Module`, org-scoped RBAC
-  (permission + querysets + subtree expansion), add `campus` org type, seed the AASTMT slice +
-  Transportation Gas Bills scenario + a department data-owner. See [DESIGN_ORG_ACCESS_MODEL.md](DESIGN_ORG_ACCESS_MODEL.md).
-- ⏭️ RUN 7: Org Access — Phase B (frontend org context + steward-scoped admin screens).
+- ✅ RUN 6: Org Access — Phase A. `OrgUnit → Module` FK, org-scoped RBAC (permission + querysets +
+  subtree expansion), `campus` org type, AASTMT seed. Isolation proven over HTTP (403).
+- ✅ RUN 7–9: Org Access — Phase B (frontend). Org context in `AuthContext`; server-filtered sidebar;
+  Org Units / Access Control / Users admin screens; data-owner landing UX.
+- ✅ Real AASTMT data seed: 3 Facilities modules (Electricity S2 / Water S3 / Chilled Water S2), ~64
+  months of real Abu Qir data, owned by "Facilities & Utilities".
+- ✅ RUN 10 (`APP-CARBON-1`): the Carbon **app** wires onto trusted data — seeds emission factors,
+  binds calculation rules to `monthly_electricity`/`monthly_water`, computes real CO₂e (44 calcs;
+  dashboards non-zero). No schema change. Chilled-water (TR) deferred.
+- ▶️ **RUN 11 (current): Org Access — Phase C (org-scoped visibility).** Apply the user's allowed-module
+  set to all emissions read endpoints (dashboard, yearly, report, calculations). Fixes the aggregation
+  leak; gives every steward a subtree-scoped dashboard. See [DESIGN_ORG_ACCESS_MODEL.md](DESIGN_ORG_ACCESS_MODEL.md) §4.6.
+- ⏭️ RUN 12: Org Access — Phase D (steward-scoped admin: manage Users + ScopedRoles within subtree,
+  with anti-escalation guards).
+- ⏭️ RUN 13: Observability quick-win (`sync_carbon_catalog --profile` → DQ/completeness on real data).
+- ⏭️ RUN 14: Chilled-water (TR) emission methodology (bring factor options, then wire).
+
+### Terminology lock (see DESIGN_ORG_ACCESS_MODEL.md §4.5)
+"Scope" has **three** distinct meanings — GHG Scope 1/2/3 (from the emission factor), access scope
+(OrgUnit subtree), and Module (dataset). `Calculation.scope` is authoritative for reporting;
+`Module.scope` is an advisory UI label only. Reference data (factors/GWP/periods) is **global**, never org-scoped.
 
 ---
 

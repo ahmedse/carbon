@@ -60,3 +60,42 @@ def get_allowed_module_ids(user, roles):
             Module.objects.filter(org_unit_id__in=org_ids).values_list('id', flat=True)
         )
     return module_ids
+
+
+# --- Visibility helpers (org-scoped READ access) -------------------------------
+ADMIN_ROLES = ["admin", "admins_group"]
+VISIBILITY_ROLES = ["admins_group", "dataowners_group", "auditors_group"]
+
+
+def user_is_global_admin(user):
+    """True for superusers or holders of a GLOBAL admins_group role (org_unit=None, module=None)."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+    return user_has_global_role(user, ADMIN_ROLES)
+
+
+def get_visible_module_ids(user):
+    """Module ids the user may see across the platform.
+
+    Returns None to mean 'unrestricted' (superuser / global admin).
+    Otherwise returns the set of module ids within the user's allowed org subtree
+    (or granted directly at module scope) for any visibility role.
+    """
+    if user_is_global_admin(user):
+        return None
+    return get_allowed_module_ids(user, VISIBILITY_ROLES)
+
+
+def get_steward_org_unit_ids(user):
+    """Org units (incl. all descendants) where the user holds an admins_group role.
+    Empty set => the user is not a steward anywhere."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return set()
+    return get_allowed_org_unit_ids(user, ADMIN_ROLES)
+
+
+def user_is_steward(user):
+    """True if the user administers at least one org subtree (but is not necessarily global)."""
+    return bool(get_steward_org_unit_ids(user))
