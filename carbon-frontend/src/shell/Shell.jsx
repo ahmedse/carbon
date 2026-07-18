@@ -1,7 +1,7 @@
 // File: src/shell/Shell.jsx
 // Root IDE shell layout with activity bar, resizable sidebar, editor area, and copilot pane
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { Box, Drawer } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { Allotment } from 'allotment';
@@ -13,8 +13,12 @@ import { ShellSidebar } from './ShellSidebar';
 import { EditorArea } from './EditorArea';
 import { StatusBar } from './StatusBar';
 import HeaderNew from '../components/HeaderNew';
-import CopilotPane from './CopilotPane';
-import CommandPalette from './CommandPalette';
+import ErrorBoundary from './ErrorBoundary';
+import { LoadingSpinner, DialogLoadingSkeleton } from './LoadingFallback';
+
+// Lazy load heavy components for code splitting
+const CopilotPane = lazy(() => import('./CopilotPane'));
+const CommandPalette = lazy(() => import('./CommandPalette'));
 
 // Default path per studio
 const STUDIO_PATHS = {
@@ -274,7 +278,11 @@ export function Shell() {
             {/* Right Copilot Pane */}
             {copilotVisible && (
               <Allotment.Pane minSize={300} preferredSize={copilotPaneSize} maxSize={600}>
-                <CopilotPane onClose={toggleCopilot} />
+                <ErrorBoundary>
+                  <Suspense fallback={<LoadingSpinner />}>
+                    <CopilotPane onClose={toggleCopilot} />
+                  </Suspense>
+                </ErrorBoundary>
               </Allotment.Pane>
             )}
           </Allotment>
@@ -290,10 +298,12 @@ export function Shell() {
       />
 
       {/* Command Palette */}
-      <CommandPalette
-        open={commandPaletteOpen}
-        onClose={() => setCommandPaletteOpen(false)}
-      />
+      <Suspense fallback={<DialogLoadingSkeleton />}>
+        <CommandPalette
+          open={commandPaletteOpen}
+          onClose={() => setCommandPaletteOpen(false)}
+        />
+      </Suspense>
     </Box>
   );
 }
