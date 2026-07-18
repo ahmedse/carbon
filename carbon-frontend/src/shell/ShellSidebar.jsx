@@ -1,8 +1,8 @@
 // File: src/shell/ShellSidebar.jsx
-// Studio-specific sidebar navigation content
+// Studio-specific sidebar navigation content with perspective awareness
 
 import React from 'react';
-import { Box, List, ListItemButton, ListItemIcon, ListItemText, Typography, IconButton, Tooltip } from '@mui/material';
+import { Box, List, ListItemButton, ListItemIcon, ListItemText, Typography, IconButton, Tooltip, Divider } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -13,6 +13,7 @@ import RuleIcon from '@mui/icons-material/Rule';
 import PeopleIcon from '@mui/icons-material/People';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import SecurityIcon from '@mui/icons-material/Security';
+import { useAuth } from '../auth/AuthContext';
 
 // Define sidebar content per studio
 function getSidebarItems(studioId) {
@@ -74,8 +75,21 @@ function getStudioTitle(studioId) {
 }
 
 export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
-  const items = getSidebarItems(activeStudio);
+  const { currentPerspective, availablePerspectives, context } = useAuth();
+  
+  // Filter items based on perspective and available admin status
+  let items = getSidebarItems(activeStudio);
   const title = getStudioTitle(activeStudio);
+  
+  // If in admin studio, filter based on whether user has admin perspective
+  if (activeStudio === 'admin' && !availablePerspectives.includes('admin')) {
+    items = []; // Hide all admin items for non-admin users
+  }
+  
+  // If in dataschema studio, hide Table Manager for non-admins
+  if (activeStudio === 'dataschema' && !availablePerspectives.includes('admin')) {
+    items = items.filter(item => item.path !== '/schema-admin/table-manager');
+  }
 
   return (
     <Box
@@ -136,35 +150,43 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
           px: 1,
         }}
       >
-        {items.map((item) => {
-          const Icon = item.icon;
-          return (
-            <ListItemButton
-              key={item.path}
-              onClick={() => onNavigate(item)}
-              sx={{
-                borderRadius: 1,
-                mb: 0.5,
-                py: 1,
-                px: 1.5,
-                '&:hover': {
-                  bgcolor: 'action.hover',
-                },
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                <Icon sx={{ fontSize: 18, color: 'text.secondary' }} />
-              </ListItemIcon>
-              <ListItemText
-                primary={item.label}
-                primaryTypographyProps={{
-                  fontSize: '0.8125rem',
-                  fontWeight: 500,
+        {items.length === 0 ? (
+          <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              No items available
+            </Typography>
+          </Box>
+        ) : (
+          items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <ListItemButton
+                key={item.path}
+                onClick={() => onNavigate(item)}
+                sx={{
+                  borderRadius: 1,
+                  mb: 0.5,
+                  py: 1,
+                  px: 1.5,
+                  '&:hover': {
+                    bgcolor: 'action.hover',
+                  },
                 }}
-              />
-            </ListItemButton>
-          );
-        })}
+              >
+                <ListItemIcon sx={{ minWidth: 36 }}>
+                  <Icon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                </ListItemIcon>
+                <ListItemText
+                  primary={item.label}
+                  primaryTypographyProps={{
+                    fontSize: '0.8125rem',
+                    fontWeight: 500,
+                  }}
+                />
+              </ListItemButton>
+            );
+          })
+        )}
       </List>
     </Box>
   );

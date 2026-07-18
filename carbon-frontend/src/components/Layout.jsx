@@ -30,10 +30,10 @@ export default function Layout() {
   const isAdmin = availablePerspectives?.includes('admin');
   const isDataEntry = currentPerspective === 'data_entry';
   
-  // Get user's primary org unit (from their data owner role)
-  const userOrgUnit = user?.roles?.find(r => r.org_unit)?.org_unit;
+  // Get user's primary org unit name from context
+  const userOrgUnitName = context?.org_units?.[0]?.name || null;
 
-  const showScopeBanner = isDataEntry && !isAdmin;
+  const showScopeBanner = !isAdmin && userOrgUnitName;
 
   const handleMouseDown = useCallback((e) => {
     e.preventDefault();
@@ -143,7 +143,7 @@ export default function Layout() {
         >
           <Box sx={{ flex: 1, p: 3, overflow: "auto", overscrollBehavior: "contain" }}>
             {/* Scope banner for data-entry users */}
-            {showScopeBanner && userOrgUnit && (
+            {showScopeBanner && (
               <Alert
                 severity="info"
                 icon={<LocationOnIcon />}
@@ -155,7 +155,7 @@ export default function Layout() {
                   border: "1px solid #bdc3c7",
                 }}
               >
-                You are viewing: <strong>{userOrgUnit}</strong>
+                You are viewing: <strong>{userOrgUnitName}</strong>
               </Alert>
             )}
             <Outlet />

@@ -1,14 +1,21 @@
 // File: src/components/HeaderNew.jsx
-// Compact 35px header with Gigacast-inspired design (gradient overlay, role badges)
+// Compact 35px header with Gigacast-inspired design (gradient overlay, role badges, perspective tabs)
 
 import React, { useState } from 'react';
-import { Box, Typography, IconButton, Popover, Tooltip, Divider, Avatar } from '@mui/material';
+import { Box, Typography, IconButton, Popover, Tooltip, Divider, Avatar, Tabs, Tab } from '@mui/material';
 import { LightMode, DarkMode, SettingsOutlined, LogoutOutlined, KeyboardOutlined } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useThemeMode } from '../theme/ThemeContext';
 import { useAuth } from '../auth/AuthContext';
 import { KeyboardShortcutsHelp } from '../shell/KeyboardShortcutsHelp';
 import aastLogo from '../assets/aast_carbon_logo_.jpg';
+
+// Perspective tab labels
+const PERSPECTIVE_LABELS = {
+  data_entry: 'Data Entry',
+  dashboards: 'Dashboards',
+  admin: 'Admin',
+};
 
 // Role badge styling
 const ROLE_COLOR = {
@@ -79,7 +86,7 @@ function MenuRow({ icon: Icon, label, onClick, danger }) {
 }
 
 export default function HeaderNew() {
-  const { user, logout } = useAuth();
+  const { user, logout, currentPerspective, setPerspective, availablePerspectives } = useAuth();
   const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -89,6 +96,9 @@ export default function HeaderNew() {
   
   // Get primary role from user groups
   const primaryRole = user?.groups?.[0]?.name?.toLowerCase() || null;
+
+  // Show perspective tabs only if user has multiple perspectives
+  const showPerspectives = availablePerspectives && availablePerspectives.length > 1;
 
   const close = () => setAnchorEl(null);
 
@@ -178,6 +188,47 @@ export default function HeaderNew() {
           Carbon
         </Typography>
       </Box>
+
+      {/* Perspective tabs (centered, only for multi-role users) */}
+      {showPerspectives && (
+        <Box
+          sx={{
+            position: 'relative',
+            zIndex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            mx: 2,
+          }}
+        >
+          <Tabs
+            value={currentPerspective}
+            onChange={(_, val) => setPerspective(val)}
+            sx={{
+              minHeight: 28,
+              '& .MuiTabs-indicator': {
+                height: 2,
+                bgcolor: 'primary.main',
+              },
+              '& .MuiTab-root': {
+                minHeight: 28,
+                py: 0.5,
+                px: 1.5,
+                fontSize: '0.6875rem',
+                fontWeight: 600,
+                textTransform: 'none',
+                color: 'text.secondary',
+                '&.Mui-selected': {
+                  color: 'primary.main',
+                },
+              },
+            }}
+          >
+            {availablePerspectives.map((p) => (
+              <Tab key={p} value={p} label={PERSPECTIVE_LABELS[p] || p} />
+            ))}
+          </Tabs>
+        </Box>
+      )}
 
       <Box sx={{ flex: 1 }} />
 

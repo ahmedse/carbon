@@ -49,6 +49,12 @@ export const AuthProvider = ({ children }) => {
     return localStorage.getItem("carbon_perspective") || "dashboards";
   });
 
+  // Perspective setter that persists to localStorage
+  const setPerspectiveActive = (perspective) => {
+    setCurrentPerspective(perspective);
+    localStorage.setItem("carbon_perspective", perspective);
+  };
+
   // --- Timers and refs ---
   const inactivityTimeout = 60 * 60 * 1000; // 1 hour
   const refreshIntervalMs = 10 * 60 * 1000; // 10 minutes
@@ -244,13 +250,6 @@ export const AuthProvider = ({ children }) => {
   // Backward-compatible alias — older components still call selectProject().
   const selectProject = async (_projectId, _user = user) => buildContext(_user);
 
-  // --- Set current perspective (persisted in localStorage) ---
-  const setPerspectiveActive = (perspective) => {
-    if (availablePerspectives.includes(perspective)) {
-      setCurrentPerspective(perspective);
-      localStorage.setItem("carbon_perspective", perspective);
-    }
-  };
 
   // --- Logout: clear all state, timers, and storage ---
   const logout = async (reason) => {
