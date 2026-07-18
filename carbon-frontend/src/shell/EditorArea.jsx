@@ -4,6 +4,7 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { Box } from '@mui/material';
+import { Breadcrumbs } from './Breadcrumbs';
 
 export function EditorArea() {
   return (
@@ -11,11 +12,24 @@ export function EditorArea() {
       sx={{
         width: '100%',
         height: '100%',
-        overflow: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
         bgcolor: 'background.default',
       }}
     >
-      <Outlet />
+      {/* Breadcrumbs navigation */}
+      <Breadcrumbs />
+      
+      {/* Main content area */}
+      <Box
+        sx={{
+          flex: 1,
+          overflow: 'auto',
+        }}
+      >
+        <Outlet />
+      </Box>
     </Box>
   );
 }

@@ -7,6 +7,7 @@ import { LightMode, DarkMode, SettingsOutlined, LogoutOutlined, KeyboardOutlined
 import { useNavigate } from 'react-router-dom';
 import { useThemeMode } from '../theme/ThemeContext';
 import { useAuth } from '../auth/AuthContext';
+import { KeyboardShortcutsHelp } from '../shell/KeyboardShortcutsHelp';
 import aastLogo from '../assets/aast_carbon_logo_.jpg';
 
 // Role badge styling
@@ -70,6 +71,7 @@ export default function HeaderNew() {
   const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : 'CB';
   
@@ -303,12 +305,15 @@ export default function HeaderNew() {
         <Divider sx={{ my: 0.5 }} />
 
         <MenuRow icon={SettingsOutlined} label="Account Settings" onClick={() => { navigate('/settings'); close(); }} />
-        <MenuRow icon={KeyboardOutlined} label="Keyboard Shortcuts" onClick={() => { navigate('/help'); close(); }} />
+        <MenuRow icon={KeyboardOutlined} label="Keyboard Shortcuts" onClick={() => { setShortcutsOpen(true); close(); }} />
 
         <Divider sx={{ my: 0.5 }} />
 
         <MenuRow icon={LogoutOutlined} label="Sign out" onClick={() => { logout(); close(); }} danger />
       </Popover>
+
+      {/* Keyboard Shortcuts Help Dialog */}
+      <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </Box>
   );
 }
