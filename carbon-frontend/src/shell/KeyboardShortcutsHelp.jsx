@@ -85,6 +85,7 @@ export function KeyboardShortcutsHelp({ open, onClose }) {
       onClose={onClose}
       maxWidth="sm"
       fullWidth
+      aria-labelledby="shortcuts-dialog-title"
       PaperProps={{
         sx: {
           borderRadius: 2,
@@ -92,6 +93,7 @@ export function KeyboardShortcutsHelp({ open, onClose }) {
       }}
     >
       <DialogTitle
+        id="shortcuts-dialog-title"
         sx={{
           display: 'flex',
           alignItems: 'center',
@@ -99,11 +101,11 @@ export function KeyboardShortcutsHelp({ open, onClose }) {
           pb: 1,
         }}
       >
-        <KeyboardIcon sx={{ color: 'primary.main' }} />
-        <Typography variant="h6" sx={{ flex: 1, fontWeight: 600 }}>
+        <KeyboardIcon sx={{ color: 'primary.main' }} aria-hidden="true" />
+        <Typography variant="h6" component="h2" sx={{ flex: 1, fontWeight: 600 }}>
           Keyboard Shortcuts
         </Typography>
-        <IconButton size="small" onClick={onClose} aria-label="Close">
+        <IconButton size="small" onClick={onClose} aria-label="Close shortcuts dialog">
           <CloseIcon />
         </IconButton>
       </DialogTitle>

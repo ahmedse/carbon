@@ -154,6 +154,8 @@ export default function CopilotPane({ onClose }) {
 
   return (
     <Box
+      role="complementary"
+      aria-label="Pulse AI Copilot"
       sx={{
         height: '100%',
         display: 'flex',
@@ -176,19 +178,25 @@ export default function CopilotPane({ onClose }) {
           minHeight: 40,
         }}
       >
-        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+        <Typography variant="subtitle2" component="h2" sx={{ fontWeight: 600 }}>
           Pulse
         </Typography>
         <IconButton
           size="small"
           onClick={onClose}
-          sx={{ 
-            width: 24, 
+          aria-label="Close Pulse copilot"
+          sx={{
+            width: 24,
             height: 24,
             '&:hover': { bgcolor: 'action.hover' },
+            '&:focus-visible': {
+              outline: '2px solid',
+              outlineColor: 'primary.main',
+              outlineOffset: '2px',
+            },
           }}
         >
-          <CloseIcon sx={{ fontSize: 16 }} />
+          <CloseIcon sx={{ fontSize: 16 }} aria-hidden="true" />
         </IconButton>
       </Box>
 

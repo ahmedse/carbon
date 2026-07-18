@@ -146,6 +146,8 @@ export function Breadcrumbs() {
 
   return (
     <Box
+      component="nav"
+      aria-label="Breadcrumb navigation"
       sx={{
         height: 32,
         display: 'flex',
@@ -158,6 +160,7 @@ export function Breadcrumbs() {
     >
       <MuiBreadcrumbs
         separator={<ChevronRightIcon sx={{ fontSize: 14, color: 'text.disabled' }} />}
+        aria-label="breadcrumb"
         sx={{ fontSize: '0.8125rem' }}
       >
         {breadcrumbs.map((crumb, index) => {
@@ -169,6 +172,7 @@ export function Breadcrumbs() {
             return (
               <Box
                 key={crumb.path}
+                aria-current="page"
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -176,7 +180,7 @@ export function Breadcrumbs() {
                   color: 'text.primary',
                 }}
               >
-                <Icon sx={{ fontSize: 16 }} />
+                <Icon sx={{ fontSize: 16 }} aria-hidden="true" />
                 <Typography
                   sx={{
                     fontSize: '0.8125rem',
@@ -194,7 +198,9 @@ export function Breadcrumbs() {
           return (
             <Link
               key={crumb.path}
+              component="button"
               onClick={() => navigate(crumb.path)}
+              aria-label={`Navigate to ${crumb.label}`}
               sx={{
                 display: 'flex',
                 alignItems: 'center',
@@ -202,13 +208,22 @@ export function Breadcrumbs() {
                 cursor: 'pointer',
                 textDecoration: 'none',
                 color: 'text.secondary',
+                background: 'none',
+                border: 'none',
+                padding: 0,
                 '&:hover': {
                   color: 'primary.main',
                   textDecoration: 'underline',
                 },
+                '&:focus-visible': {
+                  outline: '2px solid',
+                  outlineColor: 'primary.main',
+                  outlineOffset: '2px',
+                  borderRadius: 0.5,
+                },
               }}
             >
-              <Icon sx={{ fontSize: 16 }} />
+              <Icon sx={{ fontSize: 16 }} aria-hidden="true" />
               <Typography sx={{ fontSize: '0.8125rem' }}>{crumb.label}</Typography>
             </Link>
           );

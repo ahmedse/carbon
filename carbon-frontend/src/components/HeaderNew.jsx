@@ -42,7 +42,9 @@ function RoleBadge({ role }) {
 function MenuRow({ icon: Icon, label, onClick, danger }) {
   return (
     <Box
+      component="button"
       onClick={onClick}
+      role="menuitem"
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -53,14 +55,24 @@ function MenuRow({ icon: Icon, label, onClick, danger }) {
         borderRadius: 0.75,
         mx: 0.5,
         color: danger ? 'error.main' : 'text.secondary',
+        background: 'none',
+        border: 'none',
+        width: '100%',
+        textAlign: 'left',
         '&:hover': {
           bgcolor: 'action.hover',
           color: danger ? 'error.main' : 'text.primary',
         },
+        '&:focus-visible': {
+          outline: '2px solid',
+          outlineColor: 'primary.main',
+          outlineOffset: '-2px',
+          bgcolor: 'action.hover',
+        },
         transition: 'background 120ms',
       }}
     >
-      <Icon sx={{ fontSize: 13, flexShrink: 0 }} />
+      <Icon sx={{ fontSize: 13, flexShrink: 0 }} aria-hidden="true" />
       <Typography sx={{ fontSize: '0.75rem' }}>{label}</Typography>
     </Box>
   );
@@ -83,6 +95,7 @@ export default function HeaderNew() {
   return (
     <Box
       component="header"
+      role="banner"
       sx={{
         height: 35,
         minHeight: 35,
@@ -148,7 +161,7 @@ export default function HeaderNew() {
         >
           <img
             src={aastLogo}
-            alt=""
+            alt="AASTMT Logo"
             style={{ width: 14, height: 14, borderRadius: 4, objectFit: 'cover' }}
           />
         </Box>
@@ -194,15 +207,21 @@ export default function HeaderNew() {
           <IconButton
             size="small"
             onClick={toggleTheme}
+            aria-label={`Switch to ${mode === 'light' ? 'dark' : 'light'} mode`}
             sx={{
               width: 26,
               height: 26,
               borderRadius: 999,
               color: 'text.secondary',
               '&:hover': { bgcolor: 'action.hover', color: 'text.primary' },
+              '&:focus-visible': {
+                outline: '2px solid',
+                outlineColor: 'primary.main',
+                outlineOffset: '2px',
+              },
             }}
           >
-            {mode === 'light' ? <DarkMode sx={{ fontSize: 14 }} /> : <LightMode sx={{ fontSize: 14 }} />}
+            {mode === 'light' ? <DarkMode sx={{ fontSize: 14 }} aria-hidden="true" /> : <LightMode sx={{ fontSize: 14 }} aria-hidden="true" />}
           </IconButton>
         </Tooltip>
 
@@ -211,7 +230,11 @@ export default function HeaderNew() {
         {/* User avatar */}
         <Tooltip title={user?.username || 'Account'}>
           <Box
+            component="button"
             onClick={(e) => setAnchorEl(e.currentTarget)}
+            aria-label="Open user menu"
+            aria-haspopup="true"
+            aria-expanded={!!anchorEl}
             sx={{
               width: 26,
               height: 26,
@@ -228,9 +251,15 @@ export default function HeaderNew() {
               fontWeight: 700,
               color: '#fff',
               transition: 'transform 120ms ease, box-shadow 120ms ease',
+              padding: 0,
               '&:hover': {
                 transform: 'translateY(-1px)',
                 boxShadow: '0 3px 8px rgba(15,23,42,0.18)',
+              },
+              '&:focus-visible': {
+                outline: '2px solid',
+                outlineColor: 'primary.main',
+                outlineOffset: '2px',
               },
             }}
           >

@@ -18,6 +18,8 @@ export function ActivityBar({ studios, activeStudio, onStudioChange }) {
         <IconButton
           size="small"
           onClick={() => onStudioChange(studio.id)}
+          aria-label={studio.label}
+          aria-current={isActive ? 'page' : undefined}
           sx={{
             width: 40,
             height: 40,
@@ -30,6 +32,11 @@ export function ActivityBar({ studios, activeStudio, onStudioChange }) {
               bgcolor: isActive ? 'action.selected' : 'action.hover',
               color: isActive ? 'primary.main' : 'text.primary',
             },
+            '&:focus-visible': {
+              outline: '2px solid',
+              outlineColor: 'primary.main',
+              outlineOffset: '2px',
+            },
           }}
         >
           <Icon sx={{ fontSize: 20 }} />
@@ -40,6 +47,8 @@ export function ActivityBar({ studios, activeStudio, onStudioChange }) {
 
   return (
     <Box
+      component="nav"
+      aria-label="Studio navigation"
       sx={{
         width: 48,
         bgcolor: 'background.dark',

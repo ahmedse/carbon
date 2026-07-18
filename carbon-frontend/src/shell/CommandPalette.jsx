@@ -260,6 +260,8 @@ export default function CommandPalette({ open, onClose }) {
       onClose={onClose}
       maxWidth="sm"
       fullWidth
+      aria-labelledby="command-palette-title"
+      aria-describedby="command-palette-description"
       PaperProps={{
         sx: {
           position: 'fixed',
@@ -281,9 +283,16 @@ export default function CommandPalette({ open, onClose }) {
             value={query}
             onChange={handleQueryChange}
             variant="standard"
+            inputProps={{
+              'aria-label': 'Search commands',
+              'role': 'combobox',
+              'aria-expanded': filteredCommands.length > 0,
+              'aria-controls': 'command-list',
+              'aria-activedescendant': filteredCommands[selectedIndex]?.id,
+            }}
             InputProps={{
               startAdornment: (
-                <SearchIcon sx={{ mr: 1, color: 'text.secondary', fontSize: 20 }} />
+                <SearchIcon sx={{ mr: 1, color: 'text.secondary', fontSize: 20 }} aria-hidden="true" />
               ),
               disableUnderline: true,
               sx: { fontSize: '0.9375rem' },
@@ -295,6 +304,9 @@ export default function CommandPalette({ open, onClose }) {
         {/* Results List */}
         <List
           ref={listRef}
+          id="command-list"
+          role="listbox"
+          aria-label="Command results"
           sx={{
             flex: 1,
             overflow: 'auto',
@@ -316,6 +328,9 @@ export default function CommandPalette({ open, onClose }) {
               return (
                 <ListItem
                   key={command.id}
+                  id={command.id}
+                  role="option"
+                  aria-selected={isSelected}
                   button
                   selected={isSelected}
                   onClick={() => handleCommandSelect(command)}
@@ -327,10 +342,15 @@ export default function CommandPalette({ open, onClose }) {
                     '&:hover': {
                       bgcolor: 'action.hover',
                     },
+                    '&:focus-visible': {
+                      outline: '2px solid',
+                      outlineColor: 'primary.main',
+                      outlineOffset: '-2px',
+                    },
                   }}
                 >
                   <ListItemIcon sx={{ minWidth: 40 }}>
-                    <Icon sx={{ fontSize: 20, color: 'primary.main' }} />
+                    <Icon sx={{ fontSize: 20, color: 'primary.main' }} aria-hidden="true" />
                   </ListItemIcon>
                   <ListItemText
                     primary={

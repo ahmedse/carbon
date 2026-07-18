@@ -29,6 +29,8 @@ export function StatusBar({
 
   return (
     <Box
+      component="footer"
+      role="contentinfo"
       sx={{
         height: 22,
         minHeight: 22,
@@ -116,6 +118,8 @@ export function StatusBar({
           <IconButton
             size="small"
             onClick={onToggleSidebar}
+            aria-label={`${sidebarVisible ? 'Hide' : 'Show'} Sidebar`}
+            aria-pressed={sidebarVisible}
             sx={{
               p: 0.25,
               color: 'inherit',
@@ -125,9 +129,14 @@ export function StatusBar({
                 opacity: 1,
                 bgcolor: 'rgba(255,255,255,0.15)',
               },
+              '&:focus-visible': {
+                outline: '2px solid',
+                outlineColor: '#fff',
+                outlineOffset: '2px',
+              },
             }}
           >
-            <ViewSidebarIcon sx={{ fontSize: 13 }} />
+            <ViewSidebarIcon sx={{ fontSize: 13 }} aria-hidden="true" />
           </IconButton>
         </Tooltip>
 
@@ -135,6 +144,8 @@ export function StatusBar({
           <IconButton
             size="small"
             onClick={onToggleCopilot}
+            aria-label={`${copilotVisible ? 'Hide' : 'Show'} Pulse Copilot`}
+            aria-pressed={copilotVisible}
             sx={{
               p: 0.25,
               color: 'inherit',
@@ -144,9 +155,14 @@ export function StatusBar({
                 opacity: 1,
                 bgcolor: 'rgba(255,255,255,0.15)',
               },
+              '&:focus-visible': {
+                outline: '2px solid',
+                outlineColor: '#fff',
+                outlineOffset: '2px',
+              },
             }}
           >
-            <AutoAwesomeIcon sx={{ fontSize: 13 }} />
+            <AutoAwesomeIcon sx={{ fontSize: 13 }} aria-hidden="true" />
           </IconButton>
         </Tooltip>
       </Box>

@@ -127,6 +127,8 @@ export function Shell() {
         width: '100vw',
         overflow: 'hidden',
       }}
+      role="application"
+      aria-label="Carbon Data Platform"
     >
       {/* Header */}
       <HeaderNew />
