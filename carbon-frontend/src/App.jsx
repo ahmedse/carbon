@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
+import { Shell } from "./shell/Shell";
 import AdminRoute from "./components/AdminRoute";
 import TableManagerPage from "./pages/TableManagerPage";
 import OrgUnitsPage from "./pages/admin/OrgUnitsPage";
@@ -88,6 +89,10 @@ function RoleAwareLanding() {
 }
 
 export default function App() {
+  // Feature flag for new Shell layout
+  const useShellLayout = import.meta.env.VITE_USE_SHELL_LAYOUT === 'true';
+  const RootLayout = useShellLayout ? Shell : Layout;
+
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
      <BrowserRouter basename={import.meta.env.VITE_BASE}>
@@ -95,7 +100,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route element={<RequireAuth />}>
             <Route element={<RequireContext />}>
-              <Route element={<Layout />}>
+              <Route element={<RootLayout />}>
                 <Route path="help" element={<Help />} />
                 <Route path="feedback" element={<Feedback />} />
                 <Route path="/" element={<RoleAwareLanding />} />
