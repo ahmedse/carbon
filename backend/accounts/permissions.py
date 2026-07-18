@@ -53,6 +53,25 @@ class HasScopedRole(permissions.BasePermission):
         return False
 
 
+class ReadAnyWriteGlobalAdmin(permissions.BasePermission):
+    """Any authenticated user can read governance resources.
+    Only GLOBAL admins can write:
+    - superusers, OR
+    - admins_group with org_unit=None (global scope)
+
+    Org-scoped admins are read-only.
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if user.is_superuser:
+            return True
+        return bool(user_has_global_role(user, ['admins_group']))
+
+
 class CanManageScopedRoles(permissions.BasePermission):
     """Allows superusers, global admins, and org-scoped stewards (admins_group on any org unit).
     Subtree enforcement + anti-escalation is done in the viewset (get_queryset / perform_*)."""
