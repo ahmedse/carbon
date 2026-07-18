@@ -1,11 +1,10 @@
-// src/components/SidebarMenu.jsx
+// src/components/SidebarMenuRefactored.jsx
+// Perspective-driven sidebar refactoring
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import MicroHelp from "./MicroHelp";
-import { useMemo } from "react";
 import {
-  List, ListItemButton, ListItemIcon, ListItemText, Tooltip, Divider, Collapse, Box, IconButton,
+  List, ListItemButton, ListItemIcon, ListItemText, Tooltip, Divider, Collapse, Box,
 } from "@mui/material";
 import {
   DashboardRounded as DashboardIcon,
@@ -18,13 +17,14 @@ import {
   BoltRounded as Scope2Icon,
   LocalShippingRounded as Scope3Icon,
   DatasetRounded as TableIcon,
-  ArrowForwardIos as ArrowIcon,
   CalculateRounded as CalculateIcon,
   AssessmentRounded as ReportIcon,
   ShowChartRounded as AnalyticsIcon,
   TrackChangesRounded as TargetsIcon,
   VerifiedUserRounded as QualityIcon,
   DescriptionRounded as ReportingIcon,
+  LocationCityRounded as OrgIcon,
+  AdminPanelSettingsRounded as AccessIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthContext";
 
@@ -32,27 +32,23 @@ const SCOPE_META = {
   1: {
     label: "Scope 1",
     icon: <Scope1Icon sx={{ color: "#10b981" }} />,
-    color: "#d1fae5",
     desc: "Direct emissions",
-    helpKey: "scope1_microhelp",
   },
   2: {
     label: "Scope 2",
     icon: <Scope2Icon sx={{ color: "#3b82f6" }} />,
-    color: "#dbeafe",
     desc: "Indirect energy",
-    helpKey: "scope2_microhelp",
   },
   3: {
     label: "Scope 3",
     icon: <Scope3Icon sx={{ color: "#f97316" }} />,
-    color: "#ffedd5",
     desc: "Value chain emissions",
-    helpKey: "scope3_microhelp",
   },
 };
 
-function MenuItem({ to, icon, label, tooltip, selected, collapsed, sx = {}, secondary, arrow, ...props }) {
+function MenuItem({
+  to, icon, label, tooltip, selected, collapsed, sx = {}, secondary, ...props
+}) {
   const isExpanded = !collapsed;
   return (
     <Tooltip title={tooltip || label} placement="right" arrow disableHoverListener={isExpanded}>
@@ -63,7 +59,7 @@ function MenuItem({ to, icon, label, tooltip, selected, collapsed, sx = {}, seco
         sx={{
           minHeight: 36,
           py: 0.75,
-          px: collapsed ? 1.5 : 1.5,
+          px: 1.5,
           mx: 0.5,
           borderRadius: 1,
           justifyContent: collapsed ? "center" : "flex-start",
@@ -74,317 +70,85 @@ function MenuItem({ to, icon, label, tooltip, selected, collapsed, sx = {}, seco
         }}
         {...props}
       >
-        <ListItemIcon sx={{ 
-          minWidth: 0, 
-          mr: collapsed ? 0 : 1.5, 
-          justifyContent: "center", 
-          color: selected ? "#16a34a" : "#6b7280",
-        }}>
+        <ListItemIcon
+          sx={{
+            minWidth: 0,
+            mr: collapsed ? 0 : 1.5,
+            justifyContent: "center",
+            color: selected ? "#16a34a" : "#6b7280",
+          }}
+        >
           {icon}
         </ListItemIcon>
         {isExpanded && (
-          <>
-            <ListItemText
-              primary={label}
-              secondary={secondary}
-              primaryTypographyProps={{
-                fontWeight: selected ? 600 : 500,
-                fontSize: "0.8125rem",
-                noWrap: true,
-                color: selected ? "#16a34a" : "#374151",
-              }}
-              secondaryTypographyProps={{
-                fontSize: "0.6875rem",
-                color: "#9ca3af",
-              }}
-            />
-            {arrow && (
-              <IconButton
-                edge="end"
-                size="small"
-                onClick={e => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  arrow.onClick?.();
-                }}
-                sx={{ p: 0.25, ml: 0.5, color: "#9ca3af" }}
-              >
-                {arrow.expanded ? <ExpandLess sx={{ fontSize: 16 }} /> : <ExpandMore sx={{ fontSize: 16 }} />}
-              </IconButton>
-            )}
-          </>
+          <ListItemText
+            primary={label}
+            secondary={secondary}
+            primaryTypographyProps={{
+              fontWeight: selected ? 600 : 500,
+              fontSize: "0.8125rem",
+              noWrap: true,
+              color: selected ? "#16a34a" : "#374151",
+            }}
+            secondaryTypographyProps={{
+              fontSize: "0.6875rem",
+              color: "#9ca3af",
+            }}
+          />
         )}
       </ListItemButton>
     </Tooltip>
   );
 }
-export default function SidebarMenu({ collapsed }) {
-  const open = !collapsed;
-  const location = useLocation();
-  const navigate = useNavigate();
-  const {
-    context, canSchemaAdmin, canManageAllModules, canManageAssignedModules,
-  } = useAuth();
 
-  const [openMenus, setOpenMenus] = useState({ schemaManager: true, dashboards: true });
+// --- Data Entry Sidebar (lean operator view) ---
+function DataEntrySidebar({ collapsed, location, navigate, modules, tablesByModule }) {
+  const open = !collapsed;
   const [openScopeMenus, setOpenScopeMenus] = useState({ 1: true, 2: true, 3: true });
   const [openModuleMenus, setOpenModuleMenus] = useState({});
-
-  const modules = context?.modules || [];
-  const projectRoles = context?.projectRoles || [];
-  const { tablesByModule = {} } = useAuth();
-
-  // Role-based module filtering
-  let visibleModules = [];
-  if (canSchemaAdmin() || canManageAllModules()) {
-    visibleModules = modules;
-  } else if (canManageAssignedModules()) {
-    const moduleIds = projectRoles
-      .filter(r => r.role === "dataowners_group" && r.module_id)
-      .map(r => r.module_id);
-    visibleModules = modules.filter(m => moduleIds.includes(m.id));
-  }
 
   // Group modules by scope
   const modulesByScope = useMemo(() => {
     const grouped = { 1: [], 2: [], 3: [] };
-    visibleModules.forEach(mod => {
+    modules.forEach(mod => {
       const scope = mod.scope || 1;
       if (grouped[scope]) {
         grouped[scope].push(mod);
       }
     });
     return grouped;
-  }, [visibleModules]);
+  }, [modules]);
 
-  // Auto-expand logic for current path
+  // Auto-expand logic
   useEffect(() => {
     const match = location.pathname.match(/^\/dataschema\/entry\/(\d+)\/(\d+)/);
     if (match) {
       const moduleId = parseInt(match[1]);
-      let foundScope = null;
       for (const [scope, mods] of Object.entries(modulesByScope)) {
         if (mods.some(m => Number(m.id) === moduleId)) {
-          foundScope = scope;
+          setOpenScopeMenus(prev => ({ ...prev, [scope]: true }));
+          setOpenModuleMenus(prev => ({ ...prev, [moduleId]: true }));
           break;
         }
-      }
-      if (foundScope) {
-        setOpenScopeMenus(prev => ({ ...prev, [foundScope]: true }));
-        setOpenModuleMenus(prev => ({ ...prev, [moduleId]: true }));
-      }
-    }
-    const modMatch = location.pathname.match(/^\/modules\/(\d+)/);
-    if (modMatch) {
-      const moduleId = parseInt(modMatch[1]);
-      let foundScope = null;
-      for (const [scope, mods] of Object.entries(modulesByScope)) {
-        if (mods.some(m => Number(m.id) === moduleId)) {
-          foundScope = scope;
-          break;
-        }
-      }
-      if (foundScope) {
-        setOpenScopeMenus(prev => ({ ...prev, [foundScope]: true }));
-        setOpenModuleMenus(prev => ({ ...prev, [moduleId]: true }));
       }
     }
   }, [location.pathname, modulesByScope]);
 
-  const isSchemaManagerActive = location.pathname.startsWith("/schema-admin");
-
-  // --- Menu items (Dashboard always on top) ---
-  const staticMenu = [
-    {
-      type: "menu",
-      to: "/dashboard",
-      icon: <DashboardIcon />,
-      label: "Dashboard",
-      tooltip: "Dashboard",
-      match: path => path === "/dashboard",
-    },
-    { type: "divider" },
-    {
-      type: "menu",
-      to: "/help",
-      icon: <HelpIcon />,
-      label: "Help",
-      tooltip: "Help and Documentation",
-      match: path => path === "/help",
-    },
-    {
-      type: "menu",
-      to: "/feedback",
-      icon: <FeedbackIcon />,
-      label: "Feedback",
-      tooltip: "Send us your feedback",
-      match: path => path === "/feedback",
-    },
-  ].filter(Boolean);
-
   return (
     <List sx={{ pt: 0.5, pb: 2, px: 0.5 }}>
-      {/* --- Dashboard Section with Collapsible Sub-items --- */}
-      <ListItemButton
-        onClick={() => setOpenMenus(prev => ({ ...prev, dashboards: !prev.dashboards }))}
-        sx={{
-          minHeight: 36,
-          py: 0.75,
-          px: 1.5,
-          mx: 0.5,
-          borderRadius: 1,
-          justifyContent: open ? "flex-start" : "center",
-          color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#16a34a" : "#374151",
-          bgcolor: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#f0fdf4" : "transparent",
-          "&:hover": { bgcolor: "#f3f4f6" },
-        }}
-      >
-        <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
-          <Tooltip title="Dashboards" placement="right" arrow disableHoverListener={open}>
-            <DashboardIcon sx={{ fontSize: 20, color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#16a34a" : "#6b7280" }} />
-          </Tooltip>
-        </ListItemIcon>
-        {open && <ListItemText primary="Dashboards" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem" }} />}
-        {open && (openMenus.dashboards ? <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} /> : <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />)}
-      </ListItemButton>
-      <Collapse in={open && openMenus.dashboards} timeout="auto" unmountOnExit>
-        <List component="div" disablePadding>
-          <MenuItem
-            to="/dashboard"
-            icon={<DashboardIcon sx={{ fontSize: 18, color: "#16a34a" }} />}
-            label="Executive Summary"
-            tooltip="Overview of your carbon footprint"
-            selected={location.pathname === "/dashboard" || location.pathname === "/" || location.pathname === "/dashboards/executive"}
-            collapsed={collapsed}
-            sx={{ pl: 4 }}
-          />
-          <MenuItem
-            to="/dashboards/analytics"
-            icon={<AnalyticsIcon sx={{ fontSize: 18, color: "#3b82f6" }} />}
-            label="Analytics"
-            tooltip="Deep dive with date range analysis"
-            selected={location.pathname === "/dashboards/analytics"}
-            collapsed={collapsed}
-            sx={{ pl: 4 }}
-          />
-          <MenuItem
-            to="/dashboards/targets"
-            icon={<TargetsIcon sx={{ fontSize: 18, color: "#f59e0b" }} />}
-            label="Targets & Progress"
-            tooltip="Track SBTi and net-zero goals"
-            selected={location.pathname === "/dashboards/targets"}
-            collapsed={collapsed}
-            sx={{ pl: 4 }}
-          />
-          <MenuItem
-            to="/dashboards/data-quality"
-            icon={<QualityIcon sx={{ fontSize: 18, color: "#8b5cf6" }} />}
-            label="Data Quality"
-            tooltip="Data completeness and audit readiness"
-            selected={location.pathname === "/dashboards/data-quality"}
-            collapsed={collapsed}
-            sx={{ pl: 4 }}
-          />
-          <MenuItem
-            to="/dashboards/reporting"
-            icon={<ReportingIcon sx={{ fontSize: 18, color: "#06b6d4" }} />}
-            label="Reporting"
-            tooltip="Framework compliance and reports"
-            selected={location.pathname === "/dashboards/reporting"}
-            collapsed={collapsed}
-            sx={{ pl: 4 }}
-          />
-        </List>
-      </Collapse>
-      
+      {/* My Dashboard */}
+      <MenuItem
+        to="/modules"
+        icon={<DashboardIcon />}
+        label="My Dashboard"
+        selected={location.pathname === "/modules" || location.pathname === "/dashboard"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+
       <Divider sx={{ my: 1, mx: 1 }} />
-      
-      {/* --- Emissions Calculator --- */}
-      <MenuItem
-        to="/emissions"
-        icon={<CalculateIcon sx={{ fontSize: 20, color: "#10b981" }} />}
-        label="Emissions Dashboard"
-        tooltip="Carbon Emissions Calculator"
-        selected={location.pathname === "/emissions" || location.pathname === "/emissions/dashboard"}
-        collapsed={collapsed}
-        sx={{ mb: 0.5 }}
-      />
-      <MenuItem
-        to="/emissions/report"
-        icon={<ReportIcon sx={{ fontSize: 20, color: "#3b82f6" }} />}
-        label="Emissions Report"
-        tooltip="GHG Protocol Report"
-        selected={location.pathname === "/emissions/report"}
-        collapsed={collapsed}
-        sx={{ mb: 0.5 }}
-      />
 
-      {/* --- Schema Manager --- */}
-      {canSchemaAdmin() && (
-        <>
-          <ListItemButton
-            onClick={() => setOpenMenus(prev => ({ ...prev, schemaManager: !prev.schemaManager }))}
-            sx={{
-              minHeight: 36,
-              py: 0.75,
-              px: 1.5,
-              mx: 0.5,
-              borderRadius: 1,
-              justifyContent: open ? "flex-start" : "center",
-              color: isSchemaManagerActive ? "#7c3aed" : "#374151",
-              bgcolor: isSchemaManagerActive ? "#f5f3ff" : "transparent",
-              "&:hover": { bgcolor: "#f3f4f6" },
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
-              <Tooltip title="Schema Manager" placement="right" arrow disableHoverListener={open}>
-                <SchemaAdminIcon sx={{ fontSize: 20, color: isSchemaManagerActive ? "#7c3aed" : "#6b7280" }} />
-              </Tooltip>
-            </ListItemIcon>
-            {open && <ListItemText primary="Schema Manager" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem" }} />}
-            {open && (openMenus.schemaManager ? <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} /> : <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />)}
-          </ListItemButton>
-          <Collapse in={open && openMenus.schemaManager} timeout="auto" unmountOnExit>
-            <List component="div" disablePadding>
-              <MenuItem
-                to="/schema-admin/table-manager"
-                icon={<TableRowsIcon sx={{ fontSize: 18, color: "#7c3aed" }} />}
-                label="Table Manager"
-                selected={location.pathname.startsWith("/schema-admin/table-manager")}
-                collapsed={collapsed}
-                sx={{ pl: 4.5 }}
-              />
-              <MenuItem
-                to="/admin/org-units"
-                icon={<TableRowsIcon sx={{ fontSize: 18, color: "#0ea5e9" }} />}
-                label="Org Units"
-                selected={location.pathname.startsWith("/admin/org-units")}
-                collapsed={collapsed}
-                sx={{ pl: 4.5 }}
-              />
-              <MenuItem
-                to="/admin/access"
-                icon={<TableRowsIcon sx={{ fontSize: 18, color: "#f59e0b" }} />}
-                label="Access Control"
-                selected={location.pathname.startsWith("/admin/access")}
-                collapsed={collapsed}
-                sx={{ pl: 4.5 }}
-              />
-              <MenuItem
-                to="/admin/users"
-                icon={<TableRowsIcon sx={{ fontSize: 18, color: "#8b5cf6" }} />}
-                label="Users"
-                selected={location.pathname.startsWith("/admin/users")}
-                collapsed={collapsed}
-                sx={{ pl: 4.5 }}
-              />
-            </List>
-          </Collapse>
-          <Divider sx={{ my: 1, mx: 1 }} />
-        </>
-      )}
-
-      {/* --- Grouped Modules By Scope, with submenus for modules and tables --- */}
+      {/* Scopes with Modules */}
       {Object.entries(modulesByScope).map(([scope, mods]) =>
         mods.length > 0 ? (
           <React.Fragment key={`scope-${scope}`}>
@@ -416,24 +180,32 @@ export default function SidebarMenu({ collapsed }) {
                     primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem", color: "#111827" }}
                     secondaryTypographyProps={{ fontSize: "0.6875rem", color: "#9ca3af" }}
                   />
-                  {openScopeMenus[scope] ? <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} /> : <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />}
+                  {openScopeMenus[scope] ? (
+                    <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} />
+                  ) : (
+                    <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />
+                  )}
                 </>
               )}
             </ListItemButton>
 
-            {/* Scope Modules */}
+            {/* Modules in Scope */}
             <Collapse in={open && openScopeMenus[scope]} timeout="auto" unmountOnExit>
               <List component="div" disablePadding sx={{ pl: 1 }}>
                 {mods.map(mod => {
                   const tables = (tablesByModule[String(mod.id)] || []).filter(t => t.is_active !== false);
-                  const isActiveModule = location.pathname.startsWith(`/modules/${mod.id}`) ||
-                    (location.pathname.startsWith("/dataschema/entry/") && location.pathname.includes(`/${mod.id}/`));
-                  const hasTables = tables && tables.length > 0;
+                  const isActiveModule =
+                    location.pathname.startsWith(`/modules/${mod.id}`) ||
+                    location.pathname.includes(`/${mod.id}/`);
+
                   return (
                     <React.Fragment key={mod.id}>
-                      {/* Module */}
                       <ListItemButton
-                        onClick={() => hasTables ? setOpenModuleMenus(prev => ({ ...prev, [mod.id]: !prev[mod.id] })) : navigate(`/modules/${mod.id}`)}
+                        onClick={() =>
+                          tables.length > 0
+                            ? setOpenModuleMenus(prev => ({ ...prev, [mod.id]: !prev[mod.id] }))
+                            : navigate(`/modules/${mod.id}`)
+                        }
                         sx={{
                           minHeight: 32,
                           py: 0.5,
@@ -449,46 +221,17 @@ export default function SidebarMenu({ collapsed }) {
                         <ListItemIcon sx={{ minWidth: 0, mr: 1.5, color: isActiveModule ? "#16a34a" : "#9ca3af" }}>
                           <TableIcon sx={{ fontSize: 16 }} />
                         </ListItemIcon>
-                        <ListItemText
-                          primary={mod.name}
-                          primaryTypographyProps={{ fontSize: "0.8125rem", fontWeight: isActiveModule ? 600 : 500, noWrap: true }}
-                        />
-                        {hasTables && (openModuleMenus[mod.id] ? <ExpandLess sx={{ fontSize: 14, color: "#9ca3af" }} /> : <ExpandMore sx={{ fontSize: 14, color: "#9ca3af" }} />)}
+                        {open && (
+                          <ListItemText
+                            primary={mod.name}
+                            primaryTypographyProps={{
+                              fontWeight: isActiveModule ? 600 : 500,
+                              fontSize: "0.8125rem",
+                              color: isActiveModule ? "#16a34a" : "#374151",
+                            }}
+                          />
+                        )}
                       </ListItemButton>
-
-                      {/* Tables under module */}
-                      {hasTables && (
-                        <Collapse in={openModuleMenus[mod.id]} timeout="auto" unmountOnExit>
-                          <List component="div" disablePadding>
-                            {tables.map(table => {
-                              const isTableActive = location.pathname === `/dataschema/entry/${mod.id}/${table.id}`;
-                              return (
-                                <ListItemButton
-                                  key={table.id}
-                                  component={Link}
-                                  to={`/dataschema/entry/${mod.id}/${table.id}`}
-                                  sx={{
-                                    minHeight: 28,
-                                    py: 0.25,
-                                    pl: 5.5,
-                                    pr: 1.5,
-                                    mx: 0.5,
-                                    borderRadius: 1,
-                                    color: isTableActive ? "#16a34a" : "#6b7280",
-                                    bgcolor: isTableActive ? "#f0fdf4" : "transparent",
-                                    "&:hover": { bgcolor: "#f3f4f6" },
-                                  }}
-                                >
-                                  <ListItemText
-                                    primary={table.title || table.name}
-                                    primaryTypographyProps={{ fontSize: "0.75rem", fontWeight: isTableActive ? 600 : 400, noWrap: true }}
-                                  />
-                                </ListItemButton>
-                              );
-                            })}
-                          </List>
-                        </Collapse>
-                      )}
                     </React.Fragment>
                   );
                 })}
@@ -497,6 +240,335 @@ export default function SidebarMenu({ collapsed }) {
           </React.Fragment>
         ) : null
       )}
+
+      <Divider sx={{ my: 1, mx: 1 }} />
+
+      {/* Help & Feedback */}
+      <MenuItem
+        to="/help"
+        icon={<HelpIcon />}
+        label="Help"
+        selected={location.pathname === "/help"}
+        collapsed={collapsed}
+      />
+      <MenuItem
+        to="/feedback"
+        icon={<FeedbackIcon />}
+        label="Feedback"
+        selected={location.pathname === "/feedback"}
+        collapsed={collapsed}
+      />
     </List>
+  );
+}
+
+// --- Admin Sidebar (organized admin view) ---
+function AdminSidebar({ collapsed, location }) {
+  const open = !collapsed;
+  const [openMenus, setOpenMenus] = useState({ org: true, schema: true, dashboards: true });
+
+  return (
+    <List sx={{ pt: 0.5, pb: 2, px: 0.5 }}>
+      {/* Organization Section */}
+      <ListItemButton
+        onClick={() => setOpenMenus(prev => ({ ...prev, org: !prev.org }))}
+        sx={{
+          minHeight: 36,
+          py: 0.75,
+          px: 1.5,
+          mx: 0.5,
+          borderRadius: 1,
+          justifyContent: open ? "flex-start" : "center",
+          color: location.pathname.startsWith("/admin/org") ? "#0ea5e9" : "#374151",
+          bgcolor: location.pathname.startsWith("/admin/org") ? "#f0f9ff" : "transparent",
+          "&:hover": { bgcolor: "#f3f4f6" },
+        }}
+      >
+        <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
+          <Tooltip title="Organization" placement="right" arrow disableHoverListener={open}>
+            <OrgIcon sx={{ fontSize: 20, color: location.pathname.startsWith("/admin/org") ? "#0ea5e9" : "#6b7280" }} />
+          </Tooltip>
+        </ListItemIcon>
+        {open && (
+          <>
+            <ListItemText primary="Organization" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem" }} />
+            {openMenus.org ? (
+              <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} />
+            ) : (
+              <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />
+            )}
+          </>
+        )}
+      </ListItemButton>
+      <Collapse in={open && openMenus.org} timeout="auto" unmountOnExit>
+        <List component="div" disablePadding>
+          <MenuItem
+            to="/admin/org-units"
+            icon={<OrgIcon sx={{ fontSize: 18 }} />}
+            label="Org Units"
+            selected={location.pathname.startsWith("/admin/org-units")}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+          <MenuItem
+            to="/admin/users"
+            icon={<TableRowsIcon sx={{ fontSize: 18 }} />}
+            label="Users"
+            selected={location.pathname.startsWith("/admin/users")}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+          <MenuItem
+            to="/admin/access"
+            icon={<AccessIcon sx={{ fontSize: 18 }} />}
+            label="Access Control"
+            selected={location.pathname.startsWith("/admin/access")}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+        </List>
+      </Collapse>
+
+      <Divider sx={{ my: 1, mx: 1 }} />
+
+      {/* Schema Section */}
+      <ListItemButton
+        onClick={() => setOpenMenus(prev => ({ ...prev, schema: !prev.schema }))}
+        sx={{
+          minHeight: 36,
+          py: 0.75,
+          px: 1.5,
+          mx: 0.5,
+          borderRadius: 1,
+          justifyContent: open ? "flex-start" : "center",
+          color: location.pathname.startsWith("/schema-admin") ? "#7c3aed" : "#374151",
+          bgcolor: location.pathname.startsWith("/schema-admin") ? "#f5f3ff" : "transparent",
+          "&:hover": { bgcolor: "#f3f4f6" },
+        }}
+      >
+        <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
+          <Tooltip title="Schema" placement="right" arrow disableHoverListener={open}>
+            <SchemaAdminIcon sx={{ fontSize: 20, color: location.pathname.startsWith("/schema-admin") ? "#7c3aed" : "#6b7280" }} />
+          </Tooltip>
+        </ListItemIcon>
+        {open && (
+          <>
+            <ListItemText primary="Schema Management" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem" }} />
+            {openMenus.schema ? (
+              <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} />
+            ) : (
+              <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />
+            )}
+          </>
+        )}
+      </ListItemButton>
+      <Collapse in={open && openMenus.schema} timeout="auto" unmountOnExit>
+        <List component="div" disablePadding>
+          <MenuItem
+            to="/schema-admin/table-manager"
+            icon={<TableRowsIcon sx={{ fontSize: 18 }} />}
+            label="Table Manager"
+            selected={location.pathname.startsWith("/schema-admin/table-manager")}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+        </List>
+      </Collapse>
+
+      <Divider sx={{ my: 1, mx: 1 }} />
+
+      {/* Dashboards Section */}
+      <ListItemButton
+        onClick={() => setOpenMenus(prev => ({ ...prev, dashboards: !prev.dashboards }))}
+        sx={{
+          minHeight: 36,
+          py: 0.75,
+          px: 1.5,
+          mx: 0.5,
+          borderRadius: 1,
+          justifyContent: open ? "flex-start" : "center",
+          color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#16a34a" : "#374151",
+          bgcolor: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#f0fdf4" : "transparent",
+          "&:hover": { bgcolor: "#f3f4f6" },
+        }}
+      >
+        <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
+          <Tooltip title="Dashboards" placement="right" arrow disableHoverListener={open}>
+            <DashboardIcon sx={{ fontSize: 20, color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#16a34a" : "#6b7280" }} />
+          </Tooltip>
+        </ListItemIcon>
+        {open && (
+          <>
+            <ListItemText primary="Dashboards" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem" }} />
+            {openMenus.dashboards ? (
+              <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} />
+            ) : (
+              <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />
+            )}
+          </>
+        )}
+      </ListItemButton>
+      <Collapse in={open && openMenus.dashboards} timeout="auto" unmountOnExit>
+        <List component="div" disablePadding>
+          <MenuItem
+            to="/dashboard"
+            icon={<DashboardIcon sx={{ fontSize: 18 }} />}
+            label="Executive Summary"
+            selected={location.pathname === "/dashboard" || location.pathname === "/"}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+          <MenuItem
+            to="/dashboards/analytics"
+            icon={<AnalyticsIcon sx={{ fontSize: 18 }} />}
+            label="Analytics"
+            selected={location.pathname === "/dashboards/analytics"}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+          <MenuItem
+            to="/dashboards/targets"
+            icon={<TargetsIcon sx={{ fontSize: 18 }} />}
+            label="Targets & Progress"
+            selected={location.pathname === "/dashboards/targets"}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+          <MenuItem
+            to="/dashboards/data-quality"
+            icon={<QualityIcon sx={{ fontSize: 18 }} />}
+            label="Data Quality"
+            selected={location.pathname === "/dashboards/data-quality"}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+          <MenuItem
+            to="/dashboards/reporting"
+            icon={<ReportingIcon sx={{ fontSize: 18 }} />}
+            label="Reporting"
+            selected={location.pathname === "/dashboards/reporting"}
+            collapsed={collapsed}
+            sx={{ pl: 4 }}
+          />
+        </List>
+      </Collapse>
+
+      <Divider sx={{ my: 1, mx: 1 }} />
+
+      {/* Help & Feedback */}
+      <MenuItem
+        to="/help"
+        icon={<HelpIcon />}
+        label="Help"
+        selected={location.pathname === "/help"}
+        collapsed={collapsed}
+      />
+      <MenuItem
+        to="/feedback"
+        icon={<FeedbackIcon />}
+        label="Feedback"
+        selected={location.pathname === "/feedback"}
+        collapsed={collapsed}
+      />
+    </List>
+  );
+}
+
+// --- Dashboard Sidebar (all 5 dashboard views) ---
+function DashboardSidebar({ collapsed, location }) {
+  const open = !collapsed;
+
+  return (
+    <List sx={{ pt: 0.5, pb: 2, px: 0.5 }}>
+      <MenuItem
+        to="/dashboard"
+        icon={<DashboardIcon />}
+        label="Executive Summary"
+        tooltip="Overview of your carbon footprint"
+        selected={location.pathname === "/dashboard" || location.pathname === "/" || location.pathname === "/dashboards/executive"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+      <MenuItem
+        to="/dashboards/analytics"
+        icon={<AnalyticsIcon />}
+        label="Analytics"
+        tooltip="Deep dive with date range analysis"
+        selected={location.pathname === "/dashboards/analytics"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+      <MenuItem
+        to="/dashboards/targets"
+        icon={<TargetsIcon />}
+        label="Targets & Progress"
+        tooltip="Track SBTi and net-zero goals"
+        selected={location.pathname === "/dashboards/targets"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+      <MenuItem
+        to="/dashboards/data-quality"
+        icon={<QualityIcon />}
+        label="Data Quality"
+        tooltip="Data completeness and audit readiness"
+        selected={location.pathname === "/dashboards/data-quality"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+      <MenuItem
+        to="/dashboards/reporting"
+        icon={<ReportingIcon />}
+        label="Reporting"
+        tooltip="Framework compliance and reports"
+        selected={location.pathname === "/dashboards/reporting"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+
+      <Divider sx={{ my: 1, mx: 1 }} />
+
+      <MenuItem
+        to="/help"
+        icon={<HelpIcon />}
+        label="Help"
+        selected={location.pathname === "/help"}
+        collapsed={collapsed}
+      />
+      <MenuItem
+        to="/feedback"
+        icon={<FeedbackIcon />}
+        label="Feedback"
+        selected={location.pathname === "/feedback"}
+        collapsed={collapsed}
+      />
+    </List>
+  );
+}
+
+// --- Main Perspective-Driven Dispatcher ---
+export default function SidebarMenu({ collapsed }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { currentPerspective, context, tablesByModule } = useAuth();
+
+  const modules = context?.modules || [];
+
+  // Render correct sidebar based on perspective
+  if (currentPerspective === "admin") {
+    return <AdminSidebar collapsed={collapsed} location={location} />;
+  }
+  if (currentPerspective === "dashboards") {
+    return <DashboardSidebar collapsed={collapsed} location={location} />;
+  }
+  // Default: data_entry
+  return (
+    <DataEntrySidebar
+      collapsed={collapsed}
+      location={location}
+      navigate={navigate}
+      modules={modules}
+      tablesByModule={tablesByModule}
+    />
   );
 }
