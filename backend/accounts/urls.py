@@ -5,7 +5,7 @@ from django.urls import path
 from .views import (
     UserViewSet, GroupViewSet,
     ScopedRoleViewSet, RoleAssignmentAuditLogViewSet,
-    LogoutView, my_roles,
+    LogoutView, my_roles, me_context,
 )
 
 router = DefaultRouter()
@@ -16,6 +16,7 @@ router.register(r'role-audit-logs', RoleAssignmentAuditLogViewSet, basename='rol
 
 urlpatterns = [
     path('my-roles/', my_roles, name='my-roles'),
+    path('me/context/', me_context, name='me-context'),
     path('logout/', LogoutView.as_view(), name='logout'),
 ]
 
