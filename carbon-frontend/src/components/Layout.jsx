@@ -5,8 +5,8 @@ import React, { useState, useCallback } from "react";
 import { Outlet } from "react-router-dom";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
-import { Box, IconButton, Tooltip } from "@mui/material";
-import { ChevronLeft, ChevronRight } from "@mui/icons-material";
+import { Box, IconButton, Tooltip, Alert } from "@mui/material";
+import { ChevronLeft, ChevronRight, LocationOn as LocationOnIcon } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthContext";
 
 const MIN_SIDEBAR_WIDTH = 200;
@@ -15,7 +15,7 @@ const COLLAPSED_WIDTH = 56;
 const DEFAULT_WIDTH = 260;
 
 export default function Layout() {
-  const { context } = useAuth();
+  const { context, availablePerspectives, currentPerspective, user } = useAuth();
   
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = localStorage.getItem("sidebarWidth");
@@ -25,6 +25,15 @@ export default function Layout() {
     return localStorage.getItem("sidebarCollapsed") === "true";
   });
   const [isResizing, setIsResizing] = useState(false);
+
+  // Determine if user is admin and get org unit info for banner
+  const isAdmin = availablePerspectives?.includes('admin');
+  const isDataEntry = currentPerspective === 'data_entry';
+  
+  // Get user's primary org unit (from their data owner role)
+  const userOrgUnit = user?.roles?.find(r => r.org_unit)?.org_unit;
+
+  const showScopeBanner = isDataEntry && !isAdmin;
 
   const handleMouseDown = useCallback((e) => {
     e.preventDefault();
@@ -133,6 +142,22 @@ export default function Layout() {
           }}
         >
           <Box sx={{ flex: 1, p: 3, overflow: "auto", overscrollBehavior: "contain" }}>
+            {/* Scope banner for data-entry users */}
+            {showScopeBanner && userOrgUnit && (
+              <Alert
+                severity="info"
+                icon={<LocationOnIcon />}
+                sx={{
+                  mb: 2,
+                  borderRadius: 1,
+                  backgroundColor: "#ecf0f1",
+                  color: "#2c3e50",
+                  border: "1px solid #bdc3c7",
+                }}
+              >
+                You are viewing: <strong>{userOrgUnit}</strong>
+              </Alert>
+            )}
             <Outlet />
           </Box>
         </Box>

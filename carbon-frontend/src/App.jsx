@@ -50,6 +50,43 @@ function RequireContext() {
   return <Outlet />;
 }
 
+/**
+ * Role-aware landing redirect for non-admin users
+ * - Data-only users (no admin role) → redirect to first module
+ * - Admin users → stay at ExecutiveSummary dashboard
+ */
+function RoleAwareLanding() {
+  const { availablePerspectives, context, loading } = useAuth();
+  
+  if (loading) return <div className="centered">Loading…</div>;
+
+  // Check if user has admin perspective
+  const hasAdminPerspective = availablePerspectives?.includes('admin');
+  
+  // Check if user has data entry perspective but not admin
+  const hasDataOnly = availablePerspectives?.includes('data_entry') && !hasAdminPerspective;
+  
+  // Redirect data-only users to their first module
+  if (hasDataOnly) {
+    const firstModule = context?.modules?.[0];
+    if (firstModule) {
+      return <Navigate to={`/modules/${firstModule.id}`} replace />;
+    }
+    // No modules assigned - show empty state
+    return (
+      <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+        <h2>No Data Modules Assigned</h2>
+        <p style={{ color: '#666' }}>
+          Contact your administrator to get access to data entry modules.
+        </p>
+      </div>
+    );
+  }
+  
+  // For admins and others, show dashboard
+  return <ExecutiveSummary />;
+}
+
 export default function App() {
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -61,7 +98,7 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route path="help" element={<Help />} />
                 <Route path="feedback" element={<Feedback />} />
-                <Route path="/" element={<ExecutiveSummary />} />
+                <Route path="/" element={<RoleAwareLanding />} />
                 <Route path="/dashboard" element={<ExecutiveSummary />} />
                 
                 {/* New Dashboard Architecture */}
