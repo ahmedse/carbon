@@ -118,3 +118,9 @@ desktop.ini
 .env.production
 backend/.env.production
 carbon-frontend/.env.production
+
+# Database dumps and backups
+*.dump
+*.sql
+dump.rdb
+backend/dump.rdb
