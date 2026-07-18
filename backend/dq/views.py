@@ -7,13 +7,13 @@ from .models import TableProfile, FieldProfile, DQRule, DQResult
 from .serializers import (
     TableProfileSerializer, FieldProfileSerializer, DQRuleSerializer, DQResultSerializer,
 )
-from .permissions import ReadAnyWriteAdmin
+from accounts.permissions import ReadAnyWriteGlobalAdmin
 from .services import profile_table, run_dq
 
 
 class FieldProfileViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = FieldProfileSerializer
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def get_queryset(self):
         qs = FieldProfile.objects.all()
@@ -27,7 +27,7 @@ class FieldProfileViewSet(viewsets.ReadOnlyModelViewSet):
 
 class TableProfileViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TableProfileSerializer
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def get_queryset(self):
         qs = TableProfile.objects.all()
@@ -39,7 +39,7 @@ class TableProfileViewSet(viewsets.ReadOnlyModelViewSet):
 class DQRuleViewSet(viewsets.ModelViewSet):
     queryset = DQRule.objects.all()
     serializer_class = DQRuleSerializer
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def get_queryset(self):
         qs = DQRule.objects.all()
@@ -53,7 +53,7 @@ class DQRuleViewSet(viewsets.ModelViewSet):
 
 class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DQResultSerializer
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def get_queryset(self):
         qs = DQResult.objects.all()
@@ -67,7 +67,7 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ProfileTriggerView(APIView):
     """POST /dq/profile/ {"data_table": <id>} -> profile the table. Admin only."""
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def post(self, request):
         table_id = request.data.get('data_table')
@@ -81,7 +81,7 @@ class ProfileTriggerView(APIView):
 
 class DQRunView(APIView):
     """POST /dq/run/ {"data_table": <id>} -> run active rules + roll up to catalog. Admin only."""
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def post(self, request):
         table_id = request.data.get('data_table')

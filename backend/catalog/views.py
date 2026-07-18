@@ -11,14 +11,14 @@ from .serializers import (
     DataDomainSerializer, GlossaryTermSerializer, TagSerializer,
     AssetProfileSerializer, GovernanceEventSerializer,
 )
-from .permissions import ReadAnyWriteAdmin
+from accounts.permissions import ReadAnyWriteGlobalAdmin
 from .services import ensure_asset_profiles
 
 
 class DataDomainViewSet(viewsets.ModelViewSet):
     queryset = DataDomain.objects.all().order_by('name')
     serializer_class = DataDomainSerializer
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def perform_create(self, serializer):
         serializer.save(slug=slugify(serializer.validated_data['name']))
@@ -27,7 +27,7 @@ class DataDomainViewSet(viewsets.ModelViewSet):
 class GlossaryTermViewSet(viewsets.ModelViewSet):
     queryset = GlossaryTerm.objects.all().order_by('term')
     serializer_class = GlossaryTermSerializer
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def perform_create(self, serializer):
         serializer.save(slug=slugify(serializer.validated_data['term']))
@@ -36,7 +36,7 @@ class GlossaryTermViewSet(viewsets.ModelViewSet):
 class TagViewSet(viewsets.ModelViewSet):
     queryset = Tag.objects.all().order_by('name')
     serializer_class = TagSerializer
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def perform_create(self, serializer):
         serializer.save(slug=slugify(serializer.validated_data['name']))
@@ -44,7 +44,7 @@ class TagViewSet(viewsets.ModelViewSet):
 
 class AssetProfileViewSet(viewsets.ModelViewSet):
     serializer_class = AssetProfileSerializer
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
     http_method_names = ['get', 'patch', 'put', 'head', 'options']  # profiles are auto-managed; no create/delete
 
     def get_queryset(self):

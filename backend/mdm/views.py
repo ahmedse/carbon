@@ -9,13 +9,13 @@ from rest_framework.permissions import IsAuthenticated
 from dataschema.models import DataField
 from .models import ReferenceSet, ReferenceValue, OrgUnit
 from .serializers import ReferenceSetSerializer, ReferenceValueSerializer, OrgUnitSerializer
-from .permissions import ReadAnyWriteAdmin
+from accounts.permissions import ReadAnyWriteGlobalAdmin
 
 
 class ReferenceSetViewSet(viewsets.ModelViewSet):
     queryset = ReferenceSet.objects.all()
     serializer_class = ReferenceSetSerializer
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def perform_create(self, serializer):
         serializer.save(slug=slugify(serializer.validated_data['name']))
@@ -31,7 +31,7 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
 
 class ReferenceValueViewSet(viewsets.ModelViewSet):
     serializer_class = ReferenceValueSerializer
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def get_queryset(self):
         qs = ReferenceValue.objects.all()
@@ -46,7 +46,7 @@ class ReferenceValueViewSet(viewsets.ModelViewSet):
 class BindFieldView(APIView):
     """POST /mdm/bind-field/ {"data_field": <id>, "reference_set": <id|null>}
     Binds (or unbinds) a dataschema DataField to a ReferenceSet. Admin only."""
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def post(self, request):
         field_id = request.data.get('data_field')
@@ -94,7 +94,7 @@ class FieldOptionsView(APIView):
 class OrgUnitViewSet(viewsets.ModelViewSet):
     """CRUD for organisational units. Supports tree hierarchy via parent FK."""
     serializer_class = OrgUnitSerializer
-    permission_classes = [ReadAnyWriteAdmin]
+    permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def get_queryset(self):
         qs = OrgUnit.objects.all()
