@@ -7,7 +7,7 @@ This is the authoritative log of all Master/Worker RUNs for the Carbon project.
 | RUN | Title | Type | Status | Date | Result |
 |-----|-------|------|--------|------|--------|
 | A0 | Ground-truth audit | read-only | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT.md` (root) |
-| A1 | Repo hygiene & doc truth | cleanup | 🔄 IN PROGRESS | 2026-07-18 | TBD |
+| A1 | Repo hygiene & doc truth | cleanup | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A1.md` (root) |
 | A2 | Core governance RBAC fix | backend | ⏳ PENDING | — | — |
 | A3 | Data-owner scoped experience | backend+frontend | ⏳ PENDING | — | — |
 | A4 | Admin experience | backend+frontend | ⏳ PENDING | — | — |
@@ -26,17 +26,23 @@ This is the authoritative log of all Master/Worker RUNs for the Carbon project.
 
 **Result:** See `TASK-RESULT.md` (root) for full audit report
 
-### A1: Repo Hygiene & Doc Truth (2026-07-18) 🔄
+### A1: Repo Hygiene & Doc Truth (2026-07-18) ✅
 **Objective:** Clean foundation before deeper work  
 **Actions:**
 - Freeze ai_copilot app (comment URL, add deprecation notice)
 - Fix stale DESIGN_DATA_TRUST_CORE.md (Project → OrgUnit)
-- Archive 9 superseded status docs to docs/archive/
+- Archive 8 superseded status docs to docs/archive/
 - De-git .env.production and 5 data artifacts
 - Update .gitignore to prevent re-commit
 - Create this RUN_LOG.md as single source of truth
 
-**Result:** TBD
+**Key Metrics:**
+- 7 logical git commits (909486e → 5e4d063)
+- 48,667 net lines removed (mostly large data files)
+- 1.7 MB backed up to ~/carbon-backups/
+- 10/10 acceptance criteria PASSED
+
+**Result:** See `TASK-RESULT-A1.md` (root) for full report
 
 ---
 
