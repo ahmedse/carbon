@@ -33,7 +33,7 @@ function getSidebarItems(studioId) {
     
     case 'dataschema':
       return [
-        { label: 'Data Entry', path: '/dataschema/entry', icon: AddCircleOutlineIcon },
+        { label: 'Data Entry', path: '/dataschema', icon: AddCircleOutlineIcon },
         { label: 'Table Manager', path: '/schema-admin/table-manager', icon: TableChartIcon },
         { label: 'Data Quality', path: '/dashboards/data-quality', icon: RuleIcon },
       ];

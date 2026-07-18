@@ -1,7 +1,8 @@
 // File: src/shell/useShellState.js
 // Central state management for Shell layout preferences and studio navigation
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAuth } from '../auth/AuthContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import Co2Icon from '@mui/icons-material/Co2';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -27,7 +28,7 @@ const DEFAULT_STUDIOS = [
     id: 'dataschema', 
     label: 'Data Hub', 
     icon: StorageIcon, 
-    path: '/dataschema/entry' 
+    path: '/dataschema' 
   },
   { 
     id: 'admin', 
@@ -69,7 +70,14 @@ function setStoredBoolean(key, value) {
 }
 
 export function useShellState() {
-  const [studios] = useState(DEFAULT_STUDIOS);
+  const { availablePerspectives } = useAuth();
+  const studios = useMemo(() => {
+    if (!availablePerspectives?.includes('admin')) {
+      return DEFAULT_STUDIOS.filter((studio) => studio.id !== 'admin');
+    }
+    return DEFAULT_STUDIOS;
+  }, [availablePerspectives]);
+
   const [activeStudio, setActiveStudio] = useState('home');
   const [sidebarVisible, setSidebarVisible] = useState(() => getStoredBoolean('carbon-sidebar-visible', true));
   const [panelVisible, setPanelVisible] = useState(() => getStoredBoolean('carbon-panel-visible', false));

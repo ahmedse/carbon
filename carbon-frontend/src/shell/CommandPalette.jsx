@@ -97,7 +97,7 @@ const COMMANDS = [
     id: 'data-entry',
     label: 'Data Entry',
     description: 'Enter and manage emissions data',
-    path: '/dataschema/entry',
+    path: '/dataschema',
     icon: StorageIcon,
     keywords: ['data', 'entry', 'input', 'schema', 'records'],
   },

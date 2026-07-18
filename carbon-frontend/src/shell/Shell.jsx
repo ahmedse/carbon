@@ -24,7 +24,7 @@ const CommandPalette = lazy(() => import('./CommandPalette'));
 const STUDIO_PATHS = {
   home: '/dashboard',
   emissions: '/emissions',
-  dataschema: '/dataschema/entry',
+  dataschema: '/dataschema',
   admin: '/admin/users',
   settings: '/settings',
   help: '/help',

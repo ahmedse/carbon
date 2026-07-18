@@ -55,11 +55,6 @@ const ROUTE_CONFIG = {
     icon: StorageIcon,
     parent: null,
   },
-  '/dataschema/entry': {
-    label: 'Data Entry',
-    icon: StorageIcon,
-    parent: '/dataschema',
-  },
   '/schema-admin': {
     label: 'Schema Admin',
     icon: StorageIcon,

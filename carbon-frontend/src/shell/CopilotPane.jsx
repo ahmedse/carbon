@@ -1,71 +1,58 @@
 // File: src/shell/CopilotPane.jsx
-// Pulse AI Copilot widget integration for Carbon platform
-// Based on Gigacast implementation pattern
+// Embeds the Pulse AI copilot using the window.PulseWidget.mount() API.
+// Copied from Gigacast implementation.
 
 import { useEffect, useRef, useState } from 'react';
-import { Box, CircularProgress, Alert, IconButton, Typography } from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
+import { ensurePulseKey } from '../auth/pulseAuth';
 
-// Pulse widget script URL from environment
+const PULSE_HOST = import.meta.env.VITE_PULSE_HOST || 'http://127.0.0.1:9100';
+const PULSE_SCRIPT_PATHS = ['/widget/pulse.js', '/dist/pulse.js'];
+
 function getPulseScriptUrls() {
-  const pulseHost = import.meta.env.VITE_PULSE_HOST || 'http://127.0.0.1:9100';
-  return [`${pulseHost}/widget.js`];
+  const host = PULSE_HOST.replace(/\/$/, '');
+  return PULSE_SCRIPT_PATHS.map((path) => `${host}${path}`);
 }
 
-// Ensure Pulse widget script is loaded
 function ensurePulseScript({ forceReload = false } = {}) {
-  return new Promise((resolve, reject) => {
-    // If widget is already loaded and no force reload
-    if (window.PulseWidget && !forceReload) {
-      resolve(window.PulseWidget);
-      return;
-    }
+  if (!PULSE_HOST) return Promise.resolve(false);
+  if (window.PulseWidget?.mount) return Promise.resolve(true);
 
-    // Remove existing script if force reload
-    if (forceReload) {
-      const existingScript = document.querySelector('script[data-pulse-widget]');
-      if (existingScript) {
-        existingScript.remove();
-        delete window.PulseWidget;
-      }
-    }
+  const existing = document.querySelector(`script[data-pulse-host="${PULSE_HOST}"]`);
+  if (forceReload && existing) {
+    existing.remove();
+    delete window.PulseWidget;
+  }
 
+  const activeScript = forceReload ? null : document.querySelector(`script[data-pulse-host="${PULSE_HOST}"]`);
+  if (activeScript) {
+    return new Promise((resolve) => {
+      activeScript.addEventListener('load', () => resolve(true), { once: true });
+      activeScript.addEventListener('error', () => resolve(false), { once: true });
+      setTimeout(() => resolve(!!window.PulseWidget?.mount), 1000);
+    });
+  }
+
+  return new Promise((resolve) => {
     const urls = getPulseScriptUrls();
-    let attemptIndex = 0;
 
     const tryLoad = (index) => {
       if (index >= urls.length) {
-        reject(new Error('Failed to load Pulse widget from all attempted URLs'));
+        resolve(false);
         return;
       }
 
-      const scriptUrl = urls[index];
       const script = document.createElement('script');
-      script.src = scriptUrl;
-      script.async = true;
-      script.setAttribute('data-pulse-widget', 'true');
-
-      script.onload = () => {
-        if (window.PulseWidget) {
-          resolve(window.PulseWidget);
-        } else {
-          setTimeout(() => {
-            if (window.PulseWidget) {
-              resolve(window.PulseWidget);
-            } else {
-              reject(new Error('Pulse widget script loaded but PulseWidget not found'));
-            }
-          }, 100);
-        }
-      };
-
+      script.src = urls[index];
+      script.defer = true;
+      script.dataset.instance = 'carbon';
+      script.dataset.host = PULSE_HOST;
+      script.dataset.pulseHost = PULSE_HOST;
+      script.onload = () => resolve(true);
       script.onerror = () => {
         script.remove();
-        attemptIndex++;
-        tryLoad(attemptIndex);
+        tryLoad(index + 1);
       };
-
-      document.head.appendChild(script);
+      document.body.appendChild(script);
     };
 
     tryLoad(0);
@@ -73,178 +60,100 @@ function ensurePulseScript({ forceReload = false } = {}) {
 }
 
 export default function CopilotPane({ onClose }) {
-  const containerRef = useRef(null);
-  const widgetInstanceRef = useRef(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const mountRef = useRef(null);
+  const [status, setStatus] = useState('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
-    let mounted = true;
-    let cleanup = null;
+    let cancelled = false;
+    let mountedCleanup = null;
+    let fallbackTimer = null;
 
-    async function initWidget() {
-      try {
-        setLoading(true);
-        setError(null);
+    const el = mountRef.current;
+    if (!el) return undefined;
 
-        // Ensure script is loaded
-        const PulseWidget = await ensurePulseScript();
-
-        if (!mounted) return;
-
-        // Get authentication token from backend
-        const response = await fetch('/carbon-api/accounts/pulse-auth/', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Pulse auth failed: ${response.statusText}`);
-        }
-
-        const { pulse_token, pulse_user } = await response.json();
-
-        if (!mounted) return;
-
-        // Mount widget
-        const el = containerRef.current;
-        if (!el) return;
-
-        const instance = PulseWidget.mount(el, {
-          instanceId: import.meta.env.VITE_PULSE_INSTANCE_ID || 'carbon',
-          host: import.meta.env.VITE_PULSE_HOST || 'http://127.0.0.1:9100',
-          auth: {
-            token: pulse_token,
-            user: pulse_user,
-          },
-          theme: {
-            mode: 'auto', // Will follow Carbon theme context
-          },
-        });
-
-        widgetInstanceRef.current = instance;
-
-        // Cleanup function
-        cleanup = () => {
-          if (instance && typeof instance.unmount === 'function') {
-            instance.unmount();
-          }
-        };
-
-        setLoading(false);
-      } catch (err) {
-        console.error('Failed to initialize Pulse widget:', err);
-        if (mounted) {
-          setError(err.message || 'Failed to load Pulse widget');
-          setLoading(false);
-        }
-      }
+    if (!PULSE_HOST) {
+      setStatus('unavailable');
+      return undefined;
     }
 
-    initWidget();
+    setStatus('loading');
+    fallbackTimer = window.setTimeout(() => {
+      if (!cancelled) setStatus('unavailable');
+    }, 4000);
+
+    // Guarantee a per-user identity BEFORE the widget connects so it never opens
+    // as "Anonymous". ensurePulseKey provisions the key from the live JWT.
+    const liveToken = localStorage.getItem('token');
+    Promise.resolve(ensurePulseKey(liveToken))
+      .catch(() => null)
+      .then(() => ensurePulseScript({ forceReload: retryNonce > 0 }))
+      .then((ready) => {
+        if (cancelled) return;
+        window.clearTimeout(fallbackTimer);
+        if (!ready || !window.PulseWidget?.mount) {
+          setStatus('unavailable');
+          return;
+        }
+        // Suppress the standalone floating FAB — the shell drawer is the only trigger
+        if (!document.getElementById('_pulse_standalone_hide')) {
+          const s = document.createElement('style');
+          s.id = '_pulse_standalone_hide';
+          s.textContent = '#pulse-widget-root{display:none!important}';
+          document.head.appendChild(s);
+        }
+        // Pass the resolved per-user identity explicitly
+        const instance = window.PulseWidget.mount(el, {
+          onClose,
+          pulseHost: PULSE_HOST,
+          instanceId: 'carbon',
+          pulseKey: localStorage.getItem('pulse_key') || undefined,
+          carbonToken: localStorage.getItem('token') || undefined,
+        });
+        mountedCleanup = () => instance?.unmount?.();
+        setStatus('ready');
+      });
 
     return () => {
-      mounted = false;
-      if (cleanup) cleanup();
+      cancelled = true;
+      window.clearTimeout(fallbackTimer);
+      mountedCleanup?.();
     };
-  }, []);
+  }, [onClose, retryNonce]);
+
+  const handleRetry = () => {
+    setRetryNonce((value) => value + 1);
+  };
 
   return (
-    <Box
-      role="complementary"
-      aria-label="Pulse AI Copilot"
-      sx={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        bgcolor: 'background.paper',
-        borderLeft: '1px solid',
-        borderColor: 'divider',
-      }}
-    >
-      {/* Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: 1.5,
-          py: 1,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          minHeight: 40,
-        }}
-      >
-        <Typography variant="subtitle2" component="h2" sx={{ fontWeight: 600 }}>
-          Pulse
-        </Typography>
-        <IconButton
-          size="small"
-          onClick={onClose}
-          aria-label="Close Pulse copilot"
-          sx={{
-            width: 24,
-            height: 24,
-            '&:hover': { bgcolor: 'action.hover' },
-            '&:focus-visible': {
-              outline: '2px solid',
-              outlineColor: 'primary.main',
-              outlineOffset: '2px',
-            },
-          }}
-        >
-          <CloseIcon sx={{ fontSize: 16 }} aria-hidden="true" />
-        </IconButton>
-      </Box>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div
+        ref={mountRef}
+        style={{ width: '100%', height: '100%', overflow: 'hidden', visibility: status === 'ready' ? 'visible' : 'hidden' }}
+      />
 
-      {/* Widget Container */}
-      <Box sx={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {loading && (
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              bgcolor: 'background.default',
+      {status !== 'ready' && (
+        <div style={{ position: 'absolute', inset: 0, padding: 16, color: '#71717a', fontSize: 12, lineHeight: 1.6, background: '#fff' }}>
+          <div style={{ marginBottom: 10 }}>
+            {status === 'loading' ? 'Connecting AI Copilot...' : 'AI Copilot is currently offline.'}
+          </div>
+          <button
+            type="button"
+            onClick={handleRetry}
+            style={{
+              border: '1px solid #d4d4d8',
+              borderRadius: 4,
+              padding: '4px 12px',
+              background: '#fff',
+              color: '#18181b',
+              fontSize: 11,
+              cursor: 'pointer',
             }}
           >
-            <Box sx={{ textAlign: 'center' }}>
-              <CircularProgress size={32} sx={{ mb: 1.5 }} />
-              <Typography variant="body2" color="text.secondary">
-                Loading Pulse...
-              </Typography>
-            </Box>
-          </Box>
-        )}
-
-        {error && (
-          <Box sx={{ p: 2 }}>
-            <Alert severity="error" sx={{ fontSize: '0.875rem' }}>
-              {error}
-            </Alert>
-          </Box>
-        )}
-
-        <Box
-          ref={containerRef}
-          sx={{
-            width: '100%',
-            height: '100%',
-            '& > div': {
-              width: '100%',
-              height: '100%',
-            },
-          }}
-        />
-      </Box>
-    </Box>
+            Retry
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

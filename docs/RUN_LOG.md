@@ -12,7 +12,7 @@ This is the authoritative log of all Master/Worker RUNs for the Carbon project.
 | A3 | Data-owner scoped experience | backend | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A3.md` (root) |
 | A4 | Admin experience | backend | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A4.md` (root) |
 | A5 | Role-Adaptive UI (Perspectives) | design+build | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A5.md` (root) |
-| A6 | Deployment-readiness gate | ops | ⏳ PENDING | — | — |
+| A6 | Data Hub Completion | frontend+UX | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A6.md` (root) |
 
 ## RUN Details
 
@@ -138,6 +138,26 @@ This is the authoritative log of all Master/Worker RUNs for the Carbon project.
 - ⚠️ Bundle size 1.6MB (optimization opportunity for future)
 
 **Result:** See `TASK-RESULT-A5.md` (root) for full report
+
+---
+
+### A6: Data Hub End-to-End Completion (2026-07-18) ✅
+**Objective:** Fix Data Hub navigation and create a complete module browser journey
+**Actions:**
+- Enabled Shell layout by default (removed VITE_USE_SHELL_LAYOUT feature flag)
+- Fixed Data Entry dead route: `/dataschema/entry` → `/dataschema`
+- Added `/dataschema` route and created `DataHubHome.jsx`
+- Auto-redirected single-module non-admin users to their module landing page
+- Hid Admin studio icon for non-admin users via perspective filtering
+- Updated command palette and breadcrumbs to remove stale Data Entry dead-routes
+
+**Key Metrics:**
+- 1 new frontend page: `carbon-frontend/src/pages/DataHubHome.jsx`
+- 6 frontend files updated
+- Frontend build: ✅ Success
+- Acceptance criteria: ✅ Zero 404s, ✅ module browser, ✅ role-based admin visibility
+
+**Result:** See `TASK-RESULT-A6.md` (root) for full report
 
 ---
 

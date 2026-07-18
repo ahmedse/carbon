@@ -15,12 +15,14 @@ import OrgUnitsPage from "./pages/admin/OrgUnitsPage";
 import AccessControlPage from "./pages/admin/AccessControlPage";
 import UsersPage from "./pages/admin/UsersPage";
 import DataEntryPage from "./pages/DataEntryPage";
+import DataHubHome from "./pages/DataHubHome";
 import Help from "./pages/Help";
 import Feedback from "./pages/Feedback";
 import ModuleLandingPage from "./pages/ModuleLandingPage";
 import ScopeInfoPage from "./pages/ScopeInfoPage";
 import EmissionsDashboard from "./pages/EmissionsDashboard";
 import EmissionsReport from "./pages/EmissionsReport";
+import SettingsPage from "./pages/SettingsPage";
 
 // New Dashboard Architecture
 import {
@@ -89,9 +91,7 @@ function RoleAwareLanding() {
 }
 
 export default function App() {
-  // Feature flag for new Shell layout
-  const useShellLayout = import.meta.env.VITE_USE_SHELL_LAYOUT === 'true';
-  const RootLayout = useShellLayout ? Shell : Layout;
+  const RootLayout = Shell;
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -103,6 +103,7 @@ export default function App() {
               <Route element={<RootLayout />}>
                 <Route path="help" element={<Help />} />
                 <Route path="feedback" element={<Feedback />} />
+                <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/" element={<RoleAwareLanding />} />
                 <Route path="/dashboard" element={<ExecutiveSummary />} />
                 
@@ -155,7 +156,8 @@ export default function App() {
                 />
                  <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
                  <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />
-                {/* Data entry */}
+                {/* Data Hub */}
+                <Route path="/dataschema" element={<DataHubHome />} />
                 <Route
                   path="/dataschema/entry/:moduleName/:tableId"
                   element={<DataEntryPage />}
