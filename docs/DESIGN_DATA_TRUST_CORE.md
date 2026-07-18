@@ -40,10 +40,12 @@ and the seams that let apps (Carbon) and external systems (**Pulse**) sit on top
 | App | Key models | Role in the target |
 |---|---|---|
 | `accounts` | `User`, `ScopedRole`, `RoleAssignmentAuditLog`, `Group` | Governance/RBAC substrate. Stewardship & ownership build on this. |
-| `core` | `Project`, `Module` | Organizational scope for assets. |
+| `core` | `OrgUnit`, `Module` | Organizational scope for assets. [^1] |
 | `dataschema` | `DataTable`, `DataField` (typed, `reference_table` FK, `validation` JSON), `DataRow` (JSON `values`), `SchemaChangeLog` | **The metadata-driven engine.** The catalog/DQ/MDM layers annotate and observe these. |
 | `emissions` | `EmissionFactor`, `GWP`, `Calculation`, `ReportingPeriod`, `CalculationRule` | **Becomes the Carbon app** — consumer of trusted data. |
 | `ai_copilot` | — | **Frozen. Superseded by Pulse.** |
+
+[^1]: Note: Project model was replaced by OrgUnit in Phase 1 (see RUN A0 results)
 
 Key facts to build on:
 - `DataField.type` already includes `reference` + `reference_table` FK → the hook for **Reference Data**.
@@ -69,7 +71,7 @@ Key facts to build on:
                         │ annotates / observes
         ┌───────────────┴───────────────────────────────────────────────┐
         │  dataschema engine  (DataTable / DataField / DataRow)          │
-        │  accounts (RBAC) · core (Project/Module)                       │
+        │  accounts (RBAC) · core (OrgUnit/Module)                       │
         │  Django + DRF · PostgreSQL · Redis                             │
         └────────────────────────────────────────────────────────────────┘
 ```
