@@ -2,13 +2,19 @@
 // Clean, neutral header
 
 import React, { useState } from "react";
-import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Tooltip, Box, Avatar, Divider } from "@mui/material";
+import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Tooltip, Box, Avatar, Divider, Tabs, Tab } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import aastLogo from "../assets/aast_carbon_logo_.jpg";
 import { KeyboardArrowDown, Notifications, Settings, HelpOutline } from "@mui/icons-material";
 
+const PERSPECTIVE_LABELS = {
+  data_entry: 'Data Entry',
+  dashboards: 'Dashboards',
+  admin: 'Admin',
+};
+
 export default function Header() {
-  const { user, logout } = useAuth();
+  const { user, logout, currentPerspective, setPerspective, availablePerspectives } = useAuth();
   const [anchorEl, setAnchorEl] = useState(null);
 
   const handleMenu = (e) => setAnchorEl(e.currentTarget);
@@ -40,6 +46,41 @@ export default function Header() {
         </Box>
 
         <Box sx={{ flexGrow: 1 }} />
+
+        {/* Perspective tabs - show only if user has multiple perspectives */}
+        {availablePerspectives && availablePerspectives.length > 1 && (
+          <Tabs
+            value={currentPerspective}
+            onChange={(_, value) => setPerspective(value)}
+            sx={{
+              mr: 2,
+              '& .MuiTab-root': {
+                textTransform: 'none',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                color: '#6b7280',
+                '&.Mui-selected': {
+                  color: '#16a34a',
+                  fontWeight: 600,
+                },
+                minWidth: 'auto',
+                px: 1.5,
+              },
+              '& .MuiTabs-indicator': {
+                backgroundColor: '#16a34a',
+              },
+            }}
+          >
+            {availablePerspectives.map(perspective => (
+              <Tab
+                key={perspective}
+                value={perspective}
+                label={PERSPECTIVE_LABELS[perspective]}
+                disabled={perspective === 'admin' && !availablePerspectives.includes('admin')}
+              />
+            ))}
+          </Tabs>
+        )}
 
         {/* Right side icons */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
