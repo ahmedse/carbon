@@ -124,3 +124,8 @@ carbon-frontend/.env.production
 *.sql
 dump.rdb
 backend/dump.rdb
+
+# Data directories (contents should not be committed)
+backend/chroma_db/
+backend/dataschema_uploads/*
+!backend/dataschema_uploads/.gitkeep
