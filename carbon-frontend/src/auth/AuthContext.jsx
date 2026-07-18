@@ -44,6 +44,10 @@ export const AuthProvider = ({ children }) => {
   const [context, setContext] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tablesByModule, setTablesByModule] = useState({});
+  const [availablePerspectives, setAvailablePerspectives] = useState([]);
+  const [currentPerspective, setCurrentPerspective] = useState(() => {
+    return localStorage.getItem("carbon_perspective") || "dashboards";
+  });
 
   // --- Timers and refs ---
   const inactivityTimeout = 60 * 60 * 1000; // 1 hour
@@ -54,6 +58,28 @@ export const AuthProvider = ({ children }) => {
 
   // Debug helper (disabled by default, enable for debugging)
   const debug = (...args) => { /* if (import.meta.env.DEV) console.log("[Auth]", ...args); */ };
+
+  // --- Fetch perspective context from backend ---
+  const fetchPerspectiveContext = async (token) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/accounts/me/context/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch perspective context");
+      const data = await res.json();
+      setAvailablePerspectives(data.perspectives || []);
+      // Set default perspective based on available ones
+      const defaultPerspective = data.perspectives?.[0] || 'dashboards';
+      if (!localStorage.getItem("carbon_perspective")) {
+        setCurrentPerspective(defaultPerspective);
+        localStorage.setItem("carbon_perspective", defaultPerspective);
+      }
+      return data;
+    } catch (err) {
+      console.error("Failed to fetch perspective context:", err);
+      return null;
+    }
+  };
 
   // --- Local Storage Sync on mount ---
   useEffect(() => {
@@ -152,6 +178,9 @@ export const AuthProvider = ({ children }) => {
       if (!rolesRes.ok) throw new Error("Failed to fetch user roles");
       const { roles } = await rolesRes.json();
 
+      // Fetch perspective context
+      await fetchPerspectiveContext(access);
+
       const userObj = { username, token: access, refresh, roles };
       setUser(userObj);
       localStorage.setItem("user", JSON.stringify(userObj));
@@ -214,6 +243,14 @@ export const AuthProvider = ({ children }) => {
 
   // Backward-compatible alias — older components still call selectProject().
   const selectProject = async (_projectId, _user = user) => buildContext(_user);
+
+  // --- Set current perspective (persisted in localStorage) ---
+  const setPerspectiveActive = (perspective) => {
+    if (availablePerspectives.includes(perspective)) {
+      setCurrentPerspective(perspective);
+      localStorage.setItem("carbon_perspective", perspective);
+    }
+  };
 
   // --- Logout: clear all state, timers, and storage ---
   const logout = async (reason) => {
@@ -309,6 +346,9 @@ export const AuthProvider = ({ children }) => {
         canManageAssignedModules,
         tablesByModule,
         refetchTables,
+        currentPerspective,
+        setPerspective: setPerspectiveActive,
+        availablePerspectives,
       }}
     >
       {children}
@@ -330,4 +370,7 @@ export const useAuth = () => useContext(AuthContext) || {
   canManageAssignedModules: () => false,
   tablesByModule: {},
   refetchTables: async () => {},
+  currentPerspective: 'dashboards',
+  setPerspective: () => {},
+  availablePerspectives: [],
 };
