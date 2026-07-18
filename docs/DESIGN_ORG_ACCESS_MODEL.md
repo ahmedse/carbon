@@ -160,3 +160,24 @@ Apply `_scope()` to: **DashboardAPIView, YearlyComparisonAPIView, ReportAPIView,
 - No `DataTable.org_unit` (org flows through `Module`).
 - No frontend changes in Phase A (server filtering carries the sidebar).
 - No AI/Pulse, no Celery.
+
+## 4.7 Governance resource protection (RUN A2)
+
+Governance resources (AssetProfile, ReferenceSet, OrgUnit tree, DQRule) are global master data and require stricter write control than operational data.
+
+**Permission model:**
+- **ReadAnyWriteGlobalAdmin** — used by `catalog`, `mdm`, and `dq`
+  - **Read:** any authenticated user
+  - **Write:** only GLOBAL admins:
+    - superusers, OR
+    - `admins_group` role with `org_unit=None` and `module=None`
+  - **Blocked:** org-scoped admins (e.g. Steiner/colege steward with `admins_group` on OrgUnit=5) are read-only
+
+**Rationale:**
+An org-scoped steward should manage data within their subtree, but should NOT mutate the global governance layer (for example, editing the OrgUnit tree, creating ReferenceSets, or adding DQ rules). Those operations are platform-level and reserved for global admins.
+
+**Contrast with operational data:**
+- Module/DataTable/DataRow/Calculation use `HasScopedRole` + scoped queryset filtering, which allows org-scoped admins to write within their subtree.
+- Governance resources use `ReadAnyWriteGlobalAdmin`, which keeps org-scoped admins read-only for global master data.
+
+**Verified in:** RUN A2 test script (`backend/test_governance_rbac.py`)
