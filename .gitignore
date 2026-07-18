@@ -113,3 +113,8 @@ desktop.ini
 *.pem
 *.crt
 *.key
+
+# Environment files with secrets
+.env.production
+backend/.env.production
+carbon-frontend/.env.production
