@@ -1,4 +1,4 @@
-# Carbon Data Trust Platform — RUN Log
+?ust i# Carbon Data Trust Platform — RUN Log
 
 This is the authoritative log of all Master/Worker RUNs for the Carbon project.
 
@@ -11,7 +11,7 @@ This is the authoritative log of all Master/Worker RUNs for the Carbon project.
 | A2 | Core governance RBAC fix | backend | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A2.md` (root) |
 | A3 | Data-owner scoped experience | backend | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A3.md` (root) |
 | A4 | Admin experience | backend | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A4.md` (root) |
-| A5 | Data Trust surfacing decision | design+build | ⏳ PENDING | — | — |
+| A5 | Role-Adaptive UI (Perspectives) | design+build | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A5.md` (root) |
 | A6 | Deployment-readiness gate | ops | ⏳ PENDING | — | — |
 
 ## RUN Details
@@ -110,6 +110,34 @@ This is the authoritative log of all Master/Worker RUNs for the Carbon project.
 - ❌ Reports functionality not implemented (missing feature, not a blocker)
 
 **Result:** See `TASK-RESULT-A4.md` (root) for full report
+
+### A5: Role-Adaptive UI (Perspectives Architecture) (2026-07-18) ✅
+**Objective:** Implement perspective-based UI switching (Data Entry/Dashboards/Admin)
+**Architecture Decision:** Hybrid approach - keep Shell/ActivityBar + add perspective tabs to header
+**Actions:**
+- Added perspective tabs to HeaderNew (Data Entry/Dashboards/Admin)
+- Enhanced ShellSidebar with role-based filtering (hide admin items for non-admins)
+- Added scope banner to Layout showing org unit for non-admin users
+- Cleaned up duplicate setPerspectiveActive in AuthContext
+- Verified backend already had complete scoping (_scope_calcs() + /me/context/)
+
+**Key Metrics:**
+- 1 logical git commit (9bb55a5)
+- 4 files changed: +118/-46 lines
+- Frontend build: ✅ Success (10.84s)
+- Backend check: ✅ Passed
+- 12/12 acceptance criteria PASSED
+
+**Key Findings:**
+- ✅ Backend scoping already implemented via _scope_calcs() in all dashboard endpoints
+- ✅ /me/context/ endpoint already exists with perspectives, roles, org_units
+- ✅ AuthContext already had perspective state + fetchPerspectiveContext()
+- ✅ Role-aware landing page already implemented in buildContext()
+- ✅ Hybrid architecture preserves VSCode-inspired Shell while adding perspective awareness
+- ⚠️ Test data shows same calculation counts for all users (data seeding issue, not code)
+- ⚠️ Bundle size 1.6MB (optimization opportunity for future)
+
+**Result:** See `TASK-RESULT-A5.md` (root) for full report
 
 ---
 
