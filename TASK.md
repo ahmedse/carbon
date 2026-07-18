@@ -1,915 +1,865 @@
-# TASK.md — RUN A5: Role-Adaptive UI (Perspectives Architecture)
-
----
+# TASK.md — RUN A6: Data Hub End-to-End Completion
 
 ## MASTER CONTEXT
 
-**Protocol:** Master/Worker handoff (see `.clinerules/master-worker-protocol.md`)  
-**Master:** Planner (this file's author)  
-**Worker:** Raptor/Copilot (executor)  
-**Active RUN sequence:** A0 ✅ → A1 ✅ → A2 ✅ → A3 ✅ → A4 ✅ → **A5** → A6
-
-**Previous RUN findings:**
-- **A0:** Baseline audit — deployment blockers identified, permission model sound
-- **A1:** Repository cleaned — 48,667 lines removed, docs organized
-- **A2:** Governance RBAC fixed — global admins only can write catalog/mdm/dq
-- **A3:** Data-owner experience fixed — DataSchema 403 resolved, schema write protection enforced
-- **A4:** Admin experience verified — global admin full CRUD confirmed, org-scoped admin limits verified
-
-**Current state:**
-- ✅ Backend fully functional — all roles/permissions working correctly
-- ✅ Org scoping enforced server-side (modules, tables, data rows)
-- ✅ Frontend exists: single React app, AdminRoute, sidebar, dashboards, data entry grid
-- ⚠️ **Dashboard numbers NOT org-scoped** — data leakage: a data-owner sees ALL AASTMT totals (critical bug)
-- ⚠️ **Sidebar is one-size-fits-all** — data-owners see admin menu items; admin sidebar is cluttered
-- ⚠️ **No perspective switcher** — admin must manually navigate to schema/admin pages
-- ⚠️ **No role-aware landing** — all users land at same Executive Summary page
-
-**Design decision:** See `docs/DESIGN_UI_ARCHITECTURE_A5.md` — ONE unified app with role-adaptive perspectives (Ataccama ONE pattern). Three perspectives: Data Entry, Dashboards, Admin.
-
-**Roadmap:**
-- **A0–A4** ✅: Backend foundation solid
-- **A5** (this RUN): Role-adaptive UI — perspectives architecture
-- **A6**: Deployment-readiness gate (security hardening)
+**RUN ID:** A6  
+**RUN Type:** Frontend + UX  
+**Dependencies:** A0 ✅ → A1 ✅ → A2 ✅ → A3 ✅ → A4 ✅ → A5 ✅ → **A6** (this)  
+**Status:** ACTIVE  
+**Worker:** Raptor (Code Mode)  
+**Plan:** [`plans/DATA_HUB_COMPLETION_PLAN.md`](plans/DATA_HUB_COMPLETION_PLAN.md)
 
 ---
 
 ## 1. HEADER
 
-**RUN ID:** A5  
-**Title:** Role-Adaptive UI — Perspectives Architecture  
-**Type:** FRONTEND + BACKEND  
-**Worker:** Raptor  
-**Master:** Planner  
-**Date Issued:** 2026-07-18
+**Title:** Data Hub End-to-End Completion  
+**Goal:** Fix Data Hub navigation, create complete user journey for data entry  
+**Priority:** HIGH  
+**Estimated Complexity:** Medium-High (7 phases, multiple files)
 
 ---
 
 ## 2. OBJECTIVE
 
-**Problem:** The frontend is a single flat experience — every user sees the same sidebar regardless of role. Dashboard numbers are not org-scoped (a Transport data-owner sees the full AASTMT total — a data leak). There is no perspective switching.
+Complete the Data Hub (DataSchema studio) with:
+1. Working navigation (no 404 errors)
+2. Module browser landing page
+3. Role-based studio visibility
+4. Context-aware sidebar navigation
+5. Full user journey for data-owners and admins
 
-**Goal:** Implement the Ataccama-inspired role-adaptive perspectives model (documented in `docs/DESIGN_UI_ARCHITECTURE_A5.md`):
+**Current Pain Points:**
+- `/dataschema/entry` leads to 404 (dead route in sidebar)
+- Shell layout disabled by feature flag
+- Admin studio icon visible to non-admins (poor UX)
+- No landing page for Data Hub studio
+- Module-scoped users need module picker
 
-1. **Fix dashboard data scoping leak** — emissions aggregates must filter by user's allowed modules (critical backend fix)
-2. **Perspective switcher in header** — Data Entry / Dashboards / Admin tabs; Admin tab only for `admins_group` users
-3. **Refactor sidebar per perspective** — Data Entry sidebar (lean: scopes → modules → tables) vs Admin sidebar (Org / Schema / Platform sections)
-4. **Role-aware landing page** — data-only users land on their first module; admins land on Executive Summary
-5. **Scope banner** — tell data-owners clearly "You are viewing: [Their OrgUnit]"
-
-**Success:** After this RUN:
-- ✅ Data-owner's dashboard shows ONLY their org's numbers (not all AASTMT)
-- ✅ Data-owner's sidebar is lean — only their modules/tables, no admin noise
-- ✅ Admin user sees perspective tabs in header — can switch between Data Entry and Admin
-- ✅ Admin sidebar shows organized sections (Org / Schema / Platform) when in Admin mode
-- ✅ User with only data-owner role has NO admin tab visible
-- ✅ Role-aware redirect on first load
+**Success Criteria:**
+- Zero 404 errors in Data Hub navigation
+- Shell layout enabled by default
+- Admin studio hidden for non-admin users
+- Module browser works for multi-module users
+- All user journeys (4 scenarios) pass testing
 
 ---
 
 ## 3. SCOPE — IN
 
-- **Backend:** Apply org scoping to all emissions aggregate endpoints (`DashboardAPIView`, `YearlyComparisonAPIView`, `ReportAPIView`, `CalculationViewSet`)
-- **Backend:** Add `/api/accounts/me/context/` endpoint returning user's effective scope
-- **Frontend AuthContext:** Add `currentPerspective` state and `setPerspective` function
-- **Frontend Header:** Add perspective switcher tabs (Data Entry | Dashboards | Admin)
-- **Frontend SidebarMenu:** Refactor into perspective-driven sections
-- **Frontend App.jsx:** Add role-aware redirect on login
-- **Frontend Layout:** Add "You are viewing: [OrgUnit]" scope banner for non-admin users
-- **Tests:** Verify data-owner dashboard ≠ global admin dashboard (different numbers)
+**Files to Create:**
+1. `carbon-frontend/src/pages/DataHubHome.jsx` — Module browser landing page
+
+**Files to Modify:**
+1. `carbon-frontend/src/App.jsx` — Remove feature flag, add `/dataschema` route
+2. `carbon-frontend/src/shell/useShellState.js` — Filter studios by role, fix dataschema path
+3. `carbon-frontend/src/shell/ShellSidebar.jsx` — Fix Data Entry link, add module context
+4. `docs/RUN_LOG.md` — Document RUN A6 completion
+
+**Backend:** No changes (backend is complete)
 
 ---
 
 ## 4. SCOPE — OUT (DO NOT TOUCH)
 
-- **No permission model changes** — A2/A3 fixes are working correctly, do not touch
-- **No new backend apps** — no new Django apps, no new migrations beyond what's needed
-- **No AI/Pulse/LLM work** — `ai_copilot` remains frozen
-- **No reports backend** — missing feature, explicitly deferred
-- **No separate admin console** — the design decision is ONE unified app
-- **No Ataccama catalog/MDM/DQ UI screens** — those are future RUNs
-- **No deployment config** — that's A6
+- ❌ Backend API changes (all endpoints exist and work)
+- ❌ Permissions/RBAC (already complete from A2/A3)
+- ❌ Table/field CRUD (already works in TableManagerPage)
+- ❌ Data entry grid (already works in TableDataPage)
+- ❌ Bulk import backend (may do frontend UI, but backend out of scope)
+- ❌ Dashboard scoping (already fixed in A5)
+- ❌ Other studios (Emissions, Admin, etc. — out of scope)
 
 ---
 
 ## 5. PRECONDITIONS / SETUP
 
-1. **A0–A4 complete** — backend working, all roles verified
-2. **Backend running** on `http://localhost:8009`
-3. **Frontend running** on `http://localhost:5173` (or check `vite.config.js`)
-4. **Test users available:**
-   - `global_admin` / `GlobalAdmin_2026!` — global admin
-   - `fac.steward` / `FacSteward_2025` — org-scoped admin (org_unit=5)
-   - `facilities.officer` / `FacOfficer_2025` — data-owner (org_unit=5)
-   - `transport.owner` / `TransOwner_2025` — data-owner (org_unit=4, if exists)
-5. **Read before coding:**
-   - `docs/DESIGN_UI_ARCHITECTURE_A5.md` — the full design decision
-   - `carbon-frontend/src/auth/AuthContext.jsx` — current auth/context state
-   - `carbon-frontend/src/components/SidebarMenu.jsx` — current sidebar implementation
-   - `carbon-frontend/src/components/Header.jsx` — current header
-   - `backend/emissions/views.py` — the endpoints to patch
+**Required State:**
+- ✅ A5 complete (perspective architecture implemented)
+- ✅ Backend scoping works (verified in A5)
+- ✅ AuthContext has `availablePerspectives`, `context.modules`, `tablesByModule`
+- ✅ ModuleLandingPage works (shows tables for a module)
+- ✅ TableManagerPage works (admin table CRUD)
+- ✅ DataEntryPage works (data entry grid)
+
+**Development Environment:**
+```bash
+# Verify backend running
+curl http://localhost:8009/carbon-api/health/
+# Expected: {"status":"ok"}
+
+# Verify frontend builds
+cd carbon-frontend && npm run build
+# Expected: Build success
+
+# Verify you're on feature branch
+git branch --show-current
+# Expected: feature/ai-copilot-mvp or similar
+```
 
 ---
 
-## 6. CONSTRAINTS (MUST / MUST NOT)
-
-### MUST:
-- **Read `docs/DESIGN_UI_ARCHITECTURE_A5.md` first** — the architectural decision is documented there
-- **Fix the dashboard scoping leak before any frontend work** — this is a data integrity issue
-- Test backend boots after each backend change (`python manage.py check`)
-- Test frontend builds after each major change (`npm run build` in `carbon-frontend/`)
-- Document every curl test for backend changes
-- Commit in logical groups (backend scope fix, perspective context, sidebar refactor, header switcher, landing fix)
-- Keep the single React app — do NOT create separate apps or routes for admin vs user
-
-### MUST NOT:
-- Break existing data-owner access (A3 fixes must remain intact)
-- Break existing admin routes (`/admin/org-units`, `/admin/access`, `/admin/users`)
-- Remove the `AdminRoute` component — keep it, just enhance it
-- Create separate login pages or URLs for different roles
-- Duplicate components (one for admin, one for user) — use props/context to adapt
-- Change the backend permission model
-
----
-
-## 7. STEPS
+## 6. IMPLEMENTATION STEPS
 
 ### Step 1: Read Current Code (Required First)
 
-**Objective:** Understand current state before modifying anything.
+**Purpose:** Understand current state before making changes
 
 ```bash
-cd /home/ahmed/aast/carbon
+# 1.1 Read App.jsx to see current routes and feature flag
+cat carbon-frontend/src/App.jsx | grep -A 5 "useShellLayout"
+cat carbon-frontend/src/App.jsx | grep -A 20 "Route path="
 
-# 1.1 Read the design decision
-cat docs/DESIGN_UI_ARCHITECTURE_A5.md
+# 1.2 Read useShellState.js to see studio definitions
+cat carbon-frontend/src/shell/useShellState.js | grep -A 20 "DEFAULT_STUDIOS"
 
-# 1.2 Check current emissions views
-cat backend/emissions/views.py
+# 1.3 Read ShellSidebar.jsx to see current sidebar items
+cat carbon-frontend/src/shell/ShellSidebar.jsx | grep -A 30 "getSidebarItems"
 
-# 1.3 Check current rbac_utils for get_visible_module_ids
-cat backend/accounts/rbac_utils.py
-
-# 1.4 Read AuthContext
-cat carbon-frontend/src/auth/AuthContext.jsx
-
-# 1.5 Read current Header
-cat carbon-frontend/src/components/Header.jsx
-
-# 1.6 Read current Layout
-cat carbon-frontend/src/components/Layout.jsx
-
-# 1.7 Verify backend is running
-curl -s http://localhost:8009/carbon-api/ | head -20 || echo "Backend not running — start it first"
+# 1.4 Read ModuleLandingPage.jsx to understand module landing UX
+head -60 carbon-frontend/src/pages/ModuleLandingPage.jsx
 ```
 
-**Record:**
-- Does `get_visible_module_ids` exist in `rbac_utils.py`? (If not, it needs to be created)
-- What are the exact view class names in `emissions/views.py`?
-- Does `AuthContext` already have a `currentPerspective` state?
-- Is the Header a functional or class component?
+**Checkpoint:** Confirm you understand:
+- Where feature flag check is ([`App.jsx:93`](carbon-frontend/src/App.jsx:93))
+- How studios are defined ([`useShellState.js:13`](carbon-frontend/src/shell/useShellState.js:13))
+- Current sidebar items per studio ([`ShellSidebar.jsx:19`](carbon-frontend/src/shell/ShellSidebar.jsx:19))
+- How ModuleLandingPage shows table grid
 
 ---
 
-### Step 2: Backend — Fix Dashboard Data Scoping Leak (CRITICAL)
+### Step 2: Enable Shell Layout by Default
 
-**Objective:** Every emissions aggregate endpoint must filter by user's allowed module set.
+**Objective:** Make Shell the default layout (remove feature flag)
 
-**Context:** Per `DESIGN_ORG_ACCESS_MODEL.md §4.6`, dashboard aggregates currently return ALL data regardless of user's org scope. A Transport data-owner sees AASTMT-wide totals. This must be fixed.
+**File:** `carbon-frontend/src/App.jsx`
 
-**Commands:**
-```bash
-cd /home/ahmed/aast/carbon/backend
-
-# 2.1 Check if get_visible_module_ids exists
-grep -n "get_visible_module_ids\|get_allowed_module_ids" accounts/rbac_utils.py
-
-# 2.2 Read the current rbac_utils to understand what helpers exist
-cat accounts/rbac_utils.py
-```
-
-**If `get_visible_module_ids` does NOT exist, add it to `accounts/rbac_utils.py`:**
-```python
-def get_visible_module_ids(user):
-    """
-    Returns None if user has unrestricted access (global admin/superuser).
-    Returns a list of allowed module IDs for scoped users.
-    Used to scope dashboard aggregates — do NOT use for reference data.
-    """
-    if user_is_global_admin(user):
-        return None  # unrestricted
-    return list(get_allowed_module_ids(user, VISIBILITY_ROLES))
-```
-
-**Then patch `emissions/views.py`:**
-```python
-# Add this helper near the top of emissions/views.py
-from accounts.rbac_utils import get_visible_module_ids
-
-def _scope_qs(user, qs, module_field='module_id'):
-    """Filter queryset to user's allowed modules. Pass-through for global admins."""
-    allowed = get_visible_module_ids(user)
-    if allowed is None:
-        return qs
-    return qs.filter(**{f'{module_field}__in': allowed})
-```
-
-**Apply `_scope_qs` to each view — find the exact view names first:**
-```bash
-grep -n "class.*View\|def get\|def list\|queryset" emissions/views.py | head -60
-```
-
-Apply to:
-- `DashboardAPIView` — the main dashboard summary
-- `YearlyComparisonAPIView` — year-over-year chart
-- `ReportAPIView` — the GHG report endpoint
-- `CalculationViewSet` — the calculations list
-
-**Verification test:**
-```bash
-# Get tokens
-GLOBAL_TOKEN=$(curl -s -X POST http://localhost:8009/carbon-api/token/ \
-  -H "Content-Type: application/json" \
-  -d '{"username":"global_admin","password":"GlobalAdmin_2026!"}' \
-  | python3 -c "import sys, json; print(json.load(sys.stdin)['access'])")
-
-FAC_TOKEN=$(curl -s -X POST http://localhost:8009/carbon-api/token/ \
-  -H "Content-Type: application/json" \
-  -d '{"username":"facilities.officer","password":"FacOfficer_2025"}' \
-  | python3 -c "import sys, json; print(json.load(sys.stdin)['access'])")
-
-# Compare dashboard totals — they MUST be different (or fac must be <= global)
-echo "=== GLOBAL ADMIN DASHBOARD ==="
-curl -s 'http://localhost:8009/carbon-api/emissions/dashboard/' \
-  -H "Authorization: Bearer $GLOBAL_TOKEN" | python3 -m json.tool | grep -i total
-
-echo "=== FACILITIES OFFICER DASHBOARD ==="
-curl -s 'http://localhost:8009/carbon-api/emissions/dashboard/' \
-  -H "Authorization: Bearer $FAC_TOKEN" | python3 -m json.tool | grep -i total
-```
-
-**Expected result:** The facilities officer sees ONLY their facility's numbers. If both return identical totals, the scoping is not applied.
-
-**Commit:**
-```bash
-git add backend/accounts/rbac_utils.py backend/emissions/views.py
-git commit -m "fix(emissions): apply org-scoped filtering to all dashboard aggregates
-
-- Add _scope_qs() helper applying get_visible_module_ids() to querysets
-- Patch DashboardAPIView, YearlyComparisonAPIView, ReportAPIView, CalculationViewSet
-- Global admins bypass filter (allowed=None)
-- Data-owners/stewards see only their org subtree's numbers
-- Fixes data leakage noted in DESIGN_ORG_ACCESS_MODEL.md §4.6"
-```
-
-**Record:**
-- Full output of both dashboard curl calls
-- Are the totals different? (Expected: YES)
-- Which views were patched?
-- Any errors?
-
----
-
-### Step 3: Backend — Add `/api/accounts/me/context/` Endpoint
-
-**Objective:** Give the frontend a single "context card" endpoint — who I am, what I can see, what my effective scope is.
-
-**Response shape:**
-```json
-{
-  "user": {
-    "id": 7,
-    "username": "facilities.officer",
-    "email": "fac@carbon.local",
-    "full_name": "Facilities Officer"
-  },
-  "roles": ["dataowners_group"],
-  "is_global_admin": false,
-  "perspectives": ["data_entry", "dashboards"],
-  "org_units": [
-    {"id": 5, "name": "Operations & Facilities", "type": "division"}
-  ],
-  "module_count": 3
-}
-```
-
-**Add to `accounts/views.py`:**
-```python
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from accounts.rbac_utils import (
-    user_is_global_admin, get_allowed_org_unit_ids, get_allowed_module_ids, VISIBILITY_ROLES
-)
-from mdm.models import OrgUnit
-from core.models import Module
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def me_context(request):
-    user = request.user
-    roles_qs = user.scoped_roles.filter(is_active=True).select_related('group', 'org_unit')
-    role_names = list(set(r.group.name for r in roles_qs))
-    is_global = user_is_global_admin(user)
-
-    # Determine which perspectives this user can see
-    perspectives = ['dashboards']
-    has_data_role = any(r in role_names for r in ['dataowners_group', 'auditors_group'])
-    has_admin_role = 'admins_group' in role_names
-    if has_data_role or has_admin_role:
-        perspectives.append('data_entry')
-    if has_admin_role:
-        perspectives.append('admin')
-
-    # Org units the user can see
-    if is_global:
-        org_units = list(OrgUnit.objects.values('id', 'name', 'org_type')[:20])
-    else:
-        allowed_ids = get_allowed_org_unit_ids(user, VISIBILITY_ROLES)
-        org_units = list(OrgUnit.objects.filter(id__in=allowed_ids).values('id', 'name', 'org_type'))
-
-    module_count = Module.objects.all().count() if is_global else \
-        len(get_allowed_module_ids(user, VISIBILITY_ROLES))
-
-    return Response({
-        'user': {
-            'id': user.id,
-            'username': user.username,
-            'email': user.email,
-            'full_name': f"{user.first_name} {user.last_name}".strip() or user.username,
-        },
-        'roles': role_names,
-        'is_global_admin': is_global,
-        'perspectives': perspectives,
-        'org_units': org_units,
-        'module_count': module_count,
-    })
-```
-
-**Add URL in `accounts/urls.py`:**
-```python
-path('me/context/', views.me_context, name='me-context'),
-```
-
-**Verify:**
-```bash
-FAC_TOKEN=<from step 2>
-curl -s 'http://localhost:8009/carbon-api/accounts/me/context/' \
-  -H "Authorization: Bearer $FAC_TOKEN" | python3 -m json.tool
-
-GLOBAL_TOKEN=<from step 2>
-curl -s 'http://localhost:8009/carbon-api/accounts/me/context/' \
-  -H "Authorization: Bearer $GLOBAL_TOKEN" | python3 -m json.tool
-```
-
-**Expected:**
-- Fac officer: `perspectives: ["dashboards", "data_entry"]`, `is_global_admin: false`
-- Global admin: `perspectives: ["dashboards", "data_entry", "admin"]`, `is_global_admin: true`
-
-**Commit:**
-```bash
-git add backend/accounts/views.py backend/accounts/urls.py
-git commit -m "feat(accounts): add /me/context/ endpoint for frontend perspective resolution"
-```
-
-**Record:**
-- Full curl output for both users
-- Are perspectives correct for each role?
-
----
-
-### Step 4: Frontend — Perspective Context in AuthContext
-
-**Objective:** Add `currentPerspective` state to `AuthContext` so all components can read it.
-
-**Read first:**
-```bash
-cat carbon-frontend/src/auth/AuthContext.jsx
-```
-
-**Add to `AuthContext.jsx`:**
+**Change 1: Remove feature flag check**
 ```javascript
-// Inside AuthContext, add:
-const [currentPerspective, setCurrentPerspective] = useState(() => {
-  return localStorage.getItem('carbon_perspective') || 'data_entry';
-});
+// BEFORE (around line 93)
+const useShellLayout = import.meta.env.VITE_USE_SHELL_LAYOUT === 'true';
+const RootLayout = useShellLayout ? Shell : Layout;
 
-const setPerspective = (perspective) => {
-  setCurrentPerspective(perspective);
-  localStorage.setItem('carbon_perspective', perspective);
-};
+// AFTER
+const useShellLayout = true; // Shell is now the default
+const RootLayout = useShellLayout ? Shell : Layout;
 
-// Add to context value:
-// currentPerspective, setPerspective, availablePerspectives (from /me/context/ response)
+// OR simplify to:
+const RootLayout = Shell; // Shell is now the only layout
 ```
 
-**Also add `availablePerspectives` from the `/me/context/` API call (if not already fetching that endpoint).**
+**Rationale:** The Shell layout is now stable (A5 completed). No need for feature flag.
 
-**Add to the context API file (`api/api.js` or similar):**
-```javascript
-export const fetchMeContext = () =>
-  api.get('/accounts/me/context/').then(r => r.data);
-```
-
-**Commit:**
+**Test:**
 ```bash
-git add carbon-frontend/src/auth/AuthContext.jsx carbon-frontend/src/api/
-git commit -m "feat(frontend): add perspective state to AuthContext"
+cd carbon-frontend
+npm run dev
+# Navigate to http://localhost:5173
+# Expected: Shell layout (ActivityBar on left, HeaderNew with perspective tabs)
 ```
 
-**Record:**
-- What was already in AuthContext? (paste the key parts)
-- Did you need to add `availablePerspectives` or was it already there?
+**Checkpoint:** ✅ Shell layout renders without setting `VITE_USE_SHELL_LAYOUT=true`
 
 ---
 
-### Step 5: Frontend — Perspective Switcher in Header
+### Step 3: Fix Studio Default Path
 
-**Objective:** Add perspective tabs to the Header — visible only to users who have multiple perspectives.
+**Objective:** Change dataschema studio default path from invalid `/dataschema/entry` to `/dataschema`
 
-**Read first:**
-```bash
-cat carbon-frontend/src/components/Header.jsx
+**File:** `carbon-frontend/src/shell/useShellState.js`
+
+**Change: Update dataschema studio path**
+```javascript
+// BEFORE (around line 27)
+{ 
+  id: 'dataschema', 
+  label: 'Data Hub', 
+  icon: StorageIcon, 
+  path: '/dataschema/entry'  // ❌ Invalid (missing moduleId/tableId)
+},
+
+// AFTER
+{ 
+  id: 'dataschema', 
+  label: 'Data Hub', 
+  icon: StorageIcon, 
+  path: '/dataschema'  // ✅ Valid (will create this route)
+},
 ```
 
-**Target UI (simplified — adapt to the existing MUI theme in the project):**
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ 🌿 AASTMT Carbon │  [Data Entry]  [Dashboards]  [Admin ▾]        │  👤 Ahmed ▼
-└──────────────────────────────────────────────────────────────────┘
-```
+**Rationale:** `/dataschema/entry` requires `:moduleId/:tableId` params. The studio icon should navigate to a landing page, not directly to data entry.
 
-**Implementation approach in Header.jsx:**
-```jsx
+**Checkpoint:** ✅ Studio definition updated (don't test yet, route doesn't exist)
+
+---
+
+### Step 4: Hide Admin Studio for Non-Admins
+
+**Objective:** Filter studios based on user's available perspectives
+
+**File:** `carbon-frontend/src/shell/useShellState.js`
+
+**Change: Filter studios by role**
+```javascript
+// ADD IMPORT at top
 import { useAuth } from '../auth/AuthContext';
-import { Tabs, Tab } from '@mui/material';
 
-// Inside Header component:
-const { currentPerspective, setPerspective, availablePerspectives } = useAuth();
+// MODIFY useShellState function (around line 71)
+export function useShellState() {
+  const { availablePerspectives } = useAuth(); // ADD THIS
+  
+  // CHANGE: Filter studios based on user perspective
+  const studios = useMemo(() => {
+    let filtered = DEFAULT_STUDIOS;
+    
+    // Hide admin studio if user doesn't have admin perspective
+    if (!availablePerspectives?.includes('admin')) {
+      filtered = filtered.filter(s => s.id !== 'admin');
+    }
+    
+    return filtered;
+  }, [availablePerspectives]); // CHANGE from useState to useMemo
+  
+  const [activeStudio, setActiveStudio] = useState('home');
+  // ... rest of state unchanged
+```
 
-// Only show switcher if user has more than one perspective
-const showSwitcher = availablePerspectives?.length > 1;
+**Rationale:** Non-admin users clicking admin icon get redirected with "Access Denied". Better UX: don't show the icon at all.
 
-// Tab labels
-const PERSPECTIVE_LABELS = {
-  data_entry: 'Data Entry',
-  dashboards: 'Dashboards',
-  admin: 'Admin',
+**Test After Frontend Restart:**
+1. Login as `fac_officer` (non-admin)
+2. Check ActivityBar — admin icon should NOT appear
+3. Login as `global_admin` (admin)
+4. Check ActivityBar — admin icon SHOULD appear
+
+**Checkpoint:** ✅ Admin studio conditionally rendered
+
+---
+
+### Step 5: Fix Data Entry Sidebar Link
+
+**Objective:** Change "Data Entry" link from `/dataschema/entry` to `/dataschema`
+
+**File:** `carbon-frontend/src/shell/ShellSidebar.jsx`
+
+**Change: Update dataschema sidebar items**
+```javascript
+// FIND (around line 34)
+case 'dataschema':
+  return [
+    { label: 'Data Entry', path: '/dataschema/entry', icon: AddCircleOutlineIcon },
+    { label: 'Table Manager', path: '/schema-admin/table-manager', icon: TableChartIcon },
+    { label: 'Data Quality', path: '/dashboards/data-quality', icon: RuleIcon },
+  ];
+
+// REPLACE WITH
+case 'dataschema':
+  return [
+    { label: 'Data Entry', path: '/dataschema', icon: AddCircleOutlineIcon },
+    { label: 'Table Manager', path: '/schema-admin/table-manager', icon: TableChartIcon },
+    { label: 'Data Quality', path: '/dashboards/data-quality', icon: RuleIcon },
+  ];
+```
+
+**Rationale:** Same reason as Step 3 — `/dataschema/entry` is invalid.
+
+**Checkpoint:** ✅ Sidebar link updated (don't test yet, route doesn't exist)
+
+---
+
+### Step 6: Create Data Hub Home Page
+
+**Objective:** Build module browser landing page with auto-redirect logic
+
+**File:** `carbon-frontend/src/pages/DataHubHome.jsx` (NEW FILE)
+
+**Implementation:**
+```javascript
+// File: carbon-frontend/src/pages/DataHubHome.jsx
+import React, { useEffect } from 'react';
+import { Box, Typography, Card, CardContent, Grid, Button, Chip } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+import StorageIcon from '@mui/icons-material/Storage';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+
+const SCOPE_COLORS = {
+  1: { bg: '#e8f5e9', color: '#2e7d32', label: 'Scope 1' },
+  2: { bg: '#e3f2fd', color: '#1565c0', label: 'Scope 2' },
+  3: { bg: '#fff3e0', color: '#e65100', label: 'Scope 3' },
 };
 
-// Render tabs:
-{showSwitcher && (
-  <Tabs
-    value={currentPerspective}
-    onChange={(_, val) => setPerspective(val)}
-    sx={{ /* match existing header style */ }}
-  >
-    {availablePerspectives.map(p => (
-      <Tab key={p} value={p} label={PERSPECTIVE_LABELS[p]} />
-    ))}
-  </Tabs>
-)}
-```
-
-**Commit:**
-```bash
-git add carbon-frontend/src/components/Header.jsx
-git commit -m "feat(frontend): add perspective switcher to Header
-
-- Tabs visible only for users with multiple perspectives
-- Data Entry | Dashboards | Admin (Admin tab gated to admins_group)
-- Persisted in localStorage via AuthContext"
-```
-
-**Record:**
-- Before/after screenshot description (or text description of what changed)
-- Is the Admin tab correctly hidden for data-only users?
-
----
-
-### Step 6: Frontend — Refactor SidebarMenu by Perspective
-
-**Objective:** The sidebar renders completely different content based on `currentPerspective`.
-
-**Read first:**
-```bash
-cat carbon-frontend/src/components/SidebarMenu.jsx
-```
-
-**Refactor approach — split into perspective-driven rendering:**
-
-```jsx
-// SidebarMenu.jsx — simplified structure
-export default function SidebarMenu({ collapsed }) {
-  const { currentPerspective, canSchemaAdmin } = useAuth();
-
-  if (currentPerspective === 'admin') {
-    return <AdminSidebar collapsed={collapsed} />;
-  }
-  if (currentPerspective === 'dashboards') {
-    return <DashboardSidebar collapsed={collapsed} />;
-  }
-  // Default: data_entry
-  return <DataEntrySidebar collapsed={collapsed} />;
-}
-```
-
-**`DataEntrySidebar` — lean operator view:**
-```
-📊 My Dashboard (→ /dashboard)
-─────────
-🌿 Scope 1 — Direct Emissions
-   └── [Module: Fleet Fuel]
-       └── Gas Bills
-🔵 Scope 2 — Energy
-   └── [Module: Electricity]
-       └── Monthly Bills
-🚛 Scope 3 — Value Chain
-   (empty for this user → show empty state)
-─────────
-❓ Help
-💬 Feedback
-```
-- NO Schema Manager section
-- NO Admin section  
-- Modules come from the server (already org-scoped via `context.modules`)
-
-**`AdminSidebar` — organized admin view:**
-```
-🏛️ Organization
-   └── Org Units (→ /admin/org-units)
-   └── Users (→ /admin/users)
-   └── Access Control (→ /admin/access)
-─────────
-🗄️ Schema Management
-   └── Table Manager (→ /schema-admin/table-manager)
-─────────
-📊 Dashboards
-   └── Executive Summary
-   └── Analytics
-   └── Targets
-   └── Data Quality
-   └── Reporting
-─────────
-⚙️ Help / Feedback
-```
-
-**`DashboardSidebar` — all 5 dashboard views:**
-```
-📊 Executive Summary (→ /dashboards/executive)
-📈 Analytics (→ /dashboards/analytics)
-🎯 Targets & Progress (→ /dashboards/targets)
-✅ Data Quality (→ /dashboards/data-quality)
-📄 Reporting (→ /dashboards/reporting)
-─────────
-❓ Help
-💬 Feedback
-```
-
-**IMPORTANT:** Keep the `AdminRoute` protection on admin pages — the sidebar change is purely visual. Server-side and `AdminRoute` still enforce access.
-
-**Commit:**
-```bash
-git add carbon-frontend/src/components/SidebarMenu.jsx
-git commit -m "refactor(frontend): perspective-driven sidebar (data-entry / admin / dashboards)
-
-- DataEntrySidebar: lean view with only user's scoped modules/tables
-- AdminSidebar: organized sections (Org / Schema / Dashboards / Help)
-- DashboardSidebar: all 5 dashboard views
-- No admin UI visible in data-entry perspective
-- AdminRoute protection unchanged (server still enforces)"
-```
-
-**Record:**
-- Did the sidebar correctly hide admin links for the data-entry perspective?
-- Did admin sidebar show organized sections?
-- Any errors in the console?
-
----
-
-### Step 7: Frontend — Role-Aware Landing Page
-
-**Objective:** On login/first load, redirect users to the right place for their role.
-
-**Current behavior:** Everyone lands at `/` → `ExecutiveSummary`.
-
-**Target behavior:**
-- Data-only users (no admin role) → redirect to their first module (`/modules/:id`) or data entry page
-- Admin users → stay at `/` (Executive Summary is fine for admins)
-- Users with no modules assigned → show a helpful empty state
-
-**In `App.jsx` or `AuthContext`, add redirect logic:**
-```jsx
-// After login / on first load:
-function RoleAwareRedirect() {
-  const { user, availablePerspectives, context } = useAuth();
+export default function DataHubHome() {
+  const navigate = useNavigate();
+  const { context, availablePerspectives, tablesByModule } = useAuth();
   
-  const isAdminOnly = availablePerspectives?.includes('admin') && 
-                      !availablePerspectives?.includes('data_entry');
-  const isDataOnly = !availablePerspectives?.includes('admin');
+  const modules = context?.modules || [];
+  const isAdmin = availablePerspectives?.includes('admin');
   
-  if (isDataOnly) {
-    // Redirect to first module
-    const firstModule = context?.modules?.[0];
-    if (firstModule) {
-      return <Navigate to={`/modules/${firstModule.id}`} replace />;
+  // Auto-redirect: single-module users go straight to their module
+  useEffect(() => {
+    if (modules.length === 1 && !isAdmin) {
+      navigate(`/modules/${modules[0].id}`, { replace: true });
     }
-    // No modules — show empty state
-    return <NoModulesAssigned />;
+  }, [modules, isAdmin, navigate]);
+  
+  // Don't render module browser if auto-redirecting
+  if (modules.length === 1 && !isAdmin) {
+    return (
+      <Box p={3} textAlign="center">
+        <Typography>Loading your module...</Typography>
+      </Box>
+    );
   }
   
-  // Admin or mixed: go to dashboard
-  return <Navigate to="/dashboard" replace />;
-}
-```
-
-**Also add a simple `NoModulesAssigned` component:**
-```jsx
-function NoModulesAssigned() {
   return (
-    <Box sx={{ p: 4, textAlign: 'center' }}>
-      <Typography variant="h6" gutterBottom>No data modules assigned</Typography>
-      <Typography color="text.secondary">
-        Contact your administrator to get access to data entry modules.
-      </Typography>
+    <Box p={3}>
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            Data Hub
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Select a module to enter or view data
+          </Typography>
+        </Box>
+        
+        {isAdmin && (
+          <Button
+            variant="contained"
+            startIcon={<AdminPanelSettingsIcon />}
+            onClick={() => navigate('/schema-admin/table-manager')}
+          >
+            Manage All Tables
+          </Button>
+        )}
+      </Box>
+      
+      {modules.length === 0 && (
+        <Box textAlign="center" py={8}>
+          <StorageIcon sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" color="text.secondary">
+            No Data Modules Assigned
+          </Typography>
+          <Typography variant="body2" color="text.disabled" mt={1}>
+            Contact your administrator to get access to data entry modules.
+          </Typography>
+        </Box>
+      )}
+      
+      <Grid container spacing={2}>
+        {modules.map(module => {
+          const scope = module.scope || 1;
+          const scopeStyle = SCOPE_COLORS[scope] || SCOPE_COLORS[1];
+          const tableCount = (tablesByModule?.[String(module.id)] || []).length;
+          
+          return (
+            <Grid item xs={12} sm={6} md={4} key={module.id}>
+              <Card
+                variant="outlined"
+                sx={{
+                  cursor: 'pointer',
+                  height: '100%',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    boxShadow: 3,
+                    borderColor: 'primary.main',
+                    transform: 'translateY(-2px)',
+                  },
+                }}
+                onClick={() => navigate(`/modules/${module.id}`)}
+              >
+                <CardContent>
+                  <Box display="flex" alignItems="center" gap={1} mb={2}>
+                    <StorageIcon color="primary" />
+                    <Typography variant="h6" fontWeight={600}>
+                      {module.name}
+                    </Typography>
+                  </Box>
+                  
+                  <Typography variant="body2" color="text.secondary" mb={2} minHeight={40}>
+                    {module.description || 'No description'}
+                  </Typography>
+                  
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <Chip
+                      label={scopeStyle.label}
+                      size="small"
+                      sx={{
+                        bgcolor: scopeStyle.bg,
+                        color: scopeStyle.color,
+                        fontWeight: 600,
+                      }}
+                    />
+                    <Typography variant="caption" color="text.secondary">
+                      {tableCount} {tableCount === 1 ? 'table' : 'tables'}
+                    </Typography>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          );
+        })}
+      </Grid>
     </Box>
   );
 }
 ```
 
-**Commit:**
+**Rationale:**
+- Multi-module users see grid of modules
+- Single-module users auto-redirect to their module
+- Admin users see "Manage All Tables" button
+- Shows table count per module
+- Scope badges for visual hierarchy
+- Empty state for users with no modules
+
+**Checkpoint:** ✅ DataHubHome.jsx created
+
+---
+
+### Step 7: Add Data Hub Home Route
+
+**Objective:** Wire up `/dataschema` route to render DataHubHome
+
+**File:** `carbon-frontend/src/App.jsx`
+
+**Change: Add route**
+```javascript
+// FIND the imports section (around line 1-23)
+import DataEntryPage from "./pages/DataEntryPage";
+// ADD AFTER DataEntryPage import:
+import DataHubHome from "./pages/DataHubHome";
+
+// FIND the routes section (around line 100-165)
+// ADD AFTER the dashboards routes (around line 115):
+                
+                {/* Data Hub */}
+                <Route path="/dataschema" element={<DataHubHome />} />
+                
+                {/* Emissions Calculator Routes */}
+                <Route path="/emissions" element={<EmissionsDashboard />} />
+```
+
+**Rationale:** Users clicking "Data Entry" or Data Hub studio icon now have a valid destination.
+
+**Test:**
 ```bash
+# Frontend should already be running from earlier steps
+# Navigate to http://localhost:5173/dataschema
+# Expected: Module browser (if multi-module) or redirect (if single-module)
+```
+
+**Checkpoint:** ✅ Route added, DataHubHome renders
+
+---
+
+### Step 8: Build & Integration Test
+
+**Objective:** Verify all navigation works, no 404s, role gates work
+
+**Test Scenario 1: Data-Owner (Single Module)**
+```bash
+# 1. Login as fac_officer (Facilities module only)
+# Username: fac_officer
+# Password: DataOwner_2026!
+
+# 2. Check landing
+# Expected: Auto-redirect to /modules/{facilities_id} (shows table grid)
+
+# 3. Click Data Hub studio icon (3rd icon in ActivityBar)
+# Expected: Navigate to /dataschema, then auto-redirect to /modules/{facilities_id}
+
+# 4. Click "Data Entry" in sidebar
+# Expected: Navigate to /dataschema, then auto-redirect to /modules/{facilities_id}
+
+# 5. Check admin studio NOT visible
+# Expected: Admin icon does NOT appear in ActivityBar
+
+# 6. Click a table card
+# Expected: Navigate to /dataschema/entry/{moduleId}/{tableId} (data entry grid)
+```
+
+**Test Scenario 2: Admin (Multi-Module)**
+```bash
+# 1. Login as global_admin
+# Username: global_admin
+# Password: GlobalAdmin_2026!
+
+# 2. Check landing
+# Expected: /dashboard (executive summary)
+
+# 3. Click Data Hub studio icon
+# Expected: Navigate to /dataschema (module browser shows all modules)
+
+# 4. Verify "Manage All Tables" button visible
+# Expected: Button appears in top-right
+
+# 5. Click "Manage All Tables"
+# Expected: Navigate to /schema-admin/table-manager
+
+# 6. Check admin studio IS visible
+# Expected: Admin icon appears in ActivityBar (4th icon)
+
+# 7. Click a module card
+# Expected: Navigate to /modules/{moduleId} (table grid)
+```
+
+**Test Scenario 3: Data-Owner (No Modules)**
+```bash
+# 1. Create test user with no module assignments
+# OR use existing user with no roles
+
+# 2. Login
+# Expected: Login succeeds
+
+# 3. Navigate to /dataschema
+# Expected: See "No Data Modules Assigned" empty state
+
+# 4. Check admin studio NOT visible
+# Expected: Admin icon does NOT appear
+```
+
+**Test Scenario 4: Navigation Sanity**
+```bash
+# As any logged-in user:
+
+# 1. Click Data Entry in sidebar
+# Expected: No 404, valid page loads
+
+# 2. Click Data Hub studio icon
+# Expected: No 404, valid page loads
+
+# 3. Click Table Manager in sidebar (admin only)
+# Expected: Admin sees it, navigates successfully
+# Expected: Non-admin does NOT see it in sidebar
+
+# 4. Check browser console
+# Expected: No errors (warnings about Pulse are OK)
+```
+
+**Acceptance Criteria (ALL must pass):**
+- ✅ Zero 404 errors in Data Hub navigation
+- ✅ Single-module users auto-redirect to their module
+- ✅ Multi-module users see module browser
+- ✅ Admin users see "Manage All Tables" button
+- ✅ Non-admin users do NOT see admin studio icon
+- ✅ All sidebar links work (Data Entry, Data Quality, Table Manager for admins)
+- ✅ Module cards navigate to `/modules/{moduleId}`
+- ✅ Table cards navigate to `/dataschema/entry/{moduleId}/{tableId}`
+- ✅ No console errors (Pulse warnings OK)
+
+**If any test fails:** Debug, fix, re-test before proceeding.
+
+---
+
+### Step 9: Git Commit
+
+**Objective:** Commit all changes with clear message
+
+```bash
+# Stage all modified files
 git add carbon-frontend/src/App.jsx
-git commit -m "feat(frontend): role-aware landing page redirect on login
+git add carbon-frontend/src/shell/useShellState.js
+git add carbon-frontend/src/shell/ShellSidebar.jsx
+git add carbon-frontend/src/pages/DataHubHome.jsx
 
-- Data-only users → first assigned module (or NoModulesAssigned empty state)
-- Admin users → Executive Summary dashboard
-- NoModulesAssigned component for users with no module access"
+# Commit
+git commit -m "feat(A6): complete Data Hub navigation and module browser
+
+- Enable Shell layout by default (remove feature flag)
+- Fix Data Entry dead route: /dataschema/entry → /dataschema
+- Hide admin studio icon for non-admin users
+- Create DataHubHome module browser with auto-redirect
+- Update sidebar Data Entry link to /dataschema
+- Add /dataschema route to App.jsx
+
+All user journeys tested:
+- Single-module data-owners: auto-redirect ✅
+- Multi-module users: module browser ✅
+- Admin: module browser + Manage All Tables ✅
+- Role-based studio visibility ✅
+
+Resolves: #A6 Data Hub Completion"
+
+# Verify commit
+git log -1 --stat
 ```
 
-**Record:**
-- Did data-owner user land on their module page?
-- Did admin user land on the dashboard?
-- What happens for a user with no modules?
+**Checkpoint:** ✅ Changes committed
 
 ---
 
-### Step 8: Frontend — Scope Banner in Layout
+### Step 10: Update RUN_LOG and Create TASK-RESULT
 
-**Objective:** Show data-owners clearly which org unit scope they are operating in.
+**Objective:** Document completion of RUN A6
 
-**Read first:**
-```bash
-cat carbon-frontend/src/components/Layout.jsx
-```
+**File 1:** `docs/RUN_LOG.md`
 
-**Add to Layout.jsx (inside the main content area, at the top, only for non-admin users):**
-```jsx
-const { user, availablePerspectives, currentPerspective } = useAuth();
-const isAdmin = availablePerspectives?.includes('admin');
-const userOrgUnit = user?.roles?.find(r => r.org_unit)?.org_unit_name;
-
-// In the render, above the <Outlet />:
-{!isAdmin && userOrgUnit && currentPerspective === 'data_entry' && (
-  <Alert
-    severity="info"
-    icon={<LocationOnIcon />}
-    sx={{ mb: 2, borderRadius: 1 }}
-  >
-    You are viewing: <strong>{userOrgUnit}</strong>
-  </Alert>
-)}
-```
-
-If the org unit name is not in the user roles, use the `/me/context/` response's `org_units[0].name`.
-
-**Commit:**
-```bash
-git add carbon-frontend/src/components/Layout.jsx
-git commit -m "feat(frontend): scope banner showing user's org unit in data-entry perspective"
-```
-
-**Record:**
-- Does the banner appear for data-owner users?
-- Is it correctly hidden for admin users?
-- What text does it show?
-
----
-
-### Step 9: Build & Integration Test
-
-**Objective:** Verify the full flow works end-to-end.
-
-```bash
-cd /home/ahmed/aast/carbon/carbon-frontend
-
-# 9.1 Build the frontend
-npm run build
-
-# 9.2 Check for build errors
-echo $?  # Should be 0
-
-# 9.3 Start dev server (keep running in background if needed)
-npm run dev &
-sleep 3
-
-# 9.4 Check backend still boots
-cd /home/ahmed/aast/carbon/backend
-python manage.py check
-```
-
-**Manual test checklist (paste results):**
-
-**Test A — Data Owner Flow:**
-1. Login as `facilities.officer`
-2. ✅/❌ Perspective tabs visible? (should show: Data Entry | Dashboards)
-3. ✅/❌ Admin tab visible? (should NOT appear)
-4. ✅/❌ Sidebar shows only their modules (no Schema Manager, no Admin section)?
-5. ✅/❌ Dashboard numbers are scoped (lower than global admin's total)?
-6. ✅/❌ Scope banner shows "You are viewing: Operations & Facilities"?
-7. ✅/❌ Can enter data in their tables?
-8. ✅/❌ Cannot navigate to `/admin/org-units` (redirect away)?
-
-**Test B — Global Admin Flow:**
-1. Login as `global_admin`
-2. ✅/❌ Perspective tabs visible? (should show: Data Entry | Dashboards | Admin)
-3. ✅/❌ Can switch to Admin perspective?
-4. ✅/❌ Admin sidebar shows: Org / Schema / Dashboards sections?
-5. ✅/❌ Dashboard numbers show full AASTMT total?
-6. ✅/❌ No scope banner (admins see all)?
-7. ✅/❌ Can access `/admin/org-units`, `/admin/users`, `/admin/access`?
-8. ✅/❌ Can access `/schema-admin/table-manager`?
-
-**Test C — Cross-scope protection (backend):**
-```bash
-# Facilities officer cannot see transport data (server enforces)
-FAC_TOKEN=<token>
-curl -s 'http://localhost:8009/carbon-api/dataschema/rows/?data_table=<transport_table_id>' \
-  -H "Authorization: Bearer $FAC_TOKEN" | python3 -m json.tool
-# Expected: empty results or 403
-```
-
-**Commit:**
-```bash
-git add -A
-git commit -m "chore(A5): final integration test — perspectives architecture complete"
-```
-
----
-
-### Step 10: Final Checks
-
-```bash
-cd /home/ahmed/aast/carbon
-
-# 10.1 Backend check
-cd backend && python manage.py check
-
-# 10.2 Frontend build
-cd ../carbon-frontend && npm run build && echo "BUILD OK"
-
-# 10.3 Git status
-cd .. && git status
-
-# 10.4 Git log
-git log --oneline -15
-```
-
-**Record:**
-- `manage.py check` output
-- Build result
-- `git status`
-- Full commit list for A5
-
----
-
-## 8. ACCEPTANCE CRITERIA
-
-| # | Criterion | Pass Threshold | Status | Evidence Ref |
-|---|-----------|----------------|--------|--------------|
-| AC1 | Dashboard data scoping fixed | Data-owner's dashboard total ≠ global admin's total (or is a strict subset) | | Step 2 |
-| AC2 | `/me/context/` endpoint works | Returns correct perspectives array per role | | Step 3 |
-| AC3 | Perspective context in AuthContext | `currentPerspective` state exists, persists in localStorage | | Step 4 |
-| AC4 | Perspective switcher visible for admin users | Admin tab appears when user has `admins_group` role | | Step 5 |
-| AC5 | Perspective switcher hidden for data-only users | No Admin tab for users with only `dataowners_group` | | Step 5, 9 |
-| AC6 | Data Entry sidebar is lean | No Schema Manager or Admin links visible in data-entry perspective | | Step 6, 9 |
-| AC7 | Admin sidebar has organized sections | Org / Schema / Dashboards sections visible in admin perspective | | Step 6, 9 |
-| AC8 | Role-aware landing page | Data-owner lands on their first module; admin lands on dashboard | | Step 7 |
-| AC9 | Scope banner shows org unit | "You are viewing: [OrgUnit]" banner for data-owners in data-entry mode | | Step 8 |
-| AC10 | Admin routes still protected | `/admin/*` and `/schema-admin/*` still redirect non-admins | | Step 9 |
-| AC11 | Frontend builds clean | `npm run build` exits 0 with no errors | | Step 9 |
-| AC12 | Backend boots clean | `python manage.py check` exits 0 | | Step 10 |
-
-**Worker: fill the "Status" column with PASS/FAIL and reference the step where evidence is found.**
-
----
-
-## 9. DELIVERABLE FORMAT
-
-**File:** `TASK-RESULT-A5.md`
-
-**Required structure:**
-
+**Change: Update A6 status**
 ```markdown
-# TASK-RESULT-A5.md — RUN A5: Role-Adaptive UI (Perspectives Architecture)
+// FIND (around line 15)
+| A6 | Deployment-readiness gate | ops | ⏳ PENDING | — | — |
+
+// REPLACE WITH
+| A6 | Data Hub Completion | frontend+UX | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A6.md` (root) |
+```
+
+**Then ADD new section before "## Archive":**
+```markdown
+### A6: Data Hub End-to-End Completion (2026-07-18) ✅
+**Objective:** Fix Data Hub navigation and create complete user journey  
+**Actions:**
+- Enabled Shell layout by default (removed VITE_USE_SHELL_LAYOUT feature flag)
+- Fixed Data Entry dead route: /dataschema/entry → /dataschema
+- Created DataHubHome module browser with auto-redirect for single-module users
+- Hidden admin studio icon for non-admin users (role-based filtering)
+- Updated sidebar Data Entry link to /dataschema
+
+**Key Metrics:**
+- 1 file created: DataHubHome.jsx
+- 3 files modified: App.jsx, useShellState.js, ShellSidebar.jsx
+- Zero 404 errors in Data Hub navigation
+- 4/4 user journey test scenarios PASSED
+
+**Key Findings:**
+- ✅ Shell layout now enabled by default (stable, no feature flag needed)
+- ✅ Module browser works for multi-module users
+- ✅ Single-module users auto-redirect to their module (cleaner UX)
+- ✅ Admin studio hidden for non-admins (no more "Access Denied" clicks)
+- ✅ All Data Hub routes valid (no dead links)
+
+**Result:** See `TASK-RESULT-A6.md` (root) for full report
+```
+
+**File 2:** `TASK-RESULT-A6.md` (NEW FILE in root)
+
+Create detailed result document following A5 format:
+- Summary of what was built
+- What changed vs what was already complete
+- Step-by-step execution log
+- Test results (all 4 scenarios)
+- Acceptance criteria checklist (all PASS)
+- Known gaps (if any)
+- Commit hash and file changes
+- Screenshots or curl outputs if helpful
+
+**Template Structure:**
+```markdown
+# TASK-RESULT-A6.md — RUN A6: Data Hub End-to-End Completion
+
+**Date:** 2026-07-18
+**Worker:** Raptor (Code Mode)
+**Master:** Planner
+**Task:** [`TASK.md`](TASK.md) RUN A6
+
+---
 
 ## Summary
-[One paragraph: what was built, what changed, what was fixed]
 
-## Critical Fix: Dashboard Data Scoping
-[What was the leak? How was it fixed? Proof (curl output showing different totals)]
+**What was built:** Complete Data Hub navigation with module browser landing page...
 
-## Step 1: Code Review
-[What did you find in the existing code?]
+**What changed:**
+- Created DataHubHome.jsx module browser
+- Enabled Shell layout by default
+- ...
 
-## Step 2: Backend — Dashboard Scoping Fix
-[Commands + full output + verification curl showing different numbers]
+**What was already complete:**
+- Backend DataTable/DataField/DataRow APIs
+- ModuleLandingPage (table grid per module)
+- ...
 
-## Step 3: Backend — /me/context/ Endpoint
-[Commands + curl output for both user types]
+---
 
-## Step 4: Frontend — Perspective Context
-[What was added to AuthContext]
+## Step 1: Read Current Code
+[Execution log...]
 
-## Step 5: Frontend — Perspective Switcher in Header
-[What changed in Header.jsx]
+## Step 2: Enable Shell Layout by Default
+[What was changed, why, test result...]
 
-## Step 6: Frontend — Sidebar Refactor
-[What changed in SidebarMenu.jsx + description of each perspective's sidebar]
+[Continue for all steps...]
 
-## Step 7: Frontend — Role-Aware Landing
-[What was added to App.jsx]
+---
 
-## Step 8: Frontend — Scope Banner
-[What was added to Layout.jsx]
+## Test Results
 
-## Step 9: Build & Integration Test
-[Build result + manual test checklist with ✅/❌ for each item]
+### Test Scenario 1: Data-Owner (Single Module)
+✅ PASS - Auto-redirect works...
 
-## Step 10: Final Checks
-[manage.py check output, build result, git status]
+[Continue for all scenarios...]
 
-## Acceptance Criteria Table
-[Copy AC table from TASK.md, fill Status column]
+---
 
-## Git Commit Summary
-[All commits with hashes and messages]
+## Acceptance Criteria
 
-## Gaps / Known Issues
-[List anything that was not implemented and why, or "None"]
+| Criterion | Status | Evidence |
+|-----------|--------|----------|
+| Zero 404 errors in Data Hub | ✅ PASS | All routes tested |
+| ... | ... | ... |
+
+---
+
+## Files Changed
+
+**Created:**
+- carbon-frontend/src/pages/DataHubHome.jsx (+123 lines)
+
+**Modified:**
+- carbon-frontend/src/App.jsx (+4/-2 lines)
+- carbon-frontend/src/shell/useShellState.js (+12/-3 lines)
+- carbon-frontend/src/shell/ShellSidebar.jsx (+1/-1 lines)
+
+**Total:** 1 file created, 3 files modified, +140/-6 lines
+
+---
+
+## Git Commit
+
+Commit: [hash]
+Message: feat(A6): complete Data Hub navigation and module browser
+Files: 4 changed
+
+---
+
+## Gaps / Future Work
+
+1. **Bulk Import UI** - Backend may support, frontend not built (marked optional)
+2. **Recent Tables Widget** - Could add localStorage tracking for "Continue where you left off"
+3. **Module Search** - If users have 10+ modules, add search bar
+4. **Favorites** - Allow users to star frequently used modules/tables
+
+---
 
 ## Definition of Done Status
-[Explicit: "DoD met" or "DoD not met because..."]
+
+✅ All implementation steps completed
+✅ All test scenarios passed
+✅ Git commit created
+✅ RUN_LOG updated
+✅ TASK-RESULT created
+✅ No regressions (existing features still work)
+✅ Documentation complete
 ```
 
----
-
-## 10. DEFINITION OF DONE
-
-- All 12 acceptance criteria filled with PASS (or documented N/A with reason)
-- Dashboard data scoping fixed — verified by curl showing different numbers per role (AC1 PASS)
-- `/me/context/` endpoint works for both data-owner and global admin (AC2 PASS)
-- Perspective switcher works in header — Admin tab gated to `admins_group` (AC4/AC5 PASS)
-- Sidebar shows correct content per perspective (AC6/AC7 PASS)
-- Role-aware landing page works (AC8 PASS)
-- Frontend builds clean — `npm run build` exits 0 (AC11 PASS)
-- Backend boots clean — `manage.py check` exits 0 (AC12 PASS)
-- `TASK-RESULT-A5.md` returned with all required sections
-- **Gate:** A5 completion unblocks A6 (Deployment-readiness gate)
+**Checkpoint:** ✅ Documentation complete
 
 ---
 
-## 11. ESCALATION
+## 7. ACCEPTANCE CRITERIA
 
-**If blocked:**
-1. Stop the blocked step immediately
-2. Mark it `BLOCKED: <specific reason>` in the result
-3. Continue with remaining independent steps
-4. Summarize all blockers at the top of `TASK-RESULT-A5.md`
-5. Never guess, assume, or fabricate test results
+Must ALL be ✅ PASS to consider RUN A6 complete:
 
-**Priority order if time-constrained:** Step 2 (data leak fix) > Step 6 (sidebar refactor) > Step 5 (perspective switcher) > Steps 7–8 (landing/banner)
-
-**If `get_visible_module_ids` doesn't exist:** Create it in `rbac_utils.py` using the existing `get_allowed_module_ids` helper. Do NOT create a separate implementation — use what's already there.
-
-**If `availablePerspectives` is not in AuthContext:** Fetch it from `/me/context/` on login and store in context state.
-
-**If the build fails:** Paste the full error output. Do NOT force-push or skip build verification.
-
----
-
-## 12. REFERENCE
-
-- **Design decision:** `docs/DESIGN_UI_ARCHITECTURE_A5.md`
-- **Org access model:** `docs/DESIGN_ORG_ACCESS_MODEL.md` (§4.6 = dashboard scoping, §5 = portal strategy)
-- **Strategy:** `docs/STRATEGY_DATA_TRUST_PLATFORM.md`
-- **Auth context:** `carbon-frontend/src/auth/AuthContext.jsx`
-- **Current sidebar:** `carbon-frontend/src/components/SidebarMenu.jsx`
-- **Emissions views:** `backend/emissions/views.py`
-- **RBAC utils:** `backend/accounts/rbac_utils.py`
+1. ✅ Shell layout enabled by default (no feature flag check)
+2. ✅ `/dataschema` route exists and renders DataHubHome
+3. ✅ Single-module users auto-redirect to `/modules/{moduleId}`
+4. ✅ Multi-module users see module browser grid
+5. ✅ Admin users see "Manage All Tables" button on DataHubHome
+6. ✅ Admin studio icon hidden for non-admin users
+7. ✅ Admin studio icon visible for admin users
+8. ✅ "Data Entry" sidebar link navigates to `/dataschema` (no 404)
+9. ✅ Data Hub studio icon navigates to `/dataschema` (no 404)
+10. ✅ Module cards navigate to `/modules/{moduleId}`
+11. ✅ All 4 test scenarios PASS (see Step 8)
+12. ✅ No console errors (Pulse warnings OK)
+13. ✅ Git commit created with all changes
+14. ✅ RUN_LOG updated with A6 completion
+15. ✅ TASK-RESULT-A6.md created with full report
 
 ---
 
-**END OF TASK.md — RUN A5**
+## 8. DELIVERABLE FORMAT
 
-**Worker (Raptor):** This is a combined backend + frontend RUN. Start with Step 2 (the data scoping fix) — that's the most important change and it's pure backend. Then work through the frontend perspectives. Read `docs/DESIGN_UI_ARCHITECTURE_A5.md` before writing any code — the architectural decision is fully documented there. Good luck.
+**Primary Deliverable:** `TASK-RESULT-A6.md` in project root
+
+**Required Sections:**
+1. Summary (what was built, what changed)
+2. Execution log (all 10 steps with results)
+3. Test results (4 scenarios, all PASS)
+4. Acceptance criteria checklist (15 items, all PASS)
+5. Files changed (list + line counts)
+6. Git commit hash
+7. Known gaps / future work
+8. Definition of Done status
+
+**Success Signal:** All acceptance criteria ✅ PASS, zero 404 errors in Data Hub
+
+---
+
+## 9. DEFINITION OF DONE
+
+**RUN A6 is complete when:**
+
+- [x] All 10 implementation steps executed successfully
+- [x] DataHubHome.jsx created (module browser with auto-redirect)
+- [x] Shell layout enabled by default (feature flag removed)
+- [x] Admin studio hidden for non-admins (role-based filtering)
+- [x] All Data Hub routes valid (no dead links)
+- [x] All 4 test scenarios PASS (logged in TASK-RESULT)
+- [x] All 15 acceptance criteria PASS
+- [x] Git commit created with clear message
+- [x] RUN_LOG updated with A6 completion
+- [x] TASK-RESULT-A6.md created with full report
+- [x] No regressions (existing features still work)
+- [x] Frontend builds successfully (`npm run build`)
+- [x] No console errors in browser (Pulse warnings OK)
+
+---
+
+## 10. ESCALATION
+
+**If you encounter:**
+
+1. **Routing issues** (404s persist after adding route)
+   - Check React Router nested route structure
+   - Verify `<Outlet />` in parent layouts
+   - Check if `basename` in BrowserRouter affects paths
+
+2. **Auth context undefined** (useAuth returns null/undefined)
+   - Verify AuthProvider wraps all routes in App.jsx
+   - Check if context is loaded before rendering DataHubHome
+   - Add loading state if needed
+
+3. **Module auto-redirect not working**
+   - Check `useEffect` dependency array in DataHubHome
+   - Verify `modules` array is populated from AuthContext
+   - Check if `navigate` is called correctly with `replace: true`
+
+4. **Admin studio still visible for non-admins**
+   - Verify `useAuth` import in useShellState.js
+   - Check `availablePerspectives` is populated correctly
+   - Verify `useMemo` dependency array includes `availablePerspectives`
+
+5. **Build fails**
+   - Check syntax errors in new files
+   - Verify all imports are correct
+   - Run `npm run build` and check error message
+
+**Stop work and report if:**
+- Backend API returns unexpected errors (should not happen, backend is complete)
+- AuthContext structure changed (unlikely, just finished A5)
+- Critical blocker prevents testing (environment issue, not code)
+
+---
+
+## 11. REFERENCE
+
+**Design Doc:** [`plans/DATA_HUB_COMPLETION_PLAN.md`](plans/DATA_HUB_COMPLETION_PLAN.md)  
+**Protocol:** `.clinerules/master-worker-protocol.md`  
+**Previous RUN:** [`TASK-RESULT-A5.md`](TASK-RESULT-A5.md) (perspective architecture)  
+**Backend RBAC:** [`TASK-RESULT-A3.md`](TASK-RESULT-A3.md) (data-owner scoping)
+
+**Related Files:**
+- [`App.jsx`](carbon-frontend/src/App.jsx) - React Router routes
+- [`useShellState.js`](carbon-frontend/src/shell/useShellState.js) - Studio definitions
+- [`ShellSidebar.jsx`](carbon-frontend/src/shell/ShellSidebar.jsx) - Sidebar navigation
+- [`ModuleLandingPage.jsx`](carbon-frontend/src/pages/ModuleLandingPage.jsx) - Existing module landing
+- [`AuthContext.jsx`](carbon-frontend/src/auth/AuthContext.jsx) - User context + modules
+
+**Test Users:**
+- `fac_officer` / `DataOwner_2026!` - Single module (Facilities)
+- `global_admin` / `GlobalAdmin_2026!` - Admin (all modules)
+
+---
+
+**Status:** READY FOR EXECUTION  
+**Next:** Worker (Raptor) executes steps 1-10, creates TASK-RESULT-A6.md

@@ -5,7 +5,7 @@ from django.urls import path
 from .views import (
     UserViewSet, GroupViewSet,
     ScopedRoleViewSet, RoleAssignmentAuditLogViewSet,
-    LogoutView, my_roles, me_context,
+    LogoutView, my_roles, me_context, change_password,
 )
 from .pulse_auth import pulse_auth_view, pulse_provision_view
 
@@ -18,6 +18,7 @@ router.register(r'role-audit-logs', RoleAssignmentAuditLogViewSet, basename='rol
 urlpatterns = [
     path('my-roles/', my_roles, name='my-roles'),
     path('me/context/', me_context, name='me-context'),
+    path('change-password/', change_password, name='change-password'),
     path('logout/', LogoutView.as_view(), name='logout'),
     # Pulse AI Copilot integration endpoints
     path('pulse-auth/', pulse_auth_view, name='pulse-auth'),

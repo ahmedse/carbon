@@ -1,7 +1,7 @@
 // File: src/shell/ShellSidebar.jsx
 // Studio-specific sidebar navigation content with perspective awareness
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Box, List, ListItemButton, ListItemIcon, ListItemText, Typography, IconButton, Tooltip, Divider } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -13,6 +13,7 @@ import RuleIcon from '@mui/icons-material/Rule';
 import PeopleIcon from '@mui/icons-material/People';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import SecurityIcon from '@mui/icons-material/Security';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { useAuth } from '../auth/AuthContext';
 
 // Define sidebar content per studio
@@ -35,7 +36,7 @@ function getSidebarItems(studioId) {
       return [
         { label: 'Data Entry', path: '/dataschema', icon: AddCircleOutlineIcon },
         { label: 'Table Manager', path: '/schema-admin/table-manager', icon: TableChartIcon },
-        { label: 'Data Quality', path: '/dashboards/data-quality', icon: RuleIcon },
+        { label: 'Data Quality', path: '/dataschema/quality', icon: RuleIcon },
       ];
     
     case 'admin':
@@ -91,6 +92,31 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
     items = items.filter(item => item.path !== '/schema-admin/table-manager');
   }
 
+  // Compute org unit and scope summary for dataschema context header
+  const { userOrgUnit, moduleSummary } = useMemo(() => {
+    if (activeStudio !== 'dataschema') return {};
+    const modules = context?.modules || [];
+    const orgName = modules.find(m => m.org_unit_name)?.org_unit_name || null;
+
+    // Build scope breakdown: { 1: n, 2: n, 3: n }
+    const scopeCount = {};
+    modules.forEach(m => {
+      const s = m.scope || 1;
+      scopeCount[s] = (scopeCount[s] || 0) + 1;
+    });
+
+    const parts = [];
+    if (scopeCount[1]) parts.push(`${scopeCount[1]}×S1`);
+    if (scopeCount[2]) parts.push(`${scopeCount[2]}×S2`);
+    if (scopeCount[3]) parts.push(`${scopeCount[3]}×S3`);
+
+    const summary = modules.length > 0
+      ? `${modules.length} module${modules.length !== 1 ? 's' : ''}${parts.length ? `: ${parts.join(', ')}` : ''}`
+      : null;
+
+    return { userOrgUnit: orgName, moduleSummary: summary };
+  }, [activeStudio, context]);
+
   return (
     <Box
       sx={{
@@ -140,6 +166,49 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
           </IconButton>
         </Tooltip>
       </Box>
+
+      {/* Context header — only in Data Hub */}
+      {activeStudio === 'dataschema' && (userOrgUnit || moduleSummary) && (
+        <Box
+          sx={{
+            px: 2,
+            py: 1,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            flexShrink: 0,
+            bgcolor: (t) =>
+              t.palette.mode === 'light' ? 'rgba(14,165,233,0.04)' : 'rgba(56,189,248,0.06)',
+          }}
+        >
+          {userOrgUnit && (
+            <Box display="flex" alignItems="center" gap={0.5} mb={0.25}>
+              <LocationOnIcon sx={{ fontSize: 12, color: 'primary.main' }} aria-hidden="true" />
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.primary',
+                  fontWeight: 500,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: 160,
+                }}
+                title={userOrgUnit}
+              >
+                {userOrgUnit}
+              </Typography>
+            </Box>
+          )}
+          {moduleSummary && (
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', display: 'block', fontSize: '0.6875rem' }}
+            >
+              {moduleSummary}
+            </Typography>
+          )}
+        </Box>
+      )}
 
       {/* Navigation items */}
       <List

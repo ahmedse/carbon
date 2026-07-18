@@ -109,3 +109,12 @@ export const API_ROUTES = {
   emissionsRules: "emissions/rules/",
   emissionsGWP: "emissions/gwp/",
 };
+
+// Pulse AI Configuration
+// Pulse AI is an external AI assistant service that integrates with Carbon
+export const PULSE_HOST = import.meta.env.VITE_PULSE_HOST || "http://127.0.0.1:9100";
+
+console.log("🔧 Pulse AI Configuration:", {
+  host: PULSE_HOST,
+  envCheck: import.meta.env.VITE_PULSE_HOST ? '✅ Set' : '❌ Using default',
+});

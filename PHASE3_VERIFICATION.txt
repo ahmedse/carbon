@@ -1,0 +1,48 @@
+=== PHASE 3 VERIFICATION REPORT ===
+
+1. IMPORTS (TableDataPage.jsx - Lines 1-20)
+   ✓ Dialog, DialogTitle, DialogContent, DialogActions, Divider, Chip imported
+   ✓ AttachFileIcon imported
+   ✓ EvidenceUploader component imported
+   ✓ EvidenceViewer component imported
+
+2. STATE VARIABLES (TableDataPage.jsx - Lines 40-48)
+   ✓ selectedRowId state added
+   ✓ showEvidenceModal state added
+   ✓ evidenceRefreshKey state added
+
+3. ROW SELECTION HANDLER (TableDataPage.jsx - Lines 204-211)
+   ✓ handleRowSelection function defined
+   ✓ Updates selected state
+   ✓ Tracks single row selection for Evidence button
+
+4. EVIDENCE BUTTON (TableDataPage.jsx - Lines 225-234)
+   ✓ Button created with AttachFileIcon
+   ✓ Disabled when no single row selected
+   ✓ Opens evidence modal on click
+
+5. DATAGRID PROPS (TableDataPage.jsx - Lines 242-243)
+   ✓ onRowSelectionModelChange={handleRowSelection} added
+   ✓ checkboxSelection prop added
+
+6. DIALOG COMPONENT (TableDataPage.jsx - Lines 260-313)
+   ✓ Dialog properly configured
+   ✓ onClose blocks backdropClick and escapeKeyDown
+   ✓ maxWidth="md" and fullWidth set
+   ✓ PaperProps with sizing
+   ✓ DialogTitle with Row ID chip
+   ✓ EvidenceUploader with token and refresh callback
+   ✓ EvidenceViewer with token and refresh callback
+   ✓ Close button in DialogActions
+
+7. COMPONENTS FIXED
+   ✓ EvidenceUploader.jsx - token passed as prop instead of useAuth
+   ✓ EvidenceViewer.jsx - token passed as prop instead of useAuth
+   
+8. BUILD STATUS
+   ✓ npm run build succeeded in 11.08s
+   ✓ No syntax errors
+   ✓ Production bundle created
+   ✓ All modules transformed (12,444+ modules)
+
+=== INTEGRATION COMPLETE ===

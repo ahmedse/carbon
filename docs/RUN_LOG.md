@@ -159,6 +159,58 @@ This is the authoritative log of all Master/Worker RUNs for the Carbon project.
 
 **Result:** See `TASK-RESULT-A6.md` (root) for full report
 
+### A8: Evidence & Attachments (2026-07-18) ✅
+**Objective:** Enable users to attach evidence files to data rows for audit verification
+**Actions:**
+- Created Django `evidence` app with Evidence model (11 fields, soft delete, audit trail)
+- Implemented bulk-upload API endpoint with file validation
+- Created EvidenceUploader component (drag-and-drop, Material-UI)
+- Created EvidenceViewer component (list/download/delete)
+- Integrated evidence modal into TableDataPage
+- Non-dismissible modal dialog (backdrop click + ESC key prevented)
+- Resizable dialog with Row ID context chip
+
+**Backend Changes:**
+- New app: `backend/evidence/` (9 files)
+- Updated: `config/settings.py` (MEDIA config, file upload limits)
+- Updated: `config/urls.py` (evidence routing)
+- Supported files: PDF, JPG, PNG, Excel, CSV, Word, ZIP
+- Max file size: 50MB
+
+**Frontend Changes:**
+- New components: `EvidenceUploader.jsx`, `EvidenceViewer.jsx`
+- Updated: `TableDataPage.jsx` (modal integration, row selection tracking)
+- Updated: `package.json` (react-dropzone v19.0.2)
+
+**API Endpoints:**
+- `GET /carbon-api/evidence/` - List all evidence
+- `GET /carbon-api/evidence/?data_row={id}` - Filter by row
+- `POST /carbon-api/evidence/bulk-upload/` - Upload files
+- `GET /carbon-api/evidence/{id}/download/` - Download file
+- `DELETE /carbon-api/evidence/{id}/` - Soft delete
+
+**RBAC:** Users access evidence only from assigned modules. Admins access all.
+
+**Testing:**
+- ✅ Backend API tests: 7/7 PASS
+- ✅ RBAC & permissions: 4/4 PASS
+- ✅ Frontend components: 4/4 PASS
+- ✅ Build verification: 3/3 PASS
+- ✅ Database: 3/3 PASS
+- ✅ Integration: 3/3 PASS
+- ✅ Code quality: 5/5 PASS
+- **Total: 29/29 tests PASS (100%)**
+
+**Key Metrics:**
+- 11 backend files created
+- 2 frontend components created
+- 3 frontend files updated
+- Database migrations applied
+- Frontend build: ✅ Success (10.75s, 12,444+ modules)
+- Acceptance criteria: ✅ 41/41 PASS
+
+**Result:** See `TASK-RESULT-A8.md` (root) for full report
+
 ---
 
 ## Archive

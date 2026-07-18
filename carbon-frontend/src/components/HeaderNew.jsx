@@ -1,9 +1,10 @@
 // File: src/components/HeaderNew.jsx
 // Compact 35px header with Gigacast-inspired design (gradient overlay, role badges, perspective tabs)
 
-import React, { useState } from 'react';
-import { Box, Typography, IconButton, Popover, Tooltip, Divider, Avatar, Tabs, Tab } from '@mui/material';
+import React, { useState, useMemo } from 'react';
+import { Box, Typography, IconButton, Popover, Tooltip, Divider, Avatar, Tabs, Tab, Chip } from '@mui/material';
 import { LightMode, DarkMode, SettingsOutlined, LogoutOutlined, KeyboardOutlined } from '@mui/icons-material';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { useNavigate } from 'react-router-dom';
 import { useThemeMode } from '../theme/ThemeContext';
 import { useAuth } from '../auth/AuthContext';
@@ -86,7 +87,7 @@ function MenuRow({ icon: Icon, label, onClick, danger }) {
 }
 
 export default function HeaderNew() {
-  const { user, logout, currentPerspective, setPerspective, availablePerspectives } = useAuth();
+  const { user, logout, currentPerspective, setPerspective, availablePerspectives, context } = useAuth();
   const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -99,6 +100,16 @@ export default function HeaderNew() {
 
   // Show perspective tabs only if user has multiple perspectives
   const showPerspectives = availablePerspectives && availablePerspectives.length > 1;
+
+  // Derive org unit from context modules (use first module's org_unit_name)
+  const userOrgUnit = useMemo(() => {
+    const modules = context?.modules || [];
+    const orgName = modules.find(m => m.org_unit_name)?.org_unit_name;
+    return orgName || null;
+  }, [context]);
+
+  // Module count
+  const moduleCount = useMemo(() => (context?.modules || []).length, [context]);
 
   const close = () => setAnchorEl(null);
 
@@ -188,6 +199,55 @@ export default function HeaderNew() {
           Carbon
         </Typography>
       </Box>
+
+      {/* Org unit + module count context pill */}
+      {(userOrgUnit || moduleCount > 0) && (
+        <Box
+          sx={{
+            position: 'relative',
+            zIndex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.75,
+            mx: 1,
+          }}
+        >
+          {userOrgUnit && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.375 }}>
+              <LocationOnIcon sx={{ fontSize: 12, color: 'text.disabled' }} aria-hidden="true" />
+              <Typography
+                sx={{
+                  fontSize: '0.6875rem',
+                  color: 'text.secondary',
+                  userSelect: 'none',
+                  maxWidth: 160,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title={userOrgUnit}
+              >
+                {userOrgUnit}
+              </Typography>
+            </Box>
+          )}
+          {moduleCount > 0 && (
+            <Chip
+              label={`${moduleCount} Module${moduleCount !== 1 ? 's' : ''}`}
+              size="small"
+              variant="outlined"
+              sx={{
+                height: 18,
+                fontSize: '0.625rem',
+                fontWeight: 600,
+                borderColor: 'divider',
+                color: 'text.secondary',
+                '& .MuiChip-label': { px: 0.75 },
+              }}
+            />
+          )}
+        </Box>
+      )}
 
       {/* Perspective tabs (centered, only for multi-role users) */}
       {showPerspectives && (

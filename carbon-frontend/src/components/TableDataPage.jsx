@@ -1,7 +1,8 @@
 // File: src/components/TableDataPage.jsx
 
 import React, { useEffect, useState, useCallback } from "react";
-import { Box, Typography } from "@mui/material";
+import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Divider, Chip } from "@mui/material";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
 import {
   fetchDataSchemaTables,
   fetchDataSchemaFields,
@@ -15,6 +16,8 @@ import {
 } from "../api/dataschema";
 import DataTableGrid from "./DataTableGrid";
 import BulkActionBar from "./BulkActionBar";
+import EvidenceUploader from "./evidence/EvidenceUploader";
+import EvidenceViewer from "./evidence/EvidenceViewer";
 import { useNotification } from "./NotificationProvider";
 
 /**
@@ -40,6 +43,9 @@ export default function TableDataPage({
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState({});
   const [selected, setSelected] = useState([]);
+  const [selectedRowId, setSelectedRowId] = useState(null);
+  const [showEvidenceModal, setShowEvidenceModal] = useState(false);
+  const [evidenceRefreshKey, setEvidenceRefreshKey] = useState(0);
 
   const notifyCtx = useNotification();
   const notify = typeof notifyCtx?.notify === "function"
@@ -194,6 +200,16 @@ export default function TableDataPage({
     // fetchRows will be triggered by useEffect on filters change
   };
 
+  // Row selection handler - track selected row IDs
+  const handleRowSelection = (rowIds) => {
+    setSelected(rowIds);
+    if (rowIds.length === 1) {
+      setSelectedRowId(rowIds[0]);
+    } else {
+      setSelectedRowId(null);
+    }
+  };
+
   return (
     <Box>
       <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
@@ -206,12 +222,25 @@ export default function TableDataPage({
         onExport={handleExport}
       />
 
+      <Button
+        startIcon={<AttachFileIcon />}
+        onClick={() => setShowEvidenceModal(true)}
+        disabled={!selectedRowId || selected.length !== 1}
+        variant="outlined"
+        size="small"
+        sx={{ ml: 1, mb: 2 }}
+      >
+        Evidence
+      </Button>
+
       <DataTableGrid
         fields={fields}
         rows={rows}
         filters={filters}
         setFilters={handleSetFilters}
         onSelectionChange={setSelected}
+        onRowSelectionModelChange={handleRowSelection}
+        checkboxSelection
         token={token}
         project_id={project_id}
         module_id={module_id}
@@ -226,6 +255,64 @@ export default function TableDataPage({
         onExportCsv={handleExport}
         onAddNew={null}
       />
+
+      <Dialog
+        open={showEvidenceModal}
+        onClose={(event, reason) => {
+          if (reason === 'backdropClick' || reason === 'escapeKeyDown') {
+            return;
+          }
+          setShowEvidenceModal(false);
+        }}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            minHeight: '60vh',
+            maxHeight: '90vh',
+            resize: 'both',
+            overflow: 'auto'
+          }
+        }}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Evidence Attachments</Typography>
+            <Chip label={`Row ID: ${selectedRowId}`} size="small" color="primary" variant="outlined" />
+          </Box>
+        </DialogTitle>
+        
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Upload supporting documents (invoices, receipts, photos, etc.) for audit verification.
+          </Typography>
+          
+          <Box sx={{ mt: 2 }}>
+            <EvidenceUploader
+              dataRowId={selectedRowId}
+              token={token}
+              onUploadComplete={() => setEvidenceRefreshKey(prev => prev + 1)}
+            />
+          </Box>
+          
+          <Divider sx={{ my: 3 }} />
+          
+          <Typography variant="subtitle1" gutterBottom>Attached Evidence</Typography>
+          
+          <EvidenceViewer
+            dataRowId={selectedRowId}
+            token={token}
+            key={evidenceRefreshKey}
+            onDelete={() => setEvidenceRefreshKey(prev => prev + 1)}
+          />
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setShowEvidenceModal(false)} variant="contained">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

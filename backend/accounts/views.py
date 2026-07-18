@@ -218,6 +218,64 @@ class RoleAssignmentAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     required_role = "audit"  # Only users with 'audit' ScopedRole can view audit logs
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    """
+    Change the authenticated user's password.
+    
+    Request body: {
+        "current_password": "string",
+        "new_password": "string"
+    }
+    """
+    user = request.user
+    current_password = request.data.get('current_password')
+    new_password = request.data.get('new_password')
+
+    # Validation
+    if not current_password:
+        return Response(
+            {'current_password': ['Current password is required.']},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not new_password:
+        return Response(
+            {'new_password': ['New password is required.']},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Check if current password is correct
+    if not user.check_password(current_password):
+        return Response(
+            {'current_password': ['Current password is incorrect.']},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    # Validate new password length
+    if len(new_password) < 8:
+        return Response(
+            {'new_password': ['Password must be at least 8 characters long.']},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Prevent using the same password
+    if user.check_password(new_password):
+        return Response(
+            {'new_password': ['New password cannot be the same as the current password.']},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Set the new password
+    user.set_password(new_password)
+    user.save()
+
+    return Response(
+        {'detail': 'Password changed successfully.'},
+        status=status.HTTP_200_OK,
+    )
+
+
 class LogoutView(APIView):
     """Blacklist refresh tokens on logout to prevent reuse."""
 

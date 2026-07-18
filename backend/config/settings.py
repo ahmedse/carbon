@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'mdm',
     'dq',
     'ai_copilot',
+    'evidence',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -145,6 +146,9 @@ DATABASES = {
         'HOST': get_env("DB_HOST", "localhost"),
         'PORT': get_env("DB_PORT", "5432"),
         "ATOMIC_REQUESTS": True,
+        'TEST': {
+            'NAME': 'test_carbon_dev',
+        },
     }
 }
 
@@ -213,6 +217,10 @@ STATIC_ROOT = get_env("DJANGO_STATIC_ROOT", BASE_DIR / 'staticfiles')
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = get_env("DJANGO_MEDIA_ROOT", BASE_DIR / 'mediafiles')
+
+# File upload settings
+FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

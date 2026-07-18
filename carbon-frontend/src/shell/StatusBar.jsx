@@ -1,10 +1,12 @@
 // File: src/shell/StatusBar.jsx
 // 22px bottom status bar with system state, toggle buttons, and footer links
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Box, Typography, IconButton, Tooltip, Link } from '@mui/material';
+import { useLocation } from 'react-router-dom';
 import ViewSidebarIcon from '@mui/icons-material/ViewSidebar';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import { useAuth } from '../auth/AuthContext';
 
 export function StatusBar({
   sidebarVisible,
@@ -12,6 +14,8 @@ export function StatusBar({
   onToggleSidebar,
   onToggleCopilot,
 }) {
+  const location = useLocation();
+  const { context } = useAuth();
   const [systemStatus, setSystemStatus] = useState('ready');
 
   useEffect(() => {
@@ -26,6 +30,45 @@ export function StatusBar({
   const statusLabel = systemStatus === 'error' ? 'Error' :
                       systemStatus === 'processing' ? 'Processing' :
                       'Ready';
+
+  // Extract module/table context from URL
+  const contextInfo = useMemo(() => {
+    const pathname = location.pathname;
+    
+    // Check for module page: /modules/:moduleId
+    const moduleMatch = pathname.match(/\/modules\/(\d+)/);
+    if (moduleMatch) {
+      const moduleId = moduleMatch[1];
+      const module = context?.modules?.find(m => String(m.id) === moduleId);
+      if (module) {
+        return `Module: ${module.name}`;
+      }
+    }
+
+    // Check for data entry page: /dataschema/entry/:moduleId/:tableId
+    const entryMatch = pathname.match(/\/dataschema\/entry\/(\d+)\/(\d+)/);
+    if (entryMatch) {
+      const [, moduleId, tableId] = entryMatch;
+      const module = context?.modules?.find(m => String(m.id) === moduleId);
+      const table = context?.tablesByModule?.[moduleId]?.find(t => String(t.id) === tableId);
+      
+      if (table) {
+        return `${module?.name || 'Module'} › ${table.title}`;
+      }
+    }
+
+    // Check for Data Hub quality
+    if (pathname === '/dataschema/quality') {
+      return 'Data Hub › Quality';
+    }
+
+    // Check for Data Hub home
+    if (pathname === '/dataschema') {
+      return 'Data Hub';
+    }
+
+    return null;
+  }, [location.pathname, context]);
 
   return (
     <Box
@@ -64,12 +107,34 @@ export function StatusBar({
         </Typography>
       </Box>
 
+      {/* Context info (module/table) */}
+      {contextInfo && (
+        <>
+          <Box
+            sx={{
+              width: 1,
+              height: 14,
+              bgcolor: 'rgba(255,255,255,0.2)',
+              mx: 1,
+            }}
+          />
+          <Typography sx={{
+            fontSize: '0.6875rem',
+            color: 'rgba(255,255,255,0.9)',
+            fontWeight: 500,
+            userSelect: 'none',
+          }}>
+            {contextInfo}
+          </Typography>
+        </>
+      )}
+
       {/* Copyright and footer links */}
       <Typography sx={{
         fontSize: '0.6875rem',
         opacity: 0.7,
         userSelect: 'none',
-        ml: 1,
+        ml: contextInfo ? 2 : 1,
       }}>
         © {new Date().getFullYear()} AASTMT Carbon Data Trust Platform
       </Typography>

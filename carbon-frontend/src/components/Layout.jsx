@@ -3,7 +3,7 @@
 
 import React, { useState, useCallback } from "react";
 import { Outlet } from "react-router-dom";
-import Header from "./Header";
+import HeaderEnhanced from "./HeaderEnhanced";
 import Sidebar from "./Sidebar";
 import { Box, IconButton, Tooltip, Alert } from "@mui/material";
 import { ChevronLeft, ChevronRight, LocationOn as LocationOnIcon } from "@mui/icons-material";
@@ -71,7 +71,7 @@ export default function Layout() {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", bgcolor: "#f5f5f5", overflow: "hidden" }}>
-      <Header collapsed={collapsed} onToggleCollapse={toggleCollapse} />
+      <HeaderEnhanced collapsed={collapsed} onToggleCollapse={toggleCollapse} />
       <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden", isolation: "isolate" }}>
         {/* Sidebar */}
         <Box
