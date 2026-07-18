@@ -16,7 +16,7 @@ from .serializers import (
     DataFieldSerializer, DataRowSerializer,
     SchemaChangeLogSerializer
 )
-from accounts.permissions import HasScopedRole
+from accounts.permissions import HasScopedRole, ReadScopedWriteAdmin
 from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role
 from core.models import Module
 
@@ -45,11 +45,12 @@ class ScopedViewSet(viewsets.ModelViewSet):
 # --- DataTable (Schema) ---
 class DataTableViewSet(ScopedViewSet):
     """
-    Only 'admin' or 'admins_group' can access schema (tables).
+    Schema tables - Read: data-owners in scope, Write: global admins only.
     """
     queryset = DataTable.objects.all()
     serializer_class = DataTableSerializer
-    required_role = ("admin", "admins_group", "dataowners_group")
+    permission_classes = [IsAuthenticated, ReadScopedWriteAdmin]
+    required_role = ("admin", "admins_group", "dataowners_group", "auditors_group")
 
     def get_queryset(self):
         user = self.request.user
@@ -76,10 +77,11 @@ class DataTableViewSet(ScopedViewSet):
 # --- DataField (Schema) ---
 class DataFieldViewSet(ScopedViewSet):
     """
-    Only 'admin' or 'admins_group' can access schema (fields).
+    Schema fields - Read: data-owners in scope, Write: global admins only.
     """
     queryset = DataField.objects.all()
     serializer_class = DataFieldSerializer
+    permission_classes = [IsAuthenticated, ReadScopedWriteAdmin]
     required_role = ("admin", "admins_group", "auditors_group", "dataowners_group")
 
     def get_queryset(self):

@@ -8,7 +8,7 @@ This is the authoritative log of all Master/Worker RUNs for the Carbon project.
 |-----|-------|------|--------|------|--------|
 | A0 | Ground-truth audit | read-only | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT.md` (root) |
 | A1 | Repo hygiene & doc truth | cleanup | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A1.md` (root) |
-| A2 | Core governance RBAC fix | backend | ⏳ PENDING | — | — |
+| A2 | Core governance RBAC fix | backend | ✅ COMPLETE | 2026-07-18 | See `TASK-RESULT-A2.md` (root) |
 | A3 | Data-owner scoped experience | backend+frontend | ⏳ PENDING | — | — |
 | A4 | Admin experience | backend+frontend | ⏳ PENDING | — | — |
 | A5 | Data Trust surfacing decision | design+build | ⏳ PENDING | — | — |
@@ -43,6 +43,22 @@ This is the authoritative log of all Master/Worker RUNs for the Carbon project.
 - 10/10 acceptance criteria PASSED
 
 **Result:** See `TASK-RESULT-A1.md` (root) for full report
+
+### A2: Core Governance RBAC Fix (2026-07-18) ✅
+**Objective:** Ensure governance resources only mutable by global admins  
+**Actions:**
+- Created `ReadAnyWriteGlobalAdmin` permission (checks `org_unit__isnull=True`)
+- Updated catalog/mdm/dq apps to use new permission
+- Created test script proving org-scoped admin blocked, global admin allowed
+- Documented governance protection model in DESIGN_ORG_ACCESS_MODEL.md
+
+**Key Metrics:**
+- 4 logical git commits (edd78a5 → ddde8de)
+- 12 ViewSets updated across 3 apps
+- Test script: 3/3 tests PASSED
+- 8/8 acceptance criteria PASSED
+
+**Result:** See `TASK-RESULT-A2.md` (root) for full report
 
 ---
 

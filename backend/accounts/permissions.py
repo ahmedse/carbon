@@ -12,6 +12,8 @@ class HasScopedRole(permissions.BasePermission):
     """
     RBAC: superusers and global admins pass everything. Otherwise access is granted at
     module level OR when the target module's org_unit is within the user's allowed org subtree.
+    
+    Enhanced to resolve module_id from data_table when data_table is provided but module_id is not.
     """
     def has_permission(self, request, view):
         user = request.user
@@ -30,6 +32,18 @@ class HasScopedRole(permissions.BasePermission):
             return True
 
         module_id = request.query_params.get("module_id") or request.data.get("module_id")
+        
+        # FIX: Resolve module_id from data_table if not provided
+        if not module_id:
+            data_table_id = request.query_params.get("data_table") or request.data.get("data_table")
+            if data_table_id:
+                try:
+                    from dataschema.models import DataTable
+                    table = DataTable.objects.select_related('module').get(pk=data_table_id)
+                    module_id = table.module_id
+                except (DataTable.DoesNotExist, ValueError, TypeError):
+                    pass
+        
         if module_id:
             if user_has_module_role(user, module_id, ["admin", "admins_group"]):
                 return True
@@ -70,6 +84,84 @@ class ReadAnyWriteGlobalAdmin(permissions.BasePermission):
         if user.is_superuser:
             return True
         return bool(user_has_global_role(user, ['admins_group']))
+
+
+class ReadScopedWriteAdmin(permissions.BasePermission):
+    """Schema resource permission for DataTable and DataField.
+    
+    Read access: org-scoped users (data-owners, auditors, admins) within their scope
+    Write access: ONLY global admins (schema management is admin-only)
+    
+    Uses HasScopedRole for read permission checking (org-scoped filtering).
+    Uses ReadAnyWriteGlobalAdmin logic for write protection.
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        
+        # Write operations: only global admins
+        if request.method not in permissions.SAFE_METHODS:
+            if user.is_superuser:
+                return True
+            return bool(user_has_global_role(user, ['admins_group']))
+        
+        # Read operations: use HasScopedRole logic
+        required_roles = getattr(view, 'required_role', None)
+        if not required_roles:
+            return False
+        if isinstance(required_roles, str):
+            required_roles = (required_roles,)
+        
+        if user.is_superuser:
+            return True
+        if user_has_global_role(user, ["admin", "admins_group"]):
+            return True
+        
+        module_id = request.query_params.get("module_id") or request.data.get("module_id")
+        
+        # Resolve module_id from data_table if not provided
+        if not module_id:
+            data_table_id = request.query_params.get("data_table") or request.data.get("data_table")
+            if data_table_id:
+                try:
+                    from dataschema.models import DataTable
+                    table = DataTable.objects.select_related('module').get(pk=data_table_id)
+                    module_id = table.module_id
+                except (DataTable.DoesNotExist, ValueError, TypeError):
+                    pass
+        
+        # For DataTable detail views, resolve module_id from pk
+        if not module_id and hasattr(view, 'kwargs') and 'pk' in view.kwargs:
+            try:
+                from dataschema.models import DataTable
+                table_id = view.kwargs['pk']
+                table = DataTable.objects.select_related('module').get(pk=table_id)
+                module_id = table.module_id
+            except (DataTable.DoesNotExist, ValueError, TypeError, AttributeError):
+                pass
+        
+        if module_id:
+            if user_has_module_role(user, module_id, ["admin", "admins_group"]):
+                return True
+            if user_has_module_role(user, module_id, required_roles):
+                return True
+            from core.models import Module
+            try:
+                mod = Module.objects.get(pk=module_id)
+            except Module.DoesNotExist:
+                mod = None
+            if mod and mod.org_unit_id:
+                allowed_orgs = get_allowed_org_unit_ids(
+                    user, list(required_roles) + ["admin", "admins_group"]
+                )
+                if mod.org_unit_id in allowed_orgs:
+                    return True
+        
+        if user_has_global_role(user, required_roles):
+            return True
+        
+        return False
 
 
 class CanManageScopedRoles(permissions.BasePermission):
