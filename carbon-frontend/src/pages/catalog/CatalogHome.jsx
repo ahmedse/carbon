@@ -1,6 +1,7 @@
 // src/pages/catalog/CatalogHome.jsx
 // Catalog Studio Home: Dashboard overview of data governance
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
@@ -16,6 +17,7 @@ import { fetchDataDomains } from '../../api/catalog';
 import { fetchDataSchemaTables } from '../../api/dataschema';
 
 export default function CatalogHome() {
+  const navigate = useNavigate();
   const { token } = useAuth();
   const { notify } = useNotification();
   const [loading, setLoading] = useState(true);
@@ -166,7 +168,7 @@ export default function CatalogHome() {
               Browse and filter all data tables with domain, owner, and quality filters
             </Typography>
             <Box>
-              <Button variant="outlined" size="small" href="/catalog/schemas">
+              <Button variant="outlined" size="small" onClick={() => navigate('/catalog/schemas')}>
                 Open Schema Browser
               </Button>
             </Box>
@@ -183,7 +185,7 @@ export default function CatalogHome() {
               Create and manage tables, fields, and relations. Admin-only access.
             </Typography>
             <Box>
-              <Button variant="outlined" size="small" href="/catalog/schema-manager">
+              <Button variant="outlined" size="small" onClick={() => navigate('/catalog/schema-manager')}>
                 Open Schema Manager
               </Button>
             </Box>
@@ -198,7 +200,7 @@ export default function CatalogHome() {
           <Button
             fullWidth
             variant="outlined"
-            href="/catalog/domains"
+            onClick={() => navigate('/catalog/domains')}
             sx={{ py: 1.5 }}
           >
             Domains
@@ -208,7 +210,7 @@ export default function CatalogHome() {
           <Button
             fullWidth
             variant="outlined"
-            href="/catalog/glossary"
+            onClick={() => navigate('/catalog/glossary')}
             sx={{ py: 1.5 }}
           >
             Glossary
@@ -218,7 +220,7 @@ export default function CatalogHome() {
           <Button
             fullWidth
             variant="outlined"
-            href="/catalog/reference-data"
+            onClick={() => navigate('/catalog/reference-data')}
             sx={{ py: 1.5 }}
           >
             Reference Data
@@ -228,7 +230,7 @@ export default function CatalogHome() {
           <Button
             fullWidth
             variant="outlined"
-            href="/catalog/sources"
+            onClick={() => navigate('/catalog/sources')}
             sx={{ py: 1.5 }}
           >
             Data Sources

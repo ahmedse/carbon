@@ -227,8 +227,9 @@ export async function apiFetch(
     }
   }
 
+  const isFormData = body instanceof FormData;
   const headers = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     ...customHeaders,
   };
@@ -245,7 +246,7 @@ export async function apiFetch(
       method,
       headers,
       signal: controller.signal,
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      ...(body ? { body: isFormData ? body : JSON.stringify(body) } : {}),
     });
     clearTimeout(timeout);
 

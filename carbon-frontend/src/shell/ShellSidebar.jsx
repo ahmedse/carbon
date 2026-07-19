@@ -2,6 +2,7 @@
 // Studio-specific sidebar navigation content with perspective awareness
 
 import React, { useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Box, List, ListItemButton, ListItemIcon, ListItemText, Typography, IconButton, Tooltip, Divider } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -113,7 +114,8 @@ function getStudioTitle(studioId) {
 
 export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
   const { currentPerspective, availablePerspectives, context } = useAuth();
-  
+  const location = useLocation();
+
   // Filter items based on perspective and available admin status
   let items = getSidebarItems(activeStudio);
   const title = getStudioTitle(activeStudio);
@@ -152,6 +154,8 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
 
     return { userOrgUnit: orgName, moduleSummary: summary };
   }, [activeStudio, context]);
+
+  const normalizedLocation = location.pathname.replace(/\/+$|^\/+/, '');
 
   return (
     <Box
@@ -292,28 +296,33 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
 
             // Handle regular navigation items
             const Icon = item.icon;
+            const itemPath = item.path.replace(/\/+$|^\/+/, '');
+            const isActive = normalizedLocation === itemPath || normalizedLocation.startsWith(`${itemPath}/`);
             return (
               <ListItemButton
                 key={item.path}
                 onClick={() => onNavigate(item)}
+                selected={isActive}
                 sx={{
                   borderRadius: 1,
                   mb: 0.5,
                   py: 1,
                   px: 1.5,
+                  bgcolor: isActive ? 'action.selected' : 'transparent',
                   '&:hover': {
                     bgcolor: 'action.hover',
                   },
                 }}
               >
                 <ListItemIcon sx={{ minWidth: 36 }}>
-                  <Icon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                  <Icon sx={{ fontSize: 18, color: isActive ? 'primary.main' : 'text.secondary' }} />
                 </ListItemIcon>
                 <ListItemText
                   primary={item.label}
                   primaryTypographyProps={{
                     fontSize: '0.8125rem',
-                    fontWeight: 500,
+                    fontWeight: isActive ? 700 : 500,
+                    color: isActive ? 'text.primary' : 'text.secondary',
                   }}
                 />
               </ListItemButton>

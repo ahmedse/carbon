@@ -472,21 +472,11 @@ export async function createImportJob(token, data) {
   formData.append("file", data.file);
   formData.append("format", data.format || "csv");
 
-  const url = `${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api"}${API_ROUTES.importJobs}`;
-  const res = await fetch(url, {
+  return apiFetch(API_ROUTES.importJobs, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    token,
     body: formData,
   });
-
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.detail || "Import job creation failed");
-  }
-
-  return res.json();
 }
 
 // ----- Export Jobs (bulk export records) -----

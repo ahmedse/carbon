@@ -12,6 +12,17 @@ import StorageIcon from '@mui/icons-material/Storage';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import SecurityIcon from '@mui/icons-material/Security';
+import LayersIcon from '@mui/icons-material/Layers';
+import LabelIcon from '@mui/icons-material/Label';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import DownloadIcon from '@mui/icons-material/Download';
+import EditIcon from '@mui/icons-material/Edit';
 
 // Breadcrumb configuration based on routes
 const ROUTE_CONFIG = {
@@ -95,14 +106,128 @@ const ROUTE_CONFIG = {
     icon: HelpOutlineIcon,
     parent: '/help',
   },
+  '/catalog': {
+    label: 'Catalog Studio',
+    icon: DashboardIcon,
+    parent: null,
+  },
+  '/catalog/schemas': {
+    label: 'Schema Catalog',
+    icon: StorageIcon,
+    parent: '/catalog',
+  },
+  '/catalog/schemas/:tableId': {
+    label: 'Schema Detail',
+    icon: StorageIcon,
+    parent: '/catalog/schemas',
+  },
+  '/catalog/schema-manager': {
+    label: 'Schema Manager',
+    icon: AssignmentIcon,
+    parent: '/catalog',
+  },
+  '/catalog/schema-manager/:tableId': {
+    label: 'Schema Details',
+    icon: AssignmentIcon,
+    parent: '/catalog/schema-manager',
+  },
+  '/catalog/domains': {
+    label: 'Domains',
+    icon: LocationOnIcon,
+    parent: '/catalog',
+  },
+  '/catalog/glossary': {
+    label: 'Glossary',
+    icon: AssessmentIcon,
+    parent: '/catalog',
+  },
+  '/catalog/assets': {
+    label: 'Assets',
+    icon: AssignmentIcon,
+    parent: '/catalog',
+  },
+  '/catalog/tags': {
+    label: 'Tags',
+    icon: LabelIcon,
+    parent: '/catalog',
+  },
+  '/catalog/reference-data': {
+    label: 'Reference Data',
+    icon: LayersIcon,
+    parent: '/catalog',
+  },
+  '/catalog/mdm': {
+    label: 'MDM',
+    icon: AccountTreeIcon,
+    parent: '/catalog',
+  },
+  '/catalog/connections': {
+    label: 'Connections',
+    icon: SecurityIcon,
+    parent: '/catalog',
+  },
+  '/catalog/importexport': {
+    label: 'Import / Export',
+    icon: CloudUploadIcon,
+    parent: '/catalog',
+  },
+  '/catalog/sources': {
+    label: 'Data Sources',
+    icon: StorageIcon,
+    parent: '/catalog',
+  },
+  '/catalog/exports': {
+    label: 'Exports',
+    icon: DownloadIcon,
+    parent: '/catalog',
+  },
+  '/catalog/imports': {
+    label: 'Imports',
+    icon: CloudUploadIcon,
+    parent: '/catalog',
+  },
+  '/catalog/governance': {
+    label: 'Governance',
+    icon: VerifiedUserIcon,
+    parent: '/catalog',
+  },
 };
+
+function normalizePath(pathname) {
+  return pathname.replace(/\/+$|^\/+/, '').replace(/\/+/g, '/');
+}
+
+function matchRouteConfig(pathname) {
+  const cleanPath = normalizePath(pathname);
+  const normalizedWithSlash = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+  if (ROUTE_CONFIG[normalizedWithSlash]) {
+    return { config: ROUTE_CONFIG[normalizedWithSlash], path: normalizedWithSlash };
+  }
+
+  const segments = cleanPath.split('/').filter(Boolean);
+  for (const [routePath, config] of Object.entries(ROUTE_CONFIG)) {
+    const routeSegments = normalizePath(routePath).split('/').filter(Boolean);
+    if (routeSegments.length !== segments.length) continue;
+
+    const isMatch = routeSegments.every((segment, index) => {
+      if (segment.startsWith(':')) return true;
+      return segment === segments[index];
+    });
+
+    if (isMatch) {
+      return { config, path: `/${segments.join('/')}` };
+    }
+  }
+
+  return null;
+}
 
 /**
  * Build breadcrumb trail from current path
  */
 function buildBreadcrumbs(pathname) {
   const trail = [];
-  let current = pathname;
+  let current = normalizePath(pathname);
 
   // Add home as first item
   trail.unshift({
@@ -111,18 +236,24 @@ function buildBreadcrumbs(pathname) {
     icon: HomeIcon,
   });
 
-  // Walk up the parent chain
-  while (current && current !== '/dashboard') {
-    const config = ROUTE_CONFIG[current];
-    if (!config) break;
+  while (current && current !== 'dashboard' && current !== '/dashboard') {
+    const match = matchRouteConfig(current.startsWith('/') ? current : `/${current}`);
+    if (!match || !match.config) {
+      const parentPath = current.includes('/')
+        ? current.substring(0, current.lastIndexOf('/'))
+        : '/dashboard';
+      current = parentPath || '/dashboard';
+      continue;
+    }
 
     trail.push({
-      path: current,
-      label: config.label,
-      icon: config.icon,
+      path: current.startsWith('/') ? current : `/${current}`,
+      label: match.config.label,
+      icon: match.config.icon,
     });
 
-    current = config.parent;
+    current = match.config.parent || (current.includes('/') ? current.substring(0, current.lastIndexOf('/')) : '/dashboard');
+    if (!current) current = '/dashboard';
   }
 
   return trail;
