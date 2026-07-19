@@ -1,7 +1,10 @@
 # dq/models.py — Data Trust Core: Data Quality & Profiling.
 # domain-agnostic. MUST NOT import from emissions.
 from django.db import models
+from django.contrib.auth import get_user_model
 from dataschema.models import DataTable, DataField
+
+User = get_user_model()
 
 RULE_TYPES = [
     ('not_null', 'Not Null'), ('unique', 'Unique'),
@@ -39,20 +42,34 @@ class FieldProfile(models.Model):
 
 
 class DQRule(models.Model):
+    """Data quality rule with scope (table or field level)."""
     scope = models.CharField(max_length=10, choices=SCOPE_CHOICES, default='field')
-    data_table = models.ForeignKey(DataTable, null=True, blank=True, on_delete=models.CASCADE, related_name='dq_rules')
-    data_field = models.ForeignKey(DataField, null=True, blank=True, on_delete=models.CASCADE, related_name='dq_rules')
+    name = models.CharField(max_length=255, default='')  # Rule name for display
+    data_table = models.ForeignKey(
+        DataTable, null=True, blank=True, on_delete=models.CASCADE, related_name='dq_rules'
+    )
+    data_field = models.ForeignKey(
+        DataField, null=True, blank=True, on_delete=models.CASCADE, related_name='dq_rules'
+    )
     rule_type = models.CharField(max_length=20, choices=RULE_TYPES)
     params = models.JSONField(default=dict, blank=True)
     severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='error')
     is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='created_dq_rules'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.rule_type} on {self.data_field or self.data_table}"
+        return self.name or f"{self.rule_type} on {self.data_field or self.data_table}"
 
 
 class DQResult(models.Model):
+    """Results of executing a DQ rule."""
     rule = models.ForeignKey(DQRule, on_delete=models.CASCADE, related_name='results')
     run_at = models.DateTimeField(auto_now_add=True)
     passed = models.BooleanField(default=True)
