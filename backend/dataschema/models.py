@@ -130,3 +130,47 @@ class SchemaChangeLog(models.Model):
     def __str__(self):
         target = self.data_field or self.data_table
         return f"{self.action} on {target} by {self.user} at {self.timestamp}"
+
+class TableRelation(models.Model):
+   """
+   Explicit representation of a relationship between two DataTables.
+   Tracks lineage, foreign keys, and lookup references for the schema manager UI.
+   """
+   RELATION_TYPES = [
+       ('one_to_many', 'One → Many'),
+       ('many_to_many', 'Many → Many'),
+       ('lookup', 'Lookup'),
+   ]
+   from_table = models.ForeignKey(
+       DataTable, on_delete=models.CASCADE, related_name='outgoing_relations'
+   )
+   from_field = models.ForeignKey(
+       DataField, null=True, blank=True, on_delete=models.SET_NULL,
+       related_name='outgoing_relations',
+       help_text="The FK column on from_table (optional)"
+   )
+   to_table = models.ForeignKey(
+       DataTable, on_delete=models.CASCADE, related_name='incoming_relations'
+   )
+   to_field = models.ForeignKey(
+       DataField, null=True, blank=True, on_delete=models.SET_NULL,
+       related_name='incoming_relations',
+       help_text="The PK/target column on to_table (optional)"
+   )
+   relation_type = models.CharField(
+       max_length=20, choices=RELATION_TYPES, default='one_to_many'
+   )
+   label = models.CharField(max_length=120, blank=True)
+   description = models.TextField(blank=True)
+   created_by = models.ForeignKey(
+       User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_relations'
+   )
+   created_at = models.DateTimeField(auto_now_add=True)
+   updated_at = models.DateTimeField(auto_now=True)
+
+   class Meta:
+       unique_together = [('from_table', 'to_table', 'from_field', 'to_field')]
+       ordering = ['-created_at']
+
+   def __str__(self):
+       return f"{self.from_table.title} → {self.to_table.title} ({self.relation_type})"

@@ -16,8 +16,7 @@ import {
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+import { apiFetch } from '../../../api/api';
 
 function notify(message, type = 'info') {
   const event = new CustomEvent('notify', { detail: { message, type } });
@@ -32,19 +31,71 @@ export default function RowEditTab({
   token,
   onClose,
 }) {
-  const [formData, setFormData] = useState(rowData);
+  // Extract editable field data from the 'values' object
+  const extractEditableFields = (data) => {
+    const metadataFields = ['created_at', 'updated_at', 'created_by', 'updated_by'];
+    const nonDataFields = ['id', 'data_table', 'is_archived', 'version', 'values', ...metadataFields];
+    const fieldData = {};
+
+    // Primary: extract from nested 'values' object
+    if (data.values && typeof data.values === 'object') {
+      Object.entries(data.values).forEach(([key, value]) => {
+        fieldData[key] = value;
+      });
+    }
+
+    // Fallback: extract from data directly if values is empty
+    if (Object.keys(fieldData).length === 0) {
+      Object.entries(data).forEach(([key, value]) => {
+        if (!nonDataFields.includes(key)) {
+          fieldData[key] = value;
+        }
+      });
+    }
+
+    return fieldData;
+  };
+
+  const [formData, setFormData] = useState(() => extractEditableFields(rowData));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
-  // Detect changes
-  useEffect(() => {
-    const changed = JSON.stringify(formData) !== JSON.stringify(rowData);
-    setHasChanges(changed);
-    if (changed) {
-      setIsDirty(true);
+  const parseFormValue = (value) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (trimmed === '') return '';
+    if (/^-?\d+$/.test(trimmed)) {
+      return Number.parseInt(trimmed, 10);
     }
+    if (/^-?\d*\.\d+$/.test(trimmed)) {
+      return Number.parseFloat(trimmed);
+    }
+    if (/^(true|false)$/i.test(trimmed)) {
+      return trimmed.toLowerCase() === 'true';
+    }
+    return value;
+  };
+
+  useEffect(() => {
+    const extracted = extractEditableFields(rowData);
+    setFormData(extracted);
+    setHasChanges(false);
+    setIsDirty(false);
+    console.log('🟦 RowEditTab: Form data loaded', {
+      fieldsCount: Object.keys(extracted).length,
+      fieldNames: Object.keys(extracted),
+      sampleValue: Object.values(extracted)[0],
+    });
+  }, [rowData]);
+
+  // Detect changes - compare formData with properly extracted original
+  useEffect(() => {
+    const originalExtracted = extractEditableFields(rowData);
+    const changed = JSON.stringify(formData) !== JSON.stringify(originalExtracted);
+    setHasChanges(changed);
+    setIsDirty(changed);
   }, [formData, rowData]);
 
   // Prevent accidental page exit if there are unsaved changes
@@ -64,7 +115,7 @@ export default function RowEditTab({
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({
       ...prev,
-      [field]: value,
+      [field]: parseFormValue(value),
     }));
   };
 
@@ -75,39 +126,55 @@ export default function RowEditTab({
     try {
       // Build update payload (exclude metadata fields)
       const excludeFields = ['id', 'created_at', 'updated_at', 'created_by', 'updated_by'];
-      const updateData = Object.entries(formData)
+      const fieldData = Object.entries(formData)
         .filter(([key]) => !excludeFields.includes(key))
         .reduce((acc, [key, value]) => {
           acc[key] = value;
           return acc;
         }, {});
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/rows/${rowId}/?data_table=${tableId}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(updateData),
-        }
-      );
+      // Backend expects data_table on the request body for validation and will merge values into the row.
+      const updatePayload = {
+        data_table: Number(tableId),
+        values: fieldData,
+      };
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.detail || `Save failed: ${response.status}`
-        );
-      }
+      console.log('🟦 RowEditTab: Saving with apiFetch', {
+        rowId,
+        tableId,
+        payloadKeys: Object.keys(updatePayload),
+        valuesKeys: Object.keys(fieldData),
+        fieldDataSample: fieldData,
+        updatePayload,
+      });
 
-      const updated = await response.json();
-      setFormData(updated);
+      const updated = await apiFetch(`dataschema/rows/${rowId}/?data_table=${tableId}`, {
+        method: 'PATCH',
+        body: updatePayload,
+        token,
+      });
+
+      console.log('✅ RowEditTab: Response received', {
+        updatedKeys: Object.keys(updated),
+        updated
+      });
+
+      // Extract field data from the updated response (handles nested 'values' object)
+      const editableFields = extractEditableFields(updated);
+      setFormData(editableFields);
       setRowData(updated);
       setIsDirty(false);
+      setHasChanges(false);
       notify('Row saved successfully', 'success');
+      console.log('✅ RowEditTab: Row saved successfully');
     } catch (err) {
-      console.error('Save error:', err);
+      console.error('🔴 RowEditTab: Save error - full details:', {
+        errorMessage: err.message,
+        errorResponse: err.response,
+        errorData: err.data,
+        formDataSent: formData,
+        error: err,
+      });
       setError(err.message || 'Failed to save row');
       notify(`Error: ${err.message}`, 'error');
     } finally {
@@ -116,9 +183,11 @@ export default function RowEditTab({
   };
 
   const handleReset = () => {
-    setFormData(rowData);
+    const extracted = extractEditableFields(rowData);
+    setFormData(extracted);
     setHasChanges(false);
     setIsDirty(false);
+    console.log('✅ RowEditTab: Form reset to saved values');
   };
 
   // Filter out metadata fields for editing

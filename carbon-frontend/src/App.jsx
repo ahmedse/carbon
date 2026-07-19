@@ -24,6 +24,22 @@ import EmissionsDashboard from "./pages/EmissionsDashboard";
 import EmissionsReport from "./pages/EmissionsReport";
 import SettingsPage from "./pages/SettingsPage";
 import RowDetailPage from "./pages/dataschema/RowDetailPage";
+import DomainsPage from "./pages/catalog/DomainsPage";
+import GlossaryPage from "./pages/catalog/GlossaryPage";
+import AssetsPage from "./pages/catalog/AssetsPage";
+import MDMPage from "./pages/catalog/MDMPage";
+import ConnectionsPage from "./pages/catalog/ConnectionsPage";
+import ImportExportPage from "./pages/catalog/ImportExportPage";
+import CatalogHome from "./pages/catalog/CatalogHome";
+import SchemaCatalogPage from "./pages/catalog/SchemaCatalogPage";
+import SchemaDetailPage from "./pages/catalog/SchemaDetailPage";
+import SchemaManagerPage from "./pages/catalog/SchemaManagerPage";
+import TagsPage from "./pages/catalog/TagsPage";
+import ReferenceDataPage from "./pages/catalog/ReferenceDataPage";
+import GovernancePage from "./pages/catalog/GovernancePage";
+import DataSourcesDetailPage from "./pages/catalog/DataSourcesDetailPage";
+import ExportsDetailPage from "./pages/catalog/ExportsDetailPage";
+import ImportsDetailPage from "./pages/catalog/ImportsDetailPage";
 
 // New Dashboard Architecture
 import {
@@ -168,6 +184,25 @@ export default function App() {
                   path="/dataschema/row/:tableId/:rowId"
                   element={<RowDetailPage />}
                 />
+
+                {/* Catalog Studio Routes */}
+                <Route path="/catalog" element={<CatalogHome />} />
+                <Route path="/catalog/schemas" element={<SchemaCatalogPage />} />
+                <Route path="/catalog/schemas/:tableId" element={<SchemaDetailPage />} />
+                <Route path="/catalog/schema-manager" element={<SchemaManagerPage />} />
+                <Route path="/catalog/domains" element={<DomainsPage />} />
+                <Route path="/catalog/glossary" element={<GlossaryPage />} />
+                <Route path="/catalog/assets" element={<AssetsPage />} />
+                <Route path="/catalog/mdm" element={<MDMPage />} />
+                <Route path="/catalog/connections" element={<ConnectionsPage />} />
+                <Route path="/catalog/importexport" element={<ImportExportPage />} />
+                <Route path="/catalog/tags" element={<TagsPage />} />
+                <Route path="/catalog/reference-data" element={<ReferenceDataPage />} />
+                <Route path="/catalog/governance" element={<GovernancePage />} />
+                <Route path="/catalog/sources" element={<DataSourcesDetailPage />} />
+                <Route path="/catalog/exports" element={<ExportsDetailPage />} />
+                <Route path="/catalog/imports" element={<ImportsDetailPage />} />
+
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Route>

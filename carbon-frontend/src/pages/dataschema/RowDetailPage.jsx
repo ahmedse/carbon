@@ -185,19 +185,6 @@ export default function RowDetailPage() {
     );
   }
 
-  // Auth status indicator
-  const authStatusStyle = {
-    position: 'fixed',
-    top: 60,
-    right: 20,
-    padding: '12px 16px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    borderRadius: '4px',
-    zIndex: 1200,
-    minWidth: '250px',
-  };
-
   return (
     <Box
       sx={{
@@ -207,42 +194,6 @@ export default function RowDetailPage() {
         bgcolor: 'background.default',
       }}
     >
-      {!token && (
-        <div style={{
-          position: 'fixed',
-          top: 60,
-          right: 20,
-          padding: '12px 16px',
-          fontSize: '12px',
-          fontWeight: 'bold',
-          borderRadius: '4px',
-          zIndex: 1200,
-          minWidth: '250px',
-          background: '#ffcdd2',
-          border: '2px solid #e53935',
-          color: '#b71c1c',
-        }}>
-          🔴 NOT AUTHENTICATED - Token missing
-        </div>
-      )}
-      {token && (
-        <div style={{
-          position: 'fixed',
-          top: 60,
-          right: 20,
-          padding: '12px 16px',
-          fontSize: '12px',
-          fontWeight: 'bold',
-          borderRadius: '4px',
-          zIndex: 1200,
-          minWidth: '250px',
-          background: '#c8e6c9',
-          border: '2px solid #43a047',
-          color: '#1b5e20',
-        }}>
-          ✅ Authenticated
-        </div>
-      )}
       <RowDetailHeader rowData={rowData} onClose={handleClose} />
 
       <Box

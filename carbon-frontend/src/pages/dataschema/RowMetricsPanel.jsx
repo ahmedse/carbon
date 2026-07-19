@@ -10,6 +10,7 @@ import {
   Alert,
   Typography,
 } from '@mui/material';
+import { authFetch } from '../../api/api';
 import DQMetricsTab from './metrics/DQMetricsTab';
 import DataLineageTab from './metrics/DataLineageTab';
 import RelatedRecordsTab from './metrics/RelatedRecordsTab';
@@ -28,11 +29,9 @@ export default function RowMetricsPanel({
 
   // Lazy load DQ metrics only when user clicks the DQ Metrics tab
   useEffect(() => {
-    let currentToken = token;
-    
     console.log('🟦 RowMetricsPanel: useEffect triggered', {
       metricsTabIndex,
-      token: !!currentToken,
+      token: !!token,
       rowId,
       tableId,
       dqMetricsFetched,
@@ -40,24 +39,14 @@ export default function RowMetricsPanel({
     });
 
     const fetchDQMetrics = async () => {
-      // If no token, try to recover from localStorage
-      if (!currentToken) {
-        console.log('🟨 RowMetricsPanel: No token from context, attempting recovery');
-        currentToken = localStorage.getItem('access');
-        if (currentToken) {
-          console.log('✅ RowMetricsPanel: Token recovered from localStorage');
-        }
-      }
-
-      console.log('� RowMetricsPanel: fetchDQMetrics running', {
+      console.log('🟦 RowMetricsPanel: fetchDQMetrics running', {
         metricsTabIndex,
         dqMetricsFetched,
-        token: !!currentToken,
+        token: !!token,
       });
 
-      if (!currentToken || !rowId || !tableId || dqMetricsFetched) {
+      if (!rowId || !tableId || dqMetricsFetched) {
         console.log('🟨 RowMetricsPanel: Guard 1 returned - missing params or already fetched', {
-          token: !!currentToken,
           rowId,
           tableId,
           dqMetricsFetched,
@@ -79,14 +68,9 @@ export default function RowMetricsPanel({
       try {
         // For now, fetch from table-level metrics
         // In the future, this will be row-specific
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-        const url1 = `${API_BASE_URL}/carbon-api/dq/metrics/table/${tableId}/?row_id=${rowId}`;
-        console.log('🟦 RowMetricsPanel: Trying primary URL:', url1);
-
-        const response = await fetch(url1, {
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-          },
+        const response = await authFetch(`dq/metrics/table/${tableId}/?row_id=${rowId}`, {
+          method: 'GET',
+          token,
         });
 
         console.log('🟦 RowMetricsPanel: Primary response received', {
@@ -94,15 +78,10 @@ export default function RowMetricsPanel({
           ok: response.ok,
         });
 
-        // If row-specific endpoint doesn't exist, try generic metrics
         if (!response.ok && response.status === 404) {
-          const url2 = `${API_BASE_URL}/carbon-api/dq/metrics/table/${tableId}/`;
-          console.log('🟨 RowMetricsPanel: Primary 404, trying fallback URL:', url2);
-
-          const fallbackResponse = await fetch(url2, {
-            headers: {
-              Authorization: `Bearer ${currentToken}`,
-            },
+          const fallbackResponse = await authFetch(`dq/metrics/table/${tableId}/`, {
+            method: 'GET',
+            token,
           });
 
           console.log('🟦 RowMetricsPanel: Fallback response received', {

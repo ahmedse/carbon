@@ -3,6 +3,7 @@ from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
 
 from .models import TableProfile, FieldProfile, DQRule, DQResult
@@ -129,7 +130,7 @@ class DQRunView(APIView):
 
 class DQMetricsView(APIView):
     """GET /carbon-api/dq/metrics/ - Org-scoped DQ summary"""
-    permission_classes = [ReadScopedWriteAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
@@ -162,7 +163,7 @@ class DQMetricsView(APIView):
 
 class TableDQMetricsView(APIView):
     """GET /carbon-api/dq/metrics/table/{tableId}/ - Table-level DQ metrics"""
-    permission_classes = [ReadScopedWriteAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, table_id):
         try:
@@ -200,7 +201,7 @@ class TableDQMetricsView(APIView):
 
 class FieldDQMetricsView(APIView):
     """GET /carbon-api/dq/metrics/field/{fieldId}/ - Field-level DQ metrics"""
-    permission_classes = [ReadScopedWriteAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, field_id):
         try:
@@ -233,7 +234,7 @@ class FieldDQMetricsView(APIView):
 
 class RunDQValidationView(APIView):
     """POST /carbon-api/dq/run-validation/ - Trigger DQ check for table"""
-    permission_classes = [ReadScopedWriteAdmin]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         table_id = request.data.get('data_table')

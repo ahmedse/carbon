@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import DataTable, DataField, DataRow, SchemaChangeLog
+from .models import DataTable, DataField, DataRow, SchemaChangeLog, TableRelation
 
 class DataFieldSerializer(serializers.ModelSerializer):
     class Meta:
@@ -64,11 +64,20 @@ class DataRowSerializer(serializers.ModelSerializer):
     def validate(self, data):
         data_table = data.get('data_table') or (self.instance.data_table if self.instance else None)
         if data_table:
-            required_fields = data_table.fields.filter(required=True).values_list('name', flat=True)
             values = data.get('values', {})
+            if self.instance and self.partial:
+                existing_values = self.instance.values or {}
+                if not isinstance(existing_values, dict):
+                    existing_values = {}
+                values = {**existing_values, **(values or {})}
+            elif values is None:
+                values = {}
+
+            required_fields = data_table.fields.filter(required=True).values_list('name', flat=True)
             missing = [f for f in required_fields if f not in values or values[f] in (None, '', [])]
             if missing:
                 raise serializers.ValidationError({f: "This field is required." for f in missing})
+
             for f in data_table.fields.all():
                 if f.name in values:
                     val = values[f.name]
@@ -103,6 +112,24 @@ class DataRowSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'created_at', 'created_by', 'updated_at', 'updated_by', 'version'
         ]
+
+class TableRelationSerializer(serializers.ModelSerializer):
+    from_table_title = serializers.CharField(source='from_table.title', read_only=True)
+    from_field_label = serializers.CharField(source='from_field.label', read_only=True, allow_null=True)
+    to_table_title = serializers.CharField(source='to_table.title', read_only=True)
+    to_field_label = serializers.CharField(source='to_field.label', read_only=True, allow_null=True)
+    created_by_name = serializers.CharField(source='created_by', read_only=True, allow_null=True)
+
+    class Meta:
+        model = TableRelation
+        fields = [
+            'id', 'from_table', 'from_table_title', 'from_field', 'from_field_label',
+            'to_table', 'to_table_title', 'to_field', 'to_field_label',
+            'relation_type', 'label', 'description', 'created_by', 'created_by_name',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_by_name', 'created_at', 'updated_at']
+
 
 class SchemaChangeLogSerializer(serializers.ModelSerializer):
     data_table_title = serializers.CharField(source='data_table.title', read_only=True)

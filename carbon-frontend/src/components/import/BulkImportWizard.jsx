@@ -29,8 +29,7 @@ import {
 } from '@mui/material';
 import { useDropzone } from 'react-dropzone';
 import Papa from 'papaparse';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8009';
+import { API_BASE_URL } from '../../config';
 
 export default function BulkImportWizard({ open, onClose, tableId, fields, token, onImportComplete }) {
   const [activeStep, setActiveStep] = useState(0);
@@ -244,7 +243,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
     formData.append('mode', 'create');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/carbon-api/datarows/bulk-import/`, {
+      const response = await fetch(`${API_BASE_URL}datarows/bulk-import/`, {
         method: 'POST',
         headers: {
           'Authorization': `Token ${token}`

@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Box, Button, Typography, LinearProgress, Alert, List, ListItem, ListItemText, ListItemIcon } from '@mui/material';
 import { CloudUpload as UploadIcon, CheckCircle as SuccessIcon, Error as ErrorIcon } from '@mui/icons-material';
 import { useDropzone } from 'react-dropzone';
-import { API_BASE_URL } from '../../config';
+import { authFetch } from '../../api/api';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ALLOWED_TYPES = {
@@ -37,10 +37,9 @@ export default function EvidenceUploader({ dataRowId, token, onUploadComplete })
     setProgress(0);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/carbon-api/evidence/bulk-upload/`, {
+      const response = await authFetch(`evidence/bulk-upload/`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
+        body: formData,
       });
 
       const data = await response.json();
@@ -48,8 +47,10 @@ export default function EvidenceUploader({ dataRowId, token, onUploadComplete })
         setResults(data.results);
         setProgress(100);
         if (onUploadComplete) onUploadComplete(data.results.filter(r => r.status === 'success'));
+      } else if (response.status === 401) {
+        setError('Authentication failed. Please refresh the page or log in again.');
       } else {
-        setError('Upload failed. Please try again.');
+        setError(data.detail || 'Upload failed. Please try again.');
       }
     } catch (err) {
       setError(`Upload error: ${err.message}`);

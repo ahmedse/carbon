@@ -5,6 +5,8 @@ import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActi
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import UploadIcon from "@mui/icons-material/Upload";
 import DownloadIcon from "@mui/icons-material/Download";
+import AssignmentIcon from "@mui/icons-material/Assignment";
+import { API_BASE_URL } from "../config";
 import {
   fetchDataSchemaTables,
   fetchDataSchemaFields,
@@ -21,6 +23,7 @@ import BulkActionBar from "./BulkActionBar";
 import EvidenceUploader from "./evidence/EvidenceUploader";
 import EvidenceViewer from "./evidence/EvidenceViewer";
 import BulkImportWizard from "./import/BulkImportWizard";
+import DQMetricsDrawer from "./dq/DQMetricsDrawer";
 import { useNotification } from "./NotificationProvider";
 
 /**
@@ -50,6 +53,7 @@ export default function TableDataPage({
   const [showEvidenceModal, setShowEvidenceModal] = useState(false);
   const [evidenceRefreshKey, setEvidenceRefreshKey] = useState(0);
   const [showImportWizard, setShowImportWizard] = useState(false);
+  const [showDQDrawer, setShowDQDrawer] = useState(false);
 
   const notifyCtx = useNotification();
   const notify = typeof notifyCtx?.notify === "function"
@@ -242,7 +246,7 @@ export default function TableDataPage({
   const handleDownloadTemplate = async () => {
     try {
       const includeExample = window.confirm("Include example row in template?");
-      const url = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8009'}/carbon-api/datarows/download-template/?data_table=${tableId}&include_example=${includeExample}`;
+      const url = `${API_BASE_URL}datarows/download-template/?data_table=${tableId}&include_example=${includeExample}`;
       
       const response = await fetch(url, {
         method: 'GET',
@@ -305,6 +309,15 @@ export default function TableDataPage({
           size="small"
         >
           Download Template
+        </Button>
+
+        <Button
+          startIcon={<AssignmentIcon />}
+          onClick={() => setShowDQDrawer(true)}
+          variant="outlined"
+          size="small"
+        >
+          Data Quality
         </Button>
 
         <Button
@@ -412,6 +425,13 @@ export default function TableDataPage({
         fields={fields}
         token={token}
         onImportComplete={handleImportComplete}
+      />
+
+      <DQMetricsDrawer
+        open={showDQDrawer}
+        onClose={() => setShowDQDrawer(false)}
+        tableId={tableId}
+        token={token}
       />
     </Box>
   );

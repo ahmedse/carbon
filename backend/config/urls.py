@@ -47,6 +47,8 @@ urlpatterns = [
     path(f'{api_prefix}/emissions/', include('emissions.urls')),
     path(f'{api_prefix}/catalog/', include('catalog.urls')),
     path(f'{api_prefix}/mdm/', include('mdm.urls')),
+    path(f'{api_prefix}/connections/', include('connections.urls')),
+    path(f'{api_prefix}/importexport/', include('importexport.urls')),
     path(f'{api_prefix}/dq/', include('dq.urls')),
     path(f'{api_prefix}/', include('evidence.urls')),
     path(f'{api_prefix}/swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),

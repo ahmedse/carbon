@@ -13,11 +13,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.http import HttpResponse
-from .models import DataTable, DataField, DataRow, SchemaChangeLog
+from .models import DataTable, DataField, DataRow, SchemaChangeLog, TableRelation
 from .serializers import (
     DataTableSerializer, DataTableDetailSerializer,
     DataFieldSerializer, DataRowSerializer,
-    SchemaChangeLogSerializer
+    SchemaChangeLogSerializer, TableRelationSerializer
 )
 from accounts.permissions import HasScopedRole, ReadScopedWriteAdmin
 from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role
@@ -118,6 +118,35 @@ class DataRowViewSet(ScopedViewSet):
 
     def get_required_role(self):
         return ["admin", "admins_group", "auditors_group", "dataowners_group"]
+    
+    def log_request(self, request, method, endpoint_desc):
+        """Centralized request logging for debugging"""
+        import logging
+        logger = logging.getLogger('dataschema.views')
+        logger.error(f"""
+╔════════════════════════════════════════════════════════════════════════╗
+║ {method} REQUEST → {endpoint_desc}                                     ║
+╠════════════════════════════════════════════════════════════════════════╣
+║ USER: {request.user.username} | ID: {request.user.id}
+║ PARAMS: {dict(request.query_params)}
+║ BODY: {dict(request.data) if hasattr(request, 'data') else 'N/A'}
+║ CONTENT-TYPE: {request.content_type}
+╚════════════════════════════════════════════════════════════════════════╝
+        """)
+    
+    def log_error(self, method, status_code, error_msg, context=None):
+        """Centralized error logging"""
+        import logging
+        logger = logging.getLogger('dataschema.views')
+        ctx = context or {}
+        logger.error(f"""
+╔════════════════════════════════════════════════════════════════════════╗
+║ ❌ ERROR: {method} | Status: {status_code}
+╠════════════════════════════════════════════════════════════════════════╣
+║ {error_msg}
+║ CONTEXT: {ctx}
+╚════════════════════════════════════════════════════════════════════════╝
+        """)
 
     def get_queryset(self):
         user = self.request.user
@@ -135,6 +164,72 @@ class DataRowViewSet(ScopedViewSet):
         if data_table_id:
             qs = qs.filter(data_table_id=data_table_id)
         return qs
+    
+    def update(self, request, *args, **kwargs):
+        """Override to add comprehensive logging for PATCH/PUT operations"""
+        import logging
+        logger = logging.getLogger('dataschema.views')
+        
+        row_id = kwargs.get('pk')
+        logger.error(f"""
+╔════════════════════════════════════════════════════════════════════════╗
+║ 🔵 PATCH/PUT REQUEST → update()
+╠════════════════════════════════════════════════════════════════════════╣
+║ ROW ID: {row_id}
+║ USER: {request.user.username} (ID: {request.user.id})
+║ QUERY PARAMS: {dict(request.query_params)}
+║ REQUEST DATA: {dict(request.data)}
+║ CONTENT-TYPE: {request.content_type}
+╚════════════════════════════════════════════════════════════════════════╝
+        """)
+        
+        try:
+            result = super().update(request, *args, **kwargs)
+            logger.error(f"✅ UPDATE SUCCESS - Row {row_id}")
+            return result
+        except Exception as e:
+            logger.error(f"""
+╔════════════════════════════════════════════════════════════════════════╗
+║ ❌ UPDATE FAILED - Row {row_id}
+╠════════════════════════════════════════════════════════════════════════╣
+║ ERROR: {str(e)}
+║ TYPE: {type(e).__name__}
+╚════════════════════════════════════════════════════════════════════════╝
+            """, exc_info=True)
+            raise
+    
+    def partial_update(self, request, *args, **kwargs):
+        """Override to add comprehensive logging for PATCH operations"""
+        import logging
+        logger = logging.getLogger('dataschema.views')
+        
+        row_id = kwargs.get('pk')
+        logger.error(f"""
+╔════════════════════════════════════════════════════════════════════════╗
+║ 🟡 PATCH REQUEST → partial_update()
+╠════════════════════════════════════════════════════════════════════════╣
+║ ROW ID: {row_id}
+║ USER: {request.user.username} (ID: {request.user.id})
+║ QUERY PARAMS: {dict(request.query_params)}
+║ REQUEST DATA: {dict(request.data)}
+║ CONTENT-TYPE: {request.content_type}
+╚════════════════════════════════════════════════════════════════════════╝
+        """)
+        
+        try:
+            result = super().partial_update(request, *args, **kwargs)
+            logger.error(f"✅ PATCH SUCCESS - Row {row_id}")
+            return result
+        except Exception as e:
+            logger.error(f"""
+╔════════════════════════════════════════════════════════════════════════╗
+║ ❌ PATCH FAILED - Row {row_id}
+╠════════════════════════════════════════════════════════════════════════╣
+║ ERROR: {str(e)}
+║ TYPE: {type(e).__name__}
+╚════════════════════════════════════════════════════════════════════════╝
+            """, exc_info=True)
+            raise
 
     def retrieve(self, request, *args, **kwargs):
         """
@@ -384,3 +479,28 @@ class SchemaChangeLogViewSet(ScopedViewSet, viewsets.ReadOnlyModelViewSet):
         if module_id:
             qs = qs.filter(data_table__module_id=module_id)
         return qs
+
+
+# --- TableRelation (Schema relations/lineage) ---
+class TableRelationViewSet(ScopedViewSet):
+    """
+    CRUD for table relations (lineage, foreign keys, lookups).
+    Read: data-owners in scope, Write: global admins only.
+    """
+    queryset = TableRelation.objects.select_related('from_table', 'from_field', 'to_table', 'to_field', 'created_by').order_by('-created_at')
+    serializer_class = TableRelationSerializer
+    permission_classes = [IsAuthenticated, ReadScopedWriteAdmin]
+    required_role = ("admin", "admins_group", "dataowners_group")
+
+    def get_queryset(self):
+        qs = TableRelation.objects.select_related('from_table', 'from_field', 'to_table', 'to_field', 'created_by')
+        from_table_id = self.request.query_params.get('from_table')
+        to_table_id = self.request.query_params.get('to_table')
+        if from_table_id:
+            qs = qs.filter(from_table_id=from_table_id)
+        if to_table_id:
+            qs = qs.filter(to_table_id=to_table_id)
+        return qs.distinct()
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)

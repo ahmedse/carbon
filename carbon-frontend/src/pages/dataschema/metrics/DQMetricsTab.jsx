@@ -16,6 +16,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import WarningIcon from '@mui/icons-material/Warning';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import { authFetch } from '../../../api/api';
 
 function notify(message, type = 'info') {
   const event = new CustomEvent('notify', { detail: { message, type } });
@@ -57,21 +58,16 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token }) {
     setRerunError(null);
 
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-      const response = await fetch(
-        `${API_BASE_URL}/carbon-api/dq/run-validation/`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            data_table: tableId,
-            row_id: rowId,
-          }),
-        }
-      );
+      const response = await authFetch(`dq/run-validation/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: {
+          data_table: tableId,
+          row_id: rowId,
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`Validation failed: ${response.status}`);

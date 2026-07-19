@@ -53,16 +53,22 @@ class EvidenceViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Determine MIME type
-        mime_type, _ = mimetypes.guess_extension(evidence.mime_type)
+        # Determine MIME type from filename extension first, then fallback to stored mime_type
+        mime_type = mimetypes.guess_type(evidence.file.name)[0]
         if not mime_type:
-            mime_type = evidence.mime_type
-        
+            mime_type = evidence.mime_type or 'application/octet-stream'
+
         # Return file with appropriate headers
-        response = FileResponse(
-            file_obj.open('rb'),
-            content_type=mime_type
-        )
+        try:
+            response = FileResponse(
+                file_obj.open('rb'),
+                content_type=mime_type
+            )
+        except FileNotFoundError:
+            return Response(
+                {'error': 'File not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
         response['Content-Disposition'] = f'attachment; filename="{evidence.original_filename}"'
         return response
     

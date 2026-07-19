@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import Co2Icon from '@mui/icons-material/Co2';
 import StorageIcon from '@mui/icons-material/Storage';
+import CatalogIcon from '@mui/icons-material/LibraryBooks';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HelpIcon from '@mui/icons-material/Help';
@@ -24,17 +25,23 @@ const DEFAULT_STUDIOS = [
     icon: Co2Icon, 
     path: '/emissions' 
   },
-  { 
-    id: 'dataschema', 
-    label: 'Data Hub', 
-    icon: StorageIcon, 
-    path: '/dataschema' 
+  {
+    id: 'dataschema',
+    label: 'Data Hub',
+    icon: StorageIcon,
+    path: '/dataschema'
   },
-  { 
-    id: 'admin', 
-    label: 'Admin', 
-    icon: AdminPanelSettingsIcon, 
-    path: '/admin/users' 
+  {
+    id: 'catalog',
+    label: 'Catalog Studio',
+    icon: CatalogIcon,
+    path: '/catalog/domains'
+  },
+  {
+    id: 'admin',
+    label: 'Admin',
+    icon: AdminPanelSettingsIcon,
+    path: '/admin/users'
   },
   { 
     id: 'settings', 

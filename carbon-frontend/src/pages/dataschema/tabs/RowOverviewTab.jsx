@@ -31,16 +31,34 @@ export default function RowOverviewTab({ rowData, onRefresh, onClose }) {
     window.dispatchEvent(new CustomEvent('deleteRow'));
   };
 
-  const handleDownload = () => {
-    const csv = convertRowToCSV(rowData);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `row-${rowData.id}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  // Extract metadata and field data
+  const metadataFields = ['created_at', 'updated_at', 'created_by', 'updated_by'];
+  const nonDataFields = ['id', 'data_table', 'is_archived', 'version', 'values', ...metadataFields];
+  const metadata = {};
+  const fieldData = {};
+
+  // Extract metadata
+  Object.entries(rowData).forEach(([key, value]) => {
+    if (metadataFields.includes(key)) {
+      metadata[key] = value;
+    }
+  });
+
+  // Extract field data from the 'values' object
+  if (rowData.values && typeof rowData.values === 'object') {
+    Object.entries(rowData.values).forEach(([key, value]) => {
+      fieldData[key] = value;
+    });
+  }
+
+  // Fallback: if values is not nested, extract from rowData
+  if (Object.keys(fieldData).length === 0) {
+    Object.entries(rowData).forEach(([key, value]) => {
+      if (!nonDataFields.includes(key)) {
+        fieldData[key] = value;
+      }
+    });
+  }
 
   const convertRowToCSV = (data) => {
     const keys = Object.keys(data);
@@ -57,18 +75,16 @@ export default function RowOverviewTab({ rowData, onRefresh, onClose }) {
     return `${headers}\n${values}`;
   };
 
-  // Extract metadata
-  const metadataFields = ['created_at', 'updated_at', 'created_by', 'updated_by'];
-  const metadata = {};
-  const fieldData = {};
-
-  Object.entries(rowData).forEach(([key, value]) => {
-    if (metadataFields.includes(key)) {
-      metadata[key] = value;
-    } else if (key !== 'id') {
-      fieldData[key] = value;
-    }
-  });
+  const handleDownload = () => {
+    const csv = convertRowToCSV(fieldData);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `row-${rowData.id}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <Box sx={{ maxWidth: '800px' }}>

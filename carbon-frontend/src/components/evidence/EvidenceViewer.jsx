@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, List, ListItem, ListItemText, ListItemIcon, IconButton, CircularProgress, Alert } from '@mui/material';
 import { InsertDriveFile as FileIcon, Download as DownloadIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import { API_BASE_URL } from '../../config';
+import { authFetch } from '../../api/api';
 
 function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -20,37 +20,61 @@ export default function EvidenceViewer({ dataRowId, token, onDelete }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchEvidence();
-  }, [dataRowId]);
-
   const fetchEvidence = async () => {
     if (!dataRowId) return;
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/carbon-api/evidence/?data_row=${dataRowId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const response = await authFetch(`evidence/?data_row=${dataRowId}`, {
+        method: 'GET',
       });
 
-      if (response.ok) {
+      console.log('🟦 EvidenceViewer: Fetch response', {
+        status: response.status,
+        ok: response.ok,
+        dataRowId,
+      });
+
+      if (response.status === 401) {
+        console.error('🔴 EvidenceViewer: 401 Unauthorized - token may be invalid or expired');
+        localStorage.removeItem('access');
+        localStorage.removeItem('refresh');
+        setError('Authentication failed. Please refresh the page or log in again.');
+      } else if (response.ok) {
         const data = await response.json();
         setEvidence(data.results || data);
+        console.log('🟩 EvidenceViewer: Evidence loaded', { count: (data.results || data).length });
       } else {
-        setError('Failed to load evidence');
+        console.error('🔴 EvidenceViewer: HTTP error', { status: response.status, statusText: response.statusText });
+        setError(`Failed to load evidence (${response.status})`);
       }
     } catch (err) {
+      console.error('🔴 EvidenceViewer: Fetch error', err);
       setError(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchEvidence();
+  }, [dataRowId, token]);
+
+  useEffect(() => {
+    const onEvidenceRefresh = (event) => {
+      if (!event?.detail || event.detail.rowId !== dataRowId) return;
+      fetchEvidence();
+    };
+
+    window.addEventListener('evidenceRefresh', onEvidenceRefresh);
+    return () => window.removeEventListener('evidenceRefresh', onEvidenceRefresh);
+  }, [dataRowId, token]);
+
   const handleDownload = async (evidenceId, filename) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/carbon-api/evidence/${evidenceId}/download/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const response = await authFetch(`evidence/${evidenceId}/download/`, {
+        method: 'GET',
       });
 
       if (response.ok) {
@@ -73,9 +97,8 @@ export default function EvidenceViewer({ dataRowId, token, onDelete }) {
     if (!confirm('Delete this evidence?')) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/carbon-api/evidence/${evidenceId}/`, {
+      const response = await authFetch(`evidence/${evidenceId}/`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
       });
 
       if (response.ok) {

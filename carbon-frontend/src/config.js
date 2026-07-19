@@ -78,14 +78,36 @@ export const API_ROUTES = {
   groups: "accounts/roles/",
   scopedRoles: "accounts/scoped-roles/",
 
-  // Organisation (MDM)
+  // Catalog (domains, glossary, tags, assets, governance)
+  domains: "catalog/domains/",
+  glossary: "catalog/glossary/",
+  tags: "catalog/tags/",
+  assets: "catalog/assets/",
+  governance: "catalog/governance-events/",
+  catalogSearch: "catalog/search/",
+  
+  // MDM (reference data & org hierarchy)
+  referenceSets: "mdm/reference-sets/",
+  referenceValues: "mdm/reference-values/",
+  bindField: "mdm/bind-field/",
+  fieldOptions: "mdm/field-options/",
   orgUnits: "mdm/org-units/",
+  
+  // Connections (data sources & consuming systems)
+  dataSources: "connections/sources/",
+  consumingConnections: "connections/consuming/",
+  
+  // Import/Export (bulk data operations)
+  importJobs: "importexport/import/",
+  exportProjects: "importexport/export-projects/",
+  exportJobs: "importexport/export/",
   
   // Data Schema
   tables: "dataschema/tables/",
   fields: "dataschema/fields/",
   rows: "dataschema/rows/",
   schemaLogs: "dataschema/schema-logs/",
+  tableRelations: "dataschema/relations/",
   
   // AI Copilot
   aiChat: "ai/chat/send_message/",

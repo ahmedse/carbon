@@ -14,6 +14,15 @@ import PeopleIcon from '@mui/icons-material/People';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import SecurityIcon from '@mui/icons-material/Security';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
+import EditIcon from '@mui/icons-material/Edit';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import StorageIcon from '@mui/icons-material/Storage';
+import DownloadIcon from '@mui/icons-material/Download';
+import UploadIcon from '@mui/icons-material/Upload';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import LabelIcon from '@mui/icons-material/Label';
+import LayersIcon from '@mui/icons-material/Layers';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import { useAuth } from '../auth/AuthContext';
 
 // Define sidebar content per studio
@@ -37,6 +46,32 @@ function getSidebarItems(studioId) {
         { label: 'Data Entry', path: '/dataschema', icon: AddCircleOutlineIcon },
         { label: 'Table Manager', path: '/schema-admin/table-manager', icon: TableChartIcon },
         { label: 'Data Quality', path: '/dataschema/quality', icon: RuleIcon },
+      ];
+    
+    case 'catalog':
+      return [
+        { label: 'Catalog Home', path: '/catalog', icon: DashboardIcon },
+        { type: 'divider' },
+        { type: 'group', label: 'Schema & Tables' },
+        { label: 'Browse Schemas', path: '/catalog/schemas', icon: TableChartIcon },
+        { label: 'Manage Tables', path: '/catalog/schema-manager', icon: EditIcon },
+        { type: 'divider' },
+        { type: 'group', label: 'Governance' },
+        { label: 'Domains', path: '/catalog/domains', icon: LocationOnIcon },
+        { label: 'Glossary Terms', path: '/catalog/glossary', icon: AssessmentIcon },
+        { label: 'Asset Profiles', path: '/catalog/assets', icon: AssignmentIcon },
+        { label: 'Tags', path: '/catalog/tags', icon: LabelIcon },
+        { label: 'Governance Audit', path: '/catalog/governance', icon: VerifiedUserIcon },
+        { type: 'divider' },
+        { type: 'group', label: 'Master Data' },
+        { label: 'Reference Sets', path: '/catalog/reference-data', icon: LayersIcon },
+        { label: 'Master Data', path: '/catalog/mdm', icon: AccountTreeIcon },
+        { type: 'divider' },
+        { type: 'group', label: 'Data Integration' },
+        { label: 'Connections', path: '/catalog/connections', icon: SecurityIcon },
+        { label: 'Data Sources', path: '/catalog/sources', icon: StorageIcon },
+        { label: 'Exports', path: '/catalog/exports', icon: DownloadIcon },
+        { label: 'Imports', path: '/catalog/imports', icon: UploadIcon },
       ];
     
     case 'admin':
@@ -68,6 +103,7 @@ function getStudioTitle(studioId) {
     home: 'Dashboard',
     emissions: 'Emissions',
     dataschema: 'Data Hub',
+    catalog: 'Catalog Studio',
     admin: 'Administration',
     settings: 'Settings',
     help: 'Help & Support',
@@ -226,7 +262,35 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
             </Typography>
           </Box>
         ) : (
-          items.map((item) => {
+          items.map((item, index) => {
+            // Handle divider
+            if (item.type === 'divider') {
+              return <Divider key={`divider-${index}`} sx={{ my: 0.5 }} />;
+            }
+
+            // Handle group header
+            if (item.type === 'group') {
+              return (
+                <Typography
+                  key={`group-${item.label}`}
+                  variant="caption"
+                  sx={{
+                    px: 1.5,
+                    py: 1,
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    fontSize: '0.7rem',
+                    color: 'text.secondary',
+                    letterSpacing: '0.05em',
+                    display: 'block',
+                  }}
+                >
+                  {item.label}
+                </Typography>
+              );
+            }
+
+            // Handle regular navigation items
             const Icon = item.icon;
             return (
               <ListItemButton

@@ -61,6 +61,8 @@ INSTALLED_APPS = [
     'catalog',
     'mdm',
     'dq',
+    'connections',
+    'importexport',
     'ai_copilot',
     'evidence',
     'rest_framework_simplejwt.token_blacklist',

@@ -25,6 +25,7 @@ const STUDIO_PATHS = {
   home: '/dashboard',
   emissions: '/emissions',
   dataschema: '/dataschema',
+  catalog: '/catalog/domains',
   admin: '/admin/users',
   settings: '/settings',
   help: '/help',
@@ -34,6 +35,7 @@ const STUDIO_PATHS = {
 function studioFromPath(pathname) {
   if (pathname.startsWith('/emissions')) return 'emissions';
   if (pathname.startsWith('/dataschema') || pathname.startsWith('/schema-admin')) return 'dataschema';
+  if (pathname.startsWith('/catalog')) return 'catalog';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/settings')) return 'settings';
   if (pathname.startsWith('/help') || pathname.startsWith('/feedback')) return 'help';

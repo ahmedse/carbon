@@ -56,6 +56,109 @@ async function refreshAccessToken() {
   return data.access;
 }
 
+/** Returns the currently valid access token, refreshing if expired. */
+async function getValidAccessToken(token) {
+  let accessToken = token || localStorage.getItem("access");
+  const refresh = localStorage.getItem("refresh");
+
+  if (!accessToken) {
+    if (refresh) {
+      try {
+        accessToken = await refreshAccessToken();
+      } catch (e) {
+        globalLogout();
+        throw new Error("Session expired");
+      }
+    }
+    return accessToken;
+  }
+
+  if (isJwtExpired(accessToken)) {
+    try {
+      accessToken = await refreshAccessToken();
+    } catch (e) {
+      globalLogout();
+      throw new Error("Session expired");
+    }
+  }
+
+  return accessToken;
+}
+
+/** Performs a fetch with authentication and optional retry on 401. */
+export async function authFetch(
+  endpoint,
+  {
+    method = "GET",
+    body,
+    token,
+    project_id,
+    module_id,
+    timeoutMs = 15000,
+    headers: customHeaders = {},
+  } = {}
+) {
+  let url = joinUrl(API_BASE_URL, endpoint);
+  let accessToken = await getValidAccessToken(token || localStorage.getItem('access'));
+
+  if (needsProjectModuleParams(endpoint)) {
+    const [basePath, existingParams] = url.split("?");
+    const merged = new URLSearchParams(existingParams || "");
+    if (project_id) merged.set("project_id", project_id);
+    if (module_id) merged.set("module_id", module_id);
+    url = merged.toString() ? `${basePath}?${merged.toString()}` : basePath;
+  }
+
+  url = sanitizeUrl(url);
+
+  const headers = {
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...customHeaders,
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  const fetchOptions = {
+    method,
+    headers,
+    signal: controller.signal,
+    ...(body instanceof FormData ? { body } : body ? { body: JSON.stringify(body) } : {}),
+  };
+
+  let response;
+  try {
+    response = await fetch(url, fetchOptions);
+    clearTimeout(timeout);
+
+    if (response.status === 401 && accessToken) {
+      // Try refreshing once
+      accessToken = await refreshAccessToken();
+      headers.Authorization = `Bearer ${accessToken}`;
+      response = await fetch(url, { ...fetchOptions, headers });
+      clearTimeout(timeout);
+    }
+
+    return response;
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error.name === "AbortError") {
+      throw new Error("Request timed out");
+    }
+    if (error.message === "Failed to fetch") {
+      throw new Error("Network error");
+    }
+    console.error('🔴 authFetch Catch Block:', {
+      endpoint,
+      method,
+      errorMessage: error.message,
+      errorStack: error.stack,
+      timestamp: new Date().toISOString(),
+    });
+    throw error;
+  }
+}
+
 /** Logs out globally: clears user storage and redirects to login with expired param. */
 function globalLogout() {
   localStorage.clear();
@@ -179,6 +282,38 @@ export async function apiFetch(
       const detail =
         (responseData && (responseData.detail || responseData.message)) ||
         `API Error: ${response.status}`;
+      
+      // ===== COMPREHENSIVE ERROR LOGGING =====
+      const errorLog = {
+        timestamp: new Date().toISOString(),
+        endpoint,
+        method,
+        status: response.status,
+        detail,
+        requestBody: body,
+        responseData,
+        responseHeaders: Object.fromEntries(response.headers.entries()),
+      };
+      
+      // Log to console with table format for readability
+      console.group(`🔴 API ERROR - ${method} ${endpoint}`);
+      console.error('Status:', response.status);
+      console.error('Detail:', detail);
+      console.error('Request:', { method, endpoint, body });
+      console.error('Response:', responseData);
+      console.table(errorLog);
+      console.groupEnd();
+      
+      // Store in sessionStorage for backend inspection
+      try {
+        const errorHistory = JSON.parse(sessionStorage.getItem('api_errors') || '[]');
+        errorHistory.push(errorLog);
+        if (errorHistory.length > 50) errorHistory.shift(); // Keep last 50
+        sessionStorage.setItem('api_errors', JSON.stringify(errorHistory));
+      } catch (e) {
+        console.warn('Failed to store error history:', e);
+      }
+      
       throw new Error(detail);
     }
 
@@ -192,6 +327,16 @@ export async function apiFetch(
     if (error.message === "Failed to fetch") {
       throw new Error("Network error");
     }
+    
+    // Log unexpected errors
+    console.error('🔴 apiFetch Catch Block:', {
+      endpoint,
+      method,
+      errorMessage: error.message,
+      errorStack: error.stack,
+      timestamp: new Date().toISOString(),
+    });
+    
     // If not already logged out, propagate error message
     throw error;
   }

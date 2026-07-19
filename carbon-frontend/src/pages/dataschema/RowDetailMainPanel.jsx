@@ -3,6 +3,7 @@
 
 import React, { useState } from 'react';
 import { Box, CircularProgress, Alert } from '@mui/material';
+import { API_BASE_URL } from '../../config';
 import RowOverviewTab from './tabs/RowOverviewTab';
 import RowEditTab from './tabs/RowEditTab';
 import RowEvidenceTab from './tabs/RowEvidenceTab';
@@ -25,7 +26,7 @@ export default function RowDetailMainPanel({
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/carbon-api/dataschema/rows/${rowId}/?data_table=${tableId}`,
+        `${API_BASE_URL}dataschema/rows/${rowId}/?data_table=${tableId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
