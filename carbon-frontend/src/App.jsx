@@ -23,6 +23,7 @@ import ScopeInfoPage from "./pages/ScopeInfoPage";
 import EmissionsDashboard from "./pages/EmissionsDashboard";
 import EmissionsReport from "./pages/EmissionsReport";
 import SettingsPage from "./pages/SettingsPage";
+import RowDetailPage from "./pages/dataschema/RowDetailPage";
 
 // New Dashboard Architecture
 import {
@@ -161,6 +162,11 @@ export default function App() {
                 <Route
                   path="/dataschema/entry/:moduleName/:tableId"
                   element={<DataEntryPage />}
+                />
+                {/* Row Detail Page */}
+                <Route
+                  path="/dataschema/row/:tableId/:rowId"
+                  element={<RowDetailPage />}
                 />
                 <Route path="*" element={<NotFound />} />
               </Route>

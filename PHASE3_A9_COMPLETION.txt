@@ -1,0 +1,31 @@
+PHASE3_A9_COMPLETION
+====================
+
+Scope:
+- A9 Phase 3: Backend template download endpoint verification
+- Confirm `backend/dataschema/views.py` `download_template()` works as intended
+- Validate acceptance criteria for A9 Phase 3 backend API
+
+Status:
+- `download_template()` exists in `backend/dataschema/views.py`
+- Route is exposed through `dataschema.urls` via `DataRowViewSet`
+- Existing tests in `backend/dataschema/tests/test_bulk_import.py` cover:
+  - GET /carbon-api/datarows/download-template/?data_table={id}
+  - GET /carbon-api/datarows/download-template/?data_table={id}&include_example=true
+
+Acceptance Criteria Validation:
+- [x] Endpoint implemented with `@action(detail=False, methods=['get'], url_path='download-template')`
+- [x] Returns `text/csv; charset=utf-8`
+- [x] Includes active field names as CSV headers
+- [x] Optional example row added when `include_example=true`
+- [x] 404 returned if `data_table` missing or invalid
+
+Test Results:
+- Test file: `backend/dataschema/tests/test_bulk_import.py`
+- Existing coverage: `test_download_template`, `test_download_template_with_example`
+- Execution blocked by local DB permissions during test run: test database creation requires PostgreSQL user privileges. The implementation and tests are present, but the runtime environment could not initialize the test database.
+
+Notes:
+- No syntax errors found in `backend/dataschema/views.py`
+- URL path convention in tests is `GET /carbon-api/datarows/download-template/`
+- If DB access is fixed, rerun pytest for `dataschema/tests/test_bulk_import.py` to confirm runtime pass

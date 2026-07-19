@@ -75,12 +75,14 @@ export default function EvidenceUploader({ dataRowId, token, onUploadComplete })
           p: 3,
           textAlign: 'center',
           bgcolor: isDragActive ? 'action.hover' : 'background.paper',
-          cursor: 'pointer',
+          cursor: uploading && results.length === 0 ? 'not-allowed' : 'pointer',
           transition: 'all 0.2s',
-          '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' }
+          opacity: uploading && results.length === 0 ? 0.5 : 1,
+          pointerEvents: uploading && results.length === 0 ? 'none' : 'auto',
+          '&:hover': { borderColor: uploading && results.length === 0 ? 'grey.300' : 'primary.main', bgcolor: uploading && results.length === 0 ? 'background.paper' : 'action.hover' }
         }}
       >
-        <input {...getInputProps()} />
+        <input {...getInputProps()} disabled={uploading && results.length === 0} />
         <UploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
         <Typography variant="h6" gutterBottom>
           {isDragActive ? 'Drop files here' : 'Drag & drop evidence files'}

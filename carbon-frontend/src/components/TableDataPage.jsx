@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Divider, Chip } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
+import UploadIcon from "@mui/icons-material/Upload";
+import DownloadIcon from "@mui/icons-material/Download";
 import {
   fetchDataSchemaTables,
   fetchDataSchemaFields,
@@ -18,6 +20,7 @@ import DataTableGrid from "./DataTableGrid";
 import BulkActionBar from "./BulkActionBar";
 import EvidenceUploader from "./evidence/EvidenceUploader";
 import EvidenceViewer from "./evidence/EvidenceViewer";
+import BulkImportWizard from "./import/BulkImportWizard";
 import { useNotification } from "./NotificationProvider";
 
 /**
@@ -46,6 +49,7 @@ export default function TableDataPage({
   const [selectedRowId, setSelectedRowId] = useState(null);
   const [showEvidenceModal, setShowEvidenceModal] = useState(false);
   const [evidenceRefreshKey, setEvidenceRefreshKey] = useState(0);
+  const [showImportWizard, setShowImportWizard] = useState(false);
 
   const notifyCtx = useNotification();
   const notify = typeof notifyCtx?.notify === "function"
@@ -210,6 +214,68 @@ export default function TableDataPage({
     }
   };
 
+  // Handle import completion
+  const handleImportComplete = (result) => {
+    if (result.created > 0 && result.failed === 0) {
+      notify({
+        message: `Successfully imported ${result.created} rows.`,
+        type: "success",
+      });
+    } else if (result.created > 0 && result.failed > 0) {
+      notify({
+        message: `Imported ${result.created} rows with ${result.failed} errors. Check console for details.`,
+        type: "warning",
+      });
+      console.warn("[BulkImport] Errors:", result.errors);
+    } else {
+      notify({
+        message: `Import failed. ${result.failed} rows had errors.`,
+        type: "error",
+      });
+      console.error("[BulkImport] Errors:", result.errors);
+    }
+    fetchRows();
+    setShowImportWizard(false);
+  };
+
+  // Handle template download
+  const handleDownloadTemplate = async () => {
+    try {
+      const includeExample = window.confirm("Include example row in template?");
+      const url = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8009'}/carbon-api/datarows/download-template/?data_table=${tableId}&include_example=${includeExample}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Project-ID': project_id,
+          'X-Module-ID': module_id,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `${table?.name || 'template'}_template.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      notify({
+        message: "Template downloaded successfully.",
+        type: "success",
+      });
+    } catch (err) {
+      handleError(err, "Failed to download template");
+    }
+  };
+
   return (
     <Box>
       <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
@@ -222,16 +288,40 @@ export default function TableDataPage({
         onExport={handleExport}
       />
 
-      <Button
-        startIcon={<AttachFileIcon />}
-        onClick={() => setShowEvidenceModal(true)}
-        disabled={!selectedRowId || selected.length !== 1}
-        variant="outlined"
-        size="small"
-        sx={{ ml: 1, mb: 2 }}
-      >
-        Evidence
-      </Button>
+      <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+        <Button
+          startIcon={<UploadIcon />}
+          onClick={() => setShowImportWizard(true)}
+          variant="contained"
+          size="small"
+        >
+          Bulk Import
+        </Button>
+
+        <Button
+          startIcon={<DownloadIcon />}
+          onClick={handleDownloadTemplate}
+          variant="outlined"
+          size="small"
+        >
+          Download Template
+        </Button>
+
+        <Button
+          startIcon={<AttachFileIcon />}
+          onClick={() => {
+            if (selected.length === 1) {
+              setSelectedRowId(selected[0]);
+              setShowEvidenceModal(true);
+            }
+          }}
+          disabled={selected.length !== 1}
+          variant="outlined"
+          size="small"
+        >
+          Evidence
+        </Button>
+      </Box>
 
       <DataTableGrid
         fields={fields}
@@ -244,6 +334,7 @@ export default function TableDataPage({
         token={token}
         project_id={project_id}
         module_id={module_id}
+        tableId={tableId}
         uploadRowFile={uploadRowFile}
         fetchRows={fetchRows}
         editable={false}
@@ -313,6 +404,15 @@ export default function TableDataPage({
           </Button>
         </DialogActions>
       </Dialog>
+
+      <BulkImportWizard
+        open={showImportWizard}
+        onClose={() => setShowImportWizard(false)}
+        tableId={tableId}
+        fields={fields}
+        token={token}
+        onImportComplete={handleImportComplete}
+      />
     </Box>
   );
 }

@@ -136,6 +136,57 @@ class DataRowViewSet(ScopedViewSet):
             qs = qs.filter(data_table_id=data_table_id)
         return qs
 
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Retrieve a single data row by ID, respecting RBAC scoping.
+        
+        Query parameters:
+            - data_table: table ID (required for scope verification)
+        
+        Returns:
+            Row data with all fields, metadata (created_at, updated_at, created_by, updated_by),
+            and evidence_count.
+        """
+        data_table_id = request.query_params.get("data_table")
+        row_id = kwargs.get('pk')
+        
+        if not data_table_id:
+            return Response(
+                {'error': 'data_table query parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not row_id:
+            return Response(
+                {'error': 'Row ID is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Get the row and verify it belongs to the specified table
+            row = DataRow.objects.get(pk=row_id, data_table_id=data_table_id, is_archived=False)
+        except DataRow.DoesNotExist:
+            return Response(
+                {'error': 'Row not found or does not belong to the specified table'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check RBAC: user must have access to the row's table's module
+        user = request.user
+        if not (user.is_superuser or user_has_global_role(user, ["admin", "admins_group"])):
+            allowed = get_allowed_module_ids(
+                user, ["admin", "admins_group", "dataowners_group", "auditors_group"]
+            )
+            if row.data_table.module_id not in allowed:
+                return Response(
+                    {'error': 'You do not have permission to access this row'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Serialize and return
+        serializer = self.get_serializer(row)
+        return Response(serializer.data)
+
     @action(detail=False, methods=['post'], url_path='bulk-import')
     def bulk_import(self, request):
         """

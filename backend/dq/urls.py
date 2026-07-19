@@ -4,6 +4,7 @@ from django.urls import path
 from .views import (
     FieldProfileViewSet, TableProfileViewSet, DQRuleViewSet, DQResultViewSet,
     ProfileTriggerView, DQRunView,
+    DQMetricsView, TableDQMetricsView, FieldDQMetricsView, RunDQValidationView,
 )
 
 router = DefaultRouter()
@@ -15,5 +16,9 @@ router.register(r'results', DQResultViewSet, basename='dqresult')
 urlpatterns = [
     path('profile/', ProfileTriggerView.as_view(), name='dq-profile'),
     path('run/', DQRunView.as_view(), name='dq-run'),
+    path('metrics/', DQMetricsView.as_view(), name='dq-metrics'),
+    path('metrics/table/<int:table_id>/', TableDQMetricsView.as_view(), name='dq-metrics-table'),
+    path('metrics/field/<int:field_id>/', FieldDQMetricsView.as_view(), name='dq-metrics-field'),
+    path('run-validation/', RunDQValidationView.as_view(), name='dq-run-validation'),
 ]
 urlpatterns += router.urls

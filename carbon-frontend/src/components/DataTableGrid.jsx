@@ -1,9 +1,13 @@
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { DataGrid } from "@mui/x-data-grid";
-import { Button, Drawer, Box, CircularProgress, IconButton, Tooltip } from "@mui/material";
+import { Button, Dialog, Box, CircularProgress, IconButton, Tooltip, DialogTitle, DialogContent, DialogActions, Typography, Chip } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
 import FileCellRenderer from "./FileCellRenderer";
 import DataRowFormDrawer from "./DataRowFormDrawer";
 import { useNotification } from "./NotificationProvider";
@@ -29,7 +33,35 @@ function mapRows(rows, fields) {
   });
 }
 
-function buildColumns(fields, editable, token, project_id, module_id, uploadRowFile, onEditRow, onDeleteRow) {
+function ActionCellComponent({ row, onDeleteRow, tableId, rowId }) {
+  const navigate = useNavigate();
+
+  const handleViewRow = () => {
+    // tableId prop is passed from DataTableGrid; row.data_table is the API field name
+    const effectiveTableId = tableId || row.data_table || row.table_id;
+    const effectiveRowId = rowId || row.id;
+    if (effectiveTableId && effectiveRowId) {
+      navigate(`/dataschema/row/${effectiveTableId}/${effectiveRowId}`);
+    }
+  };
+
+  return (
+    <Box sx={{ display: 'flex', gap: 0.5 }}>
+      <Tooltip title="View Details">
+        <IconButton size="small" onClick={e => { e.stopPropagation(); handleViewRow(); }}>
+          <VisibilityIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="Delete">
+        <IconButton size="small" onClick={e => { e.stopPropagation(); onDeleteRow(row); }}>
+          <DeleteIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+}
+
+function buildColumns(fields, editable, token, project_id, module_id, uploadRowFile, onEditRow, onDeleteRow, tableId) {
   const columns = fields.map(field => {
     const valueOptions = safeArray(field.options).map(opt =>
       typeof opt === "object"
@@ -131,26 +163,41 @@ function buildColumns(fields, editable, token, project_id, module_id, uploadRowF
     };
   });
 
+  // Add evidence column (if evidence exists)
+  columns.push({
+    field: "evidence_count",
+    headerName: "Evidence",
+    width: 100,
+    sortable: false,
+    filterable: false,
+    renderCell: (params) => {
+      const evidenceCount = params.row.evidence_count || 0;
+      if (evidenceCount === 0) return null;
+      return (
+        <Chip
+          icon={<AttachFileIcon />}
+          label={evidenceCount}
+          size="small"
+          variant="outlined"
+        />
+      );
+    }
+  });
+
   // Add actions column at end
   columns.push({
     field: "actions",
     headerName: "Actions",
-    width: 120,
+    width: 160,
     sortable: false,
     filterable: false,
     renderCell: (params) => (
-      <Box>
-        <Tooltip title="Edit">
-          <IconButton size="small" onClick={e => { e.stopPropagation(); onEditRow(params.row); }}>
-            <EditIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Delete">
-          <IconButton size="small" onClick={e => { e.stopPropagation(); onDeleteRow(params.row); }}>
-            <DeleteIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Box>
+      <ActionCellComponent
+        row={params.row}
+        onDeleteRow={onDeleteRow}
+        tableId={tableId || params.row.data_table || params.row.table_id}
+        rowId={params.row.id}
+      />
     )
   });
 
@@ -230,11 +277,13 @@ export default function DataTableGrid({
   token,
   project_id,
   module_id,
+  tableId,
   uploadRowFile,
   onSelectionChange,
+  onRowSelectionModelChange,
   onAddNew,
-  onEditRow,
-  onDeleteRow,
+  onEditRow: parentOnEditRow,
+  onDeleteRow: parentOnDeleteRow,
   fetchRows,
   loading,
   selected,
@@ -257,6 +306,7 @@ export default function DataTableGrid({
   // Ensure selection is updated robustly
   const handleSelectionChange = (ids) => {
     if (onSelectionChange) onSelectionChange(ids);
+    if (onRowSelectionModelChange) onRowSelectionModelChange(ids);
   };
 
   // Add
@@ -304,8 +354,8 @@ export default function DataTableGrid({
   };
 
   const columns = useMemo(
-    () => buildColumns(fields, false, token, project_id, module_id, uploadRowFile, handleEditRow, handleDeleteRow),
-    [fields, token, project_id, module_id, uploadRowFile]
+    () => buildColumns(fields, false, token, project_id, module_id, uploadRowFile, handleEditRow, handleDeleteRow, tableId),
+    [fields, token, project_id, module_id, uploadRowFile, tableId]
   );
   const mappedRows = useMemo(
     () => mapRows(rows.filter(row => row && row.id), fields),
@@ -370,50 +420,103 @@ export default function DataTableGrid({
         )}
       </div>
 
-      {/* Drawer for add/edit */}
-      <Drawer
-        anchor="right"
+      {/* Dialog for add/edit (Modal, not closeable by backdrop click) */}
+      <Dialog
         open={drawerOpen}
-        onClose={() => { setDrawerOpen(false); setEditingRow(null); }}
+        onClose={(event, reason) => {
+          // Only close on explicit button click, not backdrop or escape
+          return;
+        }}
+        maxWidth="sm"
+        fullWidth
         PaperProps={{
-          sx: { width: { xs: "100%", sm: 500 }, pt: { xs: 7, sm: 9 } }
+          sx: {
+            minHeight: '60vh',
+            maxHeight: '90vh',
+            resize: 'both',
+            overflow: 'auto',
+            display: 'flex',
+            flexDirection: 'column'
+          }
         }}
       >
-        <Box p={2}>
-          <DataRowFormDrawer
-            open
-            onClose={() => { setDrawerOpen(false); setEditingRow(null); }}
-            fields={fields}
-            initial={drawerMode === "edit" ? editingRow : null}
-            onSubmit={handleDrawerSave}
-            token={token}
-            project_id={project_id}
-            module_id={module_id}
-            uploadRowFile={uploadRowFile}
-            rowId={editingRow?.id}
-            mode={drawerMode}
-          />
-        </Box>
-      </Drawer>
-
-      {/* Confirm row delete */}
-      <Drawer
-        anchor="right"
-        open={!!deleteRow}
-        onClose={() => setDeleteRow(null)}
-        PaperProps={{ sx: { width: { xs: "100%", sm: 400 }, pt: { xs: 7, sm: 9 } } }}
-      >
-        <Box p={3}>
-          <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 16 }}>Delete Row</div>
-          <div>Are you sure you want to delete this row?</div>
-          <Box mt={2} display="flex" gap={2}>
-            <Button onClick={() => setDeleteRow(null)}>Cancel</Button>
-            <Button onClick={handleConfirmDelete} color="error" variant="contained">
-              Delete
-            </Button>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+          <span>{drawerMode === 'edit' ? 'Edit Row' : 'Add New Row'}</span>
+          <IconButton
+            edge="end"
+            color="inherit"
+            onClick={() => { setDrawerOpen(false); setEditingRow(null); }}
+            sx={{ p: 0.5 }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        
+        <DialogContent sx={{ flex: 1, overflow: 'auto', pb: 2 }}>
+          <Box sx={{ pt: 1 }}>
+            <DataRowFormDrawer
+              open
+              onClose={() => { setDrawerOpen(false); setEditingRow(null); }}
+              fields={fields}
+              initial={drawerMode === "edit" ? editingRow : null}
+              onSubmit={handleDrawerSave}
+              token={token}
+              project_id={project_id}
+              module_id={module_id}
+              uploadRowFile={uploadRowFile}
+              rowId={editingRow?.id}
+              mode={drawerMode}
+            />
           </Box>
-        </Box>
-      </Drawer>
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 2, py: 1.5, borderTop: '1px solid #eee' }}>
+          <Button onClick={() => { setDrawerOpen(false); setEditingRow(null); }} variant="outlined">
+            Cancel
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirm row delete (Modal Dialog) */}
+      <Dialog
+        open={!!deleteRow}
+        onClose={(event, reason) => {
+          // Only close on explicit button click
+          return;
+        }}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            minHeight: 'auto'
+          }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Delete Row</span>
+          <IconButton
+            edge="end"
+            color="inherit"
+            onClick={() => setDeleteRow(null)}
+            sx={{ p: 0.5 }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        
+        <DialogContent>
+          <Typography>Are you sure you want to delete this row? This action cannot be undone.</Typography>
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setDeleteRow(null)} variant="outlined">
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmDelete} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 }

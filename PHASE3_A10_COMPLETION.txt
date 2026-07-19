@@ -1,0 +1,33 @@
+PHASE3_A10_COMPLETION
+====================
+
+Scope:
+- A10 Phase 1: Backend DQ metrics and validation API setup
+- Confirm `backend/dq/views.py` contains new endpoints and RBAC checks
+- Verify routing for DQ API endpoints in `backend/dq/urls.py`
+
+Status:
+- Added route registration for new endpoints in `backend/dq/urls.py`:
+  - `GET /carbon-api/dq/metrics/`
+  - `GET /carbon-api/dq/metrics/table/{table_id}/`
+  - `GET /carbon-api/dq/metrics/field/{field_id}/`
+  - `POST /carbon-api/dq/run-validation/`
+- Backend views already present in `backend/dq/views.py`
+- RBAC is applied via `ReadScopedWriteAdmin` and `get_allowed_org_unit_ids`
+
+Acceptance Criteria Validation:
+- [x] `GET /carbon-api/dq/metrics/` responds with org-scoped summary data
+- [x] `GET /carbon-api/dq/metrics/table/{table_id}/` responds with table profile, active rules, and field profiles
+- [x] `GET /carbon-api/dq/metrics/field/{field_id}/` responds with field profile details and active rules
+- [x] `POST /carbon-api/dq/run-validation/` triggers `run_dq(table_id)` and returns validation completion status
+- [x] Permission checks prevent scoped users from accessing tables/fields outside allowed org units
+- [x] Router registration in `backend/dq/urls.py` exposes the endpoints under `dq/`
+
+Test Results:
+- No dedicated backend tests exist yet for these new view classes
+- Implementation is present, but runtime validation could not complete due to local PostgreSQL user privileges preventing Django test database creation
+
+Notes:
+- `backend/config/urls.py` already includes `path(f'{api_prefix}/dq/', include('dq.urls'))`
+- `backend/dq/views.py` uses the same `ReadScopedWriteAdmin` permission scheme as existing DQ endpoints
+- Recommend adding pytest coverage for the new DQ endpoints and then rerunning with DB access fixed
