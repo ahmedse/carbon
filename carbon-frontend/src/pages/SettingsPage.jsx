@@ -186,7 +186,8 @@ export default function SettingsPage() {
       setMeLoading(false);
       return;
     }
-    fetch(`${API_BASE_URL}/accounts/my-roles/`, {
+    const baseUrl = API_BASE_URL.replace(/\/$/, '');
+    fetch(`${baseUrl}/accounts/my-roles/`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => (r.ok ? r.json() : null))
@@ -258,7 +259,8 @@ export default function SettingsPage() {
     setPwLoading(true);
     try {
       const token = localStorage.getItem("access");
-      const res = await fetch(`${API_BASE_URL}/accounts/change-password/`, {
+      const baseUrl = API_BASE_URL.replace(/\/$/, '');
+      const res = await fetch(`${baseUrl}/accounts/change-password/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

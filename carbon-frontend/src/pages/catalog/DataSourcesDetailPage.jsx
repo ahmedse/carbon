@@ -1,20 +1,42 @@
 // src/pages/catalog/DataSourcesDetailPage.jsx
 // Data Sources: Enhanced CRUD with test functionality and status indicators
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
-  Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  CircularProgress, Alert, Chip, Paper, Card, CardContent, CardHeader, MenuItem, Select, FormControl, InputLabel
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  IconButton,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
-import StorageIcon from '@mui/icons-material/Storage';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import ErrorIcon from '@mui/icons-material/Error';
+import StorageIcon from '@mui/icons-material/Storage';
 import { fetchDataSources, createDataSource, updateDataSource, deleteDataSource, testDataSource } from '../../api/catalog';
+import BaseDetailPage from '../../components/detail/BaseDetailPage';
+import DetailHeader from '../../components/detail/DetailHeader';
+import HomeIcon from '@mui/icons-material/Home';
 
 const EMPTY_FORM = { name: '', source_type: 'database', description: '' };
 const SOURCE_TYPES = ['excel', 'database', 'api', 'iot', 'mdm', 'manual'];
@@ -125,6 +147,16 @@ export default function DataSourcesDetailPage() {
     return <Typography variant="caption">—</Typography>;
   };
 
+  const summaryCards = useMemo(
+    () => [
+      { title: 'Sources', value: sources.length },
+      { title: 'Active', value: sources.filter((source) => source.status === 'active').length },
+      { title: 'Error', value: sources.filter((source) => source.status === 'error').length },
+      { title: 'Pending', value: sources.filter((source) => !source.status).length },
+    ],
+    [sources]
+  );
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -133,24 +165,12 @@ export default function DataSourcesDetailPage() {
     );
   }
 
-  return (
+  const InventoryTab = () => (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <StorageIcon sx={{ fontSize: '2rem', color: 'primary.main' }} />
-          <Box>
-            <Typography variant="h5" fontWeight={700}>Data Sources</Typography>
-            <Typography variant="body2" color="text.secondary">Source system connections</Typography>
-          </Box>
-        </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          New Source
-        </Button>
+      <Box sx={{ mb: 2 }}>
+        <Button variant="outlined" startIcon={<AddIcon />} onClick={openCreate}>New Source</Button>
       </Box>
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      <Paper>
+      <Paper variant="outlined">
         <Table>
           <TableHead>
             <TableRow sx={{ backgroundColor: 'action.hover' }}>
@@ -169,7 +189,7 @@ export default function DataSourcesDetailPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              sources.map(source => (
+              sources.map((source) => (
                 <TableRow key={source.id} hover>
                   <TableCell fontWeight={500}>{source.name}</TableCell>
                   <TableCell>
@@ -187,12 +207,7 @@ export default function DataSourcesDetailPage() {
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    <Button
-                      size="small"
-                      onClick={() => handleTest(source.id)}
-                      disabled={testingId === source.id}
-                      sx={{ mr: 1 }}
-                    >
+                    <Button size="small" onClick={() => handleTest(source.id)} disabled={testingId === source.id} sx={{ mr: 1 }}>
                       {testingId === source.id ? 'Testing...' : 'Test'}
                     </Button>
                     <IconButton size="small" onClick={() => openEdit(source)}>
@@ -208,6 +223,36 @@ export default function DataSourcesDetailPage() {
           </TableBody>
         </Table>
       </Paper>
+    </Box>
+  );
+
+  const headerComponent = (
+    <DetailHeader
+      breadcrumbs={[
+        { label: 'Home', icon: <HomeIcon />, path: '/' },
+        { label: 'Catalog', path: '/catalog' },
+        { label: 'Data Sources', path: '/catalog/sources' },
+      ]}
+      title="Data Sources"
+      description="Source system connections"
+      icon={StorageIcon}
+      onClose={() => window.history.back()}
+    />
+  );
+
+  return (
+    <>
+      {error && <Alert severity="error" sx={{ m: 3, mb: 0 }}>{error}</Alert>}
+      <BaseDetailPage
+        headerComponent={headerComponent}
+        mainTabs={[{ label: 'Inventory', component: InventoryTab }]}
+        metricsTabs={[{ label: 'Summary', component: () => <Box sx={{ p: 2 }}>{summaryCards.map((card) => <Box key={card.title} sx={{ p: 2, mb: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}><Typography variant="caption" color="text.secondary">{card.title}</Typography><Typography variant="h6">{card.value}</Typography></Box>)}</Box> }]}
+        loading={loading}
+        error={error}
+        onClose={() => window.history.back()}
+        storageKey="carbonDataSourcesDetail"
+        entityData={{ sources }}
+      />
 
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{editingSource ? 'Edit Data Source' : 'New Data Source'}</DialogTitle>
@@ -226,7 +271,7 @@ export default function DataSourcesDetailPage() {
               label="Source Type"
               onChange={(e) => setFormData({ ...formData, source_type: e.target.value })}
             >
-              {SOURCE_TYPES.map(type => (
+              {SOURCE_TYPES.map((type) => (
                 <MenuItem key={type} value={type}>{type}</MenuItem>
               ))}
             </Select>
@@ -248,6 +293,6 @@ export default function DataSourcesDetailPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }

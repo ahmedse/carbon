@@ -1,6 +1,7 @@
 // src/pages/admin/OrgUnitsPage.jsx
 // Admin page: view + manage the OrgUnit tree. Role-gated by AdminRoute in App.jsx.
 import React, { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
@@ -9,6 +10,7 @@ import {
 import AddRounded from "@mui/icons-material/AddRounded";
 import EditRounded from "@mui/icons-material/EditRounded";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
+import VisibilityRounded from "@mui/icons-material/VisibilityRounded";
 import { useAuth } from "../../auth/AuthContext";
 import {
   fetchOrgUnits, createOrgUnit, updateOrgUnit, deleteOrgUnit,
@@ -21,6 +23,7 @@ const ORG_TYPES = [
 const EMPTY_FORM = { name: "", org_type: "department", parent: "", code: "", description: "" };
 
 export default function OrgUnitsPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const token = user?.token;
 
@@ -139,6 +142,7 @@ export default function OrgUnitsPage() {
                 <TableCell>{u.code || "—"}</TableCell>
                 <TableCell style={{ color: "#6b7280", fontSize: 12 }}>{u.full_path || u.name}</TableCell>
                 <TableCell align="right">
+                  <IconButton size="small" onClick={() => navigate(`/admin/org-units/${u.id}`)} color="primary"><VisibilityRounded fontSize="small" /></IconButton>
                   <IconButton size="small" onClick={() => openEdit(u)}><EditRounded fontSize="small" /></IconButton>
                   <IconButton size="small" color="error" onClick={() => handleDelete(u)}><DeleteRounded fontSize="small" /></IconButton>
                 </TableCell>

@@ -7,11 +7,12 @@ import { useNotification } from '../../components/NotificationProvider';
 import {
   Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  CircularProgress, Alert, Chip, Paper
+  CircularProgress, Alert, Chip, Paper, Tooltip
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import StorageIcon from '@mui/icons-material/Storage';
 import { fetchDataSchemaTables, createDataSchemaTable, updateDataSchemaTable, deleteDataSchemaTable } from '../../api/dataschema';
 
@@ -156,27 +157,31 @@ export default function SchemaManagerPage() {
                   <TableCell>{table.description || '—'}</TableCell>
                   <TableCell>{table.fields_count || 0}</TableCell>
                   <TableCell align="right">
-                    <IconButton
-                      size="small"
-                      onClick={() => navigate(`/catalog/schema-manager/${table.id}`)}
-                      title="Edit fields"
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => openEdit(table)}
-                      title="Edit metadata"
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDelete(table)}
-                      title="Delete"
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    <Tooltip title="View details">
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        onClick={() => navigate(`/catalog/schemas/${table.id}`)}
+                      >
+                        <VisibilityIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Edit metadata">
+                      <IconButton
+                        size="small"
+                        onClick={() => openEdit(table)}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDelete(table)}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))

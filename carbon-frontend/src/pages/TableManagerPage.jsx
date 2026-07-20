@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box, Typography, IconButton, Button, CircularProgress, Tooltip, TextField, MenuItem, Alert
 } from "@mui/material";
-import { Add, Edit, Delete, TableRows } from "@mui/icons-material";
+import { Add, Edit, Delete, TableRows, Visibility } from "@mui/icons-material";
 
 import { DataGrid } from "@mui/x-data-grid";
 import { useAuth } from "../auth/AuthContext";
@@ -15,6 +16,7 @@ import TableFormDrawer from "../components/TableFormDrawer";
 import FieldManagerDrawer from "../components/FieldManagerDrawer";
 
 export default function TableManagerPage() {
+  const navigate = useNavigate();
   const { user, context, tablesByModule, refetchTables } = useAuth();
   const lang = "en";
   const [modules, setModules] = useState([]);
@@ -119,6 +121,15 @@ export default function TableManagerPage() {
         const hasData = params.row.row_count > 0;
         return (
           <Box display="flex" gap={1}>
+            <Tooltip title="View Details">
+              <IconButton
+                size="small"
+                color="primary"
+                onClick={() => navigate(`/catalog/schemas/${params.row.id}`)}
+              >
+                <Visibility fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <Tooltip title={hasData ? "Cannot edit fields: table has data" : "Manage Fields"}>
               <span>
                 <IconButton

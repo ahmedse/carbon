@@ -1,18 +1,35 @@
 // src/pages/catalog/ImportsDetailPage.jsx
 // Imports: Import job history and upload wizard
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
-  Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  CircularProgress, Alert, Chip, Paper, Card, CardContent, CardHeader, FormControl, InputLabel, Select, MenuItem,
-  TextField
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
 } from '@mui/material';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import AddIcon from '@mui/icons-material/Add';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { fetchImportJobs, createImportJob } from '../../api/catalog';
 import { fetchDataSchemaTables } from '../../api/dataschema';
+import BaseDetailPage from '../../components/detail/BaseDetailPage';
+import DetailHeader from '../../components/detail/DetailHeader';
+import HomeIcon from '@mui/icons-material/Home';
 
 export default function ImportsDetailPage() {
   const { token } = useAuth();
@@ -23,7 +40,8 @@ export default function ImportsDetailPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
-  
+  const [tabIndex, setTabIndex] = useState(0);
+
   const [uploadForm, setUploadForm] = useState({
     table_id: '',
     file: null,
@@ -87,31 +105,8 @@ export default function ImportsDetailPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-        <CloudUploadIcon sx={{ fontSize: '2rem', color: 'primary.main' }} />
-        <Box>
-          <Typography variant="h5" fontWeight={700}>Imports</Typography>
-          <Typography variant="body2" color="text.secondary">Upload data and manage import jobs</Typography>
-        </Box>
-      </Box>
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      {/* Upload Card */}
-      <Card sx={{ mb: 3 }}>
-        <CardHeader title="Upload Data" />
-        <CardContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+  const UploadTab = () => (
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <FormControl fullWidth>
               <InputLabel>Target Table</InputLabel>
               <Select
@@ -119,7 +114,7 @@ export default function ImportsDetailPage() {
                 label="Target Table"
                 onChange={(e) => setUploadForm({ ...uploadForm, table_id: e.target.value })}
               >
-                {tables.map(t => (
+                {tables.map((t) => (
                   <MenuItem key={t.id} value={t.id}>{t.title}</MenuItem>
                 ))}
               </Select>
@@ -160,18 +155,17 @@ export default function ImportsDetailPage() {
               {uploading ? 'Uploading...' : 'Upload File'}
             </Button>
           </Box>
-        </CardContent>
-      </Card>
+  );
 
-      {/* Jobs History */}
+  const HistoryTab = () => (
+    <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Typography variant="h6" fontWeight={700}>Import History</Typography>
         <Button variant="outlined" startIcon={<RefreshIcon />} onClick={loadData}>
           Refresh
         </Button>
       </Box>
-
-      <Paper>
+      <Paper variant="outlined">
         <Table>
           <TableHead>
             <TableRow sx={{ backgroundColor: 'action.hover' }}>
@@ -190,7 +184,7 @@ export default function ImportsDetailPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              jobs.map(job => (
+              jobs.map((job) => (
                 <TableRow key={job.id} hover>
                   <TableCell>{job.data_table_title || '—'}</TableCell>
                   <TableCell>
@@ -215,5 +209,62 @@ export default function ImportsDetailPage() {
         </Table>
       </Paper>
     </Box>
+  );
+
+  const summaryCards = useMemo(
+    () => [
+      { title: 'Jobs', value: jobs.length },
+      { title: 'Tables', value: tables.length },
+      { title: 'Pending', value: jobs.filter((job) => job.status === 'pending').length },
+      { title: 'Failed', value: jobs.filter((job) => job.status === 'failed').length },
+    ],
+    [jobs, tables]
+  );
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  const headerComponent = (
+    <DetailHeader
+      breadcrumbs={[
+        { label: 'Home', icon: <HomeIcon />, path: '/' },
+        { label: 'Catalog', path: '/catalog' },
+        { label: 'Imports', path: '/catalog/imports' },
+      ]}
+      title="Imports"
+      description="Upload data and manage import jobs"
+      icon={CloudUploadIcon}
+      onClose={() => window.history.back()}
+    />
+  );
+
+  return (
+    <BaseDetailPage
+      headerComponent={headerComponent}
+      mainTabs={[
+        { label: 'Upload', component: UploadTab },
+        { label: 'History', component: HistoryTab },
+      ]}
+      metricsTabs={[{ label: 'Summary', component: () => (
+        <Box sx={{ p: 2 }}>
+          {summaryCards.map((card) => (
+            <Box key={card.title} sx={{ p: 2, mb: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+              <Typography variant="caption" color="text.secondary">{card.title}</Typography>
+              <Typography variant="h6">{card.value}</Typography>
+            </Box>
+          ))}
+        </Box>
+      ) }]}
+      loading={loading}
+      error={error}
+      onClose={() => window.history.back()}
+      storageKey="carbonImportsDetail"
+      entityData={{ jobs, tables }}
+    />
   );
 }

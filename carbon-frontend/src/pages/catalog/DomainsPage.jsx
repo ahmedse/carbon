@@ -2,6 +2,7 @@
 // Catalog: Browse and manage data domains with governance metadata
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchDataDomains, createDataDomain, updateDataDomain, deleteDataDomain } from '../../api/catalog';
 import {
@@ -30,8 +31,10 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
 export default function DomainsPage() {
+  const navigate = useNavigate();
   const { token } = useAuth();
   const [domains, setDomains] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -137,6 +140,15 @@ export default function DomainsPage() {
                     <TableCell sx={{ fontWeight: 500 }}>{domain.name}</TableCell>
                     <TableCell>{domain.description || '-'}</TableCell>
                     <TableCell align="right">
+                      <Tooltip title="View">
+                        <IconButton
+                          size="small"
+                          onClick={() => navigate(`/catalog/domains/${domain.id}`)}
+                          color="primary"
+                        >
+                          <VisibilityIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Edit">
                         <IconButton
                           size="small"

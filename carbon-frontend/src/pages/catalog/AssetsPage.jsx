@@ -2,6 +2,7 @@
 // Catalog: Browse and manage asset profiles (metadata for tables/fields)
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchAssetProfiles, createAssetProfile, updateAssetProfile, deleteAssetProfile } from '../../api/catalog';
 import {
@@ -32,8 +33,10 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
 export default function AssetsPage() {
+  const navigate = useNavigate();
   const { token } = useAuth();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);

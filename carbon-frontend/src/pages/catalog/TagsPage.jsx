@@ -1,6 +1,7 @@
 // src/pages/catalog/TagsPage.jsx
 // Tags: Simple CRUD for classification tags
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
@@ -12,11 +13,13 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import LabelIcon from '@mui/icons-material/Label';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { fetchTags, createTag, updateTag, deleteTag } from '../../api/catalog';
 
 const EMPTY_FORM = { name: '', color: '#2563eb' };
 
 export default function TagsPage() {
+  const navigate = useNavigate();
   const { token } = useAuth();
   const { notify } = useNotification();
 

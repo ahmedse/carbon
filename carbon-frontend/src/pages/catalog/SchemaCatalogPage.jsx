@@ -6,7 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
   Box, Typography, TextField, Button, Card, CardContent, CardHeader, Grid,
-  CircularProgress, Alert, Chip, MenuItem, Paper, FormControl, InputLabel, Select
+  CircularProgress, Alert, Chip, MenuItem, Paper, FormControl, InputLabel, Select, InputAdornment
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -109,7 +109,13 @@ export default function SchemaCatalogPage() {
               fullWidth
               size="small"
               placeholder="Search tables..."
-              startAdornment={<SearchIcon sx={{ mr: 1, color: 'action.disabled' }} />}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ color: 'action.disabled' }} />
+                  </InputAdornment>
+                ),
+              }}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               variant="outlined"

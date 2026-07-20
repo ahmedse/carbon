@@ -12,6 +12,7 @@ import { Shell } from "./shell/Shell";
 import AdminRoute from "./components/AdminRoute";
 import TableManagerPage from "./pages/TableManagerPage";
 import OrgUnitsPage from "./pages/admin/OrgUnitsPage";
+import OrgUnitDetailPage from "./pages/admin/OrgUnitDetailPage";
 import AccessControlPage from "./pages/admin/AccessControlPage";
 import UsersPage from "./pages/admin/UsersPage";
 import DataEntryPage from "./pages/DataEntryPage";
@@ -34,6 +35,9 @@ import CatalogHome from "./pages/catalog/CatalogHome";
 import SchemaCatalogPage from "./pages/catalog/SchemaCatalogPage";
 import SchemaDetailPage from "./pages/catalog/SchemaDetailPage";
 import SchemaManagerPage from "./pages/catalog/SchemaManagerPage";
+import DomainDetailPage from "./pages/catalog/DomainDetailPage";
+import TagDetailPage from "./pages/catalog/TagDetailPage";
+import AssetDetailPage from "./pages/catalog/AssetDetailPage";
 import TagsPage from "./pages/catalog/TagsPage";
 import ReferenceDataPage from "./pages/catalog/ReferenceDataPage";
 import GovernancePage from "./pages/catalog/GovernancePage";
@@ -156,6 +160,14 @@ export default function App() {
                   }
                 />
                 <Route
+                  path="/admin/org-units/:orgUnitId"
+                  element={
+                    <AdminRoute>
+                      <OrgUnitDetailPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
                   path="/admin/access"
                   element={
                     <AdminRoute>
@@ -191,12 +203,15 @@ export default function App() {
                 <Route path="/catalog/schemas/:tableId" element={<SchemaDetailPage />} />
                 <Route path="/catalog/schema-manager" element={<SchemaManagerPage />} />
                 <Route path="/catalog/domains" element={<DomainsPage />} />
+                <Route path="/catalog/domains/:domainId" element={<DomainDetailPage />} />
                 <Route path="/catalog/glossary" element={<GlossaryPage />} />
                 <Route path="/catalog/assets" element={<AssetsPage />} />
+                <Route path="/catalog/assets/:assetId" element={<AssetDetailPage />} />
                 <Route path="/catalog/mdm" element={<MDMPage />} />
                 <Route path="/catalog/connections" element={<ConnectionsPage />} />
                 <Route path="/catalog/importexport" element={<ImportExportPage />} />
                 <Route path="/catalog/tags" element={<TagsPage />} />
+                <Route path="/catalog/tags/:tagId" element={<TagDetailPage />} />
                 <Route path="/catalog/reference-data" element={<ReferenceDataPage />} />
                 <Route path="/catalog/governance" element={<GovernancePage />} />
                 <Route path="/catalog/sources" element={<DataSourcesDetailPage />} />

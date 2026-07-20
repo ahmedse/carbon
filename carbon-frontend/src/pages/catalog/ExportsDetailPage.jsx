@@ -1,34 +1,47 @@
 // src/pages/catalog/ExportsDetailPage.jsx
 // Exports: Export project CRUD with job history and download
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { API_ROUTES } from '../../config';
 import {
-  Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  CircularProgress, Alert, Chip, Paper, Tabs, Tab, MenuItem, Select, FormControl, InputLabel
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  IconButton,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
-import DownloadIcon from '@mui/icons-material/Download';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import DeleteIcon from '@mui/icons-material/Delete';
+import DownloadIcon from '@mui/icons-material/Download';
+import EditIcon from '@mui/icons-material/Edit';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { fetchExportProjects, createExportProject, updateExportProject, deleteExportProject, runExportProject, fetchExportJobs, getExportJobDownloadUrl } from '../../api/catalog';
+import BaseDetailPage from '../../components/detail/BaseDetailPage';
+import DetailHeader from '../../components/detail/DetailHeader';
+import HomeIcon from '@mui/icons-material/Home';
 
 const EMPTY_FORM = { name: '', format: 'excel', schedule: 'manual', description: '' };
 const FORMATS = ['csv', 'excel', 'json'];
 const SCHEDULES = ['manual', 'daily', 'weekly', 'monthly'];
-
-function TabPanel(props) {
-  const { children, value, index } = props;
-  return (
-    <div hidden={value !== index}>
-      {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
-    </div>
-  );
-}
 
 export default function ExportsDetailPage() {
   const { token } = useAuth();
@@ -148,6 +161,122 @@ export default function ExportsDetailPage() {
     }
   };
 
+  const ProjectsTab = () => (
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ mb: 2 }}>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+          New Project
+        </Button>
+      </Box>
+      <Table>
+        <TableHead>
+          <TableRow sx={{ backgroundColor: 'action.hover' }}>
+            <TableCell fontWeight={600}>Name</TableCell>
+            <TableCell fontWeight={600}>Format</TableCell>
+            <TableCell fontWeight={600}>Schedule</TableCell>
+            <TableCell fontWeight={600} align="right">Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {projects.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
+                <Typography color="text.secondary">No export projects</Typography>
+              </TableCell>
+            </TableRow>
+          ) : (
+            projects.map((project) => (
+              <TableRow key={project.id} hover>
+                <TableCell fontWeight={500}>{project.name}</TableCell>
+                <TableCell><Chip label={project.format} size="small" variant="outlined" /></TableCell>
+                <TableCell><Chip label={project.schedule} size="small" color="primary" variant="outlined" /></TableCell>
+                <TableCell align="right">
+                  <Button
+                    size="small"
+                    startIcon={<PlayArrowIcon />}
+                    onClick={() => handleRun(project.id)}
+                    disabled={runningId === project.id}
+                    sx={{ mr: 1 }}
+                  >
+                    {runningId === project.id ? 'Running' : 'Run'}
+                  </Button>
+                  <IconButton size="small" onClick={() => openEdit(project)}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => handleDelete(project)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+
+  const JobsTab = () => (
+    <Box sx={{ p: 3 }}>
+      <Table>
+        <TableHead>
+          <TableRow sx={{ backgroundColor: 'action.hover' }}>
+            <TableCell fontWeight={600}>Project</TableCell>
+            <TableCell fontWeight={600}>Status</TableCell>
+            <TableCell fontWeight={600}>Rows</TableCell>
+            <TableCell fontWeight={600}>Date</TableCell>
+            <TableCell fontWeight={600} align="right">Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {jobs.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                <Typography color="text.secondary">No export jobs</Typography>
+              </TableCell>
+            </TableRow>
+          ) : (
+            jobs.map((job) => (
+              <TableRow key={job.id} hover>
+                <TableCell>{job.export_project_name || '—'}</TableCell>
+                <TableCell>
+                  <Chip
+                    label={job.status}
+                    size="small"
+                    color={job.status === 'ready' ? 'success' : 'default'}
+                    variant={job.status === 'ready' ? 'filled' : 'outlined'}
+                  />
+                </TableCell>
+                <TableCell>{job.row_count || 0}</TableCell>
+                <TableCell>
+                  <Typography variant="caption">
+                    {job.created_at ? new Date(job.created_at).toLocaleDateString() : '—'}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  {job.status === 'ready' && (
+                    <Button size="small" startIcon={<DownloadIcon />} onClick={() => handleDownload(job.id)}>
+                      Download
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+
+  const summaryCards = useMemo(
+    () => [
+      { title: 'Projects', value: projects.length },
+      { title: 'Jobs', value: jobs.length },
+      { title: 'Ready', value: jobs.filter((job) => job.status === 'ready').length },
+      { title: 'Running', value: jobs.filter((job) => job.status === 'running').length },
+    ],
+    [jobs, projects]
+  );
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -156,133 +285,45 @@ export default function ExportsDetailPage() {
     );
   }
 
+  const headerComponent = (
+    <DetailHeader
+      breadcrumbs={[
+        { label: 'Home', icon: <HomeIcon />, path: '/' },
+        { label: 'Catalog', path: '/catalog' },
+        { label: 'Exports', path: '/catalog/exports' },
+      ]}
+      title="Exports"
+      description="Data export projects and jobs"
+      icon={AssignmentIcon}
+      onClose={() => window.history.back()}
+    />
+  );
+
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-        <AssignmentIcon sx={{ fontSize: '2rem', color: 'primary.main' }} />
-        <Box>
-          <Typography variant="h5" fontWeight={700}>Exports</Typography>
-          <Typography variant="body2" color="text.secondary">Data export projects and jobs</Typography>
-        </Box>
-      </Box>
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      <Paper>
-        <Tabs value={tabIndex} onChange={(e, v) => setTabIndex(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tab label="Projects" />
-          <Tab label="Jobs" />
-        </Tabs>
-
-        {/* Projects Tab */}
-        <TabPanel value={tabIndex} index={0}>
-          <Box sx={{ mb: 2 }}>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-              New Project
-            </Button>
+    <>
+      {error && <Alert severity="error" sx={{ m: 3, mb: 0 }}>{error}</Alert>}
+      <BaseDetailPage
+        headerComponent={headerComponent}
+        mainTabs={[
+          { label: 'Projects', component: ProjectsTab },
+          { label: 'Jobs', component: JobsTab },
+        ]}
+        metricsTabs={[{ label: 'Summary', component: () => (
+          <Box sx={{ p: 2 }}>
+            {summaryCards.map((card) => (
+              <Box key={card.title} sx={{ p: 2, mb: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Typography variant="caption" color="text.secondary">{card.title}</Typography>
+                <Typography variant="h6">{card.value}</Typography>
+              </Box>
+            ))}
           </Box>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                <TableCell fontWeight={600}>Name</TableCell>
-                <TableCell fontWeight={600}>Format</TableCell>
-                <TableCell fontWeight={600}>Schedule</TableCell>
-                <TableCell fontWeight={600} align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {projects.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
-                    <Typography color="text.secondary">No export projects</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                projects.map(project => (
-                  <TableRow key={project.id} hover>
-                    <TableCell fontWeight={500}>{project.name}</TableCell>
-                    <TableCell><Chip label={project.format} size="small" variant="outlined" /></TableCell>
-                    <TableCell><Chip label={project.schedule} size="small" color="primary" variant="outlined" /></TableCell>
-                    <TableCell align="right">
-                      <Button
-                        size="small"
-                        startIcon={<PlayArrowIcon />}
-                        onClick={() => handleRun(project.id)}
-                        disabled={runningId === project.id}
-                        sx={{ mr: 1 }}
-                      >
-                        {runningId === project.id ? 'Running' : 'Run'}
-                      </Button>
-                      <IconButton size="small" onClick={() => openEdit(project)}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => handleDelete(project)}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TabPanel>
-
-        {/* Jobs Tab */}
-        <TabPanel value={tabIndex} index={1}>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                <TableCell fontWeight={600}>Project</TableCell>
-                <TableCell fontWeight={600}>Status</TableCell>
-                <TableCell fontWeight={600}>Rows</TableCell>
-                <TableCell fontWeight={600}>Date</TableCell>
-                <TableCell fontWeight={600} align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {jobs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
-                    <Typography color="text.secondary">No export jobs</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                jobs.map(job => (
-                  <TableRow key={job.id} hover>
-                    <TableCell>{job.export_project_name || '—'}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={job.status}
-                        size="small"
-                        color={job.status === 'ready' ? 'success' : 'default'}
-                        variant={job.status === 'ready' ? 'filled' : 'outlined'}
-                      />
-                    </TableCell>
-                    <TableCell>{job.row_count || 0}</TableCell>
-                    <TableCell>
-                      <Typography variant="caption">
-                        {job.created_at ? new Date(job.created_at).toLocaleDateString() : '—'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      {job.status === 'ready' && (
-                        <Button
-                          size="small"
-                          startIcon={<DownloadIcon />}
-                          onClick={() => handleDownload(job.id)}
-                        >
-                          Download
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TabPanel>
-      </Paper>
-
+        ) }]}
+        loading={loading}
+        error={error}
+        onClose={() => window.history.back()}
+        storageKey="carbonExportsDetail"
+        entityData={{ projects, jobs }}
+      />
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{editingProject ? 'Edit Export Project' : 'New Export Project'}</DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
@@ -300,7 +341,7 @@ export default function ExportsDetailPage() {
               label="Format"
               onChange={(e) => setFormData({ ...formData, format: e.target.value })}
             >
-              {FORMATS.map(f => <MenuItem key={f} value={f}>{f}</MenuItem>)}
+              {FORMATS.map((f) => <MenuItem key={f} value={f}>{f}</MenuItem>)}
             </Select>
           </FormControl>
           <FormControl fullWidth margin="normal">
@@ -310,7 +351,7 @@ export default function ExportsDetailPage() {
               label="Schedule"
               onChange={(e) => setFormData({ ...formData, schedule: e.target.value })}
             >
-              {SCHEDULES.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+              {SCHEDULES.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
             </Select>
           </FormControl>
           <TextField
@@ -330,6 +371,6 @@ export default function ExportsDetailPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }

@@ -68,7 +68,9 @@ export const AuthProvider = ({ children }) => {
   // --- Fetch perspective context from backend ---
   const fetchPerspectiveContext = async (token) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/accounts/me/context/`, {
+      // Remove trailing slash from API_BASE_URL to avoid double slashes
+      const baseUrl = API_BASE_URL.replace(/\/$/, '');
+      const res = await fetch(`${baseUrl}/accounts/me/context/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to fetch perspective context");

@@ -40,6 +40,10 @@ export default function RowDetailPage() {
     const stored = localStorage.getItem('carbonRowDetail:panelWidth');
     return stored ? parseInt(stored, 10) : DEFAULT_PANEL_WIDTH;
   });
+  const [metricsPanelOpen, setMetricsPanelOpen] = useState(() => {
+    const stored = localStorage.getItem('carbonRowDetail:metricsPanelOpen');
+    return stored !== 'false'; // Default to open
+  });
 
   useEffect(() => {
     const savedMainTab = localStorage.getItem('carbonRowDetail:mainTab');
@@ -61,30 +65,12 @@ export default function RowDetailPage() {
   useEffect(() => {
     const fetchRowData = async () => {
       let currentToken = token;
-      
-      console.log('🟦 RowDetailPage: fetchRowData starting', {
-        token: !!currentToken,
-        rowId,
-        tableId,
-        API_BASE_URL,
-        API_ROUTES_rows: API_ROUTES.rows,
-      });
 
-      // If no token, try to recover from localStorage
       if (!currentToken) {
-        console.log('🟨 RowDetailPage: No token from context, attempting recovery from localStorage');
         currentToken = localStorage.getItem('access');
-        if (currentToken) {
-          console.log('✅ RowDetailPage: Token recovered from localStorage');
-        }
       }
 
       if (!currentToken || !rowId || !tableId) {
-        console.log('🟨 RowDetailPage: Missing required params after recovery attempt', {
-          token: !!currentToken,
-          rowId,
-          tableId,
-        });
         setError('Authentication required. Please log in.');
         setLoading(false);
         return;
@@ -95,18 +81,10 @@ export default function RowDetailPage() {
 
       try {
         const url = `${API_BASE_URL}${API_ROUTES.rows}${rowId}/?data_table=${tableId}`;
-        console.log('🟦 RowDetailPage: Fetching from URL:', url);
-
         const response = await fetch(url, {
           headers: {
             Authorization: `Bearer ${currentToken}`,
           },
-        });
-
-        console.log('🟦 RowDetailPage: Fetch response received', {
-          status: response.status,
-          ok: response.ok,
-          statusText: response.statusText,
         });
 
         if (!response.ok) {
@@ -114,13 +92,8 @@ export default function RowDetailPage() {
         }
 
         const data = await response.json();
-        console.log('🟩 RowDetailPage: Row data received successfully', {
-          rowId: data.id,
-          fieldsCount: Object.keys(data.values || {}).length,
-        });
         setRowData(data);
       } catch (err) {
-        console.error('🔴 RowDetailPage: Error fetching row:', err);
         setError(err.message || 'Failed to load row data');
         notify(`Error: ${err.message}`, 'error');
       } finally {
@@ -139,6 +112,12 @@ export default function RowDetailPage() {
     );
     setPanelWidth(constrainedWidth);
     localStorage.setItem('carbonRowDetail:panelWidth', constrainedWidth);
+  };
+
+  const handleToggleMetricsPanel = () => {
+    const newState = !metricsPanelOpen;
+    setMetricsPanelOpen(newState);
+    localStorage.setItem('carbonRowDetail:metricsPanelOpen', newState.toString());
   };
 
   const handleClose = () => {
@@ -246,29 +225,63 @@ export default function RowDetailPage() {
         </Box>
 
         <>
-          <ResizableDivider onResize={handlePanelWidthChange} />
-
+          {/* Toggle Button - Always Visible */}
           <Box
+            onClick={handleToggleMetricsPanel}
             sx={{
-              width: `${panelWidth}px`,
+              width: '32px',
               display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: '#f5f5f5',
               borderLeft: '1px solid #e0e0e0',
-              bgcolor: '#f9fafb',
-              '@media (max-width: 1024px)': {
-                display: 'none',
+              cursor: 'pointer',
+              transition: 'background-color 0.2s',
+              '&:hover': {
+                bgcolor: '#eeeeee',
               },
             }}
           >
-            <RowMetricsPanel
-              rowId={rowId}
-              tableId={tableId}
-              token={token}
-              metricsTabIndex={metricsTabIndex}
-              onMetricsTabChange={handleMetricsTabChange}
-            />
+            <Box
+              sx={{
+                fontSize: '18px',
+                color: '#666',
+                fontWeight: 'bold',
+                transform: metricsPanelOpen ? 'scaleX(1)' : 'scaleX(-1)',
+                transition: 'transform 0.2s',
+              }}
+            >
+              ›
+            </Box>
           </Box>
+
+          {/* Resizable Divider - Only when panel is open */}
+          {metricsPanelOpen && <ResizableDivider onResize={handlePanelWidthChange} />}
+
+          {/* Metrics Panel - Conditionally Rendered */}
+          {metricsPanelOpen && (
+            <Box
+              sx={{
+                width: `${panelWidth}px`,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                borderLeft: '1px solid #e0e0e0',
+                bgcolor: '#f9fafb',
+                '@media (max-width: 1024px)': {
+                  display: 'none',
+                },
+              }}
+            >
+              <RowMetricsPanel
+                rowId={rowId}
+                tableId={tableId}
+                token={token}
+                metricsTabIndex={metricsTabIndex}
+                onMetricsTabChange={handleMetricsTabChange}
+              />
+            </Box>
+          )}
         </>
       </Box>
     </Box>
