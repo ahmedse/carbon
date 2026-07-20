@@ -84,6 +84,7 @@ export const API_ROUTES = {
   tags: "catalog/tags/",
   assets: "catalog/assets/",
   governance: "catalog/governance-events/",
+  governancePolicies: "catalog/governance-policies/",
   catalogSearch: "catalog/search/",
   
   // MDM (reference data & org hierarchy)
@@ -108,6 +109,11 @@ export const API_ROUTES = {
   rows: "dataschema/rows/",
   schemaLogs: "dataschema/schema-logs/",
   tableRelations: "dataschema/relations/",
+
+  // Data Quality (DQ)
+  dqRules: "dq/rules/",
+  dqResults: "dq/results/",
+  dqMetricsTable: "dq/metrics/table/",
   
   // AI Copilot
   aiChat: "ai/chat/send_message/",

@@ -228,11 +228,6 @@ export default function DataSourcesDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      breadcrumbs={[
-        { label: 'Home', icon: <HomeIcon />, path: '/' },
-        { label: 'Catalog', path: '/catalog' },
-        { label: 'Data Sources', path: '/catalog/sources' },
-      ]}
       title="Data Sources"
       description="Source system connections"
       icon={StorageIcon}

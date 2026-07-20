@@ -1,15 +1,64 @@
 // File: src/components/NotificationProvider.jsx
+//
+// Unified feedback mechanism for the whole app.
+//
+// Two surfaces, one entry point:
+//   - notify({ message, type })            -> lightweight snackbar (toast)
+//   - showFeedback(feedbackEnvelope)        -> rich dialog with reasons + remediation
+//   - notifyFromError(error, fallbackMsg)   -> smart router: picks the right surface
+//                                              based on the structured `feedback`
+//                                              envelope attached by the API layer.
+//
+// The backend returns a canonical envelope:
+//   { code, severity, title, detail, reasons[], remediation[], context{} }
+// (see backend/core/feedback.py). Any blocked/failed action anywhere in the
+// platform flows through here so the user always sees WHAT happened and WHAT
+// TO DO next.
 
 import React, { createContext, useContext, useState, useCallback } from "react";
-import { Snackbar, Alert, IconButton } from "@mui/material";
+import {
+  Snackbar,
+  Alert,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Box,
+  Typography,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+} from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import BlockIcon from "@mui/icons-material/Block";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 
 const NotificationContext = createContext(undefined);
 
+const SEVERITY_META = {
+  error: { color: "#dc2626", bg: "#fef2f2", icon: ErrorOutlineIcon },
+  warning: { color: "#d97706", bg: "#fffbeb", icon: WarningAmberIcon },
+  info: { color: "#2563eb", bg: "#eff6ff", icon: InfoOutlinedIcon },
+  success: { color: "#16a34a", bg: "#f0fdf4", icon: CheckCircleOutlineIcon },
+};
+
+function getMeta(severity) {
+  return SEVERITY_META[severity] || SEVERITY_META.info;
+}
+
 export function NotificationProvider({ children }) {
   const [notification, setNotification] = useState(null);
+  const [feedback, setFeedbackState] = useState(null);
 
-  // Robust: always allows stacking or fast replacement
+  // Lightweight toast
   const notify = useCallback(
     ({ message, type = "info", duration = 4000 }) => {
       setNotification({ message, type, duration, key: Date.now() });
@@ -17,30 +66,64 @@ export function NotificationProvider({ children }) {
     []
   );
 
-  const handleClose = (_, reason) => {
+  // Rich, blocking feedback dialog (reasons + remediation)
+  const showFeedback = useCallback((fb) => {
+    if (!fb) return;
+    setFeedbackState({
+      severity: fb.severity || "error",
+      title: fb.title || "Notice",
+      detail: fb.detail || "",
+      reasons: Array.isArray(fb.reasons) ? fb.reasons : [],
+      remediation: Array.isArray(fb.remediation) ? fb.remediation : [],
+      context: fb.context || {},
+      key: Date.now(),
+    });
+  }, []);
+
+  // Smart router: choose dialog vs toast based on structured content.
+  const notifyFromError = useCallback(
+    (error, fallbackMessage = "Something went wrong") => {
+      const fb = error?.feedback;
+      const hasRichContent =
+        fb && ((fb.reasons && fb.reasons.length) || (fb.remediation && fb.remediation.length));
+
+      if (hasRichContent) {
+        showFeedback(fb);
+        return;
+      }
+
+      const message = fb?.detail || error?.message || fallbackMessage;
+      const type = fb?.severity || "error";
+      setNotification({ message, type, duration: 5000, key: Date.now() });
+    },
+    [showFeedback]
+  );
+
+  const handleCloseSnackbar = (_, reason) => {
     if (reason === "clickaway") return;
     setNotification(null);
   };
 
-  // Debug: log when provider mounts
-  React.useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.debug("NotificationProvider mounted.");
-  }, []);
+  const handleCloseFeedback = () => setFeedbackState(null);
+
+  const meta = feedback ? getMeta(feedback.severity) : getMeta("info");
+  const HeaderIcon = feedback?.severity === "error" ? BlockIcon : meta.icon;
 
   return (
-    <NotificationContext.Provider value={{ notify }}>
+    <NotificationContext.Provider value={{ notify, showFeedback, notifyFromError }}>
       {children}
+
+      {/* Lightweight toast */}
       <Snackbar
         key={notification?.key}
         open={!!notification}
         autoHideDuration={notification?.duration}
-        onClose={handleClose}
+        onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: "top", horizontal: "center" }}
       >
         {notification && (
           <Alert
-            onClose={handleClose}
+            onClose={handleCloseSnackbar}
             severity={notification.type}
             sx={{ width: "100%" }}
             action={
@@ -48,7 +131,7 @@ export function NotificationProvider({ children }) {
                 aria-label="close"
                 color="inherit"
                 size="small"
-                onClick={handleClose}
+                onClick={handleCloseSnackbar}
               >
                 <CloseIcon fontSize="inherit" />
               </IconButton>
@@ -58,6 +141,105 @@ export function NotificationProvider({ children }) {
           </Alert>
         )}
       </Snackbar>
+
+      {/* Rich feedback dialog */}
+      <Dialog
+        open={!!feedback}
+        onClose={handleCloseFeedback}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        {feedback && (
+          <>
+            <DialogTitle sx={{ pb: 1 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                <Box
+                  sx={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: "50%",
+                    bgcolor: meta.bg,
+                    color: meta.color,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <HeaderIcon />
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+                    {feedback.title}
+                  </Typography>
+                  {feedback.detail && feedback.detail !== feedback.title && (
+                    <Typography variant="body2" color="text.secondary">
+                      {feedback.detail}
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            </DialogTitle>
+
+            <DialogContent dividers>
+              {feedback.reasons.length > 0 && (
+                <Box sx={{ mb: feedback.remediation.length ? 2 : 0 }}>
+                  <Typography
+                    variant="overline"
+                    color="text.secondary"
+                    fontWeight={700}
+                  >
+                    Why
+                  </Typography>
+                  <List dense disablePadding>
+                    {feedback.reasons.map((reason, i) => (
+                      <ListItem key={i} disableGutters sx={{ alignItems: "flex-start" }}>
+                        <ListItemIcon sx={{ minWidth: 30, mt: 0.5, color: meta.color }}>
+                          <ErrorOutlineIcon fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText primary={reason} />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Box>
+              )}
+
+              {feedback.reasons.length > 0 && feedback.remediation.length > 0 && (
+                <Divider sx={{ my: 1 }} />
+              )}
+
+              {feedback.remediation.length > 0 && (
+                <Box>
+                  <Typography
+                    variant="overline"
+                    color="text.secondary"
+                    fontWeight={700}
+                  >
+                    What you can do
+                  </Typography>
+                  <List dense disablePadding>
+                    {feedback.remediation.map((step, i) => (
+                      <ListItem key={i} disableGutters sx={{ alignItems: "flex-start" }}>
+                        <ListItemIcon sx={{ minWidth: 30, mt: 0.5, color: "#16a34a" }}>
+                          <ArrowForwardIcon fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText primary={step} />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Box>
+              )}
+            </DialogContent>
+
+            <DialogActions>
+              <Button onClick={handleCloseFeedback} variant="contained">
+                Got it
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </NotificationContext.Provider>
   );
 }
@@ -70,14 +252,18 @@ export function useNotification() {
     console.warn(
       "useNotification called outside of NotificationProvider! Fallback to alert."
     );
+    const fallbackNotify = (msg) => {
+      const message =
+        typeof msg === "string"
+          ? msg
+          : msg?.message || "Notification (but NotificationProvider is missing)";
+      window.alert(message);
+    };
     return {
-      notify: (msg) => {
-        const message =
-          typeof msg === "string"
-            ? msg
-            : msg?.message || "Notification (but NotificationProvider is missing)";
-        window.alert(message);
-      },
+      notify: fallbackNotify,
+      showFeedback: (fb) => window.alert(fb?.detail || fb?.title || "Notice"),
+      notifyFromError: (err, fallback) =>
+        window.alert(err?.feedback?.detail || err?.message || fallback || "Error"),
     };
   }
   return ctx;

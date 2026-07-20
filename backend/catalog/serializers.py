@@ -1,6 +1,6 @@
 # catalog/serializers.py
 from rest_framework import serializers
-from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent
+from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy
 
 
 class DataDomainSerializer(serializers.ModelSerializer):
@@ -55,3 +55,15 @@ class GovernanceEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = GovernanceEvent
         fields = ['id', 'asset', 'entity_type', 'entity_id', 'action', 'before', 'after', 'user', 'timestamp']
+
+
+class GovernancePolicySerializer(serializers.ModelSerializer):
+    updated_by_username = serializers.CharField(source='updated_by.username', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = GovernancePolicy
+        fields = [
+            'id', 'policy_type', 'name', 'description', 'enabled', 
+            'config', 'created_at', 'updated_at', 'updated_by', 'updated_by_username'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'updated_by', 'updated_by_username']

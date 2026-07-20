@@ -82,6 +82,23 @@ export function updateDataSchemaFieldOrder(token, tableId, fields, project_id, m
   });
 }
 
+// ----- Schema Change Log (audit trail) -----
+
+/**
+ * Fetch schema change logs, optionally scoped to a table or module.
+ * Admin / admins_group only (server-enforced).
+ * @param {string} token
+ * @param {{ data_table?: number|string, module_id?: number|string }} [filters]
+ */
+export function fetchSchemaChangeLogs(token, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.data_table != null) params.set("data_table", filters.data_table);
+  if (filters.module_id != null) params.set("module_id", filters.module_id);
+  const qs = params.toString();
+  return apiFetch(`${API_ROUTES.schemaLogs}${qs ? `?${qs}` : ""}`, { token });
+}
+
+
 // ----- Rows -----
 
 /**

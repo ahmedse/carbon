@@ -43,6 +43,7 @@ export default function BaseDetailPage({
   storageKey = 'detailPage',
   entityData = null,
 }) {
+  const hasMetricsPanel = metricsTabs.length > 0 || Boolean(MetricsPanelComponent);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -158,7 +159,7 @@ export default function BaseDetailPage({
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        height: '100vh',
+        height: '100%',
         bgcolor: 'background.default',
       }}
     >
@@ -171,7 +172,6 @@ export default function BaseDetailPage({
           display: 'flex',
           flex: 1,
           overflow: 'hidden',
-          borderTop: '1px solid #e0e0e0',
         }}
       >
         {/* Main panel */}
@@ -186,18 +186,12 @@ export default function BaseDetailPage({
         >
           {/* Main tabs */}
           {mainTabs.length > 0 && (
-            <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'white' }}>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
               <Tabs
                 value={mainTabIndex}
                 onChange={handleMainTabChange}
                 variant="scrollable"
                 scrollButtons="auto"
-                sx={{
-                  '& .MuiTab-root': {
-                    textTransform: 'none',
-                    fontSize: '0.95rem',
-                  },
-                }}
               >
                 {mainTabs.map((tab, idx) => (
                   <Tab key={idx} label={tab.label} />
@@ -207,13 +201,13 @@ export default function BaseDetailPage({
           )}
 
           {/* Main content */}
-          <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'white' }}>
+          <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'background.paper' }}>
             {MainTabComponent && <MainTabComponent entityData={entityData} />}
           </Box>
         </Box>
 
         {/* Resizable divider */}
-        {!isMobile && metricsPanelOpen && MetricsPanelComponent && (
+        {!isMobile && metricsPanelOpen && hasMetricsPanel && (
           <Box
             onMouseDown={() => setIsDragging(true)}
             sx={{
@@ -230,16 +224,17 @@ export default function BaseDetailPage({
         )}
 
         {/* Metrics panel */}
-        {!isMobile && MetricsPanelComponent && (
+        {!isMobile && hasMetricsPanel && (
           <Box
             sx={{
               width: metricsPanelOpen ? panelWidth : '0',
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
-              borderLeft: metricsPanelOpen ? '1px solid #e0e0e0' : 'none',
+              borderLeft: metricsPanelOpen ? 1 : 0,
+              borderColor: 'divider',
               transition: metricsPanelOpen ? 'width 0.3s ease' : 'none',
-              bgcolor: 'white',
+              bgcolor: 'background.paper',
             }}
           >
             {/* Metrics toggle button */}
@@ -250,8 +245,9 @@ export default function BaseDetailPage({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   p: 1,
-                  borderBottom: '1px solid #e0e0e0',
-                  bgcolor: 'white',
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                  bgcolor: 'background.paper',
                 }}
               >
                 <IconButton
@@ -269,20 +265,11 @@ export default function BaseDetailPage({
 
             {/* Metrics tabs */}
             {metricsTabs.length > 0 && metricsPanelOpen && (
-              <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'white' }}>
+              <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
                 <Tabs
                   value={metricsTabIndex}
                   onChange={handleMetricsTabChange}
-                  orientation="vertical"
-                  variant="scrollable"
-                  sx={{
-                    minWidth: '120px',
-                    '& .MuiTab-root': {
-                      textTransform: 'none',
-                      fontSize: '0.85rem',
-                      justifyContent: 'flex-start',
-                    },
-                  }}
+                  variant="fullWidth"
                 >
                   {metricsTabs.map((tab, idx) => (
                     <Tab key={idx} label={tab.label} />
@@ -293,7 +280,7 @@ export default function BaseDetailPage({
 
             {/* Metrics content */}
             {metricsPanelOpen && (
-              <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'white' }}>
+              <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'background.paper' }}>
                 {MetricsTabComponent && <MetricsTabComponent entityData={entityData} />}
               </Box>
             )}
@@ -301,13 +288,14 @@ export default function BaseDetailPage({
         )}
 
         {/* Collapsed metrics toggle button */}
-        {!isMobile && MetricsPanelComponent && !metricsPanelOpen && (
+        {!isMobile && hasMetricsPanel && !metricsPanelOpen && (
           <Box
             sx={{
               display: 'flex',
               alignItems: 'center',
-              borderLeft: '1px solid #e0e0e0',
-              bgcolor: 'white',
+              borderLeft: 1,
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
             }}
           >
             <IconButton

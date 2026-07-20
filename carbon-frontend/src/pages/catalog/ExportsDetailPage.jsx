@@ -287,11 +287,6 @@ export default function ExportsDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      breadcrumbs={[
-        { label: 'Home', icon: <HomeIcon />, path: '/' },
-        { label: 'Catalog', path: '/catalog' },
-        { label: 'Exports', path: '/catalog/exports' },
-      ]}
       title="Exports"
       description="Data export projects and jobs"
       icon={AssignmentIcon}

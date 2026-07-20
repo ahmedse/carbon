@@ -1,17 +1,18 @@
 # catalog/views.py
 from django.db.models import Q
 from django.utils.text import slugify
-from rest_framework import viewsets
+from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent
+from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy
 from .serializers import (
     DataDomainSerializer, GlossaryTermSerializer, TagSerializer,
-    AssetProfileSerializer, GovernanceEventSerializer,
+    AssetProfileSerializer, GovernanceEventSerializer, GovernancePolicySerializer,
 )
 from accounts.permissions import ReadAnyWriteGlobalAdmin
+from core.feedback import AppFeedback
 from .services import ensure_asset_profiles
 
 
@@ -83,6 +84,46 @@ class GovernanceEventViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = GovernanceEvent.objects.all()
     serializer_class = GovernanceEventSerializer
     permission_classes = [IsAuthenticated]
+
+
+class GovernancePolicyViewSet(viewsets.ModelViewSet):
+    """
+    Admin-managed governance policies. Read for authenticated users,
+    write for global admins only. A policy that is enabled and has been
+    enforced (usage_count > 0) cannot be deleted — only disabled.
+    """
+    queryset = GovernancePolicy.objects.all()
+    serializer_class = GovernancePolicySerializer
+    permission_classes = [IsAuthenticated, ReadAnyWriteGlobalAdmin]
+
+    def perform_create(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+
+        # Cannot delete an active policy that is actively enforcing rules.
+        if instance.enabled and instance.usage_count > 0:
+            raise AppFeedback(
+                code="policy_in_use",
+                title="Cannot delete an active policy",
+                detail=f"'{instance.name}' is enabled and has been enforced {instance.usage_count} time(s).",
+                reasons=[
+                    "This policy is currently active.",
+                    f"It has already blocked {instance.usage_count} action(s), so it is in use.",
+                ],
+                remediation=[
+                    "Disable the policy first if you no longer want it enforced.",
+                    "Once disabled, it can be safely deleted.",
+                ],
+                context={"policy_id": instance.id, "usage_count": instance.usage_count},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return super().destroy(request, *args, **kwargs)
 
 
 class CatalogSearchView(APIView):

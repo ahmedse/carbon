@@ -97,25 +97,25 @@ const createCarbonTheme = (mode = 'light') => {
       fontFamily: '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       fontSize: 14,
       h1: {
-        fontSize: '2.5rem',
+        fontSize: '2rem',
         fontWeight: 700,
         letterSpacing: '-0.02em',
         color: colors.text.primary,
       },
       h2: {
-        fontSize: '2rem',
+        fontSize: '1.75rem',
         fontWeight: 700,
         letterSpacing: '-0.01em',
         color: colors.text.primary,
       },
       h3: {
-        fontSize: '1.75rem',
+        fontSize: '1.5rem',
         fontWeight: 600,
         letterSpacing: '-0.01em',
         color: colors.text.primary,
       },
       h4: {
-        fontSize: '1.5rem',
+        fontSize: '1.25rem',
         fontWeight: 600,
         color: colors.text.primary,
       },
@@ -130,13 +130,13 @@ const createCarbonTheme = (mode = 'light') => {
         color: colors.text.primary,
       },
       subtitle1: {
-        fontSize: '1rem',
+        fontSize: '0.875rem',
         fontWeight: 500,
         letterSpacing: '0.01em',
         color: colors.text.secondary,
       },
       subtitle2: {
-        fontSize: '0.875rem',
+        fontSize: '0.8125rem',
         fontWeight: 500,
         letterSpacing: '0.01em',
         color: colors.text.secondary,
@@ -573,6 +573,50 @@ const createCarbonTheme = (mode = 'light') => {
             '& .MuiDataGrid-row:hover': {
               backgroundColor: mode === 'light' ? 'rgba(37, 99, 235, 0.04)' : 'rgba(255, 255, 255, 0.03)',
             },
+          },
+        },
+      },
+      MuiTabs: {
+        styleOverrides: {
+          root: {
+            minHeight: 36,
+          },
+          indicator: {
+            height: 2,
+          },
+        },
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: {
+            textTransform: 'none',
+            fontSize: '0.8125rem',
+            fontWeight: 500,
+            minHeight: 36,
+            padding: '6px 12px',
+          },
+        },
+      },
+      MuiDialogTitle: {
+        styleOverrides: {
+          root: {
+            fontSize: '1rem',
+            fontWeight: 600,
+            padding: '12px 16px',
+          },
+        },
+      },
+      MuiDialogContent: {
+        styleOverrides: {
+          root: {
+            padding: '12px 16px',
+          },
+        },
+      },
+      MuiDialogActions: {
+        styleOverrides: {
+          root: {
+            padding: '8px 16px',
           },
         },
       },

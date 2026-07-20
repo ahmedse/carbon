@@ -131,6 +131,13 @@ export function updateAssetProfile(token, id, data) {
 }
 
 /**
+ * Partially update an asset profile (governance metadata edits).
+ */
+export function patchAssetProfile(token, id, data) {
+  return apiFetch(`${API_ROUTES.assets}${id}/`, { method: "PATCH", token, body: data });
+}
+
+/**
  * Delete an asset profile.
  */
 export function deleteAssetProfile(token, id) {
@@ -161,6 +168,36 @@ export function searchCatalog(token, query, filters = {}) {
   const params = { q: query, ...filters };
   const queryStr = new URLSearchParams(params).toString();
   return apiFetch(`${API_ROUTES.catalogSearch}?${queryStr}`, { token });
+}
+
+// ----- Governance Policies -----
+
+/**
+ * Fetch all governance policies.
+ */
+export function fetchGovernancePolicies(token) {
+  return apiFetch(API_ROUTES.governancePolicies, { token });
+}
+
+/**
+ * Create a new governance policy.
+ */
+export function createGovernancePolicy(token, data) {
+  return apiFetch(API_ROUTES.governancePolicies, { method: "POST", token, body: data });
+}
+
+/**
+ * Update a governance policy.
+ */
+export function updateGovernancePolicy(token, id, data) {
+  return apiFetch(`${API_ROUTES.governancePolicies}${id}/`, { method: "PATCH", token, body: data });
+}
+
+/**
+ * Delete a governance policy.
+ */
+export function deleteGovernancePolicy(token, id) {
+  return apiFetch(`${API_ROUTES.governancePolicies}${id}/`, { method: "DELETE", token });
 }
 
 // ===== MDM: Reference Sets, Reference Values, Org Units =====

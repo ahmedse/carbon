@@ -100,3 +100,82 @@ class GovernanceEvent(models.Model):
 
     def __str__(self):
         return f"{self.action} {self.entity_type}#{self.entity_id} @ {self.timestamp}"
+
+
+class GovernancePolicy(models.Model):
+    """
+    Configurable governance policies for delete/update validation.
+    Managed by admins, enforced by API. Scoped to domain/org/scope.
+    """
+    POLICY_TYPES = [
+        ('module_delete', 'Module Delete Policy'),
+        ('table_delete', 'Table Delete Policy'),
+        ('module_update', 'Module Update Policy'),
+        ('table_update', 'Table Update Policy'),
+    ]
+    
+    SCOPE_CHOICES = [
+        ('global', 'Global - All'),
+        ('scope', 'Emission Scope'),
+        ('org_unit', 'Organization Unit'),
+        ('domain', 'Data Domain'),
+    ]
+    
+    policy_type = models.CharField(max_length=40, choices=POLICY_TYPES)
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    enabled = models.BooleanField(default=True)
+    
+    # Scoping
+    scope_type = models.CharField(max_length=20, choices=SCOPE_CHOICES, default='global')
+    emission_scope = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        choices=[(1, 'Scope 1'), (2, 'Scope 2'), (3, 'Scope 3')],
+        help_text="Apply only to modules in this emission scope"
+    )
+    org_unit = models.ForeignKey(
+        'mdm.OrgUnit', null=True, blank=True, on_delete=models.SET_NULL,
+        help_text="Apply only to this organization unit"
+    )
+    domain = models.ForeignKey(
+        DataDomain, null=True, blank=True, on_delete=models.SET_NULL,
+        help_text="Apply only to assets in this data domain"
+    )
+    
+    # Policy configuration
+    config = models.JSONField(
+        default=dict,
+        help_text="Policy rules: check_row_count, max_rows, block_with_dependencies, etc."
+    )
+    error_message = models.TextField(
+        default="This action is blocked by governance policy.",
+        help_text="Custom error message shown to users when policy blocks an action"
+    )
+    remediation_steps = models.JSONField(
+        default=list,
+        help_text="List of steps user should take to resolve the issue"
+    )
+    
+    # Metadata
+    usage_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of times this policy has blocked an action"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='updated_policies')
+
+    class Meta:
+        verbose_name = "Governance Policy"
+        verbose_name_plural = "Governance Policies"
+        ordering = ['policy_type', 'scope_type']
+
+    def __str__(self):
+        scope_label = f" [{self.get_scope_type_display()}]" if self.scope_type != 'global' else ""
+        status = 'enabled' if self.enabled else 'disabled'
+        return f"{self.name}{scope_label} ({status})"
+    
+    def increment_usage(self):
+        """Track policy enforcement"""
+        self.usage_count += 1
+        self.save(update_fields=['usage_count'])

@@ -72,7 +72,7 @@ const steps = [
 const faqs = [
   {
     q: "How do I create a new table or module?",
-    a: "If you have admin permissions, use the Schema Manager in the sidebar to add new modules or tables. Define fields, types, and access controls so your team can start entering data immediately."
+    a: "If you have admin permissions, open a Data Product in Catalog Studio to add tables. Define fields, types, and access controls so your team can start entering data immediately."
   },
   {
     q: "Can I edit or delete data after saving?",

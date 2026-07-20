@@ -29,10 +29,15 @@ import { fetchDataSchemaTables, fetchDataSchemaFields, updateDataSchemaTable } f
 import { fetchTableRelations } from '../../api/catalog';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
+import DQRulesTab from './tabs/DQRulesTab';
+import GovernanceTab from './tabs/GovernanceTab';
+import AuditHistoryTab from './tabs/AuditHistoryTab';
+import SchemaStructureTab from './tabs/SchemaStructureTab';
+import SchemaQualityMetrics from './tabs/SchemaQualityMetrics';
 
 export default function SchemaDetailPage() {
   const { tableId } = useParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { notify } = useNotification();
   const navigate = useNavigate();
 
@@ -41,10 +46,14 @@ export default function SchemaDetailPage() {
   const [table, setTable] = useState(null);
   const [fields, setFields] = useState([]);
   const [relations, setRelations] = useState([]);
-  const [tabIndex, setTabIndex] = useState(0);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({ title: '', description: '' });
   const [saving, setSaving] = useState(false);
+
+  const isAdmin = Boolean(
+    user?.is_superuser ||
+    (user?.roles || []).some((role) => role?.active !== false && (role.role === 'admins_group' || role.role === 'admin'))
+  );
 
   useEffect(() => {
     loadSchemaDetail();
@@ -55,7 +64,7 @@ export default function SchemaDetailPage() {
     setError(null);
     try {
       const [tableData, fieldsData, relationsData] = await Promise.all([
-        fetchDataSchemaTables(token, null, null).then(tables => tables.find(t => t.id === parseInt(tableId))),
+        fetchDataSchemaTables(token, null, null).then((tables) => tables.find((item) => item.id === parseInt(tableId, 10))),
         fetchDataSchemaFields(token, tableId, null, null),
         fetchTableRelations(token, { from_table: tableId }).catch(() => []),
       ]);
@@ -80,8 +89,8 @@ export default function SchemaDetailPage() {
 
   const handleEditMetadataClick = () => {
     setEditFormData({
-      title: table.title || '',
-      description: table.description || ''
+      title: table?.title || '',
+      description: table?.description || '',
     });
     setEditDialogOpen(true);
   };
@@ -95,9 +104,9 @@ export default function SchemaDetailPage() {
     try {
       await updateDataSchemaTable(token, tableId, {
         title: editFormData.title,
-        description: editFormData.description
+        description: editFormData.description,
       });
-      setTable({ ...table, ...editFormData });
+      await loadSchemaDetail();
       setEditDialogOpen(false);
       notify({ message: 'Metadata updated successfully', type: 'success' });
     } catch (err) {
@@ -109,42 +118,6 @@ export default function SchemaDetailPage() {
   };
 
   const detailData = useMemo(() => ({ table, fields, relations }), [table, fields, relations]);
-
-  const SchemaOverviewTab = ({ entityData }) => (
-    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Button variant="outlined" onClick={handleEditMetadataClick} sx={{ alignSelf: 'flex-start' }}>
-        Edit Metadata
-      </Button>
-      {entityData?.fields?.length === 0 ? (
-        <Typography color="text.secondary">No fields defined</Typography>
-      ) : (
-        <Paper variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                <TableCell fontWeight={600}>Name</TableCell>
-                <TableCell fontWeight={600}>Type</TableCell>
-                <TableCell fontWeight={600}>Required</TableCell>
-                <TableCell fontWeight={600}>Description</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {entityData?.fields?.map((field) => (
-                <TableRow key={field.id}>
-                  <TableCell>{field.name}</TableCell>
-                  <TableCell>
-                    <Chip label={field.field_type} size="small" variant="outlined" />
-                  </TableCell>
-                  <TableCell>{field.required ? 'Yes' : 'No'}</TableCell>
-                  <TableCell>{field.description || '—'}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Paper>
-      )}
-    </Box>
-  );
 
   const SchemaRelationsTab = ({ entityData }) => (
     <Box sx={{ p: 3 }}>
@@ -186,11 +159,11 @@ export default function SchemaDetailPage() {
         </Paper>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Typography variant="caption" color="text.secondary">Incoming Relations</Typography>
-          <Typography variant="h6">{(entityData?.relations || []).filter((r) => r.to_table === parseInt(tableId)).length}</Typography>
+          <Typography variant="h6">{(entityData?.relations || []).filter((relation) => relation.to_table === parseInt(tableId, 10)).length}</Typography>
         </Paper>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Typography variant="caption" color="text.secondary">Outgoing Relations</Typography>
-          <Typography variant="h6">{(entityData?.relations || []).filter((r) => r.from_table === parseInt(tableId)).length}</Typography>
+          <Typography variant="h6">{(entityData?.relations || []).filter((relation) => relation.from_table === parseInt(tableId, 10)).length}</Typography>
         </Paper>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Typography variant="caption" color="text.secondary">Last Modified</Typography>
@@ -202,12 +175,7 @@ export default function SchemaDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      breadcrumbs={[
-        { label: 'Home', icon: <HomeIcon />, path: '/' },
-        { label: 'Catalog', path: '/catalog' },
-        { label: 'Schemas', path: '/catalog/schemas' },
-      ]}
-      title={table?.title || 'Schema'}
+      title={table?.title || 'Table'}
       description={table?.description || 'Table definition and relationships'}
       icon={StorageIcon}
       onClose={handleClose}
@@ -235,10 +203,29 @@ export default function SchemaDetailPage() {
       <BaseDetailPage
         headerComponent={headerComponent}
         mainTabs={[
-          { label: 'Overview', component: SchemaOverviewTab },
+          {
+            label: 'Structure',
+            component: () => (
+              <SchemaStructureTab
+                entityData={detailData}
+                tableId={tableId}
+                table={table}
+                fields={fields}
+                onChanged={loadSchemaDetail}
+                isAdmin={isAdmin}
+                onEditMetadata={handleEditMetadataClick}
+              />
+            ),
+          },
           { label: 'Relations', component: SchemaRelationsTab },
+          { label: 'DQ Rules', component: () => <DQRulesTab tableId={tableId} fields={fields} /> },
+          { label: 'Governance', component: () => <GovernanceTab tableId={tableId} /> },
+          { label: 'Audit History', component: () => <AuditHistoryTab tableId={tableId} /> },
         ]}
-        metricsTabs={[{ label: 'Summary', component: SchemaSummaryMetrics }]}
+        metricsTabs={[
+          { label: 'Summary', component: SchemaSummaryMetrics },
+          { label: 'Quality', component: () => <SchemaQualityMetrics tableId={tableId} /> },
+        ]}
         loading={loading}
         error={error}
         onClose={handleClose}
@@ -253,7 +240,7 @@ export default function SchemaDetailPage() {
             fullWidth
             label="Title"
             value={editFormData.title}
-            onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+            onChange={(event) => setEditFormData((current) => ({ ...current, title: event.target.value }))}
             margin="normal"
             variant="outlined"
           />
@@ -261,7 +248,7 @@ export default function SchemaDetailPage() {
             fullWidth
             label="Description"
             value={editFormData.description}
-            onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+            onChange={(event) => setEditFormData((current) => ({ ...current, description: event.target.value }))}
             margin="normal"
             variant="outlined"
             multiline

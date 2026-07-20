@@ -12,9 +12,14 @@ class Module(models.Model):
         (3, 'Scope 3'),
     ]
     name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default='')
     scope = models.PositiveSmallIntegerField(choices=SCOPE_CHOICES, default=1)
     org_unit = models.ForeignKey(
         'mdm.OrgUnit', null=True, blank=True, on_delete=models.SET_NULL, related_name='modules'
+    )
+    is_locked = models.BooleanField(
+        default=False,
+        help_text="When locked, prevents accidental deletion or modification (admin override available)"
     )
 
     class Meta:

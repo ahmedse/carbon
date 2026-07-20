@@ -2,22 +2,20 @@
 // Unified header component with breadcrumbs for all detail pages
 
 import React from 'react';
-import { Box, Typography, IconButton, Breadcrumbs, Link, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Typography, IconButton, useTheme, useMediaQuery } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import CloseIcon from '@mui/icons-material/Close';
 
 /**
- * DetailHeader - Unified breadcrumb header for all detail pages
+ * DetailHeader - Unified header for all detail pages (breadcrumbs handled by shell)
  * 
  * Props:
- * - breadcrumbs: Array of {label, icon, path, onClick} for breadcrumb trail
  * - title: Main title/heading
  * - description: Optional subtitle/description
  * - icon: Icon component to display
  * - onClose: Callback when close button clicked
  */
 export default function DetailHeader({
-  breadcrumbs = [],
   title = '',
   description = '',
   icon: Icon = null,
@@ -27,71 +25,30 @@ export default function DetailHeader({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const handleBreadcrumbClick = (breadcrumb) => {
-    if (breadcrumb.onClick) {
-      breadcrumb.onClick();
-    } else if (breadcrumb.path) {
-      navigate(breadcrumb.path);
-    }
-  };
-
   return (
     <Box
       sx={{
-        bgcolor: 'white',
-        borderBottom: '1px solid #e0e0e0',
-        p: 2,
+        bgcolor: 'background.paper',
+        borderBottom: 1,
+        borderColor: 'divider',
+        px: 2,
+        py: 1,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: 2,
+        gap: 1.5,
       }}
     >
-      {/* Left: Breadcrumbs and title */}
+      {/* Left: Title */}
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        {breadcrumbs.length > 0 && (
-          <Breadcrumbs
-            separator="/"
-            sx={{
-              mb: 1,
-              fontSize: '0.875rem',
-              '& a': {
-                cursor: 'pointer',
-                '&:hover': {
-                  textDecoration: 'underline',
-                },
-              },
-            }}
-          >
-            {breadcrumbs.map((crumb, idx) => (
-              <Link
-                key={idx}
-                component="button"
-                type="button"
-                onClick={() => handleBreadcrumbClick(crumb)}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  color: 'inherit',
-                  textDecoration: 'none',
-                }}
-              >
-                {crumb.icon && <Box component="span" sx={{ fontSize: '1rem' }} children={crumb.icon} />}
-                {crumb.label}
-              </Link>
-            ))}
-          </Breadcrumbs>
-        )}
-
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {Icon && <Icon sx={{ fontSize: '1.5rem', color: 'primary.main' }} />}
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 600, m: 0 }}>
+          {Icon && <Icon sx={{ fontSize: '1.125rem', color: 'primary.main' }} />}
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, m: 0, lineHeight: 1.3 }} noWrap>
               {title}
             </Typography>
             {description && (
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
                 {description}
               </Typography>
             )}

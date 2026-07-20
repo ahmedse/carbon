@@ -3,11 +3,6 @@ import { apiFetch } from './api';
 import { API_BASE_URL, API_ROUTES } from '../config';
 
 /**
- * Data Quality API Integration
- * Provides scoped access to DQ metrics, rules, and results
- */
-
-/**
  * Fetch org-scoped DQ metrics summary
  */
 export async function getOrgDQMetrics(token) {
@@ -154,5 +149,67 @@ export async function getFieldProfiles(filters = {}, token) {
     headers: {
       Authorization: `Bearer ${token}`,
     },
+  });
+}
+
+// =====================================================================
+// DQ Rule CRUD — clean wrappers using relative endpoints + apiFetch.
+// apiFetch handles JWT validity/refresh; token is read from localStorage
+// when not supplied. Do NOT prepend API_BASE_URL to these endpoints.
+// =====================================================================
+
+/**
+ * List DQ rules for a table (and optionally a field).
+ * @param {string} token
+ * @param {{ data_table?: number|string, data_field?: number|string }} filters
+ */
+export function listDQRules(token, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.data_table != null) params.set('data_table', filters.data_table);
+  if (filters.data_field != null) params.set('data_field', filters.data_field);
+  const qs = params.toString();
+  return apiFetch(`${API_ROUTES.dqRules}${qs ? `?${qs}` : ''}`, { token });
+}
+
+/**
+ * Create a new DQ rule.
+ */
+export function createDQRule(token, data) {
+  return apiFetch(API_ROUTES.dqRules, { method: 'POST', token, body: data });
+}
+
+/**
+ * Partially update a DQ rule.
+ */
+export function updateDQRule(token, id, data) {
+  return apiFetch(`${API_ROUTES.dqRules}${id}/`, { method: 'PATCH', token, body: data });
+}
+
+/**
+ * Delete a DQ rule.
+ */
+export function deleteDQRule(token, id) {
+  return apiFetch(`${API_ROUTES.dqRules}${id}/`, { method: 'DELETE', token });
+}
+
+/**
+ * Execute a DQ rule now. Returns the created DQResult.
+ */
+export function executeDQRule(token, id) {
+  return apiFetch(`${API_ROUTES.dqRules}${id}/execute/`, { method: 'POST', token });
+}
+
+/**
+ * Run ALL active DQ rules for a table against real rows (the real engine).
+ * Writes DQResults and rolls up quality_status/score to the catalog asset.
+ * Server-enforced admin-only (is_superuser | is_staff).
+ * @param {string} token
+ * @param {number|string} tableId
+ */
+export function runTableValidation(token, tableId) {
+  return apiFetch('dq/run-validation/', {
+    method: 'POST',
+    token,
+    body: { data_table: tableId },
   });
 }

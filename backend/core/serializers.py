@@ -17,4 +17,4 @@ class ModuleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Module
-        fields = ['id', 'name', 'scope', 'org_unit', 'org_unit_name']
+        fields = ['id', 'name', 'description', 'scope', 'org_unit', 'org_unit_name', 'is_locked']

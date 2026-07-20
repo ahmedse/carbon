@@ -61,11 +61,6 @@ export default function TagDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      breadcrumbs={[
-        { label: 'Home', icon: <HomeIcon />, path: '/' },
-        { label: 'Catalog', path: '/catalog' },
-        { label: 'Tags', path: '/catalog/tags' },
-      ]}
       title={tag?.name || 'Tag'}
       description={tag?.description}
       icon={LocalOfferIcon}

@@ -77,7 +77,7 @@ export default function CatalogHome() {
           <Box>
             <Typography variant="h4" fontWeight={700}>Catalog Studio</Typography>
             <Typography variant="body2" color="text.secondary">
-              Centralized schema catalog with governance and lineage
+              Centralized data-product catalog with governance and lineage
             </Typography>
           </Box>
         </Box>
@@ -162,14 +162,14 @@ export default function CatalogHome() {
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <StorageIcon sx={{ color: 'primary.main' }} />
-              <Typography variant="subtitle1" fontWeight={600}>Schema Browser</Typography>
+              <Typography variant="subtitle1" fontWeight={600}>Data Products</Typography>
             </Box>
             <Typography variant="body2" color="text.secondary">
-              Browse and filter all data tables with domain, owner, and quality filters
+              Browse data products and the tables they contain, with quality and governance
             </Typography>
             <Box>
-              <Button variant="outlined" size="small" onClick={() => navigate('/catalog/schemas')}>
-                Open Schema Browser
+              <Button variant="outlined" size="small" onClick={() => navigate('/catalog/products')}>
+                Open Data Products
               </Button>
             </Box>
           </Paper>
@@ -179,14 +179,14 @@ export default function CatalogHome() {
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <CheckCircleIcon sx={{ color: 'success.main' }} />
-              <Typography variant="subtitle1" fontWeight={600}>Schema Manager</Typography>
+              <Typography variant="subtitle1" fontWeight={600}>Governance Audit</Typography>
             </Box>
             <Typography variant="body2" color="text.secondary">
-              Create and manage tables, fields, and relations. Admin-only access.
+              Review governance events and asset ownership across the catalog
             </Typography>
             <Box>
-              <Button variant="outlined" size="small" onClick={() => navigate('/catalog/schema-manager')}>
-                Open Schema Manager
+              <Button variant="outlined" size="small" onClick={() => navigate('/catalog/governance')}>
+                Open Governance Audit
               </Button>
             </Box>
           </Paper>
@@ -200,7 +200,7 @@ export default function CatalogHome() {
           <Button
             fullWidth
             variant="outlined"
-            onClick={() => navigate('/catalog/domains')}
+            onClick={() => navigate('/catalog/metadata#domains')}
             sx={{ py: 1.5 }}
           >
             Domains
@@ -210,10 +210,20 @@ export default function CatalogHome() {
           <Button
             fullWidth
             variant="outlined"
-            onClick={() => navigate('/catalog/glossary')}
+            onClick={() => navigate('/catalog/metadata#glossary')}
             sx={{ py: 1.5 }}
           >
             Glossary
+          </Button>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Button
+            fullWidth
+            variant="outlined"
+            onClick={() => navigate('/catalog/metadata#tags')}
+            sx={{ py: 1.5 }}
+          >
+            Tags
           </Button>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
@@ -224,16 +234,6 @@ export default function CatalogHome() {
             sx={{ py: 1.5 }}
           >
             Reference Data
-          </Button>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={() => navigate('/catalog/sources')}
-            sx={{ py: 1.5 }}
-          >
-            Data Sources
           </Button>
         </Grid>
       </Grid>

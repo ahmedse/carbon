@@ -58,11 +58,6 @@ export default function OrgUnitDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      breadcrumbs={[
-        { label: 'Home', icon: <HomeIcon />, path: '/' },
-        { label: 'Admin', path: '/admin' },
-        { label: 'Organization Units', path: '/admin/org-units' },
-      ]}
       title={orgUnit?.name || 'Organization Unit'}
       description={orgUnit?.description}
       icon={AccountTreeIcon}

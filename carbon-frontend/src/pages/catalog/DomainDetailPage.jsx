@@ -63,11 +63,6 @@ export default function DomainDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      breadcrumbs={[
-        { label: 'Home', icon: <HomeIcon />, path: '/' },
-        { label: 'Catalog', path: '/catalog' },
-        { label: 'Domains', path: '/catalog/domains' },
-      ]}
       title={domain?.name || 'Domain'}
       description={domain?.description}
       icon={CategoryIcon}

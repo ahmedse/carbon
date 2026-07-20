@@ -61,11 +61,6 @@ export default function AssetDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      breadcrumbs={[
-        { label: 'Home', icon: <HomeIcon />, path: '/' },
-        { label: 'Catalog', path: '/catalog' },
-        { label: 'Assets', path: '/catalog/assets' },
-      ]}
       title={asset?.name || 'Asset'}
       description={asset?.description}
       icon={StorageIcon}

@@ -231,11 +231,6 @@ export default function ImportsDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      breadcrumbs={[
-        { label: 'Home', icon: <HomeIcon />, path: '/' },
-        { label: 'Catalog', path: '/catalog' },
-        { label: 'Imports', path: '/catalog/imports' },
-      ]}
       title="Imports"
       description="Upload data and manage import jobs"
       icon={CloudUploadIcon}

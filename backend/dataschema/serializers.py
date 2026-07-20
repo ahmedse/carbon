@@ -38,7 +38,7 @@ class DataTableDetailSerializer(serializers.ModelSerializer):
         model = DataTable
         fields = [
             'id', 'title', 'description', 'module', 'module_name', 'version',
-            'is_archived', 'created_at', 'created_by', 'updated_at', 'updated_by', 'fields', 'row_count'
+            'is_archived', 'is_locked', 'created_at', 'created_by', 'updated_at', 'updated_by', 'fields', 'row_count'
         ]
         read_only_fields = [
             'id', 'created_at', 'created_by', 'updated_at', 'updated_by', 'version', 'fields', 'row_count'
@@ -49,7 +49,7 @@ class DataTableSerializer(serializers.ModelSerializer):
         model = DataTable
         fields = [
             'id', 'title', 'description', 'module', 'version',
-            'is_archived', 'created_at', 'created_by', 'updated_at', 'updated_by'
+            'is_archived', 'is_locked', 'created_at', 'created_by', 'updated_at', 'updated_by'
         ]
         read_only_fields = [
             'id', 'created_at', 'created_by', 'updated_at', 'updated_by', 'version'

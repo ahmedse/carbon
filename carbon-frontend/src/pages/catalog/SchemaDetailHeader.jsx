@@ -2,10 +2,9 @@
 // Header with breadcrumbs, title, and close button for schema detail page
 
 import React from 'react';
-import { Box, Typography, IconButton, Breadcrumbs, Link, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Typography, IconButton, useTheme, useMediaQuery } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 import CloseIcon from '@mui/icons-material/Close';
-import HomeIcon from '@mui/icons-material/Home';
 import StorageIcon from '@mui/icons-material/Storage';
 
 export default function SchemaDetailHeader({ tableData, onClose }) {
@@ -13,10 +12,6 @@ export default function SchemaDetailHeader({ tableData, onClose }) {
   const { tableId } = useParams();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
-  const handleBreadcrumbClick = (path) => {
-    navigate(path);
-  };
 
   const getTableDisplayName = () => {
     if (!tableData) return 'Schema Details';
@@ -35,56 +30,8 @@ export default function SchemaDetailHeader({ tableData, onClose }) {
         gap: 2,
       }}
     >
-      {/* Left: Breadcrumbs and title */}
+      {/* Left: Title */}
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Breadcrumbs
-          separator="/"
-          sx={{
-            mb: 1,
-            fontSize: '0.875rem',
-            '& a': {
-              cursor: 'pointer',
-              '&:hover': {
-                textDecoration: 'underline',
-              },
-            },
-          }}
-        >
-          <Link
-            component="button"
-            type="button"
-            onClick={() => handleBreadcrumbClick('/catalog')}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              color: 'inherit',
-              textDecoration: 'none',
-            }}
-          >
-            <HomeIcon sx={{ fontSize: '1rem' }} />
-            Catalog
-          </Link>
-          <Link
-            component="button"
-            type="button"
-            onClick={() => handleBreadcrumbClick('/dataschema')}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              color: 'inherit',
-              textDecoration: 'none',
-            }}
-          >
-            <StorageIcon sx={{ fontSize: '1rem' }} />
-            Schema
-          </Link>
-          <Typography sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <StorageIcon sx={{ fontSize: '1rem' }} />
-            {getTableDisplayName()}
-          </Typography>
-        </Breadcrumbs>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <StorageIcon sx={{ fontSize: '1.5rem', color: 'primary.main' }} />
           <Box>

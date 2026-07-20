@@ -1,6 +1,6 @@
 // src/App.jsx
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams } from "react-router-dom";
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { useAuth } from "./auth/AuthContext";
@@ -15,6 +15,7 @@ import OrgUnitsPage from "./pages/admin/OrgUnitsPage";
 import OrgUnitDetailPage from "./pages/admin/OrgUnitDetailPage";
 import AccessControlPage from "./pages/admin/AccessControlPage";
 import UsersPage from "./pages/admin/UsersPage";
+import GovernancePolicyPage from "./pages/admin/GovernancePolicyPage";
 import DataEntryPage from "./pages/DataEntryPage";
 import DataHubHome from "./pages/DataHubHome";
 import Help from "./pages/Help";
@@ -27,6 +28,7 @@ import SettingsPage from "./pages/SettingsPage";
 import RowDetailPage from "./pages/dataschema/RowDetailPage";
 import DomainsPage from "./pages/catalog/DomainsPage";
 import GlossaryPage from "./pages/catalog/GlossaryPage";
+import MetadataManagementPage from "./pages/catalog/MetadataManagementPage";
 import AssetsPage from "./pages/catalog/AssetsPage";
 import MDMPage from "./pages/catalog/MDMPage";
 import ConnectionsPage from "./pages/catalog/ConnectionsPage";
@@ -35,6 +37,8 @@ import CatalogHome from "./pages/catalog/CatalogHome";
 import SchemaCatalogPage from "./pages/catalog/SchemaCatalogPage";
 import SchemaDetailPage from "./pages/catalog/SchemaDetailPage";
 import SchemaManagerPage from "./pages/catalog/SchemaManagerPage";
+import DataProductsPage from "./pages/catalog/DataProductsPage";
+import DataProductDetailPage from "./pages/catalog/DataProductDetailPage";
 import DomainDetailPage from "./pages/catalog/DomainDetailPage";
 import TagDetailPage from "./pages/catalog/TagDetailPage";
 import AssetDetailPage from "./pages/catalog/AssetDetailPage";
@@ -54,11 +58,16 @@ import {
   ReportingDashboard,
 } from "./pages/dashboards";
 
+/** Redirect legacy /catalog/schemas/:tableId → /catalog/tables/:tableId (preserves id). */
+function RedirectSchemaToTable() {
+  const { tableId } = useParams();
+  return <Navigate to={`/catalog/tables/${tableId}`} replace />;
+}
+
 /**
  * Protects all routes that require authentication.
  */
-function RequireAuth() {
-  const { user, loading } = useAuth();
+function RequireAuth() {  const { user, loading } = useAuth();
   if (loading) return <div className="centered">Loading authentication...</div>;
   if (!user) return <Navigate to="/login" replace />;
   return <Outlet />;
@@ -183,7 +192,8 @@ export default function App() {
                     </AdminRoute>
                   }
                 />
-                 <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
+                <Route path="/admin/policies" element={<Navigate to="/catalog/policies" replace />} />
+                <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
                  <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />
                 {/* Data Hub */}
                 <Route path="/dataschema" element={<DataHubHome />} />
@@ -199,18 +209,32 @@ export default function App() {
 
                 {/* Catalog Studio Routes */}
                 <Route path="/catalog" element={<CatalogHome />} />
-                <Route path="/catalog/schemas" element={<SchemaCatalogPage />} />
-                <Route path="/catalog/schemas/:tableId" element={<SchemaDetailPage />} />
-                <Route path="/catalog/schema-manager" element={<SchemaManagerPage />} />
-                <Route path="/catalog/domains" element={<DomainsPage />} />
+                {/* Data Products (Modules) → Tables → table workbench */}
+                <Route path="/catalog/products" element={<DataProductsPage />} />
+                <Route path="/catalog/products/:moduleId" element={<DataProductDetailPage />} />
+                <Route path="/catalog/policies" element={
+                  <AdminRoute>
+                    <GovernancePolicyPage />
+                  </AdminRoute>
+                } />
+                <Route path="/catalog/tables/:tableId" element={<SchemaDetailPage />} />
+                {/* Legacy redirects */}
+                <Route path="/catalog/schemas" element={<Navigate to="/catalog/products" replace />} />
+                <Route path="/catalog/schemas/:tableId" element={<RedirectSchemaToTable />} />
+                <Route path="/catalog/schema-manager" element={<Navigate to="/catalog/products" replace />} />
+                {/* Consolidated metadata management */}
+                <Route path="/catalog/metadata" element={<MetadataManagementPage />} />
+                {/* Redirect old separate pages to consolidated metadata page */}
+                <Route path="/catalog/domains" element={<Navigate to="/catalog/metadata#domains" replace />} />
+                <Route path="/catalog/glossary" element={<Navigate to="/catalog/metadata#glossary" replace />} />
+                <Route path="/catalog/tags" element={<Navigate to="/catalog/metadata#tags" replace />} />
+                {/* Keep detail pages for now */}
                 <Route path="/catalog/domains/:domainId" element={<DomainDetailPage />} />
-                <Route path="/catalog/glossary" element={<GlossaryPage />} />
                 <Route path="/catalog/assets" element={<AssetsPage />} />
                 <Route path="/catalog/assets/:assetId" element={<AssetDetailPage />} />
                 <Route path="/catalog/mdm" element={<MDMPage />} />
                 <Route path="/catalog/connections" element={<ConnectionsPage />} />
                 <Route path="/catalog/importexport" element={<ImportExportPage />} />
-                <Route path="/catalog/tags" element={<TagsPage />} />
                 <Route path="/catalog/tags/:tagId" element={<TagDetailPage />} />
                 <Route path="/catalog/reference-data" element={<ReferenceDataPage />} />
                 <Route path="/catalog/governance" element={<GovernancePage />} />

@@ -1,5 +1,7 @@
 # Catalog Studio — Full Design Plan
 
+> ⚠️ **TERMINOLOGY SUPERSEDED (2026-07-20):** This doc predates the terminology decision. "Schema Catalog"/"Schema Manager" are **retired**. The correct model is **Data Product (= `Module`) → Table → Structure (fields)**. See the authoritative [`docs/TERMINOLOGY.md`](../docs/TERMINOLOGY.md). Read every "schema catalog/manager" mention below as "Data Products / table workbench".
+>
 > **Status:** Architect-approved design. Awaiting implementation approval.  
 > **Scope:** Full CRUD for schema catalog, schema manager, reference data, data sources, data exports, and consuming-system connections.  
 > **Principle:** Build on top of the already-existing `catalog/`, `dataschema/`, `mdm/`, and `dq/` backend apps. Add only what is missing.

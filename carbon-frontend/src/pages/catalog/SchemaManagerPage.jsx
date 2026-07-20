@@ -5,9 +5,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
-  Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
+  Box, Typography, Button, Grid, Card, CardHeader, CardContent,
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  CircularProgress, Alert, Chip, Paper, Tooltip
+  CircularProgress, Alert, Chip, Tooltip
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -132,32 +132,28 @@ export default function SchemaManagerPage() {
       {/* Error Alert */}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      {/* Tables Table */}
-      <Paper>
-        <Table>
-          <TableHead>
-            <TableRow sx={{ backgroundColor: 'action.hover' }}>
-              <TableCell fontWeight={600}>Title</TableCell>
-              <TableCell fontWeight={600}>Description</TableCell>
-              <TableCell fontWeight={600}>Fields</TableCell>
-              <TableCell fontWeight={600} align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {tables.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
-                  <Typography color="text.secondary">No tables yet</Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              tables.map(table => (
-                <TableRow key={table.id} hover>
-                  <TableCell>{table.title}</TableCell>
-                  <TableCell>{table.description || '—'}</TableCell>
-                  <TableCell>{table.fields_count || 0}</TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="View details">
+      {/* Schema cards grid */}
+      {tables.length === 0 ? (
+        <Alert severity="info">No tables yet</Alert>
+      ) : (
+        <Grid container spacing={2}>
+          {tables.map((table) => (
+            <Grid item xs={12} sm={6} md={4} key={table.id}>
+              <Card
+                sx={{
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <CardHeader
+                  title={table.title}
+                  titleTypographyProps={{ variant: 'subtitle1', fontWeight: 600 }}
+                  subheader={`${table.fields_count || 0} fields`}
+                  action={
+                    <Tooltip title="View schema details">
                       <IconButton
                         size="small"
                         color="primary"
@@ -166,29 +162,33 @@ export default function SchemaManagerPage() {
                         <VisibilityIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Edit metadata">
-                      <IconButton
-                        size="small"
-                        onClick={() => openEdit(table)}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDelete(table)}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Paper>
+                  }
+                />
+                <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {table.description || 'No description'}
+                  </Typography>
+                  <Box sx={{ mt: 'auto', display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Chip label={`${table.fields_count || 0} fields`} size="small" variant="outlined" />
+                  </Box>
+                </CardContent>
+                <Box sx={{ px: 2, pb: 2, pt: 1, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                  <Tooltip title="Edit metadata">
+                    <IconButton size="small" onClick={() => openEdit(table)}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete">
+                    <IconButton size="small" onClick={() => handleDelete(table)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
 
       {/* Create/Edit Dialog */}
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>

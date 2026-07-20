@@ -28,3 +28,31 @@ function buildQuery(params) {
 export function fetchModules(token, project_id, module_id) {
   return apiFetch(API_ROUTES.modules, { token, project_id, module_id });
 }
+
+/**
+ * Create a new Data Product (Module).
+ * @param {string} token
+ * @param {{name:string, description?:string, scope?:number, org_unit?:number|null}} data
+ */
+export function createModule(token, data) {
+  return apiFetch(API_ROUTES.modules, { method: "POST", token, body: data });
+}
+
+/**
+ * Update an existing Data Product (Module).
+ * @param {string} token
+ * @param {string|number} id
+ * @param {object} data
+ */
+export function updateModule(token, id, data) {
+  return apiFetch(`${API_ROUTES.modules}${id}/`, { method: "PATCH", token, body: data });
+}
+
+/**
+ * Delete a Data Product (Module).
+ * @param {string} token
+ * @param {string|number} id
+ */
+export function deleteModule(token, id) {
+  return apiFetch(`${API_ROUTES.modules}${id}/`, { method: "DELETE", token });
+}

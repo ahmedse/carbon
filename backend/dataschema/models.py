@@ -28,6 +28,10 @@ class DataTable(models.Model):
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='data_tables')
     version = models.PositiveIntegerField(default=1)
     is_archived = models.BooleanField(default=False)
+    is_locked = models.BooleanField(
+        default=False,
+        help_text="When locked, prevents accidental deletion or modification (admin override available)"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_data_tables')
     updated_at = models.DateTimeField(auto_now=True)

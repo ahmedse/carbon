@@ -125,7 +125,7 @@ export default function TableManagerPage() {
               <IconButton
                 size="small"
                 color="primary"
-                onClick={() => navigate(`/catalog/schemas/${params.row.id}`)}
+                onClick={() => navigate(`/catalog/tables/${params.row.id}`)}
               >
                 <Visibility fontSize="small" />
               </IconButton>

@@ -227,9 +227,8 @@ export async function apiFetch(
     }
   }
 
-  const isFormData = body instanceof FormData;
   const headers = {
-    ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    "Content-Type": "application/json",
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     ...customHeaders,
   };
@@ -246,7 +245,7 @@ export async function apiFetch(
       method,
       headers,
       signal: controller.signal,
-      ...(body ? { body: isFormData ? body : JSON.stringify(body) } : {}),
+      ...(body ? { body: JSON.stringify(body) } : {}),
     });
     clearTimeout(timeout);
 
@@ -280,7 +279,12 @@ export async function apiFetch(
 
     // Check for fatal errors and propagate with detail
     if (!response.ok) {
+      const feedback =
+        responseData && typeof responseData === "object"
+          ? responseData.feedback
+          : null;
       const detail =
+        feedback?.detail ||
         (responseData && (responseData.detail || responseData.message)) ||
         `API Error: ${response.status}`;
       
@@ -315,11 +319,13 @@ export async function apiFetch(
         console.warn('Failed to store error history:', e);
       }
       
-      throw new Error(detail);
+      const err = new Error(detail);
+      if (feedback) err.feedback = feedback;
+      err.status = response.status;
+      throw err;
     }
 
     return responseData;
-
   } catch (error) {
     clearTimeout(timeout);
     if (error.name === "AbortError") {

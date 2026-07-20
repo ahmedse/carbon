@@ -22,9 +22,29 @@ from .serializers import (
 from accounts.permissions import HasScopedRole, ReadScopedWriteAdmin
 from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role
 from core.models import Module
+from core.feedback import AppFeedback
 import pandas as pd
 import io
 import json
+
+
+def _log_schema_change(user, action, *, data_table=None, data_field=None,
+                       before=None, after=None, notes=""):
+    """Best-effort write to SchemaChangeLog. Never blocks the request on failure."""
+    try:
+        SchemaChangeLog.objects.create(
+            data_table=data_table,
+            data_field=data_field,
+            action=action,
+            before=before,
+            after=after,
+            user=user if getattr(user, "is_authenticated", False) else None,
+            notes=notes,
+        )
+    except Exception:  # pragma: no cover - logging must not break CRUD
+        import logging
+        logging.getLogger("dataschema.views").exception("Failed to write SchemaChangeLog")
+
 
 class ScopedViewSet(viewsets.ModelViewSet):
     """
@@ -80,6 +100,73 @@ class DataTableViewSet(ScopedViewSet):
             return DataTableDetailSerializer
         return DataTableSerializer
 
+    def perform_create(self, serializer):
+        obj = serializer.save()
+        _log_schema_change(
+            self.request.user, "add", data_table=obj,
+            after=DataTableSerializer(obj).data,
+        )
+
+    def perform_update(self, serializer):
+        before = DataTableSerializer(serializer.instance).data
+        obj = serializer.save()
+        _log_schema_change(
+            self.request.user, "edit", data_table=obj,
+            before=before, after=DataTableSerializer(obj).data,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete validation: prevent deletion if table is locked or has rows.
+        Superuser may override row dependency with ?force=true.
+        """
+        instance = self.get_object()
+
+        # Locked guard
+        if getattr(instance, "is_locked", False) and not request.user.is_superuser:
+            raise AppFeedback(
+                code="table_locked",
+                title="Table is locked",
+                detail=f"'{instance.title}' is locked to prevent accidental changes.",
+                reasons=["This table has been locked by an administrator."],
+                remediation=[
+                    "Ask an administrator to unlock it before deleting.",
+                    "Unlocking is available in the table settings.",
+                ],
+                context={"table_id": instance.id, "is_locked": True},
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Dependency guard: rows
+        row_count = instance.rows.filter(is_archived=False).count()
+        if row_count > 0:
+            force = request.query_params.get("force", "").lower() == "true"
+            if not (force and request.user.is_superuser):
+                raise AppFeedback(
+                    code="table_has_rows",
+                    title="Cannot delete table",
+                    detail=f"'{instance.title}' still contains {row_count} row(s) of data.",
+                    reasons=[
+                        f"This table has {row_count} row(s) of data.",
+                        "Deleting it would permanently remove all of that data.",
+                    ],
+                    remediation=[
+                        "Delete or archive the rows in this table first.",
+                        "Then retry deleting the table.",
+                    ],
+                    context={"table_id": instance.id, "row_count": row_count},
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Log before deletion
+        before = DataTableSerializer(instance).data
+        _log_schema_change(
+            request.user, "delete", data_table=instance, before=before,
+            notes=f"Deleted table '{instance.title}' (id={instance.id})",
+        )
+
+        return super().destroy(request, *args, **kwargs)
+
 # --- DataField (Schema) ---
 class DataFieldViewSet(ScopedViewSet):
     """
@@ -105,6 +192,31 @@ class DataFieldViewSet(ScopedViewSet):
         if table_id:
             qs = qs.filter(data_table_id=table_id)
         return qs
+
+    def perform_create(self, serializer):
+        obj = serializer.save()
+        _log_schema_change(
+            self.request.user, "add", data_table=obj.data_table, data_field=obj,
+            after=DataFieldSerializer(obj).data,
+        )
+
+    def perform_update(self, serializer):
+        before = DataFieldSerializer(serializer.instance).data
+        obj = serializer.save()
+        _log_schema_change(
+            self.request.user, "edit", data_table=obj.data_table, data_field=obj,
+            before=before, after=DataFieldSerializer(obj).data,
+        )
+
+    def perform_destroy(self, instance):
+        before = DataFieldSerializer(instance).data
+        parent_table = instance.data_table
+        _log_schema_change(
+            self.request.user, "delete", data_table=parent_table, data_field=instance,
+            before=before,
+            notes=f"Deleted field '{instance.name}' (id={instance.id})",
+        )
+        instance.delete()
 
 # --- DataRow (Data) ---
 class DataRowViewSet(ScopedViewSet):
@@ -475,9 +587,12 @@ class SchemaChangeLogViewSet(ScopedViewSet, viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         module_id = self.request.query_params.get("module_id")
+        data_table_id = self.request.query_params.get("data_table")
         qs = SchemaChangeLog.objects.all()
         if module_id:
             qs = qs.filter(data_table__module_id=module_id)
+        if data_table_id:
+            qs = qs.filter(data_table_id=data_table_id)
         return qs
 
 

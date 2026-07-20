@@ -1,9 +1,11 @@
 from .models import Module, Feedback
 from .serializers import ModuleSerializer, FeedbackSerializer
+from .feedback import AppFeedback
 from accounts.permissions import HasScopedRole
 from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, viewsets, status
 from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.response import Response
 
 
 class ModuleViewSet(viewsets.ModelViewSet):
@@ -25,6 +27,51 @@ class ModuleViewSet(viewsets.ModelViewSet):
             user, ["admin", "admins_group", "dataowners_group", "auditors_group"]
         )
         return Module.objects.filter(id__in=allowed)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete validation: prevent deletion if module is locked or has tables.
+        Superuser may override table dependency with ?force=true.
+        """
+        instance = self.get_object()
+
+        # Locked guard
+        if getattr(instance, "is_locked", False) and not request.user.is_superuser:
+            raise AppFeedback(
+                code="module_locked",
+                title="Data product is locked",
+                detail=f"'{instance.name}' is locked to prevent accidental changes.",
+                reasons=["This data product has been locked by an administrator."],
+                remediation=[
+                    "Ask an administrator to unlock it before deleting.",
+                    "Unlocking is available in the data product settings.",
+                ],
+                context={"module_id": instance.id, "is_locked": True},
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Dependency guard
+        table_count = instance.data_tables.count()
+        if table_count > 0:
+            force = request.query_params.get("force", "").lower() == "true"
+            if not (force and request.user.is_superuser):
+                raise AppFeedback(
+                    code="module_has_tables",
+                    title="Cannot delete data product",
+                    detail=f"'{instance.name}' still contains {table_count} table(s).",
+                    reasons=[
+                        f"This data product has {table_count} table(s) attached to it.",
+                        "Deleting it would remove all of those tables and their data.",
+                    ],
+                    remediation=[
+                        "Move or delete the tables inside this data product first.",
+                        "Then retry deleting the data product.",
+                    ],
+                    context={"module_id": instance.id, "table_count": table_count},
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+        return super().destroy(request, *args, **kwargs)
 
 class FeedbackViewSet(mixins.CreateModelMixin,
                       mixins.ListModelMixin,

@@ -4,6 +4,7 @@
 import React from 'react';
 import { Box, Breadcrumbs as MuiBreadcrumbs, Typography, Link } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import HomeIcon from '@mui/icons-material/Home';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -111,25 +112,35 @@ const ROUTE_CONFIG = {
     icon: DashboardIcon,
     parent: null,
   },
+  '/catalog/products': {
+    label: 'Data Products',
+    icon: StorageIcon,
+    parent: '/catalog',
+  },
+  '/catalog/products/:moduleId': {
+    label: 'Data Product',
+    icon: StorageIcon,
+    parent: '/catalog/products',
+  },
+  '/catalog/tables/:tableId': {
+    label: 'Table',
+    icon: StorageIcon,
+    parent: '/catalog/products',
+  },
   '/catalog/schemas': {
-    label: 'Schema Catalog',
+    label: 'Data Products',
     icon: StorageIcon,
     parent: '/catalog',
   },
   '/catalog/schemas/:tableId': {
-    label: 'Schema Detail',
+    label: 'Table',
     icon: StorageIcon,
-    parent: '/catalog/schemas',
+    parent: '/catalog/products',
   },
-  '/catalog/schema-manager': {
-    label: 'Schema Manager',
-    icon: AssignmentIcon,
+  '/catalog/metadata': {
+    label: 'Metadata Management',
+    icon: LocationOnIcon,
     parent: '/catalog',
-  },
-  '/catalog/schema-manager/:tableId': {
-    label: 'Schema Details',
-    icon: AssignmentIcon,
-    parent: '/catalog/schema-manager',
   },
   '/catalog/domains': {
     label: 'Domains',
@@ -226,16 +237,10 @@ function matchRouteConfig(pathname) {
  * Build breadcrumb trail from current path
  */
 function buildBreadcrumbs(pathname) {
-  const trail = [];
+  const chain = [];
   let current = normalizePath(pathname);
 
-  // Add home as first item
-  trail.unshift({
-    path: '/dashboard',
-    label: 'Home',
-    icon: HomeIcon,
-  });
-
+  // Walk UP from the current page to the root, collecting each crumb.
   while (current && current !== 'dashboard' && current !== '/dashboard') {
     const match = matchRouteConfig(current.startsWith('/') ? current : `/${current}`);
     if (!match || !match.config) {
@@ -246,7 +251,7 @@ function buildBreadcrumbs(pathname) {
       continue;
     }
 
-    trail.push({
+    chain.push({
       path: current.startsWith('/') ? current : `/${current}`,
       label: match.config.label,
       icon: match.config.icon,
@@ -256,14 +261,53 @@ function buildBreadcrumbs(pathname) {
     if (!current) current = '/dashboard';
   }
 
-  return trail;
+  // chain is [current, parent, grandparent, …] — reverse to root→current order,
+  // then prepend Home so the trail reads Home → … → current.
+  chain.reverse();
+
+  return [
+    { path: '/dashboard', label: 'Home', icon: HomeIcon },
+    ...chain,
+  ];
+}
+
+/**
+ * Smart label resolution: replace generic labels on dynamic entity routes with
+ * the REAL entity name (e.g. "Facilities - Electricity", "Monthly Electricity").
+ * Resolved client-side from AuthContext (modules + tablesByModule) — no fetch.
+ */
+function resolveCrumbLabel(crumb, modules, tablesByModule) {
+  const segs = crumb.path.split('/').filter(Boolean);
+  const last = segs[segs.length - 1];
+
+  // Data Product / module detail: /catalog/products/:id or /modules/:id
+  if ((segs[0] === 'catalog' && segs[1] === 'products' && segs[2]) ||
+      (segs[0] === 'modules' && segs[1])) {
+    const mod = (modules || []).find((m) => String(m.id) === String(last));
+    if (mod?.name) return mod.name;
+  }
+
+  // Table detail: /catalog/tables/:id or /catalog/schemas/:id (legacy)
+  if (segs[0] === 'catalog' && (segs[1] === 'tables' || segs[1] === 'schemas') && segs[2]) {
+    for (const arr of Object.values(tablesByModule || {})) {
+      const t = (arr || []).find((x) => String(x.id) === String(last));
+      if (t) return t.title || t.name || crumb.label;
+    }
+  }
+
+  return crumb.label;
 }
 
 export function Breadcrumbs() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { context, tablesByModule } = useAuth();
+  const modules = context?.modules || [];
 
-  const breadcrumbs = buildBreadcrumbs(location.pathname);
+  const breadcrumbs = buildBreadcrumbs(location.pathname).map((crumb) => ({
+    ...crumb,
+    label: resolveCrumbLabel(crumb, modules, tablesByModule),
+  }));
 
   if (breadcrumbs.length <= 1) {
     // Don't show breadcrumbs on home page
@@ -275,19 +319,19 @@ export function Breadcrumbs() {
       component="nav"
       aria-label="Breadcrumb navigation"
       sx={{
-        height: 32,
+        height: 30,
         display: 'flex',
         alignItems: 'center',
         px: 2,
         borderBottom: 1,
         borderColor: 'divider',
-        bgcolor: 'background.paper',
+        bgcolor: 'background.default',
       }}
     >
       <MuiBreadcrumbs
-        separator={<ChevronRightIcon sx={{ fontSize: 14, color: 'text.disabled' }} />}
+        separator={<ChevronRightIcon sx={{ fontSize: 13, color: 'text.disabled' }} />}
         aria-label="breadcrumb"
-        sx={{ fontSize: '0.8125rem' }}
+        sx={{ fontSize: '0.75rem' }}
       >
         {breadcrumbs.map((crumb, index) => {
           const Icon = crumb.icon;
@@ -306,10 +350,10 @@ export function Breadcrumbs() {
                   color: 'text.primary',
                 }}
               >
-                <Icon sx={{ fontSize: 16 }} aria-hidden="true" />
+                <Icon sx={{ fontSize: 14 }} aria-hidden="true" />
                 <Typography
                   sx={{
-                    fontSize: '0.8125rem',
+                    fontSize: '0.75rem',
                     fontWeight: 600,
                     color: 'text.primary',
                   }}
@@ -349,8 +393,8 @@ export function Breadcrumbs() {
                 },
               }}
             >
-              <Icon sx={{ fontSize: 16 }} aria-hidden="true" />
-              <Typography sx={{ fontSize: '0.8125rem' }}>{crumb.label}</Typography>
+              <Icon sx={{ fontSize: 14 }} aria-hidden="true" />
+              <Typography sx={{ fontSize: '0.75rem' }}>{crumb.label}</Typography>
             </Link>
           );
         })}
