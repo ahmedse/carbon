@@ -42,6 +42,7 @@ import DataProductDetailPage from "./pages/catalog/DataProductDetailPage";
 import DomainDetailPage from "./pages/catalog/DomainDetailPage";
 import TagDetailPage from "./pages/catalog/TagDetailPage";
 import AssetDetailPage from "./pages/catalog/AssetDetailPage";
+import ReferenceSetDetailPage from "./pages/catalog/ReferenceSetDetailPage";
 import TagsPage from "./pages/catalog/TagsPage";
 import ReferenceDataPage from "./pages/catalog/ReferenceDataPage";
 import GovernancePage from "./pages/catalog/GovernancePage";
@@ -233,6 +234,7 @@ export default function App() {
                 <Route path="/catalog/assets" element={<AssetsPage />} />
                 <Route path="/catalog/assets/:assetId" element={<AssetDetailPage />} />
                 <Route path="/catalog/mdm" element={<MDMPage />} />
+                <Route path="/catalog/mdm/reference-sets/:setId" element={<ReferenceSetDetailPage />} />
                 <Route path="/catalog/connections" element={<ConnectionsPage />} />
                 <Route path="/catalog/importexport" element={<ImportExportPage />} />
                 <Route path="/catalog/tags/:tagId" element={<TagDetailPage />} />

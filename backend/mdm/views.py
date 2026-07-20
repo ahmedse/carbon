@@ -1,4 +1,5 @@
 # mdm/views.py
+from django.db import models
 from django.utils.text import slugify
 from rest_framework import viewsets, status, filters
 from rest_framework.views import APIView
@@ -41,7 +42,7 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         RBAC Logic:
         - Superusers/staff see all reference sets
         - Regular users see only reference sets in their assigned org_units
-        - If user has no org_unit assignments, return empty (no access)
+        - If user has no org_unit assignments, show all (for now - permissive)
         """
         user = self.request.user
         
@@ -54,14 +55,18 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
             user=user, is_active=True
         ).values_list('org_unit_id', flat=True).distinct()
         
-        # If no org units assigned, user has no access
+        # If no org units assigned, show all reference sets (permissive mode)
+        # TODO: Make this restrictive once RBAC is fully implemented
         if not user_org_units:
-            return ReferenceSet.objects.none()
+            return ReferenceSet.objects.filter(is_active=True)
         
-        # Filter reference sets by domain's org_unit
+        # Filter reference sets by domain's org_unit or show all if domain is null
         from catalog.models import DataDomain
-        domains = DataDomain.objects.filter(id__in=user_org_units)
-        return ReferenceSet.objects.filter(domain__in=domains, is_active=True)
+        domains_in_scope = DataDomain.objects.filter(id__in=user_org_units)
+        return ReferenceSet.objects.filter(
+            models.Q(domain__in=domains_in_scope) | models.Q(domain__isnull=True),
+            is_active=True
+        )
 
     def perform_create(self, serializer):
         """Auto-assign steward to current user on create."""

@@ -4,14 +4,14 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
-  Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  CircularProgress, Alert, Chip, Paper
+  Box, Button, IconButton, Dialog, DialogTitle, DialogContent,
+  DialogActions, TextField, CircularProgress, Alert, Chip, Tooltip,
 } from '@mui/material';
+import PageContainer from '../../components/layout/PageContainer';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
-import BookIcon from '@mui/icons-material/Book';
 import { fetchReferenceSets, createReferenceSet, updateReferenceSet, deleteReferenceSet } from '../../api/catalog';
 
 const EMPTY_FORM = { name: '', description: '' };
@@ -27,6 +27,8 @@ export default function ReferenceDataPage() {
   const [editingSet, setEditingSet] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [filterDomain, setFilterDomain] = useState('');
 
   useEffect(() => {
     loadSets();
@@ -45,6 +47,11 @@ export default function ReferenceDataPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleClearFilters = () => {
+    setSearchText('');
+    setFilterDomain('');
   };
 
   const openCreate = () => {
@@ -100,68 +107,74 @@ export default function ReferenceDataPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress />
-      </Box>
+      <PageContainer>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+          <CircularProgress />
+        </Box>
+      </PageContainer>
     );
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <BookIcon sx={{ fontSize: '2rem', color: 'primary.main' }} />
-          <Box>
-            <Typography variant="h5" fontWeight={700}>Reference Data</Typography>
-            <Typography variant="body2" color="text.secondary">Master data reference sets</Typography>
-          </Box>
-        </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          New Set
-        </Button>
-      </Box>
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      <Paper>
-        <Table>
-          <TableHead>
-            <TableRow sx={{ backgroundColor: 'action.hover' }}>
-              <TableCell fontWeight={600}>Name</TableCell>
-              <TableCell fontWeight={600}>Description</TableCell>
-              <TableCell fontWeight={600}>Values</TableCell>
-              <TableCell fontWeight={600} align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {sets.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
-                  <Typography color="text.secondary">No reference sets yet</Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              sets.map(set => (
-                <TableRow key={set.id} hover>
-                  <TableCell fontWeight={500}>{set.name}</TableCell>
-                  <TableCell>{set.description || '—'}</TableCell>
-                  <TableCell>
-                    <Chip label={set.value_count || 0} size="small" variant="outlined" />
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton size="small" onClick={() => openEdit(set)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => handleDelete(set)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Paper>
+    <>
+      <FilteredDataGrid
+        title="Reference Data"
+        subtitle="Manage master data reference sets used across the platform."
+        actions={(
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+            New Set
+          </Button>
+        )}
+        rows={sets}
+        loading={loading}
+        columns={[
+          { field: 'name', headerName: 'Name', flex: 1, minWidth: 220 },
+          { field: 'description', headerName: 'Description', flex: 2, minWidth: 260, renderCell: (params) => params.value || '—' },
+          { field: 'value_count', headerName: 'Values', width: 110, renderCell: (params) => <Chip label={params.value || 0} size="small" /> },
+          { field: 'domain_name', headerName: 'Domain', width: 160, renderCell: (params) => params.value || '—' },
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 150,
+            sortable: false,
+            renderCell: (params) => (
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Tooltip title="Edit reference set">
+                  <IconButton size="small" onClick={() => openEdit(params.row)}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Delete reference set">
+                  <IconButton size="small" color="error" onClick={() => handleDelete(params.row)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            ),
+          },
+        ]}
+        pageSize={25}
+        rowsPerPageOptions={[25, 50, 100]}
+        hideFooterSelectedRowCount
+        toolbar
+        searchValue={searchText}
+        onSearchChange={setSearchText}
+        filterDefs={[
+          {
+            key: 'domain',
+            label: 'Domain',
+            emptyLabel: 'All Domains',
+            options: [],
+          },
+        ]}
+        filterValues={{ domain: filterDomain }}
+        onFilterChange={(key, value) => {
+          if (key === 'domain') setFilterDomain(value);
+        }}
+        onClearFilters={handleClearFilters}
+        emptyMessage="No reference sets found"
+        emptySubtext={searchText || filterDomain ? 'Try adjusting your filters' : 'Reference sets will appear here once created.'}
+      />
 
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{editingSet ? 'Edit Reference Set' : 'New Reference Set'}</DialogTitle>
@@ -190,6 +203,7 @@ export default function ReferenceDataPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }
+    

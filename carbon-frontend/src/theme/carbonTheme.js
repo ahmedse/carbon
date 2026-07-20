@@ -95,9 +95,9 @@ const createCarbonTheme = (mode = 'light') => {
 
     typography: {
       fontFamily: '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      fontSize: 14,
+      fontSize: 13,
       h1: {
-        fontSize: '2rem',
+        fontSize: '1.95rem',
         fontWeight: 700,
         letterSpacing: '-0.02em',
         color: colors.text.primary,
@@ -208,8 +208,8 @@ const createCarbonTheme = (mode = 'light') => {
             height: '100%',
           },
           body: {
-            fontSize: 14,
-            lineHeight: 1.5,
+            fontSize: 13,
+            lineHeight: 1.45,
             letterSpacing: '-0.011em',
             WebkitFontSmoothing: 'antialiased',
             MozOsxFontSmoothing: 'grayscale',

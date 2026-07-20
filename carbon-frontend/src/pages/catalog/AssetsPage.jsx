@@ -39,6 +39,7 @@ import {
   CardContent,
   LinearProgress,
 } from '@mui/material';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import { DataGrid } from '@mui/x-data-grid';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -329,185 +330,85 @@ export default function AssetsPage() {
     searchText || filterDomain || filterClassification || filterQuality || filterAssetType;
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Asset Profiles
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {filteredAssets.length} of {assets.length} assets
-          </Typography>
-        </Box>
-        <Button
-          startIcon={<AddIcon />}
-          variant="contained"
-          onClick={() => navigate('/catalog/assets/new')}
-        >
-          New Asset
-        </Button>
-      </Box>
-
+    <Box sx={{ p: 0 }}>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      {/* Filter Bar */}
-      <Paper sx={{ p: 2, mb: 3, bgcolor: 'background.alt' }}>
-        <Stack spacing={2}>
-          {/* Search */}
-          <TextField
-            placeholder="Search by name or description..."
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            fullWidth
-            size="small"
-            InputProps={{
-              startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-            }}
-          />
-
-          {/* Filter Dropdowns */}
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Domain</InputLabel>
-                <Select
-                  value={filterDomain}
-                  label="Domain"
-                  onChange={(e) => setFilterDomain(e.target.value)}
-                >
-                  <MenuItem value="">All Domains</MenuItem>
-                  {domains.map((d) => (
-                    <MenuItem key={d.id} value={d.id}>
-                      {d.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Classification</InputLabel>
-                <Select
-                  value={filterClassification}
-                  label="Classification"
-                  onChange={(e) => setFilterClassification(e.target.value)}
-                >
-                  <MenuItem value="">All Levels</MenuItem>
-                  <MenuItem value="public">Public</MenuItem>
-                  <MenuItem value="internal">Internal</MenuItem>
-                  <MenuItem value="confidential">Confidential</MenuItem>
-                  <MenuItem value="pii">PII</MenuItem>
-                  <MenuItem value="sensitive">Sensitive</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Quality</InputLabel>
-                <Select
-                  value={filterQuality}
-                  label="Quality"
-                  onChange={(e) => setFilterQuality(e.target.value)}
-                >
-                  <MenuItem value="">All Status</MenuItem>
-                  <MenuItem value="passing">Passing</MenuItem>
-                  <MenuItem value="warning">Warning</MenuItem>
-                  <MenuItem value="failing">Failing</MenuItem>
-                  <MenuItem value="unknown">Unknown</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Asset Type</InputLabel>
-                <Select
-                  value={filterAssetType}
-                  label="Asset Type"
-                  onChange={(e) => setFilterAssetType(e.target.value)}
-                >
-                  <MenuItem value="">All Types</MenuItem>
-                  <MenuItem value="table">Table</MenuItem>
-                  <MenuItem value="field">Field</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-
-          {/* Clear Button */}
-          {hasActiveFilters && (
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button size="small" onClick={handleClearFilters}>
-                Clear Filters
-              </Button>
-            </Box>
-          )}
-        </Stack>
-      </Paper>
-
-      {/* Grid */}
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
-        </Box>
-      ) : filteredAssets.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary" gutterBottom>
-            No assets found
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {hasActiveFilters
-              ? 'Try adjusting your filters'
-              : 'Assets are auto-created for all tables and fields'}
-          </Typography>
-        </Paper>
-      ) : (
-        <Paper sx={{ height: '600px' }}>
-          <DataGrid
-            rows={filteredAssets}
-            columns={columns}
-            paginationModel={paginationModel}
-            onPaginationModelChange={setPaginationModel}
-            pageSizeOptions={[10, 25, 50, 100]}
-            sortModel={sortModel}
-            onSortModelChange={setSortModel}
-            disableSelectionOnClick
-            sx={{
-              '& .MuiDataGrid-cell': {
-                py: 1,
-              },
-              '& .MuiDataGrid-columnHeader': {
-                backgroundColor: theme.palette.mode === 'dark' 
-                  ? 'rgba(255, 255, 255, 0.05)' 
-                  : 'rgba(0, 0, 0, 0.05)',
-              },
-            }}
-          />
-        </Paper>
-      )}
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={Boolean(deleteConfirm)} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Delete Asset</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete this asset profile? This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+      <FilteredDataGrid
+        title="Asset Profiles"
+        subtitle={`${filteredAssets.length} of ${assets.length} assets`}
+        actions={(
           <Button
-            onClick={() => handleDelete(deleteConfirm)}
-            color="error"
+            startIcon={<AddIcon />}
             variant="contained"
+            onClick={() => navigate('/catalog/assets/new')}
           >
-            Delete
+            New Asset
           </Button>
-        </DialogActions>
-      </Dialog>
+        )}
+        rows={filteredAssets}
+        loading={loading}
+        columns={columns}
+        countLabel={`${filteredAssets.length} of ${assets.length} assets`}
+        searchValue={searchText}
+        onSearchChange={setSearchText}
+        filterDefs={[
+          {
+            key: 'domain',
+            label: 'Domain',
+            emptyLabel: 'All Domains',
+            options: domains.map((d) => ({ value: d.id, label: d.name })),
+          },
+          {
+            key: 'classification',
+            label: 'Classification',
+            emptyLabel: 'All Levels',
+            options: [
+              { value: 'public', label: 'Public' },
+              { value: 'internal', label: 'Internal' },
+              { value: 'confidential', label: 'Confidential' },
+              { value: 'pii', label: 'PII' },
+              { value: 'sensitive', label: 'Sensitive' },
+            ],
+          },
+          {
+            key: 'quality',
+            label: 'Quality',
+            emptyLabel: 'All Status',
+            options: [
+              { value: 'passing', label: 'Passing' },
+              { value: 'warning', label: 'Warning' },
+              { value: 'failing', label: 'Failing' },
+              { value: 'unknown', label: 'Unknown' },
+            ],
+          },
+          {
+            key: 'assetType',
+            label: 'Asset Type',
+            emptyLabel: 'All Types',
+            options: [
+              { value: 'table', label: 'Table' },
+              { value: 'field', label: 'Field' },
+            ],
+          },
+        ]}
+        filterValues={{
+          domain: filterDomain,
+          classification: filterClassification,
+          quality: filterQuality,
+          assetType: filterAssetType,
+        }}
+        onFilterChange={(key, value) => {
+          if (key === 'domain') setFilterDomain(value);
+          if (key === 'classification') setFilterClassification(value);
+          if (key === 'quality') setFilterQuality(value);
+          if (key === 'assetType') setFilterAssetType(value);
+        }}
+        onClearFilters={handleClearFilters}
+        pageSize={25}
+        rowsPerPageOptions={[25, 50, 100]}
+        emptyMessage="No assets found"
+        emptySubtext={hasActiveFilters ? 'Try adjusting your filters' : 'Assets are auto-created for all tables and fields'}
+      />
     </Box>
   );
 }

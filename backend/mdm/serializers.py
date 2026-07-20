@@ -38,14 +38,10 @@ class ReferenceValueSerializer(serializers.ModelSerializer):
 class ReferenceSetSerializer(serializers.ModelSerializer):
     """Serializer for ReferenceSet with nested values and steward details."""
     
-    values = ReferenceValueSerializer(
-        many=True, source='values', read_only=True
-    )
-    steward_name = serializers.CharField(
-        source='steward.get_full_name', read_only=True
-    )
+    values = ReferenceValueSerializer(many=True, read_only=True)
+    steward_name = serializers.SerializerMethodField()
     domain_name = serializers.CharField(
-        source='domain.name', read_only=True
+        source='domain.name', read_only=True, allow_null=True
     )
     value_count = serializers.SerializerMethodField()
 
@@ -61,6 +57,15 @@ class ReferenceSetSerializer(serializers.ModelSerializer):
             'id', 'slug', 'value_count', 'steward', 'created_at', 'updated_at'
         ]
 
+    def get_steward_name(self, obj):
+        """Return steward's username or full name."""
+        if not obj.steward:
+            return None
+        full_name = obj.steward.get_full_name()
+        if full_name and full_name.strip():
+            return full_name
+        return obj.steward.username
+    
     def get_value_count(self, obj):
         """Return count of active values."""
         return obj.values.filter(is_active=True).count()

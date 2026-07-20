@@ -1,8 +1,11 @@
 // src/pages/catalog/MDMPage.jsx
-// Catalog: Master Data Management - Reference sets, values, and org units
+// Master Data Management: Reference Sets, Reference Values, and Org Units
+// Unified architecture using MUI DataGrid, search/filters, and system theme
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { useNotification } from '../../components/NotificationProvider';
 import {
   fetchReferenceSets,
   createReferenceSet,
@@ -16,51 +19,41 @@ import {
   createOrgUnit,
   updateOrgUnit,
   deleteOrgUnit,
+  fetchDataDomains,
 } from '../../api/catalog';
+import { fetchUsers } from '../../api/users';
 import {
   Box,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Tabs,
+  Tab,
   TextField,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
+  InputAdornment,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Chip,
   IconButton,
   Tooltip,
   CircularProgress,
   Alert,
   Typography,
-  Tabs,
-  Tab,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
+import { DataGrid } from '@mui/x-data-grid';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
+import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
-function TabPanel(props) {
-  const { children, value, index, ...other } = props;
+function TabPanel({ children, value, index }) {
   return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`mdm-tabpanel-${index}`}
-      aria-labelledby={`mdm-tab-${index}`}
-      {...other}
-    >
+    <div role="tabpanel" hidden={value !== index}>
       {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
     </div>
   );
@@ -68,369 +61,698 @@ function TabPanel(props) {
 
 export default function MDMPage() {
   const { token } = useAuth();
+  const { notify } = useNotification();
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
   const [tabValue, setTabValue] = useState(0);
-  
-  // Reference sets state
-  const [refSets, setRefSets] = useState([]);
-  const [refValues, setRefValues] = useState([]);
-  const [selectedRefSet, setSelectedRefSet] = useState(null);
-  
-  // Org units state
-  const [orgUnits, setOrgUnits] = useState([]);
-  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [dialogType, setDialogType] = useState(''); // 'refset', 'refvalue', 'orgunit'
-  const [editingItem, setEditingItem] = useState(null);
-  const [formData, setFormData] = useState({});
+
+  // Reference Sets state
+  const [refSets, setRefSets] = useState([]);
+  const [searchRefSets, setSearchRefSets] = useState('');
+  const [filterDomain, setFilterDomain] = useState('');
+  const [filterSteward, setFilterSteward] = useState('');
+
+  // Reference Values state
+  const [selectedRefSet, setSelectedRefSet] = useState(null);
+  const [refValues, setRefValues] = useState([]);
+  const [searchRefValues, setSearchRefValues] = useState('');
+
+  // Org Units state
+  const [orgUnits, setOrgUnits] = useState([]);
+  const [searchOrgUnits, setSearchOrgUnits] = useState('');
+  const [filterOrgType, setFilterOrgType] = useState('');
+
+  // Select options
+  const [domains, setDomains] = useState([]);
+  const [users, setUsers] = useState([]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [token]);
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [sets, units] = await Promise.all([
-        fetchReferenceSets(token),
-        fetchOrgUnits(token),
+      const [setsData, domainsData, usersData, unitsData] = await Promise.all([
+        fetchReferenceSets(token).catch(() => []),
+        fetchDataDomains(token).catch(() => []),
+        fetchUsers(token).catch(() => []),
+        fetchOrgUnits(token).catch(() => []),
       ]);
-      setRefSets(Array.isArray(sets) ? sets : sets.results || []);
-      setOrgUnits(Array.isArray(units) ? units : units.results || []);
-      
-      // Load values for first ref set if available
-      if ((Array.isArray(sets) ? sets : sets.results || [])[0]) {
-        const firstSet = (Array.isArray(sets) ? sets : sets.results || [])[0];
+
+      setRefSets(Array.isArray(setsData) ? setsData : setsData.results || []);
+      setDomains(Array.isArray(domainsData) ? domainsData : domainsData.results || []);
+      setUsers(Array.isArray(usersData) ? usersData : usersData.results || []);
+      setOrgUnits(Array.isArray(unitsData) ? unitsData : unitsData.results || []);
+
+      // Auto-select first reference set
+      const firstSet = (Array.isArray(setsData) ? setsData : setsData.results || [])[0];
+      if (firstSet) {
         setSelectedRefSet(firstSet.id);
-        const vals = await fetchReferenceValues(token, firstSet.id);
-        setRefValues(Array.isArray(vals) ? vals : vals.results || []);
+        loadRefValues(firstSet.id);
       }
     } catch (err) {
-      setError(err.message || 'Failed to load MDM data');
+      const msg = err.message || 'Failed to load MDM data';
+      setError(msg);
+      notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenDialog = (type, item = null) => {
-    setDialogType(type);
-    if (item) {
-      setEditingItem(item);
-      if (type === 'refset') {
-        setFormData({ name: item.name, description: item.description || '' });
-      } else if (type === 'refvalue') {
-        setFormData({ code: item.code, label: item.label, description: item.description || '' });
-      } else if (type === 'orgunit') {
-        setFormData({ name: item.name, parent: item.parent || '', description: item.description || '' });
-      }
-    } else {
-      setEditingItem(null);
-      setFormData({});
-    }
-    setOpenDialog(true);
-  };
-
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setEditingItem(null);
-    setFormData({});
-  };
-
-  const handleSave = async () => {
+  const loadRefValues = async (setId) => {
+    if (!setId) return;
     try {
-      if (dialogType === 'refset') {
-        if (editingItem) {
-          await updateReferenceSet(token, editingItem.id, formData);
-        } else {
-          await createReferenceSet(token, formData);
-        }
-        await loadData();
-      } else if (dialogType === 'refvalue') {
-        const data = { ...formData, reference_set: selectedRefSet };
-        if (editingItem) {
-          await updateReferenceValue(token, editingItem.id, data);
-        } else {
-          await createReferenceValue(token, data);
-        }
-        if (selectedRefSet) {
-          const vals = await fetchReferenceValues(token, selectedRefSet);
-          setRefValues(Array.isArray(vals) ? vals : vals.results || []);
-        }
-      } else if (dialogType === 'orgunit') {
-        if (editingItem) {
-          await updateOrgUnit(token, editingItem.id, formData);
-        } else {
-          await createOrgUnit(token, formData);
-        }
-        const units = await fetchOrgUnits(token);
-        setOrgUnits(Array.isArray(units) ? units : units.results || []);
-      }
-      handleCloseDialog();
+      const valsData = await fetchReferenceValues(token, setId);
+      setRefValues(Array.isArray(valsData) ? valsData : valsData.results || []);
     } catch (err) {
-      setError(err.message || 'Failed to save');
+      notify({ message: 'Failed to load reference values', type: 'error' });
     }
   };
 
-  const handleDelete = async (type, id) => {
-    if (!window.confirm('Are you sure?')) return;
+  const handleDeleteRefSet = async (id) => {
+    if (!window.confirm('Delete this reference set? This will also delete all its values.')) return;
     try {
-      if (type === 'refset') {
-        await deleteReferenceSet(token, id);
-        await loadData();
-      } else if (type === 'refvalue') {
-        await deleteReferenceValue(token, id);
-        if (selectedRefSet) {
-          const vals = await fetchReferenceValues(token, selectedRefSet);
-          setRefValues(Array.isArray(vals) ? vals : vals.results || []);
-        }
-      } else if (type === 'orgunit') {
-        await deleteOrgUnit(token, id);
-        const units = await fetchOrgUnits(token);
-        setOrgUnits(Array.isArray(units) ? units : units.results || []);
-      }
+      await deleteReferenceSet(token, id);
+      notify({ message: 'Reference set deleted', type: 'success' });
+      loadData();
     } catch (err) {
-      setError(err.message || 'Failed to delete');
+      notify({ message: err.message || 'Failed to delete reference set', type: 'error' });
     }
   };
+
+  const handleDeleteRefValue = async (id) => {
+    if (!window.confirm('Delete this reference value?')) return;
+    try {
+      await deleteReferenceValue(token, id);
+      notify({ message: 'Reference value deleted', type: 'success' });
+      if (selectedRefSet) loadRefValues(selectedRefSet);
+    } catch (err) {
+      notify({ message: err.message || 'Failed to delete reference value', type: 'error' });
+    }
+  };
+
+  const handleDeleteOrgUnit = async (id) => {
+    if (!window.confirm('Delete this organizational unit?')) return;
+    try {
+      await deleteOrgUnit(token, id);
+      notify({ message: 'Org unit deleted', type: 'success' });
+      const unitsData = await fetchOrgUnits(token);
+      setOrgUnits(Array.isArray(unitsData) ? unitsData : unitsData.results || []);
+    } catch (err) {
+      notify({ message: err.message || 'Failed to delete org unit', type: 'error' });
+    }
+  };
+
+  const handleClearRefSetsFilters = () => {
+    setSearchRefSets('');
+    setFilterDomain('');
+    setFilterSteward('');
+  };
+
+  const handleClearRefValuesFilters = () => {
+    setSearchRefValues('');
+  };
+
+  const handleClearOrgUnitsFilters = () => {
+    setSearchOrgUnits('');
+    setFilterOrgType('');
+  };
+
+  // Filtered Reference Sets
+  const filteredRefSets = useMemo(() => {
+    let filtered = refSets;
+
+    if (searchRefSets.trim()) {
+      const query = searchRefSets.toLowerCase();
+      filtered = filtered.filter(
+        (s) =>
+          (s.name && s.name.toLowerCase().includes(query)) ||
+          (s.description && s.description.toLowerCase().includes(query))
+      );
+    }
+
+    if (filterDomain) {
+      filtered = filtered.filter((s) => s.domain === filterDomain);
+    }
+
+    if (filterSteward) {
+      filtered = filtered.filter((s) => s.steward === filterSteward);
+    }
+
+    return filtered;
+  }, [refSets, searchRefSets, filterDomain, filterSteward]);
+
+  // Filtered Reference Values
+  const filteredRefValues = useMemo(() => {
+    if (!searchRefValues.trim()) return refValues;
+    const query = searchRefValues.toLowerCase();
+    return refValues.filter(
+      (v) =>
+        (v.code && v.code.toLowerCase().includes(query)) ||
+        (v.label && v.label.toLowerCase().includes(query)) ||
+        (v.description && v.description.toLowerCase().includes(query))
+    );
+  }, [refValues, searchRefValues]);
+
+  // Filtered Org Units
+  const filteredOrgUnits = useMemo(() => {
+    let filtered = orgUnits;
+
+    if (searchOrgUnits.trim()) {
+      const query = searchOrgUnits.toLowerCase();
+      filtered = filtered.filter(
+        (u) =>
+          (u.name && u.name.toLowerCase().includes(query)) ||
+          (u.code && u.code.toLowerCase().includes(query)) ||
+          (u.description && u.description.toLowerCase().includes(query))
+      );
+    }
+
+    if (filterOrgType) {
+      filtered = filtered.filter((u) => u.org_type === filterOrgType);
+    }
+
+    return filtered;
+  }, [orgUnits, searchOrgUnits, filterOrgType]);
+
+  // Reference Sets Columns
+  const refSetsColumns = [
+    {
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
+      minWidth: 200,
+      renderCell: (params) => (
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+          {params.value}
+        </Typography>
+      ),
+    },
+    {
+      field: 'description',
+      headerName: 'Description',
+      flex: 2,
+      minWidth: 250,
+      renderCell: (params) => (
+        <Typography variant="body2" color="text.secondary">
+          {params.value || '—'}
+        </Typography>
+      ),
+    },
+    {
+      field: 'domain_name',
+      headerName: 'Domain',
+      width: 160,
+      renderCell: (params) => params.value || '—',
+    },
+    {
+      field: 'steward_name',
+      headerName: 'Steward',
+      width: 140,
+      renderCell: (params) => params.value || '—',
+    },
+    {
+      field: 'value_count',
+      headerName: 'Values',
+      width: 100,
+      renderCell: (params) => <Chip label={params.value || 0} size="small" />,
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 160,
+      sortable: false,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title="View Details">
+            <IconButton
+              size="small"
+              onClick={() => navigate(`/catalog/mdm/reference-sets/${params.row.id}`)}
+            >
+              <VisibilityIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete">
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => handleDeleteRefSet(params.row.id)}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      ),
+    },
+  ];
+
+  // Reference Values Columns
+  const refValuesColumns = [
+    { field: 'code', headerName: 'Code', flex: 1, minWidth: 140 },
+    { field: 'label', headerName: 'Label', flex: 2, minWidth: 200 },
+    {
+      field: 'description',
+      headerName: 'Description',
+      flex: 2,
+      minWidth: 220,
+      renderCell: (params) => params.value || '—',
+    },
+    {
+      field: 'is_active',
+      headerName: 'Active',
+      width: 100,
+      renderCell: (params) => (
+        <Chip
+          label={params.value ? 'Active' : 'Inactive'}
+          size="small"
+          color={params.value ? 'success' : 'default'}
+          variant="outlined"
+        />
+      ),
+    },
+    {
+      field: 'valid_from',
+      headerName: 'Valid From',
+      width: 120,
+      renderCell: (params) =>
+        params.value ? new Date(params.value).toLocaleDateString() : '—',
+    },
+    {
+      field: 'valid_to',
+      headerName: 'Valid To',
+      width: 120,
+      renderCell: (params) =>
+        params.value ? new Date(params.value).toLocaleDateString() : '—',
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 120,
+      sortable: false,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title="Delete">
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => handleDeleteRefValue(params.row.id)}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      ),
+    },
+  ];
+
+  // Org Units Columns
+  const orgUnitsColumns = [
+    {
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
+      minWidth: 200,
+      renderCell: (params) => (
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+          {params.value}
+        </Typography>
+      ),
+    },
+    {
+      field: 'org_type',
+      headerName: 'Type',
+      width: 140,
+      renderCell: (params) => (
+        <Chip label={params.value || 'other'} size="small" variant="outlined" />
+      ),
+    },
+    {
+      field: 'code',
+      headerName: 'Code',
+      width: 120,
+      renderCell: (params) => params.value || '—',
+    },
+    {
+      field: 'parent_name',
+      headerName: 'Parent',
+      width: 160,
+      renderCell: (params) => params.value || '—',
+    },
+    {
+      field: 'children_count',
+      headerName: 'Children',
+      width: 100,
+      renderCell: (params) => <Chip label={params.value || 0} size="small" />,
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 160,
+      sortable: false,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title="View Details">
+            <IconButton
+              size="small"
+              onClick={() => navigate(`/catalog/mdm/org-units/${params.row.id}`)}
+            >
+              <AccountTreeIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete">
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => handleDeleteOrgUnit(params.row.id)}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      ),
+    },
+  ];
 
   if (loading) {
-    return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>;
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h5" sx={{ mb: 2 }}>Master Data Management</Typography>
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {/* Header */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" gutterBottom>
+          Master Data Management
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Manage reference sets, reference values, and organizational units for controlled vocabularies and governance
+        </Typography>
+      </Box>
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      {/* Tabs */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)}>
-          <Tab label="Reference Sets" />
-          <Tab label="Reference Values" />
-          <Tab label="Org Units" />
+          <Tab label={`Reference Sets (${refSets.length})`} />
+          <Tab label={`Reference Values (${refValues.length})`} />
+          <Tab label={`Org Units (${orgUnits.length})`} />
         </Tabs>
       </Box>
 
-      {/* Reference Sets Tab */}
+      {/* Tab 1: Reference Sets */}
       <TabPanel value={tabValue} index={0}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <Button startIcon={<AddIcon />} variant="contained" onClick={() => handleOpenDialog('refset')}>
-            New Set
+        {/* Filters Bar */}
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 2,
+            mb: 2,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            p: 2,
+            bgcolor: 'background.alt',
+            borderRadius: 1,
+          }}
+        >
+          <TextField
+            size="small"
+            placeholder="Search reference sets..."
+            value={searchRefSets}
+            onChange={(e) => setSearchRefSets(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ flex: '1 1 250px', minWidth: 200 }}
+          />
+
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Domain</InputLabel>
+            <Select
+              value={filterDomain}
+              onChange={(e) => setFilterDomain(e.target.value)}
+              label="Domain"
+            >
+              <MenuItem value="">All Domains</MenuItem>
+              {domains.map((d) => (
+                <MenuItem key={d.id} value={d.id}>
+                  {d.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Steward</InputLabel>
+            <Select
+              value={filterSteward}
+              onChange={(e) => setFilterSteward(e.target.value)}
+              label="Steward"
+            >
+              <MenuItem value="">All Stewards</MenuItem>
+              {users.map((u) => (
+                <MenuItem key={u.id} value={u.id}>
+                  {u.username}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <Button
+            size="small"
+            startIcon={<ClearIcon />}
+            onClick={handleClearRefSetsFilters}
+            disabled={!searchRefSets && !filterDomain && !filterSteward}
+          >
+            Clear Filters
+          </Button>
+
+          <Box sx={{ flex: 1 }} />
+
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/catalog/mdm/reference-sets/new')}
+          >
+            New Reference Set
           </Button>
         </Box>
-        <TableContainer component={Paper}>
-          <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'background.alt' }}>
-                <TableCell>Name</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {refSets.map((set) => (
-                <TableRow key={set.id} hover>
-                  <TableCell>{set.name}</TableCell>
-                  <TableCell>{set.description || '-'}</TableCell>
-                  <TableCell align="right">
-                    <IconButton size="small" onClick={() => handleOpenDialog('refset', set)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" color="error" onClick={() => handleDelete('refset', set.id)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+
+        {/* DataGrid */}
+        <Box sx={{ height: 500, width: '100%' }}>
+          <DataGrid
+            rows={filteredRefSets}
+            columns={refSetsColumns}
+            pageSizeOptions={[10, 25, 50, 100]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 25 } },
+            }}
+            disableRowSelectionOnClick
+            sx={{
+              '& .MuiDataGrid-columnHeader': {
+                backgroundColor: theme.palette.background.alt,
+                fontWeight: 600,
+              },
+            }}
+          />
+        </Box>
       </TabPanel>
 
-      {/* Reference Values Tab */}
+      {/* Tab 2: Reference Values */}
       <TabPanel value={tabValue} index={1}>
-        <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
-          <FormControl sx={{ minWidth: 250 }}>
+        {/* Reference Set Selector + Filters */}
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 2,
+            mb: 2,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            p: 2,
+            bgcolor: 'background.alt',
+            borderRadius: 1,
+          }}
+        >
+          <FormControl size="small" sx={{ minWidth: 240, flex: '1 1 300px' }}>
             <InputLabel>Select Reference Set</InputLabel>
             <Select
               value={selectedRefSet || ''}
-              onChange={async (e) => {
+              onChange={(e) => {
                 setSelectedRefSet(e.target.value);
-                const vals = await fetchReferenceValues(token, e.target.value);
-                setRefValues(Array.isArray(vals) ? vals : vals.results || []);
+                loadRefValues(e.target.value);
               }}
               label="Select Reference Set"
             >
               {refSets.map((set) => (
-                <MenuItem key={set.id} value={set.id}>{set.name}</MenuItem>
+                <MenuItem key={set.id} value={set.id}>
+                  {set.name}
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
-          <Button startIcon={<AddIcon />} variant="contained" onClick={() => handleOpenDialog('refvalue')}>
+
+          <TextField
+            size="small"
+            placeholder="Search values..."
+            value={searchRefValues}
+            onChange={(e) => setSearchRefValues(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ flex: '1 1 200px' }}
+          />
+
+          <Button
+            size="small"
+            startIcon={<ClearIcon />}
+            onClick={handleClearRefValuesFilters}
+            disabled={!searchRefValues}
+          >
+            Clear
+          </Button>
+
+          <Box sx={{ flex: 1 }} />
+
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            disabled={!selectedRefSet}
+            onClick={() => notify({ message: 'Use detail page to add values', type: 'info' })}
+          >
             New Value
           </Button>
         </Box>
-        <TableContainer component={Paper}>
-          <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'background.alt' }}>
-                <TableCell>Code</TableCell>
-                <TableCell>Label</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {refValues.map((val) => (
-                <TableRow key={val.id} hover>
-                  <TableCell>{val.code}</TableCell>
-                  <TableCell>{val.label}</TableCell>
-                  <TableCell>{val.description || '-'}</TableCell>
-                  <TableCell align="right">
-                    <IconButton size="small" onClick={() => handleOpenDialog('refvalue', val)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" color="error" onClick={() => handleDelete('refvalue', val.id)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+
+        {/* DataGrid */}
+        <Box sx={{ height: 500, width: '100%' }}>
+          <DataGrid
+            rows={filteredRefValues}
+            columns={refValuesColumns}
+            pageSizeOptions={[10, 25, 50, 100]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 25 } },
+            }}
+            disableRowSelectionOnClick
+            sx={{
+              '& .MuiDataGrid-columnHeader': {
+                backgroundColor: theme.palette.background.alt,
+                fontWeight: 600,
+              },
+            }}
+          />
+        </Box>
       </TabPanel>
 
-      {/* Org Units Tab */}
+      {/* Tab 3: Org Units */}
       <TabPanel value={tabValue} index={2}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <Button startIcon={<AddIcon />} variant="contained" onClick={() => handleOpenDialog('orgunit')}>
-            New Unit
+        {/* Filters Bar */}
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 2,
+            mb: 2,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            p: 2,
+            bgcolor: 'background.alt',
+            borderRadius: 1,
+          }}
+        >
+          <TextField
+            size="small"
+            placeholder="Search org units..."
+            value={searchOrgUnits}
+            onChange={(e) => setSearchOrgUnits(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ flex: '1 1 250px', minWidth: 200 }}
+          />
+
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Type</InputLabel>
+            <Select
+              value={filterOrgType}
+              onChange={(e) => setFilterOrgType(e.target.value)}
+              label="Type"
+            >
+              <MenuItem value="">All Types</MenuItem>
+              <MenuItem value="university">University</MenuItem>
+              <MenuItem value="campus">Campus</MenuItem>
+              <MenuItem value="college">College</MenuItem>
+              <MenuItem value="department">Department</MenuItem>
+              <MenuItem value="division">Division</MenuItem>
+              <MenuItem value="team">Team</MenuItem>
+              <MenuItem value="facility">Facility</MenuItem>
+              <MenuItem value="other">Other</MenuItem>
+            </Select>
+          </FormControl>
+
+          <Button
+            size="small"
+            startIcon={<ClearIcon />}
+            onClick={handleClearOrgUnitsFilters}
+            disabled={!searchOrgUnits && !filterOrgType}
+          >
+            Clear Filters
+          </Button>
+
+          <Box sx={{ flex: 1 }} />
+
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/catalog/mdm/org-units/new')}
+          >
+            New Org Unit
           </Button>
         </Box>
-        <TableContainer component={Paper}>
-          <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'background.alt' }}>
-                <TableCell>Name</TableCell>
-                <TableCell>Parent</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {orgUnits.map((unit) => (
-                <TableRow key={unit.id} hover>
-                  <TableCell>{unit.name}</TableCell>
-                  <TableCell>{unit.parent_name || '-'}</TableCell>
-                  <TableCell>{unit.description || '-'}</TableCell>
-                  <TableCell align="right">
-                    <IconButton size="small" onClick={() => handleOpenDialog('orgunit', unit)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" color="error" onClick={() => handleDelete('orgunit', unit.id)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </TabPanel>
 
-      {/* Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {editingItem ? `Edit ${dialogType}` : `New ${dialogType}`}
-        </DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          {dialogType === 'refset' && (
-            <>
-              <TextField
-                label="Name"
-                fullWidth
-                value={formData.name || ''}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                margin="normal"
-                autoFocus
-              />
-              <TextField
-                label="Description"
-                fullWidth
-                multiline
-                rows={2}
-                value={formData.description || ''}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                margin="normal"
-              />
-            </>
-          )}
-          {dialogType === 'refvalue' && (
-            <>
-              <TextField
-                label="Code"
-                fullWidth
-                value={formData.code || ''}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                margin="normal"
-                autoFocus
-              />
-              <TextField
-                label="Label"
-                fullWidth
-                value={formData.label || ''}
-                onChange={(e) => setFormData({ ...formData, label: e.target.value })}
-                margin="normal"
-              />
-              <TextField
-                label="Description"
-                fullWidth
-                multiline
-                rows={2}
-                value={formData.description || ''}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                margin="normal"
-              />
-            </>
-          )}
-          {dialogType === 'orgunit' && (
-            <>
-              <TextField
-                label="Name"
-                fullWidth
-                value={formData.name || ''}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                margin="normal"
-                autoFocus
-              />
-              <TextField
-                label="Parent ID"
-                fullWidth
-                value={formData.parent || ''}
-                onChange={(e) => setFormData({ ...formData, parent: e.target.value })}
-                margin="normal"
-              />
-              <TextField
-                label="Description"
-                fullWidth
-                multiline
-                rows={2}
-                value={formData.description || ''}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                margin="normal"
-              />
-            </>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained">
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
+        {/* DataGrid */}
+        <Box sx={{ height: 500, width: '100%' }}>
+          <DataGrid
+            rows={filteredOrgUnits}
+            columns={orgUnitsColumns}
+            pageSizeOptions={[10, 25, 50, 100]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 25 } },
+            }}
+            disableRowSelectionOnClick
+            sx={{
+              '& .MuiDataGrid-columnHeader': {
+                backgroundColor: theme.palette.background.alt,
+                fontWeight: 600,
+              },
+            }}
+          />
+        </Box>
+      </TabPanel>
     </Box>
   );
 }
