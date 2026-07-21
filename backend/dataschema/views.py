@@ -79,6 +79,8 @@ class DataTableViewSet(ScopedViewSet):
     required_role = ("admin", "admins_group", "dataowners_group", "auditors_group")
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return DataTable.objects.none()
         user = self.request.user
         module_id = self.request.query_params.get("module_id")
         pk = self.kwargs.get('pk')
@@ -178,9 +180,10 @@ class DataFieldViewSet(ScopedViewSet):
     required_role = ("admin", "admins_group", "auditors_group", "dataowners_group")
 
     def get_queryset(self):
+        module = getattr(self, 'module', None)
         qs = DataField.objects.all()
-        if self.module:
-            qs = qs.filter(data_table__module=self.module, is_archived=False)
+        if module:
+            qs = qs.filter(data_table__module=module, is_archived=False)
         else:
             qs = qs.filter(is_archived=False)
         table_id = (
@@ -261,6 +264,8 @@ class DataRowViewSet(ScopedViewSet):
         """)
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return DataRow.objects.none()
         user = self.request.user
         module_id = self.request.query_params.get("module_id")
         data_table_id = self.request.query_params.get("data_table")

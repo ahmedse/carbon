@@ -7,14 +7,13 @@ from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, Calculati
 
 class ReportingPeriodSerializer(serializers.ModelSerializer):
     """Serializer for reporting periods."""
-    project_name = serializers.CharField(source='project.name', read_only=True)
     duration_days = serializers.IntegerField(read_only=True)
     is_active = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = ReportingPeriod
         fields = [
-            'id', 'name', 'project', 'project_name',
+            'id', 'name',
             'start_date', 'end_date', 'period_type', 'status',
             'description', 'is_baseline', 'duration_days', 'is_active',
             'created_at', 'updated_at'
@@ -65,7 +64,6 @@ class CalculationSerializer(serializers.ModelSerializer):
     """Serializer for emission calculations."""
     emission_factor_name = serializers.CharField(source='emission_factor.name', read_only=True)
     emission_factor_code = serializers.CharField(source='emission_factor.code', read_only=True)
-    project_name = serializers.CharField(source='project.name', read_only=True)
     module_name = serializers.CharField(source='module.name', read_only=True)
     scope_display = serializers.CharField(source='get_scope_display', read_only=True)
     reporting_period_name = serializers.CharField(source='reporting_period.name', read_only=True)
@@ -73,7 +71,7 @@ class CalculationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Calculation
         fields = [
-            'id', 'data_row', 'project', 'project_name', 'module', 'module_name',
+            'id', 'data_row', 'module', 'module_name',
             'emission_factor', 'emission_factor_name', 'emission_factor_code',
             'activity_value', 'activity_unit', 
             'co2e_kg', 'co2_kg', 'ch4_kg', 'n2o_kg',

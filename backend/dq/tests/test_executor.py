@@ -8,9 +8,9 @@ Covers:
  - GovernanceEvent creation
 """
 import time
-import pytest
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from core.models import Module
 from dataschema.models import DataTable, DataField, DataRow
@@ -274,6 +274,26 @@ class ReferenceIntegrityRuleTests(DQBaseTestCase):
                                params={'reference_set_id': self.ref_set.id})
         passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
         self.assertFalse(passed)
+
+    def test_temporal_validity_uses_current_values_only(self):
+        yesterday = timezone.now().date() - timezone.timedelta(days=1)
+        tomorrow = timezone.now().date() + timezone.timedelta(days=1)
+        ReferenceValue.objects.create(
+            reference_set=self.ref_set, code='CURRENT', label='Current', valid_from=None, valid_to=None, is_active=True
+        )
+        ReferenceValue.objects.create(
+            reference_set=self.ref_set, code='EXPIRED', label='Expired', valid_from=None, valid_to=yesterday, is_active=True
+        )
+        ReferenceValue.objects.create(
+            reference_set=self.ref_set, code='FUTURE', label='Future', valid_from=tomorrow, valid_to=None, is_active=True
+        )
+        rows = self._make_rows([{'status': 'CURRENT'}, {'status': 'EXPIRED'}, {'status': 'FUTURE'}])
+        rule = self._make_rule('reference_integrity', field=self.ref_field,
+                               params={'reference_set_id': self.ref_set.id})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertFalse(passed)
+        self.assertEqual(failed, 2)
+        self.assertEqual({item['value'] for item in sample}, {'EXPIRED', 'FUTURE'})
 
     def test_uses_field_reference_set_if_no_param(self):
         """Rule without explicit reference_set_id should fall back to field.reference_set."""

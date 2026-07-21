@@ -436,6 +436,8 @@ class InsightViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Filter insights for current user."""
+        if getattr(self, 'swagger_fake_view', False):
+            return ProactiveInsight.objects.none()
         queryset = ProactiveInsight.objects.filter(user=self.request.user)
         
         # Filter by project if specified

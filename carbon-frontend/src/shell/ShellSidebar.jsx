@@ -11,6 +11,7 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import RuleIcon from '@mui/icons-material/Rule';
+import HistoryIcon from '@mui/icons-material/History';
 import PeopleIcon from '@mui/icons-material/People';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import SecurityIcon from '@mui/icons-material/Security';
@@ -59,6 +60,8 @@ function getSidebarItems(studioId) {
         { type: 'group', label: 'Governance' },
         { label: 'Metadata', path: '/catalog/metadata', icon: EditIcon },
         { label: 'Asset Profiles', path: '/catalog/assets', icon: AssignmentIcon },
+        { label: 'DQ Dashboard', path: '/catalog/dq-dashboard', icon: RuleIcon },
+        { label: 'DQ Rules', path: '/catalog/dq-rules', icon: HistoryIcon },
         { label: 'Governance Policies', path: '/catalog/policies', icon: RuleIcon },
         { label: 'Governance Audit', path: '/catalog/governance', icon: VerifiedUserIcon },
         { type: 'divider' },

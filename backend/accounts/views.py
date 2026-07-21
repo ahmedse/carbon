@@ -165,6 +165,8 @@ class ScopedRoleViewSet(viewsets.ModelViewSet):
         return ScopedRoleSerializer
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return ScopedRole.objects.none()
         user = self.request.user
         if user_is_global_admin(user):
             return ScopedRole.objects.all()

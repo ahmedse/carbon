@@ -49,12 +49,12 @@ class ReferenceSetSerializer(serializers.ModelSerializer):
         model = ReferenceSet
         fields = [
             'id', 'name', 'slug', 'description', 'domain', 'domain_name',
-            'steward', 'steward_name', 'is_active', 'version',
+            'steward', 'steward_name', 'is_active', 'version', 'lifecycle_state',
             'value_count', 'values',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'slug', 'value_count', 'steward', 'created_at', 'updated_at'
+            'id', 'slug', 'value_count', 'steward', 'lifecycle_state', 'created_at', 'updated_at'
         ]
 
     def get_steward_name(self, obj):

@@ -1,14 +1,16 @@
 # mdm/views.py
 from django.db import models
 from django.utils.text import slugify
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets, status, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError as DRFValidationError
 
-from dataschema.models import DataField
+from dataschema.models import DataField, DataRow
 from catalog.audit_utils import emit_governance_event
 from .models import ReferenceSet, ReferenceValue, OrgUnit
 from .serializers import ReferenceSetSerializer, ReferenceValueSerializer, OrgUnitSerializer
@@ -45,6 +47,8 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         - Regular users see only reference sets in their assigned org_units
         - If user has no org_unit assignments, show all (for now - permissive)
         """
+        if getattr(self, 'swagger_fake_view', False):
+            return ReferenceSet.objects.none()
         user = self.request.user
         
         # Superusers and staff see everything
@@ -138,14 +142,73 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
             user=self.request.user,
         )
 
+    @swagger_auto_schema(
+        method='get',
+        operation_description='Return reference values valid on a given date, optionally filtered to active values only.',
+        manual_parameters=[
+            openapi.Parameter('date', openapi.IN_QUERY, description='ISO date to query historical values', type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE, required=False),
+            openapi.Parameter('active', openapi.IN_QUERY, description='Filter to active values only', type=openapi.TYPE_BOOLEAN, required=False),
+        ],
+        responses={200: 'List of reference values', 400: 'Invalid date format', 404: 'Reference set not found'},
+    )
     @action(detail=True, methods=['get'])
     def values(self, request, pk=None):
-        """GET /mdm/reference-sets/{id}/values/?active=1 -> values of this set."""
+        """GET /mdm/reference-sets/{id}/values/?date=YYYY-MM-DD&active=true -> values of this set."""
+        from datetime import date
+
         ref_set = self.get_object()
         qs = ReferenceValue.objects.filter(reference_set=ref_set)
         if request.query_params.get('active') in ('1', 'true', 'True'):
             qs = qs.filter(is_active=True)
+
+        date_str = request.query_params.get('date')
+        if date_str:
+            try:
+                target_date = date.fromisoformat(date_str)
+            except ValueError:
+                return Response(
+                    {'error': 'date must be a valid ISO date YYYY-MM-DD'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            qs = qs.filter(
+                models.Q(valid_from__isnull=True) | models.Q(valid_from__lte=target_date),
+                models.Q(valid_to__isnull=True) | models.Q(valid_to__gte=target_date),
+            )
+
         return Response(ReferenceValueSerializer(qs, many=True).data)
+
+    @swagger_auto_schema(
+        method='post',
+        operation_description='Advance a reference set through its lifecycle states.',
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={'state': openapi.Schema(type=openapi.TYPE_STRING, description='Target lifecycle state')},
+            required=['state'],
+        ),
+        responses={200: 'Transition accepted', 400: 'Invalid lifecycle transition', 404: 'Reference set not found'},
+    )
+    @action(detail=True, methods=['post'])
+    def transition(self, request, pk=None):
+        """POST /mdm/reference-sets/{id}/transition/ to move lifecycle state."""
+        ref_set = self.get_object()
+        new_state = request.data.get('state')
+        valid_states = [state for state, _ in ReferenceSet.LIFECYCLE_STATES]
+        if not new_state:
+            raise DRFValidationError({'state': ['This field is required.']})
+        if new_state not in valid_states:
+            raise DRFValidationError(
+                {'state': [f"Invalid state '{new_state}'. Allowed values: {', '.join(valid_states)}"]}
+            )
+        try:
+            ref_set.transition_to(new_state, user=request.user)
+        except ValueError as exc:
+            raise DRFValidationError({'state': [str(exc)]})
+        return Response({
+            'id': ref_set.id,
+            'name': ref_set.name,
+            'lifecycle_state': ref_set.lifecycle_state,
+            'message': f'Transitioned to {ref_set.lifecycle_state}',
+        })
 
     @action(detail=True, methods=['post'])
     def add_value(self, request, pk=None):
@@ -162,10 +225,107 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @swagger_auto_schema(
+        method='post',
+        operation_description=(
+            'Archive multiple reference sets in one request. '
+            'Sets is_active=False and lifecycle_state=archived for each ID. '
+            'Returns per-item success/failure so partial failures do not abort the batch.'
+        ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'ids': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(type=openapi.TYPE_INTEGER),
+                    description='List of ReferenceSet IDs to archive',
+                ),
+            },
+            required=['ids'],
+        ),
+        responses={
+            200: openapi.Response(
+                description='Per-item success/failure summary',
+                examples={'application/json': {'success': [1, 2], 'failed': [{'id': 99, 'error': 'ReferenceSet not found'}]}},
+            ),
+            400: 'ids must be a non-empty list',
+        },
+    )
+    @action(detail=False, methods=['post'], url_path='archive-bulk')
+    def archive_bulk(self, request):
+        ids = request.data.get('ids', [])
+        if not isinstance(ids, list) or not ids:
+            return Response({'error': 'ids must be a non-empty list'}, status=status.HTTP_400_BAD_REQUEST)
+
+        results = {'success': [], 'failed': []}
+        for set_id in ids:
+            try:
+                ref_set = ReferenceSet.objects.get(pk=set_id)
+            except ReferenceSet.DoesNotExist:
+                results['failed'].append({'id': set_id, 'error': 'ReferenceSet not found'})
+                continue
+
+            ref_set.is_active = False
+            ref_set.lifecycle_state = ReferenceSet.LIFECYCLE_ARCHIVED
+            ref_set.save(update_fields=['is_active', 'lifecycle_state'])
+            emit_governance_event(
+                entity_type='ReferenceSet',
+                entity_id=ref_set.id,
+                action='delete',
+                before={'is_active': True},
+                after={'is_active': False, 'lifecycle_state': ReferenceSet.LIFECYCLE_ARCHIVED},
+                user=request.user,
+            )
+            results['success'].append(ref_set.id)
+
+        return Response(results, status=status.HTTP_200_OK)
+
 
 class ReferenceValueViewSet(viewsets.ModelViewSet):
     serializer_class = ReferenceValueSerializer
     permission_classes = [ReadAnyWriteGlobalAdmin]
+
+    @swagger_auto_schema(
+        method='post',
+        operation_description='Create multiple reference values atomically for bulk import workflows.',
+        request_body=openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
+        responses={201: 'Bulk-create succeeded', 400: 'One or more values failed validation'},
+    )
+    @action(detail=False, methods=['post'], url_path='bulk-create')
+    def bulk_create(self, request):
+        payload = request.data
+        if not isinstance(payload, list) or not payload:
+            return Response({'error': 'A non-empty list of values is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reference_set_id = request.query_params.get('reference_set')
+        if isinstance(request.data, dict):
+            reference_set_id = reference_set_id or request.data.get('reference_set')
+        if not reference_set_id:
+            return Response({'error': 'reference_set is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            ref_set = ReferenceSet.objects.get(pk=reference_set_id)
+        except ReferenceSet.DoesNotExist:
+            return Response({'error': 'reference_set not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializers = []
+        for item in payload:
+            serializer = ReferenceValueSerializer(data=item)
+            if not serializer.is_valid():
+                return Response({'error': 'One or more items failed validation', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+            serializer.validated_data['reference_set'] = ref_set
+            serializers.append(serializer)
+
+        objs = [s.save() for s in serializers]
+        emit_governance_event(
+            entity_type='ReferenceValue',
+            entity_id=ref_set.id,
+            action='create',
+            before={},
+            after={'bulk_create': len(objs)},
+            user=self.request.user,
+        )
+        return Response(ReferenceValueSerializer(objs, many=True).data, status=status.HTTP_201_CREATED)
 
     def get_queryset(self):
         qs = ReferenceValue.objects.all()
@@ -239,28 +399,70 @@ class ReferenceValueViewSet(viewsets.ModelViewSet):
 
 
 class BindFieldView(APIView):
-    """POST /mdm/bind-field/ {"data_field": <id>, "reference_set": <id|null>}
-    Binds (or unbinds) a dataschema DataField to a ReferenceSet. Admin only."""
+    """POST /mdm/bind-field/ to bind or unbind one or many DataFields.
+
+    Body examples:
+      {"data_field": 1, "reference_set": 5}
+      {"data_fields": [1,2,3], "reference_set": 5}
+      {"data_fields": [1,2], "reference_set": null, "force": true}
+    """
     permission_classes = [ReadAnyWriteGlobalAdmin]
 
+    @swagger_auto_schema(
+        operation_description='Bind or unbind one or many data fields to a reference set.',
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'data_field': openapi.Schema(type=openapi.TYPE_INTEGER),
+                'data_fields': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_INTEGER)),
+                'reference_set': openapi.Schema(type=openapi.TYPE_INTEGER),
+                'force': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+            },
+        ),
+        responses={200: 'Binding updated', 400: 'Invalid request', 404: 'Field or reference set not found'},
+    )
     def post(self, request):
-        field_id = request.data.get('data_field')
+        field_ids = request.data.get('data_fields') or [request.data.get('data_field')]
         set_id = request.data.get('reference_set')
-        if not field_id:
-            return Response({'error': 'data_field is required'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            field = DataField.objects.get(pk=field_id)
-        except DataField.DoesNotExist:
-            return Response({'error': 'data_field not found'}, status=status.HTTP_404_NOT_FOUND)
-        if set_id in (None, '', 'null'):
-            field.reference_set = None
-        else:
+        force = request.data.get('force') in (True, 'true', 'True', '1')
+
+        if not field_ids or field_ids == [None]:
+            return Response({'error': 'data_field or data_fields is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        field_ids = [fid for fid in field_ids if fid is not None]
+        fields = list(DataField.objects.filter(pk__in=field_ids))
+        if len(fields) != len(set(field_ids)):
+            return Response({'error': 'one or more data_fields not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        reference_set = None
+        if set_id not in (None, '', 'null'):
             try:
-                field.reference_set = ReferenceSet.objects.get(pk=set_id)
+                reference_set = ReferenceSet.objects.get(pk=set_id)
             except ReferenceSet.DoesNotExist:
                 return Response({'error': 'reference_set not found'}, status=status.HTTP_404_NOT_FOUND)
-        field.save(update_fields=['reference_set'])
-        return Response({'data_field': field.id, 'reference_set': field.reference_set_id})
+
+        updated = []
+        for field in fields:
+            if reference_set is None:
+                if field.reference_set_id and not force:
+                    if DataRow.objects.filter(
+                        data_table=field.data_table,
+                        is_archived=False,
+                        values__has_key=field.name,
+                    ).exists():
+                        return Response(
+                            {
+                                'error': 'Field unbind rejected because existing rows reference this field. Use force=true to override.'
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                field.reference_set = None
+            else:
+                field.reference_set = reference_set
+            field.save(update_fields=['reference_set'])
+            updated.append({'data_field': field.id, 'reference_set': field.reference_set_id})
+
+        return Response({'updated': updated})
 
 
 class FieldOptionsView(APIView):
@@ -394,6 +596,16 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
             user=self.request.user,
         )
 
+    @swagger_auto_schema(
+        operation_description=(
+            'Return the full subtree of org units rooted at this unit, '
+            'including self and all active descendants (breadth-first order).'
+        ),
+        responses={
+            200: openapi.Response(description='Flat list of OrgUnit objects in the subtree'),
+            404: 'Org unit not found',
+        },
+    )
     @action(detail=True, methods=['get'])
     def tree(self, request, pk=None):
         """GET /mdm/org-units/{id}/tree/ -> subtree rooted at this unit."""
@@ -403,6 +615,16 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
 
+    @swagger_auto_schema(
+        operation_description=(
+            'Return the ancestor chain from the root org unit down to this unit\'s parent '
+            '(ordered root-first). Self is not included.'
+        ),
+        responses={
+            200: openapi.Response(description='Ordered list of ancestor OrgUnit objects from root to parent'),
+            404: 'Org unit not found',
+        },
+    )
     @action(detail=True, methods=['get'])
     def ancestors(self, request, pk=None):
         """GET /mdm/org-units/{id}/ancestors/ -> path to root."""

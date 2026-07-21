@@ -23,6 +23,8 @@ class EvidenceViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Return evidence accessible by the current user."""
+        if getattr(self, 'swagger_fake_view', False):
+            return Evidence.objects.none()
         from accounts.rbac_utils import get_allowed_module_ids, user_is_global_admin
         
         user = self.request.user

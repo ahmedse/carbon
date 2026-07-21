@@ -335,6 +335,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider
       value={{
         user,
+        token: user?.token,
         projects,
         context,
         loading,
@@ -359,6 +360,7 @@ export const AuthProvider = ({ children }) => {
 
 export const useAuth = () => useContext(AuthContext) || {
   user: null,
+  token: null,
   projects: [],
   context: null,
   loading: false,

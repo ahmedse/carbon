@@ -28,7 +28,7 @@ export default function GovernancePage() {
     setError(null);
     try {
       const data = await fetchGovernanceEvents(token);
-      setEvents(data || []);
+      setEvents(Array.isArray(data) ? data : data?.results || []);
       notify({ message: 'Events loaded', type: 'success' });
     } catch (err) {
       const msg = err.message || 'Failed to load governance events';

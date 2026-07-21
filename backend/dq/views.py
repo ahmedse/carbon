@@ -1,4 +1,6 @@
 # dq/views.py
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets, status, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -64,6 +66,8 @@ class FieldProfileViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ['profiled_at', 'completeness_pct']
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return FieldProfile.objects.none()
         qs = FieldProfile.objects.all()
         user = self.request.user
         if user.is_superuser or user.is_staff:
@@ -89,6 +93,8 @@ class TableProfileViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ['profiled_at', 'completeness_pct']
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return TableProfile.objects.none()
         qs = TableProfile.objects.all()
         user = self.request.user
         if user.is_superuser or user.is_staff:
@@ -115,6 +121,8 @@ class DQRuleViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'name', 'severity']
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return DQRule.objects.none()
         user = self.request.user
         if user.is_superuser or user.is_staff:
             qs = DQRule.objects.filter(is_active=True)
@@ -136,6 +144,19 @@ class DQRuleViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {
+                'detail': 'Hard delete not supported; use PATCH {"is_active": false} to deactivate this rule.',
+                'resource': 'DQRule',
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    @swagger_auto_schema(
+        operation_description='Execute a single data quality rule and return the resulting DQ result.',
+        responses={201: 'DQ result created', 400: 'Invalid request', 404: 'Rule not found'},
+    )
     @action(detail=True, methods=['post'])
     def execute(self, request, pk=None):
         """POST /dq/rules/{id}/execute/ — Execute this rule."""
@@ -145,6 +166,10 @@ class DQRuleViewSet(viewsets.ModelViewSet):
         result = executor.execute()
         return Response(DQResultSerializer(result).data, status=status.HTTP_201_CREATED)
 
+    @swagger_auto_schema(
+        operation_description='Return the recent execution history for a data quality rule.',
+        responses={200: 'Recent execution history', 404: 'Rule not found'},
+    )
     @action(detail=True, methods=['get'])
     def history(self, request, pk=None):
         """GET /dq/rules/{id}/history/ — Last 10 runs with trend analysis."""
@@ -184,6 +209,8 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ['-run_at']
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return DQResult.objects.none()
         user = self.request.user
         if user.is_superuser or user.is_staff:
             qs = DQResult.objects.all()
@@ -212,6 +239,10 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(passed=False)
         return qs.distinct()
 
+    @swagger_auto_schema(
+        operation_description='Return a paged list of DQ execution results for the current scope.',
+        responses={200: 'List of DQ results'},
+    )
     def list(self, request, *args, **kwargs):
         qs = self.filter_queryset(self.get_queryset())
         limit = min(int(request.query_params.get('limit', 50)), 200)
@@ -220,6 +251,10 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
             return self.get_paginated_response(self.get_serializer(page, many=True).data)
         return Response(self.get_serializer(qs[:limit], many=True).data)
 
+    @swagger_auto_schema(
+        operation_description='Return a sample of failed rows and reasons for a DQ execution result.',
+        responses={200: 'Sample failures', 404: 'Result not found'},
+    )
     @action(detail=True, methods=['get'])
     def failures(self, request, pk=None):
         """GET /dq/results/{id}/failures/ — Sample failures with context."""
@@ -255,6 +290,25 @@ class ProfileTriggerView(APIView):
     """POST /dq/profile/ — Profile a single table."""
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_description=(
+            'Profile a single data table, computing row count, completeness, null counts, '
+            'and uniqueness for each field. Results are persisted as TableProfile / FieldProfile records.'
+        ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'data_table_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the DataTable to profile'),
+            },
+            required=['data_table_id'],
+        ),
+        responses={
+            200: openapi.Response(description='Profile result with row count and per-field stats'),
+            400: 'data_table_id is required',
+            403: 'Not authorized for this table',
+            404: 'Table not found',
+        },
+    )
     def post(self, request):
         table_id = request.data.get('data_table_id') or request.data.get('data_table')
         if not table_id:
@@ -274,6 +328,28 @@ class BulkProfileView(APIView):
     """POST /dq/profile/bulk/ — Profile multiple tables."""
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_description=(
+            'Profile multiple data tables in a single request. '
+            'Non-admin users have inaccessible tables silently skipped. '
+            'Returns total/success/failed counts plus per-table results.'
+        ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'data_table_ids': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(type=openapi.TYPE_INTEGER),
+                    description='List of DataTable IDs to profile',
+                ),
+            },
+            required=['data_table_ids'],
+        ),
+        responses={
+            200: openapi.Response(description='Bulk profile result with total/success/failed counts and per-table results'),
+            400: 'data_table_ids must be a non-empty list',
+        },
+    )
     def post(self, request):
         table_ids = request.data.get('data_table_ids', [])
         if not isinstance(table_ids, list) or not table_ids:
@@ -297,6 +373,27 @@ class DQRunView(APIView):
     """POST /dq/run/ — Run a single rule (rule_id) or all rules for a table (data_table_id)."""
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_description=(
+            'Run DQ rules and record results. Provide either:\n'
+            '- `rule_id` to execute a single rule\n'
+            '- `data_table_id` to run all active rules scoped to that table\n\n'
+            'Results are persisted as DQResult records and written back to AssetProfile quality_status/quality_score.'
+        ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'rule_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of a specific DQRule to execute'),
+                'data_table_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='Run all active rules for this DataTable'),
+            },
+        ),
+        responses={
+            200: openapi.Response(description='DQ run result with passed/score/rules_run counts'),
+            400: 'Neither rule_id nor data_table_id provided',
+            403: 'Not authorized for this rule or table',
+            404: 'Rule or table not found',
+        },
+    )
     def post(self, request):
         rule_id = request.data.get('rule_id')
         table_id = request.data.get('data_table_id') or request.data.get('data_table')
@@ -337,6 +434,13 @@ class DQMetricsView(APIView):
     """GET /carbon-api/dq/metrics/ - Org-scoped DQ summary"""
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_description=(
+            'Return aggregated DQ metrics for the authenticated user\'s org scope: '
+            'total tables profiled, total rows, and weighted completeness percentage.'
+        ),
+        responses={200: openapi.Response(description='DQ metrics summary (table_count, total_rows, completeness_pct)')},
+    )
     def get(self, request):
         user = request.user
         if user.is_superuser or user.is_staff:
@@ -367,6 +471,17 @@ class TableDQMetricsView(APIView):
     """GET /carbon-api/dq/metrics/table/{tableId}/ - Table-level DQ metrics"""
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_description=(
+            'Return DQ metrics for a specific table: row count, completeness percentage, '
+            'per-field profiles, and all active DQ rules scoped to this table.'
+        ),
+        responses={
+            200: openapi.Response(description='Table-level DQ metrics with field profiles and active rules'),
+            403: 'Not authorized for this table',
+            404: 'Table not found',
+        },
+    )
     def get(self, request, table_id):
         try:
             table = DataTable.objects.get(id=table_id)
@@ -392,6 +507,17 @@ class FieldDQMetricsView(APIView):
     """GET /carbon-api/dq/metrics/field/{fieldId}/ - Field-level DQ metrics"""
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_description=(
+            'Return DQ metrics for a specific field: null count, completeness percentage, '
+            'uniqueness percentage, and all active DQ rules targeting this field.'
+        ),
+        responses={
+            200: openapi.Response(description='Field-level DQ metrics with active rules'),
+            403: 'Not authorized for this field',
+            404: 'Field not found',
+        },
+    )
     def get(self, request, field_id):
         try:
             field = DataField.objects.get(id=field_id)
@@ -418,6 +544,25 @@ class RunDQValidationView(APIView):
     """POST /carbon-api/dq/run-validation/ - Trigger DQ check for table (legacy alias)."""
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_description=(
+            'Legacy alias for POST /dq/run/ with data_table. '
+            'Run all active DQ rules against a table and return a summary. '
+            'Prefer POST /dq/run/ for new integrations.'
+        ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'data_table': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the DataTable to validate'),
+            },
+            required=['data_table'],
+        ),
+        responses={
+            200: openapi.Response(description='Validation complete with status and result summary'),
+            400: 'data_table is required',
+            404: 'Table not found',
+        },
+    )
     def post(self, request):
         table_id = request.data.get('data_table')
         if not table_id:

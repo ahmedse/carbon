@@ -42,6 +42,8 @@ import DataProductDetailPage from "./pages/catalog/DataProductDetailPage";
 import DomainDetailPage from "./pages/catalog/DomainDetailPage";
 import TagDetailPage from "./pages/catalog/TagDetailPage";
 import AssetDetailPage from "./pages/catalog/AssetDetailPage";
+import DQDashboardPage from "./pages/catalog/DQDashboardPage";
+import DQRulesPage from "./pages/catalog/DQRulesPage";
 import ReferenceSetDetailPage from "./pages/catalog/ReferenceSetDetailPage";
 import TagsPage from "./pages/catalog/TagsPage";
 import ReferenceDataPage from "./pages/catalog/ReferenceDataPage";
@@ -233,6 +235,8 @@ export default function App() {
                 <Route path="/catalog/domains/:domainId" element={<DomainDetailPage />} />
                 <Route path="/catalog/assets" element={<AssetsPage />} />
                 <Route path="/catalog/assets/:assetId" element={<AssetDetailPage />} />
+                <Route path="/catalog/dq-dashboard" element={<DQDashboardPage />} />
+                <Route path="/catalog/dq-rules" element={<DQRulesPage />} />
                 <Route path="/catalog/mdm" element={<MDMPage />} />
                 <Route path="/catalog/mdm/reference-sets/:setId" element={<ReferenceSetDetailPage />} />
                 <Route path="/catalog/connections" element={<ConnectionsPage />} />

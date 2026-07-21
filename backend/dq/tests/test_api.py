@@ -10,7 +10,6 @@ Covers:
  - GET /dq/results/{id}/failures/ — failure detail
  - RBAC: non-owner gets 403; no org_unit gets empty set
 """
-import pytest
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient

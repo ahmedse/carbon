@@ -154,6 +154,8 @@ class CalculationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return Calculation.objects.none()
         queryset = Calculation.objects.select_related(
             'module', 'emission_factor', 'reporting_period'
         )

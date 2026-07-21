@@ -5,6 +5,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField,
   FormControl, InputLabel, Select, MenuItem, Box, Alert, FormControlLabel, Switch,
 } from '@mui/material';
+import { fetchDataSchemaFields } from '../../../api/dataschema';
 
 // Matches backend RULE_TYPES / SEVERITY_CHOICES / SCOPE_CHOICES exactly.
 const RULE_TYPES = [
@@ -31,10 +32,14 @@ const emptyForm = {
   pattern: '',
 };
 
-export default function DQRuleDialog({ open, onClose, onSave, rule, tableId, fields = [] }) {
-  const [form, setForm] = useState(emptyForm);
+export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [], token }) {
+  const [form, setForm] = useState({
+    ...emptyForm,
+    data_table: '',
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [tableFields, setTableFields] = useState([]);
 
   useEffect(() => {
     if (!open) return;
@@ -45,6 +50,7 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tableId, fie
         scope: rule.scope || 'field',
         rule_type: rule.rule_type || 'not_null',
         data_field: rule.data_field || '',
+        data_table: rule.data_table || '',
         severity: rule.severity || 'error',
         is_active: rule.is_active !== false,
         values: Array.isArray(p.values) ? p.values.join(', ') : '',
@@ -53,12 +59,33 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tableId, fie
         pattern: p.pattern ?? '',
       });
     } else {
-      setForm(emptyForm);
+      setForm({
+        ...emptyForm,
+        data_table: tables.length === 1 ? tables[0].data_table : '',
+      });
     }
     setError(null);
-  }, [rule, open]);
+  }, [rule, open, tables]);
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+  useEffect(() => {
+    if (!token || !form.data_table) {
+      setTableFields([]);
+      return;
+    }
+
+    const fetchFields = async () => {
+      try {
+        const fields = await fetchDataSchemaFields(token, form.data_table);
+        setTableFields(Array.isArray(fields) ? fields : fields.results || []);
+      } catch {
+        setTableFields([]);
+      }
+    };
+
+    fetchFields();
+  }, [form.data_table, token]);
 
   const buildParams = () => {
     switch (form.rule_type) {
@@ -95,8 +122,7 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tableId, fie
       severity: form.severity,
       is_active: form.is_active,
       params: buildParams(),
-      // Always set data_table so the rule lists under this table; set data_field for field scope.
-      data_table: tableId,
+      data_table: form.data_table,
       data_field: form.scope === 'field' ? form.data_field : null,
     };
 
@@ -150,11 +176,29 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tableId, fie
       <DialogContent sx={{ pt: 2 }}>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-        <TextField
+            <TextField
           label="Rule Name" value={form.name}
           onChange={(e) => set('name', e.target.value)}
           fullWidth margin="normal" required
         />
+
+        <FormControl fullWidth margin="normal" required>
+          <InputLabel>Table</InputLabel>
+          <Select
+            value={form.data_table}
+            label="Table"
+            onChange={(e) => {
+              set('data_table', e.target.value);
+              set('data_field', '');
+            }}
+          >
+            {tables.map((table) => (
+              <MenuItem key={table.data_table} value={table.data_table}>
+                {table.title || table.name || `Table #${table.data_table}`}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
         <FormControl fullWidth margin="normal">
           <InputLabel>Scope</InputLabel>
@@ -169,8 +213,8 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tableId, fie
           <FormControl fullWidth margin="normal" required>
             <InputLabel>Field</InputLabel>
             <Select value={form.data_field} label="Field" onChange={(e) => set('data_field', e.target.value)}>
-              {fields.map((f) => (
-                <MenuItem key={f.id} value={f.id}>{f.name}</MenuItem>
+              {tableFields.map((f) => (
+                <MenuItem key={f.id} value={f.id}>{f.name || f.label || `Field #${f.id}`}</MenuItem>
               ))}
             </Select>
           </FormControl>

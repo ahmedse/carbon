@@ -1,155 +1,89 @@
 // carbon-frontend/src/api/dq.js
 import { apiFetch } from './api';
-import { API_BASE_URL, API_ROUTES } from '../config';
+import { API_ROUTES } from '../config';
 
 /**
  * Fetch org-scoped DQ metrics summary
  */
-export async function getOrgDQMetrics(token) {
-  return apiFetch(`${API_BASE_URL}dq/metrics/`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+export function getOrgDQMetrics(token) {
+  return apiFetch('dq/metrics/', { token });
 }
 
 /**
  * Fetch table-level DQ metrics and active rules
- * @param {number} tableId - DataTable ID
- * @param {string} token - Auth token
  */
-export async function getTableDQMetrics(tableId, token) {
-  return apiFetch(`${API_BASE_URL}dq/metrics/table/${tableId}/`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+export function getTableDQMetrics(tableId, token) {
+  return apiFetch(`dq/metrics/table/${tableId}/`, { token });
 }
 
 /**
  * Fetch field-level DQ metrics
- * @param {number} fieldId - DataField ID
- * @param {string} token - Auth token
  */
-export async function getFieldDQMetrics(fieldId, token) {
-  return apiFetch(`${API_BASE_URL}dq/metrics/field/${fieldId}/`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+export function getFieldDQMetrics(fieldId, token) {
+  return apiFetch(`dq/metrics/field/${fieldId}/`, { token });
 }
 
 /**
  * Fetch DQ results for a specific table or rule
- * @param {Object} filters - Query filters { data_table, rule, etc }
- * @param {string} token - Auth token
  */
-export async function getDQResults(filters = {}, token) {
+export function getDQResults(filters = {}, token) {
   const queryParams = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       queryParams.append(key, value);
     }
   });
-
-  const url = `${API_BASE_URL}dq/results/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-
-  return apiFetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const qs = queryParams.toString();
+  return apiFetch(`dq/results/${qs ? `?${qs}` : ''}`, { token });
 }
 
 /**
  * Trigger on-demand DQ validation for a table
- * @param {number} tableId - DataTable ID
- * @param {string} token - Auth token
  */
-export async function runDQValidation(tableId, token) {
-  return apiFetch(`${API_BASE_URL}dq/run-validation/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      data_table: tableId,
-    }),
-  });
+export function runDQValidation(tableId, token) {
+  return apiFetch('dq/run-validation/', { method: 'POST', token, body: { data_table: tableId } });
 }
 
 /**
  * Fetch all DQ rules (optionally filtered)
- * @param {Object} filters - Query filters { data_table, data_field, etc }
- * @param {string} token - Auth token
  */
-export async function getDQRules(filters = {}, token) {
+export function getDQRules(filters = {}, token) {
   const queryParams = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       queryParams.append(key, value);
     }
   });
-
-  const url = `${API_BASE_URL}dq/rules/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-
-  return apiFetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const qs = queryParams.toString();
+  return apiFetch(`dq/rules/${qs ? `?${qs}` : ''}`, { token });
 }
 
 /**
  * Fetch table profiles
- * @param {Object} filters - Query filters { data_table, etc }
- * @param {string} token - Auth token
  */
-export async function getTableProfiles(filters = {}, token) {
+export function getTableProfiles(filters = {}, token) {
   const queryParams = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       queryParams.append(key, value);
     }
   });
-
-  const url = `${API_BASE_URL}dq/table-profiles/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-
-  return apiFetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const qs = queryParams.toString();
+  return apiFetch(`dq/table-profiles/${qs ? `?${qs}` : ''}`, { token });
 }
 
 /**
  * Fetch field profiles
- * @param {Object} filters - Query filters { data_table, data_field, etc }
- * @param {string} token - Auth token
  */
-export async function getFieldProfiles(filters = {}, token) {
+export function getFieldProfiles(filters = {}, token) {
   const queryParams = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       queryParams.append(key, value);
     }
   });
-
-  const url = `${API_BASE_URL}dq/field-profiles/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-
-  return apiFetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const qs = queryParams.toString();
+  return apiFetch(`dq/field-profiles/${qs ? `?${qs}` : ''}`, { token });
 }
 
 // =====================================================================
@@ -160,8 +94,6 @@ export async function getFieldProfiles(filters = {}, token) {
 
 /**
  * List DQ rules for a table (and optionally a field).
- * @param {string} token
- * @param {{ data_table?: number|string, data_field?: number|string }} filters
  */
 export function listDQRules(token, filters = {}) {
   const params = new URLSearchParams();
@@ -197,6 +129,10 @@ export function deleteDQRule(token, id) {
  */
 export function executeDQRule(token, id) {
   return apiFetch(`${API_ROUTES.dqRules}${id}/execute/`, { method: 'POST', token });
+}
+
+export function getDQRuleHistory(token, id) {
+  return apiFetch(`${API_ROUTES.dqRules}${id}/history/`, { token });
 }
 
 /**

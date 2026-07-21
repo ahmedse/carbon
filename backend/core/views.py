@@ -20,6 +20,8 @@ class ModuleViewSet(viewsets.ModelViewSet):
         return [HasScopedRole()]
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return Module.objects.none()
         user = self.request.user
         if user.is_superuser or user_has_global_role(user, ["admin", "admins_group"]):
             return Module.objects.all()

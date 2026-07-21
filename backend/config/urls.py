@@ -16,9 +16,23 @@ api_prefix = getattr(settings, "API_PREFIX", "/api/v1/").strip("/")
 
 schema_view = get_schema_view(
     openapi.Info(
-        title="Carbon API",
+        title="Carbon Data Trust Core API",
         default_version='v1',
-        description="Carbon platform API",
+        description=(
+            "**Data Trust Core Platform APIs**\n\n"
+            "Provides catalog, master data management (MDM), and data quality (DQ) services.\n\n"
+            "### Key Modules\n"
+            "- **Catalog** (`/catalog/`): Asset profiling, governance events, glossary terms, data domains\n"
+            "- **MDM** (`/mdm/`): Reference sets (temporal + lifecycle), org-unit hierarchy, field binding\n"
+            "- **DQ** (`/dq/`): Data profiling, rule execution, quality metrics, execution history\n\n"
+            "### Authentication\n"
+            "All endpoints require JWT. Obtain a token via `POST /carbon-api/token/`.\n\n"
+            "### Soft-Delete Policy\n"
+            "Hard DELETE is rejected with HTTP 405 on catalog and DQ resources. "
+            "Use `PATCH {\"is_active\": false}` or the dedicated `archive-bulk` actions instead."
+        ),
+        contact=openapi.Contact(email="carbon@aast.edu"),
+        license=openapi.License(name="Proprietary"),
     ),
     public=True,
     permission_classes=(AllowAny,),

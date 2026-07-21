@@ -25,6 +25,24 @@ class ReferenceSet(models.Model):
     )
     is_active = models.BooleanField(default=True)
     version = models.PositiveIntegerField(default=1)
+
+    LIFECYCLE_DRAFT = 'draft'
+    LIFECYCLE_ACTIVE = 'active'
+    LIFECYCLE_DEPRECATED = 'deprecated'
+    LIFECYCLE_ARCHIVED = 'archived'
+    LIFECYCLE_STATES = [
+        (LIFECYCLE_DRAFT, 'Draft'),
+        (LIFECYCLE_ACTIVE, 'Active'),
+        (LIFECYCLE_DEPRECATED, 'Deprecated'),
+        (LIFECYCLE_ARCHIVED, 'Archived'),
+    ]
+    lifecycle_state = models.CharField(
+        max_length=20,
+        choices=LIFECYCLE_STATES,
+        default=LIFECYCLE_DRAFT,
+        help_text='Lifecycle state of this reference set',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -34,6 +52,57 @@ class ReferenceSet(models.Model):
 
     def get_active_values(self):
         return self.values.filter(is_active=True)
+
+    def get_current_values(self, as_of=None, include_inactive=False):
+        """Return values valid on the requested date (today by default)."""
+        from django.db.models import Q
+        from django.utils import timezone
+
+        target_date = as_of or timezone.now().date()
+        qs = self.values.all()
+        if not include_inactive:
+            qs = qs.filter(is_active=True)
+        return qs.filter(
+            Q(valid_from__isnull=True) | Q(valid_from__lte=target_date),
+            Q(valid_to__isnull=True) | Q(valid_to__gte=target_date),
+        )
+
+    VALID_LIFECYCLE_TRANSITIONS = {
+        LIFECYCLE_DRAFT: [LIFECYCLE_ACTIVE],
+        LIFECYCLE_ACTIVE: [LIFECYCLE_DEPRECATED],
+        LIFECYCLE_DEPRECATED: [LIFECYCLE_ACTIVE, LIFECYCLE_ARCHIVED],
+        LIFECYCLE_ARCHIVED: [],
+    }
+
+    def can_transition_to(self, new_state):
+        """Return True if the requested lifecycle transition is permitted."""
+        return new_state in self.VALID_LIFECYCLE_TRANSITIONS.get(self.lifecycle_state, [])
+
+    def transition_to(self, new_state, user=None):
+        """Advance the lifecycle state with validation and optional audit emission."""
+        if new_state == self.lifecycle_state:
+            return self
+        if not self.can_transition_to(new_state):
+            raise ValueError(
+                f'Invalid reference set lifecycle transition: {self.lifecycle_state} -> {new_state}'
+            )
+        old_state = self.lifecycle_state
+        self.lifecycle_state = new_state
+        if new_state == self.LIFECYCLE_ARCHIVED:
+            self.is_active = False
+        self.save(update_fields=['lifecycle_state', 'is_active'] if new_state == self.LIFECYCLE_ARCHIVED else ['lifecycle_state'])
+
+        if user is not None:
+            from catalog.audit_utils import emit_governance_event
+            emit_governance_event(
+                entity_type='ReferenceSet',
+                entity_id=self.id,
+                action='update',
+                before={'lifecycle_state': old_state},
+                after={'lifecycle_state': self.lifecycle_state},
+                user=user,
+            )
+        return self
 
     def __str__(self):
         return self.name

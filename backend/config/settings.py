@@ -33,7 +33,7 @@ ALLOWED_HOSTS = get_env(
     "DJANGO_ALLOWED_HOSTS",
     get_env(
         "ALLOWED_HOSTS",
-        "127.0.0.1,localhost,72.60.83.189,clearturn.tech,gigacast.clearturn.tech",
+        "127.0.0.1,localhost,testserver,72.60.83.189,clearturn.tech,gigacast.clearturn.tech",
     ),
 ).split(",")
 #FORCE_SCRIPT_NAME = get_env('FORCE_SCRIPT_NAME', None)
@@ -84,6 +84,7 @@ AUTH_USER_MODEL = 'accounts.User'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'core.middleware.CorrelationIDMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -91,6 +92,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.RequestLoggingMiddleware',
 ]
 
 if DJANGO_ENV == "development":
@@ -115,8 +117,9 @@ CORS_ALLOW_HEADERS = [
     "user-agent",
     "x-csrftoken",
     "x-requested-with",
+    "x-correlation-id",
 ]
-CORS_EXPOSE_HEADERS = ["Content-Disposition"]
+CORS_EXPOSE_HEADERS = ["Content-Disposition", "X-Correlation-ID"]
 
 ROOT_URLCONF = 'config.urls'
 
@@ -161,7 +164,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    'EXCEPTION_HANDLER': 'core.feedback.unified_exception_handler',
+    # 'EXCEPTION_HANDLER': 'catalog.exceptions.data_trust_exception_handler',  # Temporarily disabled to see full errors
+    'EXCEPTION_HANDLER': 'catalog.exceptions.data_trust_exception_handler',
     'DEFAULT_THROTTLE_CLASSES': (
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
@@ -252,9 +256,18 @@ if SECURE_SSL_REDIRECT:
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "structured": {
+            "()": "core.middleware.StructuredLoggingFilter",
+        },
+    },
     "formatters": {
         "verbose": {
             "format": "{levelname} {asctime} {module} {message}",
+            "style": "{",
+        },
+        "json": {
+            "format": "{levelname} {asctime} {name} {message} {structured_json}",
             "style": "{",
         },
     },
@@ -262,6 +275,11 @@ LOGGING = {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
+        },
+        "console_json": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+            "filters": ["structured"],
         },
     },
     "root": {
@@ -282,6 +300,26 @@ LOGGING = {
         "ai_copilot": {
             "handlers": ["console"],
             "level": "DEBUG",
+            "propagate": False,
+        },
+        "core.middleware": {
+            "handlers": ["console_json"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "dq.performance": {
+            "handlers": ["console_json"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "catalog.operations": {
+            "handlers": ["console_json"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "mdm.operations": {
+            "handlers": ["console_json"],
+            "level": "INFO",
             "propagate": False,
         },
     },

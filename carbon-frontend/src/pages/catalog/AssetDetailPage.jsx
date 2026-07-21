@@ -23,6 +23,7 @@ import ViewWeekIcon from '@mui/icons-material/ViewWeek';
 // Tab components
 import AssetOverviewTab from './tabs/AssetOverviewTab';
 import AssetEditTab from './tabs/AssetEditTab';
+import AssetQualityTab from './tabs/AssetQualityTab';
 import AssetAuditTab from './tabs/AssetAuditTab';
 
 export default function AssetDetailPage() {

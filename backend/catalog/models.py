@@ -71,6 +71,7 @@ class AssetProfile(models.Model):
     # quality_* are written by the future dq app; leave defaults this run.
     quality_status = models.CharField(max_length=20, choices=QUALITY_STATUS_CHOICES, default='unknown')
     quality_score = models.PositiveSmallIntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='updated_assets')
 

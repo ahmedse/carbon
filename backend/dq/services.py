@@ -1,6 +1,7 @@
 # dq/services.py
 import re
 import logging
+import time
 from statistics import mean
 from django.db.models import Q
 from dataschema.models import DataTable, DataRow
@@ -9,6 +10,7 @@ from mdm.models import ReferenceValue
 from .models import TableProfile, FieldProfile, DQRule, DQResult
 
 logger = logging.getLogger(__name__)
+perf_logger = logging.getLogger('dq.performance')
 
 CHUNK_SIZE = 5000
 
@@ -17,6 +19,17 @@ def _rows(table, chunk=False):
     """Return DataRows for a table. If chunk=True yield lists of CHUNK_SIZE."""
     qs = DataRow.objects.filter(data_table=table, is_archived=False)
     if not chunk:
+        count = qs.count()
+        if count > 10000:
+            perf_logger.warning(
+                'Loading large dataset without chunking',
+                extra={'structured': {
+                    'event': 'dq_rows_large_load',
+                    'table_id': table.id,
+                    'row_count': count,
+                    'warning': 'Consider enabling chunking for datasets > 10k rows'
+                }}
+            )
         return list(qs)
     total = qs.count()
     if total <= CHUNK_SIZE:
@@ -25,8 +38,22 @@ def _rows(table, chunk=False):
     rows = []
     offset = 0
     while offset < total:
-        rows.extend(list(qs[offset: offset + CHUNK_SIZE]))
+        chunk_batch = list(qs[offset: offset + CHUNK_SIZE])
+        rows.extend(chunk_batch)
         offset += CHUNK_SIZE
+        # Log progress for very large datasets
+        if total > 50000 and offset % (CHUNK_SIZE * 5) == 0:
+            progress_pct = round((offset / total) * 100, 1)
+            perf_logger.info(
+                f'Chunked load progress: {progress_pct}%',
+                extra={'structured': {
+                    'event': 'dq_rows_chunk_progress',
+                    'table_id': table.id,
+                    'offset': offset,
+                    'total': total,
+                    'progress_pct': progress_pct
+                }}
+            )
     return rows
 
 
@@ -35,13 +62,29 @@ def _is_empty(v):
 
 
 def profile_table(table_id):
+    start_time = time.time()
     table = DataTable.objects.get(id=table_id)
     rows = _rows(table)
     n = len(rows)
+    
+    # Warn on large datasets
+    if n > 50000:
+        perf_logger.warning(
+            'Large dataset profiling initiated',
+            extra={'structured': {
+                'event': 'dq_profile_large_dataset',
+                'table_id': table_id,
+                'row_count': n,
+                'warning': 'Dataset exceeds 50k rows - consider async processing'
+            }}
+        )
+    
     fields = list(table.fields.filter(is_active=True, is_archived=False))
     completeness_all = []
     field_profile_data = []
+    
     for f in fields:
+        field_start = time.time()
         vals = [r.values.get(f.name) for r in rows]
         non_empty = [v for v in vals if not _is_empty(v)]
         null_count = n - len(non_empty)
@@ -78,8 +121,37 @@ def profile_table(table_id):
             'distinct_count': distinct,
             'top_values': fp.top_values,
         })
+        
+        field_duration_ms = (time.time() - field_start) * 1000
+        if field_duration_ms > 1000:  # Warn on slow field profiling
+            perf_logger.warning(
+                'Slow field profiling',
+                extra={'structured': {
+                    'event': 'dq_profile_field_slow',
+                    'table_id': table_id,
+                    'field_id': f.id,
+                    'field_name': f.name,
+                    'duration_ms': round(field_duration_ms, 2),
+                    'row_count': n
+                }}
+            )
+    
     table_completeness = round(mean(completeness_all), 2) if completeness_all else 0.0
     tp = TableProfile.objects.create(data_table=table, row_count=n, completeness_pct=table_completeness)
+    
+    total_duration_ms = (time.time() - start_time) * 1000
+    perf_logger.info(
+        'Table profiling completed',
+        extra={'structured': {
+            'event': 'dq_profile_complete',
+            'table_id': table.id,
+            'rows_profiled': n,
+            'fields_profiled': len(fields),
+            'duration_ms': round(total_duration_ms, 2),
+            'completeness_pct': table_completeness
+        }}
+    )
+    
     return {
         'table_id': table.id,
         'rows_profiled': n,
@@ -171,9 +243,14 @@ def _evaluate_rule(rule, rows):
         if rs_id is None and field and hasattr(field, 'reference_set_id'):
             rs_id = field.reference_set_id
         if rs_id:
-            allowed = {str(c) for c in ReferenceValue.objects.filter(
-                reference_set_id=rs_id, is_active=True
-            ).values_list('code', flat=True)}
+            from mdm.models import ReferenceSet
+            try:
+                ref_set = ReferenceSet.objects.get(id=rs_id)
+                allowed = {
+                    str(c) for c in ref_set.get_current_values().values_list('code', flat=True)
+                }
+            except ReferenceSet.DoesNotExist:
+                allowed = set()
         else:
             allowed = set()
         for r in rows:
@@ -269,20 +346,81 @@ def _emit_governance_event(ap, old_status, old_score, new_status, new_score, use
 
 def run_dq(table_id, user=None):
     """Run all active DQ rules for a table. Returns summary dict."""
+    start_time = time.time()
     table = DataTable.objects.get(id=table_id)
     rows = _rows(table, chunk=True)
+    row_count = len(rows)
+    
+    # Warn on very large datasets
+    if row_count > 100000:
+        perf_logger.warning(
+            'Large dataset DQ execution initiated',
+            extra={'structured': {
+                'event': 'dq_run_large_dataset',
+                'table_id': table_id,
+                'row_count': row_count,
+                'warning': 'Dataset exceeds 100k rows - execution may be slow'
+            }}
+        )
+    
     field_ids = list(table.fields.values_list('id', flat=True))
     rules = list(DQRule.objects.filter(is_active=True).filter(
         Q(data_table_id=table_id) | Q(data_field_id__in=field_ids)
     ).select_related('data_field'))
+    
     results = []
     for rule in rules:
-        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
-        results.append(DQResult.objects.create(
-            rule=rule, passed=passed, checked_count=checked,
-            failed_count=failed, sample_failures=sample, score=score,
-        ))
+        rule_start = time.time()
+        try:
+            passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+            results.append(DQResult.objects.create(
+                rule=rule, passed=passed, checked_count=checked,
+                failed_count=failed, sample_failures=sample, score=score,
+            ))
+            rule_duration_ms = (time.time() - rule_start) * 1000
+            
+            # Log slow rule execution
+            if rule_duration_ms > 2000:
+                perf_logger.warning(
+                    'Slow DQ rule execution',
+                    extra={'structured': {
+                        'event': 'dq_rule_slow',
+                        'table_id': table_id,
+                        'rule_id': rule.id,
+                        'rule_type': rule.rule_type,
+                        'duration_ms': round(rule_duration_ms, 2),
+                        'row_count': row_count
+                    }}
+                )
+        except Exception as exc:
+            logger.error(
+                f'DQ rule execution failed: {exc}',
+                extra={'structured': {
+                    'event': 'dq_rule_error',
+                    'table_id': table_id,
+                    'rule_id': rule.id,
+                    'rule_type': rule.rule_type,
+                    'error': str(exc)
+                }},
+                exc_info=True
+            )
+            # Continue with other rules even if one fails
+            continue
+    
     _rollup_to_catalog(table, rules, results, user=user)
+    
+    total_duration_ms = (time.time() - start_time) * 1000
+    perf_logger.info(
+        'DQ execution completed',
+        extra={'structured': {
+            'event': 'dq_run_complete',
+            'table_id': table_id,
+            'row_count': row_count,
+            'rules_run': len(results),
+            'duration_ms': round(total_duration_ms, 2)
+        }}
+    )
+    
     return {
         'table': table_id,
         'rules_run': len(results),
@@ -299,21 +437,41 @@ def run_dq(table_id, user=None):
 
 def run_single_rule(rule_id, user=None):
     """Run a single DQ rule by ID. Returns response dict with DQResult data."""
+    start_time = time.time()
     rule = DQRule.objects.select_related('data_field', 'data_table').get(id=rule_id)
     table = rule.data_table or (rule.data_field.data_table if rule.data_field else None)
     if table is None:
         raise ValueError("Rule has no associated table or field")
+    
     rows = _rows(table, chunk=True)
     passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
     result = DQResult.objects.create(
         rule=rule, passed=passed, checked_count=checked,
         failed_count=failed, sample_failures=sample, score=score,
     )
+    
     # Rollup quality for this table
     all_rules = list(DQRule.objects.filter(is_active=True).filter(
         Q(data_table=table) | Q(data_field__data_table=table)
     ).distinct())
     _rollup_to_catalog(table, all_rules, [result], user=user)
+    
+    duration_ms = (time.time() - start_time) * 1000
+    perf_logger.info(
+        'Single rule execution completed',
+        extra={'structured': {
+            'event': 'dq_rule_execute',
+            'rule_id': rule.id,
+            'rule_type': rule.rule_type,
+            'table_id': table.id,
+            'passed': passed,
+            'checked_count': checked,
+            'failed_count': failed,
+            'score': score,
+            'duration_ms': round(duration_ms, 2)
+        }}
+    )
+    
     return {
         'rule_id': rule.id,
         'rule_name': rule.name,
@@ -329,9 +487,11 @@ def run_single_rule(rule_id, user=None):
 
 def bulk_profile(table_ids, user=None):
     """Profile multiple tables. Returns per-table status."""
+    start_time = time.time()
     results = []
     success = 0
     failed = 0
+    
     for tid in table_ids:
         try:
             data = profile_table(tid)
@@ -341,4 +501,17 @@ def bulk_profile(table_ids, user=None):
             logger.warning("bulk_profile table=%s error: %s", tid, exc)
             results.append({'table_id': tid, 'status': 'error', 'error': str(exc)})
             failed += 1
+    
+    total_duration_ms = (time.time() - start_time) * 1000
+    perf_logger.info(
+        'Bulk profiling completed',
+        extra={'structured': {
+            'event': 'dq_bulk_profile_complete',
+            'table_count': len(table_ids),
+            'success': success,
+            'failed': failed,
+            'duration_ms': round(total_duration_ms, 2)
+        }}
+    )
+    
     return {'total': len(table_ids), 'success': success, 'failed': failed, 'results': results}

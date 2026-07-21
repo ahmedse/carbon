@@ -3,7 +3,10 @@ from django.db.models import Count, Q
 from django.utils.text import slugify
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework import filters, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -35,11 +38,31 @@ class DataDomainViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(slug=slugify(serializer.validated_data['name']))
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        return Response(
+            {
+                'detail': 'Hard delete not supported; use PATCH {"is_active": false} to archive this resource.',
+                'resource': 'DataDomain',
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
 
 class GlossaryTermViewSet(viewsets.ModelViewSet):
     queryset = GlossaryTerm.objects.all().order_by('term')
     serializer_class = GlossaryTermSerializer
     permission_classes = [ReadAnyWriteGlobalAdmin]
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        return Response(
+            {
+                'detail': 'Hard delete not supported; use PATCH {"is_active": false} to archive this resource.',
+                'resource': 'GlossaryTerm',
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
     def perform_create(self, serializer):
         instance = serializer.save(slug=slugify(serializer.validated_data['term']))
@@ -105,6 +128,16 @@ class TagViewSet(viewsets.ModelViewSet):
     serializer_class = TagSerializer
     permission_classes = [ReadAnyWriteGlobalAdmin]
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        return Response(
+            {
+                'detail': 'Hard delete not supported; use PATCH {"is_active": false} to archive this resource.',
+                'resource': 'Tag',
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
     def perform_create(self, serializer):
         serializer.save(slug=slugify(serializer.validated_data['name']))
 
@@ -112,7 +145,47 @@ class TagViewSet(viewsets.ModelViewSet):
 class AssetProfileViewSet(viewsets.ModelViewSet):
     serializer_class = AssetProfileSerializer
     permission_classes = [ReadAnyWriteGlobalAdmin]
-    http_method_names = ['get', 'patch', 'put', 'head', 'options']  # profiles are auto-managed; no create/delete
+    http_method_names = ['get', 'post', 'patch', 'put', 'head', 'options']  # profiles are auto-managed; no create/delete
+
+    @swagger_auto_schema(
+        method='post',
+        operation_description='Archive multiple asset profiles in one request.',
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'ids': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_INTEGER)),
+            },
+            required=['ids'],
+        ),
+        responses={200: 'Per-item success/failure summary', 400: 'Invalid request'},
+    )
+    @action(detail=False, methods=['post'], url_path='archive-bulk')
+    def archive_bulk(self, request):
+        ids = request.data.get('ids', [])
+        if not isinstance(ids, list) or not ids:
+            return Response({'error': 'ids must be a non-empty list'}, status=status.HTTP_400_BAD_REQUEST)
+
+        results = {'success': [], 'failed': []}
+        for asset_id in ids:
+            try:
+                asset = AssetProfile.objects.get(pk=asset_id)
+            except AssetProfile.DoesNotExist:
+                results['failed'].append({'id': asset_id, 'error': 'AssetProfile not found'})
+                continue
+
+            asset.is_active = False
+            asset.save(update_fields=['is_active'])
+            emit_governance_event(
+                entity_type='AssetProfile',
+                entity_id=asset.id,
+                action='delete',
+                before={'is_active': True},
+                after={'is_active': False},
+                user=request.user,
+            )
+            results['success'].append(asset.id)
+
+        return Response(results, status=status.HTTP_200_OK)
 
     def get_queryset(self):
         ensure_asset_profiles()
@@ -184,6 +257,13 @@ class GovernanceEventViewSet(viewsets.ReadOnlyModelViewSet):
 class GovernanceComplianceView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_description='Summarize governance events for a recent time window.',
+        manual_parameters=[
+            openapi.Parameter('days', openapi.IN_QUERY, description='Number of days to include', type=openapi.TYPE_INTEGER, required=False),
+        ],
+        responses={200: 'Compliance summary of recent governance activity'},
+    )
     def get(self, request):
         days = int(request.query_params.get('days', 30))
         cutoff = timezone.now() - timezone.timedelta(days=days)
