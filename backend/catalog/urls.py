@@ -2,7 +2,8 @@
 from django.urls import path
 from .views import (
     DataDomainViewSet, GlossaryTermViewSet, TagViewSet,
-    AssetProfileViewSet, GovernanceEventViewSet, GovernancePolicyViewSet, CatalogSearchView,
+    AssetProfileViewSet, GovernanceEventViewSet, GovernanceComplianceView,
+    GovernancePolicyViewSet, CatalogSearchView,
 )
 from rest_framework.routers import DefaultRouter
 
@@ -16,5 +17,6 @@ router.register(r'governance-policies', GovernancePolicyViewSet, basename='gover
 
 urlpatterns = [
     path('search/', CatalogSearchView.as_view(), name='catalog-search'),
+    path('governance/compliance/', GovernanceComplianceView.as_view(), name='governance-compliance'),
 ]
 urlpatterns += router.urls

@@ -52,9 +52,12 @@ class AssetProfileSerializer(serializers.ModelSerializer):
 
 
 class GovernanceEventSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True, allow_null=True)
+
     class Meta:
         model = GovernanceEvent
-        fields = ['id', 'asset', 'entity_type', 'entity_id', 'action', 'before', 'after', 'user', 'timestamp']
+        fields = ['id', 'asset', 'entity_type', 'entity_id', 'action', 'before', 'after', 'user', 'username', 'timestamp']
+        read_only_fields = ['id', 'timestamp']
 
 
 class GovernancePolicySerializer(serializers.ModelSerializer):

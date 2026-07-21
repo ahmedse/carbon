@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 
 from dataschema.models import DataField
+from catalog.audit_utils import emit_governance_event
 from .models import ReferenceSet, ReferenceValue, OrgUnit
 from .serializers import ReferenceSetSerializer, ReferenceValueSerializer, OrgUnitSerializer
 from accounts.permissions import ReadAnyWriteGlobalAdmin
@@ -70,9 +71,24 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Auto-assign steward to current user on create."""
-        serializer.save(
+        instance = serializer.save(
             slug=slugify(serializer.validated_data.get('name', '')),
             steward=self.request.user
+        )
+        emit_governance_event(
+            entity_type='ReferenceSet',
+            entity_id=instance.id,
+            action='create',
+            before={},
+            after={
+                'name': instance.name,
+                'description': instance.description,
+                'domain': instance.domain_id,
+                'steward': instance.steward_id,
+                'is_active': instance.is_active,
+                'version': instance.version,
+            },
+            user=self.request.user,
         )
 
     def perform_update(self, serializer):
@@ -80,12 +96,47 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         obj = self.get_object()
         if obj.steward != self.request.user and not self.request.user.is_staff:
             raise PermissionDenied("Only steward can edit this reference set")
-        serializer.save()
+        before = {
+            'name': obj.name,
+            'description': obj.description,
+            'domain': obj.domain_id,
+            'steward': obj.steward_id,
+            'is_active': obj.is_active,
+            'version': obj.version,
+        }
+        instance = serializer.save()
+        after = {
+            'name': instance.name,
+            'description': instance.description,
+            'domain': instance.domain_id,
+            'steward': instance.steward_id,
+            'is_active': instance.is_active,
+            'version': instance.version,
+        }
+        changed = {k: after[k] for k in before if before.get(k) != after.get(k)}
+        if changed:
+            emit_governance_event(
+                entity_type='ReferenceSet',
+                entity_id=instance.id,
+                action='update',
+                before={k: before[k] for k in changed},
+                after=changed,
+                user=self.request.user,
+            )
 
     def perform_destroy(self, instance):
         """Soft delete: set is_active=False instead of hard delete."""
+        before = {'is_active': instance.is_active}
         instance.is_active = False
-        instance.save()
+        instance.save(update_fields=['is_active'])
+        emit_governance_event(
+            entity_type='ReferenceSet',
+            entity_id=instance.id,
+            action='delete',
+            before=before,
+            after={'is_active': False},
+            user=self.request.user,
+        )
 
     @action(detail=True, methods=['get'])
     def values(self, request, pk=None):
@@ -124,6 +175,67 @@ class ReferenceValueViewSet(viewsets.ModelViewSet):
         if p.get('active') in ('1', 'true', 'True'):
             qs = qs.filter(is_active=True)
         return qs
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        emit_governance_event(
+            entity_type='ReferenceValue',
+            entity_id=instance.id,
+            action='create',
+            before={},
+            after={
+                'code': instance.code,
+                'label': instance.label,
+                'is_active': instance.is_active,
+                'sort_order': instance.sort_order,
+                'valid_from': str(instance.valid_from) if instance.valid_from else None,
+                'valid_to': str(instance.valid_to) if instance.valid_to else None,
+            },
+            user=self.request.user,
+        )
+
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        before = {
+            'code': instance.code,
+            'label': instance.label,
+            'is_active': instance.is_active,
+            'sort_order': instance.sort_order,
+            'valid_from': str(instance.valid_from) if instance.valid_from else None,
+            'valid_to': str(instance.valid_to) if instance.valid_to else None,
+        }
+        obj = serializer.save()
+        after = {
+            'code': obj.code,
+            'label': obj.label,
+            'is_active': obj.is_active,
+            'sort_order': obj.sort_order,
+            'valid_from': str(obj.valid_from) if obj.valid_from else None,
+            'valid_to': str(obj.valid_to) if obj.valid_to else None,
+        }
+        changed = {k: after[k] for k in before if before.get(k) != after.get(k)}
+        if changed:
+            emit_governance_event(
+                entity_type='ReferenceValue',
+                entity_id=obj.id,
+                action='update',
+                before={k: before[k] for k in changed},
+                after=changed,
+                user=self.request.user,
+            )
+
+    def perform_destroy(self, instance):
+        before = {'is_active': instance.is_active}
+        instance.is_active = False
+        instance.save(update_fields=['is_active'])
+        emit_governance_event(
+            entity_type='ReferenceValue',
+            entity_id=instance.id,
+            action='delete',
+            before=before,
+            after={'is_active': False},
+            user=self.request.user,
+        )
 
 
 class BindFieldView(APIView):
@@ -219,7 +331,20 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
         name = serializer.validated_data.get('name', '')
         parent = serializer.validated_data.get('parent')
         base = f"{parent.slug}-{slugify(name)}" if parent else slugify(name)
-        serializer.save(slug=base)
+        instance = serializer.save(slug=base)
+        emit_governance_event(
+            entity_type='OrgUnit',
+            entity_id=instance.id,
+            action='create',
+            before={},
+            after={
+                'name': instance.name,
+                'org_type': instance.org_type,
+                'parent': instance.parent_id,
+                'is_active': instance.is_active,
+            },
+            user=self.request.user,
+        )
 
     def perform_update(self, serializer):
         """Validate hierarchy before update."""
@@ -229,15 +354,45 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
         # Prevent circular references
         if new_parent and new_parent.id in obj.get_descendant_ids(include_self=True):
             raise PermissionDenied("Cannot set parent to be a descendant of this unit")
-        
-        serializer.save()
+        before = {
+            'name': obj.name,
+            'org_type': obj.org_type,
+            'parent': obj.parent_id,
+            'is_active': obj.is_active,
+        }
+        instance = serializer.save()
+        after = {
+            'name': instance.name,
+            'org_type': instance.org_type,
+            'parent': instance.parent_id,
+            'is_active': instance.is_active,
+        }
+        changed = {k: after[k] for k in before if before.get(k) != after.get(k)}
+        if changed:
+            emit_governance_event(
+                entity_type='OrgUnit',
+                entity_id=instance.id,
+                action='update',
+                before={k: before[k] for k in changed},
+                after=changed,
+                user=self.request.user,
+            )
 
     def perform_destroy(self, instance):
         """Soft delete: set is_active=False. Prevent if has active children."""
         if instance.children.filter(is_active=True).exists():
             raise PermissionDenied("Cannot delete org unit with active children")
+        before = {'is_active': instance.is_active}
         instance.is_active = False
-        instance.save()
+        instance.save(update_fields=['is_active'])
+        emit_governance_event(
+            entity_type='OrgUnit',
+            entity_id=instance.id,
+            action='delete',
+            before=before,
+            after={'is_active': False},
+            user=self.request.user,
+        )
 
     @action(detail=True, methods=['get'])
     def tree(self, request, pk=None):

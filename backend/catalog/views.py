@@ -1,19 +1,30 @@
 # catalog/views.py
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils.text import slugify
-from rest_framework import viewsets, status
-from rest_framework.views import APIView
-from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
+from django.utils import timezone
+from rest_framework import filters, status, viewsets
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from accounts.permissions import ReadAnyWriteGlobalAdmin
+from core.feedback import AppFeedback
+from .audit_utils import emit_governance_event
+from .filters import GovernanceEventFilter
 from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy
 from .serializers import (
     DataDomainSerializer, GlossaryTermSerializer, TagSerializer,
     AssetProfileSerializer, GovernanceEventSerializer, GovernancePolicySerializer,
 )
-from accounts.permissions import ReadAnyWriteGlobalAdmin
-from core.feedback import AppFeedback
 from .services import ensure_asset_profiles
+
+
+class GovernanceEventPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = 'page_size'
+    max_page_size = 500
 
 
 class DataDomainViewSet(viewsets.ModelViewSet):
@@ -31,7 +42,62 @@ class GlossaryTermViewSet(viewsets.ModelViewSet):
     permission_classes = [ReadAnyWriteGlobalAdmin]
 
     def perform_create(self, serializer):
-        serializer.save(slug=slugify(serializer.validated_data['term']))
+        instance = serializer.save(slug=slugify(serializer.validated_data['term']))
+        emit_governance_event(
+            entity_type='GlossaryTerm',
+            entity_id=instance.id,
+            action='create',
+            before={},
+            after={
+                'term': instance.term,
+                'definition': instance.definition,
+                'status': instance.status,
+                'steward': instance.steward_id,
+                'domain': instance.domain_id,
+            },
+            user=self.request.user,
+        )
+
+    def perform_update(self, serializer):
+        old = self.get_object()
+        before = {
+            'term': old.term,
+            'definition': old.definition,
+            'status': old.status,
+            'steward': old.steward_id,
+            'domain': old.domain_id,
+        }
+        instance = serializer.save()
+        after = {
+            'term': instance.term,
+            'definition': instance.definition,
+            'status': instance.status,
+            'steward': instance.steward_id,
+            'domain': instance.domain_id,
+        }
+        changed = {k: after[k] for k in before if before.get(k) != after.get(k)}
+        if changed:
+            emit_governance_event(
+                entity_type='GlossaryTerm',
+                entity_id=instance.id,
+                action='update',
+                before={k: before[k] for k in changed},
+                after=changed,
+                user=self.request.user,
+            )
+
+    def perform_destroy(self, instance):
+        before = {'term': instance.term, 'definition': instance.definition, 'status': instance.status}
+        entity_id = instance.id
+        instance.delete()
+        emit_governance_event(
+            entity_type='GlossaryTerm',
+            entity_id=entity_id,
+            action='delete',
+            before=before,
+            after={'deleted': True},
+            user=self.request.user,
+        )
 
 
 class TagViewSet(viewsets.ModelViewSet):
@@ -71,19 +137,64 @@ class AssetProfileViewSet(viewsets.ModelViewSet):
         return qs.distinct().order_by('id')
 
     def perform_update(self, serializer):
-        before = AssetProfileSerializer(serializer.instance).data
+        instance = self.get_object()
+        before = {
+            'owner': instance.owner_id,
+            'steward': instance.steward_id,
+            'classification': instance.classification,
+            'domain': instance.domain_id,
+            'glossary_term': instance.glossary_term_id,
+            'quality_status': instance.quality_status,
+            'quality_score': instance.quality_score,
+        }
         obj = serializer.save(updated_by=self.request.user)
-        after = AssetProfileSerializer(obj).data
-        GovernanceEvent.objects.create(
-            asset=obj, entity_type='asset', entity_id=obj.id, action='update',
-            before=before, after=after, user=self.request.user,
-        )
+        after = {
+            'owner': obj.owner_id,
+            'steward': obj.steward_id,
+            'classification': obj.classification,
+            'domain': obj.domain_id,
+            'glossary_term': obj.glossary_term_id,
+            'quality_status': obj.quality_status,
+            'quality_score': obj.quality_score,
+        }
+        changed = {k: after[k] for k in before if before.get(k) != after.get(k)}
+        if changed:
+            emit_governance_event(
+                entity_type='AssetProfile',
+                entity_id=obj.id,
+                action='update',
+                before={k: before[k] for k in changed},
+                after=changed,
+                user=self.request.user,
+                asset_profile=obj,
+            )
 
 
 class GovernanceEventViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = GovernanceEvent.objects.all()
+    queryset = GovernanceEvent.objects.all().order_by('-timestamp')
     serializer_class = GovernanceEventSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = GovernanceEventFilter
+    ordering = ['-timestamp']
+    ordering_fields = ['timestamp', 'entity_type', 'action']
+    pagination_class = GovernanceEventPagination
+
+
+class GovernanceComplianceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        days = int(request.query_params.get('days', 30))
+        cutoff = timezone.now() - timezone.timedelta(days=days)
+        qs = GovernanceEvent.objects.filter(timestamp__gte=cutoff).order_by('-timestamp')
+        return Response({
+            'window_days': days,
+            'total_events': qs.count(),
+            'by_action': list(qs.values('action').annotate(count=Count('action')).values('action', 'count')),
+            'by_entity_type': list(qs.values('entity_type').annotate(count=Count('entity_type')).values('entity_type', 'count')),
+            'recent_events': GovernanceEventSerializer(qs[:10], many=True).data,
+        })
 
 
 class GovernancePolicyViewSet(viewsets.ModelViewSet):

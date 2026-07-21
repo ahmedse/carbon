@@ -1,8 +1,15 @@
 import pytest
+from django.conf import settings as django_settings
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import Group
+
+# Ensure Django's test client host is always allowed
+if 'testserver' not in django_settings.ALLOWED_HOSTS:
+    django_settings.ALLOWED_HOSTS.append('testserver')
+if 'localhost' not in django_settings.ALLOWED_HOSTS:
+    django_settings.ALLOWED_HOSTS.append('localhost')
 import uuid
 
 from accounts.models import ScopedRole
