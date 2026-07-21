@@ -132,6 +132,7 @@ export const API_ROUTES = {
   emissionsReport: "emissions/report/",
   emissionsCalculate: "emissions/calculate/",
   emissionsPeriods: "emissions/periods/",
+  emissionsOwnerDashboard: "emissions/owner-dashboard/",
   emissionsFactors: "emissions/factors/",
   emissionsCalculations: "emissions/calculations/",
   emissionsRules: "emissions/rules/",

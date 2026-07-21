@@ -163,3 +163,37 @@ export async function fetchYearlyComparison({ project_id, years } = {}, token) {
   
   return apiFetch(endpoint, { token });
 }
+
+/**
+ * Fetch owner dashboard data (scoped to user's org unit)
+ * @param {string} token - JWT token
+ * @param {number} orgUnitId - Optional specific org_unit to scope to
+ * @param {number} periodId - Optional reporting period ID
+ */
+export async function fetchOwnerDashboard(token, orgUnitId = null, periodId = null) {
+  const params = new URLSearchParams();
+  if (orgUnitId) params.append('org_unit', orgUnitId);
+  if (periodId) params.append('period', periodId);
+  
+  const endpoint = params.toString()
+    ? `${API_ROUTES.emissionsOwnerDashboard}?${params.toString()}`
+    : API_ROUTES.emissionsOwnerDashboard;
+  
+  return apiFetch(endpoint, { token });
+}
+
+/**
+ * Fetch reporting periods with optional status filter
+ * @param {string} token - JWT token
+ * @param {string} status - Optional filter by status (open, closed, etc.)
+ */
+export async function fetchReportingPeriodsFiltered(token, status = null) {
+  const params = new URLSearchParams();
+  if (status) params.append('status', status);
+  
+  const endpoint = params.toString()
+    ? `${API_ROUTES.emissionsPeriods}?${params.toString()}`
+    : API_ROUTES.emissionsPeriods;
+  
+  return apiFetch(endpoint, { token });
+}

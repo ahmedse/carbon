@@ -14,6 +14,7 @@ from collections import defaultdict
 
 from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule
 from accounts.rbac_utils import get_visible_module_ids
+from accounts.models import ScopedRole
 from .serializers import (
     ReportingPeriodSerializer,
     EmissionFactorSerializer,
@@ -654,3 +655,97 @@ class CalculateAPIView(APIView):
             'rules_executed': len(results),
             'details': results
         })
+
+
+class OwnerDashboardAPIView(APIView):
+    """
+    Data owner scoped dashboard: emissions + DQ metrics for owned assets.
+    
+    GET /emissions/owner-dashboard/
+    
+    Returns:
+    - Org-unit scoped emissions summary
+    - DQ metrics for owned data
+    - Reporting status
+    - Quality badges
+    
+    Accessible only to users with org_unit scopes via ScopedRole.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        period_id = request.query_params.get('reporting_period_id')
+        
+        # Get user's org units from ScopedRole
+        if user.is_superuser or user.is_staff:
+            org_units = None  # All org units
+        else:
+            org_units = list(
+                ScopedRole.objects.filter(
+                    user=user, is_active=True
+                ).values_list('org_unit_id', flat=True).distinct()
+            )
+            if not org_units:
+                return Response({'detail': 'No accessible org units'}, status=403)
+        
+        # Get reporting period (default to active)
+        reporting_period = None
+        if period_id:
+            reporting_period = ReportingPeriod.objects.filter(id=period_id).first()
+        else:
+            today = timezone.now().date()
+            reporting_period = ReportingPeriod.objects.filter(
+                start_date__lte=today,
+                end_date__gte=today,
+                status__in=['open', 'locked']
+            ).first()
+        
+        # Scope calculations to user's org units
+        calc_qs = Calculation.objects.all()
+        if org_units is not None:
+            calc_qs = calc_qs.filter(module__org_unit_id__in=org_units)
+        
+        if reporting_period:
+            calc_qs = calc_qs.filter(reporting_period=reporting_period)
+        
+        # Calculate scope breakdown
+        scope_breakdown = []
+        scope_data = calc_qs.values('scope').annotate(
+            total_kg=Sum('co2e_kg'),
+            count=Count('id')
+        ).order_by('scope')
+        
+        grand_total_kg = sum(s['total_kg'] or 0 for s in scope_data)
+        scope_names = {1: 'Scope 1 - Direct', 2: 'Scope 2 - Indirect Energy', 3: 'Scope 3 - Value Chain'}
+        
+        for s in scope_data:
+            total_kg = s['total_kg'] or Decimal('0')
+            scope_breakdown.append({
+                'scope': s['scope'],
+                'scope_name': scope_names.get(s['scope'], f"Scope {s['scope']}"),
+                'co2e_tonnes': round(total_kg / 1000, 2),
+                'percentage': round((total_kg / grand_total_kg * 100) if grand_total_kg else 0, 2)
+            })
+        
+        # DQ metrics (stub for now - integration with DQ app later)
+        dq_summary = {
+            'quality_score': 85,
+            'rules_passing': 42,
+            'rules_total': 50,
+            'tables_profiled': 156,
+        }
+        
+        # Build response
+        response_data = {
+            'reporting_period': ReportingPeriodSerializer(reporting_period).data if reporting_period else None,
+            'total_co2e_tonnes': round(grand_total_kg / 1000, 2),
+            'scope_breakdown': scope_breakdown,
+            'category_breakdown': [],  # Can be expanded later
+            'monthly_trend': [],  # Can be expanded later
+            'data_quality_summary': dq_summary,
+            'calculation_count': calc_qs.count(),
+            'submission_status': 'pending' if reporting_period and reporting_period.status == 'open' else 'submitted',
+        }
+        
+        return Response(response_data)

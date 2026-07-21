@@ -51,6 +51,9 @@ import GovernancePage from "./pages/catalog/GovernancePage";
 import DataSourcesDetailPage from "./pages/catalog/DataSourcesDetailPage";
 import ExportsDetailPage from "./pages/catalog/ExportsDetailPage";
 import ImportsDetailPage from "./pages/catalog/ImportsDetailPage";
+import DataOwnerPortalPage from "./pages/data-owner/DataOwnerPortalPage";
+import DataOwnerDashboardPage from "./pages/data-owner/DataOwnerDashboardPage";
+import DataOwnerAssetsPage from "./pages/data-owner/DataOwnerAssetsPage";
 
 // New Dashboard Architecture
 import {
@@ -154,6 +157,11 @@ export default function App() {
                 <Route path="/emissions" element={<EmissionsDashboard />} />
                 <Route path="/emissions/dashboard" element={<EmissionsDashboard />} />
                 <Route path="/emissions/report" element={<EmissionsReport />} />
+                
+                {/* Data Owner Portal Routes */}
+                <Route path="/data-owner" element={<DataOwnerPortalPage />} />
+                <Route path="/data-owner/dashboard" element={<DataOwnerDashboardPage />} />
+                <Route path="/data-owner/assets" element={<DataOwnerAssetsPage />} />
                 {/* Admin-only: Schema Admin > Table Manager */}
                 <Route
                   path="/schema-admin/table-manager"

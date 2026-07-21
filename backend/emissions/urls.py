@@ -14,6 +14,7 @@ from .views import (
     YearlyComparisonAPIView,
     ReportAPIView,
     CalculateAPIView,
+    OwnerDashboardAPIView,
 )
 
 app_name = 'emissions'
@@ -32,6 +33,9 @@ urlpatterns = [
     
     # Dashboard API
     path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),
+    
+    # Owner dashboard (org-unit scoped)
+    path('owner-dashboard/', OwnerDashboardAPIView.as_view(), name='owner-dashboard'),
     
     # Yearly Comparison API
     path('yearly-comparison/', YearlyComparisonAPIView.as_view(), name='yearly-comparison'),

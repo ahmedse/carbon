@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import ReadAnyWriteGlobalAdmin
+from accounts.models import ScopedRole
 from core.feedback import AppFeedback
 from .audit_utils import emit_governance_event
 from .filters import GovernanceEventFilter
@@ -193,6 +194,22 @@ class AssetProfileViewSet(viewsets.ModelViewSet):
             'data_table', 'data_field', 'data_field__data_table',
             'domain', 'owner', 'steward', 'glossary_term',
         ).prefetch_related('tags')
+        
+        # RBAC: Scope to user's org units (superusers/staff see all)
+        user = self.request.user
+        if not (user.is_superuser or user.is_staff):
+            org_units = list(
+                ScopedRole.objects.filter(
+                    user=user, is_active=True
+                ).values_list('org_unit_id', flat=True).distinct()
+            )
+            if not org_units:
+                return AssetProfile.objects.none()
+            qs = qs.filter(
+                Q(data_table__module__org_unit_id__in=org_units) |
+                Q(data_field__data_table__module__org_unit_id__in=org_units)
+            )
+        
         p = self.request.query_params
         if p.get('classification'):
             qs = qs.filter(classification=p['classification'])

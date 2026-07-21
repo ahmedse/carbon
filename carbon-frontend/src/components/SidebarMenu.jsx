@@ -546,6 +546,76 @@ function DashboardSidebar({ collapsed, location }) {
   );
 }
 
+// --- Data Owner Sidebar (scoped data owner view) ---
+function DataOwnerSidebar({ collapsed, location }) {
+  const open = !collapsed;
+
+  return (
+    <List sx={{ pt: 0.5, pb: 2, px: 0.5 }}>
+      {/* My Data Section */}
+      <Typography
+        variant="caption"
+        sx={{
+          fontWeight: 700,
+          fontSize: "0.7rem",
+          color: "#9ca3af",
+          textTransform: "uppercase",
+          px: 1.5,
+          py: 1,
+          display: "block",
+        }}
+      >
+        {open ? "My Data" : ""}
+      </Typography>
+
+      <MenuItem
+        to="/data-owner"
+        icon={<DashboardIcon />}
+        label="My Portal"
+        tooltip="Overview of your domain assets"
+        selected={location.pathname === "/data-owner"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+      <MenuItem
+        to="/data-owner/dashboard"
+        icon={<AnalyticsIcon />}
+        label="My Dashboard"
+        tooltip="Emissions KPIs and data quality"
+        selected={location.pathname === "/data-owner/dashboard"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+      <MenuItem
+        to="/data-owner/assets"
+        icon={<TableIcon />}
+        label="My Assets"
+        tooltip="Scoped asset browser"
+        selected={location.pathname === "/data-owner/assets"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+
+      <Divider sx={{ my: 1, mx: 1 }} />
+
+      <MenuItem
+        to="/help"
+        icon={<HelpIcon />}
+        label="Help"
+        selected={location.pathname === "/help"}
+        collapsed={collapsed}
+      />
+      <MenuItem
+        to="/feedback"
+        icon={<FeedbackIcon />}
+        label="Feedback"
+        selected={location.pathname === "/feedback"}
+        collapsed={collapsed}
+      />
+    </List>
+  );
+}
+
 // --- Main Perspective-Driven Dispatcher ---
 export default function SidebarMenu({ collapsed }) {
   const location = useLocation();
@@ -553,13 +623,18 @@ export default function SidebarMenu({ collapsed }) {
   const { currentPerspective, context, tablesByModule } = useAuth();
 
   const modules = context?.modules || [];
+  const hasDataOwnerScope = context?.org_units && context.org_units.length > 0;
 
-  // Render correct sidebar based on perspective
+  // Render correct sidebar based on perspective or role
   if (currentPerspective === "admin") {
     return <AdminSidebar collapsed={collapsed} location={location} />;
   }
   if (currentPerspective === "dashboards") {
     return <DashboardSidebar collapsed={collapsed} location={location} />;
+  }
+  // Data owner with scoped role gets dedicated sidebar
+  if (hasDataOwnerScope && !modules.length) {
+    return <DataOwnerSidebar collapsed={collapsed} location={location} />;
   }
   // Default: data_entry
   return (
