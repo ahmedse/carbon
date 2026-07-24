@@ -121,7 +121,7 @@ function DataEntrySidebar({ collapsed, location, navigate, modules, tablesByModu
 
   // Auto-expand logic
   useEffect(() => {
-    const match = location.pathname.match(/^\/dataschema\/entry\/(\d+)\/(\d+)/);
+    const match = location.pathname.match(/\/(?:carbon\/data-entry|dataschema)\/entry\/(\d+)\/(\d+)/);
     if (match) {
       const moduleId = parseInt(match[1]);
       for (const [scope, mods] of Object.entries(modulesByScope)) {

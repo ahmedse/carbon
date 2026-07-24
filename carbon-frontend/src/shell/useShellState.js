@@ -16,12 +16,12 @@ import { APP_REGISTRY } from '../apps/registry';
 // NOTE: 'emissions' and 'dataschema' are removed — their functionality lives inside
 //       the Carbon Footprint domain app (carbon studio).
 const PLATFORM_STUDIOS = [
-  { id: 'home',    label: 'Dashboard',      icon: DashboardIcon,          path: '/dashboard'       },
+  { id: 'home',     label: 'Dashboard',       icon: DashboardIcon,          path: '/dashboard'       },
   // ── App studios injected here at runtime ──
-  { id: 'catalog', label: 'Catalog Studio', icon: CatalogIcon,            path: '/catalog/domains' },
-  { id: 'admin',   label: 'Admin',          icon: AdminPanelSettingsIcon, path: '/admin/users'     },
-  { id: 'settings',label: 'Settings',       icon: SettingsIcon,           path: '/settings',  bottom: true },
-  { id: 'help',    label: 'Help',           icon: HelpIcon,               path: '/help',      bottom: true },
+  { id: 'catalog',  label: 'Catalog Studio', icon: CatalogIcon,            path: '/catalog/domains' },
+  { id: 'admin',    label: 'Platform Admin', icon: AdminPanelSettingsIcon, path: '/admin/users'     },
+  { id: 'settings', label: 'Settings',        icon: SettingsIcon,           path: '/settings',  bottom: true },
+  { id: 'help',     label: 'Help',            icon: HelpIcon,               path: '/help',      bottom: true },
 ];
 
 // Icon lookup for manifest-declared apps.

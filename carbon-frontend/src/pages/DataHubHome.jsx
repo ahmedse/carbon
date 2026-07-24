@@ -61,10 +61,10 @@ export default function DataHubHome() {
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={2}>
         <Box>
           <Typography variant="h4" gutterBottom>
-            Data Hub
+            Carbon Data Entry Hub
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Select a module to enter or manage data.
+            Select a module to enter or manage your carbon emissions data.
           </Typography>
         </Box>
 

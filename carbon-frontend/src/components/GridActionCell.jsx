@@ -28,7 +28,7 @@ export function ActionCell({ params, onDeleteRow }) {
 
   const handleViewRow = () => {
     if (tableId && rowId) {
-      navigate(`/dataschema/row/${tableId}/${rowId}`);
+      navigate(`/carbon/data-entry/row/${tableId}/${rowId}`);
     }
   };
 

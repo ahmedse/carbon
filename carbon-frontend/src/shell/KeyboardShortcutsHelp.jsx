@@ -43,7 +43,7 @@ const SHORTCUTS = [
     items: [
       { keys: ['Alt', '1'], description: 'Go to Dashboard' },
       { keys: ['Alt', '2'], description: 'Go to Emissions' },
-      { keys: ['Alt', '3'], description: 'Go to Data Hub' },
+      { keys: ['Alt', '3'], description: 'Go to Carbon Data Entry' },
       { keys: ['Alt', '4'], description: 'Go to Admin' },
       { keys: ['Alt', '5'], description: 'Go to Settings' },
       { keys: ['Alt', '6'], description: 'Go to Help' },

@@ -58,7 +58,8 @@ urlpatterns = [
     path(f'{api_prefix}/dataschema/', include('dataschema.urls')),
     # FROZEN 2026-07-18: ai_copilot superseded by external Pulse (see STRATEGY_DATA_TRUST_PLATFORM.md)
     # path(f'{api_prefix}/ai/', include('ai_copilot.urls')),
-    path(f'{api_prefix}/emissions/', include('emissions.urls')),
+    path('api/v1/carbon/', include(('emissions.urls', 'carbon'), namespace='carbon')),
+    path(f'{api_prefix}/carbon/', include(('emissions.urls', 'carbon'), namespace='carbon')),
     path(f'{api_prefix}/catalog/', include('catalog.urls')),
     path(f'{api_prefix}/mdm/', include('mdm.urls')),
     path(f'{api_prefix}/connections/', include('connections.urls')),

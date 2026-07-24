@@ -4,20 +4,17 @@ import pytest
 from django.urls import reverse
 
 @pytest.fixture
-def setup_schema(db, create_tenant):
+def setup_schema(db):
     from core.models import Module
     from dataschema.models import DataTable, DataField, DataRow
 
-    tenant = create_tenant()
-    # project removed
-    module = Module.objects.create(name="Test Module", project=project)
+    module = Module.objects.create(name="Test Module")
     table = DataTable.objects.create(title="Test Table", name="test_table", module=module)
     field = DataField.objects.create(data_table=table, name="value", label="Value", type="string")
     row = DataRow.objects.create(data_table=table, values={"value": "hello"})
 
     return {
-        "tenant": tenant,
-        "project": project,
+        "project": None,
         "module": module,
         "table": table,
         "field": field,
@@ -37,16 +34,15 @@ def setup_schema(db, create_tenant):
 def test_table_list_access(
     api_client, create_user, create_scoped_role, get_token_for_user, setup_schema, group, expected_status
 ):
-    project = setup_schema["project"]
-    tenant = setup_schema["tenant"]
+    module = setup_schema["module"]
     groups = [group] if group else []
-    user = create_user("bob", groups=groups, tenant=tenant)
+    user = create_user("bob", groups=groups)
     if group:
-        create_scoped_role(user, group, tenant=tenant, project=project)
+        create_scoped_role(user, group, module=module)
     token = get_token_for_user(user)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
-    url = reverse("dataschema-table-list") + f"?project_id={project.id}"
+    url = reverse("dataschema-table-list")
     resp = api_client.get(url)
     assert resp.status_code == expected_status
 
@@ -63,16 +59,15 @@ def test_table_list_access(
 def test_field_list_access(
     api_client, create_user, create_scoped_role, get_token_for_user, setup_schema, group, expected_status
 ):
-    project = setup_schema["project"]
-    tenant = setup_schema["tenant"]
+    module = setup_schema["module"]
     groups = [group] if group else []
-    user = create_user("bob", groups=groups, tenant=tenant)
+    user = create_user("bob", groups=groups)
     if group:
-        create_scoped_role(user, group, tenant=tenant, project=project)
+        create_scoped_role(user, group, module=module)
     token = get_token_for_user(user)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
-    url = reverse("dataschema-field-list") + f"?project_id={project.id}"
+    url = reverse("dataschema-field-list")
     resp = api_client.get(url)
     assert resp.status_code == expected_status
 
@@ -90,12 +85,10 @@ def test_row_list_access(
     api_client, create_user, create_scoped_role, get_token_for_user, setup_schema,
     group, expected_status_module, expected_status_other_module
 ):
-    project = setup_schema["project"]
     module = setup_schema["module"]
-    tenant = setup_schema["tenant"]
 
     from core.models import Module as CoreModule
-    other_module = CoreModule.objects.create(name="Other Module", project=project)
+    other_module = CoreModule.objects.create(name="Other Module")
 
     from dataschema.models import DataTable, DataField, DataRow
     other_table = DataTable.objects.create(title="Other Table", name="other_table", module=other_module)
@@ -103,11 +96,11 @@ def test_row_list_access(
     DataRow.objects.create(data_table=other_table, values={"other_value": "foo"})
 
     groups = [group] if group else []
-    user = create_user("bob", groups=groups, tenant=tenant)
+    user = create_user("bob", groups=groups)
     if group == "dataowner":
-        create_scoped_role(user, group, tenant=tenant, module=module)
+        create_scoped_role(user, group, module=module)
     elif group in ("admin", "audit"):
-        create_scoped_role(user, group, tenant=tenant, project=project)
+        create_scoped_role(user, group)
     token = get_token_for_user(user)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
@@ -132,15 +125,14 @@ def test_row_list_access(
 def test_schema_log_list_access(
     api_client, create_user, create_scoped_role, get_token_for_user, setup_schema, group, expected_status
 ):
-    project = setup_schema["project"]
-    tenant = setup_schema["tenant"]
+    module = setup_schema["module"]
     groups = [group] if group else []
-    user = create_user("bob", groups=groups, tenant=tenant)
+    user = create_user("bob", groups=groups)
     if group:
-        create_scoped_role(user, group, tenant=tenant, project=project)
+        create_scoped_role(user, group, module=module)
     token = get_token_for_user(user)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
-    url = reverse("dataschema-schemalog-list") + f"?project_id={project.id}"
+    url = reverse("dataschema-schemalog-list")
     resp = api_client.get(url)
     assert resp.status_code == expected_status

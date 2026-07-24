@@ -45,8 +45,8 @@ export function StatusBar({
       }
     }
 
-    // Check for data entry page: /dataschema/entry/:moduleId/:tableId
-    const entryMatch = pathname.match(/\/dataschema\/entry\/(\d+)\/(\d+)/);
+    // Check for data entry page: /carbon/data-entry/entry/:moduleId/:tableId or /dataschema/entry/:moduleId/:tableId
+    const entryMatch = pathname.match(/\/(?:carbon\/data-entry|dataschema)\/entry\/(\d+)\/(\d+)/);
     if (entryMatch) {
       const [, moduleId, tableId] = entryMatch;
       const module = context?.modules?.find(m => String(m.id) === moduleId);
@@ -57,14 +57,14 @@ export function StatusBar({
       }
     }
 
-    // Check for Data Hub quality
-    if (pathname === '/dataschema/quality') {
-      return 'Data Hub › Quality';
+    // Check for Carbon Data Entry quality
+    if (pathname === '/dataschema/quality' || pathname === '/carbon/data-entry/quality') {
+      return 'Carbon Data Entry › Quality';
     }
 
-    // Check for Data Hub home
-    if (pathname === '/dataschema') {
-      return 'Data Hub';
+    // Check for Carbon Data Entry home
+    if (pathname === '/dataschema' || pathname === '/carbon/data-entry') {
+      return 'Carbon Data Entry';
     }
 
     return null;

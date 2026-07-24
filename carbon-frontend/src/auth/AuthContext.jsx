@@ -82,6 +82,10 @@ export const AuthProvider = ({ children }) => {
         setCurrentPerspective(defaultPerspective);
         localStorage.setItem("carbon_perspective", defaultPerspective);
       }
+      localStorage.setItem(
+        "available_perspectives",
+        JSON.stringify(data.perspectives || [])
+      );
       return data;
     } catch (err) {
       console.error("Failed to fetch perspective context:", err);
@@ -95,12 +99,27 @@ export const AuthProvider = ({ children }) => {
       const storedUser = JSON.parse(localStorage.getItem("user"));
       const storedProjects = JSON.parse(localStorage.getItem("projects"));
       const storedContext = JSON.parse(localStorage.getItem("context"));
+      const storedPerspectives = JSON.parse(
+        localStorage.getItem("available_perspectives") || "[]"
+      );
       if (storedUser?.token) setUser(storedUser);
       if (Array.isArray(storedProjects)) setProjects(storedProjects);
       if (storedContext) setContext(storedContext);
+      if (Array.isArray(storedPerspectives) && storedPerspectives.length) {
+        setAvailablePerspectives(storedPerspectives);
+      }
     } catch {}
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (user && !availablePerspectives?.length) {
+      fetchPerspectiveContext(user.token).catch(() => {
+        // If perspective fetch fails on reload, clear stale auth state to avoid broken nav.
+        console.warn("Failed to restore perspectives on reload");
+      });
+    }
+  }, [user, availablePerspectives.length]);
 
   // --- Inactivity & periodic token refresh logic ---
   useEffect(() => {

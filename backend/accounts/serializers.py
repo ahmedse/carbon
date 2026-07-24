@@ -3,7 +3,7 @@
 
 from rest_framework import serializers
 from django.contrib.auth.models import Group
-from .models import User, ScopedRole, RoleAssignmentAuditLog
+from .models import User, ScopedRole, RoleAssignmentAuditLog, GroupMetadata
 
 class UserSerializer(serializers.ModelSerializer):
     # Write-only: accepted on create/update, never returned in responses.
@@ -36,9 +36,101 @@ class UserSerializer(serializers.ModelSerializer):
         return instance
 
 class GroupSerializer(serializers.ModelSerializer):
+    permissions_count = serializers.SerializerMethodField()
+    users_count = serializers.SerializerMethodField()
+    role_type = serializers.SerializerMethodField()
+    app_id = serializers.SerializerMethodField()
+    manifest_key = serializers.SerializerMethodField()
+    is_scoped = serializers.SerializerMethodField()
+    is_protected = serializers.SerializerMethodField()
+    description = serializers.CharField(allow_blank=True, required=False, default='')
+
     class Meta:
         model = Group
-        fields = ['id', 'name']
+        fields = [
+            'id',
+            'name',
+            'description',
+            'permissions_count',
+            'users_count',
+            'role_type',
+            'app_id',
+            'manifest_key',
+            'is_scoped',
+            'is_protected',
+        ]
+        read_only_fields = ['id', 'permissions_count', 'users_count', 'role_type', 'app_id', 'manifest_key', 'is_scoped', 'is_protected']
+
+    def get_permissions_count(self, obj):
+        return obj.permissions.count()
+
+    def get_users_count(self, obj):
+        from .models import ScopedRole
+        return ScopedRole.objects.filter(group=obj, is_active=True).values('user').distinct().count()
+
+    def get_role_type(self, obj):
+        name = obj.name.lower()
+        platform_roles = {'admin', 'admins_group', 'audit', 'steward', 'dataowners_group', 'data_owners_group', 'analysts_group', 'data_analysts_group'}
+        if name in platform_roles or name.startswith('admin'):
+            return 'platform'
+        if '_' in name:
+            return 'app'
+        return 'platform'
+
+    def get_app_id(self, obj):
+        name = obj.name.lower()
+        if '_' not in name:
+            return None
+        if name in {'admins_group', 'admin', 'audit', 'steward'}:
+            return None
+        return name.split('_', 1)[0]
+
+    def get_manifest_key(self, obj):
+        app_id = self.get_app_id(obj)
+        if not app_id:
+            return None
+        suffix = obj.name[len(app_id) + 1:]
+        return f'{app_id}:{suffix}'
+
+    def get_is_scoped(self, obj):
+        name = obj.name.lower()
+        return any(token in name for token in ['data_owner', 'dataowner', 'analyst', 'steward'])
+
+    def get_is_protected(self, obj):
+        return obj.name.lower() in {'admin', 'admins_group', 'carbon_data_owners_group', 'carbon_analysts_group'}
+
+    def get_description(self, obj):
+        try:
+            return obj.metadata.description or ''
+        except GroupMetadata.DoesNotExist:
+            return ''
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['description'] = self.get_description(instance)
+        return data
+
+    def update(self, instance, validated_data):
+        description = validated_data.get('description')
+        model_validated_data = validated_data.copy()
+        model_validated_data.pop('description', None)
+        instance = super().update(instance, model_validated_data)
+        if description is not None:
+            metadata, _ = GroupMetadata.objects.get_or_create(group=instance)
+            metadata.description = description
+            metadata.save()
+        return instance
+
+    def create(self, validated_data):
+        description = validated_data.get('description')
+        model_validated_data = validated_data.copy()
+        model_validated_data.pop('description', None)
+        instance = super().create(model_validated_data)
+        if description is not None:
+            metadata, _ = GroupMetadata.objects.get_or_create(group=instance)
+            metadata.description = description
+            metadata.save()
+        return instance
 
 class ScopedRoleSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField()

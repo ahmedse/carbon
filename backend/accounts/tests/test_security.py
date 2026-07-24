@@ -37,16 +37,12 @@ def test_jwt_cannot_be_reused_after_logout(api_client, create_user, get_token_fo
     pass  # Implement if JWT blacklist is enabled.
 
 @pytest.mark.django_db
-def test_cross_tenant_access(api_client, create_user, create_tenant, get_token_for_user):
-    tenant1 = create_tenant("Tenant1")
-    tenant2 = create_tenant("Tenant2")
-    user1 = create_user("alice", tenant=tenant1)
-    user2 = create_user("bob", tenant=tenant2)
+def test_user_cannot_access_detail_of_another_user(api_client, create_user, get_token_for_user):
+    user1 = create_user("alice")
+    user2 = create_user("bob")
     token = get_token_for_user(user1)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
-    # Try to access user2's detail
     url = reverse("user-detail", args=[user2.id])
     response = api_client.get(url)
-    # Should be forbidden or not found, depending on your policy
     assert response.status_code in [403, 404]

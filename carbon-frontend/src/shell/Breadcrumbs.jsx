@@ -63,9 +63,24 @@ const ROUTE_CONFIG = {
     parent: '/emissions',
   },
   '/dataschema': {
-    label: 'Data Hub',
+    label: 'Carbon Data Entry',
     icon: StorageIcon,
     parent: null,
+  },
+  '/carbon/data-entry': {
+    label: 'Carbon Data Entry',
+    icon: StorageIcon,
+    parent: null,
+  },
+  '/carbon/data-entry/entry/:moduleId/:tableId': {
+    label: 'Table Entry',
+    icon: StorageIcon,
+    parent: '/carbon/data-entry',
+  },
+  '/carbon/data-entry/row/:tableId/:rowId': {
+    label: 'Row Detail',
+    icon: StorageIcon,
+    parent: '/carbon/data-entry',
   },
   '/schema-admin': {
     label: 'Schema Admin',

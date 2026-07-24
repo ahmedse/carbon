@@ -56,7 +56,7 @@ export default function ModuleLandingPage() {
       {/* Back navigation */}
       <Button
         startIcon={<ArrowBackIcon />}
-        onClick={() => navigate('/dataschema')}
+        onClick={() => navigate('/carbon/data-entry')}
         size="small"
         sx={{
           mb: 2,
@@ -67,7 +67,7 @@ export default function ModuleLandingPage() {
           '&:hover': { color: 'text.primary' },
         }}
       >
-        Back to Data Hub
+        Back to Carbon Data Entry Hub
       </Button>
 
       {/* Module header with scope context */}
@@ -123,7 +123,7 @@ export default function ModuleLandingPage() {
                 display: "flex",
                 flexDirection: "column",
               }}
-              onClick={() => navigate(`/dataschema/entry/${module.id}/${table.id}`)}
+              onClick={() => navigate(`/carbon/data-entry/entry/${module.id}/${table.id}`)}
             >
               <CardContent>
                 <Box display="flex" alignItems="center" gap={1} mb={1}>

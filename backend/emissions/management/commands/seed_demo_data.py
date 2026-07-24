@@ -802,7 +802,6 @@ class Command(BaseCommand):
     
     def _print_summary(self):
         """Print summary of created data."""
-        from accounts.models import Tenant
         from core.models import Module
         from dataschema.models import DataTable, DataRow
         from emissions.models import ReportingPeriod, Calculation, CalculationRule

@@ -5,7 +5,6 @@ from django.urls import reverse
 
 # (endpoint_name, allowed_groups)
 PROTECTED_ENDPOINTS = [
-    ("tenant-list", ["superuser"]),    # Only Django superuser can access tenants
     ("role-list", ["admin"]),          # Only ScopedRole 'admin'
     ("user-list", ["admin"]),          # Only ScopedRole 'admin'
 ]

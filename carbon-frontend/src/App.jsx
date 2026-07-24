@@ -15,7 +15,11 @@ import OrgUnitsPage from "./pages/admin/OrgUnitsPage";
 import OrgUnitDetailPage from "./pages/admin/OrgUnitDetailPage";
 import AccessControlPage from "./pages/admin/AccessControlPage";
 import UsersPage from "./pages/admin/UsersPage";
+import GroupsPage from "./pages/admin/GroupsPage";
+import RoleRegistryPage from "./pages/admin/RoleRegistryPage";
+import RegisteredAppsPage from "./pages/admin/RegisteredAppsPage";
 import GovernancePolicyPage from "./pages/admin/GovernancePolicyPage";
+import GroupDetailPage from "./pages/admin/GroupDetailPage";
 import DataEntryPage from "./pages/DataEntryPage";
 import DataHubHome from "./pages/DataHubHome";
 import Help from "./pages/Help";
@@ -219,23 +223,49 @@ export default function App() {
                     </AdminRoute>
                   }
                 />
+                <Route
+                  path="/admin/groups"
+                  element={
+                    <AdminRoute>
+                      <GroupsPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/groups/:groupId"
+                  element={
+                    <AdminRoute>
+                      <GroupDetailPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/role-matrix"
+                  element={
+                    <AdminRoute>
+                      <RoleRegistryPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/admin/apps"
+                  element={
+                    <AdminRoute>
+                      <RegisteredAppsPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route path="/admin/audit" element={<AdminRoute><div style={{ padding: 24 }}>Audit log page coming soon.</div></AdminRoute>} />
                 <Route path="/admin/policies" element={<Navigate to="/catalog/policies" replace />} />
                 <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
                  <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />
-                {/* Data Hub */}
+                {/* Carbon-owned Data Hub / Data Entry routes */}
                 <Route path="/carbon/data-entry" element={<DataHubHome />} />
                 <Route path="/carbon/data-entry/entry/:moduleName/:tableId" element={<DataEntryPage />} />
                 <Route path="/carbon/data-entry/row/:tableId/:rowId" element={<RowDetailPage />} />
                 <Route path="/dataschema" element={<DataHubHome />} />
-                <Route
-                  path="/dataschema/entry/:moduleName/:tableId"
-                  element={<DataEntryPage />}
-                />
-                {/* Row Detail Page */}
-                <Route
-                  path="/dataschema/row/:tableId/:rowId"
-                  element={<RowDetailPage />}
-                />
+                <Route path="/dataschema/entry/:moduleName/:tableId" element={<DataEntryPage />} />
+                <Route path="/dataschema/row/:tableId/:rowId" element={<RowDetailPage />} />
 
                 {/* Catalog Studio Routes */}
                 <Route path="/catalog" element={<CatalogHome />} />

@@ -6,13 +6,14 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useNotification } from "./NotificationProvider";
 
-function isAdmin(user) {
-  if (!user?.roles) return false;
-  return user.roles.some(r => r.active && r.role === "admins_group");
+function isAdmin(user, availablePerspectives = []) {
+  if (!user?.roles && !availablePerspectives?.length) return false;
+  const roles = (user?.roles || []).map(r => r?.role).filter(Boolean);
+  return availablePerspectives.includes("admin") || roles.includes("admin") || roles.includes("admins_group");
 }
 
 export default function AdminRoute({ children, redirectTo = "/" }) {
-  const { user, loading } = useAuth();
+  const { user, loading, availablePerspectives } = useAuth();
   const notifyCtx = useNotification();
   const notify = typeof notifyCtx?.notify === "function"
     ? notifyCtx.notify
@@ -21,7 +22,7 @@ export default function AdminRoute({ children, redirectTo = "/" }) {
 
   useEffect(() => {
     // Only notify once, and only when user is loaded and is not admin
-    if (!loading && user && !isAdmin(user) && !notifiedRef.current) {
+    if (!loading && user && !isAdmin(user, availablePerspectives) && !notifiedRef.current) {
       notify({
         message: "Access denied: admin role required.",
         type: "error",
@@ -36,7 +37,7 @@ export default function AdminRoute({ children, redirectTo = "/" }) {
   if (!user) {
     return null;
   }
-  if (!isAdmin(user)) {
+  if (!isAdmin(user, availablePerspectives)) {
     return <Navigate to={redirectTo} replace />;
   }
   return children ? children : <Outlet />;

@@ -4,13 +4,12 @@ import pytest
 from django.urls import reverse
 
 @pytest.mark.django_db
-def test_admin_can_list_groups(api_client, create_user, create_scoped_role, get_token_for_user, create_tenant):
+def test_admin_can_list_groups(api_client, create_user, create_scoped_role, get_token_for_user):
     """
     User with 'admin' ScopedRole should be able to list groups (roles).
     """
-    tenant = create_tenant()
-    user = create_user("adminuser", groups=["admin"], tenant=tenant)
-    create_scoped_role(user, "admin", tenant=tenant)  # <-- ensure tenant match
+    user = create_user("adminuser", groups=["admin"])
+    create_scoped_role(user, "admin")
     token = get_token_for_user(user)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 

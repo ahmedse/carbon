@@ -29,3 +29,7 @@ export function createScopedRole(token, data) {
 export function deleteScopedRole(token, id) {
   return apiFetch(`${API_ROUTES.scopedRoles}${id}/`, { method: "DELETE", token });
 }
+
+export function updateScopedRole(token, id, data) {
+  return apiFetch(`${API_ROUTES.scopedRoles}${id}/`, { method: "PATCH", token, body: data });
+}

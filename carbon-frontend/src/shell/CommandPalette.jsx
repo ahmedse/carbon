@@ -92,12 +92,12 @@ const COMMANDS = [
     keywords: ['report', 'emissions', 'export', 'ghg'],
   },
 
-  // Data Hub commands
+  // Carbon Data Entry commands
   {
     id: 'data-entry',
     label: 'Data Entry',
     description: 'Enter and manage emissions data',
-    path: '/dataschema',
+    path: '/carbon/data-entry',
     icon: StorageIcon,
     keywords: ['data', 'entry', 'input', 'schema', 'records'],
   },

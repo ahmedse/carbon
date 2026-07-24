@@ -72,6 +72,32 @@ class RoleAssignmentAuditLog(models.Model):
     def __str__(self):
         return f"{self.timestamp}: {self.action} {self.group} for {self.user}"
 
+
+class GroupMetadata(models.Model):
+    """Extended metadata for Django Group role definitions."""
+
+    CATEGORY_CHOICES = [
+        ('platform', 'Platform'),
+        ('app', 'App'),
+    ]
+
+    group = models.OneToOneField(Group, on_delete=models.CASCADE, related_name='metadata')
+    description = models.TextField(blank=True, default='')
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='app')
+    app_id = models.CharField(max_length=50, blank=True, default='')
+    manifest_key = models.CharField(max_length=100, blank=True, default='')
+    is_scoped = models.BooleanField(default=False)
+    is_protected = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Group Metadata'
+        verbose_name_plural = 'Group Metadata'
+
+    def __str__(self):
+        return f"Metadata for {self.group.name}"
+
+
 # --- SYSTEM ROLE NAMES (constants for code clarity) ---
 
 SYSTEM_ROLES = {

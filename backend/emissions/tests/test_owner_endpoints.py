@@ -99,3 +99,13 @@ class OwnerApiEndpointsTest(TestCase):
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]['module_name'], self.module.name)
         self.assertEqual(data[0]['activity_type'], 'submission')
+
+    def test_carbon_namespace_alias_serves_owner_endpoints(self):
+        self.client.force_authenticate(self.owner)
+
+        response = self.client.get('/api/v1/carbon/owner/summary/')
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['org_unit']['id'], self.org_unit.id)
+        self.assertEqual(data['summary']['total_modules'], 1)

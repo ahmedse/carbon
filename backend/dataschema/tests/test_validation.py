@@ -4,13 +4,11 @@ import pytest
 from dataschema.serializers import DataRowSerializer
 from dataschema.models import DataTable, DataField
 from core.models import Module
-from accounts.models import Tenant
 
 @pytest.fixture
 def setup_table(db):
-    tenant = Tenant.objects.create(name="Tenant")
     # project removed
-    module = Module.objects.create(name="Module", project=project)
+    module = Module.objects.create(name="Module")
     table = DataTable.objects.create(title="Test Table", name="test_table", module=module)
     field_str = DataField.objects.create(data_table=table, name="name", label="Name", type="string", required=True)
     field_num = DataField.objects.create(data_table=table, name="age", label="Age", type="number", required=True)

@@ -25,18 +25,20 @@ import LayersIcon from '@mui/icons-material/Layers';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import ScienceIcon from '@mui/icons-material/Science';
 import FolderIcon from '@mui/icons-material/Folder';
-import Co2Icon from '@mui/icons-material/Co2';
+import GroupIcon from '@mui/icons-material/Group';
+import AppsIcon from '@mui/icons-material/Apps';
+import GridViewIcon from '@mui/icons-material/GridView';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
 
 // UI-driven icon mapping for Carbon sidebar items
 // This allows icons to be chosen at runtime without hardcoding
 const CARBON_ITEM_ICONS = {
-  'My Portal':       LocationOnIcon,
-  'My Dashboard':    BarChartIcon,
-  'My Assets':       StorageIcon,
-  'Data Entry Hub':  AddCircleOutlineIcon,
-  'Generate Report': AssessmentIcon,
+  'My Portal':         LocationOnIcon,
+  'My Dashboard':      BarChartIcon,
+  'My Assets':         StorageIcon,
+  'Carbon Data Entry': AddCircleOutlineIcon,
+  'Generate Report':   AssessmentIcon,
   'Saved Reports':   FolderIcon,
   'Analytics':       BarChartIcon,
   'Emission Factors': ScienceIcon,
@@ -95,9 +97,15 @@ function getSidebarItems(studioId) {
     
     case 'admin':
       return [
-        { label: 'Users', path: '/admin/users', icon: PeopleIcon },
-        { label: 'Org Units', path: '/admin/org-units', icon: AccountTreeIcon },
-        { label: 'Access Control', path: '/admin/access', icon: SecurityIcon },
+        { label: 'Users', path: '/admin/users', icon: PeopleIcon, role: 'admin' },
+        { label: 'Groups & Roles', path: '/admin/groups', icon: GroupIcon, role: 'admin' },
+        { label: 'Org Units', path: '/admin/org-units', icon: AccountTreeIcon, role: 'admin' },
+        { label: 'Access Control', path: '/admin/access', icon: SecurityIcon, role: 'admin' },
+        { label: 'Audit Log', path: '/admin/audit', icon: HistoryIcon, role: 'admin' },
+        { type: 'divider' },
+        { type: 'group', label: 'App Management' },
+        { label: 'Registered Apps', path: '/admin/apps', icon: AppsIcon, role: 'admin' },
+        { label: 'Role Registry', path: '/admin/role-matrix', icon: GridViewIcon, role: 'admin' },
       ];
     
     case 'settings':
@@ -131,7 +139,7 @@ function getStudioTitle(studioId) {
   const titles = {
     home:    'Dashboard',
     catalog: 'Catalog Studio',
-    admin:   'Administration',
+    admin:   'Platform Admin',
     settings:'Settings',
     help:    'Help & Support',
   };
@@ -149,7 +157,8 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
   const title = getStudioTitle(activeStudio);
   
   // If in admin studio, filter based on whether user has admin perspective
-  if (activeStudio === 'admin' && !availablePerspectives.includes('admin')) {
+  const canAccessPlatformAdmin = availablePerspectives.includes('admin') || availablePerspectives.includes('platform-admin');
+  if (activeStudio === 'admin' && !canAccessPlatformAdmin) {
     items = []; // Hide all admin items for non-admin users
   }
   

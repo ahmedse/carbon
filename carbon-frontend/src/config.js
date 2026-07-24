@@ -75,8 +75,10 @@ export const API_ROUTES = {
 
   // Accounts / access control
   users: "accounts/users/",
-  groups: "accounts/roles/",
+  groups: "accounts/groups/",
   scopedRoles: "accounts/scoped-roles/",
+  roleRegistry: "accounts/role-registry/",
+  auditLogs: "accounts/role-audit-logs/",
 
   // Catalog (domains, glossary, tags, assets, governance)
   domains: "catalog/domains/",
@@ -126,19 +128,19 @@ export const API_ROUTES = {
   aiPreferencesUpdate: "ai/preferences/update_me/",
   aiQaRun: "ai/qa/run/",
   
-  // Emissions Calculator
-  emissionsAPI: "emissions/",
-  emissionsDashboard: "emissions/dashboard/",
-  emissionsYearlyComparison: "emissions/yearly-comparison/",
-  emissionsReport: "emissions/report/",
-  emissionsCalculate: "emissions/calculate/",
-  emissionsPeriods: "emissions/periods/",
-  emissionsOwnerDashboard: "emissions/owner-dashboard/",
-  emissionsFactors: "emissions/factors/",
-  emissionsCalculations: "emissions/calculations/",
-  emissionsRules: "emissions/rules/",
-  emissionsGWP: "emissions/gwp/",
-  emissionsReportConfigs: "emissions/report-configs/",
+  // Carbon app APIs
+  emissionsAPI: "carbon/",
+  emissionsDashboard: "carbon/dashboard/",
+  emissionsYearlyComparison: "carbon/yearly-comparison/",
+  emissionsReport: "carbon/report/",
+  emissionsCalculate: "carbon/calculate/",
+  emissionsPeriods: "carbon/periods/",
+  emissionsOwnerDashboard: "carbon/owner-dashboard/",
+  emissionsFactors: "carbon/factors/",
+  emissionsCalculations: "carbon/calculations/",
+  emissionsRules: "carbon/rules/",
+  emissionsGWP: "carbon/gwp/",
+  emissionsReportConfigs: "carbon/report-configs/",
 };
 
 // Pulse AI Configuration

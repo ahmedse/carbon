@@ -41,7 +41,7 @@ function ActionCellComponent({ row, onDeleteRow, tableId, rowId }) {
     const effectiveTableId = tableId || row.data_table || row.table_id;
     const effectiveRowId = rowId || row.id;
     if (effectiveTableId && effectiveRowId) {
-      navigate(`/dataschema/row/${effectiveTableId}/${effectiveRowId}`);
+      navigate(`/carbon/data-entry/row/${effectiveTableId}/${effectiveRowId}`);
     }
   };
 
