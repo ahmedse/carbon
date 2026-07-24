@@ -213,6 +213,37 @@ This is the authoritative log of all Master/Worker RUNs for the Carbon project.
 
 ---
 
+### F-Track P1: Scoped Data Owner Portal + Dashboard (2026-07-23) ✅
+**Objective:** Build first carbon product apps — Scoped Data Owner Portal (App 1) and Scoped Owner Dashboard (App 2)
+**Workers:** F1 (Backend) + F2 (Frontend) — parallel execution
+
+**F1 — Backend Worker:**
+- Hardened `AssetProfileViewSet.get_queryset()` in [`backend/catalog/views.py`](../catalog/views.py:200) — added ScopedRole-based org_unit filtering (restrictive mode: no org_units → empty queryset)
+- Verified `DQRuleViewSet.get_queryset()` already restrictive — no change needed
+- Implemented `OwnerDashboardAPIView` at [`backend/emissions/views.py`](../emissions/views.py:660) — 97 lines, full scope/calculation aggregation
+- Registered endpoint at `GET /carbon-api/emissions/owner-dashboard/` in [`backend/emissions/urls.py`](../emissions/urls.py:38)
+- 7 comprehensive RBAC tests in `backend/emissions/tests/test_scoped_access.py`
+
+**F2 — Frontend Worker:**
+- Created `carbon-frontend/src/api/emissions.js` — `fetchOwnerDashboard()` + `fetchReportingPeriodsFiltered()` functions
+- Created [`carbon-frontend/src/pages/data-owner/DataOwnerPortalPage.jsx`](../carbon-frontend/src/pages/data-owner/DataOwnerPortalPage.jsx) — domain cards, quick stats, recent activity, empty state
+- Created [`carbon-frontend/src/pages/data-owner/DataOwnerDashboardPage.jsx`](../carbon-frontend/src/pages/data-owner/DataOwnerDashboardPage.jsx) — KPI tiles (Total/Scope 1/2/3), DQ summary, submission status
+- Created [`carbon-frontend/src/pages/data-owner/DataOwnerAssetsPage.jsx`](../carbon-frontend/src/pages/data-owner/DataOwnerAssetsPage.jsx) — scoped asset grid with search + domain filter
+- Registered 3 routes in [`carbon-frontend/src/App.jsx`](../carbon-frontend/src/App.jsx:162): `/data-owner`, `/data-owner/dashboard`, `/data-owner/assets`
+- Added `DataOwnerSidebar` component in `SidebarMenu.jsx` (line 549) with "My Data" nav section
+- All pages: theme.palette colors, empty state when `context.org_units` is empty, responsive layout
+
+**Key Metrics:**
+- 3 new frontend pages created
+- 1 new backend API view (97 lines)
+- 7 backend tests
+- RBAC: superuser/staff bypass; data owners scoped; no-role → 403/empty
+- Django system check: 0 issues
+
+**Result:** See `TASK-RESULT-CARBON-P1.md` (root) when workers file it
+
+---
+
 ## Archive
 
 Superseded status documents moved to `docs/archive/`:

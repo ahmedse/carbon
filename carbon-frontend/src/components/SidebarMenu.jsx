@@ -569,29 +569,29 @@ function DataOwnerSidebar({ collapsed, location }) {
       </Typography>
 
       <MenuItem
-        to="/data-owner"
+        to="/carbon/owner/portal"
         icon={<DashboardIcon />}
         label="My Portal"
         tooltip="Overview of your domain assets"
-        selected={location.pathname === "/data-owner"}
+        selected={location.pathname === "/carbon/owner/portal"}
         collapsed={collapsed}
         sx={{ mb: 0.5 }}
       />
       <MenuItem
-        to="/data-owner/dashboard"
+        to="/carbon/owner/dashboard"
         icon={<AnalyticsIcon />}
         label="My Dashboard"
         tooltip="Emissions KPIs and data quality"
-        selected={location.pathname === "/data-owner/dashboard"}
+        selected={location.pathname === "/carbon/owner/dashboard"}
         collapsed={collapsed}
         sx={{ mb: 0.5 }}
       />
       <MenuItem
-        to="/data-owner/assets"
+        to="/carbon/owner/assets"
         icon={<TableIcon />}
         label="My Assets"
         tooltip="Scoped asset browser"
-        selected={location.pathname === "/data-owner/assets"}
+        selected={location.pathname === "/carbon/owner/assets"}
         collapsed={collapsed}
         sx={{ mb: 0.5 }}
       />

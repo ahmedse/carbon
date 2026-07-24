@@ -54,6 +54,10 @@ import ImportsDetailPage from "./pages/catalog/ImportsDetailPage";
 import DataOwnerPortalPage from "./pages/data-owner/DataOwnerPortalPage";
 import DataOwnerDashboardPage from "./pages/data-owner/DataOwnerDashboardPage";
 import DataOwnerAssetsPage from "./pages/data-owner/DataOwnerAssetsPage";
+import EmissionFactorsPage from "./pages/emissions/EmissionFactorsPage";
+import ReportGeneratorPage from "./pages/emissions/ReportGeneratorPage";
+import SavedReportsPage from "./pages/emissions/SavedReportsPage";
+import ReportingPeriodsPage from "./pages/emissions/ReportingPeriodsPage";
 
 // New Dashboard Architecture
 import {
@@ -158,10 +162,22 @@ export default function App() {
                 <Route path="/emissions/dashboard" element={<EmissionsDashboard />} />
                 <Route path="/emissions/report" element={<EmissionsReport />} />
                 
-                {/* Data Owner Portal Routes */}
-                <Route path="/data-owner" element={<DataOwnerPortalPage />} />
-                <Route path="/data-owner/dashboard" element={<DataOwnerDashboardPage />} />
-                <Route path="/data-owner/assets" element={<DataOwnerAssetsPage />} />
+                {/* Carbon App — all routes under /carbon/* namespace */}
+                <Route path="/carbon/dashboard" element={<EmissionsDashboard />} />
+                <Route path="/carbon/analytics" element={<Navigate to="/dashboards/analytics" replace />} />
+                <Route path="/carbon/admin/factors" element={<AdminRoute><EmissionFactorsPage /></AdminRoute>} />
+                <Route path="/carbon/reporting/generate" element={<ReportGeneratorPage />} />
+                <Route path="/carbon/reporting/saved" element={<SavedReportsPage />} />
+                <Route path="/carbon/reporting/periods" element={<AdminRoute><ReportingPeriodsPage /></AdminRoute>} />
+                
+                {/* Carbon App — Data Owner Routes (namespace: /carbon/owner/*) */}
+                <Route path="/carbon/owner/portal" element={<DataOwnerPortalPage />} />
+                <Route path="/carbon/owner/dashboard" element={<DataOwnerDashboardPage />} />
+                <Route path="/carbon/owner/assets" element={<DataOwnerAssetsPage />} />
+                {/* Legacy redirects */}
+                <Route path="/data-owner" element={<Navigate to="/carbon/owner/portal" replace />} />
+                <Route path="/data-owner/dashboard" element={<Navigate to="/carbon/owner/dashboard" replace />} />
+                <Route path="/data-owner/assets" element={<Navigate to="/carbon/owner/assets" replace />} />
                 {/* Admin-only: Schema Admin > Table Manager */}
                 <Route
                   path="/schema-admin/table-manager"
@@ -207,6 +223,9 @@ export default function App() {
                 <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
                  <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />
                 {/* Data Hub */}
+                <Route path="/carbon/data-entry" element={<DataHubHome />} />
+                <Route path="/carbon/data-entry/entry/:moduleName/:tableId" element={<DataEntryPage />} />
+                <Route path="/carbon/data-entry/row/:tableId/:rowId" element={<RowDetailPage />} />
                 <Route path="/dataschema" element={<DataHubHome />} />
                 <Route
                   path="/dataschema/entry/:moduleName/:tableId"

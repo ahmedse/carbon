@@ -62,6 +62,21 @@ def get_allowed_module_ids(user, roles):
     return module_ids
 
 
+def get_visible_org_units(user):
+    """Return org units the user may view for emissions owner pages."""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return []
+    from mdm.models import OrgUnit
+
+    if user_is_global_admin(user):
+        return list(OrgUnit.objects.filter(is_active=True).order_by('name'))
+
+    allowed_ids = get_allowed_org_unit_ids(user, VISIBILITY_ROLES)
+    if not allowed_ids:
+        return []
+    return list(OrgUnit.objects.filter(id__in=allowed_ids, is_active=True).order_by('name'))
+
+
 # --- Visibility helpers (org-scoped READ access) -------------------------------
 ADMIN_ROLES = ["admin", "admins_group"]
 VISIBILITY_ROLES = ["admins_group", "dataowners_group", "auditors_group"]

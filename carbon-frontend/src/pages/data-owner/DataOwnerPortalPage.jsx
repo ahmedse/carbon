@@ -6,11 +6,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
-  fetchDataDomains,
-  fetchAssetProfiles,
-  fetchGovernanceEvents,
-} from '../../api/catalog';
-import { fetchDQMetrics } from '../../api/dq';
+  fetchOwnerSummary,
+  fetchOwnerAssets,
+  fetchOwnerActivity,
+} from '../../api/emissions';
 import {
   Box,
   Container,
@@ -182,7 +181,7 @@ const DomainCard = ({ domain, assetCount, avgQuality, navigate, theme }) => {
       <CardActions>
         <Button
           size="small"
-          onClick={() => navigate(`/data-owner/assets?domain=${domain.id}`)}
+          onClick={() => navigate(`/carbon/owner/assets?domain=${domain.id}`)}
           sx={{ color: theme.palette.success.main, fontWeight: 500 }}
         >
           View Assets →
@@ -253,30 +252,26 @@ export default function DataOwnerPortalPage() {
       try {
         setLoading(true);
 
-        // Check if user has org_unit scope
-        if (!context?.org_units || context.org_units.length === 0) {
+        const summaryRes = await fetchOwnerSummary(token);
+
+        if (!summaryRes?.org_unit) {
           setError('no-scope');
           setLoading(false);
           return;
         }
 
-        // Load domains
-        const domainsRes = await fetchDataDomains({}, token);
-        setDomains(domainsRes.results || domainsRes);
+        const assetsRes = await fetchOwnerAssets({}, token);
+        const activityRes = await fetchOwnerActivity({ limit: 10 }, token);
 
-        // Load assets
-        const assetsRes = await fetchAssetProfiles({}, token);
-        const assetsList = Array.isArray(assetsRes) ? assetsRes : assetsRes.results || [];
-        setAssets(assetsList);
+        const orgDomain = {
+          id: summaryRes.org_unit.id,
+          name: summaryRes.org_unit.name,
+          description: `${summaryRes.summary.total_modules} module(s) in scope`,
+        };
 
-        // Load recent events
-        try {
-          const eventsRes = await fetchGovernanceEvents({}, token);
-          setEvents((Array.isArray(eventsRes) ? eventsRes : eventsRes.results || []).slice(0, 10));
-        } catch (e) {
-          console.warn('Could not load governance events:', e);
-        }
-
+        setDomains([orgDomain]);
+        setAssets(Array.isArray(assetsRes) ? assetsRes : []);
+        setEvents(Array.isArray(activityRes) ? activityRes : []);
         setError(null);
       } catch (err) {
         console.error('Error loading portal data:', err);
@@ -293,7 +288,7 @@ export default function DataOwnerPortalPage() {
     if (token) {
       loadData();
     }
-  }, [token, context, showNotification]);
+  }, [token, showNotification]);
 
   if (loading) {
     return (
@@ -404,7 +399,7 @@ export default function DataOwnerPortalPage() {
                 </Typography>
               </CardContent>
               <CardActions>
-                <Button size="small" onClick={() => navigate('/data-owner/dashboard')}>
+                <Button size="small" onClick={() => navigate('/carbon/owner/dashboard')}>
                   Go to Dashboard
                 </Button>
               </CardActions>
@@ -419,7 +414,7 @@ export default function DataOwnerPortalPage() {
                 </Typography>
               </CardContent>
               <CardActions>
-                <Button size="small" onClick={() => navigate('/data-owner/assets')}>
+                <Button size="small" onClick={() => navigate('/carbon/owner/assets')}>
                   View Assets
                 </Button>
               </CardActions>

@@ -183,6 +183,41 @@ export async function fetchOwnerDashboard(token, orgUnitId = null, periodId = nu
 }
 
 /**
+ * Fetch data owner summary (org unit, modules, stats)
+ * @param {string} token - JWT token
+ */
+export async function fetchOwnerSummary(token) {
+  return apiFetch(`${API_ROUTES.emissionsAPI}owner/summary/`, { token });
+}
+
+/**
+ * Fetch emission-generating assets scoped to the user's org unit
+ * @param {Object} params - Query parameters
+ * @param {string} token - JWT token
+ */
+export async function fetchOwnerAssets({ search, scope } = {}, token) {
+  const params = new URLSearchParams();
+  if (search) params.append('search', search);
+  if (scope) params.append('scope', scope);
+
+  const endpoint = params.toString()
+    ? `${API_ROUTES.emissionsAPI}owner/assets/?${params.toString()}`
+    : `${API_ROUTES.emissionsAPI}owner/assets/`;
+
+  return apiFetch(endpoint, { token });
+}
+
+/**
+ * Fetch recent activity for a data owner
+ * @param {Object} params - Query parameters
+ * @param {number} params.limit - Max number of events to return
+ * @param {string} token - JWT token
+ */
+export async function fetchOwnerActivity({ limit = 20 } = {}, token) {
+  return apiFetch(`${API_ROUTES.emissionsAPI}owner/activity/?limit=${limit}`, { token });
+}
+
+/**
  * Fetch reporting periods with optional status filter
  * @param {string} token - JWT token
  * @param {string} status - Optional filter by status (open, closed, etc.)

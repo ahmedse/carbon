@@ -22,19 +22,18 @@ const CommandPalette = lazy(() => import('./CommandPalette'));
 
 // Default path per studio
 const STUDIO_PATHS = {
-  home: '/dashboard',
-  emissions: '/emissions',
-  dataschema: '/dataschema',
+  home:    '/dashboard',
+  carbon:  '/carbon/dashboard',   // app studio: default to carbon dashboard
   catalog: '/catalog/domains',
-  admin: '/admin/users',
-  settings: '/settings',
-  help: '/help',
+  admin:   '/admin/users',
+  settings:'/settings',
+  help:    '/help',
 };
 
 // Infer active studio from current URL
 function studioFromPath(pathname) {
-  if (pathname.startsWith('/emissions')) return 'emissions';
-  if (pathname.startsWith('/dataschema') || pathname.startsWith('/schema-admin')) return 'dataschema';
+  if (pathname.startsWith('/carbon')) return 'carbon';  // app studio — checked first
+  if (pathname.startsWith('/emissions') || pathname.startsWith('/dataschema') || pathname.startsWith('/schema-admin')) return 'carbon';
   if (pathname.startsWith('/catalog')) return 'catalog';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/settings')) return 'settings';

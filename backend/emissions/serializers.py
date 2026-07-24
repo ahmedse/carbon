@@ -2,7 +2,7 @@
 # Serializers for Emission Factor Calculator API
 
 from rest_framework import serializers
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig
 
 
 class ReportingPeriodSerializer(serializers.ModelSerializer):
@@ -171,3 +171,24 @@ class EmissionReportSerializer(serializers.Serializer):
     summary = serializers.DictField()
     scope_details = serializers.ListField()
     rows = EmissionReportRowSerializer(many=True)
+
+
+class ReportConfigSerializer(serializers.ModelSerializer):
+    """Serializer for saved report configurations."""
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    reporting_period_name = serializers.CharField(source='reporting_period.name', read_only=True, allow_null=True)
+    org_unit_name = serializers.CharField(source='org_unit.name', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = ReportConfig
+        fields = [
+            'id', 'name', 'created_by', 'created_by_username',
+            'reporting_period', 'reporting_period_name',
+            'custom_start', 'custom_end',
+            'org_unit', 'org_unit_name',
+            'ghg_scopes', 'categories',
+            'output_format', 'grouping',
+            'include_dq_status', 'include_unverified',
+            'last_run_at', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_by', 'last_run_at', 'created_at', 'updated_at']

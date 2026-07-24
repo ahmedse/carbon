@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
-import { fetchOwnerDashboard, fetchReportingPeriodsFiltered } from '../../api/emissions';
+import { fetchOwnerDashboard, fetchReportingPeriodsFiltered, fetchOwnerSummary } from '../../api/emissions';
 import {
   Box,
   Container,
@@ -201,8 +201,16 @@ export default function DataOwnerDashboardPage() {
         }
 
         // Load dashboard data
-        const dashRes = await fetchOwnerDashboard(token, defaultOrgUnit, selectedPeriod);
-        setDashboardData(dashRes);
+        const [dashRes, summaryRes] = await Promise.all([
+          fetchOwnerDashboard(token, defaultOrgUnit, selectedPeriod),
+          fetchOwnerSummary(token),
+        ]);
+
+        setDashboardData({
+          ...dashRes,
+          summary: summaryRes?.summary || null,
+          org_unit: dashRes?.org_unit || summaryRes?.org_unit || null,
+        });
         setError(null);
       } catch (err) {
         console.error('Error loading dashboard:', err);

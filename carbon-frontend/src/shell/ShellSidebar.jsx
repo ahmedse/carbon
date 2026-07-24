@@ -17,15 +17,33 @@ import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import SecurityIcon from '@mui/icons-material/Security';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import EditIcon from '@mui/icons-material/Edit';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import StorageIcon from '@mui/icons-material/Storage';
 import DownloadIcon from '@mui/icons-material/Download';
 import UploadIcon from '@mui/icons-material/Upload';
 import AssignmentIcon from '@mui/icons-material/Assignment';
-import LabelIcon from '@mui/icons-material/Label';
 import LayersIcon from '@mui/icons-material/Layers';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import ScienceIcon from '@mui/icons-material/Science';
+import FolderIcon from '@mui/icons-material/Folder';
+import Co2Icon from '@mui/icons-material/Co2';
 import { useAuth } from '../auth/AuthContext';
+import { APP_REGISTRY } from '../apps/registry';
+
+// UI-driven icon mapping for Carbon sidebar items
+// This allows icons to be chosen at runtime without hardcoding
+const CARBON_ITEM_ICONS = {
+  'My Portal':       LocationOnIcon,
+  'My Dashboard':    BarChartIcon,
+  'My Assets':       StorageIcon,
+  'Data Entry Hub':  AddCircleOutlineIcon,
+  'Generate Report': AssessmentIcon,
+  'Saved Reports':   FolderIcon,
+  'Analytics':       BarChartIcon,
+  'Emission Factors': ScienceIcon,
+  'Reporting Periods': AssignmentIcon,
+  'Table Manager':   TableChartIcon,
+  'Dashboard':       DashboardIcon,
+};
 
 // Define sidebar content per studio
 function getSidebarItems(studioId) {
@@ -37,18 +55,17 @@ function getSidebarItems(studioId) {
         { label: 'Targets', path: '/dashboards/targets', icon: AssessmentIcon },
       ];
     
-    case 'emissions':
-      return [
-        { label: 'Dashboard', path: '/emissions/dashboard', icon: DashboardIcon },
-        { label: 'Report', path: '/emissions/report', icon: AssessmentIcon },
-      ];
-    
-    case 'dataschema':
-      return [
-        { label: 'Data Entry', path: '/dataschema', icon: AddCircleOutlineIcon },
-        { label: 'Table Manager', path: '/schema-admin/table-manager', icon: TableChartIcon },
-        { label: 'Data Quality', path: '/dataschema/quality', icon: RuleIcon },
-      ];
+    case 'carbon': {
+      // Carbon app — read from manifest, resolve icons by label (same pattern as Catalog)
+      const carbonApp = APP_REGISTRY.find(m => m.id === 'carbon');
+      if (carbonApp && carbonApp.navigation && carbonApp.navigation.items) {
+        return carbonApp.navigation.items.map(item => ({
+          ...item,
+          icon: CARBON_ITEM_ICONS[item.label] || DashboardIcon,
+        }));
+      }
+      return [];
+    }
     
     case 'catalog':
       return [
@@ -95,22 +112,32 @@ function getSidebarItems(studioId) {
         { label: 'Feedback', path: '/feedback', icon: AssessmentIcon },
       ];
     
-    default:
+    default: {
+      // Dynamic lookup: if this studioId is a manifest app, return its nav items.
+      // This makes ALL future apps work with zero additional changes here.
+      const manifest = APP_REGISTRY.find(m => m.id === studioId);
+      if (manifest) {
+        return manifest.navigation.items.map(item => ({
+          ...item,
+          icon: DashboardIcon,   // Future: add iconName to manifest nav items for dynamic resolution
+        }));
+      }
       return [];
-  }
+    }
+   }
 }
 
 function getStudioTitle(studioId) {
   const titles = {
-    home: 'Dashboard',
-    emissions: 'Emissions',
-    dataschema: 'Data Hub',
+    home:    'Dashboard',
     catalog: 'Catalog Studio',
-    admin: 'Administration',
-    settings: 'Settings',
-    help: 'Help & Support',
+    admin:   'Administration',
+    settings:'Settings',
+    help:    'Help & Support',
   };
-  return titles[studioId] || 'Carbon';
+  return titles[studioId]
+    || APP_REGISTRY.find(m => m.id === studioId)?.name
+    || 'Carbon';
 }
 
 export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
@@ -126,14 +153,28 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
     items = []; // Hide all admin items for non-admin users
   }
   
-  // If in dataschema studio, hide Table Manager for non-admins
-  if (activeStudio === 'dataschema' && !availablePerspectives.includes('admin')) {
-    items = items.filter(item => item.path !== '/schema-admin/table-manager');
+  // Filter items by role-based access (for Carbon and other manifest-driven apps)
+  if (activeStudio === 'carbon') {
+    const userRoles = availablePerspectives || [];
+    items = items.filter(item => {
+      // Always show items without role restriction (role: '*') or no role set
+      if (!item.role || item.role === '*') return true;
+      // Show dividers and groups always
+      if (item.type === 'divider' || item.type === 'group') return true;
+      // For regular items with role: check if user has that role
+      // Match both full role format (carbon:data_owner) and short format (data-owner)
+      if (item.role.includes(':')) {
+        // Extract the role suffix after ':' and convert underscore to hyphen
+        const roleSuffix = item.role.split(':')[1].replace(/_/g, '-');
+        return userRoles.includes(roleSuffix) || userRoles.includes('admin');
+      }
+      return userRoles.includes(item.role);
+    });
   }
 
-  // Compute org unit and scope summary for dataschema context header
+  // Compute org unit and scope summary for carbon context header
   const { userOrgUnit, moduleSummary } = useMemo(() => {
-    if (activeStudio !== 'dataschema') return {};
+    if (activeStudio !== 'carbon') return {};
     const modules = context?.modules || [];
     const orgName = modules.find(m => m.org_unit_name)?.org_unit_name || null;
 
@@ -208,8 +249,8 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
         </Tooltip>
       </Box>
 
-      {/* Context header — only in Data Hub */}
-      {activeStudio === 'dataschema' && (userOrgUnit || moduleSummary) && (
+      {/* Context header — only in Carbon studio */}
+      {activeStudio === 'carbon' && (userOrgUnit || moduleSummary) && (
         <Box
           sx={{
             px: 2,
@@ -267,68 +308,91 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
             </Typography>
           </Box>
         ) : (
-          items.map((item, index) => {
-            // Handle divider
-            if (item.type === 'divider') {
-              return <Divider key={`divider-${index}`} sx={{ my: 0.5 }} />;
-            }
+          (() => {
+            const rendered = [];
+            let lastWasDivider = false;
+            
+            items.forEach((item, index) => {
+              // Skip rendering if no type or path for the item
+              if (!item.type && !item.path) {
+                return;
+              }
 
-            // Handle group header
-            if (item.type === 'group') {
-              return (
-                <Typography
-                  key={`group-${item.label}`}
-                  variant="caption"
+              // Handle divider
+              if (item.type === 'divider') {
+                // Skip consecutive dividers
+                if (!lastWasDivider && rendered.length > 0) {
+                  rendered.push(
+                    <Divider key={`divider-${index}`} sx={{ my: 0.5 }} />
+                  );
+                  lastWasDivider = true;
+                }
+                return;
+              }
+
+              // Handle group header
+              if (item.type === 'group') {
+                rendered.push(
+                  <Typography
+                    key={`group-${item.label}`}
+                    variant="caption"
+                    sx={{
+                      px: 1.5,
+                      py: 1,
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      fontSize: '0.7rem',
+                      color: 'text.secondary',
+                      letterSpacing: '0.05em',
+                      display: 'block',
+                      mt: 1,
+                    }}
+                  >
+                    {item.label}
+                  </Typography>
+                );
+                lastWasDivider = false;
+                return;
+              }
+
+              // Handle regular navigation items
+              const Icon = item.icon;
+              const itemPath = item.path ? item.path.replace(/\/+$|^\/+/, '') : '';
+              const isActive = itemPath && (normalizedLocation === itemPath || normalizedLocation.startsWith(`${itemPath}/`));
+              rendered.push(
+                <ListItemButton
+                  key={item.path}
+                  onClick={() => onNavigate(item)}
+                  selected={isActive}
                   sx={{
-                    px: 1.5,
+                    borderRadius: 1,
+                    mb: 0.5,
                     py: 1,
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    fontSize: '0.7rem',
-                    color: 'text.secondary',
-                    letterSpacing: '0.05em',
-                    display: 'block',
+                    px: 1.5,
+                    bgcolor: isActive ? 'action.selected' : 'transparent',
+                    '&:hover': {
+                      bgcolor: 'action.hover',
+                    },
                   }}
                 >
-                  {item.label}
-                </Typography>
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    <Icon sx={{ fontSize: 18, color: isActive ? 'primary.main' : 'text.secondary' }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{
+                      fontSize: '0.8125rem',
+                      fontWeight: isActive ? 700 : 500,
+                      color: isActive ? 'text.primary' : 'text.secondary',
+                    }}
+                  />
+                </ListItemButton>
               );
-            }
-
-            // Handle regular navigation items
-            const Icon = item.icon;
-            const itemPath = item.path.replace(/\/+$|^\/+/, '');
-            const isActive = normalizedLocation === itemPath || normalizedLocation.startsWith(`${itemPath}/`);
-            return (
-              <ListItemButton
-                key={item.path}
-                onClick={() => onNavigate(item)}
-                selected={isActive}
-                sx={{
-                  borderRadius: 1,
-                  mb: 0.5,
-                  py: 1,
-                  px: 1.5,
-                  bgcolor: isActive ? 'action.selected' : 'transparent',
-                  '&:hover': {
-                    bgcolor: 'action.hover',
-                  },
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 36 }}>
-                  <Icon sx={{ fontSize: 18, color: isActive ? 'primary.main' : 'text.secondary' }} />
-                </ListItemIcon>
-                <ListItemText
-                  primary={item.label}
-                  primaryTypographyProps={{
-                    fontSize: '0.8125rem',
-                    fontWeight: isActive ? 700 : 500,
-                    color: isActive ? 'text.primary' : 'text.secondary',
-                  }}
-                />
-              </ListItemButton>
-            );
-          })
+              lastWasDivider = false;
+            });
+            
+            return rendered;
+          })()
         )}
       </List>
     </Box>

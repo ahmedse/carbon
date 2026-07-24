@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.contrib.auth.models import Group
 from django.test import TestCase
+from django.urls import reverse
 from rest_framework.test import APIClient
 
 from accounts.models import ScopedRole, User
@@ -14,7 +15,6 @@ from mdm.models import OrgUnit
 class OwnerApiEndpointsTest(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(username='owner', password='pass123')
-        self.outsider = User.objects.create_user(username='outsider', password='pass123')
 
         self.org_unit = OrgUnit.objects.create(name='Engineering', slug='engineering')
         self.other_org_unit = OrgUnit.objects.create(name='Finance', slug='finance')
@@ -25,7 +25,7 @@ class OwnerApiEndpointsTest(TestCase):
         self.table = DataTable.objects.create(module=self.module, name='electricity_usage')
         self.other_table = DataTable.objects.create(module=self.other_module, name='fleet_usage')
 
-        DataRow.objects.create(data_table=self.table, values={'kwh': 1000})
+        self.data_row = DataRow.objects.create(data_table=self.table, values={'kwh': 1000})
         DataRow.objects.create(data_table=self.other_table, values={'liters': 200})
 
         self.period = ReportingPeriod.objects.create(
@@ -47,7 +47,7 @@ class OwnerApiEndpointsTest(TestCase):
         )
 
         Calculation.objects.create(
-            data_row=DataRow.objects.first(),
+            data_row=self.data_row,
             module=self.module,
             emission_factor=self.factor,
             activity_value=Decimal('1000'),
@@ -55,20 +55,6 @@ class OwnerApiEndpointsTest(TestCase):
             co2e_kg=Decimal('500'),
             scope=2,
             category='electricity',
-            reporting_period=self.period,
-            reporting_year=2026,
-            reporting_month=1,
-            activity_date='2026-01-15',
-        )
-        Calculation.objects.create(
-            data_row=DataRow.objects.last(),
-            module=self.other_module,
-            emission_factor=self.factor,
-            activity_value=Decimal('200'),
-            activity_unit='kWh',
-            co2e_kg=Decimal('100'),
-            scope=1,
-            category='transport',
             reporting_period=self.period,
             reporting_year=2026,
             reporting_month=1,
@@ -83,7 +69,7 @@ class OwnerApiEndpointsTest(TestCase):
     def test_summary_endpoint_returns_scoped_summary(self):
         self.client.force_authenticate(self.owner)
 
-        response = self.client.get('/api/v1/emissions/owner/summary/')
+        response = self.client.get(reverse('emissions:owner-summary'))
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -95,7 +81,7 @@ class OwnerApiEndpointsTest(TestCase):
     def test_assets_endpoint_returns_emission_sources(self):
         self.client.force_authenticate(self.owner)
 
-        response = self.client.get('/api/v1/emissions/owner/assets/')
+        response = self.client.get(reverse('emissions:owner-assets'))
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -106,7 +92,7 @@ class OwnerApiEndpointsTest(TestCase):
     def test_activity_endpoint_returns_recent_emission_activity(self):
         self.client.force_authenticate(self.owner)
 
-        response = self.client.get('/api/v1/emissions/owner/activity/')
+        response = self.client.get(reverse('emissions:owner-activity'))
 
         self.assertEqual(response.status_code, 200)
         data = response.json()

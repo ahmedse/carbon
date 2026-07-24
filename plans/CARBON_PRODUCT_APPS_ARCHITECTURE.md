@@ -1,9 +1,17 @@
-# Carbon Product Apps — Architecture & Portfolio Plan
+# Carbon Footprint App — Architecture & Feature Portfolio
 
-> **Status:** Approved direction for Phase 2 carbon-specific application layer  
-> **Prerequisite:** Data Trust Core Phase 1 — ✅ COMPLETE (326 tests passing)  
-> **Author:** Architect  
-> **Date:** 2026-07-21
+> **Status:** Active delivery plan. Carbon is **App #1** on the Data Trust Platform.
+> **Version:** 1.1 — 2026-07-23
+> **Prerequisite:** Data Trust Core Phase 1 — ✅ COMPLETE (326 tests passing)
+> **Platform model:** See [`docs/PLATFORM_APP_MODEL.md`](../docs/PLATFORM_APP_MODEL.md) for the
+>   platform-as-OS / apps-as-plugins architecture that this app is the first instance of.
+>
+> **Positioning:** Carbon is a **domain app** that plugs into the Data Trust Platform. It consumes
+>   platform services (Catalog, MDM, DQ, RBAC, Audit) but does not own or modify them. The platform
+>   team owns the core; the Carbon app team ships business value on top of it.
+>
+> **Route namespace:** `/carbon/*` (frontend) · `/api/v1/carbon/*` (new features)
+> **Existing stable API:** `/api/v1/emissions/*` remains unchanged (no migration needed)
 
 ---
 
@@ -39,24 +47,84 @@
 
 ---
 
-## 2. Carbon App Portfolio
+## 2. Carbon App — Internal Structure
+
+### Carbon as a Platform App
+
+Following the App Contract defined in [`docs/PLATFORM_APP_MODEL.md`](../docs/PLATFORM_APP_MODEL.md),
+Carbon is structured as a self-contained package. It does not live inside the platform's
+`catalog/`, `mdm/`, or `dq/` apps. It consumes them.
+
+```
+CARBON APP STRUCTURE
+│
+├── PERSONAS (who uses it)
+│   ├── Data Owner    → scoped to their org unit, CRUD on their data, quality ownership
+│   ├── Analyst       → read-only, cross-org visibility, trend analysis
+│   ├── Carbon Admin  → manages factors, rules, periods, compliance calendar
+│   └── Executive     → top-level aggregated view (served by platform dashboards)
+│
+├── MODULES (what it does)
+│   ├── Data Collection    → data entry forms, module assignments
+│   ├── Calculations       → emission factors, calculation rules, auto-calc engine
+│   ├── Reporting Periods  → open/close cycles, submission workflow
+│   ├── Dashboards         → per-persona, scoped KPI views
+│   └── Reports            → GHG protocol exports, regulatory reporting
+│
+├── PLATFORM SERVICES CONSUMED (Carbon is a consumer, not an owner)
+│   ├── Catalog API    → asset metadata context for carbon data assets
+│   ├── MDM API        → reference data (emission factors as reference sets)
+│   ├── DQ API         → quality scores on carbon data tables
+│   ├── ScopedRole     → org-unit access control (shared RBAC, not carbon-specific)
+│   └── GovernanceEvent→ audit trail for all carbon mutations
+│
+└── APP-PRIVATE (owned exclusively by Carbon, never touched by the platform)
+    ├── Emission calculations + history
+    ├── ReportingPeriod lifecycle
+    ├── Carbon-specific calculation rules
+    └── Carbon roles: carbon:data_owner, carbon:analyst, carbon:admin
+```
+
+### Route Namespace (App #1 pattern — all future apps follow the same)
+
+```
+/carbon/                       ← App root
+  dashboard/                   ← All carbon users (summary)
+  owner/                       ← Data Owner persona (scoped to org unit)
+    portal/                    ← My domains + quality badges
+    emissions/                 ← My scoped emissions dashboard
+    assets/                    ← My scoped data assets (reads platform catalog)
+    data-entry/                ← CRUD: my org-unit data entry
+  analytics/                   ← Analyst persona
+    benchmarks/                ← Cross-campus comparison
+    trends/                    ← Period-over-period trends
+  reporting/                   ← Reporting cycle management
+    periods/                   ← Period lifecycle (open/close/submit)
+    submissions/               ← Submission status by org unit
+    exports/                   ← GHG protocol exports
+  admin/                       ← Carbon Admin only
+    emission-factors/          ← Manage emission factor library
+    calculation-rules/         ← Define / audit rules
+```
 
 ### Architecture overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  CARBON PRODUCT APPS (org-unit scoped, emissions domain)            │
+│  CARBON APP (App #1 on the Data Trust Platform)                     │
 │                                                                      │
-│  App 1: Scoped Data Owner Portal    App 2: Scoped Owner Dashboard    │
-│  App 3: Report Generator            App 4: Data Submission Workflow  │
-│  App 5: Emission Factor Manager     App 6: Carbon Budget Tracker     │
-│  App 7: Compliance Calendar         App 8: Benchmark Comparator      │
+│  /carbon/owner/*          /carbon/analytics/*                       │
+│  /carbon/reporting/*      /carbon/admin/*                           │
+│  /carbon/dashboard                                                   │
+│                                                                      │
+│  carbon:data_owner | carbon:analyst | carbon:admin roles            │
 └──────────────────▲──────────────────────────────────────────────────┘
-                   │ consumes via REST (ScopedRole-protected)
+                   │ consumes via stable REST APIs (ScopedRole-protected)
 ┌──────────────────┴──────────────────────────────────────────────────┐
-│  DATA TRUST CORE — catalog / mdm / dq  (domain-agnostic)            │
-│  dataschema engine · accounts RBAC · core OrgUnit/Module            │
-│  emissions: Calculation, EmissionFactor, ReportingPeriod, GWP       │
+│  DATA TRUST PLATFORM — L1/L2 (domain-agnostic, never app-specific) │
+│                                                                      │
+│  catalog · mdm · dq · dataschema engine · ScopedRole RBAC          │
+│  emissions models (Calculation, Factor, Period) · GovernanceEvent   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 

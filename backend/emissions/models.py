@@ -734,3 +734,71 @@ class CalculationRule(models.Model):
                 errors += 1
         
         return created, skipped, errors
+
+
+class ReportConfig(models.Model):
+    """
+    Saved report configuration for reusable report generation.
+    Captures: which period, which org_unit subtree, which GHG scopes,
+    which categories, and output format preferences.
+    """
+    PERIOD_TYPE_CHOICES = [
+        ('existing', 'Existing Reporting Period'),
+        ('custom', 'Custom Date Range'),
+    ]
+    FORMAT_CHOICES = [
+        ('json', 'JSON'),
+        ('csv', 'CSV'),
+    ]
+    GROUPING_CHOICES = [
+        ('scope', 'By GHG Scope'),
+        ('category', 'By Category'),
+        ('module', 'By Module'),
+        ('month', 'By Month'),
+    ]
+
+    name = models.CharField(max_length=200, help_text="e.g., 'FY 2026 Smart Village Annual Report'")
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, related_name='report_configs'
+    )
+
+    # Period selection
+    reporting_period = models.ForeignKey(
+        ReportingPeriod, on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="If null, use custom_start / custom_end"
+    )
+    custom_start = models.DateField(null=True, blank=True)
+    custom_end = models.DateField(null=True, blank=True)
+
+    # Scope filters
+    org_unit = models.ForeignKey(
+        'mdm.OrgUnit', on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="Scope to this org_unit subtree (null = all accessible)"
+    )
+    ghg_scopes = models.JSONField(
+        default=list,
+        help_text="List of GHG scope numbers to include, e.g., [1, 2, 3]. Empty = all."
+    )
+    categories = models.JSONField(
+        default=list,
+        help_text="List of category codes to include. Empty = all."
+    )
+
+    # Output preferences
+    output_format = models.CharField(max_length=10, choices=FORMAT_CHOICES, default='json')
+    grouping = models.CharField(max_length=20, choices=GROUPING_CHOICES, default='scope')
+    include_dq_status = models.BooleanField(default=True)
+    include_unverified = models.BooleanField(default=False)
+
+    # Metadata
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+        verbose_name = "Report Configuration"
+        verbose_name_plural = "Report Configurations"
+
+    def __str__(self):
+        return self.name

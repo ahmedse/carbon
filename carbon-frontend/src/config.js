@@ -127,6 +127,7 @@ export const API_ROUTES = {
   aiQaRun: "ai/qa/run/",
   
   // Emissions Calculator
+  emissionsAPI: "emissions/",
   emissionsDashboard: "emissions/dashboard/",
   emissionsYearlyComparison: "emissions/yearly-comparison/",
   emissionsReport: "emissions/report/",
@@ -137,6 +138,7 @@ export const API_ROUTES = {
   emissionsCalculations: "emissions/calculations/",
   emissionsRules: "emissions/rules/",
   emissionsGWP: "emissions/gwp/",
+  emissionsReportConfigs: "emissions/report-configs/",
 };
 
 // Pulse AI Configuration

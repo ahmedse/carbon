@@ -1,7 +1,9 @@
 # Strategy — Carbon → AI-Era Data Trust Platform
 
 > **Status:** Living document. North star for architecture and roadmap decisions.
+> **Version:** 1.1 — 2026-07-23 (Platform App Model formalised)
 > **Naming:** The product keeps the **"Carbon"** name for now. The *architecture* underneath evolves into a general-purpose **Data Trust Platform** on which domain apps (Carbon being the first) are hosted.
+> **New in v1.1:** Platform-as-OS / apps-as-plugins model formalised. See [`docs/PLATFORM_APP_MODEL.md`](PLATFORM_APP_MODEL.md) for the full specification.
 
 ---
 
@@ -58,28 +60,48 @@ What we build here, inside Django + Postgres:
 ### 3.4 Naming / domain separation
 - Keep user-facing **"Carbon"** branding.
 - Internally, structure the code so **platform** (data trust core) and **app** (Carbon domain logic) are separable. Carbon becomes *the first app hosted on the platform*, not the platform itself. **Pulse** is a peer system that plugs in for AI/semantic/agentic capability.
+- Every domain app (Carbon, and future apps such as Academic Portfolio, Research Projects, Facilities Mgmt, Sustainability Goals) follows the **App Contract**: a `manifest.js` file that declares the app's route namespace, API namespace, ontology extensions, RBAC roles, navigation items, platform dependencies, and AI skills. The platform shell reads manifests and configures everything automatically — routes, nav, roles. No core changes needed to add a new app.
+- The Catalog, MDM, and DQ layers are **platform services** — never part of any app. Apps consume them via stable internal APIs.
+- See **[`docs/PLATFORM_APP_MODEL.md`](PLATFORM_APP_MODEL.md)** for the full platform-app architecture, manifest contract, ontology model, and migration path.
 
 ---
 
-## 4. Target shape: "apps on trusted data"
+## 4. Target shape: four-layer platform
 
 ```
-                ┌─────────────────────────────────────────────┐
-                │              Hosted Domain Apps               │
-                │   Carbon (1st)   ·  ESG  ·  Energy  ·  ...     │
-                └───────────────▲───────────────▲──────────────┘
-                                │ build on
-                ┌───────────────┴───────────────────────────────┐
-                │              DATA TRUST PLATFORM               │
-                │  Catalog · Quality · Governance(RBAC) ·        │
-                │  Observability · Semantic/AI layer             │
-                └───────────────▲───────────────────────────────┘
-                                │ over
-                ┌───────────────┴───────────────────────────────┐
-                │   Metadata-driven schema engine (dataschema)   │
-                │   Django + DRF · PostgreSQL(+pgvector) · Redis │
-                └────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│  L4 — AI / EXPERIENCE FABRIC                                           │
+│  Pulse copilot · Agentic workflows · Unified search · Notifications    │
+│  ONE AI reasons across ALL apps via the shared Ontology (L1)           │
+├───────────────────────────────────────────────────────────────────────┤
+│  L3 — DOMAIN APPS (pluggable, isolated, each ships a manifest)         │
+│                                                                         │
+│  Carbon  │  Academic Portfolio  │  Research Projects                   │
+│  Sustainability Goals  │  Facilities Mgmt  │  Procurement  │  ...       │
+│                                                                         │
+│  Each app: manifest + own models + own /app-id/* routes + own roles    │
+├───────────────────────────────────────────────────────────────────────┤
+│  L2 — PLATFORM SERVICES (Data Trust Core — domain-agnostic)            │
+│  catalog · mdm · dq · governance · audit · dataschema engine           │
+│  auth + ScopedRole RBAC · workflow · event bus · lineage               │
+├───────────────────────────────────────────────────────────────────────┤
+│  L1 — SEMANTIC CORE / ONTOLOGY                                         │
+│  Entity registry · Relationship graph · OrgUnit hierarchy              │
+│  Shared metric definitions · Policy bindings · Lifecycle states        │
+│  ← The language every app and every AI agent speaks →                  │
+└───────────────────────────────────────────────────────────────────────┘
+         ↑ built on
+┌───────────────────────────────────────────────────────────────────────┐
+│  INFRASTRUCTURE: Django + DRF · PostgreSQL + pgvector · Redis          │
+└───────────────────────────────────────────────────────────────────────┘
 ```
+
+**The single most important architectural bet:** invest in the Ontology (L1). Every entity a new
+app registers is one more thing the AI (Pulse) can reason about — for free, for every user, without
+per-app AI training. A question spanning Carbon + Research + Facilities is answerable because they
+all share the same OrgUnit entity as a join key in the ontology graph.
+
+See **[`docs/PLATFORM_APP_MODEL.md`](PLATFORM_APP_MODEL.md)** § 3 for the full ontology design.
 
 ---
 
@@ -101,9 +123,13 @@ What we build here, inside Django + Postgres:
 - Data observability (freshness/completeness trends).
 - Lineage between tables/fields.
 
-**Stage 3 — Platform/app separation:**
-- Factor Carbon domain logic into a hosted "app" on the platform.
-- App SDK/contract so new domain apps plug in.
+**Stage 3 — Platform/app separation (formalised 2026-07-23):**
+- Factor Carbon domain logic into `apps/carbon/` — a self-contained package with a manifest.
+- App manifest contract covers: route namespace, API namespace, ontology extensions, RBAC roles, navigation items, platform dependencies, AI skills, lifecycle hooks.
+- Platform shell reads manifests dynamically → automatic nav injection, route guards, role registration.
+- Prove the pattern by registering a second stub app (zero-feature, just validates isolation).
+- Future apps (Academic, Research, Facilities, Goals) are additive: drop a folder + manifest, zero core changes.
+- Full specification: **[`docs/PLATFORM_APP_MODEL.md`](PLATFORM_APP_MODEL.md)**
 
 **Stage 4 — Optional infra evolution:**
 - Managed Postgres/Storage (possibly Supabase) *behind* Django, only if ops demands it.
@@ -111,8 +137,22 @@ What we build here, inside Django + Postgres:
 ---
 
 ## 6. Principles to hold the line on
-- **Lighter than Ataccama** — resist enterprise sprawl; one core, pluggable apps.
-- **Metadata-driven first** — new capability should be describable as metadata, not hard-coded.
-- **AI-native, provider-agnostic** — never hard-couple to a single model vendor.
+- **The platform is the OS; apps are the applications.** Every architectural decision must pass: *"Does adding a new app require changing the core?"* If yes, the boundary was violated.
+- **Lighter than Ataccama** — resist enterprise sprawl; one core, pluggable apps, no per-app microservices.
+- **Metadata-driven first** — new capability should be describable as metadata (or an ontology entity), not hard-coded.
+- **Ontology-first for AI** — the AI reasons over the ontology, not over app tables. Every registered entity = one more AI capability for free.
+- **Isolation is sacred** — core never imports apps; apps never import each other; cross-app data flows only via ontology + platform events.
+- **AI-native, provider-agnostic** — never hard-couple to a single model vendor. Pulse is the AI layer; the platform exposes capabilities to it.
 - **Trust is the product** — governed, quality-checked, cataloged, observable, explainable data.
-- **Strangler over big-bang** — evolve in place; never rewrite the moat for infra convenience.
+- **Strangler over big-bang** — evolve in place. Never rewrite the moat for architectural purity.
+
+---
+
+## 7. Key Reference Documents
+
+| Document | Purpose |
+|---|---|
+| **[`docs/PLATFORM_APP_MODEL.md`](PLATFORM_APP_MODEL.md)** | **Canonical reference.** Four-layer model, ontology design, app manifest contract, route namespaces, AI integration, migration path. |
+| [`docs/DESIGN_DATA_TRUST_CORE.md`](DESIGN_DATA_TRUST_CORE.md) | Platform services design (Catalog, MDM, DQ, Governance) |
+| [`docs/DESIGN_ORG_ACCESS_MODEL.md`](DESIGN_ORG_ACCESS_MODEL.md) | ScopedRole RBAC design |
+| [`plans/CARBON_PRODUCT_APPS_ARCHITECTURE.md`](../plans/CARBON_PRODUCT_APPS_ARCHITECTURE.md) | Carbon as App #1 — feature portfolio and delivery plan |

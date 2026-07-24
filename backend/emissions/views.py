@@ -6,15 +6,19 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.db.models import Sum, Count, Avg, F, Q
+from django.db.models import Sum, Count, Avg, F, Q, Max
 from django.db.models.functions import TruncMonth, ExtractMonth
 from django.utils import timezone
 from decimal import Decimal
 from collections import defaultdict
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule
-from accounts.rbac_utils import get_visible_module_ids
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig
+from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units
 from accounts.models import ScopedRole
+from core.models import Module
+from dataschema.models import DataRow, DataTable
 from .serializers import (
     ReportingPeriodSerializer,
     EmissionFactorSerializer,
@@ -24,6 +28,7 @@ from .serializers import (
     CalculationRuleSerializer,
     DashboardSummarySerializer,
     EmissionReportSerializer,
+    ReportConfigSerializer,
 )
 
 
@@ -480,6 +485,7 @@ class ReportAPIView(APIView):
     
     def get(self, request):
         period_id = request.query_params.get('reporting_period_id')
+        org_unit_id = request.query_params.get('org_unit_id')
         year = request.query_params.get('year', timezone.now().year)
         report_format = request.query_params.get('format', 'json')
         
@@ -487,6 +493,16 @@ class ReportAPIView(APIView):
         queryset = _scope_calcs(request.user, Calculation.objects.select_related(
             'module', 'emission_factor', 'data_row', 'data_row__data_table'
         ))
+        
+        # Apply org_unit filter if provided
+        if org_unit_id:
+            from mdm.models import OrgUnit
+            try:
+                ou = OrgUnit.objects.get(pk=org_unit_id)
+                descendant_ids = ou.get_descendant_ids(include_self=True)
+                queryset = queryset.filter(module__org_unit_id__in=descendant_ids)
+            except OrgUnit.DoesNotExist:
+                pass
         
         reporting_period = None
         if period_id:
@@ -578,6 +594,29 @@ class ReportAPIView(APIView):
             'rows': rows
         }
         
+        # CSV export
+        if report_format == 'csv':
+            import csv
+            import io
+            from django.http import HttpResponse
+            
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(['Scope', 'Category', 'CO2e (tonnes)', 'Count'])
+            
+            for scope_detail in scope_details:
+                for category in scope_detail.get('categories', []):
+                    writer.writerow([
+                        scope_detail['name'],
+                        category['name'],
+                        category['emissions_tonnes'],
+                        category['count']
+                    ])
+            
+            response = HttpResponse(output.getvalue(), content_type='text/csv')
+            response['Content-Disposition'] = 'attachment; filename="emissions_report.csv"'
+            return response
+        
         return Response(report)
 
 
@@ -657,6 +696,131 @@ class CalculateAPIView(APIView):
         })
 
 
+def _generate_report_from_config(config, user):
+    """Generate report data from a ReportConfig instance."""
+    from datetime import datetime
+    from mdm.models import OrgUnit
+    
+    queryset = Calculation.objects.select_related(
+        'reporting_period', 'module', 'module__org_unit'
+    ).all()
+    
+    # Apply RBAC scoping
+    queryset = _scope_calcs(user, queryset)
+    
+    # Apply config filters
+    if config.org_unit_id:
+        try:
+            ou = OrgUnit.objects.get(pk=config.org_unit_id)
+            descendant_ids = ou.get_descendant_ids(include_self=True)
+            queryset = queryset.filter(module__org_unit_id__in=descendant_ids)
+        except OrgUnit.DoesNotExist:
+            pass
+    
+    if config.reporting_period_id:
+        queryset = queryset.filter(reporting_period_id=config.reporting_period_id)
+    elif config.custom_start and config.custom_end:
+        queryset = queryset.filter(
+            activity_date__gte=config.custom_start,
+            activity_date__lte=config.custom_end
+        )
+    
+    if config.ghg_scopes:
+        queryset = queryset.filter(scope__in=config.ghg_scopes)
+    
+    if config.categories:
+        queryset = queryset.filter(category__in=config.categories)
+    
+    # Aggregate data
+    scope_breakdown = []
+    scope_data = queryset.values('scope').annotate(
+        total_kg=Sum('co2e_kg'),
+        count=Count('id')
+    ).order_by('scope')
+    
+    category_breakdown = []
+    category_data = queryset.values('category').annotate(
+        total_kg=Sum('co2e_kg'),
+        count=Count('id')
+    ).order_by('category')
+    
+    module_breakdown = []
+    if config.grouping == 'module':
+        module_data = queryset.values('module__name').annotate(
+            total_kg=Sum('co2e_kg'),
+            count=Count('id')
+        ).order_by('module__name')
+        for m in module_data:
+            module_breakdown.append({
+                'module': m['module__name'],
+                'co2e_tonnes': round((m['total_kg'] or 0) / 1000, 2),
+                'calculation_count': m['count']
+            })
+    
+    grand_total_kg = sum(s['total_kg'] or 0 for s in scope_data)
+    scope_names = {1: 'Scope 1 - Direct', 2: 'Scope 2 - Indirect Energy', 3: 'Scope 3 - Value Chain'}
+    
+    for s in scope_data:
+        total_kg = s['total_kg'] or Decimal('0')
+        scope_breakdown.append({
+            'scope': s['scope'],
+            'scope_name': scope_names.get(s['scope'], f"Scope {s['scope']}"),
+            'co2e_tonnes': round(total_kg / 1000, 2),
+            'percentage': round((total_kg / grand_total_kg * 100) if grand_total_kg else 0, 2)
+        })
+    
+    for c in category_data:
+        total_kg = c['total_kg'] or Decimal('0')
+        category_breakdown.append({
+            'category': c['category'],
+            'co2e_tonnes': round(total_kg / 1000, 2),
+            'calculation_count': c['count']
+        })
+    
+    return {
+        'config_id': config.id,
+        'config_name': config.name,
+        'reporting_period_id': config.reporting_period_id,
+        'date_range': {
+            'start': config.custom_start.isoformat() if config.custom_start else None,
+            'end': config.custom_end.isoformat() if config.custom_end else None,
+        },
+        'org_unit_id': config.org_unit_id,
+        'total_co2e_tonnes': round(grand_total_kg / 1000, 2),
+        'calculation_count': queryset.count(),
+        'scope_breakdown': scope_breakdown,
+        'category_breakdown': category_breakdown,
+        'module_breakdown': module_breakdown,
+        'generated_at': datetime.now().isoformat(),
+    }
+
+
+class ReportConfigViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing saved report configurations."""
+    serializer_class = ReportConfigSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """Non-staff users see only their own configs; staff sees all."""
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            return ReportConfig.objects.all()
+        return ReportConfig.objects.filter(created_by=self.request.user)
+    
+    def perform_create(self, serializer):
+        """Auto-set created_by to current user."""
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def run(self, request, pk=None):
+        """Generate report from this config."""
+        config = self.get_object()
+        config.last_run_at = timezone.now()
+        config.save()
+        
+        report_data = _generate_report_from_config(config, request.user)
+        return Response(report_data)
+
+
 class OwnerDashboardAPIView(APIView):
     """
     Data owner scoped dashboard: emissions + DQ metrics for owned assets.
@@ -728,12 +892,34 @@ class OwnerDashboardAPIView(APIView):
                 'percentage': round((total_kg / grand_total_kg * 100) if grand_total_kg else 0, 2)
             })
         
-        # DQ metrics (stub for now - integration with DQ app later)
+        # DQ metrics — real data from AssetProfile quality_status
+        from catalog.models import AssetProfile
+        
+        # Scope asset profiles to user's org units (same scoping as calc_qs above)
+        if org_units is not None:
+            asset_qs = AssetProfile.objects.filter(
+                Q(data_table__module__org_unit_id__in=org_units) |
+                Q(data_field__data_table__module__org_unit_id__in=org_units)
+            )
+        else:
+            asset_qs = AssetProfile.objects.all()
+        
+        total_assets = asset_qs.count()
+        passing_count = asset_qs.filter(quality_status='passing').count()
+        warning_count = asset_qs.filter(quality_status='warning').count()
+        failing_count = asset_qs.filter(quality_status='failing').count()
+        unknown_count = asset_qs.filter(quality_status='unknown').count()
+        
+        # Quality score = (passing / total * 100) if any assets exist
+        quality_score = round((passing_count / total_assets * 100), 1) if total_assets > 0 else 0.0
+        
         dq_summary = {
-            'quality_score': 85,
-            'rules_passing': 42,
-            'rules_total': 50,
-            'tables_profiled': 156,
+            'quality_score': quality_score,
+            'passing_count': passing_count,
+            'warning_count': warning_count,
+            'failing_count': failing_count,
+            'unknown_count': unknown_count,
+            'total_assets': total_assets,
         }
         
         # Build response
@@ -749,3 +935,141 @@ class OwnerDashboardAPIView(APIView):
         }
         
         return Response(response_data)
+
+
+class OwnerSummaryAPIView(APIView):
+    """Get high-level summary data for the data owner landing page."""
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description='Return a summary of emission modules and data quality for the current org unit.',
+        responses={200: openapi.Response('OK', schema=openapi.Schema(type=openapi.TYPE_OBJECT))}
+    )
+    def get(self, request):
+        org_units = get_visible_org_units(request.user)
+        if not org_units:
+            return Response({'detail': 'No accessible org units'}, status=403)
+
+        org_unit = org_units[0]
+        modules = Module.objects.filter(org_unit=org_unit).select_related('org_unit').order_by('name')
+
+        module_ids = list(modules.values_list('id', flat=True))
+        row_counts = dict(
+            DataTable.objects.filter(module_id__in=module_ids)
+            .annotate(row_count=Count('rows'))
+            .values_list('module_id', 'row_count')
+        )
+        modules_with_data = sum(1 for module_id in module_ids if row_counts.get(module_id, 0) > 0)
+
+        latest_row = DataRow.objects.filter(data_table__module__org_unit=org_unit).order_by('-created_at').first()
+        latest_submission = latest_row.created_at if latest_row else None
+
+        module_data = [{
+            'id': module.id,
+            'name': module.name,
+            'scope': module.scope,
+            'table_name': module.name.lower().replace(' ', '_'),
+        } for module in modules]
+
+        return Response({
+            'org_unit': {
+                'id': org_unit.id,
+                'name': org_unit.name,
+                'code': getattr(org_unit, 'code', ''),
+            },
+            'modules': module_data,
+            'summary': {
+                'total_modules': len(module_data),
+                'modules_with_data': modules_with_data,
+                'latest_submission': latest_submission.isoformat() if latest_submission else None,
+                'data_quality': {'passing': 0, 'warning': 0, 'failing': 0},
+            },
+        })
+
+
+class OwnerAssetsAPIView(APIView):
+    """Return emission-generating assets scoped to the current owner org unit."""
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description='List emission source modules for the current org unit.',
+        manual_parameters=[
+            openapi.Parameter('search', openapi.IN_QUERY, description='Filter by module name', type=openapi.TYPE_STRING),
+            openapi.Parameter('scope', openapi.IN_QUERY, description='Filter by emission scope', type=openapi.TYPE_INTEGER),
+        ],
+        responses={200: openapi.Response('OK', schema=openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)))}
+    )
+    def get(self, request):
+        org_units = get_visible_org_units(request.user)
+        if not org_units:
+            return Response({'detail': 'No accessible org units'}, status=403)
+
+        modules = Module.objects.filter(org_unit__in=org_units).select_related('org_unit').order_by('name')
+
+        search = request.query_params.get('search')
+        if search:
+            modules = modules.filter(name__icontains=search)
+
+        scope = request.query_params.get('scope')
+        if scope:
+            modules = modules.filter(scope=scope)
+
+        module_ids = list(modules.values_list('id', flat=True))
+        table_row_counts = dict(
+            DataTable.objects.filter(module_id__in=module_ids)
+            .annotate(row_count=Count('rows'))
+            .values_list('module_id', 'row_count')
+        )
+        last_entry_map = dict(
+            DataRow.objects.filter(data_table__module_id__in=module_ids)
+            .values('data_table__module_id')
+            .annotate(last_created_at=Max('created_at'))
+            .values_list('data_table__module_id', 'last_created_at')
+        )
+
+        assets = []
+        for module in modules:
+            row_count = table_row_counts.get(module.id, 0)
+            last_entry = last_entry_map.get(module.id)
+            assets.append({
+                'id': module.id,
+                'name': module.name,
+                'scope': module.scope,
+                'category': module.name.lower().replace(' ', '_'),
+                'table_name': module.name.lower().replace(' ', '_'),
+                'row_count': row_count,
+                'last_entry': last_entry.isoformat() if last_entry else None,
+                'data_quality_status': 'passing' if row_count else 'warning',
+            })
+
+        return Response(assets)
+
+
+class OwnerActivityAPIView(APIView):
+    """Return recent emission submission activity for the current owner org unit."""
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description='Return recent emission activity for the current org unit.',
+        responses={200: openapi.Response('OK', schema=openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)))}
+    )
+    def get(self, request):
+        org_units = get_visible_org_units(request.user)
+        if not org_units:
+            return Response({'detail': 'No accessible org units'}, status=403)
+
+        activity_items = Calculation.objects.filter(module__org_unit__in=org_units).select_related('module', 'reporting_period').order_by('-calculated_at')[:10]
+        payload = []
+        for calculation in activity_items:
+            payload.append({
+                'id': calculation.id,
+                'activity_type': 'submission',
+                'module_id': calculation.module_id,
+                'module_name': calculation.module.name,
+                'scope': calculation.scope,
+                'category': calculation.category,
+                'co2e_tonnes': round((calculation.co2e_kg or Decimal('0')) / Decimal('1000'), 2),
+                'reported_at': calculation.calculated_at.isoformat(),
+                'period_name': calculation.reporting_period.name if calculation.reporting_period else None,
+            })
+        return Response(payload)

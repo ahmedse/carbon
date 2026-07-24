@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
-import { fetchAssetProfiles, fetchDataDomains } from '../../api/catalog';
+import { fetchOwnerAssets } from '../../api/emissions';
 import {
   Box,
   Container,
@@ -93,14 +93,17 @@ export default function DataOwnerAssetsPage() {
           return;
         }
 
-        // Load domains
-        const domainsRes = await fetchDataDomains({}, token);
-        const domainsList = Array.isArray(domainsRes) ? domainsRes : domainsRes.results || [];
-        setDomains(domainsList);
+        const assetsRes = await fetchOwnerAssets({}, token);
+        const assetsList = Array.isArray(assetsRes) ? assetsRes : [];
+        const domainList = assetsList.reduce((acc, asset) => {
+          const domain = asset.domain;
+          if (domain && !acc.some(item => item.id === domain.id)) {
+            acc.push({ id: domain.id, name: domain.name || 'Unassigned' });
+          }
+          return acc;
+        }, []);
 
-        // Load assets (backend filters by org_unit)
-        const assetsRes = await fetchAssetProfiles({}, token);
-        const assetsList = Array.isArray(assetsRes) ? assetsRes : assetsRes.results || [];
+        setDomains(domainList);
         setAssets(assetsList);
         setError(null);
       } catch (err) {
@@ -216,15 +219,18 @@ export default function DataOwnerAssetsPage() {
       minWidth: 100,
       sortable: false,
       filterable: false,
-      renderCell: (params) => (
-        <Button
-          size="small"
-          onClick={() => navigate(`/catalog/assets/${params.row.id}`)}
-          sx={{ color: theme.palette.success.main }}
-        >
-          View
-        </Button>
-      ),
+      renderCell: (params) => {
+        const moduleId = params.row.module_id || params.row.module?.id || params.row.id;
+        return (
+          <Button
+            size="small"
+            onClick={() => navigate(`/modules/${moduleId}`)}
+            sx={{ color: theme.palette.success.main }}
+          >
+            View
+          </Button>
+        );
+      },
     },
   ];
 
