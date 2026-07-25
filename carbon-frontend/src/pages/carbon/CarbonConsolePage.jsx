@@ -138,14 +138,14 @@ const StatCard = ({ label, value, color, icon: Icon }) => {
 export default function CarbonConsolePage() {
   const navigate = useNavigate();
   const theme = useTheme();
-  const { context, user } = useAuth();
+  const { context, user, availablePerspectives } = useAuth();
   const { showNotification } = useNotification();
   
   const [loading, setLoading] = useState(true);
   const [activePeriod, setActivePeriod] = useState(null);
   const [summary, setSummary] = useState(null);
 
-  const isAdmin = user?.is_superuser || context?.available_perspectives?.includes('admin');
+  const isAdmin = user?.is_superuser || (availablePerspectives || []).includes('admin');
 
   useEffect(() => {
     loadData();
@@ -167,7 +167,7 @@ export default function CarbonConsolePage() {
     }
   };
 
-  const isDataOwner = context?.org_units && context.org_units.length > 0;
+  const isDataOwner = isAdmin || (context?.org_units && context.org_units.length > 0);
 
   const workflows = [
     // ── Measure (all roles) ──
@@ -183,7 +183,7 @@ export default function CarbonConsolePage() {
       description: 'Deep-dive into emission patterns, identify reduction opportunities, and track progress toward science-based targets.',
       icon: AnalyticsIcon,
       color: theme.palette.warning.main,
-      onClick: () => navigate('/dashboards/analytics'),
+      onClick: () => navigate('/carbon/analytics'),
     },
 
     // ── My Data (data owners) ──
@@ -192,7 +192,7 @@ export default function CarbonConsolePage() {
       description: 'Record activity data for your organizational units — electricity, fuel, travel, and other emission sources.',
       icon: DataEntryIcon,
       color: theme.palette.success.main,
-      onClick: () => navigate('/carbon/data-entry'),
+      onClick: () => navigate('/carbon/my-data'),
       role: 'carbon:data_owner',
     },
     {
@@ -200,7 +200,7 @@ export default function CarbonConsolePage() {
       description: 'Review your organizational unit\'s emission source assets, data quality scores, and submission status.',
       icon: CalculateIcon,
       color: theme.palette.info.main,
-      onClick: () => navigate('/carbon/owner/assets'),
+      onClick: () => navigate('/carbon/my-data?tab=sources'),
       role: 'carbon:data_owner',
     },
 

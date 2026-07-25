@@ -64,6 +64,7 @@ import ReportGeneratorPage from "./pages/emissions/ReportGeneratorPage";
 import SavedReportsPage from "./pages/emissions/SavedReportsPage";
 import ReportingPeriodsPage from "./pages/emissions/ReportingPeriodsPage";
 import CarbonConsolePage from "./pages/carbon/CarbonConsolePage";
+import MyDataPage from "./pages/carbon/MyDataPage";
 import AuditLogPage from "./pages/admin/AuditLogPage";
 
 // New Dashboard Architecture
@@ -172,7 +173,8 @@ export default function App() {
                 {/* Carbon App — all routes under /carbon/* namespace */}
                 <Route path="/carbon/console" element={<CarbonConsolePage />} />
                 <Route path="/carbon/dashboard" element={<EmissionsDashboard />} />
-                <Route path="/carbon/analytics" element={<Navigate to="/dashboards/analytics" replace />} />
+                <Route path="/carbon/analytics" element={<AnalyticsDashboard />} />
+                <Route path="/carbon/my-data" element={<MyDataPage />} />
                 <Route path="/carbon/admin/factors" element={<AdminRoute><EmissionFactorsPage /></AdminRoute>} />
                 <Route path="/carbon/admin/rules" element={<AdminRoute><EmissionFactorsPage /></AdminRoute>} />
                 <Route path="/carbon/reporting/generate" element={<ReportGeneratorPage />} />
@@ -181,7 +183,9 @@ export default function App() {
                 
                 {/* Carbon App — Data Owner Routes (namespace: /carbon/owner/*) */}
                 <Route path="/carbon/owner/assets" element={<DataOwnerAssetsPage />} />
-                {/* Legacy redirects — old My Portal / My Dashboard paths redirect to Overview */}
+                {/* Legacy redirects — old paths redirect to unified My Data page */}
+                <Route path="/carbon/data-entry" element={<Navigate to="/carbon/my-data" replace />} />
+                <Route path="/carbon/data-entry/entry/:moduleName/:tableId" element={<DataEntryPage />} />
                 <Route path="/carbon/owner/portal" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/carbon/owner/dashboard" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/data-owner" element={<Navigate to="/carbon/console" replace />} />

@@ -592,20 +592,20 @@ function DataOwnerSidebar({ collapsed, location }) {
       </Typography>
 
       <MenuItem
-        to="/carbon/data-entry"
+        to="/carbon/my-data"
         icon={<DataEntryIcon />}
         label="Data Entry"
-        tooltip="Enter activity data for your org units"
-        selected={location.pathname === "/carbon/data-entry"}
+        tooltip="Enter and manage your emission activity data"
+        selected={location.pathname === "/carbon/my-data"}
         collapsed={collapsed}
         sx={{ mb: 0.5 }}
       />
       <MenuItem
-        to="/carbon/owner/assets"
+        to="/carbon/my-data?tab=sources"
         icon={<TableIcon />}
         label="Emission Sources"
         tooltip="Your scoped emission source assets"
-        selected={location.pathname === "/carbon/owner/assets"}
+        selected={location.pathname === "/carbon/my-data" && location.search.includes("tab=sources")}
         collapsed={collapsed}
         sx={{ mb: 0.5 }}
       />

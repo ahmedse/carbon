@@ -127,6 +127,8 @@ export function canAccessRoute(path, user, availablePerspectives = [], context =
   
   // Carbon app routes
   if (path.startsWith('/carbon')) {
+    // Global admins can access everything
+    if (isGlobalAdmin(user, availablePerspectives)) return true;
     // Carbon owner routes
     if (path.startsWith('/carbon/owner')) {
       return isDataOwner(user, availablePerspectives);
@@ -155,6 +157,9 @@ export function canAccessRoute(path, user, availablePerspectives = [], context =
 export function filterMenuItems(items, user, availablePerspectives = [], context = {}) {
   if (!items || !Array.isArray(items)) return [];
   
+  // Global admins see everything
+  if (isGlobalAdmin(user, availablePerspectives)) return items;
+  
   return items.filter((item) => {
     // Always show items without role restriction
     if (!item.role || item.role === '*') return true;
@@ -170,9 +175,9 @@ export function filterMenuItems(items, user, availablePerspectives = [], context
       const [appPrefix, roleSuffix] = item.role.split(':');
       const normalizedSuffix = roleSuffix.replace(/_/g, '-');
       const appPrefixedRole = `${appPrefix}-${normalizedSuffix}`;
-      return userRoles.includes(normalizedSuffix) || userRoles.includes(appPrefixedRole) || isGlobalAdmin(user, availablePerspectives);
+      return userRoles.includes(normalizedSuffix) || userRoles.includes(appPrefixedRole);
     }
     
-    return userRoles.includes(item.role) || isGlobalAdmin(user, availablePerspectives);
+    return userRoles.includes(item.role);
   });
 }

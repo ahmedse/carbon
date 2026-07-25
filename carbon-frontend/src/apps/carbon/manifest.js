@@ -59,8 +59,8 @@ export default {
 
       // ── My Data (data owners: enter & review their org-unit data) ──
       { type: 'group', label: 'My Data' },
-      { label: 'Data Entry',           path: '/carbon/data-entry',         role: 'carbon:data_owner' },
-      { label: 'Emission Sources',     path: '/carbon/owner/assets',       role: 'carbon:data_owner' },
+      { label: 'Data Entry',           path: '/carbon/my-data',              role: 'carbon:data_owner' },
+      { label: 'Emission Sources',     path: '/carbon/my-data?tab=sources',  role: 'carbon:data_owner' },
       { type: 'divider' },
 
       // ── Reporting (analyst + admin) ──

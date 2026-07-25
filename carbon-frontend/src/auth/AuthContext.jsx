@@ -86,6 +86,10 @@ export const AuthProvider = ({ children }) => {
         "available_perspectives",
         JSON.stringify(data.perspectives || [])
       );
+      // Store org_units from backend for data owner checks
+      if (data.org_units) {
+        localStorage.setItem("org_units", JSON.stringify(data.org_units));
+      }
       return data;
     } catch (err) {
       console.error("Failed to fetch perspective context:", err);
@@ -256,6 +260,7 @@ export const AuthProvider = ({ children }) => {
         projectRoles: u.roles || [],
         modules,
         landingPath,
+        org_units: JSON.parse(localStorage.getItem("org_units") || "[]"),
       };
       setContext(ctx);
       setProjects([ctx.project]);
