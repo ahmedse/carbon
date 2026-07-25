@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
-  IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Chip, CircularProgress, Alert,
+  IconButton, TextField, Chip, CircularProgress, Alert,
 } from '@mui/material';
+import SystemDialog from '../../components/SystemDialog';
 import { useNavigate } from 'react-router-dom';
 import AddRounded from '@mui/icons-material/AddRounded';
 import EditRounded from '@mui/icons-material/EditRounded';
@@ -55,13 +55,14 @@ export default function GroupsPage() {
     try {
       const url = editingId ? `${API_BASE_URL}accounts/groups/${editingId}/` : `${API_BASE_URL}accounts/groups/`;
       const method = editingId ? 'PUT' : 'POST';
+      const body = { name: form.name.trim(), description: form.description };
       const res = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ name: form.name.trim(), metadata: { description: form.description } }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -147,9 +148,25 @@ export default function GroupsPage() {
         </Table>
       )}
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth='sm'>
-        <DialogTitle>{editingId ? 'Edit Group' : 'New Group'}</DialogTitle>
-        <DialogContent>
+      <SystemDialog
+        open={dialogOpen}
+        title={editingId ? 'Edit Group' : 'New Group'}
+        onClose={() => setDialogOpen(false)}
+        onCancel={() => setDialogOpen(false)}
+        cancelLabel='Cancel'
+        actions={(
+          <Button variant='contained' onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        )}
+        width={560}
+        height={360}
+        minWidth={420}
+        minHeight={320}
+        maxWidth='calc(100vw - 32px)'
+        maxHeight='calc(100vh - 32px)'
+      >
+        <Box px={2} py={1}>
           <TextField
             label='Group name'
             fullWidth
@@ -162,16 +179,12 @@ export default function GroupsPage() {
             fullWidth
             margin='normal'
             multiline
-            rows={3}
+            rows={4}
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button variant='contained' onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </SystemDialog>
     </Box>
   );
 }

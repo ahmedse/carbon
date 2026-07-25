@@ -20,6 +20,7 @@ import RoleRegistryPage from "./pages/admin/RoleRegistryPage";
 import RegisteredAppsPage from "./pages/admin/RegisteredAppsPage";
 import GovernancePolicyPage from "./pages/admin/GovernancePolicyPage";
 import GroupDetailPage from "./pages/admin/GroupDetailPage";
+import CatalogRoute from "./components/CatalogRoute";
 import DataEntryPage from "./pages/DataEntryPage";
 import DataHubHome from "./pages/DataHubHome";
 import Help from "./pages/Help";
@@ -268,42 +269,44 @@ export default function App() {
                 <Route path="/dataschema/row/:tableId/:rowId" element={<RowDetailPage />} />
 
                 {/* Catalog Studio Routes */}
-                <Route path="/catalog" element={<CatalogHome />} />
-                {/* Data Products (Modules) → Tables → table workbench */}
-                <Route path="/catalog/products" element={<DataProductsPage />} />
-                <Route path="/catalog/products/:moduleId" element={<DataProductDetailPage />} />
-                <Route path="/catalog/policies" element={
-                  <AdminRoute>
-                    <GovernancePolicyPage />
-                  </AdminRoute>
-                } />
-                <Route path="/catalog/tables/:tableId" element={<SchemaDetailPage />} />
-                {/* Legacy redirects */}
-                <Route path="/catalog/schemas" element={<Navigate to="/catalog/products" replace />} />
-                <Route path="/catalog/schemas/:tableId" element={<RedirectSchemaToTable />} />
-                <Route path="/catalog/schema-manager" element={<Navigate to="/catalog/products" replace />} />
-                {/* Consolidated metadata management */}
-                <Route path="/catalog/metadata" element={<MetadataManagementPage />} />
-                {/* Redirect old separate pages to consolidated metadata page */}
-                <Route path="/catalog/domains" element={<Navigate to="/catalog/metadata#domains" replace />} />
-                <Route path="/catalog/glossary" element={<Navigate to="/catalog/metadata#glossary" replace />} />
-                <Route path="/catalog/tags" element={<Navigate to="/catalog/metadata#tags" replace />} />
-                {/* Keep detail pages for now */}
-                <Route path="/catalog/domains/:domainId" element={<DomainDetailPage />} />
-                <Route path="/catalog/assets" element={<AssetsPage />} />
-                <Route path="/catalog/assets/:assetId" element={<AssetDetailPage />} />
-                <Route path="/catalog/dq-dashboard" element={<DQDashboardPage />} />
-                <Route path="/catalog/dq-rules" element={<DQRulesPage />} />
-                <Route path="/catalog/mdm" element={<MDMPage />} />
-                <Route path="/catalog/mdm/reference-sets/:setId" element={<ReferenceSetDetailPage />} />
-                <Route path="/catalog/connections" element={<ConnectionsPage />} />
-                <Route path="/catalog/importexport" element={<ImportExportPage />} />
-                <Route path="/catalog/tags/:tagId" element={<TagDetailPage />} />
-                <Route path="/catalog/reference-data" element={<ReferenceDataPage />} />
-                <Route path="/catalog/governance" element={<GovernancePage />} />
-                <Route path="/catalog/sources" element={<DataSourcesDetailPage />} />
-                <Route path="/catalog/exports" element={<ExportsDetailPage />} />
-                <Route path="/catalog/imports" element={<ImportsDetailPage />} />
+                <Route element={<CatalogRoute />}>
+                  <Route path="/catalog" element={<CatalogHome />} />
+                  {/* Data Products (Modules) → Tables → table workbench */}
+                  <Route path="/catalog/products" element={<DataProductsPage />} />
+                  <Route path="/catalog/products/:moduleId" element={<DataProductDetailPage />} />
+                  <Route path="/catalog/policies" element={
+                    <AdminRoute>
+                      <GovernancePolicyPage />
+                    </AdminRoute>
+                  } />
+                  <Route path="/catalog/tables/:tableId" element={<SchemaDetailPage />} />
+                  {/* Legacy redirects */}
+                  <Route path="/catalog/schemas" element={<Navigate to="/catalog/products" replace />} />
+                  <Route path="/catalog/schemas/:tableId" element={<RedirectSchemaToTable />} />
+                  <Route path="/catalog/schema-manager" element={<Navigate to="/catalog/products" replace />} />
+                  {/* Consolidated metadata management */}
+                  <Route path="/catalog/metadata" element={<MetadataManagementPage />} />
+                  {/* Redirect old separate pages to consolidated metadata page */}
+                  <Route path="/catalog/domains" element={<Navigate to="/catalog/metadata#domains" replace />} />
+                  <Route path="/catalog/glossary" element={<Navigate to="/catalog/metadata#glossary" replace />} />
+                  <Route path="/catalog/tags" element={<Navigate to="/catalog/metadata#tags" replace />} />
+                  {/* Keep detail pages for now */}
+                  <Route path="/catalog/domains/:domainId" element={<DomainDetailPage />} />
+                  <Route path="/catalog/assets" element={<AssetsPage />} />
+                  <Route path="/catalog/assets/:assetId" element={<AssetDetailPage />} />
+                  <Route path="/catalog/dq-dashboard" element={<DQDashboardPage />} />
+                  <Route path="/catalog/dq-rules" element={<DQRulesPage />} />
+                  <Route path="/catalog/mdm" element={<MDMPage />} />
+                  <Route path="/catalog/mdm/reference-sets/:setId" element={<ReferenceSetDetailPage />} />
+                  <Route path="/catalog/connections" element={<ConnectionsPage />} />
+                  <Route path="/catalog/importexport" element={<ImportExportPage />} />
+                  <Route path="/catalog/tags/:tagId" element={<TagDetailPage />} />
+                  <Route path="/catalog/reference-data" element={<ReferenceDataPage />} />
+                  <Route path="/catalog/governance" element={<GovernancePage />} />
+                  <Route path="/catalog/sources" element={<DataSourcesDetailPage />} />
+                  <Route path="/catalog/exports" element={<ExportsDetailPage />} />
+                  <Route path="/catalog/imports" element={<ImportsDetailPage />} />
+                </Route>
 
                 <Route path="*" element={<NotFound />} />
               </Route>

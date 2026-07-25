@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import DataSource, ConsumingConnection
 from .serializers import DataSourceSerializer, ConsumingConnectionSerializer
 from accounts.permissions import ReadAnyWriteGlobalAdmin
+from catalog.permissions import AdminOrSuperuserOnly
 
 
 class DataSourceViewSet(viewsets.ModelViewSet):
@@ -17,7 +18,7 @@ class DataSourceViewSet(viewsets.ModelViewSet):
     """
     queryset = DataSource.objects.select_related('domain', 'owner').order_by('-updated_at')
     serializer_class = DataSourceSerializer
-    permission_classes = [ReadAnyWriteGlobalAdmin]
+    permission_classes = [AdminOrSuperuserOnly]
 
     @action(detail=True, methods=['post'])
     def test(self, request, pk=None):
@@ -62,7 +63,7 @@ class ConsumingConnectionViewSet(viewsets.ModelViewSet):
     """
     queryset = ConsumingConnection.objects.select_related('owner').order_by('-updated_at')
     serializer_class = ConsumingConnectionSerializer
-    permission_classes = [ReadAnyWriteGlobalAdmin]
+    permission_classes = [AdminOrSuperuserOnly]
 
     @action(detail=True, methods=['post'])
     def rotate_key(self, request, pk=None):

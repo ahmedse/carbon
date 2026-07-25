@@ -1,13 +1,13 @@
-// File: src/components/AdminRoute.jsx
-// Simple RBAC: allow if user has active "admins_group" role anywhere.
+// src/components/CatalogRoute.jsx
+// Route guard for Catalog Studio pages. Only catalog/studio admin roles should access.
 
 import React, { useRef, useEffect } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useNotification } from "./NotificationProvider";
-import { isGlobalAdmin } from "../utils/rbac";
+import { isCatalogAdmin } from "../utils/rbac";
 
-export default function AdminRoute({ children, redirectTo = "/" }) {
+export default function CatalogRoute({ children, redirectTo = "/" }) {
   const { user, loading, availablePerspectives } = useAuth();
   const notifyCtx = useNotification();
   const notify = typeof notifyCtx?.notify === "function"
@@ -16,24 +16,26 @@ export default function AdminRoute({ children, redirectTo = "/" }) {
   const notifiedRef = useRef(false);
 
   useEffect(() => {
-    // Only notify once, and only when user is loaded and is not admin
-    if (!loading && user && !isGlobalAdmin(user, availablePerspectives) && !notifiedRef.current) {
+    if (!loading && user && !isCatalogAdmin(user, availablePerspectives) && !notifiedRef.current) {
       notify({
-        message: "Access denied: admin role required.",
+        message: "Access denied: catalog admin role required.",
         type: "error",
       });
       notifiedRef.current = true;
     }
-  }, [loading, user, notify]);
+  }, [loading, user, availablePerspectives, notify]);
 
   if (loading) {
     return <div style={{ padding: 48, textAlign: "center" }}>Checking permissions...</div>;
   }
+
   if (!user) {
     return null;
   }
-  if (!isGlobalAdmin(user, availablePerspectives)) {
+
+  if (!isCatalogAdmin(user, availablePerspectives)) {
     return <Navigate to={redirectTo} replace />;
   }
+
   return children ? children : <Outlet />;
 }

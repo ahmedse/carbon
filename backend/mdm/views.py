@@ -15,6 +15,7 @@ from catalog.audit_utils import emit_governance_event
 from .models import ReferenceSet, ReferenceValue, OrgUnit
 from .serializers import ReferenceSetSerializer, ReferenceValueSerializer, OrgUnitSerializer
 from accounts.permissions import ReadAnyWriteGlobalAdmin
+from catalog.permissions import AdminOrSuperuserOnly
 from accounts.models import ScopedRole
 
 
@@ -51,9 +52,20 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
             return ReferenceSet.objects.none()
         user = self.request.user
         
+        # Optimize queryset with select_related for foreign keys
+        qs = ReferenceSet.objects.select_related(
+            'domain', 'steward', 'created_by', 'updated_by'
+        )
+        
+        # Annotate to avoid N+1 on value counts
+        from django.db.models import Count, Q
+        qs = qs.annotate(
+            values_count=Count('values', filter=Q(values__is_active=True))
+        )
+        
         # Superusers and staff see everything
         if user.is_superuser or user.is_staff:
-            return ReferenceSet.objects.filter(is_active=True)
+            return qs.filter(is_active=True)
         
         # Get user's accessible org_unit IDs from ScopedRole
         user_org_units = ScopedRole.objects.filter(
@@ -63,12 +75,12 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         # If no org units assigned, show all reference sets (permissive mode)
         # TODO: Make this restrictive once RBAC is fully implemented
         if not user_org_units:
-            return ReferenceSet.objects.filter(is_active=True)
+            return qs.filter(is_active=True)
         
         # Filter reference sets by domain's org_unit or show all if domain is null
         from catalog.models import DataDomain
         domains_in_scope = DataDomain.objects.filter(id__in=user_org_units)
-        return ReferenceSet.objects.filter(
+        return qs.filter(
             models.Q(domain__in=domains_in_scope) | models.Q(domain__isnull=True),
             is_active=True
         )

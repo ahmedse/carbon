@@ -1,4 +1,6 @@
 # dq/views.py
+import logging
+import time
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets, status, filters
@@ -8,6 +10,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied, NotFound
 from django.db.models import Q
+
+logger = logging.getLogger(__name__)
 
 from .models import TableProfile, FieldProfile, DQRule, DQResult
 from .serializers import (
@@ -211,17 +215,24 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return DQResult.objects.none()
+        
+        # Optimize with select_related to avoid N+1 queries
+        qs = DQResult.objects.select_related(
+            'rule', 'data_table', 'created_by'
+        )
+        
         user = self.request.user
         if user.is_superuser or user.is_staff:
-            qs = DQResult.objects.all()
+            pass  # Use full queryset
         else:
             org_units = _get_user_org_units(user)
             if not org_units:
                 return DQResult.objects.none()
-            qs = DQResult.objects.filter(
+            qs = qs.filter(
                 Q(rule__data_field__data_table__module__org_unit_id__in=org_units) |
                 Q(rule__data_table__module__org_unit_id__in=org_units)
             )
+        
         p = self.request.query_params
         if p.get('rule_id'):
             qs = qs.filter(rule_id=p['rule_id'])
@@ -237,7 +248,7 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(passed=True)
             elif p['passed'].lower() == 'false':
                 qs = qs.filter(passed=False)
-        return qs.distinct()
+        return qs.order_by('-executed_at').distinct()
 
     @swagger_auto_schema(
         operation_description='Return a paged list of DQ execution results for the current scope.',
@@ -311,17 +322,133 @@ class ProfileTriggerView(APIView):
     )
     def post(self, request):
         table_id = request.data.get('data_table_id') or request.data.get('data_table')
+        correlation_id = getattr(request, 'correlation_id', 'unknown')
+        
         if not table_id:
+            logger.warning(
+                "DQ profiling triggered without table_id",
+                extra={
+                    "correlation_id": correlation_id,
+                    "user_id": request.user.id if request.user.is_authenticated else None,
+                    "action": "dq_profile_missing_param",
+                }
+            )
             return Response({'error': 'data_table_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.info(
+            "DQ profiling triggered",
+            extra={
+                "correlation_id": correlation_id,
+                "user_id": request.user.id,
+                "table_id": table_id,
+                "action": "dq_profile_start",
+            }
+        )
+        
         try:
             table = DataTable.objects.get(id=table_id)
         except DataTable.DoesNotExist:
-            return Response({'error': f'Table {table_id} not found'}, status=status.HTTP_404_NOT_FOUND)
-        _check_table_access(request.user, table)
+            logger.warning(
+                "DQ profiling table not found",
+                extra={
+                    "correlation_id": correlation_id,
+                    "table_id": table_id,
+                    "user_id": request.user.id,
+                    "action": "dq_profile_table_not_found",
+                }
+            )
+            return Response(
+                {
+                    "error": "TableNotFound",
+                    "message": f"DataTable with ID {table_id} does not exist",
+                    "details": {
+                        "table_id": [f"No table found with ID {table_id}. Verify the ID or check if the table was archived."]
+                    },
+                    "suggested_action": "Use GET /dataschema/tables/ to list available tables",
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
         try:
-            return Response(profile_table(table_id))
+            _check_table_access(request.user, table)
+        except PermissionDenied:
+            logger.warning(
+                "DQ profiling permission denied",
+                extra={
+                    "correlation_id": correlation_id,
+                    "table_id": table_id,
+                    "user_id": request.user.id,
+                    "action": "dq_profile_permission_denied",
+                }
+            )
+            raise
+        
+        # Check if table has data
+        row_count = table.rows.filter(is_archived=False).count()
+        if row_count == 0:
+            logger.info(
+                "DQ profiling skipped - empty table",
+                extra={
+                    "correlation_id": correlation_id,
+                    "table_id": table_id,
+                    "user_id": request.user.id,
+                    "action": "dq_profile_empty_table",
+                }
+            )
+            return Response(
+                {
+                    "error": "EmptyTable",
+                    "message": f"Table '{table.name}' has no data rows to profile",
+                    "details": {
+                        "table_id": [f"Table {table_id} exists but contains 0 rows. Add data before profiling."]
+                    },
+                    "suggested_action": "Import data via POST /dataschema/rows/bulk-import/ first",
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        start = time.time()
+        try:
+            result = profile_table(table_id)
+            duration = time.time() - start
+            
+            logger.info(
+                "DQ profiling completed",
+                extra={
+                    "correlation_id": correlation_id,
+                    "table_id": table_id,
+                    "user_id": request.user.id,
+                    "duration_ms": round(duration * 1000, 2),
+                    "row_count": result.get('row_count', 0),
+                    "field_count": result.get('field_count', 0),
+                    "action": "dq_profile_success",
+                }
+            )
+            return Response(result)
         except Exception as exc:
-            return Response({'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            duration = time.time() - start
+            logger.error(
+                "DQ profiling failed",
+                extra={
+                    "correlation_id": correlation_id,
+                    "table_id": table_id,
+                    "user_id": request.user.id,
+                    "duration_ms": round(duration * 1000, 2),
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "action": "dq_profile_error",
+                },
+                exc_info=True
+            )
+            return Response(
+                {
+                    "error": "ProfilingFailed",
+                    "message": f"An error occurred while profiling table {table_id}",
+                    "details": {"error": [str(exc)]},
+                    "suggested_action": "Check server logs for details or contact administrator",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class BulkProfileView(APIView):

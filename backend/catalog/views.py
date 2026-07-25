@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import ReadAnyWriteGlobalAdmin
+from .permissions import AdminOrSuperuserOnly
 from accounts.models import ScopedRole
 from core.feedback import AppFeedback
 from .audit_utils import emit_governance_event
@@ -34,7 +35,7 @@ class GovernanceEventPagination(PageNumberPagination):
 class DataDomainViewSet(viewsets.ModelViewSet):
     queryset = DataDomain.objects.all().order_by('name')
     serializer_class = DataDomainSerializer
-    permission_classes = [ReadAnyWriteGlobalAdmin]
+    permission_classes = [AdminOrSuperuserOnly]
 
     def perform_create(self, serializer):
         serializer.save(slug=slugify(serializer.validated_data['name']))
@@ -53,7 +54,7 @@ class DataDomainViewSet(viewsets.ModelViewSet):
 class GlossaryTermViewSet(viewsets.ModelViewSet):
     queryset = GlossaryTerm.objects.all().order_by('term')
     serializer_class = GlossaryTermSerializer
-    permission_classes = [ReadAnyWriteGlobalAdmin]
+    permission_classes = [AdminOrSuperuserOnly]
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -127,7 +128,7 @@ class GlossaryTermViewSet(viewsets.ModelViewSet):
 class TagViewSet(viewsets.ModelViewSet):
     queryset = Tag.objects.all().order_by('name')
     serializer_class = TagSerializer
-    permission_classes = [ReadAnyWriteGlobalAdmin]
+    permission_classes = [AdminOrSuperuserOnly]
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -145,7 +146,7 @@ class TagViewSet(viewsets.ModelViewSet):
 
 class AssetProfileViewSet(viewsets.ModelViewSet):
     serializer_class = AssetProfileSerializer
-    permission_classes = [ReadAnyWriteGlobalAdmin]
+    permission_classes = [AdminOrSuperuserOnly]
     http_method_names = ['get', 'post', 'patch', 'put', 'head', 'options']  # profiles are auto-managed; no create/delete
 
     @swagger_auto_schema(
@@ -263,7 +264,7 @@ class AssetProfileViewSet(viewsets.ModelViewSet):
 class GovernanceEventViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = GovernanceEvent.objects.all().order_by('-timestamp')
     serializer_class = GovernanceEventSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = GovernanceEventFilter
     ordering = ['-timestamp']
@@ -272,7 +273,7 @@ class GovernanceEventViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class GovernanceComplianceView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
 
     @swagger_auto_schema(
         operation_description='Summarize governance events for a recent time window.',
@@ -302,7 +303,7 @@ class GovernancePolicyViewSet(viewsets.ModelViewSet):
     """
     queryset = GovernancePolicy.objects.all()
     serializer_class = GovernancePolicySerializer
-    permission_classes = [IsAuthenticated, ReadAnyWriteGlobalAdmin]
+    permission_classes = [AdminOrSuperuserOnly]
 
     def perform_create(self, serializer):
         serializer.save(updated_by=self.request.user)

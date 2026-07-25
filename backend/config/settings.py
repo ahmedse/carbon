@@ -84,15 +84,14 @@ AUTH_USER_MODEL = 'accounts.User'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    'core.middleware.CorrelationIDMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'core.middleware.RequestLoggingMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'core.middleware.RequestLoggingMiddleware',
 ]
 
 if DJANGO_ENV == "development":
@@ -253,72 +252,60 @@ if SECURE_SSL_REDIRECT:
     SECURE_HSTS_PRELOAD = True
 
 # Logging
+from pythonjsonlogger import jsonlogger
+
+# Ensure logs directory exists
+LOGS_DIR = os.path.join(BASE_DIR, 'logs')
+os.makedirs(LOGS_DIR, exist_ok=True)
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "filters": {
-        "structured": {
-            "()": "core.middleware.StructuredLoggingFilter",
-        },
-    },
     "formatters": {
+        "json": {
+            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s %(pathname)s %(lineno)d",
+        },
         "verbose": {
             "format": "{levelname} {asctime} {module} {message}",
-            "style": "{",
-        },
-        "json": {
-            "format": "{levelname} {asctime} {name} {message} {structured_json}",
             "style": "{",
         },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "verbose",
+            "formatter": "json" if os.getenv("LOG_FORMAT", "json") == "json" else "verbose",
         },
-        "console_json": {
-            "class": "logging.StreamHandler",
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.path.join(LOGS_DIR, "carbon.log"),
+            "maxBytes": 10 * 1024 * 1024,  # 10MB
+            "backupCount": 5,
             "formatter": "json",
-            "filters": ["structured"],
         },
     },
     "root": {
-        "handlers": ["console"],
+        "handlers": ["console", "file"],
         "level": get_env("ROOT_LOG_LEVEL", "INFO"),
     },
     "loggers": {
-        "django": {
-            "handlers": ["console"],
-            "level": get_env("DJANGO_LOG_LEVEL", "INFO"),
-            "propagate": True,
-        },
-        "rest_framework": {
-            "handlers": ["console"],
-            "level": get_env("REST_FRAMEWORK_LOG_LEVEL", "INFO"),
+        "django.request": {
+            "handlers": ["console", "file"],
+            "level": "WARNING",
             "propagate": False,
         },
-        "ai_copilot": {
-            "handlers": ["console"],
-            "level": "DEBUG",
-            "propagate": False,
-        },
-        "core.middleware": {
-            "handlers": ["console_json"],
+        "catalog": {
+            "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": False,
         },
-        "dq.performance": {
-            "handlers": ["console_json"],
+        "mdm": {
+            "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": False,
         },
-        "catalog.operations": {
-            "handlers": ["console_json"],
-            "level": "INFO",
-            "propagate": False,
-        },
-        "mdm.operations": {
-            "handlers": ["console_json"],
+        "dq": {
+            "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": False,
         },

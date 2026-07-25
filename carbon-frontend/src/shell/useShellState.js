@@ -10,6 +10,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HelpIcon from '@mui/icons-material/Help';
 import { APP_REGISTRY } from '../apps/registry';
+import { isGlobalAdmin, isCatalogAdmin, hasAppAccess } from '../utils/rbac';
 
 // Platform studios — shell-owned, NOT app-manifest-driven.
 // App studios are injected dynamically from APP_REGISTRY below.
@@ -49,7 +50,7 @@ function setStoredBoolean(key, value) {
 }
 
 export function useShellState() {
-  const { availablePerspectives } = useAuth();
+  const { availablePerspectives, user, context } = useAuth();
   const studios = useMemo(() => {
     // Derive app studios from the manifest registry.
     const appStudios = APP_REGISTRY.map(m => ({
@@ -69,11 +70,30 @@ export function useShellState() {
       ...PLATFORM_STUDIOS.slice(homeIdx + 1),
     ];
 
-    if (!availablePerspectives?.includes('admin')) {
-      return combined.filter(s => s.id !== 'admin');
-    }
-    return combined;
-  }, [availablePerspectives]);
+    // Filter based on user permissions
+    const filtered = combined.filter((s) => {
+      // Hide admin studio if not admin
+      if (s.id === 'admin') {
+        return isGlobalAdmin(user, availablePerspectives);
+      }
+      
+      // Hide catalog studio if not catalog admin
+      if (s.id === 'catalog') {
+        return isCatalogAdmin(user, availablePerspectives);
+      }
+      
+      // For app studios, check if user has any access to that app
+      const isAppStudio = APP_REGISTRY.some(app => app.id === s.id);
+      if (isAppStudio) {
+        return hasAppAccess(s.id, user, context, availablePerspectives);
+      }
+      
+      // Always show home, settings, help
+      return true;
+    });
+    
+    return filtered;
+  }, [availablePerspectives, user, context]);
 
   const [activeStudio, setActiveStudio] = useState('home');
   const [sidebarVisible, setSidebarVisible] = useState(() => getStoredBoolean('carbon-sidebar-visible', true));

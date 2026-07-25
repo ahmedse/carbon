@@ -8,6 +8,7 @@ from dataschema.models import DataTable, DataRow
 from catalog.models import AssetProfile, GovernanceEvent
 from mdm.models import ReferenceValue
 from .models import TableProfile, FieldProfile, DQRule, DQResult
+from core.utils import retry_on_db_error
 
 logger = logging.getLogger(__name__)
 perf_logger = logging.getLogger('dq.performance')
@@ -61,10 +62,27 @@ def _is_empty(v):
     return v is None or v == '' or v == []
 
 
+@retry_on_db_error(max_retries=3)
 def profile_table(table_id):
+    """Profile table metrics with retry logic and chunked processing for large tables."""
     start_time = time.time()
     table = DataTable.objects.get(id=table_id)
-    rows = _rows(table)
+    
+    # Determine if chunked processing is needed
+    row_count = DataRow.objects.filter(data_table=table, is_archived=False).count()
+    use_chunks = row_count > 10000
+    
+    if use_chunks:
+        logger.info(
+            f"Using chunked processing for table {table_id}",
+            extra={
+                "table_id": table_id,
+                "row_count": row_count,
+                "use_chunks": True,
+            }
+        )
+    
+    rows = _rows(table, chunk=use_chunks)
     n = len(rows)
     
     # Warn on large datasets

@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import ExportProject, ImportJob, ExportJob
 from .serializers import ExportProjectSerializer, ImportJobSerializer, ExportJobSerializer
 from accounts.permissions import ReadAnyWriteGlobalAdmin
+from catalog.permissions import AdminOrSuperuserOnly
 
 
 class ExportProjectViewSet(viewsets.ModelViewSet):
@@ -18,7 +19,7 @@ class ExportProjectViewSet(viewsets.ModelViewSet):
     """
     queryset = ExportProject.objects.select_related('data_table', 'owner').order_by('-updated_at')
     serializer_class = ExportProjectSerializer
-    permission_classes = [ReadAnyWriteGlobalAdmin]
+    permission_classes = [AdminOrSuperuserOnly]
 
     @action(detail=True, methods=['post'])
     def run(self, request, pk=None):
@@ -50,7 +51,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
     """
     queryset = ImportJob.objects.select_related('data_table', 'source', 'user').order_by('-created_at')
     serializer_class = ImportJobSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
     parser_classes = (MultiPartParser, FormParser)
 
     def get_permissions(self):

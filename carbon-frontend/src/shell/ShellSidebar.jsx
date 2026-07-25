@@ -30,6 +30,7 @@ import AppsIcon from '@mui/icons-material/Apps';
 import GridViewIcon from '@mui/icons-material/GridView';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
+import { isGlobalAdmin, filterMenuItems } from '../utils/rbac';
 
 // UI-driven icon mapping for Carbon sidebar items
 // This allows icons to be chosen at runtime without hardcoding
@@ -149,7 +150,7 @@ function getStudioTitle(studioId) {
 }
 
 export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
-  const { currentPerspective, availablePerspectives, context } = useAuth();
+  const { currentPerspective, availablePerspectives, context, user } = useAuth();
   const location = useLocation();
 
   // Filter items based on perspective and available admin status
@@ -157,29 +158,12 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
   const title = getStudioTitle(activeStudio);
   
   // If in admin studio, filter based on whether user has admin perspective
-  const canAccessPlatformAdmin = availablePerspectives.includes('admin') || availablePerspectives.includes('platform-admin');
-  if (activeStudio === 'admin' && !canAccessPlatformAdmin) {
+  if (activeStudio === 'admin' && !isGlobalAdmin(user, availablePerspectives)) {
     items = []; // Hide all admin items for non-admin users
   }
   
-  // Filter items by role-based access (for Carbon and other manifest-driven apps)
-  if (activeStudio === 'carbon') {
-    const userRoles = availablePerspectives || [];
-    items = items.filter(item => {
-      // Always show items without role restriction (role: '*') or no role set
-      if (!item.role || item.role === '*') return true;
-      // Show dividers and groups always
-      if (item.type === 'divider' || item.type === 'group') return true;
-      // For regular items with role: check if user has that role
-      // Match both full role format (carbon:data_owner) and short format (data-owner)
-      if (item.role.includes(':')) {
-        // Extract the role suffix after ':' and convert underscore to hyphen
-        const roleSuffix = item.role.split(':')[1].replace(/_/g, '-');
-        return userRoles.includes(roleSuffix) || userRoles.includes('admin');
-      }
-      return userRoles.includes(item.role);
-    });
-  }
+  // Filter items by role-based access using centralized RBAC
+  items = filterMenuItems(items, user, availablePerspectives, context);
 
   // Compute org unit and scope summary for carbon context header
   const { userOrgUnit, moduleSummary } = useMemo(() => {

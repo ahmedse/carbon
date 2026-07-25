@@ -18,6 +18,7 @@ from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, Calculati
 from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units
 from accounts.models import ScopedRole
 from core.models import Module
+from catalog.permissions import AdminOrSuperuserOnly
 from dataschema.models import DataRow, DataTable
 from .serializers import (
     ReportingPeriodSerializer,
@@ -54,7 +55,7 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
     - GET /emissions/periods/active/ - Get currently active period
     """
     serializer_class = ReportingPeriodSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
     
     def get_queryset(self):
         """Return all reporting periods for authenticated users."""
@@ -91,7 +92,7 @@ class EmissionFactorViewSet(viewsets.ModelViewSet):
     - active: Filter by active status (true/false)
     """
     serializer_class = EmissionFactorSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
     
     def get_queryset(self):
         queryset = EmissionFactor.objects.all()
@@ -141,7 +142,7 @@ class GWPViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for Global Warming Potentials (read-only)."""
     queryset = GWP.objects.all()
     serializer_class = GWPSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
 
 
 class CalculationViewSet(viewsets.ModelViewSet):
