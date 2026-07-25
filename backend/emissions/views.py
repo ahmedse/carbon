@@ -628,7 +628,6 @@ class CalculateAPIView(APIView):
     POST /emissions/calculate/
     {
         "rule_id": 1,  // OR
-        "project_id": 1,  // Calculate all rules for a project
         "reporting_period_id": 1,
         "recalculate": false
     }
@@ -637,63 +636,76 @@ class CalculateAPIView(APIView):
     
     def post(self, request):
         rule_id = request.data.get('rule_id')
-        project_id = request.data.get('project_id')
         period_id = request.data.get('reporting_period_id')
         recalculate = request.data.get('recalculate', False)
         
-        # Get reporting period
+        if not rule_id:
+            return Response(
+                {'error': 'Missing required parameter: rule_id'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         period = None
         if period_id:
             period = ReportingPeriod.objects.filter(id=period_id).first()
-        
-        results = []
-        
-        if rule_id:
-            # Execute single rule
-            rule = CalculationRule.objects.filter(id=rule_id).first()
-            if not rule:
-                return Response({'error': 'Rule not found'}, status=404)
-            
-            created, skipped, errors = rule.calculate_for_table(
-                reporting_period=period,
-                user=request.user,
-                recalculate=recalculate
-            )
-            results.append({
-                'rule': rule.name,
-                'created': created,
-                'skipped': skipped,
-                'errors': errors
-            })
-        
-        else:
-            # Execute all active rules across all data tables
-            rules = CalculationRule.objects.filter(is_active=True)
-            
-            for rule in rules:
-                created, skipped, errors = rule.calculate_for_table(
-                    reporting_period=period,
-                    user=request.user,
-                    recalculate=recalculate
+            if not period:
+                return Response(
+                    {'error': 'Reporting period not found'},
+                    status=status.HTTP_404_NOT_FOUND,
                 )
-                results.append({
-                    'rule': rule.name,
-                    'created': created,
-                    'skipped': skipped,
-                    'errors': errors
-                })
-        
-        total_created = sum(r['created'] for r in results)
-        total_skipped = sum(r['skipped'] for r in results)
-        total_errors = sum(r['errors'] for r in results)
+            if period.status == 'closed':
+                return Response(
+                    {'error': 'Reporting period is closed and cannot be used for new calculations.'},
+                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+
+        rule = CalculationRule.objects.filter(id=rule_id).first()
+        if not rule:
+            return Response({'error': 'Rule not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not rule.is_active:
+            return Response(
+                {'error': 'Cannot execute an inactive calculation rule.'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        rows = DataRow.objects.filter(data_table=rule.data_table, is_archived=False)
+        if not rows.exists():
+            return Response(
+                {'error': 'No active rows found for the selected calculation rule.'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        incomplete_rows = []
+        for row in rows:
+            raw_value = row.values.get(rule.activity_field.name)
+            if raw_value is None or raw_value == '':
+                incomplete_rows.append(row.id)
+                continue
+            if rule.date_field and not row.values.get(rule.date_field.name):
+                incomplete_rows.append(row.id)
+
+        if incomplete_rows:
+            return Response(
+                {
+                    'error': 'Incomplete activity data for one or more rows.',
+                    'incomplete_rows': incomplete_rows,
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        created, skipped, errors = rule.calculate_for_table(
+            reporting_period=period,
+            user=request.user,
+            recalculate=recalculate,
+        )
         
         return Response({
             'success': True,
-            'total_created': total_created,
-            'total_skipped': total_skipped,
-            'total_errors': total_errors,
-            'rules_executed': len(results),
-            'details': results
+            'total_created': created,
+            'total_skipped': skipped,
+            'total_errors': errors,
+            'rule': rule.name,
         })
 
 

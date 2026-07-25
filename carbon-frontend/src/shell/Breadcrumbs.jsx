@@ -67,10 +67,55 @@ const ROUTE_CONFIG = {
     icon: StorageIcon,
     parent: null,
   },
-  '/carbon/data-entry': {
-    label: 'Carbon Data Entry',
-    icon: StorageIcon,
+  '/carbon/console': {
+    label: 'Carbon Console',
+    icon: Co2Icon,
     parent: null,
+  },
+  '/carbon/dashboard': {
+    label: 'Emissions Dashboard',
+    icon: DashboardIcon,
+    parent: '/carbon/console',
+  },
+  '/carbon/owner/portal': {
+    label: 'Data Owner Portal',
+    icon: LocationOnIcon,
+    parent: '/carbon/console',
+  },
+  '/carbon/owner/dashboard': {
+    label: 'My Dashboard',
+    icon: DashboardIcon,
+    parent: '/carbon/owner/portal',
+  },
+  '/carbon/owner/assets': {
+    label: 'My Emission Sources',
+    icon: StorageIcon,
+    parent: '/carbon/owner/portal',
+  },
+  '/carbon/reporting/generate': {
+    label: 'Generate Report',
+    icon: AssessmentIcon,
+    parent: '/carbon/console',
+  },
+  '/carbon/reporting/saved': {
+    label: 'Saved Reports',
+    icon: AssessmentIcon,
+    parent: '/carbon/console',
+  },
+  '/carbon/reporting/periods': {
+    label: 'Reporting Periods',
+    icon: AssignmentIcon,
+    parent: '/carbon/console',
+  },
+  '/carbon/admin/factors': {
+    label: 'Emission Factors',
+    icon: Co2Icon,
+    parent: '/carbon/console',
+  },
+  '/carbon/data-entry': {
+    label: 'Activity Data Entry',
+    icon: StorageIcon,
+    parent: '/carbon/console',
   },
   '/carbon/data-entry/entry/:moduleId/:tableId': {
     label: 'Table Entry',

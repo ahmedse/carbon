@@ -45,31 +45,35 @@ export default {
 
   // ── NAVIGATION ─────────────────────────────────────────────────
   // Injected into platform shell nav by role.
-  // Uses the same pattern as Catalog: hardcoded icon component names.
-  // Note: icons are resolved in ShellSidebar.jsx via SIDEBAR_ICON_MAP.
+  // Enterprise-grade structure aligned with Persefoni/Watershed patterns:
+  //   Overview → Measure → My Data → Reporting → Configuration
+  // Icons are resolved in ShellSidebar.jsx via CARBON_ITEM_ICONS map.
   navigation: {
     section: 'Carbon Footprint',
     items: [
-      { label: 'Dashboard',          path: '/carbon/dashboard',          role: '*' },
+      // ── Overview (all roles) ──
+      { label: 'Overview',             path: '/carbon/console',            role: '*' },
+      { label: 'Emissions Dashboard',  path: '/carbon/dashboard',          role: '*' },
+      { label: 'Analytics & Trends',   path: '/carbon/analytics',          role: 'carbon:analyst' },
       { type: 'divider' },
-      { type: 'group', label: 'Data Owner' },
-      { label: 'My Portal',          path: '/carbon/owner/portal',       role: 'carbon:data_owner' },
-      { label: 'My Dashboard',       path: '/carbon/owner/dashboard',    role: 'carbon:data_owner' },
-      { label: 'My Assets',          path: '/carbon/owner/assets',       role: 'carbon:data_owner' },
+
+      // ── My Data (data owners: enter & review their org-unit data) ──
+      { type: 'group', label: 'My Data' },
+      { label: 'Data Entry',           path: '/carbon/data-entry',         role: 'carbon:data_owner' },
+      { label: 'Emission Sources',     path: '/carbon/owner/assets',       role: 'carbon:data_owner' },
       { type: 'divider' },
-      { type: 'group', label: 'Data Entry' },
-      // Carbon Data Entry — Carbon-owned table-driven data entry interface.
-      // This routes to the existing dataschema experience while keeping the Carbon namespace.
-      { label: 'Carbon Data Entry',   path: '/carbon/data-entry',         role: 'carbon:data_owner' },
-      { type: 'divider' },
+
+      // ── Reporting (analyst + admin) ──
       { type: 'group', label: 'Reporting' },
-      { label: 'Generate Report',    path: '/carbon/reporting/generate', role: 'carbon:analyst' },
-      { label: 'Saved Reports',      path: '/carbon/reporting/saved',    role: 'carbon:analyst' },
-      { label: 'Analytics',          path: '/carbon/analytics',          role: 'carbon:analyst' },
+      { label: 'Generate Report',      path: '/carbon/reporting/generate', role: 'carbon:analyst' },
+      { label: 'Saved Reports',        path: '/carbon/reporting/saved',    role: 'carbon:analyst' },
+      { label: 'Reporting Periods',    path: '/carbon/reporting/periods',  role: 'carbon:analyst' },
       { type: 'divider' },
-      { type: 'group', label: 'Administration' },
-      { label: 'Emission Factors',   path: '/carbon/admin/factors',      role: 'carbon:admin' },
-      { label: 'Reporting Periods',  path: '/carbon/reporting/periods',  role: 'carbon:admin' },
+
+      // ── Configuration (admin only) ──
+      { type: 'group', label: 'Configuration' },
+      { label: 'Emission Factors',     path: '/carbon/admin/factors',      role: 'carbon:admin' },
+      { label: 'Calculation Rules',    path: '/carbon/admin/rules',        role: 'carbon:admin' },
     ],
   },
 

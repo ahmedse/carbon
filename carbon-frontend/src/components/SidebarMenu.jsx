@@ -25,6 +25,7 @@ import {
   DescriptionRounded as ReportingIcon,
   LocationCityRounded as OrgIcon,
   AdminPanelSettingsRounded as AccessIcon,
+  EditNoteRounded as DataEntryIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../auth/AuthContext";
 
@@ -552,6 +553,28 @@ function DataOwnerSidebar({ collapsed, location }) {
 
   return (
     <List sx={{ pt: 0.5, pb: 2, px: 0.5 }}>
+      {/* Overview */}
+      <MenuItem
+        to="/carbon/console"
+        icon={<DashboardIcon />}
+        label="Overview"
+        tooltip="Carbon footprint overview and workflows"
+        selected={location.pathname === "/carbon/console"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+      <MenuItem
+        to="/carbon/dashboard"
+        icon={<AnalyticsIcon />}
+        label="Emissions Dashboard"
+        tooltip="Organization-wide emissions and trends"
+        selected={location.pathname === "/carbon/dashboard"}
+        collapsed={collapsed}
+        sx={{ mb: 0.5 }}
+      />
+
+      <Divider sx={{ my: 1, mx: 1 }} />
+
       {/* My Data Section */}
       <Typography
         variant="caption"
@@ -569,28 +592,19 @@ function DataOwnerSidebar({ collapsed, location }) {
       </Typography>
 
       <MenuItem
-        to="/carbon/owner/portal"
-        icon={<DashboardIcon />}
-        label="My Portal"
-        tooltip="Overview of your domain assets"
-        selected={location.pathname === "/carbon/owner/portal"}
-        collapsed={collapsed}
-        sx={{ mb: 0.5 }}
-      />
-      <MenuItem
-        to="/carbon/owner/dashboard"
-        icon={<AnalyticsIcon />}
-        label="My Dashboard"
-        tooltip="Emissions KPIs and data quality"
-        selected={location.pathname === "/carbon/owner/dashboard"}
+        to="/carbon/data-entry"
+        icon={<DataEntryIcon />}
+        label="Data Entry"
+        tooltip="Enter activity data for your org units"
+        selected={location.pathname === "/carbon/data-entry"}
         collapsed={collapsed}
         sx={{ mb: 0.5 }}
       />
       <MenuItem
         to="/carbon/owner/assets"
         icon={<TableIcon />}
-        label="My Assets"
-        tooltip="Scoped asset browser"
+        label="Emission Sources"
+        tooltip="Your scoped emission source assets"
         selected={location.pathname === "/carbon/owner/assets"}
         collapsed={collapsed}
         sx={{ mb: 0.5 }}

@@ -40,24 +40,38 @@ export default function DetailMetricsPanel({
 export function MetricCard({
   label = '',
   value = '',
-  icon: Icon = null,
+  icon = null,
   color = 'default',
   variant = 'outlined',
 }) {
+  const iconStyle = {
+    color: `${color}.main`,
+    fontSize: '1.5rem',
+    mt: 0.5,
+    flexShrink: 0,
+  };
+
+  const renderIcon = () => {
+    if (!icon) {
+      return null;
+    }
+    if (React.isValidElement(icon)) {
+      return React.cloneElement(icon, {
+        sx: {
+          ...icon.props.sx,
+          ...iconStyle,
+        },
+      });
+    }
+    const IconComponent = icon;
+    return <IconComponent sx={iconStyle} />;
+  };
+
   return (
     <Card variant={variant} sx={{ mb: 2 }}>
       <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-          {Icon && (
-            <Icon
-              sx={{
-                color: `${color}.main`,
-                fontSize: '1.5rem',
-                mt: 0.5,
-                flexShrink: 0,
-              }}
-            />
-          )}
+          {renderIcon()}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="caption" sx={{ textTransform: 'uppercase', color: 'text.secondary' }}>
               {label}

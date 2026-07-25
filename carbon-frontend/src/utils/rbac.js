@@ -167,8 +167,10 @@ export function filterMenuItems(items, user, availablePerspectives = [], context
     
     // Match full role format (carbon:data_owner) or short format (data-owner)
     if (item.role.includes(':')) {
-      const roleSuffix = item.role.split(':')[1].replace(/_/g, '-');
-      return userRoles.includes(roleSuffix) || isGlobalAdmin(user, availablePerspectives);
+      const [appPrefix, roleSuffix] = item.role.split(':');
+      const normalizedSuffix = roleSuffix.replace(/_/g, '-');
+      const appPrefixedRole = `${appPrefix}-${normalizedSuffix}`;
+      return userRoles.includes(normalizedSuffix) || userRoles.includes(appPrefixedRole) || isGlobalAdmin(user, availablePerspectives);
     }
     
     return userRoles.includes(item.role) || isGlobalAdmin(user, availablePerspectives);

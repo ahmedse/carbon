@@ -35,17 +35,18 @@ import { isGlobalAdmin, filterMenuItems } from '../utils/rbac';
 // UI-driven icon mapping for Carbon sidebar items
 // This allows icons to be chosen at runtime without hardcoding
 const CARBON_ITEM_ICONS = {
-  'My Portal':         LocationOnIcon,
-  'My Dashboard':      BarChartIcon,
-  'My Assets':         StorageIcon,
-  'Carbon Data Entry': AddCircleOutlineIcon,
-  'Generate Report':   AssessmentIcon,
-  'Saved Reports':   FolderIcon,
-  'Analytics':       BarChartIcon,
-  'Emission Factors': ScienceIcon,
-  'Reporting Periods': AssignmentIcon,
-  'Table Manager':   TableChartIcon,
-  'Dashboard':       DashboardIcon,
+  'Overview':             DashboardIcon,
+  'Emissions Dashboard':  BarChartIcon,
+  'Analytics & Trends':   BarChartIcon,
+  'Data Entry':           AddCircleOutlineIcon,
+  'Emission Sources':     StorageIcon,
+  'Generate Report':      AssessmentIcon,
+  'Saved Reports':        FolderIcon,
+  'Reporting Periods':    AssignmentIcon,
+  'Emission Factors':     ScienceIcon,
+  'Calculation Rules':    ScienceIcon,
+  'Table Manager':        TableChartIcon,
+  'Dashboard':            DashboardIcon,
 };
 
 // Define sidebar content per studio
