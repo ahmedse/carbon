@@ -69,19 +69,23 @@ ChartJS.register(
 
 // ============ Styled Components ============
 
+// ── Compact Design System (aligned with carbonDesign.js) ────────────────────
+const SPACING = { sm: 1.5, md: 2, lg: 3 };
+const FONT = {
+  statValue: { fontSize: '1.5rem', fontWeight: 700, lineHeight: 1.2 },
+  statLabel: { fontSize: '0.6875rem', fontWeight: 500, letterSpacing: '0.02em', textTransform: 'uppercase' },
+  cardTitle: { fontSize: '0.875rem', fontWeight: 600 },
+  bodySmall: { fontSize: '0.75rem', lineHeight: 1.5 },
+  chip: { fontSize: '0.6875rem', fontWeight: 500 },
+};
+
 const GlassCard = ({ children, sx = {}, ...props }) => (
   <Card
-    elevation={0}
+    variant="outlined"
     sx={{
-      background: "rgba(255, 255, 255, 0.95)",
-      backdropFilter: "blur(10px)",
-      border: "1px solid rgba(0, 0, 0, 0.08)",
-      borderRadius: 3,
-      transition: "all 0.3s ease",
-      "&:hover": {
-        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.08)",
-        transform: "translateY(-2px)",
-      },
+      borderRadius: 1.5,
+      transition: "box-shadow 0.15s ease",
+      "&:hover": { boxShadow: "0 2px 12px rgba(0, 0, 0, 0.06)" },
       ...sx,
     }}
     {...props}
@@ -92,18 +96,13 @@ const GlassCard = ({ children, sx = {}, ...props }) => (
 
 const StatCard = ({ title, value, unit, subtitle, icon, color, trend, trendValue }) => (
   <GlassCard>
-    <CardContent sx={{ p: 3 }}>
-      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 2 }}>
+    <CardContent sx={{ p: SPACING.md, '&:last-child': { pb: SPACING.md } }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 1.5 }}>
         <Box
           sx={{
-            width: 48,
-            height: 48,
-            borderRadius: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: `linear-gradient(135deg, ${color}20, ${color}40)`,
-            color: color,
+            width: 36, height: 36, borderRadius: 1,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            bgcolor: `${color}18`, color,
           }}
         >
           {icon}
@@ -111,30 +110,23 @@ const StatCard = ({ title, value, unit, subtitle, icon, color, trend, trendValue
         {trend && (
           <Chip
             size="small"
-            icon={trend === "up" ? <TrendingUp fontSize="small" /> : <TrendingDown fontSize="small" />}
+            icon={trend === "up" ? <TrendingUp sx={{ fontSize: 12 }} /> : <TrendingDown sx={{ fontSize: 12 }} />}
             label={trendValue}
-            sx={{
-              bgcolor: trend === "up" ? "#fee2e2" : "#d1fae5",
-              color: trend === "up" ? "#dc2626" : "#059669",
-              fontWeight: 600,
-              "& .MuiChip-icon": {
-                color: "inherit",
-              },
-            }}
+            sx={{ ...FONT.chip, height: 20, bgcolor: trend === "up" ? "#fee2e2" : "#d1fae5", color: trend === "up" ? "#dc2626" : "#059669" }}
           />
         )}
       </Box>
-      <Typography variant="h3" sx={{ fontWeight: 700, color: "#111827", mb: 0.5 }}>
+      <Typography sx={{ ...FONT.statValue, color: "text.primary", mb: 0.25 }}>
         {typeof value === "number" ? value.toLocaleString() : value}
-        <Typography component="span" variant="h6" sx={{ ml: 1, fontWeight: 400, color: "#6b7280" }}>
+        <Typography component="span" sx={{ ml: 0.75, ...FONT.bodySmall, color: "text.secondary" }}>
           {unit}
         </Typography>
       </Typography>
-      <Typography variant="body2" sx={{ color: "#6b7280", fontWeight: 500 }}>
+      <Typography sx={{ ...FONT.statLabel, color: "text.secondary" }}>
         {title}
       </Typography>
       {subtitle && (
-        <Typography variant="caption" sx={{ color: "#9ca3af", display: "block", mt: 0.5 }}>
+        <Typography sx={{ ...FONT.chip, color: "text.disabled", mt: 0.25 }}>
           {subtitle}
         </Typography>
       )}
@@ -143,42 +135,30 @@ const StatCard = ({ title, value, unit, subtitle, icon, color, trend, trendValue
 );
 
 const ScopeCard = ({ scope, name, value, percentage, color }) => (
-  <Box sx={{ flex: 1, minWidth: 200 }}>
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-      <Box
-        sx={{
-          width: 12,
-          height: 12,
-          borderRadius: "50%",
-          bgcolor: color,
-        }}
-      />
-      <Typography variant="body2" sx={{ fontWeight: 600, color: "#374151" }}>
+  <Box sx={{ flex: 1, minWidth: 180 }}>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
+      <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color }} />
+      <Typography sx={{ ...FONT.cardTitle, color: "text.primary" }}>
         {name}
       </Typography>
     </Box>
-    <Typography variant="h5" sx={{ fontWeight: 700, color: "#111827" }}>
+    <Typography sx={{ ...FONT.statValue, color: "text.primary", mb: 0.25 }}>
       {value.toLocaleString()}
-      <Typography component="span" variant="body2" sx={{ ml: 0.5, color: "#6b7280" }}>
+      <Typography component="span" sx={{ ml: 0.5, ...FONT.bodySmall, color: "text.secondary" }}>
         t CO₂e
       </Typography>
     </Typography>
-    <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
+    <Box sx={{ mt: 0.75, display: "flex", alignItems: "center", gap: 1 }}>
       <LinearProgress
         variant="determinate"
         value={percentage}
         sx={{
-          flex: 1,
-          height: 6,
-          borderRadius: 3,
+          flex: 1, height: 4, borderRadius: 2,
           bgcolor: `${color}20`,
-          "& .MuiLinearProgress-bar": {
-            bgcolor: color,
-            borderRadius: 3,
-          },
+          "& .MuiLinearProgress-bar": { bgcolor: color, borderRadius: 2 },
         }}
       />
-      <Typography variant="caption" sx={{ fontWeight: 600, color: "#6b7280", minWidth: 40 }}>
+      <Typography sx={{ ...FONT.chip, color: "text.secondary", minWidth: 36 }}>
         {percentage.toFixed(1)}%
       </Typography>
     </Box>
@@ -466,25 +446,20 @@ export default function EmissionsDashboard({ projectId }) {
   // No data state
   if (!data || data.calculation_count === 0) {
     return (
-      <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 3 }, py: 4 }}>
-        <Paper sx={{ p: 6, textAlign: "center", bgcolor: "#f9fafb" }}>
-          <CloudQueue sx={{ fontSize: 64, color: "#9ca3af", mb: 2 }} />
-          <Typography variant="h5" sx={{ fontWeight: 600, color: "#374151", mb: 1 }}>
+      <Box sx={{ px: SPACING.lg, py: SPACING.md, height: '100%', overflow: 'auto' }}>
+        <Paper variant="outlined" sx={{ p: SPACING.lg * 2, textAlign: "center", borderRadius: 1.5 }}>
+          <CloudQueue sx={{ fontSize: 48, color: "text.disabled", mb: SPACING.md }} />
+          <Typography sx={{ ...FONT.cardTitle, color: "text.secondary", mb: 0.5 }}>
             No Emissions Data Yet
           </Typography>
-          <Typography variant="body1" sx={{ color: "#6b7280", mb: 3 }}>
+          <Typography sx={{ ...FONT.bodySmall, color: "text.disabled", mb: SPACING.lg }}>
             Run calculations to see your carbon emissions dashboard
           </Typography>
           <Button
             variant="contained"
             startIcon={<Refresh />}
             onClick={handleRecalculate}
-            sx={{
-              bgcolor: "#10b981",
-              "&:hover": { bgcolor: "#059669" },
-              borderRadius: 2,
-              px: 4,
-            }}
+            sx={{ borderRadius: 1.5, px: SPACING.lg }}
           >
             Calculate Emissions
           </Button>
@@ -496,30 +471,19 @@ export default function EmissionsDashboard({ projectId }) {
   return (
     <Box
       sx={{
-        maxWidth: 1600,
-        mx: "auto",
-        px: { xs: 2, md: 4 },
-        py: 4,
-        background: "linear-gradient(135deg, #f0fdf4 0%, #f8fafc 100%)",
-        minHeight: "100vh",
+        px: SPACING.lg,
+        py: SPACING.md,
+        height: '100%',
+        overflow: 'auto',
       }}
     >
       {/* Header */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 4 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: SPACING.lg }}>
         <Box>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 800,
-              background: "linear-gradient(135deg, #10b981, #059669)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              mb: 0.5,
-            }}
-          >
-            Carbon Emissions Dashboard
+          <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: 'text.primary', mb: 0.25 }}>
+            Emissions Dashboard
           </Typography>
-          <Typography variant="body1" sx={{ color: "#6b7280" }}>
+          <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>
             {data.reporting_period?.name || `Year ${selectedYear}`} • Last updated:{" "}
             {data.last_updated
               ? new Date(data.last_updated).toLocaleDateString()
@@ -569,7 +533,7 @@ export default function EmissionsDashboard({ projectId }) {
       </Box>
 
       {/* Top Stats */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={SPACING.sm} sx={{ mb: SPACING.lg }}>
         <Grid item xs={12} md={4}>
           <StatCard
             title="Total Carbon Emissions"
@@ -626,7 +590,7 @@ export default function EmissionsDashboard({ projectId }) {
       </GlassCard>
 
       {/* Charts Row */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={SPACING.sm} sx={{ mb: SPACING.lg }}>
         {/* Monthly Trend */}
         <Grid item xs={12} lg={8}>
           <GlassCard sx={{ height: "100%" }}>
