@@ -1,38 +1,55 @@
 // File: src/pages/DataEntryPage.jsx
 
 import React from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { Box } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import TableDataPage from "../components/TableDataPage";
+import { PageHeader, LoadingSkeleton } from "../components";
 
 export default function DataEntryPage() {
-  const { moduleName, tableId } = useParams();
+  const { moduleId, tableId } = useParams();
+  const navigate = useNavigate();
   const { user, context } = useAuth();
 
   if (!user || !context) {
-    return <div style={{ padding: 48, textAlign: "center" }}>Loading context...</div>;
+    return <LoadingSkeleton variant="detail" />;
   }
 
-  // Get project ID robustly
   const projectId = context.project_id || context.projectId;
-
-  // Prefer module_id from context, else fallback to moduleName (from URL)
-  let moduleId = context.module_id;
-  if (!moduleId && context.context_type === "module") {
-    moduleId = context.context_id;
-  }
-  if (!moduleId && moduleName) {
-    moduleId = moduleName;
-  }
+  const module = (context?.modules || []).find((m) => String(m.id) === String(moduleId));
 
   return (
-    <TableDataPage
-      project_id={projectId}
-      module_id={moduleId}
-      moduleId={moduleId}
-      tableId={tableId}
-      lang={context.language || "en"}
-      token={user.token}
-    />
+    <Box>
+      <PageHeader
+        title="Data Entry"
+        subtitle={module?.name || `Module ${moduleId}`}
+        breadcrumbs={[
+          { label: "Home", path: "/dashboard" },
+          { label: "My Data", path: "/carbon/my-data" },
+          { label: module?.name || "...", path: `/carbon/my-data/${moduleId}` },
+          { label: "Data Entry" },
+        ]}
+        actions={
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <Box
+              component="button"
+              onClick={() => navigate(`/carbon/my-data/${moduleId}`)}
+              sx={{ border: "none", background: "transparent", cursor: "pointer", color: "text.secondary", fontSize: "0.875rem" }}
+            >
+              Back to source
+            </Box>
+          </Box>
+        }
+      />
+      <TableDataPage
+        project_id={projectId}
+        module_id={moduleId}
+        moduleId={moduleId}
+        tableId={tableId}
+        lang={context.language || "en"}
+        token={user.token}
+      />
+    </Box>
   );
 }

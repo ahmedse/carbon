@@ -112,10 +112,15 @@ const ROUTE_CONFIG = {
     icon: Co2Icon,
     parent: '/carbon/console',
   },
+  '/carbon/my-data': {
+    label: 'My Data',
+    icon: StorageIcon,
+    parent: '/carbon/console',
+  },
   '/carbon/data-entry': {
     label: 'Activity Data Entry',
     icon: StorageIcon,
-    parent: '/carbon/console',
+    parent: '/carbon/my-data',
   },
   '/carbon/data-entry/entry/:moduleId/:tableId': {
     label: 'Table Entry',

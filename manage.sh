@@ -298,6 +298,8 @@ start_frontend() {
     
     # Start
     cd "$FRONTEND_DIR" || return 1
+    export PORT="$FRONTEND_PORT"
+    export VITE_PORT="$FRONTEND_PORT"
     nohup npm run dev > "$FRONTEND_LOG" 2>&1 &
     echo $! > "$FRONTEND_PID"
     

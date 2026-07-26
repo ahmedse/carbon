@@ -19,6 +19,8 @@ from .views import (
     OwnerSummaryAPIView,
     OwnerAssetsAPIView,
     OwnerActivityAPIView,
+    MyDataAPIView,
+    ConsoleAPIView,
 )
 
 app_name = 'emissions'
@@ -39,11 +41,14 @@ urlpatterns = [
     # Dashboard API
     path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),
     
-    # Owner dashboard (org-unit scoped)
+    # Owner APIs (org-unit scoped)
     path('owner-dashboard/', OwnerDashboardAPIView.as_view(), name='owner-dashboard'),
     path('owner/summary/', OwnerSummaryAPIView.as_view(), name='owner-summary'),
     path('owner/assets/', OwnerAssetsAPIView.as_view(), name='owner-assets'),
     path('owner/activity/', OwnerActivityAPIView.as_view(), name='owner-activity'),
+
+    # My Data API (consolidated owner workspace)
+    path('my-data/', MyDataAPIView.as_view(), name='my-data'),
     
     # Yearly Comparison API
     path('yearly-comparison/', YearlyComparisonAPIView.as_view(), name='yearly-comparison'),
@@ -53,4 +58,7 @@ urlpatterns = [
     
     # Calculate API (trigger calculations)
     path('calculate/', CalculateAPIView.as_view(), name='calculate'),
+    
+    # Console API (aggregated landing page data)
+    path('console/', ConsoleAPIView.as_view(), name='console'),
 ]

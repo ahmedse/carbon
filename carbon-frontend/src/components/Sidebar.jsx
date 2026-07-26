@@ -24,9 +24,9 @@ export default function Sidebar({ collapsed = false }) {
       <Box
         sx={{
           px: collapsed ? 1 : 2,
-          py: 1.5,
+          py: 1.25,
           borderBottom: "1px solid #e5e7eb",
-          minHeight: 48,
+          minHeight: 42,
           display: "flex",
           alignItems: "center",
           justifyContent: collapsed ? "center" : "flex-start",
@@ -72,14 +72,14 @@ export default function Sidebar({ collapsed = false }) {
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography
-                fontSize="0.8125rem"
+                fontSize="0.6875rem"
                 fontWeight={600}
                 color="#111827"
                 noWrap
               >
                 {project.name}
               </Typography>
-              <Typography fontSize="0.6875rem" color="#6b7280" noWrap>
+              <Typography fontSize="0.5625rem" color="#6b7280" noWrap>
                 {subtitle}
               </Typography>
             </Box>

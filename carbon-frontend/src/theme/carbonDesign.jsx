@@ -8,7 +8,8 @@
 //   - Subtle borders over heavy shadows
 //   - All tokens in one place — no scattered magic numbers
 
-import { Box, Paper, Typography, useTheme } from '@mui/material';
+import { Box, Paper, Typography, useTheme, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 // ── Spacing Scale ──────────────────────────────────────────────────────────
 export const SPACING = {
@@ -21,16 +22,16 @@ export const SPACING = {
 
 // ── Typography Scale (compact, Linear/Vercel-inspired) ─────────────────────
 export const FONT = {
-  pageTitle:   { fontSize: '1.25rem', fontWeight: 700, lineHeight: 1.3 },   // 20px
-  sectionTitle:{ fontSize: '0.8125rem', fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase' }, // 13px
-  cardTitle:   { fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.3 },   // 14px
-  body:        { fontSize: '0.8125rem', lineHeight: 1.5 },                    // 13px
-  bodySmall:   { fontSize: '0.75rem', lineHeight: 1.5 },                      // 12px
-  caption:     { fontSize: '0.6875rem', lineHeight: 1.4 },                    // 11px
-  statValue:   { fontSize: '1.5rem', fontWeight: 700, lineHeight: 1.2 },     // 24px
-  statLabel:   { fontSize: '0.6875rem', fontWeight: 500, letterSpacing: '0.02em', textTransform: 'uppercase' }, // 11px
-  chip:        { fontSize: '0.6875rem', fontWeight: 500 },                    // 11px
-  tab:         { fontSize: '0.75rem', fontWeight: 600 },                      // 12px
+  pageTitle:   { fontSize: '1rem', fontWeight: 700, lineHeight: 1.3 },   // ~16px
+  sectionTitle:{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }, // ~11px
+  cardTitle:   { fontSize: '0.75rem', fontWeight: 600, lineHeight: 1.3 },   // ~12px
+  body:        { fontSize: '0.6875rem', lineHeight: 1.5 },                    // ~11px
+  bodySmall:   { fontSize: '0.625rem', lineHeight: 1.5 },                      // ~10px
+  caption:     { fontSize: '0.5625rem', lineHeight: 1.4 },                    // ~9px
+  statValue:   { fontSize: '1.125rem', fontWeight: 700, lineHeight: 1.2 },     // ~18px
+  statLabel:   { fontSize: '0.5625rem', fontWeight: 500, letterSpacing: '0.02em', textTransform: 'uppercase' }, // ~9px
+  chip:        { fontSize: '0.5625rem', fontWeight: 500 },                    // ~9px
+  tab:         { fontSize: '0.625rem', fontWeight: 600 },                      // ~10px
 };
 
 // ── Border & Shadow Tokens ──────────────────────────────────────────────────
@@ -45,8 +46,8 @@ export function PageWrapper({ children, sx = {} }) {
   return (
     <Box
       sx={{
-        px: SPACING.lg,    // 24px horizontal
-        py: SPACING.md,    // 16px vertical
+        px: SPACING.md,    // 16px horizontal
+        py: SPACING.sm,    // 12px vertical
         height: '100%',
         overflow: 'auto',
         ...sx,
@@ -59,7 +60,6 @@ export function PageWrapper({ children, sx = {} }) {
 
 // ── Page Header — compact title + optional subtitle ─────────────────────────
 export function PageHeader({ title, subtitle, action }) {
-  const theme = useTheme();
   return (
     <Box
       sx={{
@@ -101,6 +101,52 @@ export function SectionHeader({ label, action }) {
       </Typography>
       {action}
     </Box>
+  );
+}
+
+// ── Collapsible Section — System-wide standard for bulky content ────────────
+export function CollapsibleSection({ label, defaultExpanded = true, children, action }) {
+  return (
+    <Accordion
+      defaultExpanded={defaultExpanded}
+      elevation={0}
+      sx={{ 
+        mb: SPACING.sm, 
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        '&:before': { display: 'none' },
+        transition: 'box-shadow 0.25s ease',
+        '&.Mui-expanded': {
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+        }
+      }}
+    >
+      <AccordionSummary 
+        expandIcon={<ExpandMoreIcon sx={{ color: 'primary.main', fontSize: 18 }} />}
+        sx={{
+          minHeight: 40,
+          '& .MuiAccordionSummary-content': {
+            my: 0.75
+          },
+          '&:hover': {
+            bgcolor: 'action.hover'
+          },
+          transition: 'background-color 0.2s ease'
+        }}
+      >
+        <Box sx={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, color: 'text.primary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {label}
+          </Typography>
+          {action && <Box onClick={(e) => e.stopPropagation()}>{action}</Box>}
+        </Box>
+      </AccordionSummary>
+      <AccordionDetails sx={{ p: SPACING.sm, pt: 0.5 }}>
+        {children}
+      </AccordionDetails>
+    </Accordion>
   );
 }
 

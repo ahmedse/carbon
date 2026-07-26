@@ -192,3 +192,54 @@ class ReportConfigSerializer(serializers.ModelSerializer):
             'last_run_at', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_by', 'last_run_at', 'created_at', 'updated_at']
+
+
+# ============= Console Serializers =============
+
+class ActivePeriodConsoleSerializer(serializers.Serializer):
+    """Active reporting period for the console."""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+    status = serializers.CharField()
+    days_remaining = serializers.IntegerField()
+
+
+class StatsConsoleSerializer(serializers.Serializer):
+    """Aggregated stats for the console."""
+    total_modules = serializers.IntegerField()
+    total_tables = serializers.IntegerField()
+    total_calculations = serializers.IntegerField()
+    avg_quality_score = serializers.FloatField()
+    total_emissions_tonnes = serializers.FloatField()
+
+
+class AlertConsoleSerializer(serializers.Serializer):
+    """Alert item for the console."""
+    type = serializers.ChoiceField(choices=['dq', 'pending_submission'])
+    module_name = serializers.CharField(allow_null=True)
+    message = serializers.CharField()
+    # DQ-specific fields
+    score = serializers.IntegerField(required=False, allow_null=True)
+    threshold = serializers.IntegerField(required=False, allow_null=True)
+    # Pending submission-specific fields
+    module_id = serializers.IntegerField(required=False, allow_null=True)
+    pending_rows = serializers.IntegerField(required=False, allow_null=True)
+
+
+class RecentActivityConsoleSerializer(serializers.Serializer):
+    """Recent activity item for the console."""
+    id = serializers.IntegerField()
+    action = serializers.CharField()
+    module_name = serializers.CharField(allow_null=True)
+    timestamp = serializers.DateTimeField(allow_null=True)
+    detail = serializers.CharField(allow_null=True)
+
+
+class ConsoleResponseSerializer(serializers.Serializer):
+    """Complete console response."""
+    active_period = ActivePeriodConsoleSerializer(allow_null=True)
+    stats = StatsConsoleSerializer()
+    alerts = AlertConsoleSerializer(many=True)
+    recent_activity = RecentActivityConsoleSerializer(many=True)

@@ -282,7 +282,11 @@ export default function EntityDetailShell({
                   )}
 
                   {/* Metrics Content */}
-                  <Box sx={{ flex: 1, overflow: 'auto' }}>{metricsPanel}</Box>
+                  <Box sx={{ flex: 1, overflow: 'auto' }}>
+                    {metricsTabs?.length > 0
+                      ? metricsTabs[metricsTabIndex]?.render?.() ?? metricsPanel
+                      : metricsPanel}
+                  </Box>
                 </Box>
               )}
             </>

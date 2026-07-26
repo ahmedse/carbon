@@ -6,7 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.db.models import Sum, Count, Avg, F, Q, Max
+from django.db.models import Sum, Count, Window, F, Q, Max, Exists, OuterRef
 from django.db.models.functions import TruncMonth, ExtractMonth
 from django.utils import timezone
 from decimal import Decimal
@@ -19,6 +19,7 @@ from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units
 from accounts.models import ScopedRole
 from core.models import Module
 from catalog.permissions import AdminOrSuperuserOnly
+from catalog.models import AssetProfile
 from dataschema.models import DataRow, DataTable
 from .serializers import (
     ReportingPeriodSerializer,
@@ -30,6 +31,7 @@ from .serializers import (
     DashboardSummarySerializer,
     EmissionReportSerializer,
     ReportConfigSerializer,
+    ConsoleResponseSerializer,
 )
 
 
@@ -1086,3 +1088,331 @@ class OwnerActivityAPIView(APIView):
                 'period_name': calculation.reporting_period.name if calculation.reporting_period else None,
             })
         return Response(payload)
+
+
+class MyDataAPIView(APIView):
+    """
+    Consolidated My Data endpoint for Data Owner workspace.
+
+    GET /api/v1/emissions/my-data/
+
+    Returns org unit context, stats, modules, and recent activity
+    in a single response — the only endpoint the My Data page calls.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        # ── 1. Org unit context ─────────────────────────────────────
+        org_units = get_visible_org_units(user)
+        if not org_units:
+            return Response({'detail': 'No accessible org units'}, status=403)
+
+        org_unit = org_units[0]
+        org_unit_data = {
+            'id': org_unit.id,
+            'name': org_unit.name,
+            'code': getattr(org_unit, 'code', ''),
+        }
+
+        # ── 2. Visible modules for this org unit ────────────────────
+        modules_qs = Module.objects.filter(
+            org_unit__in=org_units
+        ).select_related('org_unit').order_by('name')
+
+        module_ids = list(modules_qs.values_list('id', flat=True))
+
+        # ── 3. Table + row aggregates per module ────────────────────
+        table_counts = dict(
+            DataTable.objects.filter(module_id__in=module_ids, is_archived=False)
+            .values('module_id')
+            .annotate(count=Count('id'))
+            .values_list('module_id', 'count')
+        )
+        row_counts = dict(
+            DataRow.objects.filter(
+                data_table__module_id__in=module_ids, is_archived=False
+            )
+            .values('data_table__module_id')
+            .annotate(count=Count('id'))
+            .values_list('data_table__module_id', 'count')
+        )
+        last_entry_map = dict(
+            DataRow.objects.filter(data_table__module_id__in=module_ids)
+            .values('data_table__module_id')
+            .annotate(last_created_at=Max('created_at'))
+            .values_list('data_table__module_id', 'last_created_at')
+        )
+
+        # ── 4. Quality from AssetProfile ────────────────────────────
+        quality_qs = AssetProfile.objects.filter(
+            Q(data_table__module_id__in=module_ids) |
+            Q(data_field__data_table__module_id__in=module_ids)
+        )
+        quality_statuses = list(
+            quality_qs.values_list('quality_status', flat=True)
+        )
+        passing = quality_statuses.count('passing')
+        warning = quality_statuses.count('warning')
+        failing = quality_statuses.count('failing')
+        unknown = len(quality_statuses) - passing - warning - failing
+        total_assets = len(quality_statuses)
+
+        # Quality per module
+        module_quality = {}
+        for asset in quality_qs.select_related('data_table__module', 'data_field__data_table__module'):
+            mid = None
+            if asset.data_table and asset.data_table.module_id:
+                mid = asset.data_table.module_id
+            elif asset.data_field and asset.data_field.data_table and asset.data_field.data_table.module_id:
+                mid = asset.data_field.data_table.module_id
+            if mid:
+                module_quality.setdefault(mid, []).append(asset.quality_status)
+
+        # ── 5. Stats ────────────────────────────────────────────────
+        total_rows = sum(row_counts.values())
+        total_modules = len(module_ids)
+        modules_with_data = sum(1 for mid in module_ids if row_counts.get(mid, 0) > 0)
+        latest_submission = (
+            max(last_entry_map.values()).isoformat()
+            if last_entry_map else None
+        )
+
+        stats = {
+            'total_modules': total_modules,
+            'modules_with_data': modules_with_data,
+            'total_rows': total_rows,
+            'latest_submission': latest_submission,
+            'data_quality': {
+                'passing': passing,
+                'warning': warning,
+                'failing': failing,
+                'unknown': unknown,
+                'total_assets': total_assets,
+            },
+        }
+
+        # ── 6. Module list ──────────────────────────────────────────
+        modules_data = []
+        for module in modules_qs:
+            mid = module.id
+            tc = table_counts.get(mid, 0)
+            rc = row_counts.get(mid, 0)
+            le = last_entry_map.get(mid)
+            statuses = module_quality.get(mid, [])
+            if 'failing' in statuses:
+                qs = 'failing'
+            elif 'warning' in statuses:
+                qs = 'warning'
+            elif 'passing' in statuses:
+                qs = 'passing'
+            else:
+                qs = 'unknown'
+            passing_count = statuses.count('passing')
+            qscore = round(passing_count / len(statuses) * 100, 1) if statuses else None
+
+            modules_data.append({
+                'id': mid,
+                'name': module.name,
+                'scope': module.scope,
+                'table_count': tc,
+                'row_count': rc,
+                'quality_status': qs,
+                'quality_score': qscore,
+                'last_entry': le.isoformat() if le else None,
+            })
+
+        # ── 7. Recent activity (last 10 data entries) ───────────────
+        recent_rows = DataRow.objects.filter(
+            data_table__module_id__in=module_ids, is_archived=False
+        ).select_related('data_table__module', 'created_by').order_by('-created_at')[:10]
+
+        recent_activity = []
+        for row in recent_rows:
+            recent_activity.append({
+                'module_name': row.data_table.module.name if row.data_table.module else None,
+                'action': 'data_entered',
+                'timestamp': row.created_at.isoformat(),
+                'rows': 1,
+                'user': row.created_by.username if row.created_by else None,
+            })
+
+        return Response({
+            'org_unit': org_unit_data,
+            'stats': stats,
+            'modules': modules_data,
+            'recent_activity': recent_activity,
+        })
+
+
+class ConsoleAPIView(APIView):
+    """
+    Aggregated console data for the Carbon landing page.
+
+    GET /api/v1/emissions/console/
+
+    Returns active reporting period, stats, alerts, and recent activity
+    in a single response — the only endpoint the Console page calls.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        today = timezone.now().date()
+
+        # ── 1. Active reporting period ──────────────────────────────────
+        active_period = ReportingPeriod.objects.filter(
+            status__in=['open', 'locked', 'submitted']
+        ).order_by('-start_date').first()
+
+        active_period_data = None
+        if active_period:
+            active_period_data = {
+                'id': active_period.id,
+                'name': active_period.name,
+                'start_date': active_period.start_date.isoformat(),
+                'end_date': active_period.end_date.isoformat(),
+                'status': active_period.status,
+                'days_remaining': (active_period.end_date - today).days,
+            }
+
+        # ── 2. RBAC scoping — visible module set ────────────────────────
+        visible_module_ids = get_visible_module_ids(user)
+
+        # Build module filter (None = unrestricted for superusers/admins)
+        module_filter = {}
+        if visible_module_ids is not None:
+            module_filter['id__in'] = visible_module_ids
+
+        # ── 3. Module + table counts (single aggregated query) ──────────
+        module_agg = Module.objects.filter(**module_filter).aggregate(
+            module_count=Count('id'),
+            table_count=Count('data_tables', filter=Q(data_tables__is_archived=False)),
+        )
+        total_modules = module_agg['module_count'] or 0
+        total_tables = module_agg['table_count'] or 0
+
+        # ── 4. Calculation aggregate + recent activity (single query via Window) ──
+        calc_qs = _scope_calcs(
+            user,
+            Calculation.objects.select_related('module', 'reporting_period'),
+        )
+        recent_calcs = list(
+            calc_qs.annotate(
+                total_count=Window(Count('id')),
+                total_kg_sum=Window(Sum('co2e_kg')),
+            ).order_by('-calculated_at')[:10]
+        )
+
+        if recent_calcs:
+            total_calculations = recent_calcs[0].total_count
+            total_emissions_tonnes = round(
+                float(recent_calcs[0].total_kg_sum or 0) / 1000, 2)
+        else:
+            total_calculations = 0
+            total_emissions_tonnes = 0.0
+
+        recent_activity = []
+        for calc in recent_calcs:
+            recent_activity.append({
+                'id': calc.id,
+                'action': 'calculation_completed',
+                'module_name': calc.module.name if calc.module else None,
+                'timestamp': calc.calculated_at.isoformat() if calc.calculated_at else None,
+                'detail': (
+                    f"{calc.activity_value} {calc.activity_unit} \u2192 "
+                    f"{round(calc.co2e_kg, 1)} kg CO2e"
+                ),
+            })
+
+        # ── 5. AssetProfile: avg quality + DQ alerts (single query) ────
+        if visible_module_ids is not None:
+            asset_qs = AssetProfile.objects.filter(
+                Q(data_table__module_id__in=visible_module_ids) |
+                Q(data_field__data_table__module_id__in=visible_module_ids),
+                quality_score__isnull=False,
+            )
+        else:
+            asset_qs = AssetProfile.objects.filter(quality_score__isnull=False)
+
+        # Fetch all scored assets in one query — compute avg + extract DQ in Python.
+        all_assets = list(asset_qs.select_related(
+            'data_table__module', 'data_field__data_table__module'
+        ).only('quality_score', 'data_table__module__name',
+               'data_field__data_table__module__name'))
+
+        scores = [a.quality_score for a in all_assets if a.quality_score is not None]
+        avg_quality_score = round(sum(scores) / len(scores), 1) if scores else 0.0
+
+        dq_alerts = []
+        for asset in all_assets:
+            if asset.quality_score and asset.quality_score < 70:
+                module_name = None
+                if asset.data_table and asset.data_table.module:
+                    module_name = asset.data_table.module.name
+                elif asset.data_field and asset.data_field.data_table and asset.data_field.data_table.module:
+                    module_name = asset.data_field.data_table.module.name
+                dq_alerts.append({
+                    'type': 'dq',
+                    'module_name': module_name,
+                    'score': asset.quality_score,
+                    'threshold': 70,
+                    'message': 'Data quality below 70% threshold',
+                })
+                if len(dq_alerts) >= 5:
+                    break
+
+        # ── 6. Pending submission alerts ────────────────────────────────
+        # Modules with DataRows but no Calculation for the active period.
+        pending_alerts = []
+        if active_period:
+            if visible_module_ids is not None:
+                data_table_qs = DataTable.objects.filter(
+                    module_id__in=visible_module_ids, is_archived=False)
+            else:
+                data_table_qs = DataTable.objects.filter(is_archived=False)
+
+            # Count rows per (module_id, module_name) that have no
+            # Calculation linked to this data_row in the active period.
+            has_calc = Calculation.objects.filter(
+                data_row=OuterRef('pk'),
+                reporting_period=active_period,
+            )
+            pending_rows = (
+                DataRow.objects
+                .filter(data_table__in=data_table_qs, is_archived=False)
+                .annotate(has_calc=Exists(has_calc))
+                .filter(has_calc=False)
+                .values('data_table__module_id', 'data_table__module__name')
+                .annotate(pending_count=Count('id'))
+                .order_by('-pending_count')[:5]
+            )
+            for pr in pending_rows:
+                pending_alerts.append({
+                    'type': 'pending_submission',
+                    'module_id': pr['data_table__module_id'],
+                    'module_name': pr['data_table__module__name'],
+                    'pending_rows': pr['pending_count'],
+                    'message': f"{pr['pending_count']} rows pending submission",
+                })
+
+        # ── Assemble response ───────────────────────────────────────────
+        stats = {
+            'total_modules': total_modules,
+            'total_tables': total_tables,
+            'total_calculations': total_calculations,
+            'avg_quality_score': avg_quality_score,
+            'total_emissions_tonnes': total_emissions_tonnes,
+        }
+
+        alerts = dq_alerts + pending_alerts
+
+        response_data = {
+            'active_period': active_period_data,
+            'stats': stats,
+            'alerts': alerts,
+            'recent_activity': recent_activity,
+        }
+
+        return Response(response_data)

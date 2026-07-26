@@ -65,6 +65,7 @@ import SavedReportsPage from "./pages/emissions/SavedReportsPage";
 import ReportingPeriodsPage from "./pages/emissions/ReportingPeriodsPage";
 import CarbonConsolePage from "./pages/carbon/CarbonConsolePage";
 import MyDataPage from "./pages/carbon/MyDataPage";
+import ModuleWorkspacePage from "./pages/carbon/ModuleWorkspacePage";
 import AuditLogPage from "./pages/admin/AuditLogPage";
 
 // New Dashboard Architecture
@@ -175,6 +176,8 @@ export default function App() {
                 <Route path="/carbon/dashboard" element={<EmissionsDashboard />} />
                 <Route path="/carbon/analytics" element={<AnalyticsDashboard />} />
                 <Route path="/carbon/my-data" element={<MyDataPage />} />
+                <Route path="/carbon/my-data/:moduleId" element={<ModuleWorkspacePage />} />
+                <Route path="/carbon/my-data/:moduleId/:tableId" element={<DataEntryPage />} />
                 <Route path="/carbon/admin/factors" element={<AdminRoute><EmissionFactorsPage /></AdminRoute>} />
                 <Route path="/carbon/admin/rules" element={<AdminRoute><EmissionFactorsPage /></AdminRoute>} />
                 <Route path="/carbon/reporting/generate" element={<ReportGeneratorPage />} />
@@ -270,10 +273,10 @@ export default function App() {
                  <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />
                 {/* Carbon-owned Data Hub / Data Entry routes */}
                 <Route path="/carbon/data-entry" element={<DataHubHome />} />
-                <Route path="/carbon/data-entry/entry/:moduleName/:tableId" element={<DataEntryPage />} />
+                <Route path="/carbon/data-entry/entry/:moduleId/:tableId" element={<DataEntryPage />} />
                 <Route path="/carbon/data-entry/row/:tableId/:rowId" element={<RowDetailPage />} />
                 <Route path="/dataschema" element={<DataHubHome />} />
-                <Route path="/dataschema/entry/:moduleName/:tableId" element={<DataEntryPage />} />
+                <Route path="/dataschema/entry/:moduleId/:tableId" element={<DataEntryPage />} />
                 <Route path="/dataschema/row/:tableId/:rowId" element={<RowDetailPage />} />
 
                 {/* Catalog Studio Routes */}

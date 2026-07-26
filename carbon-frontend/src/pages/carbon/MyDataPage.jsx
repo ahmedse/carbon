@@ -1,482 +1,602 @@
 // src/pages/carbon/MyDataPage.jsx
-// Unified "My Data" page — compact, enterprise-grade, full-width
-// Uses shared carbonDesign.js tokens for consistent typography, spacing, and components.
+// My Data – Level 1 data owner workspace.
+// Pattern: EntityDetailShell (main grid + resizable right panel)
+//   – Grid: FilteredDataGrid-style with search, scope + status filters
+//   – Row click: highlights row, populates right panel (tabs: Overview, Tables, Activity)
+//   – Row actions: View (→ module workspace), Edit, Delete
+//   – All colours via theme.palette, zero hardcoded hex
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../../auth/AuthContext';
-import { useNotification } from '../../components/NotificationProvider';
-import { fetchOwnerSummary, fetchOwnerAssets } from '../../api/emissions';
-import { isGlobalAdmin } from '../../utils/rbac';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Box,
-  Grid,
-  Card,
-  CardContent,
-  CardActions,
-  Typography,
-  Button,
-  Chip,
-  CircularProgress,
   Alert,
-  Paper,
-  TextField,
-  Stack,
+  Box,
+  Chip,
   Divider,
-  InputAdornment,
   FormControl,
+  IconButton,
+  InputAdornment,
   InputLabel,
-  Select,
+  LinearProgress,
   MenuItem,
-  Tabs,
+  Select,
+  Snackbar,
+  Stack,
   Tab,
+  Tabs,
+  TextField,
+  Tooltip,
+  Typography,
   useTheme,
-  useMediaQuery,
 } from '@mui/material';
-import {
-  Search as SearchIcon,
-  AddCircleOutline as DataEntryIcon,
-  Storage as StorageIcon,
-  FilterList as FilterIcon,
-} from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
-import {
-  PageWrapper,
-  PageHeader,
-  SectionHeader,
-  StatCard,
-  EmptyState,
-  FONT,
-  SPACING,
-  BORDER,
-  SCOPE_META,
-  QUALITY_CONFIG,
-} from '../../theme/carbonDesign.jsx';
+import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded';
+import NatureRoundedIcon from '@mui/icons-material/NatureRounded';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import SearchIcon from '@mui/icons-material/Search';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import { useAuth } from '../../auth/AuthContext';
+import { fetchMyData, fetchOwnerActivity } from '../../api/emissions';
+import EntityDetailShell from '../../components/entity/EntityDetailShell';
+import { EmptyState, ErrorAlert, LoadingSkeleton, PageHeader, StatCard } from '../../components';
 
-// ── Quality Badge ───────────────────────────────────────────────────────────
-function QualityBadge({ status, score, theme }) {
-  const config = QUALITY_CONFIG[status] || QUALITY_CONFIG.unknown;
-  const Icon = config.icon;
-  const colorMain = config.color === 'default'
-    ? theme.palette.text.secondary
-    : theme.palette[config.color]?.main;
-  const colorBg = config.color === 'default'
-    ? theme.palette.action.disabledBackground
-    : `${colorMain}18`;
+// ── Scope config uses MUI palette colour names ─────────────────────────────
 
+const SCOPE_CFG = {
+  1: { label: 'Scope 1', palette: 'success',  Icon: NatureRoundedIcon },
+  2: { label: 'Scope 2', palette: 'info',     Icon: BoltRoundedIcon },
+  3: { label: 'Scope 3', palette: 'warning',  Icon: LocalShippingRoundedIcon },
+};
+
+const STATUS_CFG = {
+  passing: { label: 'Passing', palette: 'success', Icon: CheckCircleOutlineIcon },
+  warning: { label: 'Warning', palette: 'warning', Icon: WarningAmberIcon },
+  failing: { label: 'Failing', palette: 'error',   Icon: ErrorOutlineIcon },
+  no_data: { label: 'No Data', palette: null,      Icon: HelpOutlineIcon },
+};
+
+function getStatus(mod) {
+  if (!mod?.row_count) return 'no_data';
+  if (mod.quality_score != null && mod.quality_score < 60) return 'failing';
+  if (mod.quality_score != null && mod.quality_score < 80) return 'warning';
+  return 'passing';
+}
+
+function fmtDate(v) {
+  if (!v) return 'Never';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? 'Never' : d.toLocaleDateString();
+}
+
+// ── Reusable chip helpers ──────────────────────────────────────────────────
+
+function ScopeChip({ value }) {
+  const theme = useTheme();
+  const cfg = SCOPE_CFG[value] || SCOPE_CFG[1];
+  const p = theme.palette[cfg.palette];
   return (
     <Chip
-      icon={<Icon sx={{ fontSize: 14 }} />}
-      label={`${config.label}${score != null ? ` ${Math.round(score)}%` : ''}`}
+      label={cfg.label}
       size="small"
       sx={{
-        ...FONT.chip,
-        height: 22,
-        bgcolor: colorBg,
-        color: colorMain,
-        '& .MuiChip-icon': { ml: 0.5, mr: -0.25 },
+        height: 20,
+        fontSize: '0.68rem',
+        fontWeight: 700,
+        bgcolor: p?.['50'] || p?.light + '30',
+        color: p?.dark || p?.main,
+        border: 'none',
+        '& .MuiChip-label': { px: 1 },
       }}
     />
   );
 }
 
-// ── Module Card ─────────────────────────────────────────────────────────────
-function ModuleCard({ module: mod, onEnter, theme }) {
-  const scope = mod.scope || 1;
-  const meta = SCOPE_META[scope] || SCOPE_META[1];
-  const ScopeIcon = meta.icon;
-
+function StatusChip({ row }) {
+  const status = getStatus(row);
+  const cfg = STATUS_CFG[status];
+  const Icon = cfg.Icon;
   return (
-    <Card
+    <Chip
+      icon={<Icon sx={{ fontSize: '13px !important' }} />}
+      label={cfg.label}
+      size="small"
+      color={cfg.palette || 'default'}
       variant="outlined"
-      sx={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        cursor: 'pointer',
-        borderLeft: `3px solid ${meta.color}`,
-        borderRadius: BORDER.radius,
-        transition: 'box-shadow 0.15s ease, border-color 0.15s ease',
-        '&:hover': {
-          borderColor: meta.color,
-          boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-        },
-      }}
-      onClick={onEnter}
-    >
-      <CardContent sx={{ flexGrow: 1, p: SPACING.md, pb: `${SPACING.sm}px !important` }}>
-        <Stack direction="row" spacing={SPACING.sm} alignItems="flex-start">
-          <Box
-            sx={{
-              bgcolor: `${meta.color}14`,
-              borderRadius: 1,
-              p: 0.75,
-              display: 'flex',
-              flexShrink: 0,
-            }}
-          >
-            <ScopeIcon sx={{ fontSize: 20, color: meta.color }} />
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ ...FONT.cardTitle, mb: 0.25 }}>
-              {mod.name}
-            </Typography>
-            <Chip
-              label={meta.label}
-              size="small"
-              sx={{
-                ...FONT.chip,
-                height: 18,
-                bgcolor: meta.bg,
-                color: meta.color,
-              }}
-            />
-          </Box>
-        </Stack>
-
-        {mod.description && (
-          <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary', mt: SPACING.sm, mb: SPACING.sm }}>
-            {mod.description}
-          </Typography>
-        )}
-
-        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-          <Chip
-            icon={<StorageIcon sx={{ fontSize: 12 }} />}
-            label={`${mod.tableCount || 0} ${(mod.tableCount || 0) === 1 ? 'table' : 'tables'}`}
-            size="small"
-            variant="outlined"
-            sx={{ ...FONT.chip, height: 20 }}
-          />
-          {(mod.rowCount || 0) > 0 && (
-            <Chip
-              label={`${mod.rowCount} rows`}
-              size="small"
-              variant="outlined"
-              sx={{ ...FONT.chip, height: 20 }}
-            />
-          )}
-          <QualityBadge status={mod.qualityStatus} score={mod.qualityScore} theme={theme} />
-        </Stack>
-      </CardContent>
-      <Divider />
-      <CardActions sx={{ justifyContent: 'flex-end', px: SPACING.md, py: 0.75 }}>
-        <Button size="small" sx={{ ...FONT.chip, color: meta.color, fontWeight: 600 }}>
-          Enter Data →
-        </Button>
-      </CardActions>
-    </Card>
+      sx={{ height: 20, fontSize: '0.68rem', '& .MuiChip-label': { px: 0.5 }, '& .MuiChip-icon': { ml: '4px' } }}
+    />
   );
 }
 
-// ── Main Page ───────────────────────────────────────────────────────────────
-export default function MyDataPage() {
-  const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const { user, context, tablesByModule, token, availablePerspectives } = useAuth();
-  const { showNotification } = useNotification();
-  const [searchParams, setSearchParams] = useSearchParams();
+// ── Right panel: selected module detail ────────────────────────────────────
 
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') === 'sources' ? 1 : 0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [summary, setSummary] = useState(null);
-  const [assets, setAssets] = useState([]);
-  const [scopeFilter, setScopeFilter] = useState('all');
-  const [moduleSearch, setModuleSearch] = useState('');
-  const [assetSearch, setAssetSearch] = useState('');
-  const [domainFilter, setDomainFilter] = useState('');
-  const [qualityFilter, setQualityFilter] = useState('');
-  const [paginationModel, setPaginationModel] = useState({ pageSize: 25, page: 0 });
+function SourceOverviewTab({ mod, theme }) {
+  if (!mod) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          Select a source to see source metadata and row entry history.
+        </Typography>
+      </Box>
+    );
+  }
 
-  const modules = context?.modules || [];
-  const userIsGlobalAdmin = isGlobalAdmin(user, availablePerspectives);
-  const isDataOwner = userIsGlobalAdmin || (context?.org_units && context.org_units.length > 0);
+  const dqPct = mod.quality_score ?? 0;
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const [summaryRes, assetsRes] = await Promise.all([
-          fetchOwnerSummary(token).catch(() => null),
-          fetchOwnerAssets({}, token).catch(() => []),
-        ]);
-        setSummary(summaryRes);
-        setAssets(Array.isArray(assetsRes) ? assetsRes : []);
-        setError(null);
-      } catch (err) {
-        setError('load-failed');
-        showNotification({ message: 'Failed to load data', type: 'error' });
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (token && context) loadData();
-  }, [token, context, showNotification]);
+  const details = [
+    { label: 'Source Name', value: mod.name },
+    { label: 'Source ID', value: mod.id },
+    { label: 'Scope', value: <ScopeChip value={mod.scope} /> },
+    { label: 'Tables', value: mod.table_count ?? 0 },
+    { label: 'Rows', value: mod.row_count ?? 0 },
+    { label: 'Last entry', value: fmtDate(mod.last_entry) },
+    { label: 'Status', value: <StatusChip row={mod} /> },
+    { label: 'Data quality', value: mod.quality_score != null ? `${Math.round(mod.quality_score)}%` : 'Not available' },
+  ];
 
-  const enrichedModules = useMemo(() => {
-    return modules.map(mod => {
-      const modAssets = assets.filter(a => String(a.module_id || a.module?.id) === String(mod.id));
-      const tableList = tablesByModule?.[String(mod.id)] || [];
-      const totalRows = tableList.reduce((sum, t) => sum + (t.row_count || 0), 0);
-      const scores = modAssets.map(a => a.quality_score).filter(s => s != null);
-      const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
-      const statuses = modAssets.map(a => a.quality_status).filter(Boolean);
-      let worstStatus = 'unknown';
-      if (statuses.includes('failing')) worstStatus = 'failing';
-      else if (statuses.includes('warning')) worstStatus = 'warning';
-      else if (statuses.includes('passing')) worstStatus = 'passing';
-      return { ...mod, tableCount: tableList.length, rowCount: totalRows, assetCount: modAssets.length, qualityScore: avgScore, qualityStatus: worstStatus };
-    });
-  }, [modules, assets, tablesByModule]);
+  return (
+    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.8rem' }}>
+      <Typography variant="body2" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.68rem' }}>
+        Overview
+      </Typography>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 1.25 }}>
+        {details.map(({ label, value }) => (
+          <Box
+            key={label}
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: '140px 1fr',
+              gap: 1,
+              py: 1,
+              borderBottom: `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+              {label}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              {typeof value === 'string' || typeof value === 'number' ? (
+                <Typography component="span" variant="body2" sx={{ fontWeight: 600, color: 'text.primary', fontSize: '0.82rem' }}>
+                  {value}
+                </Typography>
+              ) : (
+                value
+              )}
+            </Box>
+          </Box>
+        ))}
+      </Box>
+
+      <Box sx={{ pt: 1 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 700, fontSize: '0.76rem' }}>
+          Data trust context
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.78rem' }}>
+          Detailed rules, lineage, and governance are typically managed at the table or asset level. This page focuses on source selection and row entry operations.
+        </Typography>
+      </Box>
+
+      <Box sx={{ pt: 1 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 700, fontSize: '0.76rem' }}>
+          Quality summary
+        </Typography>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: dqPct >= 80 ? 'success.main' : dqPct >= 60 ? 'warning.main' : 'error.main', fontSize: '0.82rem' }}>
+          {mod.quality_score != null ? `${Math.round(dqPct)}%` : 'No score available'}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
+function StatsTab({ stats, modules, theme }) {
+  const dqScore = useMemo(() => {
+    const q = stats?.data_quality || {};
+    if (!q.total_assets) return 'N/A';
+    return `${Math.round((q.passing / q.total_assets) * 100)}%`;
+  }, [stats]);
 
   const scopeCounts = useMemo(() => {
     const c = { 1: 0, 2: 0, 3: 0 };
-    enrichedModules.forEach(m => { const s = m.scope || 1; if (c[s] !== undefined) c[s]++; });
+    modules.forEach((m) => { if (c[m.scope] !== undefined) c[m.scope]++; });
     return c;
-  }, [enrichedModules]);
+  }, [modules]);
 
-  const filteredModules = useMemo(() => {
-    let r = enrichedModules;
-    if (scopeFilter !== 'all') r = r.filter(m => String(m.scope || 1) === scopeFilter);
-    if (moduleSearch) {
-      const q = moduleSearch.toLowerCase();
-      r = r.filter(m => (m.name && m.name.toLowerCase().includes(q)) || (m.description && m.description.toLowerCase().includes(q)));
+  return (
+    <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+        <StatCard title="Sources"   value={stats?.total_modules ?? 0}    color="primary" />
+        <StatCard title="With Data" value={stats?.modules_with_data ?? 0} color="success" />
+        <StatCard title="Total Rows" value={stats?.total_rows ?? 0}       color="info" />
+        <StatCard title="DQ Score"  value={dqScore}                       color="warning" />
+      </Box>
+
+      <Divider />
+      <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}>
+        By Scope
+      </Typography>
+      {[1, 2, 3].map((s) => {
+        const cfg = SCOPE_CFG[s];
+        const p = theme.palette[cfg.palette];
+        return (
+          <Stack key={s} direction="row" alignItems="center" spacing={1}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: p?.main, flexShrink: 0 }} />
+            <Typography sx={{ fontSize: '0.75rem', flex: 1, color: 'text.secondary' }}>{cfg.label}</Typography>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700 }}>{scopeCounts[s]}</Typography>
+          </Stack>
+        );
+      })}
+    </Box>
+  );
+}
+
+function ActivityTab({ activity }) {
+  if (!activity?.length) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>No recent activity.</Typography>
+      </Box>
+    );
+  }
+  return (
+    <Box sx={{ p: 1.5 }}>
+      <Stack divider={<Divider flexItem />} spacing={0}>
+        {activity.map((item, i) => (
+          <Box key={item.id ?? i} sx={{ py: 1 }}>
+            <Typography sx={{ fontSize: '0.75rem' }}>{item.detail || item.message || 'Updated'}</Typography>
+            <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled', mt: 0.25 }}>
+              {fmtDate(item.timestamp || item.created_at)}
+            </Typography>
+          </Box>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────
+
+export default function MyDataPage() {
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const { token } = useAuth();
+
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
+  const [data, setData]             = useState(null);
+  const [activity, setActivity]     = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [searchText, setSearchText] = useState('');
+  const [scopeFilter, setScopeFilter]   = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [snackbar, setSnackbar]     = useState(null);
+
+  const modules  = useMemo(() => data?.modules  || [], [data]);
+  const orgUnit  = data?.org_unit;
+  const selected = useMemo(() => modules.find((m) => m.id === selectedId) || null, [modules, selectedId]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [res, act] = await Promise.all([
+        fetchMyData(token),
+        fetchOwnerActivity({ limit: 15 }, token).catch(() => []),
+      ]);
+      setData(res);
+      setActivity(Array.isArray(act) ? act : []);
+    } catch (err) {
+      setError(err.message || 'Failed to load My Data');
+    } finally {
+      setLoading(false);
     }
-    return r;
-  }, [enrichedModules, scopeFilter, moduleSearch]);
+  }, [token]);
 
-  const domains = useMemo(() => assets.reduce((acc, a) => {
-    if (a.domain && !acc.some(d => d.id === a.domain.id)) acc.push({ id: a.domain.id, name: a.domain.name || 'Unassigned' });
-    return acc;
-  }, []), [assets]);
+  useEffect(() => { if (token) load(); }, [load, token]);
 
-  const filteredAssets = useMemo(() => {
-    let r = assets;
-    if (domainFilter) r = r.filter(a => String(a.domain?.id) === domainFilter);
-    if (qualityFilter) r = r.filter(a => a.quality_status === qualityFilter);
-    if (assetSearch) {
-      const q = assetSearch.toLowerCase();
-      r = r.filter(a => (a.name && a.name.toLowerCase().includes(q)) || (a.description && a.description.toLowerCase().includes(q)) || (a.data_table?.name && a.data_table.name.toLowerCase().includes(q)));
+  // Client-side filter
+  const filtered = useMemo(() => {
+    let rows = modules;
+    if (scopeFilter !== 'all')  rows = rows.filter((m) => m.scope === Number(scopeFilter));
+    if (statusFilter !== 'all') rows = rows.filter((m) => getStatus(m) === statusFilter);
+    if (searchText) {
+      const q = searchText.toLowerCase();
+      rows = rows.filter((m) => (m.name || '').toLowerCase().includes(q));
     }
-    return r;
-  }, [assets, domainFilter, qualityFilter, assetSearch]);
+    return rows;
+  }, [modules, scopeFilter, statusFilter, searchText]);
 
-  const handleTabChange = (_, v) => { setActiveTab(v); setSearchParams(v === 1 ? { tab: 'sources' } : {}); };
-
-  if (loading) {
-    return (
-      <PageWrapper>
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
-          <CircularProgress size={32} />
-        </Box>
-      </PageWrapper>
-    );
-  }
-
-  if (error === 'load-failed') {
-    return (
-      <PageWrapper>
-        <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => window.location.reload()}>Retry</Button>}>
-          Failed to load your data.
-        </Alert>
-      </PageWrapper>
-    );
-  }
-
-  if (!isDataOwner) {
-    return (
-      <PageWrapper>
-        <EmptyState
-          icon={StorageIcon}
-          title="No Organizational Unit Assigned"
-          description="You need to be assigned to an organizational unit to manage emission data. Contact your platform administrator."
-        />
-      </PageWrapper>
-    );
-  }
-
-  const assetColumns = [
+  // Grid columns
+  const columns = useMemo(() => [
     {
-      field: 'name', headerName: 'Asset', flex: 1.5, minWidth: 180,
-      renderCell: (p) => (
-        <Box>
-          <Typography sx={{ ...FONT.bodySmall, fontWeight: 500 }}>{p.row.name}</Typography>
-          <Typography sx={{ ...FONT.caption, color: 'text.secondary' }}>{p.row.data_table?.name || p.row.data_field?.name || '—'}</Typography>
-        </Box>
+      field: 'scope',
+      headerName: 'Scope',
+      width: 105,
+      renderCell: ({ value }) => <ScopeChip value={value} />,
+    },
+    {
+      field: 'name',
+      headerName: 'Source Name',
+      flex: 2,
+      minWidth: 180,
+      renderCell: ({ value }) => (
+        <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{value}</Typography>
       ),
     },
     {
-      field: 'domain', headerName: 'Domain', flex: 0.8, minWidth: 110,
-      renderCell: (p) => <Chip label={p.row.domain?.name || 'Unassigned'} size="small" variant="outlined" sx={{ ...FONT.chip, height: 20 }} />,
+      field: 'table_count',
+      headerName: 'Tables',
+      width: 75,
+      type: 'number',
+      renderCell: ({ value }) => <Typography sx={{ fontSize: '0.8125rem' }}>{value ?? 0}</Typography>,
     },
     {
-      field: 'quality_status', headerName: 'Quality', flex: 0.9, minWidth: 140,
-      renderCell: (p) => <QualityBadge status={p.row.quality_status} score={p.row.quality_score} theme={theme} />,
+      field: 'row_count',
+      headerName: 'Rows',
+      width: 75,
+      type: 'number',
+      renderCell: ({ value }) => <Typography sx={{ fontSize: '0.8125rem' }}>{value ?? 0}</Typography>,
     },
     {
-      field: 'row_count', headerName: 'Rows', flex: 0.4, minWidth: 60,
-      renderCell: (p) => <Typography sx={FONT.bodySmall}>{p.row.row_count ?? '—'}</Typography>,
-    },
-    {
-      field: 'owner', headerName: 'Owner', flex: 0.7, minWidth: 90,
-      renderCell: (p) => <Typography sx={FONT.caption}>{p.row.owner?.first_name || p.row.owner?.username || '—'}</Typography>,
-    },
-    {
-      field: 'actions', headerName: '', flex: 0.5, minWidth: 90, sortable: false, filterable: false,
-      renderCell: (p) => {
-        const mid = p.row.module_id || p.row.module?.id;
-        if (!mid) return null;
-        return <Button size="small" variant="outlined" onClick={(e) => { e.stopPropagation(); navigate(`/modules/${mid}`); }} sx={{ ...FONT.chip, py: 0.25, minWidth: 'auto' }}>Enter Data</Button>;
+      field: 'status',
+      headerName: 'Status',
+      width: 115,
+      valueGetter: (valueOrParams, row) => {
+        const currentRow = row ?? valueOrParams?.row ?? valueOrParams;
+        return getStatus(currentRow);
       },
+      renderCell: (params) => <StatusChip row={params?.row ?? params} />,
     },
+    {
+      field: 'quality_score',
+      headerName: 'DQ%',
+      width: 68,
+      renderCell: ({ value }) => (
+        <Typography
+          sx={{
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            color: value == null
+              ? 'text.disabled'
+              : value >= 80 ? 'success.dark' : value >= 60 ? 'warning.dark' : 'error.dark',
+          }}
+        >
+          {value != null ? `${Math.round(value)}%` : '—'}
+        </Typography>
+      ),
+    },
+    {
+      field: 'last_entry',
+      headerName: 'Last Entry',
+      width: 110,
+      renderCell: ({ value }) => (
+        <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>{fmtDate(value)}</Typography>
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: '',
+      width: 90,
+      sortable: false,
+      disableColumnMenu: true,
+      renderCell: ({ row }) => (
+        <Stack direction="row" spacing={0.25} onClick={(e) => e.stopPropagation()}>
+          <Tooltip title="Open workspace">
+            <IconButton size="small" onClick={() => navigate(`/carbon/my-data/${row.id}`)}>
+              <VisibilityIcon sx={{ fontSize: 15 }} />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      ),
+    },
+  ], [navigate]);
+
+  const breadcrumbs = [
+    { label: 'Home',    path: '/dashboard' },
+    { label: 'My Data' },
   ];
 
-  const displayColumns = isMobile ? assetColumns.filter(c => !['owner', 'row_count'].includes(c.field)) : assetColumns;
+  const rightPanelTabs = [
+    { label: 'Overview', render: () => <SourceOverviewTab mod={selected} theme={theme} /> },
+    { label: 'Activity', render: () => <ActivityTab activity={activity} /> },
+  ];
 
-  return (
-    <PageWrapper>
-      <PageHeader
-        title="My Data"
-        subtitle="Manage your organizational unit's emission sources and activity data"
-      />
+  const [activePanelTab, setActivePanelTab] = useState(0);
 
-      {/* Quick Stats */}
-      {summary && (
-        <Grid container spacing={SPACING.sm} sx={{ mb: SPACING.lg }}>
-          <Grid item xs={6} sm={3}>
-            <StatCard label="Emission Sources" value={enrichedModules.length} color={theme.palette.primary.main} icon={StorageIcon} />
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <StatCard label="Data Tables" value={summary.total_tables || 0} color={theme.palette.success.main} icon={DataEntryIcon} />
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <StatCard label="Data Quality" value={summary.avg_quality ? `${Math.round(summary.avg_quality)}%` : 'N/A'} color={theme.palette.warning.main} icon={QUALITY_CONFIG.passing.icon} />
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <StatCard label="Total Assets" value={assets.length} color={theme.palette.info.main} icon={StorageIcon} />
-          </Grid>
-        </Grid>
-      )}
+  const rightPanel = (
+    <Box sx={{ height: '100%', overflow: 'auto' }}>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'white' }}>
+        <Tabs
+          value={activePanelTab}
+          onChange={(event, next) => setActivePanelTab(next)}
+          variant="fullWidth"
+          sx={{ '& .MuiTab-root': { textTransform: 'none', fontSize: '0.85rem' } }}
+        >
+          {rightPanelTabs.map((tab) => (
+            <Tab key={tab.label} label={tab.label} />
+          ))}
+        </Tabs>
+      </Box>
+      <Box sx={{ p: 2 }}>{rightPanelTabs[activePanelTab]?.render()}</Box>
+    </Box>
+  );
 
-      {/* Tabs */}
-      <Tabs
-        value={activeTab}
-        onChange={handleTabChange}
+  // ── Loading / error states ─────────────────────────────────────────────
+  if (loading) return (
+    <Box>
+      <PageHeader title="My Data" subtitle="Loading…" breadcrumbs={breadcrumbs} />
+      <LoadingSkeleton variant="table" />
+    </Box>
+  );
+
+  if (error) return (
+    <Box>
+      <PageHeader title="My Data" breadcrumbs={breadcrumbs} />
+      <ErrorAlert message={error} onRetry={load} />
+    </Box>
+  );
+
+  // ── Main layout ────────────────────────────────────────────────────────
+  const mainContent = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+
+      {/* ── Filter bar ── */}
+      <Stack
+        direction="row"
+        spacing={1}
+        alignItems="center"
         sx={{
-          minHeight: 36,
-          mb: SPACING.md,
-          borderBottom: BORDER.light,
+          px: 2,
+          py: 1,
+          flexShrink: 0,
+          borderBottom: 1,
           borderColor: 'divider',
-          '& .MuiTab-root': { minHeight: 36, py: 0.75, ...FONT.tab, textTransform: 'none' },
-          '& .MuiTabs-indicator': { height: 2 },
+          bgcolor: 'background.paper',
         }}
       >
-        <Tab icon={<DataEntryIcon sx={{ fontSize: 16 }} />} iconPosition="start" label={`Data Entry (${enrichedModules.length})`} />
-        <Tab icon={<StorageIcon sx={{ fontSize: 16 }} />} iconPosition="start" label={`Emission Sources (${assets.length})`} />
-      </Tabs>
+        <TextField
+          size="small"
+          placeholder="Search sources…"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 15, color: 'text.disabled' }} />
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            flex: 1,
+            '& .MuiInputBase-input': { fontSize: '0.8125rem', py: '6px' },
+          }}
+        />
 
-      {/* Tab 1: Data Entry */}
-      {activeTab === 0 && (
-        <>
-          {enrichedModules.length > 0 && (
-            <Tabs
-              value={scopeFilter}
-              onChange={(_, v) => setScopeFilter(v)}
-              sx={{
-                minHeight: 32,
-                mb: SPACING.md,
-                '& .MuiTab-root': { minHeight: 32, py: 0.25, ...FONT.chip, textTransform: 'none' },
-              }}
-            >
-              <Tab value="all" label={`All (${enrichedModules.length})`} />
-              {scopeCounts[1] > 0 && <Tab value="1" label={<Stack direction="row" spacing={0.5} alignItems="center">{React.createElement(SCOPE_META[1].icon, { sx: { fontSize: 12, color: SCOPE_META[1].color } })}<span>Scope 1 ({scopeCounts[1]})</span></Stack>} />}
-              {scopeCounts[2] > 0 && <Tab value="2" label={<Stack direction="row" spacing={0.5} alignItems="center">{React.createElement(SCOPE_META[2].icon, { sx: { fontSize: 12, color: SCOPE_META[2].color } })}<span>Scope 2 ({scopeCounts[2]})</span></Stack>} />}
-              {scopeCounts[3] > 0 && <Tab value="3" label={<Stack direction="row" spacing={0.5} alignItems="center">{React.createElement(SCOPE_META[3].icon, { sx: { fontSize: 12, color: SCOPE_META[3].color } })}<span>Scope 3 ({scopeCounts[3]})</span></Stack>} />}
-            </Tabs>
-          )}
+        <FormControl size="small" sx={{ minWidth: 100 }}>
+          <InputLabel>Scope</InputLabel>
+          <Select value={scopeFilter} label="Scope" onChange={(e) => setScopeFilter(e.target.value)}
+            sx={{ fontSize: '0.8125rem' }}>
+            <MenuItem value="all">All scopes</MenuItem>
+            <MenuItem value="1">Scope 1</MenuItem>
+            <MenuItem value="2">Scope 2</MenuItem>
+            <MenuItem value="3">Scope 3</MenuItem>
+          </Select>
+        </FormControl>
 
-          <TextField
-            fullWidth size="small" placeholder="Search emission sources..."
-            value={moduleSearch} onChange={(e) => setModuleSearch(e.target.value)}
-            sx={{ mb: SPACING.md }}
-            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16 }} /></InputAdornment>, sx: { ...FONT.bodySmall } }}
+        <FormControl size="small" sx={{ minWidth: 110 }}>
+          <InputLabel>Status</InputLabel>
+          <Select value={statusFilter} label="Status" onChange={(e) => setStatusFilter(e.target.value)}
+            sx={{ fontSize: '0.8125rem' }}>
+            <MenuItem value="all">All</MenuItem>
+            <MenuItem value="passing">Passing</MenuItem>
+            <MenuItem value="warning">Warning</MenuItem>
+            <MenuItem value="failing">Failing</MenuItem>
+            <MenuItem value="no_data">No Data</MenuItem>
+          </Select>
+        </FormControl>
+
+        <Tooltip title="Refresh">
+          <IconButton size="small" onClick={load}>
+            <RefreshIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+
+        <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5, whiteSpace: 'nowrap' }}>
+          {filtered.length} of {modules.length}
+        </Typography>
+      </Stack>
+
+      {/* ── Data grid ── */}
+      <Box sx={{ flex: 1, minHeight: 0 }}>
+        {filtered.length === 0 ? (
+          <Box sx={{ p: 4 }}>
+            <EmptyState title="No sources match your filters" description="Try adjusting the search or filters." />
+          </Box>
+        ) : (
+          <DataGrid
+            rows={filtered}
+            columns={columns}
+            density="compact"
+            rowSelection
+            rowSelectionModel={selectedId ? { type: 'include', ids: new Set([selectedId]) } : { type: 'include', ids: new Set() }}
+            onRowSelectionModelChange={(model) => {
+              const ids = Array.from(model.ids || []);
+              setSelectedId(ids[0] ?? null);
+              setActivePanelTab(0);
+            }}
+            onRowClick={(params) => {
+              setSelectedId(params.id);
+              setActivePanelTab(0);
+            }}
+            pageSizeOptions={[25, 50, 100]}
+            initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+            sx={{
+              border: 'none',
+              fontSize: '0.8125rem',
+              '& .MuiDataGrid-columnHeaders': {
+                bgcolor: 'grey.50',
+                borderBottom: 1,
+                borderColor: 'divider',
+                '& .MuiDataGrid-columnHeaderTitle': {
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  color: 'text.secondary',
+                  letterSpacing: '0.04em',
+                },
+              },
+              '& .MuiDataGrid-row': {
+                cursor: 'pointer',
+                '&:hover': { bgcolor: 'action.hover' },
+                '&.Mui-selected': {
+                  bgcolor: `${theme.palette.primary.main}14`,
+                  '&:hover': { bgcolor: `${theme.palette.primary.main}1e` },
+                },
+              },
+              '& .MuiDataGrid-cell': {
+                borderBottom: `1px solid ${theme.palette.divider}`,
+                '&:focus, &:focus-within': { outline: 'none' },
+              },
+              '& .MuiDataGrid-footerContainer': {
+                borderTop: 1,
+                borderColor: 'divider',
+                minHeight: 40,
+              },
+            }}
           />
+        )}
+      </Box>
+    </Box>
+  );
 
-          {filteredModules.length === 0 ? (
-            <EmptyState
-              icon={DataEntryIcon}
-              title={enrichedModules.length === 0 ? 'No Emission Sources Assigned' : 'No sources match your filters'}
-              description={enrichedModules.length === 0 ? 'Your administrator has not assigned any emission source modules to your organizational unit.' : 'Try adjusting your scope filter or search terms.'}
-            />
-          ) : (
-            <Grid container spacing={SPACING.sm}>
-              {filteredModules.map(mod => (
-                <Grid item xs={12} sm={6} md={4} key={mod.id}>
-                  <ModuleCard module={mod} theme={theme} onEnter={() => navigate(`/modules/${mod.id}`)} />
-                </Grid>
-              ))}
-            </Grid>
-          )}
-        </>
-      )}
+  return (
+    <>
+      <EntityDetailShell
+        header={
+          <PageHeader
+            title="My Data"
+            subtitle={orgUnit?.name || ''}
+            breadcrumbs={breadcrumbs}
+          />
+        }
+        mainContent={mainContent}
+        metricsPanel={rightPanel}
+        metricsTabs={rightPanelTabs}
+        initialMetricsTab={activePanelTab}
+        activeMetricsTab={activePanelTab}
+        onMetricsTabChange={(event, next) => setActivePanelTab(next)}
+        panelWidthKey="myData:panelWidth"
+      />
 
-      {/* Tab 2: Emission Sources */}
-      {activeTab === 1 && (
-        <>
-          <Paper variant="outlined" sx={{ p: SPACING.md, mb: SPACING.md, borderRadius: BORDER.radius }}>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={SPACING.sm} alignItems={{ sm: 'center' }}>
-              <TextField size="small" placeholder="Search assets..." value={assetSearch} onChange={(e) => setAssetSearch(e.target.value)}
-                sx={{ minWidth: 200 }} InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16 }} /></InputAdornment>, sx: { ...FONT.bodySmall } }} />
-              <FormControl size="small" sx={{ minWidth: 140 }}>
-                <InputLabel sx={FONT.bodySmall}>Domain</InputLabel>
-                <Select value={domainFilter} onChange={(e) => setDomainFilter(e.target.value)} label="Domain" sx={FONT.bodySmall}>
-                  <MenuItem value="" sx={FONT.bodySmall}>All Domains</MenuItem>
-                  {domains.map(d => <MenuItem key={d.id} value={String(d.id)} sx={FONT.bodySmall}>{d.name}</MenuItem>)}
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ minWidth: 120 }}>
-                <InputLabel sx={FONT.bodySmall}>Quality</InputLabel>
-                <Select value={qualityFilter} onChange={(e) => setQualityFilter(e.target.value)} label="Quality" sx={FONT.bodySmall}>
-                  <MenuItem value="" sx={FONT.bodySmall}>All Statuses</MenuItem>
-                  <MenuItem value="passing" sx={FONT.bodySmall}>Passing</MenuItem>
-                  <MenuItem value="warning" sx={FONT.bodySmall}>Warning</MenuItem>
-                  <MenuItem value="failing" sx={FONT.bodySmall}>Failing</MenuItem>
-                </Select>
-              </FormControl>
-              {(assetSearch || domainFilter || qualityFilter) && (
-                <Button variant="outlined" size="small" onClick={() => { setAssetSearch(''); setDomainFilter(''); setQualityFilter(''); }} startIcon={<FilterIcon sx={{ fontSize: 14 }} />} sx={{ ...FONT.chip }}>
-                  Clear
-                </Button>
-              )}
-            </Stack>
-          </Paper>
-
-          {filteredAssets.length === 0 ? (
-            <EmptyState
-              icon={StorageIcon}
-              title={assets.length === 0 ? 'No Emission Source Assets' : 'No assets match your filters'}
-              description={assets.length === 0 ? 'No emission source assets have been registered for your organizational unit.' : 'Try adjusting your search or filter criteria.'}
-            />
-          ) : (
-            <Paper variant="outlined" sx={{ borderRadius: BORDER.radius, overflow: 'hidden' }}>
-              <DataGrid
-                rows={filteredAssets} columns={displayColumns}
-                paginationModel={paginationModel} onPaginationModelChange={setPaginationModel}
-                pageSizeOptions={[10, 25, 50, 100]} disableRowSelectionOnClick density="compact" autoHeight
-                sx={{
-                  border: 'none',
-                  '& .MuiDataGrid-cell': { borderColor: 'divider', py: 0.75, ...FONT.bodySmall },
-                  '& .MuiDataGrid-columnHeaders': { bgcolor: 'action.hover', ...FONT.chip, fontWeight: 600 },
-                  '& .MuiDataGrid-row:hover': { bgcolor: 'action.hover' },
-                  '& .MuiDataGrid-footerContainer': { ...FONT.chip },
-                }}
-              />
-            </Paper>
-          )}
-        </>
-      )}
-    </PageWrapper>
+      <Snackbar open={Boolean(snackbar)} autoHideDuration={4000} onClose={() => setSnackbar(null)}>
+        <Alert severity={snackbar?.severity || 'info'} onClose={() => setSnackbar(null)}>
+          {snackbar?.message}
+        </Alert>
+      </Snackbar>
+    </>
   );
 }

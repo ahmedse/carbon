@@ -1,0 +1,203 @@
+# Carbon Domain — Design & Architecture v2.0
+
+> Updated: 2026-07-26 | Master: GitHub Copilot + DeepSeek V4 Pro
+
+---
+
+## 1. System Identity
+
+Carbon is a **GHG emissions management domain app** built on the AASTMT Data Trust Platform. It serves institutional carbon accounting needs following **GHG Protocol Corporate Standard** and **ISO 14064**.
+
+**Not a generic carbon calculator.** Carbon is purpose-built for AASTMT's organizational structure (university → campus → college → department → facility), with Egypt-specific emission factors and bilingual readiness.
+
+---
+
+## 2. Data Trust Platform Foundation
+
+Carbon sits on top of these platform primitives:
+
+| Layer | Provides | Carbon Uses It For |
+|---|---|---|
+| **core.Module** | Data collection unit, org-scoped | Emission source (e.g., "Abu Qir Electricity") |
+| **dataschema.DataTable** | Dynamic schema, virtual tables | Activity data structure (e.g., monthly kWh) |
+| **dataschema.DataRow** | JSON row storage | Individual activity records |
+| **mdm.OrgUnit** | Hierarchical org tree | Organizational boundary (campus → facility) |
+| **mdm.ReferenceSet** | Master data lists | Fuel types, grid regions, GWP reference |
+| **catalog.AssetProfile** | Metadata + quality score | Per-source DQ tracking |
+| **catalog.GovernanceEvent** | Immutable audit trail | Who changed what, when, why |
+| **dq** | Rule-based quality engine | Data completeness, range checks |
+
+---
+
+## 3. Architecture Principles
+
+1. **Domain isolation**: `emissions` may import `core`, `dataschema`, `mdm`, `catalog`, `dq`. Platform apps MUST NOT import `emissions`.
+2. **Emission factors are global** (not org-scoped). Activity data + calculations are org-scoped.
+3. **Dynamic schema, static calculation**: DataTables are user-defined, but CalculationRules bridge dynamic fields to typed emission factors.
+4. **Immutable calculations**: Once verified, calculations are locked. Modifications create new versions, not edits.
+5. **Monthly reporting cycles**: Default cadence, with annual aggregation.
+6. **No auto-approval**: Calculations must be manually reviewed before verification.
+
+---
+
+## 4. Scope Taxonomy
+
+Three distinct "scope" concepts — never conflate:
+
+| Concept | Meaning | Field |
+|---|---|---|
+| **GHG Scope** | Emission taxonomy (Scope 1/2/3) | `EmissionFactor.scope`, `Calculation.scope` |
+| **Access Scope** | OrgUnit subtree RBAC | `get_visible_org_unit_ids(user)` |
+| **Module.scope** | Advisory only | `Module.scope` — deprecated in favor of factor-level scope |
+
+---
+
+## 5. UI/UX System — FINALIZED 2026-07-26
+
+### Decisions
+
+| Decision | Choice | Detail |
+|---|---|---|
+| Density | **B — Compact** | 24px table rows, `size="small"` inputs, 16px card padding |
+| Color | **Blue + Zinc** | Light (default): `#2563eb` + slate. Dark: `#3b82f6` + zinc. Theme switch button. |
+| Navigation | **Sidebar + Tabs + Right Panel** | Left sidebar, breadcrumbs, tab bars for sub-pages, collapsible/resizable right panel for entity metadata |
+| Cards | **A — Minimal bordered** | `border: 1px solid divider`, no shadow, 8px radius |
+| Data Presentation | **C — Balanced** | Charts and tables equal weight, sparklines in stat cards |
+| Page Width | **A — Full fluid** | No max-width, content fills viewport |
+| Animations | **B — Subtle** | Hover color shifts only, <200ms |
+| Empty States | **B — Illustrated** | Icon + title + description + CTA |
+
+### Visual Language
+
+| Element | Spec |
+|---|---|
+| **Typography** | System font stack: `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif` |
+| **Primary (light)** | `#2563eb` (blue-600) |
+| **Primary (dark)** | `#3b82f6` (blue-500) |
+| **Neutrals (light)** | Zinc/slate: `#18181b` → `#f4f4f5` |
+| **Neutrals (dark)** | Zinc dark: `#fafafa` → `#18181b` |
+| **Success** | `#16a34a` (green-600) |
+| **Warning** | `#d97706` (amber-600) |
+| **Error** | `#dc2626` (red-600) |
+| **Border radius** | 8px (cards, inputs), 4px (chips, badges) |
+| **Shadow** | `boxShadow: 1` only for interactive overlays, never for cards |
+
+### Unified Component Library
+
+Every page MUST use these shared components. Never create ad-hoc tables or cards.
+
+```
+src/components/
+  DataGrid/
+    CarbonDataGrid.jsx       ← THE standard table (pagination, sort, resize, show/hide, highlight, actions)
+  Cards/
+    StatCard.jsx             ← Stat metric (value + unit + icon + sparkline + trend)
+    WorkflowCard.jsx         ← Navigation card (icon + title + description + onClick)
+  Page/
+    PageHeader.jsx           ← Title + subtitle + breadcrumb + badge + actions
+    EmptyState.jsx           ← Icon + title + description + CTA
+    LoadingSkeleton.jsx      ← Skeleton matching layout shape
+    ErrorAlert.jsx           ← Alert with retry button
+  Layout/
+    TabPanel.jsx             ← Tab content container
+    RightPanel.jsx           ← Collapsible/resizable entity metadata sidebar
+  Feedback/
+    PeriodBanner.jsx         ← Active period status bar
+    ActivityFeed.jsx         ← Compact timeline
+  Form/
+    SaveBar.jsx              ← Bottom-pinned Cancel + Save
+    FormField.jsx            ← Standard field (label above, size=small)
+```
+
+---
+
+## 6. User Personas & Journeys
+
+| Persona | Real Role | Core Question | Primary Page |
+|---|---|---|---|
+| **Data Owner** | Facilities officer, transport manager | "What data do I need to enter this month?" | My Data |
+| **Analyst** | Sustainability analyst, internal auditor | "What's our footprint, and is the data trustworthy?" | Dashboard + Calculations |
+| **Admin** | Carbon program manager | "Is the system configured correctly?" | Admin Console |
+
+### Data Owner Journey
+```
+Login → Console (see alerts) → My Data (enter monthly activity)
+  → Submit for review → (Analyst picks up)
+```
+
+### Analyst Journey
+```
+Login → Console (see pending submissions) → Dashboard (review footprint)
+  → Calculations (verify DQ, approve) → Reports (generate, export)
+```
+
+### Admin Journey
+```
+Login → Console (system health) → Factors (update grid factor)
+  → Rules (configure new source) → Periods (open new cycle)
+```
+
+---
+
+## 7. Page Architecture
+
+```
+/carbon
+  /console           ← Landing: alerts, stats, workflows
+  /my-data           ← Data owner portal: modules, data entry
+  /dashboard         ← Footprint visualization, trends
+  /calculations      ← Calculation queue, verification
+  /reporting
+    /generate        ← Report builder wizard
+    /saved           ← Saved reports library
+    /periods         ← Reporting period management
+  /admin
+    /factors         ← Emission factors CRUD
+    /rules           ← Calculation rules CRUD
+  /targets           ← Science-based targets, goals
+```
+
+---
+
+## 8. Emission Factor Catalog
+
+### Implemented (Phase 0)
+
+| Code | Name | Factor | Unit | Scope |
+|---|---|---|---|---|
+| `EG_GRID_2024` | Egypt National Grid 2024 | 0.4584 | kg CO2e/kWh | 2 |
+| `EG_WATER_2024` | Egypt Water Supply 2024 | 0.344 | kg CO2e/m³ | 3 |
+
+### Planned (Phase 06)
+
+| Code | Category | Priority |
+|---|---|---|
+| `EG_DIESEL` | Stationary combustion | High |
+| `EG_NATURAL_GAS` | Stationary combustion | High |
+| `EG_PETROL` | Mobile combustion | High |
+| `EG_WASTE` | Waste disposal | Medium |
+| `EG_PAPER` | Materials (paper) | Low |
+
+---
+
+## 9. Known Technical Debt
+
+| # | Item | Severity | Plan |
+|---|---|---|---|
+| 1 | RBAC nav items all `role: '*'` | High | Phase 08 |
+| 2 | Governance policy enforcement not wired | High | Phase 08 |
+| 3 | DQ execute action is stub | High | Phase 08 |
+| 4 | Only 4/15 Scope 3 categories | Medium | Phase 06 |
+| 5 | No spend-based calculation | Medium | Post-MVP |
+| 6 | No organizational boundary model | Medium | Post-MVP |
+| 7 | Tests broken/stale | Medium | Phase 08 |
+| 8 | Legacy `reporting_year`/`reporting_month` fields | Low | Migration cleanup |
+
+---
+
+## 10. Master-Worker Protocol
+
+See `/plans/carbon-phase/PROTOCOL.md` for the full task delegation protocol.
+
+**Current Phase**: 01 — Carbon Console
+**Next Phase**: 02 — My Data (Data Owner Portal)

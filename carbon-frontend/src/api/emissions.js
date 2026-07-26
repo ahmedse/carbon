@@ -191,6 +191,22 @@ export async function fetchOwnerSummary(token) {
 }
 
 /**
+ * Fetch Carbon console data
+ * @param {string} token - JWT token
+ */
+export async function fetchConsoleData(token) {
+  return apiFetch(`${API_ROUTES.emissionsAPI}console/`, { token });
+}
+
+/**
+ * Fetch consolidated My Data (Data Owner workspace)
+ * @param {string} token - JWT token
+ */
+export async function fetchMyData(token) {
+  return apiFetch(`${API_ROUTES.emissionsAPI}my-data/`, { token });
+}
+
+/**
  * Fetch emission-generating assets scoped to the user's org unit
  * @param {Object} params - Query parameters
  * @param {string} token - JWT token

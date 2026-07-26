@@ -58,9 +58,9 @@ function MenuItem({
         to={to}
         selected={selected}
         sx={{
-          minHeight: 36,
-          py: 0.75,
-          px: 1.5,
+          minHeight: 28,
+          py: 0.375,
+          px: 1.25,
           mx: 0.5,
           borderRadius: 1,
           justifyContent: collapsed ? "center" : "flex-start",
@@ -87,12 +87,12 @@ function MenuItem({
             secondary={secondary}
             primaryTypographyProps={{
               fontWeight: selected ? 600 : 500,
-              fontSize: "0.8125rem",
+              fontSize: "0.6875rem",
               noWrap: true,
               color: selected ? "#16a34a" : "#374151",
             }}
             secondaryTypographyProps={{
-              fontSize: "0.6875rem",
+              fontSize: "0.5625rem",
               color: "#9ca3af",
             }}
           />
@@ -157,8 +157,8 @@ function DataEntrySidebar({ collapsed, location, navigate, modules, tablesByModu
             <ListItemButton
               onClick={() => setOpenScopeMenus(prev => ({ ...prev, [scope]: !prev[scope] }))}
               sx={{
-                minHeight: 36,
-                py: 0.75,
+                minHeight: 32,
+                py: 0.5,
                 px: 1.5,
                 mx: 0.5,
                 mt: 0.5,
@@ -170,7 +170,7 @@ function DataEntrySidebar({ collapsed, location, navigate, modules, tablesByModu
             >
               <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
                 <Tooltip title={SCOPE_META[scope].label} placement="right" arrow disableHoverListener={open}>
-                  {React.cloneElement(SCOPE_META[scope].icon, { sx: { fontSize: 20 } })}
+                  {React.cloneElement(SCOPE_META[scope].icon, { sx: { fontSize: 16 } })}
                 </Tooltip>
               </ListItemIcon>
               {open && (
@@ -178,13 +178,13 @@ function DataEntrySidebar({ collapsed, location, navigate, modules, tablesByModu
                   <ListItemText
                     primary={SCOPE_META[scope].label}
                     secondary={SCOPE_META[scope].desc}
-                    primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem", color: "#111827" }}
-                    secondaryTypographyProps={{ fontSize: "0.6875rem", color: "#9ca3af" }}
+                    primaryTypographyProps={{ fontWeight: 600, fontSize: "0.75rem", color: "#111827" }}
+                    secondaryTypographyProps={{ fontSize: "0.625rem", color: "#9ca3af" }}
                   />
                   {openScopeMenus[scope] ? (
-                    <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} />
+                    <ExpandLess sx={{ fontSize: 14, color: "#9ca3af" }} />
                   ) : (
-                    <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />
+                    <ExpandMore sx={{ fontSize: 14, color: "#9ca3af" }} />
                   )}
                 </>
               )}
@@ -227,7 +227,7 @@ function DataEntrySidebar({ collapsed, location, navigate, modules, tablesByModu
                             primary={mod.name}
                             primaryTypographyProps={{
                               fontWeight: isActiveModule ? 600 : 500,
-                              fontSize: "0.8125rem",
+                              fontSize: "0.75rem",
                               color: isActiveModule ? "#16a34a" : "#374151",
                             }}
                           />
@@ -274,8 +274,8 @@ function AdminSidebar({ collapsed, location }) {
       <ListItemButton
         onClick={() => setOpenMenus(prev => ({ ...prev, org: !prev.org }))}
         sx={{
-          minHeight: 36,
-          py: 0.75,
+          minHeight: 32,
+          py: 0.5,
           px: 1.5,
           mx: 0.5,
           borderRadius: 1,
@@ -287,16 +287,16 @@ function AdminSidebar({ collapsed, location }) {
       >
         <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
           <Tooltip title="Organization" placement="right" arrow disableHoverListener={open}>
-            <OrgIcon sx={{ fontSize: 20, color: location.pathname.startsWith("/admin/org") ? "#0ea5e9" : "#6b7280" }} />
+            <OrgIcon sx={{ fontSize: 18, color: location.pathname.startsWith("/admin/org") ? "#0ea5e9" : "#6b7280" }} />
           </Tooltip>
         </ListItemIcon>
         {open && (
           <>
-            <ListItemText primary="Organization" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem" }} />
+            <ListItemText primary="Organization" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.75rem" }} />
             {openMenus.org ? (
-              <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} />
+              <ExpandLess sx={{ fontSize: 14, color: "#9ca3af" }} />
             ) : (
-              <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />
+              <ExpandMore sx={{ fontSize: 14, color: "#9ca3af" }} />
             )}
           </>
         )}
@@ -305,7 +305,7 @@ function AdminSidebar({ collapsed, location }) {
         <List component="div" disablePadding>
           <MenuItem
             to="/admin/org-units"
-            icon={<OrgIcon sx={{ fontSize: 18 }} />}
+            icon={<OrgIcon sx={{ fontSize: 16 }} />}
             label="Org Units"
             selected={location.pathname.startsWith("/admin/org-units")}
             collapsed={collapsed}
@@ -313,7 +313,7 @@ function AdminSidebar({ collapsed, location }) {
           />
           <MenuItem
             to="/admin/users"
-            icon={<TableRowsIcon sx={{ fontSize: 18 }} />}
+            icon={<TableRowsIcon sx={{ fontSize: 16 }} />}
             label="Users"
             selected={location.pathname.startsWith("/admin/users")}
             collapsed={collapsed}
@@ -321,7 +321,7 @@ function AdminSidebar({ collapsed, location }) {
           />
           <MenuItem
             to="/admin/access"
-            icon={<AccessIcon sx={{ fontSize: 18 }} />}
+            icon={<AccessIcon sx={{ fontSize: 16 }} />}
             label="Access Control"
             selected={location.pathname.startsWith("/admin/access")}
             collapsed={collapsed}
@@ -336,8 +336,8 @@ function AdminSidebar({ collapsed, location }) {
       <ListItemButton
         onClick={() => setOpenMenus(prev => ({ ...prev, schema: !prev.schema }))}
         sx={{
-          minHeight: 36,
-          py: 0.75,
+          minHeight: 32,
+          py: 0.5,
           px: 1.5,
           mx: 0.5,
           borderRadius: 1,
@@ -349,16 +349,16 @@ function AdminSidebar({ collapsed, location }) {
       >
         <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
           <Tooltip title="Schema" placement="right" arrow disableHoverListener={open}>
-            <SchemaAdminIcon sx={{ fontSize: 20, color: location.pathname.startsWith("/schema-admin") ? "#7c3aed" : "#6b7280" }} />
+            <SchemaAdminIcon sx={{ fontSize: 18, color: location.pathname.startsWith("/schema-admin") ? "#7c3aed" : "#6b7280" }} />
           </Tooltip>
         </ListItemIcon>
         {open && (
           <>
-            <ListItemText primary="Schema Management" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem" }} />
+            <ListItemText primary="Schema Management" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.75rem" }} />
             {openMenus.schema ? (
-              <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} />
+              <ExpandLess sx={{ fontSize: 14, color: "#9ca3af" }} />
             ) : (
-              <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />
+              <ExpandMore sx={{ fontSize: 14, color: "#9ca3af" }} />
             )}
           </>
         )}
@@ -367,7 +367,7 @@ function AdminSidebar({ collapsed, location }) {
         <List component="div" disablePadding>
           <MenuItem
             to="/schema-admin/table-manager"
-            icon={<TableRowsIcon sx={{ fontSize: 18 }} />}
+            icon={<TableRowsIcon sx={{ fontSize: 16 }} />}
             label="Table Manager"
             selected={location.pathname.startsWith("/schema-admin/table-manager")}
             collapsed={collapsed}
@@ -382,8 +382,8 @@ function AdminSidebar({ collapsed, location }) {
       <ListItemButton
         onClick={() => setOpenMenus(prev => ({ ...prev, dashboards: !prev.dashboards }))}
         sx={{
-          minHeight: 36,
-          py: 0.75,
+          minHeight: 32,
+          py: 0.5,
           px: 1.5,
           mx: 0.5,
           borderRadius: 1,
@@ -395,16 +395,16 @@ function AdminSidebar({ collapsed, location }) {
       >
         <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
           <Tooltip title="Dashboards" placement="right" arrow disableHoverListener={open}>
-            <DashboardIcon sx={{ fontSize: 20, color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#16a34a" : "#6b7280" }} />
+            <DashboardIcon sx={{ fontSize: 18, color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#16a34a" : "#6b7280" }} />
           </Tooltip>
         </ListItemIcon>
         {open && (
           <>
-            <ListItemText primary="Dashboards" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.8125rem" }} />
+            <ListItemText primary="Dashboards" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.75rem" }} />
             {openMenus.dashboards ? (
-              <ExpandLess sx={{ fontSize: 16, color: "#9ca3af" }} />
+              <ExpandLess sx={{ fontSize: 14, color: "#9ca3af" }} />
             ) : (
-              <ExpandMore sx={{ fontSize: 16, color: "#9ca3af" }} />
+              <ExpandMore sx={{ fontSize: 14, color: "#9ca3af" }} />
             )}
           </>
         )}
@@ -413,7 +413,7 @@ function AdminSidebar({ collapsed, location }) {
         <List component="div" disablePadding>
           <MenuItem
             to="/dashboard"
-            icon={<DashboardIcon sx={{ fontSize: 18 }} />}
+            icon={<DashboardIcon sx={{ fontSize: 16 }} />}
             label="Executive Summary"
             selected={location.pathname === "/dashboard" || location.pathname === "/"}
             collapsed={collapsed}
@@ -421,7 +421,7 @@ function AdminSidebar({ collapsed, location }) {
           />
           <MenuItem
             to="/dashboards/analytics"
-            icon={<AnalyticsIcon sx={{ fontSize: 18 }} />}
+            icon={<AnalyticsIcon sx={{ fontSize: 16 }} />}
             label="Analytics"
             selected={location.pathname === "/dashboards/analytics"}
             collapsed={collapsed}
@@ -429,7 +429,7 @@ function AdminSidebar({ collapsed, location }) {
           />
           <MenuItem
             to="/dashboards/targets"
-            icon={<TargetsIcon sx={{ fontSize: 18 }} />}
+            icon={<TargetsIcon sx={{ fontSize: 16 }} />}
             label="Targets & Progress"
             selected={location.pathname === "/dashboards/targets"}
             collapsed={collapsed}
@@ -437,7 +437,7 @@ function AdminSidebar({ collapsed, location }) {
           />
           <MenuItem
             to="/dashboards/data-quality"
-            icon={<QualityIcon sx={{ fontSize: 18 }} />}
+            icon={<QualityIcon sx={{ fontSize: 16 }} />}
             label="Data Quality"
             selected={location.pathname === "/dashboards/data-quality"}
             collapsed={collapsed}
@@ -445,7 +445,7 @@ function AdminSidebar({ collapsed, location }) {
           />
           <MenuItem
             to="/dashboards/reporting"
-            icon={<ReportingIcon sx={{ fontSize: 18 }} />}
+            icon={<ReportingIcon sx={{ fontSize: 16 }} />}
             label="Reporting"
             selected={location.pathname === "/dashboards/reporting"}
             collapsed={collapsed}
@@ -580,11 +580,12 @@ function DataOwnerSidebar({ collapsed, location }) {
         variant="caption"
         sx={{
           fontWeight: 700,
-          fontSize: "0.7rem",
+          fontSize: "0.625rem",
           color: "#9ca3af",
           textTransform: "uppercase",
+          letterSpacing: "0.05em",
           px: 1.5,
-          py: 1,
+          py: 0.5,
           display: "block",
         }}
       >
