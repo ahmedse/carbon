@@ -59,9 +59,9 @@ function ActivityFeed({ items, maxItems, emptyMessage, loading }) {
               <Box 
                 sx={{ 
                   display: 'flex', 
-                  gap: 1.5, 
+                  gap: 1, 
                   alignItems: 'flex-start',
-                  p: 1.5,
+                  p: 1,
                   transition: 'background-color 0.2s ease',
                   '&:hover': {
                     bgcolor: 'action.hover'

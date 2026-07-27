@@ -7,13 +7,13 @@ function WorkflowCard({ icon, title, description, onClick, disabled }) {
     <Box
       onClick={disabled ? undefined : onClick}
       sx={{
-        p: 1.5,
+        p: 1.25,
         borderRadius: 2,
         border: '1px solid',
         borderColor: 'divider',
         display: 'flex',
         alignItems: 'center',
-        gap: 1.5,
+        gap: 1.25,
         cursor: disabled ? 'not-allowed' : 'pointer',
         transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
@@ -31,17 +31,17 @@ function WorkflowCard({ icon, title, description, onClick, disabled }) {
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'center', 
-        width: 36, 
-        height: 36, 
+        width: 32, 
+        height: 32, 
         borderRadius: 2, 
         background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(37, 99, 235, 0.15) 100%)',
         flexShrink: 0,
         transition: 'transform 0.2s ease'
       }}>
-        {icon && React.cloneElement(icon, { sx: { fontSize: 18, color: 'primary.main' } })}
+        {icon && React.cloneElement(icon, { sx: { fontSize: 16, color: 'primary.main' } })}
       </Box>
       <Box sx={{ minWidth: 0, textAlign: 'left', flex: 1 }}>
-        <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.primary', mb: 0.25, lineHeight: 1.2 }}>{title}</Typography>
+        <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.primary', lineHeight: 1.2 }}>{title}</Typography>
         <Typography 
           sx={{ 
             fontSize: '0.65rem', 

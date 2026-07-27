@@ -30,7 +30,7 @@ function StatCard({ title, value, unit, icon, color, sparkline, trend, trendLabe
       elevation={0}
       onClick={onClick}
       sx={{
-        p: 1.5,
+        p: 1.25,
         borderRadius: 2,
         border: '1px solid',
         borderColor: 'divider',
@@ -47,11 +47,11 @@ function StatCard({ title, value, unit, icon, color, sparkline, trend, trendLabe
         },
       }}
     >
-      <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', mb: 0.75 }}>
+      <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', mb: 0.5 }}>
         {icon && (
           <Box sx={{ 
-            width: 28, 
-            height: 28, 
+            width: 24, 
+            height: 24, 
             borderRadius: 1.5, 
             bgcolor: alpha(paletteColor, 0.1), 
             display: 'flex', 
@@ -59,14 +59,14 @@ function StatCard({ title, value, unit, icon, color, sparkline, trend, trendLabe
             justifyContent: 'center',
             transition: 'all 0.25s ease'
           }}>
-            {React.cloneElement(icon, { sx: { fontSize: 16, color: paletteColor } })}
+            {React.cloneElement(icon, { sx: { fontSize: 14, color: paletteColor } })}
           </Box>
         )}
         <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           {title}
         </Typography>
       </Box>
-      <Typography sx={{ fontSize: '1.375rem', fontWeight: 700, color: 'text.primary', lineHeight: 1.1 }}>
+      <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: 'text.primary', lineHeight: 1.1 }}>
         {loading ? '–' : value}
         {unit && (
           <Typography component="span" sx={{ fontSize: '0.8rem', color: 'text.secondary', ml: 0.5, fontWeight: 500 }}>

@@ -12,23 +12,23 @@ function PeriodBanner({ name, startDate, endDate, status, daysRemaining, onActio
     <Paper 
       elevation={0}
       sx={{ 
-        p: 2, 
-        mb: 2.5, 
+        p: 1.5, 
+        mb: 1.5, 
         background: statusBg,
         borderRadius: 2,
         display: 'flex', 
         flexDirection: { xs: 'column', sm: 'row' }, 
-        gap: 1.5, 
+        gap: 1.25, 
         alignItems: 'center', 
         justifyContent: 'space-between',
         boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
         border: 'none'
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
         <Box sx={{ 
-          width: 36, 
-          height: 36, 
+          width: 32, 
+          height: 32, 
           borderRadius: 1.5, 
           bgcolor: 'rgba(255,255,255,0.2)', 
           display: 'flex', 
@@ -36,15 +36,15 @@ function PeriodBanner({ name, startDate, endDate, status, daysRemaining, onActio
           justifyContent: 'center',
           backdropFilter: 'blur(10px)'
         }}>
-          <CalendarMonthIcon sx={{ fontSize: 18, color: '#fff' }} />
+          <CalendarMonthIcon sx={{ fontSize: 16, color: '#fff' }} />
         </Box>
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, color: '#fff', mb: 0.25 }}>{name}</Typography>
-          <Typography sx={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.85)' }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff' }}>{name}</Typography>
+          <Typography sx={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.85)' }}>
             {startDate} — {endDate}
           </Typography>
           {daysRemaining != null && (
-            <Typography sx={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.95)', fontWeight: 600, mt: 0.5 }}>
+            <Typography sx={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.95)', fontWeight: 600, mt: 0.25 }}>
               {daysRemaining} days remaining
             </Typography>
           )}
