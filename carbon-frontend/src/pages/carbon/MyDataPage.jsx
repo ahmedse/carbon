@@ -139,7 +139,7 @@ function SourceOverviewTab({ mod, theme }) {
   ];
 
   return (
-    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.8rem' }}>
+    <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5, fontSize: '0.75rem' }}>
       <Typography variant="body2" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.68rem' }}>
         Overview
       </Typography>
@@ -156,12 +156,12 @@ function SourceOverviewTab({ mod, theme }) {
               borderBottom: `1px solid ${theme.palette.divider}`,
             }}
           >
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
               {label}
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               {typeof value === 'string' || typeof value === 'number' ? (
-                <Typography component="span" variant="body2" sx={{ fontWeight: 600, color: 'text.primary', fontSize: '0.82rem' }}>
+                <Typography component="span" variant="body2" sx={{ fontWeight: 600, color: 'text.primary', fontSize: '0.8rem' }}>
                   {value}
                 </Typography>
               ) : (
@@ -176,7 +176,7 @@ function SourceOverviewTab({ mod, theme }) {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 700, fontSize: '0.76rem' }}>
           Data trust context
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.78rem' }}>
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.72rem' }}>
           Detailed rules, lineage, and governance are typically managed at the table or asset level. This page focuses on source selection and row entry operations.
         </Typography>
       </Box>
@@ -185,7 +185,7 @@ function SourceOverviewTab({ mod, theme }) {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 700, fontSize: '0.76rem' }}>
           Quality summary
         </Typography>
-        <Typography variant="body2" sx={{ fontWeight: 600, color: dqPct >= 80 ? 'success.main' : dqPct >= 60 ? 'warning.main' : 'error.main', fontSize: '0.82rem' }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: dqPct >= 80 ? 'success.main' : dqPct >= 60 ? 'warning.main' : 'error.main', fontSize: '0.8rem' }}>
           {mod.quality_score != null ? `${Math.round(dqPct)}%` : 'No score available'}
         </Typography>
       </Box>
@@ -216,7 +216,7 @@ function StatsTab({ stats, modules, theme }) {
       </Box>
 
       <Divider />
-      <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}>
+      <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}>
         By Scope
       </Typography>
       {[1, 2, 3].map((s) => {
@@ -225,8 +225,8 @@ function StatsTab({ stats, modules, theme }) {
         return (
           <Stack key={s} direction="row" alignItems="center" spacing={1}>
             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: p?.main, flexShrink: 0 }} />
-            <Typography sx={{ fontSize: '0.75rem', flex: 1, color: 'text.secondary' }}>{cfg.label}</Typography>
-            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700 }}>{scopeCounts[s]}</Typography>
+            <Typography sx={{ fontSize: '0.72rem', flex: 1, color: 'text.secondary' }}>{cfg.label}</Typography>
+            <Typography sx={{ fontSize: '0.72rem', fontWeight: 700 }}>{scopeCounts[s]}</Typography>
           </Stack>
         );
       })}
@@ -238,7 +238,7 @@ function ActivityTab({ activity }) {
   if (!activity?.length) {
     return (
       <Box sx={{ p: 2 }}>
-        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>No recent activity.</Typography>
+        <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>No recent activity.</Typography>
       </Box>
     );
   }
@@ -247,8 +247,8 @@ function ActivityTab({ activity }) {
       <Stack divider={<Divider flexItem />} spacing={0}>
         {activity.map((item, i) => (
           <Box key={item.id ?? i} sx={{ py: 1 }}>
-            <Typography sx={{ fontSize: '0.75rem' }}>{item.detail || item.message || 'Updated'}</Typography>
-            <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled', mt: 0.25 }}>
+            <Typography sx={{ fontSize: '0.72rem' }}>{item.detail || item.message || 'Updated'}</Typography>
+            <Typography sx={{ fontSize: '0.62rem', color: 'text.disabled', mt: 0.25 }}>
               {fmtDate(item.timestamp || item.created_at)}
             </Typography>
           </Box>
@@ -414,14 +414,14 @@ export default function MyDataPage() {
           value={activePanelTab}
           onChange={(event, next) => setActivePanelTab(next)}
           variant="fullWidth"
-          sx={{ '& .MuiTab-root': { textTransform: 'none', fontSize: '0.85rem' } }}
+          sx={{ '& .MuiTab-root': { textTransform: 'none', fontSize: '0.78rem', minHeight: 36, py: 0.5 } }}
         >
           {rightPanelTabs.map((tab) => (
             <Tab key={tab.label} label={tab.label} />
           ))}
         </Tabs>
       </Box>
-      <Box sx={{ p: 2 }}>{rightPanelTabs[activePanelTab]?.render()}</Box>
+      <Box sx={{ p: 2, fontSize: '0.78rem' }}>{rightPanelTabs[activePanelTab]?.render()}</Box>
     </Box>
   );
 
@@ -447,11 +447,11 @@ export default function MyDataPage() {
       {/* ── Filter bar ── */}
       <Stack
         direction="row"
-        spacing={1}
+        spacing={0.75}
         alignItems="center"
         sx={{
-          px: 2,
-          py: 1,
+          px: 1.5,
+          py: 0.5,
           flexShrink: 0,
           borderBottom: 1,
           borderColor: 'divider',
@@ -466,46 +466,46 @@ export default function MyDataPage() {
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon sx={{ fontSize: 15, color: 'text.disabled' }} />
+                <SearchIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
               </InputAdornment>
             ),
           }}
           sx={{
             flex: 1,
-            '& .MuiInputBase-input': { fontSize: '0.8125rem', py: '6px' },
+            '& .MuiInputBase-input': { fontSize: '0.75rem', py: '6px' },
           }}
         />
 
         <FormControl size="small" sx={{ minWidth: 100 }}>
-          <InputLabel>Scope</InputLabel>
+          <InputLabel sx={{ fontSize: '0.75rem' }}>Scope</InputLabel>
           <Select value={scopeFilter} label="Scope" onChange={(e) => setScopeFilter(e.target.value)}
-            sx={{ fontSize: '0.8125rem' }}>
-            <MenuItem value="all">All scopes</MenuItem>
-            <MenuItem value="1">Scope 1</MenuItem>
-            <MenuItem value="2">Scope 2</MenuItem>
-            <MenuItem value="3">Scope 3</MenuItem>
+            sx={{ fontSize: '0.75rem' }}>
+            <MenuItem value="all" sx={{ fontSize: '0.75rem' }}>All scopes</MenuItem>
+            <MenuItem value="1" sx={{ fontSize: '0.75rem' }}>Scope 1</MenuItem>
+            <MenuItem value="2" sx={{ fontSize: '0.75rem' }}>Scope 2</MenuItem>
+            <MenuItem value="3" sx={{ fontSize: '0.75rem' }}>Scope 3</MenuItem>
           </Select>
         </FormControl>
 
         <FormControl size="small" sx={{ minWidth: 110 }}>
-          <InputLabel>Status</InputLabel>
+          <InputLabel sx={{ fontSize: '0.75rem' }}>Status</InputLabel>
           <Select value={statusFilter} label="Status" onChange={(e) => setStatusFilter(e.target.value)}
-            sx={{ fontSize: '0.8125rem' }}>
-            <MenuItem value="all">All</MenuItem>
-            <MenuItem value="passing">Passing</MenuItem>
-            <MenuItem value="warning">Warning</MenuItem>
-            <MenuItem value="failing">Failing</MenuItem>
-            <MenuItem value="no_data">No Data</MenuItem>
+            sx={{ fontSize: '0.75rem' }}>
+            <MenuItem value="all" sx={{ fontSize: '0.75rem' }}>All</MenuItem>
+            <MenuItem value="passing" sx={{ fontSize: '0.75rem' }}>Passing</MenuItem>
+            <MenuItem value="warning" sx={{ fontSize: '0.75rem' }}>Warning</MenuItem>
+            <MenuItem value="failing" sx={{ fontSize: '0.75rem' }}>Failing</MenuItem>
+            <MenuItem value="no_data" sx={{ fontSize: '0.75rem' }}>No Data</MenuItem>
           </Select>
         </FormControl>
 
         <Tooltip title="Refresh">
-          <IconButton size="small" onClick={load}>
-            <RefreshIcon sx={{ fontSize: 16 }} />
+          <IconButton size="small" onClick={load} sx={{ p: 0.5 }}>
+            <RefreshIcon sx={{ fontSize: 14 }} />
           </IconButton>
         </Tooltip>
 
-        <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5, whiteSpace: 'nowrap' }}>
+<Typography variant="caption" color="text.secondary" sx={{ ml: 0.5, whiteSpace: 'nowrap', fontSize: '0.72rem' }}>
           {filtered.length} of {modules.length}
         </Typography>
       </Stack>
@@ -542,7 +542,7 @@ export default function MyDataPage() {
                 borderBottom: 1,
                 borderColor: 'divider',
                 '& .MuiDataGrid-columnHeaderTitle': {
-                  fontSize: '0.72rem',
+                  fontSize: '0.68rem',
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   color: 'text.secondary',
@@ -559,6 +559,7 @@ export default function MyDataPage() {
               },
               '& .MuiDataGrid-cell': {
                 borderBottom: `1px solid ${theme.palette.divider}`,
+                fontSize: '0.72rem',
                 '&:focus, &:focus-within': { outline: 'none' },
               },
               '& .MuiDataGrid-footerContainer': {
@@ -580,7 +581,6 @@ export default function MyDataPage() {
           <PageHeader
             title="My Data"
             subtitle={orgUnit?.name || ''}
-            breadcrumbs={breadcrumbs}
           />
         }
         mainContent={mainContent}

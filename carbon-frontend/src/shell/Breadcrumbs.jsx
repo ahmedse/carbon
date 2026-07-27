@@ -117,13 +117,23 @@ const ROUTE_CONFIG = {
     icon: StorageIcon,
     parent: '/carbon/console',
   },
+  '/carbon/my-data/:moduleId': {
+    label: 'Source Workspace',
+    icon: StorageIcon,
+    parent: '/carbon/my-data',
+  },
+  '/carbon/my-data/:moduleId/:tableId': {
+    label: 'Data Entry',
+    icon: StorageIcon,
+    parent: '/carbon/my-data/:moduleId',
+  },
   '/carbon/data-entry': {
     label: 'Activity Data Entry',
     icon: StorageIcon,
     parent: '/carbon/my-data',
   },
   '/carbon/data-entry/entry/:moduleId/:tableId': {
-    label: 'Table Entry',
+    label: 'Data Entry',
     icon: StorageIcon,
     parent: '/carbon/data-entry',
   },
@@ -273,6 +283,15 @@ function normalizePath(pathname) {
   return pathname.replace(/\/+$|^\/+/, '').replace(/\/+/g, '/');
 }
 
+function fillPathParams(parentPath, currentPath) {
+  const parentSegments = normalizePath(parentPath).split('/').filter(Boolean);
+  const currentSegments = normalizePath(currentPath).split('/').filter(Boolean);
+
+  return `/${parentSegments.map((segment, index) => (
+    segment.startsWith(':') ? currentSegments[index] || segment : segment
+  )).join('/')}`;
+}
+
 function matchRouteConfig(pathname) {
   const cleanPath = normalizePath(pathname);
   const normalizedWithSlash = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
@@ -323,6 +342,9 @@ function buildBreadcrumbs(pathname) {
     });
 
     current = match.config.parent || (current.includes('/') ? current.substring(0, current.lastIndexOf('/')) : '/dashboard');
+    if (current && current.includes(':')) {
+      current = fillPathParams(current, match.path);
+    }
     if (!current) current = '/dashboard';
   }
 
@@ -350,6 +372,20 @@ function resolveCrumbLabel(crumb, modules, tablesByModule) {
       (segs[0] === 'modules' && segs[1])) {
     const mod = (modules || []).find((m) => String(m.id) === String(last));
     if (mod?.name) return mod.name;
+  }
+
+  // Data entry routes: /carbon/my-data/:moduleId and /carbon/my-data/:moduleId/:tableId
+  if (segs[0] === 'carbon' && segs[1] === 'my-data' && segs[2] && segs.length === 3) {
+    const mod = (modules || []).find((m) => String(m.id) === String(segs[2]));
+    if (mod?.name) return mod.name;
+  }
+
+  if (segs[0] === 'carbon' && segs[1] === 'my-data' && segs[2] && segs[3]) {
+    const moduleId = segs[2];
+    const tableId = segs[3];
+    const tables = tablesByModule?.[String(moduleId)] || [];
+    const table = tables.find((x) => String(x.id) === String(tableId));
+    if (table?.title || table?.name) return table.title || table.name;
   }
 
   // Table detail: /catalog/tables/:id or /catalog/schemas/:id (legacy)
@@ -394,9 +430,9 @@ export function Breadcrumbs() {
       }}
     >
       <MuiBreadcrumbs
-        separator={<ChevronRightIcon sx={{ fontSize: 13, color: 'text.disabled' }} />}
+        separator={<ChevronRightIcon sx={{ fontSize: 11, color: 'text.disabled' }} />}
         aria-label="breadcrumb"
-        sx={{ fontSize: '0.75rem' }}
+        sx={{ fontSize: '0.65rem' }}
       >
         {breadcrumbs.map((crumb, index) => {
           const Icon = crumb.icon;

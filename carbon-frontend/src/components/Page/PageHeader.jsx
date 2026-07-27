@@ -5,9 +5,9 @@ import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 
 function PageHeader({ title, subtitle, breadcrumbs, badge, actions }) {
   return (
-    <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 1.5, mb: 2 }}>
+    <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 1, mb: 1.5 }}>
       {breadcrumbs?.length > 0 && (
-        <Breadcrumbs separator={<NavigateNextIcon fontSize="small" />} sx={{ mb: 0.75 }}>
+        <Breadcrumbs separator={<NavigateNextIcon fontSize="small" />} sx={{ mb: 0.5 }}>
           {breadcrumbs.map((crumb, index) => (
             crumb.path ? (
               <Link key={index} color="inherit" underline="hover" href={crumb.path} sx={{ fontSize: '0.6875rem' }}>
@@ -21,16 +21,16 @@ function PageHeader({ title, subtitle, breadcrumbs, badge, actions }) {
           ))}
         </Breadcrumbs>
       )}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Typography sx={{ fontSize: '1.125rem', fontWeight: 600 }}>{title}</Typography>
+            <Typography sx={{ fontSize: '1rem', fontWeight: 600 }}>{title}</Typography>
             {badge && (
               <Chip label={badge.label} size="small" variant="outlined" color={badge.color} sx={{ height: 20, fontSize: '0.625rem' }} />
             )}
           </Box>
           {subtitle && (
-            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.25 }}>{subtitle}</Typography>
+            <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>{subtitle}</Typography>
           )}
         </Box>
         {actions && <Box>{actions}</Box>}

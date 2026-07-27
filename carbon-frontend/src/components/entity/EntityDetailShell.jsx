@@ -187,9 +187,12 @@ export default function EntityDetailShell({
                   variant="scrollable"
                   scrollButtons="auto"
                   sx={{
+                    minHeight: 36,
                     '& .MuiTab-root': {
                       textTransform: 'none',
-                      fontSize: '0.95rem',
+                      fontSize: '0.78rem',
+                      minHeight: 36,
+                      py: 0.5,
                     },
                   }}
                 >
@@ -268,9 +271,12 @@ export default function EntityDetailShell({
                         variant="scrollable"
                         scrollButtons="auto"
                         sx={{
+                          minHeight: 36,
                           '& .MuiTab-root': {
                             textTransform: 'none',
-                            fontSize: '0.9rem',
+                            fontSize: '0.78rem',
+                            minHeight: 36,
+                            py: 0.5,
                           },
                         }}
                       >

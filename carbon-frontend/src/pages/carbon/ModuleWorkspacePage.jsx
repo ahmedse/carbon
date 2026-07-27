@@ -176,7 +176,7 @@ export default function ModuleWorkspacePage() {
   if (loading) return <LoadingSkeleton variant="detail" />;
   if (error) return (
     <Box>
-      <PageHeader title="Source Workspace" subtitle="Loading workspace" breadcrumbs={breadcrumb} />
+      <PageHeader title="Source Workspace" subtitle="Loading workspace" />
       <ErrorAlert message={error} onRetry={() => window.location.reload()} />
     </Box>
   );
@@ -200,7 +200,6 @@ export default function ModuleWorkspacePage() {
         <PageHeader
           title={module?.name || 'Loading...'}
           subtitle={`${SCOPE_META[module?.scope]?.label || 'Scope'} — ${tables.length} tables, ${module?.row_count || 0} rows`}
-          breadcrumbs={breadcrumb}
           badge={SCOPE_META[module?.scope]?.label ? { label: SCOPE_META[module?.scope]?.label, color: SCOPE_META[module?.scope]?.color } : undefined}
         />
       )}

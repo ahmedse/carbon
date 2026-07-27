@@ -26,15 +26,15 @@ function TableOverviewTab({ table, module: mod }) {
     { label: 'Status',       value: rows > 0 ? 'Has Data' : 'Empty' },
   ];
   return (
-    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.8rem' }}>
+    <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.25, fontSize: '0.75rem' }}>
       <Typography variant="body2" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.68rem' }}>
         Table overview
       </Typography>
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 1.25 }}>
         {details.map(({ label, value }) => (
           <Box key={label} sx={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 1, py: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>{label}</Typography>
-            <Typography component="span" variant="body2" sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{value ?? '—'}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.68rem' }}>{label}</Typography>
+            <Typography component="span" variant="body2" sx={{ fontWeight: 600, fontSize: '0.78rem' }}>{value ?? '—'}</Typography>
           </Box>
         ))}
       </Box>
@@ -49,7 +49,7 @@ function TableFieldsTab({ fields }) {
     return <Box sx={{ p: 2 }}><Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>No fields defined.</Typography></Box>;
   }
   return (
-    <Box sx={{ p: 1.5 }}>
+    <Box sx={{ p: 1.25 }}>
       <Stack divider={<Divider flexItem />} spacing={0}>
         {fields.map((f) => (
           <Box key={f.id} sx={{ py: 1 }}>
