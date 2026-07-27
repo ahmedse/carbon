@@ -127,6 +127,11 @@ const ROUTE_CONFIG = {
     icon: StorageIcon,
     parent: '/carbon/my-data/:moduleId',
   },
+  '/carbon/my-data/row/:tableId/:rowId': {
+    label: 'Row Detail',
+    icon: StorageIcon,
+    parent: '/carbon/my-data',
+  },
   '/carbon/data-entry': {
     label: 'Activity Data Entry',
     icon: StorageIcon,
@@ -374,7 +379,7 @@ function resolveCrumbLabel(crumb, modules, tablesByModule) {
     if (mod?.name) return mod.name;
   }
 
-  // Data entry routes: /carbon/my-data/:moduleId and /carbon/my-data/:moduleId/:tableId
+  // Data entry routes: /carbon/my-data/:moduleId, /carbon/my-data/:moduleId/:tableId, /carbon/my-data/row/:tableId/:rowId
   if (segs[0] === 'carbon' && segs[1] === 'my-data' && segs[2] && segs.length === 3) {
     const mod = (modules || []).find((m) => String(m.id) === String(segs[2]));
     if (mod?.name) return mod.name;
@@ -386,6 +391,12 @@ function resolveCrumbLabel(crumb, modules, tablesByModule) {
     const tables = tablesByModule?.[String(moduleId)] || [];
     const table = tables.find((x) => String(x.id) === String(tableId));
     if (table?.title || table?.name) return table.title || table.name;
+  }
+
+  // Row detail: /carbon/my-data/row/:tableId/:rowId
+  if (segs[0] === 'carbon' && segs[1] === 'my-data' && segs[2] === 'row' && segs.length >= 5) {
+    const rowId = segs[4];
+    if (rowId) return `Row #${rowId}`;
   }
 
   // Table detail: /catalog/tables/:id or /catalog/schemas/:id (legacy)

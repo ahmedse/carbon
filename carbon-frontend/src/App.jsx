@@ -83,6 +83,18 @@ function RedirectSchemaToTable() {
   return <Navigate to={`/catalog/tables/${tableId}`} replace />;
 }
 
+/** Redirect legacy /carbon/data-entry/entry/:moduleName/:tableId → /carbon/my-data/:moduleName/:tableId */
+function RedirectLegacyEntry() {
+  const { moduleName, tableId } = useParams();
+  return <Navigate to={`/carbon/my-data/${moduleName}/${tableId}`} replace />;
+}
+
+/** Redirect legacy /carbon/data-entry/row/:tableId/:rowId → /carbon/my-data/row/:tableId/:rowId */
+function RedirectLegacyRow() {
+  const { tableId, rowId } = useParams();
+  return <Navigate to={`/carbon/my-data/row/${tableId}/${rowId}`} replace />;
+}
+
 /**
  * Protects all routes that require authentication.
  */
@@ -178,6 +190,7 @@ export default function App() {
                 <Route path="/carbon/my-data" element={<MyDataPage />} />
                 <Route path="/carbon/my-data/:moduleId" element={<ModuleWorkspacePage />} />
                 <Route path="/carbon/my-data/:moduleId/:tableId" element={<DataEntryPage />} />
+                <Route path="/carbon/my-data/row/:tableId/:rowId" element={<RowDetailPage />} />
                 <Route path="/carbon/admin/factors" element={<AdminRoute><EmissionFactorsPage /></AdminRoute>} />
                 <Route path="/carbon/admin/rules" element={<AdminRoute><EmissionFactorsPage /></AdminRoute>} />
                 <Route path="/carbon/reporting/generate" element={<ReportGeneratorPage />} />
@@ -188,7 +201,8 @@ export default function App() {
                 <Route path="/carbon/owner/assets" element={<DataOwnerAssetsPage />} />
                 {/* Legacy redirects — old paths redirect to unified My Data page */}
                 <Route path="/carbon/data-entry" element={<Navigate to="/carbon/my-data" replace />} />
-                <Route path="/carbon/data-entry/entry/:moduleName/:tableId" element={<DataEntryPage />} />
+                <Route path="/carbon/data-entry/entry/:moduleName/:tableId" element={<RedirectLegacyEntry />} />
+                <Route path="/carbon/data-entry/row/:tableId/:rowId" element={<RedirectLegacyRow />} />
                 <Route path="/carbon/owner/portal" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/carbon/owner/dashboard" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/data-owner" element={<Navigate to="/carbon/console" replace />} />
@@ -271,10 +285,7 @@ export default function App() {
                 <Route path="/admin/policies" element={<Navigate to="/catalog/policies" replace />} />
                 <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
                  <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />
-                {/* Carbon-owned Data Hub / Data Entry routes */}
-                <Route path="/carbon/data-entry" element={<DataHubHome />} />
-                <Route path="/carbon/data-entry/entry/:moduleId/:tableId" element={<DataEntryPage />} />
-                <Route path="/carbon/data-entry/row/:tableId/:rowId" element={<RowDetailPage />} />
+                {/* Dataschema legacy routes */}
                 <Route path="/dataschema" element={<DataHubHome />} />
                 <Route path="/dataschema/entry/:moduleId/:tableId" element={<DataEntryPage />} />
                 <Route path="/dataschema/row/:tableId/:rowId" element={<RowDetailPage />} />
