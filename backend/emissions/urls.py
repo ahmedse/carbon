@@ -15,12 +15,15 @@ from .views import (
     YearlyComparisonAPIView,
     ReportAPIView,
     CalculateAPIView,
+    BatchCalculateAPIView,
     OwnerDashboardAPIView,
     OwnerSummaryAPIView,
     OwnerAssetsAPIView,
     OwnerActivityAPIView,
     MyDataAPIView,
     ConsoleAPIView,
+    VerificationRecordViewSet,
+    CalculationAuditViewSet,
 )
 
 app_name = 'emissions'
@@ -34,9 +37,21 @@ router.register(r'calculations', CalculationViewSet, basename='calculation')
 router.register(r'rules', CalculationRuleViewSet, basename='calculation-rule')
 router.register(r'report-configs', ReportConfigViewSet, basename='report-config')
 
+verification_router = DefaultRouter()
+verification_router.register(r'verifications', VerificationRecordViewSet, basename='verification')
+
+audit_router = DefaultRouter()
+audit_router.register(r'calculation-audits', CalculationAuditViewSet, basename='calculation-audit')
+
 urlpatterns = [
     # ViewSet routes
     path('', include(router.urls)),
+    
+    # Verification routes
+    path('', include(verification_router.urls)),
+    
+    # Audit trail routes
+    path('', include(audit_router.urls)),
     
     # Dashboard API
     path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),
@@ -58,6 +73,7 @@ urlpatterns = [
     
     # Calculate API (trigger calculations)
     path('calculate/', CalculateAPIView.as_view(), name='calculate'),
+    path('batch-calculate/', BatchCalculateAPIView.as_view(), name='batch-calculate'),
     
     # Console API (aggregated landing page data)
     path('console/', ConsoleAPIView.as_view(), name='console'),

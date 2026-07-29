@@ -99,7 +99,7 @@ export default function DQMetricsPanel({ token }) {
       <CardContent>
         <Grid container spacing={2}>
           {/* Overall Score */}
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <Box sx={{ textAlign: 'center', mb: 2 }}>
               <Box
                 sx={{
@@ -150,7 +150,7 @@ export default function DQMetricsPanel({ token }) {
           </Grid>
 
           {/* Key Metrics */}
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {/* Completeness */}
               <Box>
@@ -158,14 +158,14 @@ export default function DQMetricsPanel({ token }) {
                   <Typography variant="body2" sx={{ fontWeight: 500 }}>
                     Completeness
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#4caf50', fontWeight: 'bold' }}>
+                  <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 'bold' }}>
                     {(metrics.completeness_score || 0).toFixed(1)}%
                   </Typography>
                 </Box>
                 <LinearProgress
                   variant="determinate"
                   value={metrics.completeness_score || 0}
-                  sx={{ backgroundColor: '#e0e0e0', '& .MuiLinearProgress-bar': { backgroundColor: '#4caf50' } }}
+                  sx={{ backgroundColor: 'action.disabledBackground', '& .MuiLinearProgress-bar': { backgroundColor: 'success.main' } }}
                 />
               </Box>
 
@@ -175,14 +175,14 @@ export default function DQMetricsPanel({ token }) {
                   <Typography variant="body2" sx={{ fontWeight: 500 }}>
                     Uniqueness
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#2196f3', fontWeight: 'bold' }}>
+                  <Typography variant="body2" sx={{ color: 'info.main', fontWeight: 'bold' }}>
                     {(metrics.uniqueness_score || 0).toFixed(1)}%
                   </Typography>
                 </Box>
                 <LinearProgress
                   variant="determinate"
                   value={metrics.uniqueness_score || 0}
-                  sx={{ backgroundColor: '#e0e0e0', '& .MuiLinearProgress-bar': { backgroundColor: '#2196f3' } }}
+                  sx={{ backgroundColor: 'action.disabledBackground', '& .MuiLinearProgress-bar': { backgroundColor: 'info.main' } }}
                 />
               </Box>
 
@@ -192,35 +192,35 @@ export default function DQMetricsPanel({ token }) {
                   <Typography variant="body2" sx={{ fontWeight: 500 }}>
                     Compliance
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#ff9800', fontWeight: 'bold' }}>
+                  <Typography variant="body2" sx={{ color: 'warning.main', fontWeight: 'bold' }}>
                     {(metrics.compliance_score || 0).toFixed(1)}%
                   </Typography>
                 </Box>
                 <LinearProgress
                   variant="determinate"
                   value={metrics.compliance_score || 0}
-                  sx={{ backgroundColor: '#e0e0e0', '& .MuiLinearProgress-bar': { backgroundColor: '#ff9800' } }}
+                  sx={{ backgroundColor: 'action.disabledBackground', '& .MuiLinearProgress-bar': { backgroundColor: 'warning.main' } }}
                 />
               </Box>
             </Box>
           </Grid>
 
           {/* Statistics */}
-          <Grid item xs={12}>
+          <Grid size={{ xs: 12 }}>
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, mt: 1 }}>
-              <Box sx={{ textAlign: 'center', p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+              <Box sx={{ textAlign: 'center', p: 1, backgroundColor: 'action.hover', borderRadius: 1 }}>
                 <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
                   Tables Monitored
                 </Typography>
                 <Typography variant="h6">{metrics.table_count || 0}</Typography>
               </Box>
-              <Box sx={{ textAlign: 'center', p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+              <Box sx={{ textAlign: 'center', p: 1, backgroundColor: 'action.hover', borderRadius: 1 }}>
                 <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
                   Rules Active
                 </Typography>
                 <Typography variant="h6">{metrics.rule_count || 0}</Typography>
               </Box>
-              <Box sx={{ textAlign: 'center', p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+              <Box sx={{ textAlign: 'center', p: 1, backgroundColor: 'action.hover', borderRadius: 1 }}>
                 <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
                   Last Checked
                 </Typography>

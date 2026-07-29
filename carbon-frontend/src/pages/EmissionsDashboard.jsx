@@ -534,7 +534,7 @@ export default function EmissionsDashboard({ projectId }) {
 
       {/* Top Stats */}
       <Grid container spacing={SPACING.sm} sx={{ mb: SPACING.lg }}>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <StatCard
             title="Total Carbon Emissions"
             value={data.total_co2e_tonnes}
@@ -544,7 +544,7 @@ export default function EmissionsDashboard({ projectId }) {
             color="#10b981"
           />
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <StatCard
             title="Data Quality Score"
             value={data.data_quality_score}
@@ -554,7 +554,7 @@ export default function EmissionsDashboard({ projectId }) {
             color="#3b82f6"
           />
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <StatCard
             title="Reporting Period"
             value={data.reporting_period?.name || selectedYear}
@@ -592,7 +592,7 @@ export default function EmissionsDashboard({ projectId }) {
       {/* Charts Row */}
       <Grid container spacing={SPACING.sm} sx={{ mb: SPACING.lg }}>
         {/* Monthly Trend */}
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ xs: 12, lg: 8 }}>
           <GlassCard sx={{ height: "100%" }}>
             <CardContent sx={{ height: "100%", p: 3 }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: "#111827", mb: 3 }}>
@@ -608,7 +608,7 @@ export default function EmissionsDashboard({ projectId }) {
         </Grid>
 
         {/* Scope Distribution */}
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <GlassCard sx={{ height: "100%" }}>
             <CardContent sx={{ height: "100%", p: 3 }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: "#111827", mb: 3 }}>

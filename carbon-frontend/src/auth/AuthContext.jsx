@@ -7,7 +7,7 @@ import { apiFetch } from "../api/api"; // <-- Add this import
 async function refreshAccessToken() {
   const refresh = localStorage.getItem("refresh");
   if (!refresh) throw new Error("No refresh token");
-  const res = await fetch(`${API_BASE_URL}${API_ROUTES.tokenRefresh}`, {
+  const res = await fetch(`${API_BASE_URL}${API_ROUTES.tokenRefresh}`, { // internal token refresh
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh }),
@@ -68,13 +68,7 @@ export const AuthProvider = ({ children }) => {
   // --- Fetch perspective context from backend ---
   const fetchPerspectiveContext = async (token) => {
     try {
-      // Remove trailing slash from API_BASE_URL to avoid double slashes
-      const baseUrl = API_BASE_URL.replace(/\/$/, '');
-      const res = await fetch(`${baseUrl}/accounts/me/context/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to fetch perspective context");
-      const data = await res.json();
+      const data = await apiFetch('accounts/me/context/', { method: 'GET', token }); // fetch perspective
       setAvailablePerspectives(data.perspectives || []);
       // Set default perspective based on available ones
       const defaultPerspective = data.perspectives?.[0] || 'dashboards';
@@ -194,7 +188,7 @@ export const AuthProvider = ({ children }) => {
     loginInFlightRef.current = true;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}${API_ROUTES.token}`, {
+      const res = await fetch(`${API_BASE_URL}${API_ROUTES.token}`, { // login token endpoint
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -203,11 +197,8 @@ export const AuthProvider = ({ children }) => {
       const { access, refresh } = await res.json();
 
       // Fetch roles
-      const rolesRes = await fetch(`${API_BASE_URL}${API_ROUTES.myRoles}`, {
-        headers: { Authorization: `Bearer ${access}` },
-      });
-      if (!rolesRes.ok) throw new Error("Failed to fetch user roles");
-      const { roles } = await rolesRes.json();
+      const rolesData = await apiFetch('accounts/my-roles/', { method: 'GET', token: access }); // fetch roles
+      const { roles } = rolesData;
 
       // Fetch perspective context
       await fetchPerspectiveContext(access);
@@ -286,7 +277,7 @@ export const AuthProvider = ({ children }) => {
       const refresh = localStorage.getItem("refresh");
       const access = localStorage.getItem("access");
       if (refresh && access && API_ROUTES.logout) {
-        await fetch(`${API_BASE_URL}${API_ROUTES.logout}`, {
+        await fetch(`${API_BASE_URL}${API_ROUTES.logout}`, { // backend logout (best-effort)
           method: "POST",
           headers: {
             "Content-Type": "application/json",

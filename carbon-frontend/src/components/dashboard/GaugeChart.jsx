@@ -9,7 +9,7 @@ export default function GaugeChart({
   label, 
   min = 0, 
   max = 100, 
-  color = "#16a34a",
+  color = "#16a34a", // svg stroke prop default
   size = 120,
   unit = "%"
 }) {
@@ -30,7 +30,7 @@ export default function GaugeChart({
             cy={cy}
             r={radius}
             fill="none"
-            stroke="#f3f4f6"
+            stroke="#f3f4f6" // svg background track
             strokeWidth={size * 0.08}
             strokeDasharray={circumference}
             strokeDashoffset={0}
@@ -58,7 +58,7 @@ export default function GaugeChart({
             fontSize={size * 0.23} 
             fontWeight="bold" 
             textAnchor="middle" 
-            fill="#111827"
+            fill="#111827" // svg value text
           >
             {Math.round(value)}{unit}
           </text>
@@ -68,7 +68,7 @@ export default function GaugeChart({
             y={cy + size * 0.22} 
             fontSize={size * 0.11} 
             textAnchor="middle" 
-            fill="#6b7280"
+            fill="#6b7280" // svg label
           >
             {label}
           </text>

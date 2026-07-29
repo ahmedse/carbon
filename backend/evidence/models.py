@@ -2,6 +2,7 @@
 import os
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from dataschema.models import DataRow
 
 
@@ -10,8 +11,7 @@ User = get_user_model()
 
 def evidence_upload_path(instance, filename):
     """Upload evidence files to media/evidence/YYYY/MM/DD/ directory."""
-    from datetime import datetime
-    today = datetime.now()
+    today = timezone.now()
     return f'evidence/{today.year}/{today.month:02d}/{today.day:02d}/{filename}'
 
 

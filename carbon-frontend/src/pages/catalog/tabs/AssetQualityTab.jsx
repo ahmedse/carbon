@@ -107,7 +107,7 @@ export default function AssetQualityTab({ entityData }) {
     <DetailTabContent>
       {error && <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert>}
       <Grid container spacing={2}>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -134,7 +134,7 @@ export default function AssetQualityTab({ entityData }) {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -152,7 +152,7 @@ export default function AssetQualityTab({ entityData }) {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>

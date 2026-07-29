@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddIndex(
             model_name='dqresult',
-            index=models.Index(fields=['-executed_at', 'rule'], name='dqresult_time_rule_idx'),
+            index=models.Index(fields=['-run_at', 'rule'], name='dqresult_time_rule_idx'),
         ),
         migrations.AddIndex(
             model_name='dqresult',

@@ -43,7 +43,7 @@ function sanitizeUrl(url) {
 async function refreshAccessToken() {
   const refresh = localStorage.getItem("refresh");
   if (!refresh) throw new Error("No refresh token");
-  const res = await fetch(joinUrl(API_BASE_URL, API_ROUTES.tokenRefresh), {
+  const res = await fetch(joinUrl(API_BASE_URL, API_ROUTES.tokenRefresh), { // internal refresh helper
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh }),
@@ -128,14 +128,14 @@ export async function authFetch(
 
   let response;
   try {
-    response = await fetch(url, fetchOptions);
+    response = await fetch(url, fetchOptions); // internal api helper
     clearTimeout(timeout);
 
     if (response.status === 401 && accessToken) {
       // Try refreshing once
       accessToken = await refreshAccessToken();
       headers.Authorization = `Bearer ${accessToken}`;
-      response = await fetch(url, { ...fetchOptions, headers });
+      response = await fetch(url, { ...fetchOptions, headers }); // retry after refresh
       clearTimeout(timeout);
     }
 
@@ -241,7 +241,7 @@ export async function apiFetch(
   let responseData;
 
   try {
-    response = await fetch(url, {
+    response = await fetch(url, { // internal apiFetch
       method,
       headers,
       signal: controller.signal,
@@ -262,7 +262,7 @@ export async function apiFetch(
         accessToken = await refreshAccessToken();
         headers.Authorization = `Bearer ${accessToken}`;
         // Retry request after token refresh
-        response = await fetch(url, {
+        response = await fetch(url, { // retry after refresh
           method,
           headers,
           signal: controller.signal,

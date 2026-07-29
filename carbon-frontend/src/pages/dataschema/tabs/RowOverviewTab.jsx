@@ -131,7 +131,7 @@ export default function RowOverviewTab({ rowData, onRefresh, onClose }) {
           </Typography>
           <Grid container spacing={2}>
             {Object.entries(fieldData).map(([key, value]) => (
-              <Grid item xs={12} sm={6} key={key}>
+              <Grid size={{ xs: 12, sm: 6 }} key={key}>
                 <Box>
                   <Typography
                     variant="caption"

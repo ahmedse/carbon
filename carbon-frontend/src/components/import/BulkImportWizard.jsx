@@ -30,6 +30,7 @@ import {
 import { useDropzone } from 'react-dropzone';
 import Papa from 'papaparse';
 import { API_BASE_URL } from '../../config';
+import { authFetch } from '../../api/api';
 
 export default function BulkImportWizard({ open, onClose, tableId, fields, token, onImportComplete }) {
   const [activeStep, setActiveStep] = useState(0);
@@ -243,12 +244,13 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
     formData.append('mode', 'create');
 
     try {
-      const response = await fetch(`${API_BASE_URL}datarows/bulk-import/`, {
+      const response = await authFetch('datarows/bulk-import/', {
         method: 'POST',
+        body: formData,
+        token,
         headers: {
-          'Authorization': `Token ${token}`
-        },
-        body: formData
+          // authFetch handles Authorization header, FormData body
+        }
       });
 
       if (!response.ok) {

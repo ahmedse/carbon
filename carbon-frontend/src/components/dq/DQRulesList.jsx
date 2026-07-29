@@ -25,24 +25,24 @@ import {
 function getSeverityColor(severity) {
   switch (severity) {
     case 'error':
-      return '#f44336';
+      return 'error.main';
     case 'warn':
-      return '#ff9800';
+      return 'warning.main';
     case 'info':
-      return '#2196f3';
+      return 'info.main';
     default:
-      return '#9e9e9e';
+      return 'text.secondary';
   }
 }
 
 function getSeverityIcon(severity) {
   switch (severity) {
     case 'error':
-      return <ErrorIcon sx={{ color: '#f44336', fontSize: '1.2rem' }} />;
+      return <ErrorIcon sx={{ color: 'error.main', fontSize: '1.2rem' }} />;
     case 'warn':
-      return <WarningIcon sx={{ color: '#ff9800', fontSize: '1.2rem' }} />;
+      return <WarningIcon sx={{ color: 'warning.main', fontSize: '1.2rem' }} />;
     case 'info':
-      return <CheckCircleIcon sx={{ color: '#2196f3', fontSize: '1.2rem' }} />;
+      return <CheckCircleIcon sx={{ color: 'info.main', fontSize: '1.2rem' }} />;
     default:
       return null;
   }
@@ -95,8 +95,8 @@ export default function DQRulesList({ rules, loading, error }) {
                       size="small"
                       variant="outlined"
                       sx={{
-                        borderColor: rule.is_active ? '#4caf50' : '#bdbdbd',
-                        color: rule.is_active ? '#4caf50' : '#9e9e9e',
+                        borderColor: rule.is_active ? 'success.main' : 'action.disabled',
+                        color: rule.is_active ? 'success.main' : 'text.secondary',
                       }}
                     />
                     <Chip

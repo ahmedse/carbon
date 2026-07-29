@@ -6,7 +6,7 @@ function ResponsiveGrid({ children, spacing, columns }) {
   return (
     <Grid container spacing={spacing} columns={columns}>
       {React.Children.map(children, (child) => (
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           {child}
         </Grid>
       ))}

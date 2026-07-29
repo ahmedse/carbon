@@ -8,7 +8,7 @@ import { useNotification } from '../../components/NotificationProvider';
 import { Box } from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
 import CategoryIcon from '@mui/icons-material/Category';
-import { API_BASE_URL, API_ROUTES } from '../../config';
+import { apiFetch } from '../../api/api';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
 
@@ -37,11 +37,7 @@ export default function DomainDetailPage() {
 
       try {
         setLoading(true);
-        const baseUrl = API_BASE_URL.replace(/\/$/, '');
-        const url = `${baseUrl}${API_ROUTES.domains}${domainId}/`;
-        const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await apiFetch(`catalog/domains/${domainId}/`, { method: 'GET', token }); // fetch domain
 
         if (!response.ok) {
           throw new Error(`Failed to fetch domain: ${response.status}`);

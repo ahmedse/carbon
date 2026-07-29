@@ -28,6 +28,7 @@ class ReportingPeriod(models.Model):
         ('locked', 'Locked for Review'),
         ('submitted', 'Submitted'),
         ('verified', 'Verified'),
+        ('rejected', 'Rejected'),
         ('closed', 'Closed'),
     ]
     
@@ -47,6 +48,7 @@ class ReportingPeriod(models.Model):
     is_baseline = models.BooleanField(default=False, help_text="Is this the baseline period for comparisons?")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
@@ -91,6 +93,35 @@ class ReportingPeriod(models.Model):
         from django.utils import timezone
         today = timezone.now().date()
         return self.start_date <= today <= self.end_date
+
+
+class VerificationRecord(models.Model):
+    """Tracks verification actions on reporting periods."""
+    reporting_period = models.ForeignKey(
+        'ReportingPeriod', on_delete=models.CASCADE, related_name='verifications'
+    )
+    verifier = models.ForeignKey(
+        'accounts.User', on_delete=models.PROTECT
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pending'),
+            ('in_review', 'In Review'),
+            ('verified', 'Verified'),
+            ('rejected', 'Rejected'),
+        ],
+        default='pending',
+    )
+    notes = models.TextField(blank=True, default='')
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('reporting_period', 'verifier')]
+
+    def __str__(self):
+        return f"Verification #{self.id} — {self.reporting_period.name} ({self.get_status_display()})"
 
 
 class EmissionFactor(models.Model):
@@ -802,3 +833,92 @@ class ReportConfig(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class SBTiTarget(models.Model):
+    """Science-Based Target initiative target — emission reduction goal per org unit."""
+    org_unit = models.ForeignKey(
+        'mdm.OrgUnit', on_delete=models.CASCADE, related_name='sbti_targets'
+    )
+    name = models.CharField(max_length=200)
+    base_year = models.IntegerField()
+    target_year = models.IntegerField()
+    target_type = models.CharField(
+        max_length=20,
+        choices=[('absolute', 'Absolute Reduction'), ('intensity', 'Intensity Reduction')]
+    )
+    scope = models.CharField(
+        max_length=20,
+        choices=[
+            ('1', 'Scope 1'),
+            ('2', 'Scope 2'),
+            ('3', 'Scope 3'),
+            ('1+2', 'Scope 1+2'),
+            ('1+2+3', 'Scope 1+2+3'),
+        ]
+    )
+    reduction_pct = models.DecimalField(max_digits=5, decimal_places=2)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('draft', 'Draft'),
+            ('committed', 'Committed'),
+            ('approved', 'Approved'),
+        ],
+        default='draft',
+    )
+    description = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-base_year']
+
+    def __str__(self):
+        return f"{self.name} ({self.base_year}→{self.target_year}, -{self.reduction_pct}%)"
+
+
+class CalculationAudit(models.Model):
+    """Immutable audit trail for every calculation trigger event."""
+    TRIGGER_TYPE_CHOICES = [
+        ('single', 'Single Rule'),
+        ('batch', 'Batch'),
+    ]
+
+    trigger_type = models.CharField(max_length=10, choices=TRIGGER_TYPE_CHOICES)
+    triggered_by = models.ForeignKey(
+        'accounts.User', on_delete=models.PROTECT,
+        help_text="User who triggered this calculation run"
+    )
+    calculation_rule = models.ForeignKey(
+        CalculationRule, on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="Rule executed (null for batch)"
+    )
+    data_table = models.ForeignKey(
+        'dataschema.DataTable', on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="DataTable targeted"
+    )
+    reporting_period = models.ForeignKey(
+        ReportingPeriod, on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="Reporting period for this run"
+    )
+    table_ids = models.JSONField(
+        null=True, blank=True,
+        help_text="List of table IDs for batch runs"
+    )
+    recalculate = models.BooleanField(default=False)
+    created_count = models.PositiveIntegerField(default=0)
+    skipped_count = models.PositiveIntegerField(default=0)
+    error_count = models.PositiveIntegerField(default=0)
+    triggered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-triggered_at']
+        indexes = [
+            models.Index(fields=['-triggered_at']),
+            models.Index(fields=['triggered_by', '-triggered_at']),
+            models.Index(fields=['reporting_period']),
+        ]
+
+    def __str__(self):
+        return f"Audit #{self.id} — {self.get_trigger_type_display()} by {self.triggered_by} ({self.created_count}c/{self.skipped_count}s/{self.error_count}e)"

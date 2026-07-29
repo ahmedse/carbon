@@ -10,7 +10,7 @@ import EditRounded from '@mui/icons-material/EditRounded';
 import DeleteRounded from '@mui/icons-material/DeleteRounded';
 import VisibilityRounded from '@mui/icons-material/VisibilityRounded';
 import { useAuth } from '../../auth/AuthContext';
-import { API_BASE_URL } from '../../config';
+import { apiFetch } from '../../api/api';
 
 const EMPTY_FORM = { name: '', description: '' };
 
@@ -30,9 +30,7 @@ export default function GroupsPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE_URL}accounts/groups/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch('accounts/groups/', { method: 'GET', token }); // groups list
       if (!res.ok) throw new Error('Failed to load groups');
       const data = await res.json();
       setGroups(Array.isArray(data) ? data : data.results || []);
@@ -53,17 +51,12 @@ export default function GroupsPage() {
     setSaving(true);
     setError('');
     try {
-      const url = editingId ? `${API_BASE_URL}accounts/groups/${editingId}/` : `${API_BASE_URL}accounts/groups/`;
-      const method = editingId ? 'PUT' : 'POST';
       const body = { name: form.name.trim(), description: form.description };
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
+      const res = await apiFetch(editingId ? `accounts/groups/${editingId}/` : 'accounts/groups/', {
+        method: editingId ? 'PUT' : 'POST',
+        token,
+        body,
+      }); // save group
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || body.detail || 'Failed to save group');
@@ -81,10 +74,10 @@ export default function GroupsPage() {
     if (!window.confirm(`Delete group "${group.name}"?`)) return;
     setError('');
     try {
-      const res = await fetch(`${API_BASE_URL}accounts/groups/${group.id}/`, {
+      const res = await apiFetch(`accounts/groups/${group.id}/`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        token,
+      }); // delete group
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || body.detail || 'Delete failed');

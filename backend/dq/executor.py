@@ -1,6 +1,6 @@
 """DQ Rule Executor Service - Executes and validates data quality rules."""
 import logging
-from datetime import datetime
+from django.utils import timezone
 from django.db import models
 from .models import DQRule, DQResult, FieldProfile, TableProfile
 
@@ -272,7 +272,7 @@ class DQRuleExecutor:
             failed_count=1,
             sample_failures=[{
                 'error': error_message,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': timezone.now().isoformat()
             }],
             score=0
         )

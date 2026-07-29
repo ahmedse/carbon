@@ -131,7 +131,7 @@ export default function GovernanceTab({ tableId }) {
       {!asset && <Alert severity="warning" sx={{ mb: 2 }}>No catalog asset profile found for this table.</Alert>}
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={7}>
+        <Grid size={{ xs: 12, md: 7 }}>
           <Paper variant="outlined" sx={{ p: 3 }}>
             <Typography variant="subtitle2" fontWeight={600} gutterBottom>
               Classification &amp; Ownership
@@ -193,7 +193,7 @@ export default function GovernanceTab({ tableId }) {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} md={5}>
+        <Grid size={{ xs: 12, md: 5 }}>
           <Paper variant="outlined" sx={{ p: 3 }}>
             <Typography variant="subtitle2" fontWeight={600} gutterBottom>
               Quality (read-only)

@@ -1,7 +1,7 @@
 // src/api/emissions-extended.js
 // Extended API functions for P2 — Report Generator & Emission Factors
 
-import { apiFetch } from "./api";
+import { apiFetch, authFetch } from "./api";
 import { API_ROUTES } from "../config";
 
 /**
@@ -189,12 +189,7 @@ export async function downloadReportCsv(params, token) {
   
   const endpoint = `${API_ROUTES.emissionsReport}?${query.toString()}`;
   
-  const response = await fetch(
-    `${import.meta.env.VITE_API_URL}${endpoint}`,
-    {
-      headers: { "Authorization": `Bearer ${token}` },
-    }
-  );
+  const response = await authFetch(endpoint, { method: 'GET', token, rawResponse: true }); // CSV download
   
   if (!response.ok) {
     throw new Error(`CSV download failed: ${response.statusText}`);

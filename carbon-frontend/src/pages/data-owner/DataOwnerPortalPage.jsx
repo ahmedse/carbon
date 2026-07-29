@@ -71,7 +71,7 @@ const QualityBadge = ({ status, score, theme }) => {
 const QuickStats = ({ assets, domainsCount, modulesWithData, modulesWithoutDataNames, theme }) => {
   return (
     <Grid container spacing={2} sx={{ mb: 4 }}>
-      <Grid item xs={12} sm={6} md={3}>
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <Paper
           sx={{
             p: 2.5,
@@ -88,7 +88,7 @@ const QuickStats = ({ assets, domainsCount, modulesWithData, modulesWithoutDataN
           </Typography>
         </Paper>
       </Grid>
-      <Grid item xs={12} sm={6} md={3}>
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <Paper
           sx={{
             p: 2.5,
@@ -105,7 +105,7 @@ const QuickStats = ({ assets, domainsCount, modulesWithData, modulesWithoutDataN
           </Typography>
         </Paper>
       </Grid>
-      <Grid item xs={12} sm={6} md={3}>
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <Paper
           sx={{
             p: 2.5,
@@ -122,7 +122,7 @@ const QuickStats = ({ assets, domainsCount, modulesWithData, modulesWithoutDataN
           </Typography>
         </Paper>
       </Grid>
-      <Grid item xs={12} sm={6} md={3}>
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <Paper
           sx={{
             p: 2.5,
@@ -351,7 +351,7 @@ export default function DataOwnerPortalPage() {
 
       <Grid container spacing={3} sx={{ mb: 4 }}>
         {/* Domain Cards */}
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
             Data Domains ({domainsWithAssets.length})
           </Typography>
@@ -362,7 +362,7 @@ export default function DataOwnerPortalPage() {
           ) : (
             <Grid container spacing={2}>
               {domainsWithAssets.map(domain => (
-                <Grid item xs={12} sm={6} md={4} key={domain.id}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }} key={domain.id}>
                   <DomainCard
                     domain={domain}
                     assetCount={assets.filter(a => a.domain?.id === domain.id).length}
@@ -376,7 +376,7 @@ export default function DataOwnerPortalPage() {
         </Grid>
 
         {/* Recent Activity */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
             Recent Activity
           </Typography>
@@ -384,7 +384,7 @@ export default function DataOwnerPortalPage() {
         </Grid>
 
         {/* Help & Navigation */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
             Quick Navigation
           </Typography>

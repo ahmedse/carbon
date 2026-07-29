@@ -65,7 +65,7 @@ export default function Dashboard() {
         <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 3, mb: 3 }} />
         <Grid container spacing={3}>
           {[1, 2, 3].map((i) => (
-            <Grid item xs={12} md={4} key={i}>
+            <Grid size={{ xs: 12, md: 4 }} key={i}>
               <Skeleton variant="rectangular" height={180} sx={{ borderRadius: 3 }} />
             </Grid>
           ))}
@@ -201,7 +201,7 @@ export default function Dashboard() {
 
       {/* Top Metrics */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <MetricCard
             title="Total Emissions"
             value={`${summary.emissions.total.toLocaleString()} t`}
@@ -212,7 +212,7 @@ export default function Dashboard() {
             context={`Data completeness: ${summary.dataCompleteness}%`}
           />
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <MetricCard
             title="Energy Consumption"
             value={`${Math.round(summary.energy.total / 1000).toLocaleString()}k kWh`}
@@ -223,7 +223,7 @@ export default function Dashboard() {
             context="Tracking across all facilities"
           />
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <MetricCard
             title="Water Usage"
             value={`${Math.round(summary.water.total / 1000).toLocaleString()}k m³`}
@@ -280,7 +280,7 @@ export default function Dashboard() {
         onChange={() => togglePanel("impact")}
       >
         <Grid container spacing={3}>
-          <Grid item xs={12} md={8}>
+          <Grid size={{ xs: 12, md: 8 }}>
             <Box sx={{ height: 300 }}>
               <Typography variant="subtitle2" color="#6b7280" sx={{ mb: 2 }}>
                 Monthly Emissions Trend
@@ -288,7 +288,7 @@ export default function Dashboard() {
               <Line data={emissionsTrend} options={lineOptions} />
             </Box>
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Box sx={{ height: 300 }}>
               <Typography variant="subtitle2" color="#6b7280" sx={{ mb: 2 }}>
                 Scope Breakdown
@@ -308,7 +308,7 @@ export default function Dashboard() {
         onChange={() => togglePanel("trends")}
       >
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Box sx={{ height: 300 }}>
               <Typography variant="subtitle2" color="#6b7280" sx={{ mb: 2 }}>
                 Energy Consumption (kWh)
@@ -316,7 +316,7 @@ export default function Dashboard() {
               <Bar data={energyTrend} options={barOptions} />
             </Box>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Box sx={{ height: 300 }}>
               <Typography variant="subtitle2" color="#6b7280" sx={{ mb: 2 }}>
                 Water Usage (m³)
@@ -337,7 +337,7 @@ export default function Dashboard() {
       >
         <Box sx={{ p: 3, bgcolor: "#f9fafb", borderRadius: 2 }}>
           <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" fontWeight={600} color="#111827" gutterBottom>
                 Data Coverage
               </Typography>
@@ -348,7 +348,7 @@ export default function Dashboard() {
                 Last updated: {summary.lastUpdate}
               </Typography>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" fontWeight={600} color="#111827" gutterBottom>
                 Key Insights
               </Typography>

@@ -44,10 +44,10 @@ import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 const NotificationContext = createContext(undefined);
 
 const SEVERITY_META = {
-  error: { color: "#dc2626", bg: "#fef2f2", icon: ErrorOutlineIcon },
-  warning: { color: "#d97706", bg: "#fffbeb", icon: WarningAmberIcon },
-  info: { color: "#2563eb", bg: "#eff6ff", icon: InfoOutlinedIcon },
-  success: { color: "#16a34a", bg: "#f0fdf4", icon: CheckCircleOutlineIcon },
+  error: { color: "error.main", bg: "error.light", icon: ErrorOutlineIcon },
+  warning: { color: "warning.main", bg: "warning.light", icon: WarningAmberIcon },
+  info: { color: "info.main", bg: "info.light", icon: InfoOutlinedIcon },
+  success: { color: "success.main", bg: "success.light", icon: CheckCircleOutlineIcon },
 };
 
 function getMeta(severity) {
@@ -221,7 +221,7 @@ export function NotificationProvider({ children }) {
                   <List dense disablePadding>
                     {feedback.remediation.map((step, i) => (
                       <ListItem key={i} disableGutters sx={{ alignItems: "flex-start" }}>
-                        <ListItemIcon sx={{ minWidth: 30, mt: 0.5, color: "#16a34a" }}>
+                        <ListItemIcon sx={{ minWidth: 30, mt: 0.5, color: "success.main" }}>
                           <ArrowForwardIcon fontSize="small" />
                         </ListItemIcon>
                         <ListItemText primary={step} />

@@ -227,7 +227,7 @@ export default function DataQualityView() {
 
       {/* Key Metrics */}
       <Grid container spacing={2} mb={4}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             icon={DataUsage}
             title="Data Completeness"
@@ -237,7 +237,7 @@ export default function DataQualityView() {
             loading={loading}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             icon={PlaylistAddCheck}
             title="Validation Score"
@@ -247,7 +247,7 @@ export default function DataQualityView() {
             loading={loading}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             icon={Description}
             title="Evidence Rate"
@@ -257,7 +257,7 @@ export default function DataQualityView() {
             loading={loading}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             icon={VerifiedUser}
             title="Audit Readiness"

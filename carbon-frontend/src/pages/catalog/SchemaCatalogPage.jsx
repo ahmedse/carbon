@@ -192,7 +192,7 @@ export default function SchemaCatalogPage() {
 
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="flex-end">
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
               fullWidth
               size="small"
@@ -209,7 +209,7 @@ export default function SchemaCatalogPage() {
               variant="outlined"
             />
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid size={{ xs: 12, sm: 4 }}>
             <FormControl fullWidth size="small">
               <InputLabel>Domain</InputLabel>
               <Select
@@ -224,7 +224,7 @@ export default function SchemaCatalogPage() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={2}>
+          <Grid size={{ xs: 12, sm: 2 }}>
             <Button
               fullWidth
               size="small"
@@ -251,7 +251,7 @@ export default function SchemaCatalogPage() {
             const fieldCount = table.fields_count ?? table.field_count;
             const showFieldCount = fieldCount != null && fieldCount !== '' && Number(fieldCount) > 0;
             return (
-              <Grid item xs={12} sm={6} md={4} key={table.id}>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={table.id}>
                 <Card
                   sx={{
                     height: '100%',

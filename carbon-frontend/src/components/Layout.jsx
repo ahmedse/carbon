@@ -70,7 +70,7 @@ export default function Layout() {
   const currentWidth = collapsed ? COLLAPSED_WIDTH : sidebarWidth;
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", bgcolor: "#f5f5f5", overflow: "hidden" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", bgcolor: 'background.default', overflow: "hidden" }}>
       <HeaderEnhanced collapsed={collapsed} onToggleCollapse={toggleCollapse} />
       <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden", isolation: "isolate" }}>
         {/* Sidebar */}
@@ -80,8 +80,9 @@ export default function Layout() {
             minWidth: currentWidth,
             maxWidth: currentWidth,
             transition: isResizing ? "none" : "width 0.2s ease",
-            bgcolor: "#fff",
-            borderRight: "1px solid #e5e7eb",
+            bgcolor: 'background.paper',
+            borderRight: '1px solid',
+            borderColor: 'divider',
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
@@ -117,10 +118,11 @@ export default function Layout() {
               zIndex: 100,
               width: 24,
               height: 24,
-              bgcolor: "#fff",
-              border: "1px solid #e5e7eb",
+              bgcolor: 'background.paper',
+              border: '1px solid',
+              borderColor: 'divider',
               boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-              "&:hover": { bgcolor: "#f9fafb" },
+              "&:hover": { bgcolor: 'action.hover' },
               transition: isResizing ? "none" : "left 0.2s ease",
             }}
           >
@@ -137,7 +139,7 @@ export default function Layout() {
             flexDirection: "column",
             minWidth: 0,
             minHeight: 0,
-            bgcolor: "#fff",
+            bgcolor: 'background.paper',
             overflow: "hidden",
           }}
         >
@@ -150,9 +152,10 @@ export default function Layout() {
                 sx={{
                   mb: 2,
                   borderRadius: 1,
-                  backgroundColor: "#ecf0f1",
-                  color: "#2c3e50",
-                  border: "1px solid #bdc3c7",
+                  backgroundColor: 'action.hover',
+                  color: 'text.primary',
+                  border: '1px solid',
+                  borderColor: 'divider',
                 }}
               >
                 You are viewing: <strong>{userOrgUnitName}</strong>

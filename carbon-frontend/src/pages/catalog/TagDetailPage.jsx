@@ -8,7 +8,7 @@ import { useNotification } from '../../components/NotificationProvider';
 import { Box } from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
-import { API_BASE_URL, API_ROUTES } from '../../config';
+import { apiFetch } from '../../api/api';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
 import TagOverviewTab from './tabs/TagOverviewTab';
@@ -35,11 +35,7 @@ export default function TagDetailPage() {
 
       try {
         setLoading(true);
-        const baseUrl = API_BASE_URL.replace(/\/$/, '');
-        const url = `${baseUrl}${API_ROUTES.tags}${tagId}/`;
-        const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await apiFetch(`catalog/tags/${tagId}/`, { method: 'GET', token }); // fetch tag
 
         if (!response.ok) {
           throw new Error(`Failed to fetch tag: ${response.status}`);

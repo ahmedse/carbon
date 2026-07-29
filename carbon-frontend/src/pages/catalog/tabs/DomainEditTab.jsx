@@ -5,7 +5,7 @@ import { Box, TextField, Button, CircularProgress, Alert } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
-import { API_BASE_URL, API_ROUTES } from '../../../config';
+import { apiFetch } from '../../../api/api';
 
 export default function DomainEditTab({ entityData }) {
   const { token } = useAuth();
@@ -33,16 +33,11 @@ export default function DomainEditTab({ entityData }) {
     setError(null);
 
     try {
-      const baseUrl = API_BASE_URL.replace(/\/$/, '');
-      const url = `${baseUrl}${API_ROUTES.domains}${entityData.id}/`;
-      const response = await fetch(url, {
+      const response = await apiFetch(`catalog/domains/${entityData.id}/`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+        token,
+        body: formData,
+      }); // update domain
 
       if (!response.ok) {
         throw new Error(`Failed to save: ${response.status}`);

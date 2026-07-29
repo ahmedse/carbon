@@ -197,7 +197,7 @@ export default function DataProductsPage() {
           {filtered.map((m) => {
             const stats = statsByModule[m.id] || { count: 0, failing: 0, warning: 0 };
             return (
-              <Grid item xs={12} sm={6} md={4} key={m.id}>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={m.id}>
                 <Card
                   sx={{ height: '100%', display: 'flex', flexDirection: 'column',
                     border: '1px solid', borderColor: 'divider', cursor: 'pointer' }}

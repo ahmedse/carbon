@@ -209,7 +209,7 @@ export default function DataProductDetailPage() {
           {tables.map((t) => {
             const q = assets[t.id]?.quality_status || 'unknown';
             return (
-              <Grid item xs={12} sm={6} md={4} key={t.id}>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={t.id}>
                 <Card
                   sx={{ height: '100%', display: 'flex', flexDirection: 'column',
                     border: '1px solid', borderColor: 'divider', cursor: 'pointer' }}

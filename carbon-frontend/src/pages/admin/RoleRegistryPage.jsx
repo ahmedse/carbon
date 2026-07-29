@@ -7,7 +7,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { useAuth } from '../../auth/AuthContext';
-import { API_BASE_URL } from '../../config';
+import { apiFetch } from '../../api/api';
 
 export default function RoleRegistryPage() {
   const { user } = useAuth();
@@ -18,9 +18,7 @@ export default function RoleRegistryPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}accounts/role-registry/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiFetch('accounts/role-registry/', { method: 'GET', token }); // role registry
         if (!res.ok) throw new Error('Failed to load role registry');
         const data = await res.json();
         setApps(Array.isArray(data.apps) ? data.apps : []);

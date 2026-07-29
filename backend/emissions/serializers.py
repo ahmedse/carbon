@@ -2,7 +2,7 @@
 # Serializers for Emission Factor Calculator API
 
 from rest_framework import serializers
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, VerificationRecord, SBTiTarget, CalculationAudit
 
 
 class ReportingPeriodSerializer(serializers.ModelSerializer):
@@ -16,9 +16,19 @@ class ReportingPeriodSerializer(serializers.ModelSerializer):
             'id', 'name',
             'start_date', 'end_date', 'period_type', 'status',
             'description', 'is_baseline', 'duration_days', 'is_active',
+            'submitted_at',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'status', 'submitted_at']
+
+
+class VerificationRecordSerializer(serializers.ModelSerializer):
+    verifier_name = serializers.CharField(source='verifier.username', read_only=True)
+
+    class Meta:
+        model = VerificationRecord
+        fields = '__all__'
+        read_only_fields = ['created_at', 'verifier_name']
 
 
 class EmissionFactorSerializer(serializers.ModelSerializer):
@@ -235,6 +245,27 @@ class RecentActivityConsoleSerializer(serializers.Serializer):
     module_name = serializers.CharField(allow_null=True)
     timestamp = serializers.DateTimeField(allow_null=True)
     detail = serializers.CharField(allow_null=True)
+
+
+class SBTiTargetSerializer(serializers.ModelSerializer):
+    org_unit_name = serializers.CharField(source='org_unit.name', read_only=True)
+
+    class Meta:
+        model = SBTiTarget
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'org_unit_name']
+
+
+class CalculationAuditSerializer(serializers.ModelSerializer):
+    triggered_by_name = serializers.CharField(source='triggered_by.username', read_only=True)
+    rule_name = serializers.CharField(source='calculation_rule.name', read_only=True)
+    table_name = serializers.CharField(source='data_table.name', read_only=True)
+    period_name = serializers.CharField(source='reporting_period.name', read_only=True)
+
+    class Meta:
+        model = CalculationAudit
+        fields = '__all__'
+        read_only_fields = ['triggered_at', 'triggered_by_name', 'rule_name', 'table_name', 'period_name']
 
 
 class ConsoleResponseSerializer(serializers.Serializer):

@@ -11,7 +11,7 @@ export default function RegisteredAppsPage() {
       </Alert>
       <Grid container spacing={3}>
         {APP_REGISTRY.map((app) => (
-          <Grid item xs={12} md={6} lg={4} key={app.id}>
+          <Grid size={{ xs: 12, md: 6, lg: 4 }} key={app.id}>
             <Card>
               <CardContent>
                 <Typography variant='h6' gutterBottom>{app.name}</Typography>

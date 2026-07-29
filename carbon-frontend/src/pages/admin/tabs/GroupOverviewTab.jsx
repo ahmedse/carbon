@@ -19,13 +19,13 @@ export default function GroupOverviewTab({ entityData: group }) {
     <Box sx={{ p: 3 }}>
       <Typography variant='h6' gutterBottom>Role Summary</Typography>
       <Grid container spacing={2}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <InfoRow label='Group Name' value={group.name} />
           <InfoRow label='Type' value={group.role_type === 'platform' ? 'Platform Role' : 'App Role'} />
           <InfoRow label='App ID' value={group.app_id} />
           <InfoRow label='Manifest Key' value={group.manifest_key} />
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <InfoRow label='Scoped' value={group.is_scoped ? 'Yes' : 'No'} />
           <InfoRow label='Protected' value={group.is_protected ? 'Yes' : 'No'} />
           <InfoRow label='Users' value={group.users_count} />

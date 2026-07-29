@@ -230,7 +230,7 @@ const FrameworkCard = ({ framework, onSelect, selected }) => {
         <Divider sx={{ my: 2 }} />
 
         <Grid container spacing={1}>
-          <Grid item xs={6}>
+          <Grid size={{ xs: 6 }}>
             <Typography variant="caption" color="#9ca3af" display="block">
               Last Report
             </Typography>
@@ -238,7 +238,7 @@ const FrameworkCard = ({ framework, onSelect, selected }) => {
               {framework.lastReport}
             </Typography>
           </Grid>
-          <Grid item xs={6}>
+          <Grid size={{ xs: 6 }}>
             <Typography variant="caption" color="#9ca3af" display="block">
               Next Due
             </Typography>
@@ -523,7 +523,7 @@ export default function ReportingDashboard() {
         <Skeleton variant="rectangular" height={60} sx={{ borderRadius: 2, mb: 3 }} />
         <Grid container spacing={3}>
           {[1, 2, 3, 4, 5].map((i) => (
-            <Grid item xs={12} md={4} lg={2.4} key={i}>
+            <Grid size={{ xs: 12, md: 4, lg: 2.4 }} key={i}>
               <Skeleton variant="rectangular" height={220} sx={{ borderRadius: 3 }} />
             </Grid>
           ))}
@@ -588,7 +588,7 @@ export default function ReportingDashboard() {
       </Typography>
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {FRAMEWORKS.map((framework) => (
-          <Grid item xs={12} sm={6} md={4} lg={2.4} key={framework.id}>
+          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }} key={framework.id}>
             <FrameworkCard
               framework={framework}
               selected={selectedFramework === framework.id}
@@ -600,10 +600,10 @@ export default function ReportingDashboard() {
 
       {/* Framework Detail */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ xs: 12, lg: 8 }}>
           <FrameworkDetailPanel framework={selectedFw} />
         </Grid>
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <Stack spacing={3}>
             <RecentReportsCard reports={recentReports} />
           </Stack>

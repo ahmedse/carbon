@@ -278,12 +278,12 @@ const DataCoverageChart = ({ coverage }) => {
         </Typography>
 
         <Grid container spacing={2}>
-          <Grid item xs={5}>
+          <Grid size={{ xs: 5 }}>
             <Box sx={{ height: 160 }}>
               <Doughnut data={data} options={options} />
             </Box>
           </Grid>
-          <Grid item xs={7}>
+          <Grid size={{ xs: 7 }}>
             <Stack spacing={1.5} sx={{ height: "100%", justifyContent: "center" }}>
               {items.map((item) => (
                 <Box key={item.label}>
@@ -536,7 +536,7 @@ export default function DataQualityDashboard() {
         <Skeleton variant="rectangular" height={60} sx={{ borderRadius: 2, mb: 3 }} />
         <Grid container spacing={3}>
           {[1, 2, 3, 4].map((i) => (
-            <Grid item xs={12} md={6} key={i}>
+            <Grid size={{ xs: 12, md: 6 }} key={i}>
               <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 3 }} />
             </Grid>
           ))}
@@ -607,7 +607,7 @@ export default function DataQualityDashboard() {
 
       {/* Metric Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} lg={3}>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
             icon={DataUsage}
             title="Data Entries"
@@ -617,7 +617,7 @@ export default function DataQualityDashboard() {
             color="#3b82f6"
           />
         </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
             icon={Calculate}
             title="Estimation Ratio"
@@ -627,7 +627,7 @@ export default function DataQualityDashboard() {
             color="#f59e0b"
           />
         </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
             icon={LinkIcon}
             title="Source Links"
@@ -637,7 +637,7 @@ export default function DataQualityDashboard() {
             color="#16a34a"
           />
         </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
             icon={Schedule}
             title="Data Age"
@@ -651,10 +651,10 @@ export default function DataQualityDashboard() {
 
       {/* Middle Row */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <DataCoverageChart coverage={coverage} />
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <ScopeCompletenessCard scopes={scopes} />
         </Grid>
       </Grid>

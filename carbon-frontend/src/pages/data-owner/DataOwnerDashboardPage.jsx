@@ -61,7 +61,7 @@ const DataQualitySummary = ({ data, theme }) => {
         </Box>
 
         <Grid container spacing={1}>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: `${theme.palette.success.main}15`, borderLeft: `3px solid ${theme.palette.success.main}` }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: theme.palette.success.dark }}>
                 {data.passing_count}
@@ -71,7 +71,7 @@ const DataQualitySummary = ({ data, theme }) => {
               </Typography>
             </Paper>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: `${theme.palette.warning.main}15`, borderLeft: `3px solid ${theme.palette.warning.main}` }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: theme.palette.warning.dark }}>
                 {data.warning_count}
@@ -81,7 +81,7 @@ const DataQualitySummary = ({ data, theme }) => {
               </Typography>
             </Paper>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: `${theme.palette.error.main}15`, borderLeft: `3px solid ${theme.palette.error.main}` }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: theme.palette.error.dark }}>
                 {data.failing_count}
@@ -91,7 +91,7 @@ const DataQualitySummary = ({ data, theme }) => {
               </Typography>
             </Paper>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: theme.palette.action.disabledBackground, borderLeft: `3px solid ${theme.palette.divider}` }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: theme.palette.text.secondary }}>
                 {data.unknown_count}
@@ -277,7 +277,7 @@ export default function DataOwnerDashboardPage() {
         </Typography>
 
         <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <FormControl fullWidth size="small">
               <InputLabel>Reporting Period</InputLabel>
               <Select
@@ -293,7 +293,7 @@ export default function DataOwnerDashboardPage() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <FormControl fullWidth size="small">
               <InputLabel>Organization Unit</InputLabel>
               <Select
@@ -317,7 +317,7 @@ export default function DataOwnerDashboardPage() {
         Total Emissions
       </Typography>
       <Grid container spacing={2} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Total CO2e"
             value={emissions.total_co2e_tonne?.toLocaleString('en-US', { maximumFractionDigits: 1 }) || '0'}
@@ -328,7 +328,7 @@ export default function DataOwnerDashboardPage() {
             barColor={theme.palette.info.main}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Scope 1 - Direct"
             value={emissions.scope1_co2e_tonne?.toLocaleString('en-US', { maximumFractionDigits: 1 }) || '0'}
@@ -336,7 +336,7 @@ export default function DataOwnerDashboardPage() {
             barColor={theme.palette.error.main}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Scope 2 - Energy"
             value={emissions.scope2_co2e_tonne?.toLocaleString('en-US', { maximumFractionDigits: 1 }) || '0'}
@@ -344,7 +344,7 @@ export default function DataOwnerDashboardPage() {
             barColor={theme.palette.warning.main}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <MetricCard
             title="Scope 3 - Value Chain"
             value={emissions.scope3_co2e_tonne?.toLocaleString('en-US', { maximumFractionDigits: 1 }) || '0'}
@@ -359,10 +359,10 @@ export default function DataOwnerDashboardPage() {
         Data Quality & Submission
       </Typography>
       <Grid container spacing={2}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <DataQualitySummary data={dq} theme={theme} />
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <SubmissionStatusCard data={dashboardData} modulesData={dashboardData?.modules} theme={theme} />
         </Grid>
       </Grid>

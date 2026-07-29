@@ -13,7 +13,7 @@ from decimal import Decimal
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit
 from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units
 from core.models import Module
 from catalog.permissions import AdminOrSuperuserOnly
@@ -26,6 +26,9 @@ from .serializers import (
     CalculationSerializer,
     CalculationRuleSerializer,
     ReportConfigSerializer,
+    SBTiTargetSerializer,
+    VerificationRecordSerializer,
+    CalculationAuditSerializer,
 )
 from .services import (
     scope_calculations,
@@ -76,6 +79,55 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         
         return Response({'detail': 'No active reporting period found.'}, status=404)
+
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """Submit period for verification."""
+        period = self.get_object()
+        if period.status != 'draft':
+            return Response({'detail': 'Only draft periods can be submitted.'}, status=400)
+        period.status = 'submitted'
+        period.submitted_at = timezone.now()
+        period.save()
+        return Response(ReportingPeriodSerializer(period).data)
+
+    @action(detail=True, methods=['post'])
+    def verify(self, request, pk=None):
+        """Verify a submitted period (admin/admins_group only)."""
+        if not (request.user.is_superuser or request.user.groups.filter(name='admins_group').exists()):
+            return Response({'detail': 'Only admins can verify.'}, status=403)
+        period = self.get_object()
+        if period.status != 'submitted':
+            return Response({'detail': 'Only submitted periods can be verified.'}, status=400)
+        period.status = 'verified'
+        period.save()
+        VerificationRecord.objects.create(
+            reporting_period=period,
+            verifier=request.user,
+            status='verified',
+            verified_at=timezone.now(),
+        )
+        return Response(ReportingPeriodSerializer(period).data, status=201)
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """Reject a submitted period (admin/admins_group only)."""
+        if not (request.user.is_superuser or request.user.groups.filter(name='admins_group').exists()):
+            return Response({'detail': 'Only admins can reject.'}, status=403)
+        period = self.get_object()
+        if period.status != 'submitted':
+            return Response({'detail': 'Only submitted periods can be rejected.'}, status=400)
+        period.status = 'rejected'
+        period.save()
+        notes = request.data.get('notes', '')
+        VerificationRecord.objects.create(
+            reporting_period=period,
+            verifier=request.user,
+            status='rejected',
+            notes=notes,
+            verified_at=timezone.now(),
+        )
+        return Response(ReportingPeriodSerializer(period).data, status=201)
 
 
 class EmissionFactorViewSet(viewsets.ModelViewSet):
@@ -305,6 +357,7 @@ class ReportAPIView(APIView):
     - Stakeholder disclosure
     """
     permission_classes = [IsAuthenticated]
+    format_kwarg = None  # Let view handle format param directly
 
     def get(self, request):
         period_id = request.query_params.get('reporting_period_id')
@@ -393,6 +446,19 @@ class CalculateAPIView(APIView):
             rule, reporting_period=period, user=request.user, recalculate=recalculate,
         )
 
+        # Audit trail
+        CalculationAudit.objects.create(
+            trigger_type='single',
+            triggered_by=request.user,
+            calculation_rule=rule,
+            data_table=rule.data_table,
+            reporting_period=period,
+            recalculate=recalculate,
+            created_count=created,
+            skipped_count=skipped,
+            error_count=err_count,
+        )
+
         return Response({
             'success': True,
             'total_created': created,
@@ -400,6 +466,64 @@ class CalculateAPIView(APIView):
             'total_errors': err_count,
             'rule': rule.name,
         })
+
+
+class BatchCalculateAPIView(APIView):
+    """Run calculations across multiple tables at once."""
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Batch calculate emissions for multiple tables",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['table_ids', 'period_id'],
+            properties={
+                'table_ids': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(type=openapi.TYPE_INTEGER),
+                    description="DataTable IDs to calculate",
+                ),
+                'period_id': openapi.Schema(
+                    type=openapi.TYPE_INTEGER,
+                    description="ReportingPeriod ID",
+                ),
+            },
+        ),
+    )
+    def post(self, request):
+        table_ids = request.data.get('table_ids')
+        period_id = request.data.get('period_id')
+
+        if not table_ids or not isinstance(table_ids, list):
+            return Response(
+                {'detail': 'table_ids is required and must be a list of integers.'},
+                status=400,
+            )
+        if not period_id:
+            return Response(
+                {'detail': 'period_id is required.'},
+                status=400,
+            )
+
+        try:
+            result = CalculationEngineService.batch_calculate(
+                table_ids, period_id, user=request.user,
+            )
+        except Exception as e:
+            return Response({'detail': str(e)}, status=500)
+
+        # Audit trail
+        CalculationAudit.objects.create(
+            trigger_type='batch',
+            triggered_by=request.user,
+            reporting_period_id=period_id,
+            table_ids=table_ids,
+            created_count=result.get('total_created', 0),
+            skipped_count=result.get('total_skipped', 0),
+            error_count=result.get('total_errors', 0),
+        )
+
+        return Response(result, status=200)
 
 
 class ReportConfigViewSet(viewsets.ModelViewSet):
@@ -527,6 +651,19 @@ class MyDataAPIView(APIView):
         return Response(data)
 
 
+class SBTiTargetViewSet(viewsets.ModelViewSet):
+    """CRUD for SBTi targets — org-scoped visibility."""
+    serializer_class = SBTiTargetSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        from accounts.rbac_utils import get_visible_org_units
+        allowed = get_visible_org_units(self.request.user)
+        if allowed is None:
+            return SBTiTarget.objects.all()
+        return SBTiTarget.objects.filter(org_unit_id__in=allowed)
+
+
 class ConsoleAPIView(APIView):
     """
     Aggregated console data for the Carbon landing page.
@@ -541,3 +678,36 @@ class ConsoleAPIView(APIView):
     def get(self, request):
         data = ConsoleService.get_console_data(request.user)
         return Response(data)
+
+
+class VerificationRecordViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = VerificationRecordSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = VerificationRecord.objects.select_related('reporting_period', 'verifier')
+        period_id = self.request.query_params.get('period_id')
+        if period_id:
+            qs = qs.filter(reporting_period_id=period_id)
+        return qs
+
+
+class CalculationAuditViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only audit trail for calculation triggers."""
+    serializer_class = CalculationAuditSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = CalculationAudit.objects.select_related(
+            'triggered_by', 'calculation_rule', 'data_table', 'reporting_period'
+        )
+        trigger_type = self.request.query_params.get('trigger_type')
+        if trigger_type:
+            qs = qs.filter(trigger_type=trigger_type)
+        period_id = self.request.query_params.get('period_id')
+        if period_id:
+            qs = qs.filter(reporting_period_id=period_id)
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            qs = qs.filter(triggered_by_id=user_id)
+        return qs

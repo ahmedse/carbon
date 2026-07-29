@@ -212,10 +212,10 @@ export default function BaseDetailPage({
             onMouseDown={() => setIsDragging(true)}
             sx={{
               width: '4px',
-              backgroundColor: isDragging ? '#1976d2' : 'transparent',
+              backgroundColor: isDragging ? theme.palette.primary.main : 'transparent',
               cursor: isDragging ? 'col-resize' : 'col-resize',
               '&:hover': {
-                backgroundColor: '#1976d2',
+                backgroundColor: theme.palette.primary.main,
               },
               transition: isDragging ? 'none' : 'background-color 0.2s',
               userSelect: 'none',

@@ -10,7 +10,8 @@ import {
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
-import { API_BASE_URL, API_ROUTES } from '../../../config';
+import { apiFetch } from '../../../api/api';
+
 
 export default function ReferenceSetEditTab({ entityData, additionalProps = {} }) {
   const { token } = useAuth();
@@ -47,9 +48,6 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
     setError(null);
 
     try {
-      const baseUrl = API_BASE_URL.replace(/\/$/, '');
-      const url = `${baseUrl}${API_ROUTES.referenceSets}${entityData.id}/`;
-
       // Prepare payload with only the fields we're updating
       const payload = {
         name: formData.name,
@@ -59,14 +57,11 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
         is_active: formData.is_active,
       };
 
-      const response = await fetch(url, {
+      const response = await apiFetch(`catalog/reference-sets/${entityData.id}/`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+        token,
+        body: payload,
+      }); // update reference set
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));

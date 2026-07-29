@@ -171,7 +171,7 @@ const MainTargetCard = ({ target, current, baseYear, targetYear, baselineValue, 
         </Box>
 
         <Grid container spacing={2}>
-          <Grid item xs={4}>
+          <Grid size={{ xs: 4 }}>
             <Paper elevation={0} sx={{ p: 1.5, bgcolor: "#f9fafb", borderRadius: 2, textAlign: "center" }}>
               <Typography variant="caption" color="#6b7280">
                 Target Reduction
@@ -181,7 +181,7 @@ const MainTargetCard = ({ target, current, baseYear, targetYear, baselineValue, 
               </Typography>
             </Paper>
           </Grid>
-          <Grid item xs={4}>
+          <Grid size={{ xs: 4 }}>
             <Paper
               elevation={0}
               sx={{
@@ -199,7 +199,7 @@ const MainTargetCard = ({ target, current, baseYear, targetYear, baselineValue, 
               </Typography>
             </Paper>
           </Grid>
-          <Grid item xs={4}>
+          <Grid size={{ xs: 4 }}>
             <Paper elevation={0} sx={{ p: 1.5, bgcolor: "#f9fafb", borderRadius: 2, textAlign: "center" }}>
               <Typography variant="caption" color="#6b7280">
                 Remaining
@@ -530,7 +530,7 @@ export default function TargetsDashboard() {
         <Skeleton variant="rectangular" height={60} sx={{ borderRadius: 2, mb: 3 }} />
         <Grid container spacing={3}>
           {[1, 2, 3, 4].map((i) => (
-            <Grid item xs={12} md={6} key={i}>
+            <Grid size={{ xs: 12, md: 6 }} key={i}>
               <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 3 }} />
             </Grid>
           ))}
@@ -617,7 +617,7 @@ export default function TargetsDashboard() {
 
       {/* Scope Targets */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <ScopeTargetCard
             scope={1}
             name="Scope 1 - Direct Emissions"
@@ -628,7 +628,7 @@ export default function TargetsDashboard() {
             targetYear={2030}
           />
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <ScopeTargetCard
             scope={2}
             name="Scope 2 - Energy"
@@ -639,7 +639,7 @@ export default function TargetsDashboard() {
             targetYear={2030}
           />
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <ScopeTargetCard
             scope={3}
             name="Scope 3 - Value Chain"
@@ -654,21 +654,21 @@ export default function TargetsDashboard() {
 
       {/* Charts */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ xs: 12, lg: 8 }}>
           <TrajectoryChart 
             yearlyData={yearlyData?.yearlyData} 
             targets={yearlyData?.targets}
             baselineTotal={baselineTotal}
           />
         </Grid>
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <MilestonesCard milestones={milestones} />
         </Grid>
       </Grid>
 
       {/* Annual Progress */}
       <Grid container spacing={3}>
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <AnnualProgressChart yearlyData={yearlyData?.yearlyData} />
         </Grid>
       </Grid>

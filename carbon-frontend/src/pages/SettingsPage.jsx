@@ -104,7 +104,7 @@ const VALID_TABS = new Set(["profile", "security", "preferences", "pulse", "shor
 const PULSE_HOST = import.meta.env.VITE_PULSE_HOST || "http://127.0.0.1:9100";
 
 async function generatePulseKey(carbonToken) {
-  const res = await fetch(`${PULSE_HOST}/instances/carbon/user-keys`, {
+  const res = await fetch(`${PULSE_HOST}/instances/carbon/user-keys`, { // Pulse external host
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ host_token: carbonToken }),
@@ -117,7 +117,7 @@ async function generatePulseKey(carbonToken) {
 }
 
 async function fetchPulseKeyInfo(carbonToken, pulseKey) {
-  const res = await fetch(`${PULSE_HOST}/instances/carbon/user-keys/refresh-token`, {
+  const res = await fetch(`${PULSE_HOST}/instances/carbon/user-keys/refresh-token`, { // Pulse external host
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Pulse-Key": pulseKey },
     body: JSON.stringify({ host_token: carbonToken }),
@@ -187,7 +187,7 @@ export default function SettingsPage() {
       return;
     }
     const baseUrl = API_BASE_URL.replace(/\/$/, '');
-    fetch(`${baseUrl}/accounts/my-roles/`, {
+    fetch(`${baseUrl}/accounts/my-roles/`, { // my-roles endpoint
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => (r.ok ? r.json() : null))
@@ -260,7 +260,7 @@ export default function SettingsPage() {
     try {
       const token = localStorage.getItem("access");
       const baseUrl = API_BASE_URL.replace(/\/$/, '');
-      const res = await fetch(`${baseUrl}/accounts/change-password/`, {
+      const res = await fetch(`${baseUrl}/accounts/change-password/`, { // change-password endpoint
         method: "POST",
         headers: {
           "Content-Type": "application/json",

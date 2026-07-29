@@ -7,6 +7,7 @@ import UploadIcon from "@mui/icons-material/Upload";
 import DownloadIcon from "@mui/icons-material/Download";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import { API_BASE_URL } from "../config";
+import { authFetch } from "../api/api";
 import {
   fetchDataSchemaTables,
   fetchDataSchemaFields,
@@ -246,15 +247,13 @@ export default function TableDataPage({
   const handleDownloadTemplate = async () => {
     try {
       const includeExample = window.confirm("Include example row in template?");
-      const url = `${API_BASE_URL}datarows/download-template/?data_table=${tableId}&include_example=${includeExample}`;
+      const endpoint = `datarows/download-template/?data_table=${tableId}&include_example=${includeExample}`;
       
-      const response = await fetch(url, {
+      const response = await authFetch(endpoint, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-Project-ID': project_id,
-          'X-Module-ID': module_id,
-        },
+        token,
+        project_id,
+        module_id,
       });
 
       if (!response.ok) {

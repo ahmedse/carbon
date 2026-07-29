@@ -1,10 +1,14 @@
 # File: backend/config/settings.py
 
 import os
+import logging
 import warnings
 from datetime import timedelta
 from pathlib import Path
 from dotenv import load_dotenv
+
+
+logger = logging.getLogger(__name__)
 
 # Suppress ONNX Runtime GPU warnings (harmless - we don't need GPU)
 warnings.filterwarnings('ignore', category=UserWarning, module='onnxruntime')
@@ -36,14 +40,11 @@ ALLOWED_HOSTS = get_env(
         "127.0.0.1,localhost,testserver,72.60.83.189,clearturn.tech,gigacast.clearturn.tech",
     ),
 ).split(",")
-#FORCE_SCRIPT_NAME = get_env('FORCE_SCRIPT_NAME', None)
-#print("FORCE_SCRIPT_NAME =", FORCE_SCRIPT_NAME)
-
 CSRF_TRUSTED_ORIGINS = [x.strip() for x in get_env("CSRF_TRUSTED_ORIGINS", "").split(",") if x.strip()]
 
-print("CSRF_TRUSTED_ORIGINS =", repr(CSRF_TRUSTED_ORIGINS))
+logger.debug("CSRF_TRUSTED_ORIGINS = %s", repr(CSRF_TRUSTED_ORIGINS))
 
-print("DEBUG =", repr(DEBUG))
+logger.debug("DEBUG = %s", repr(DEBUG))
 
 
 # Path for API (configurable, e.g. /api/v1/, /carbon/api/)

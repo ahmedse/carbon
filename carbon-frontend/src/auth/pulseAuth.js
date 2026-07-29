@@ -20,7 +20,7 @@ export async function syncPulseToken(newAccessToken) {
   const pulseKey = localStorage.getItem('pulse_key');
   if (!pulseKey || !newAccessToken) return;
   try {
-    await fetch(`${PULSE_HOST}/instances/carbon/user-keys/refresh-token`, {
+    await fetch(`${PULSE_HOST}/instances/carbon/user-keys/refresh-token`, { // pulse sync
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Pulse-Key': pulseKey },
       body: JSON.stringify({ host_token: newAccessToken }),
@@ -52,7 +52,7 @@ export async function ensurePulseKey(accessToken) {
 
   inFlightProvision = (async () => {
     try {
-      const res = await fetch(`${PULSE_HOST}/instances/carbon/user-keys`, {
+      const res = await fetch(`${PULSE_HOST}/instances/carbon/user-keys`, { // pulse provision
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ host_token: accessToken }),

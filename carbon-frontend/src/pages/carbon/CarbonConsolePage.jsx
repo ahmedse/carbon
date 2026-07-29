@@ -107,7 +107,7 @@ export default function CarbonConsolePage() {
       {alerts.length > 0 && (
         <Grid container spacing={1} sx={{ mb: 2 }}>
           {alerts.slice(0, 4).map((a, i) => (
-            <Grid item xs={6} sm={6} md={3} key={i}>
+            <Grid size={{ xs: 6, sm: 6, md: 3 }} key={i}>
               <StatCard title={a.type === 'pending_submission' ? 'Pending' : 'DQ Alert'}
                 value={a.type === 'pending_submission' ? a.pending_rows : a.score}
                 unit={a.type === 'pending_submission' ? 'rows' : '%'}
@@ -121,7 +121,7 @@ export default function CarbonConsolePage() {
       {stats && (
         <Grid container spacing={1} sx={{ mb: 2 }}>
           {STAT_CARDS.map((sc) => (
-            <Grid item xs={12} sm={6} md key={sc.key}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={sc.key}>
               <StatCard title={sc.title} value={sc.fmt ? sc.fmt(stats[sc.key]) : (stats[sc.key] ?? 0)}
                 unit={sc.unit} icon={sc.icon} color={sc.color}
                 tooltip={`Total ${sc.title.toLowerCase()} across all modules in the current period`} />
@@ -133,7 +133,7 @@ export default function CarbonConsolePage() {
       <CollapsibleSection label="Quick Actions" defaultExpanded>
         <Grid container spacing={1}>
           {QUICK_ACTIONS.map((c) => (
-            <Grid item xs={12} sm={6} md={4} key={c.title}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={c.title}>
               <WorkflowCard icon={c.icon} title={c.title} description={c.description}
                 onClick={() => navigate(c.path)} />
             </Grid>
@@ -145,7 +145,7 @@ export default function CarbonConsolePage() {
         <CollapsibleSection label="Administration" defaultExpanded={false}>
           <Grid container spacing={1}>
             {ADMIN_TOOLS.map((c) => (
-              <Grid item xs={12} sm={6} md={4} key={c.title}>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={c.title}>
                 <WorkflowCard icon={c.icon} title={c.title} description={c.description}
                   onClick={() => navigate(c.path)} />
               </Grid>

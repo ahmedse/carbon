@@ -113,10 +113,10 @@ export default function Help() {
 
         {/* System Summary Cards */}
         <Grid container spacing={2} mb={2}>
-          <Grid item xs={12} sm={4}>
-            <Card sx={{ bgcolor: "#e3f2fd", borderRadius: 3 }}>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <Card sx={{ bgcolor: (t) => t.palette.primary.light, borderRadius: 3 }}>
               <CardContent sx={{ textAlign: "center" }}>
-                <Avatar sx={{ bgcolor: "#1976d2", mx: "auto", mb: 1 }}>
+                <Avatar sx={{ bgcolor: "primary.main", mx: "auto", mb: 1 }}>
                   <DashboardIcon />
                 </Avatar>
                 <Typography fontWeight={700}>Unified Workspace</Typography>
@@ -124,10 +124,10 @@ export default function Help() {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={4}>
-            <Card sx={{ bgcolor: "#e8f5e9", borderRadius: 3 }}>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <Card sx={{ bgcolor: (t) => t.palette.success.light, borderRadius: 3 }}>
               <CardContent sx={{ textAlign: "center" }}>
-                <Avatar sx={{ bgcolor: "#43a047", mx: "auto", mb: 1 }}>
+                <Avatar sx={{ bgcolor: "success.main", mx: "auto", mb: 1 }}>
                   <EmojiObjectsIcon />
                 </Avatar>
                 <Typography fontWeight={700}>Smart Data Entry</Typography>
@@ -135,10 +135,10 @@ export default function Help() {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={4}>
-            <Card sx={{ bgcolor: "#f3e5f5", borderRadius: 3 }}>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <Card sx={{ bgcolor: (t) => t.palette.secondary.light, borderRadius: 3 }}>
               <CardContent sx={{ textAlign: "center" }}>
-                <Avatar sx={{ bgcolor: "#8e24aa", mx: "auto", mb: 1 }}>
+                <Avatar sx={{ bgcolor: "secondary.main", mx: "auto", mb: 1 }}>
                   <InsightsIcon />
                 </Avatar>
                 <Typography fontWeight={700}>Instant Insights</Typography>

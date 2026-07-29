@@ -138,7 +138,7 @@ export default function SchemaManagerPage() {
       ) : (
         <Grid container spacing={2}>
           {tables.map((table) => (
-            <Grid item xs={12} sm={6} md={4} key={table.id}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={table.id}>
               <Card
                 sx={{
                   height: '100%',

@@ -14,6 +14,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import { useAuth } from '../../auth/AuthContext';
 import { API_BASE_URL, API_ROUTES } from '../../config';
+import { apiFetch, authFetch } from '../../api/api';
 import EntityDetailShell from '../../components/entity/EntityDetailShell';
 import PageHeader from '../../components/Page/PageHeader';
 import RowOverviewTab from './tabs/RowOverviewTab';
@@ -22,7 +23,6 @@ import RowEvidenceTab from './tabs/RowEvidenceTab';
 import DQMetricsTab from './metrics/DQMetricsTab';
 import DataLineageTab from './metrics/DataLineageTab';
 import RelatedRecordsTab from './metrics/RelatedRecordsTab';
-import { authFetch } from '../../api/api';
 
 function notify(message, type = 'info') {
   const event = new CustomEvent('notify', { detail: { message, type } });
@@ -69,8 +69,7 @@ export default function RowDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const url = `${API_BASE_URL}${API_ROUTES.rows}${rowId}/?data_table=${tableId}`;
-        const response = await fetch(url, { headers: { Authorization: `Bearer ${currentToken}` } });
+        const response = await apiFetch(`dataschema/rows/${rowId}/?data_table=${tableId}`, { method: 'GET', token: currentToken }); // fetch row data
         if (!response.ok) throw new Error(`Failed to fetch row: ${response.status}`);
         setRowData(await response.json());
       } catch (err) {
@@ -116,8 +115,7 @@ export default function RowDetailPage() {
   const handleRefresh = async () => {
     let currentToken = token || localStorage.getItem('access');
     try {
-      const url = `${API_BASE_URL}dataschema/rows/${rowId}/?data_table=${tableId}`;
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${currentToken}` } });
+      const response = await apiFetch(`dataschema/rows/${rowId}/?data_table=${tableId}`, { method: 'GET', token: currentToken }); // refresh row
       if (!response.ok) throw new Error('Failed to refresh row data');
       setRowData(await response.json());
     } catch (err) {

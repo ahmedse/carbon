@@ -10,7 +10,8 @@ import {
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
-import { API_BASE_URL, API_ROUTES } from '../../../config';
+import { apiFetch } from '../../../api/api';
+
 
 export default function AssetEditTab({ entityData, additionalProps = {} }) {
   const { token } = useAuth();
@@ -118,9 +119,6 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
     setError(null);
 
     try {
-      const baseUrl = API_BASE_URL.replace(/\/$/, '');
-      const url = `${baseUrl}${API_ROUTES.assetProfiles}${entityData.id}/`;
-
       // Prepare payload with only the fields we're updating
       const payload = {
         title: formData.title,
@@ -134,14 +132,11 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
         tags: formData.tags,
       };
 
-      const response = await fetch(url, {
+      const response = await apiFetch(`catalog/assets/${entityData.id}/`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+        token,
+        body: payload,
+      }); // update asset
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));

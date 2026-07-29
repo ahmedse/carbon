@@ -440,6 +440,57 @@ class CalculationEngineService:
 
         return rule, period, errors
 
+    @staticmethod
+    def batch_calculate(table_ids, period_id, user=None):
+        """Run calculation rules across multiple tables.
+
+        Args:
+            table_ids: list of DataTable IDs
+            period_id: ReportingPeriod ID
+            user: request user (optional, passed to execute_rule)
+
+        Returns:
+            dict: {total_created, total_updated, total_skipped, total_errors,
+                   per_table: {table_id: {created, updated, skipped, errors}}}
+        """
+        period = None
+        if period_id:
+            period = ReportingPeriod.objects.filter(id=period_id).first()
+
+        result = {
+            'total_created': 0,
+            'total_updated': 0,
+            'total_skipped': 0,
+            'total_errors': 0,
+            'per_table': {},
+        }
+        for table_id in table_ids:
+            rules = CalculationRule.objects.filter(
+                data_table_id=table_id, is_active=True
+            )
+            if not rules.exists():
+                result['per_table'][str(table_id)] = {
+                    'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0,
+                    'note': 'no active rules',
+                }
+                continue
+
+            t = {'created': 0, 'updated': 0, 'skipped': 0, 'errors': 0}
+            for rule in rules:
+                created, skipped, err_count = CalculationEngineService.execute_rule(
+                    rule, reporting_period=period, user=user,
+                )
+                t['created'] += created
+                t['skipped'] += skipped
+                t['errors'] += err_count
+
+            result['per_table'][str(table_id)] = t
+            result['total_created'] += t['created']
+            result['total_skipped'] += t['skipped']
+            result['total_errors'] += t['errors']
+
+        return result
+
 
 # ── Owner Service ──────────────────────────────────────────────────────────
 
@@ -927,9 +978,42 @@ class ConsoleService:
 class ReportConfigService:
     """Generate report data from a saved ReportConfig."""
 
+class TargetService:
+    """Progress tracking for SBTi targets."""
+
+    @staticmethod
+    def get_progress(target_id, year):
+        from .models import SBTiTarget, Calculation
+        from decimal import Decimal
+
+        target = SBTiTarget.objects.get(pk=target_id)
+        scopes = target.scope.replace('+', ',').split(',')
+
+        actual = Calculation.objects.filter(
+            module__org_unit_id=target.org_unit_id,
+            reporting_year=year,
+            scope__in=scopes,
+        ).aggregate(total=Sum('co2e_kg'))['total'] or Decimal('0')
+
+        # Progress = how much of the reduction achieved (simplified baseline model)
+        return {
+            'target_id': target.id,
+            'name': target.name,
+            'base_year': target.base_year,
+            'target_year': target.target_year,
+            'target_type': target.target_type,
+            'reduction_pct': float(target.reduction_pct),
+            'actual_tco2e': float(actual),
+            'status': target.status,
+        }
+
+
+class ReportConfigService:
+    """Generate report data from a saved ReportConfig."""
+
     @staticmethod
     def generate_from_config(config, user):
-        from datetime import datetime
+        from django.utils import timezone
         from mdm.models import OrgUnit
 
         qs = Calculation.objects.select_related(
@@ -1013,5 +1097,5 @@ class ReportConfigService:
             'scope_breakdown': scope_breakdown,
             'category_breakdown': category_breakdown,
             'module_breakdown': module_breakdown,
-            'generated_at': datetime.now().isoformat(),
+            'generated_at': timezone.now().isoformat(),
         }

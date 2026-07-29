@@ -206,11 +206,9 @@ export async function uploadRowFile(token, rowId, field, file, project_id, modul
 
   let resp;
   try {
-    resp = await fetch(url, {
+    resp = await apiFetch(url, { // file upload
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      token,
       body: formData,
     });
   } catch (err) {

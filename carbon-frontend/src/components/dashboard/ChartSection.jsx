@@ -19,7 +19,8 @@ export default function ChartSection({
       expanded={expanded}
       onChange={onChange}
       sx={{
-        border: "1px solid #e5e7eb",
+        border: '1px solid',
+        borderColor: 'divider',
         borderRadius: "12px !important",
         boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
         "&:before": { display: "none" },
@@ -43,21 +44,21 @@ export default function ChartSection({
               width: 40,
               height: 40,
               borderRadius: 2,
-              bgcolor: "#f0fdf4",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#16a34a",
+              bgcolor: 'success.light',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'success.main',
             }}
           >
             {icon}
           </Box>
           <Box>
-            <Typography fontSize="0.9375rem" fontWeight={600} color="#111827">
+            <Typography fontSize="0.9375rem" fontWeight={600} color="text.primary">
               {title}
             </Typography>
             {subtitle && (
-              <Typography fontSize="0.75rem" color="#6b7280">
+              <Typography fontSize="0.75rem" color="text.secondary">
                 {subtitle}
               </Typography>
             )}

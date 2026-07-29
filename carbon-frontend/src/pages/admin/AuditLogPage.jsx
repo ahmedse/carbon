@@ -263,7 +263,7 @@ export default function AuditLogPage() {
 
       {/* Stats */}
       <Grid container spacing={2} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" variant="caption" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>
@@ -276,7 +276,7 @@ export default function AuditLogPage() {
           </Card>
         </Grid>
         {Object.entries(stats).map(([action, count]) => (
-          <Grid item xs={12} sm={6} md={3} key={action}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} key={action}>
             <Card>
               <CardContent>
                 <Typography color="text.secondary" variant="caption" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>
@@ -299,7 +299,7 @@ export default function AuditLogPage() {
           Filters
         </Typography>
         <Grid container spacing={2}>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <FormControl fullWidth size="small">
               <InputLabel>Action</InputLabel>
               <Select
@@ -314,7 +314,7 @@ export default function AuditLogPage() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <TextField
               fullWidth
               size="small"
@@ -324,7 +324,7 @@ export default function AuditLogPage() {
               placeholder="Filter by username"
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <TextField
               fullWidth
               size="small"
@@ -335,7 +335,7 @@ export default function AuditLogPage() {
               InputLabelProps={{ shrink: true }}
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <TextField
               fullWidth
               size="small"

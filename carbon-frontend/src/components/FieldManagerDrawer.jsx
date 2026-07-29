@@ -18,11 +18,12 @@ function SortableFieldRow({ field, idx, onEdit, onDelete }) {
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.5 : 1,
-        background: isDragging ? "#f0f0f0" : "inherit"
+        background: isDragging ? "action.hover" : "inherit"
       }}
       display="flex"
       alignItems="center"
-      borderBottom="1px solid #eee"
+      borderBottom={1}
+      borderColor="divider"
       px={1}
       py={1}
       gap={1}

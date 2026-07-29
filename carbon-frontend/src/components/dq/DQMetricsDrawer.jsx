@@ -80,7 +80,7 @@ export default function DQMetricsDrawer({ open, onClose, tableId, token }) {
       }}
     >
       {/* Header */}
-      <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h6">Data Quality Metrics</Typography>
         <IconButton size="small" onClick={onClose}>
           <CloseIcon />
@@ -145,9 +145,10 @@ export default function DQMetricsDrawer({ open, onClose, tableId, token }) {
                       sx={{
                         p: 2,
                         mb: 1,
-                        border: '1px solid #e0e0e0',
+                        border: '1px solid',
+                        borderColor: 'divider',
                         borderRadius: 1,
-                        backgroundColor: result.passed ? '#e8f5e9' : '#ffebee',
+                        backgroundColor: result.passed ? 'success.light' : 'error.light',
                       }}
                     >
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -157,7 +158,7 @@ export default function DQMetricsDrawer({ open, onClose, tableId, token }) {
                         <Typography
                           variant="caption"
                           sx={{
-                            backgroundColor: result.passed ? '#4caf50' : '#f44336',
+                            backgroundColor: result.passed ? 'success.main' : 'error.main',
                             color: 'white',
                             px: 1,
                             py: 0.5,
@@ -171,7 +172,7 @@ export default function DQMetricsDrawer({ open, onClose, tableId, token }) {
                         {new Date(result.executed_at).toLocaleString()}
                       </Typography>
                       {result.error_message && (
-                        <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#f44336' }}>
+                        <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'error.main' }}>
                           {result.error_message}
                         </Typography>
                       )}

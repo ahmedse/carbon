@@ -212,7 +212,7 @@ function FilterBar({ fields, filters, setFilters, onAddNew, onSearchChange }) {
   const inputStyle = {
     padding: "8px 12px",
     borderRadius: 6,
-    border: "1px solid #e2e8f0",
+    border: "1px solid #e2e8f0", // input style
     fontSize: "0.8125rem",
     outline: "none",
     transition: "border-color 0.15s",
@@ -396,7 +396,7 @@ export default function DataTableGrid({
           pageSize={20}
           rowsPerPageOptions={[20, 50, 100]}
           sx={{
-            bgcolor: "#fff",
+            bgcolor: 'background.paper',
             borderRadius: 2,
             boxShadow: 1,
             opacity: loading ? 0.4 : 1,
@@ -470,7 +470,7 @@ export default function DataTableGrid({
           </Box>
         </DialogContent>
         
-        <DialogActions sx={{ px: 2, py: 1.5, borderTop: '1px solid #eee' }}>
+        <DialogActions sx={{ px: 2, py: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
           <Button onClick={() => { setDrawerOpen(false); setEditingRow(null); }} variant="outlined">
             Cancel
           </Button>

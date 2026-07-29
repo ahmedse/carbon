@@ -27,7 +27,7 @@ const validateApiConfig = async () => {
     let reachable = false;
     for (const url of healthUrlCandidates) {
       try {
-        const res = await fetch(url, { method: 'GET' });
+        const res = await fetch(url, { method: 'GET' }); // health check (no auth context)
         // Any HTTP response (200-499/500) shows the host is reachable; only network errors/aborts are fatal.
         console.log(`API reach check: ${url} -> ${res.status}`);
         reachable = true;

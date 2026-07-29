@@ -165,7 +165,7 @@ export default function EntityDetailShell({
             display: 'flex',
             flex: 1,
             overflow: 'hidden',
-            borderTop: '1px solid #e0e0e0',
+            borderTop: `1px solid ${theme.palette.divider}`,
           }}
         >
           {/* Main Content Area */}
@@ -222,19 +222,19 @@ export default function EntityDetailShell({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  bgcolor: '#f5f5f5',
-                  borderLeft: '1px solid #e0e0e0',
+                  bgcolor: (t) => t.palette.background.default,
+                  borderLeft: (t) => `1px solid ${t.palette.divider}`,
                   cursor: 'pointer',
                   transition: 'background-color 0.2s',
                   '&:hover': {
-                    bgcolor: '#eeeeee',
+                    bgcolor: (t) => t.palette.action.hover,
                   },
                 }}
               >
                 <Box
                   sx={{
                     fontSize: '18px',
-                    color: '#666',
+                    color: 'text.secondary',
                     fontWeight: 'bold',
                     transform: metricsPanelOpen ? 'scaleX(1)' : 'scaleX(-1)',
                     transition: 'transform 0.2s',
@@ -255,8 +255,8 @@ export default function EntityDetailShell({
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
-                    borderLeft: '1px solid #e0e0e0',
-                    bgcolor: '#f9fafb',
+                    borderLeft: (t) => `1px solid ${t.palette.divider}`,
+                    bgcolor: 'background.default',
                     '@media (max-width: 1024px)': {
                       display: 'none',
                     },
@@ -328,7 +328,7 @@ export default function EntityDetailShell({
       {summaryCards.length > 0 && (
         <Grid container spacing={2} sx={{ mb: 3 }}>
           {summaryCards.map((card) => (
-            <Grid item xs={12} sm={6} md={3} key={card.title}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }} key={card.title}>
               <Paper sx={{ p: 2, height: '100%' }}>
                 <Typography variant="caption" color="text.secondary" display="block">{card.title}</Typography>
                 <Typography variant="h6" fontWeight={700}>{card.value}</Typography>
@@ -340,7 +340,7 @@ export default function EntityDetailShell({
       )}
 
       <Grid container spacing={3}>
-        <Grid item xs={12} lg={9}>
+        <Grid size={{ xs: 12, lg: 9 }}>
           <Card>
             <CardContent sx={{ pt: 1 }}>
               {visibleTabs.length > 0 && (
@@ -355,7 +355,7 @@ export default function EntityDetailShell({
           </Card>
         </Grid>
 
-        <Grid item xs={12} lg={3}>
+        <Grid size={{ xs: 12, lg: 3 }}>
           <Card>
             <CardContent>
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>Quick Access</Typography>

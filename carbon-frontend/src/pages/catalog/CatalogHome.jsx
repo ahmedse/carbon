@@ -89,7 +89,7 @@ export default function CatalogHome() {
       {/* Metrics Grid */}
       <Grid container spacing={2} sx={{ mb: 4 }}>
         {/* Total Domains */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ height: '100%' }}>
             <CardHeader
               title="Data Domains"
@@ -106,7 +106,7 @@ export default function CatalogHome() {
         </Grid>
 
         {/* Total Tables */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ height: '100%' }}>
             <CardHeader
               title="Tables"
@@ -123,7 +123,7 @@ export default function CatalogHome() {
         </Grid>
 
         {/* Metadata Coverage */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ height: '100%' }}>
             <CardHeader
               title="Metadata Coverage"
@@ -140,7 +140,7 @@ export default function CatalogHome() {
         </Grid>
 
         {/* Quality Score */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ height: '100%' }}>
             <CardHeader
               title="Quality Index"
@@ -158,7 +158,7 @@ export default function CatalogHome() {
       {/* Quick Access Cards */}
       <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>Quick Access</Typography>
       <Grid container spacing={2} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <StorageIcon sx={{ color: 'primary.main' }} />
@@ -175,7 +175,7 @@ export default function CatalogHome() {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <CheckCircleIcon sx={{ color: 'success.main' }} />
@@ -196,7 +196,7 @@ export default function CatalogHome() {
       {/* Governance & Metadata */}
       <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>Governance & Metadata</Typography>
       <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Button
             fullWidth
             variant="outlined"
@@ -206,7 +206,7 @@ export default function CatalogHome() {
             Domains
           </Button>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Button
             fullWidth
             variant="outlined"
@@ -216,7 +216,7 @@ export default function CatalogHome() {
             Glossary
           </Button>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Button
             fullWidth
             variant="outlined"
@@ -226,7 +226,7 @@ export default function CatalogHome() {
             Tags
           </Button>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Button
             fullWidth
             variant="outlined"

@@ -145,14 +145,14 @@ export default function ScopeInfoPage() {
       </Box>
       <Grid container spacing={3}>
         {modules.length === 0 && (
-          <Grid item xs={12}>
+          <Grid size={{ xs: 12 }}>
             <Typography color="text.secondary">No modules found for this scope.</Typography>
           </Grid>
         )}
         {modules.map(mod => {
           const stats = getModuleStats(mod);
           return (
-            <Grid item xs={12} sm={6} md={4} lg={3} key={mod.id}>
+            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={mod.id}>
               <Card
                 variant="outlined"
                 sx={{

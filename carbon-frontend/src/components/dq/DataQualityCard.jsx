@@ -28,15 +28,15 @@ import { getOrgDQMetrics } from '../../api/dq';
  * Embedded in ModuleLandingPage
  */
 function getQualityColor(percentage) {
-  if (percentage >= 90) return '#4caf50'; // green
-  if (percentage >= 70) return '#ff9800'; // orange
-  return '#f44336'; // red
+  if (percentage >= 90) return 'success.main';
+  if (percentage >= 70) return 'warning.main';
+  return 'error.main';
 }
 
 function getQualityIcon(percentage) {
-  if (percentage >= 90) return <CheckCircleIcon sx={{ color: '#4caf50' }} />;
-  if (percentage >= 70) return <WarningIcon sx={{ color: '#ff9800' }} />;
-  return <ErrorIcon sx={{ color: '#f44336' }} />;
+  if (percentage >= 90) return <CheckCircleIcon sx={{ color: 'success.main' }} />;
+  if (percentage >= 70) return <WarningIcon sx={{ color: 'warning.main' }} />;
+  return <ErrorIcon sx={{ color: 'error.main' }} />;
 }
 
 function getQualityLabel(percentage) {
@@ -59,7 +59,7 @@ function MetricRow({ label, value, color }) {
           sx={{
             height: 8,
             borderRadius: 4,
-            backgroundColor: '#e0e0e0',
+            backgroundColor: 'action.disabledBackground',
             '& .MuiLinearProgress-bar': {
               backgroundColor: color,
               borderRadius: 4,
@@ -201,17 +201,17 @@ export default function DataQualityCard({ onOpenMetrics }) {
           <MetricRow
             label="Completeness"
             value={metrics.completeness_pct}
-            color="#4caf50"
+            color="success.main"
           />
           <MetricRow
             label="Uniqueness"
             value={metrics.uniqueness_pct}
-            color="#2196f3"
+            color="info.main"
           />
           <MetricRow
             label="Compliance"
             value={metrics.compliance_pct}
-            color="#9c27b0"
+            color="secondary.main"
           />
         </Box>
       </CardContent>

@@ -25,7 +25,8 @@ export default function Sidebar({ collapsed = false }) {
         sx={{
           px: collapsed ? 1 : 2,
           py: 1.25,
-          borderBottom: "1px solid #e5e7eb",
+          borderBottom: '1px solid',
+          borderColor: 'divider',
           minHeight: 42,
           display: "flex",
           alignItems: "center",
@@ -39,8 +40,8 @@ export default function Sidebar({ collapsed = false }) {
                 width: 32,
                 height: 32,
                 borderRadius: 1,
-                bgcolor: "#16a34a",
-                color: "#fff",
+                bgcolor: 'success.main',
+                color: 'common.white',
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -58,8 +59,8 @@ export default function Sidebar({ collapsed = false }) {
                 width: 32,
                 height: 32,
                 borderRadius: 1,
-                bgcolor: "#16a34a",
-                color: "#fff",
+                bgcolor: 'success.main',
+                color: 'common.white',
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -74,12 +75,12 @@ export default function Sidebar({ collapsed = false }) {
               <Typography
                 fontSize="0.6875rem"
                 fontWeight={600}
-                color="#111827"
+                color="text.primary"
                 noWrap
               >
                 {project.name}
               </Typography>
-              <Typography fontSize="0.5625rem" color="#6b7280" noWrap>
+              <Typography fontSize="0.5625rem" color="text.secondary" noWrap>
                 {subtitle}
               </Typography>
             </Box>

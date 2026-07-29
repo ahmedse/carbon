@@ -6,10 +6,16 @@ from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
 from rest_framework.permissions import AllowAny
+from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from accounts.views import ThrottledTokenObtainPairView
+from emissions.views import SBTiTargetViewSet
+
+# SBTi targets router
+targets_router = DefaultRouter()
+targets_router.register(r'targets', SBTiTargetViewSet, basename='targets')
 
 # API prefix, e.g. '/api/v1/' or '/carbon/api/'
 api_prefix = getattr(settings, "API_PREFIX", "/api/v1/").strip("/")
@@ -65,6 +71,9 @@ urlpatterns = [
     path(f'{api_prefix}/dq/', include('dq.urls')),
     path(f'{api_prefix}/', include('evidence.urls')),
     path(f'{api_prefix}/swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+
+    # SBTi target endpoints
+    path(f'{api_prefix}/emissions/', include(targets_router.urls)),
 ]
 
 if settings.DEBUG:

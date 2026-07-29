@@ -32,17 +32,17 @@ import { useAuth } from "../auth/AuthContext";
 const SCOPE_META = {
   1: {
     label: "Scope 1",
-    icon: <Scope1Icon sx={{ color: "#10b981" }} />,
+    icon: <Scope1Icon sx={{ color: "success.main" }} />,
     desc: "Direct emissions",
   },
   2: {
     label: "Scope 2",
-    icon: <Scope2Icon sx={{ color: "#3b82f6" }} />,
+    icon: <Scope2Icon sx={{ color: "primary.main" }} />,
     desc: "Indirect energy",
   },
   3: {
     label: "Scope 3",
-    icon: <Scope3Icon sx={{ color: "#f97316" }} />,
+    icon: <Scope3Icon sx={{ color: "warning.main" }} />,
     desc: "Value chain emissions",
   },
 };
@@ -64,9 +64,9 @@ function MenuItem({
           mx: 0.5,
           borderRadius: 1,
           justifyContent: collapsed ? "center" : "flex-start",
-          color: selected ? "#16a34a" : "#374151",
-          bgcolor: selected ? "#f0fdf4" : "transparent",
-          "&:hover": { bgcolor: "#f3f4f6" },
+          color: selected ? "success.main" : "text.secondary",
+          bgcolor: selected ? "success.light" : "transparent",
+          "&:hover": { bgcolor: "action.hover" },
           ...sx,
         }}
         {...props}
@@ -76,7 +76,7 @@ function MenuItem({
             minWidth: 0,
             mr: collapsed ? 0 : 1.5,
             justifyContent: "center",
-            color: selected ? "#16a34a" : "#6b7280",
+            color: selected ? "success.main" : "text.secondary",
           }}
         >
           {icon}
@@ -89,11 +89,11 @@ function MenuItem({
               fontWeight: selected ? 600 : 500,
               fontSize: "0.6875rem",
               noWrap: true,
-              color: selected ? "#16a34a" : "#374151",
+              color: selected ? "success.main" : "text.secondary",
             }}
             secondaryTypographyProps={{
               fontSize: "0.5625rem",
-              color: "#9ca3af",
+              color: "text.secondary",
             }}
           />
         )}
@@ -164,8 +164,8 @@ function DataEntrySidebar({ collapsed, location, navigate, modules, tablesByModu
                 mt: 0.5,
                 borderRadius: 1,
                 justifyContent: open ? "flex-start" : "center",
-                bgcolor: openScopeMenus[scope] ? "#f9fafb" : "transparent",
-                "&:hover": { bgcolor: "#f3f4f6" },
+                bgcolor: openScopeMenus[scope] ? "background.default" : "transparent",
+                "&:hover": { bgcolor: "action.hover" },
               }}
             >
               <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
@@ -178,13 +178,13 @@ function DataEntrySidebar({ collapsed, location, navigate, modules, tablesByModu
                   <ListItemText
                     primary={SCOPE_META[scope].label}
                     secondary={SCOPE_META[scope].desc}
-                    primaryTypographyProps={{ fontWeight: 600, fontSize: "0.75rem", color: "#111827" }}
-                    secondaryTypographyProps={{ fontSize: "0.625rem", color: "#9ca3af" }}
+                    primaryTypographyProps={{ fontWeight: 600, fontSize: "0.75rem", color: "text.primary" }}
+                    secondaryTypographyProps={{ fontSize: "0.625rem", color: "text.secondary" }}
                   />
                   {openScopeMenus[scope] ? (
-                    <ExpandLess sx={{ fontSize: 14, color: "#9ca3af" }} />
+                    <ExpandLess sx={{ fontSize: 14, color: "text.secondary" }} />
                   ) : (
-                    <ExpandMore sx={{ fontSize: 14, color: "#9ca3af" }} />
+                    <ExpandMore sx={{ fontSize: 14, color: "text.secondary" }} />
                   )}
                 </>
               )}
@@ -214,12 +214,12 @@ function DataEntrySidebar({ collapsed, location, navigate, modules, tablesByModu
                           pr: 1.5,
                           mx: 0.5,
                           borderRadius: 1,
-                          color: isActiveModule ? "#16a34a" : "#4b5563",
-                          bgcolor: isActiveModule ? "#f0fdf4" : "transparent",
-                          "&:hover": { bgcolor: "#f3f4f6" },
+                          color: isActiveModule ? "success.main" : "text.secondary",
+                          bgcolor: isActiveModule ? "success.light" : "transparent",
+                          "&:hover": { bgcolor: "action.hover" },
                         }}
                       >
-                        <ListItemIcon sx={{ minWidth: 0, mr: 1.5, color: isActiveModule ? "#16a34a" : "#9ca3af" }}>
+                        <ListItemIcon sx={{ minWidth: 0, mr: 1.5, color: isActiveModule ? "success.main" : "text.secondary" }}>
                           <TableIcon sx={{ fontSize: 16 }} />
                         </ListItemIcon>
                         {open && (
@@ -228,7 +228,7 @@ function DataEntrySidebar({ collapsed, location, navigate, modules, tablesByModu
                             primaryTypographyProps={{
                               fontWeight: isActiveModule ? 600 : 500,
                               fontSize: "0.75rem",
-                              color: isActiveModule ? "#16a34a" : "#374151",
+                              color: isActiveModule ? "success.main" : "text.secondary",
                             }}
                           />
                         )}
@@ -280,23 +280,23 @@ function AdminSidebar({ collapsed, location }) {
           mx: 0.5,
           borderRadius: 1,
           justifyContent: open ? "flex-start" : "center",
-          color: location.pathname.startsWith("/admin/org") ? "#0ea5e9" : "#374151",
-          bgcolor: location.pathname.startsWith("/admin/org") ? "#f0f9ff" : "transparent",
-          "&:hover": { bgcolor: "#f3f4f6" },
+          color: location.pathname.startsWith("/admin/org") ? "info.main" : "text.secondary",
+          bgcolor: location.pathname.startsWith("/admin/org") ? "info.light" : "transparent",
+          "&:hover": { bgcolor: "action.hover" },
         }}
       >
         <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
           <Tooltip title="Organization" placement="right" arrow disableHoverListener={open}>
-            <OrgIcon sx={{ fontSize: 18, color: location.pathname.startsWith("/admin/org") ? "#0ea5e9" : "#6b7280" }} />
+            <OrgIcon sx={{ fontSize: 18, color: location.pathname.startsWith("/admin/org") ? "info.main" : "text.secondary" }} />
           </Tooltip>
         </ListItemIcon>
         {open && (
           <>
             <ListItemText primary="Organization" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.75rem" }} />
             {openMenus.org ? (
-              <ExpandLess sx={{ fontSize: 14, color: "#9ca3af" }} />
+              <ExpandLess sx={{ fontSize: 14, color: "text.secondary" }} />
             ) : (
-              <ExpandMore sx={{ fontSize: 14, color: "#9ca3af" }} />
+              <ExpandMore sx={{ fontSize: 14, color: "text.secondary" }} />
             )}
           </>
         )}
@@ -342,23 +342,23 @@ function AdminSidebar({ collapsed, location }) {
           mx: 0.5,
           borderRadius: 1,
           justifyContent: open ? "flex-start" : "center",
-          color: location.pathname.startsWith("/schema-admin") ? "#7c3aed" : "#374151",
-          bgcolor: location.pathname.startsWith("/schema-admin") ? "#f5f3ff" : "transparent",
-          "&:hover": { bgcolor: "#f3f4f6" },
+          color: location.pathname.startsWith("/schema-admin") ? "secondary.main" : "text.secondary",
+          bgcolor: location.pathname.startsWith("/schema-admin") ? "secondary.light" : "transparent",
+          "&:hover": { bgcolor: "action.hover" },
         }}
       >
         <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
           <Tooltip title="Schema" placement="right" arrow disableHoverListener={open}>
-            <SchemaAdminIcon sx={{ fontSize: 18, color: location.pathname.startsWith("/schema-admin") ? "#7c3aed" : "#6b7280" }} />
+            <SchemaAdminIcon sx={{ fontSize: 18, color: location.pathname.startsWith("/schema-admin") ? "secondary.main" : "text.secondary" }} />
           </Tooltip>
         </ListItemIcon>
         {open && (
           <>
             <ListItemText primary="Schema Management" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.75rem" }} />
             {openMenus.schema ? (
-              <ExpandLess sx={{ fontSize: 14, color: "#9ca3af" }} />
+              <ExpandLess sx={{ fontSize: 14, color: "text.secondary" }} />
             ) : (
-              <ExpandMore sx={{ fontSize: 14, color: "#9ca3af" }} />
+              <ExpandMore sx={{ fontSize: 14, color: "text.secondary" }} />
             )}
           </>
         )}
@@ -388,23 +388,23 @@ function AdminSidebar({ collapsed, location }) {
           mx: 0.5,
           borderRadius: 1,
           justifyContent: open ? "flex-start" : "center",
-          color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#16a34a" : "#374151",
-          bgcolor: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#f0fdf4" : "transparent",
-          "&:hover": { bgcolor: "#f3f4f6" },
+          color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "success.main" : "text.secondary",
+          bgcolor: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "success.light" : "transparent",
+          "&:hover": { bgcolor: "action.hover" },
         }}
       >
         <ListItemIcon sx={{ minWidth: 0, mr: open ? 1.5 : 0, justifyContent: "center" }}>
           <Tooltip title="Dashboards" placement="right" arrow disableHoverListener={open}>
-            <DashboardIcon sx={{ fontSize: 18, color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "#16a34a" : "#6b7280" }} />
+            <DashboardIcon sx={{ fontSize: 18, color: location.pathname.startsWith("/dashboard") || location.pathname === "/" ? "success.main" : "text.secondary" }} />
           </Tooltip>
         </ListItemIcon>
         {open && (
           <>
             <ListItemText primary="Dashboards" primaryTypographyProps={{ fontWeight: 600, fontSize: "0.75rem" }} />
             {openMenus.dashboards ? (
-              <ExpandLess sx={{ fontSize: 14, color: "#9ca3af" }} />
+              <ExpandLess sx={{ fontSize: 14, color: "text.secondary" }} />
             ) : (
-              <ExpandMore sx={{ fontSize: 14, color: "#9ca3af" }} />
+              <ExpandMore sx={{ fontSize: 14, color: "text.secondary" }} />
             )}
           </>
         )}
@@ -581,7 +581,7 @@ function DataOwnerSidebar({ collapsed, location }) {
         sx={{
           fontWeight: 700,
           fontSize: "0.625rem",
-          color: "#9ca3af",
+          color: "text.secondary",
           textTransform: "uppercase",
           letterSpacing: "0.05em",
           px: 1.5,

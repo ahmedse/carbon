@@ -156,7 +156,7 @@ export default function DataHubHome() {
                 const tableCount = (tablesByModule?.[String(module.id)] || []).length;
 
                 return (
-                  <Grid item xs={12} sm={6} md={4} key={module.id}>
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }} key={module.id}>
                     <Card
                       variant="outlined"
                       sx={{

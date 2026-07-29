@@ -12,15 +12,15 @@ export default function MetricCard({
   changeColor = "success",
   icon,
   barValue,
-  barColor = "#43a047",
+  barColor = "#43a047", // prop default
   context,
   onClick,
 }) {
   const changeTextColor = {
-    success: "#16a34a",
-    error: "#dc2626",
-    warning: "#f59e0b",
-  }[changeColor] || "#6b7280";
+    success: "#16a34a", // change indicator
+    error: "#dc2626", // change indicator
+    warning: "#f59e0b", // change indicator
+  }[changeColor] || 'text.secondary';
 
   return (
     <Paper
@@ -28,7 +28,8 @@ export default function MetricCard({
       sx={{
         p: 2.5,
         borderRadius: 3,
-        border: "1px solid #e5e7eb",
+        border: '1px solid',
+        borderColor: 'divider',
         cursor: onClick ? "pointer" : "default",
         transition: "all 0.2s",
         "&:hover": onClick ? {
@@ -40,10 +41,10 @@ export default function MetricCard({
       {/* Header with icon and title */}
       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 2 }}>
         <Box>
-          <Typography fontSize="0.75rem" color="#6b7280" fontWeight={500} sx={{ mb: 0.5 }}>
+          <Typography fontSize="0.75rem" color="text.secondary" fontWeight={500} sx={{ mb: 0.5 }}>
             {title}
           </Typography>
-          <Typography fontSize="1.75rem" fontWeight={700} color="#111827" sx={{ lineHeight: 1 }}>
+          <Typography fontSize="1.75rem" fontWeight={700} color="text.primary" sx={{ lineHeight: 1 }}>
             {value}
           </Typography>
         </Box>
@@ -65,7 +66,7 @@ export default function MetricCard({
 
       {/* Target and change */}
       {target && (
-        <Typography fontSize="0.6875rem" color="#6b7280" sx={{ mb: 1 }}>
+        <Typography fontSize="0.6875rem" color="text.secondary" sx={{ mb: 1 }}>
           {target}
         </Typography>
       )}
@@ -79,7 +80,7 @@ export default function MetricCard({
           >
             {change}
           </Typography>
-          <Typography fontSize="0.6875rem" color="#6b7280">
+          <Typography fontSize="0.6875rem" color="text.secondary">
             vs last period
           </Typography>
         </Box>
@@ -94,7 +95,7 @@ export default function MetricCard({
             sx={{
               height: 6,
               borderRadius: 3,
-              bgcolor: "#f3f4f6",
+              bgcolor: 'action.disabledBackground',
               "& .MuiLinearProgress-bar": {
                 bgcolor: barColor,
                 borderRadius: 3,
@@ -102,7 +103,7 @@ export default function MetricCard({
             }}
           />
           {context && (
-            <Typography fontSize="0.6875rem" color="#6b7280" sx={{ mt: 0.75 }}>
+            <Typography fontSize="0.6875rem" color="text.secondary" sx={{ mt: 0.75 }}>
               {context}
             </Typography>
           )}

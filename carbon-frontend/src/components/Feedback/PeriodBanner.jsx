@@ -4,9 +4,9 @@ import { Box, Paper, Typography, Chip, Button } from '@mui/material';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 
 function PeriodBanner({ name, startDate, endDate, status, daysRemaining, onAction }) {
-  const statusBg = status === 'open' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 
-                   status === 'closing' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 
-                   'linear-gradient(135deg, #64748b 0%, #475569 100%)';
+  const statusBg = status === 'open' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : // gradient
+                   status === 'closing' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : // gradient
+                   'linear-gradient(135deg, #64748b 0%, #475569 100%)'; // gradient
 
   return (
     <Paper 
@@ -36,10 +36,10 @@ function PeriodBanner({ name, startDate, endDate, status, daysRemaining, onActio
           justifyContent: 'center',
           backdropFilter: 'blur(10px)'
         }}>
-          <CalendarMonthIcon sx={{ fontSize: 16, color: '#fff' }} />
+          <CalendarMonthIcon sx={{ fontSize: 16, color: 'common.white' }} />
         </Box>
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#fff' }}>{name}</Typography>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'common.white' }}>{name}</Typography>
           <Typography sx={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.85)' }}>
             {startDate} — {endDate}
           </Typography>
@@ -57,7 +57,7 @@ function PeriodBanner({ name, startDate, endDate, status, daysRemaining, onActio
           onClick={onAction}
           sx={{
             bgcolor: 'rgba(255,255,255,0.25)',
-            color: '#fff',
+            color: 'common.white',
             backdropFilter: 'blur(10px)',
             fontWeight: 600,
             fontSize: '0.7rem',

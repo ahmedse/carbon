@@ -337,7 +337,7 @@ export default function EmissionsReport({ projectId }) {
       {/* Executive Summary */}
       <ReportSection title="Executive Summary" icon={<Description sx={{ color: "#10b981", fontSize: 28 }} />}>
         <Grid container spacing={4}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Box sx={{ mb: 3 }}>
               <Typography variant="h6" sx={{ fontWeight: 600, color: "#374151", mb: 2 }}>
                 Total GHG Emissions
@@ -355,7 +355,7 @@ export default function EmissionsReport({ projectId }) {
               Scope 1 (direct), Scope 2 (indirect from energy), and Scope 3 (value chain) emissions.
             </Typography>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             {scopePieData && (
               <Box sx={{ height: 280 }}>
                 <Doughnut
@@ -386,7 +386,7 @@ export default function EmissionsReport({ projectId }) {
       <ReportSection title="Emissions by Scope" icon={<Factory sx={{ color: "#3b82f6", fontSize: 28 }} />}>
         <Grid container spacing={3}>
           {report.scope_details?.map((scope) => (
-            <Grid item xs={12} md={4} key={scope.scope}>
+            <Grid size={{ xs: 12, md: 4 }} key={scope.scope}>
               <ScopeSummaryCard
                 scope={scope.scope}
                 name={scope.name}
@@ -546,7 +546,7 @@ export default function EmissionsReport({ projectId }) {
           Sustainable Development (WBCSD).
         </Typography>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#374151", mb: 1 }}>
               Organizational Boundary
             </Typography>
@@ -554,7 +554,7 @@ export default function EmissionsReport({ projectId }) {
               Operational control approach
             </Typography>
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#374151", mb: 1 }}>
               GWP Values
             </Typography>
@@ -562,7 +562,7 @@ export default function EmissionsReport({ projectId }) {
               IPCC AR6 100-year horizon
             </Typography>
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#374151", mb: 1 }}>
               Emission Factors
             </Typography>

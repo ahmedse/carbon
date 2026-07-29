@@ -108,12 +108,12 @@ export default function ModuleLandingPage() {
       />
       <Grid container spacing={2}>
         {tables.length === 0 && (
-          <Grid item xs={12}>
+          <Grid size={{ xs: 12 }}>
             <Typography>No tables found.</Typography>
           </Grid>
         )}
         {tables.map(table => (
-          <Grid item xs={12} sm={6} md={4} key={table.id}>
+          <Grid size={{ xs: 12, sm: 6, md: 4 }} key={table.id}>
             <Card
               variant="outlined"
               sx={{

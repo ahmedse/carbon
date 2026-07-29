@@ -64,7 +64,7 @@ export default function FilteredDataGrid({
           {filterDefs.length > 0 && (
             <Grid container spacing={2}>
               {filterDefs.map((def) => (
-                <Grid item xs={12} sm={6} md={3} key={def.key}>
+                <Grid size={{ xs: 12, sm: 6, md: 3 }} key={def.key}>
                   <FormControl fullWidth size="small">
                     <InputLabel>{def.label}</InputLabel>
                     <Select
