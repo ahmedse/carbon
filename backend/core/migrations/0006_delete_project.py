@@ -7,7 +7,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('accounts', '0006_remove_roleassignmentauditlog_project_and_more'),
-        ('ai_copilot', '0003_remove_conversationmessage_ai_copilot__project_27b666_idx_and_more'),
         ('core', '0005_alter_project_unique_together_alter_feedback_options_and_more'),
         ('emissions', '0004_remove_calculation_emissions_c_project_f4484e_idx_and_more'),
     ]

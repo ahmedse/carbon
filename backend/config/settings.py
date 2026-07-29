@@ -63,7 +63,6 @@ INSTALLED_APPS = [
     'dq',
     'connections',
     'importexport',
-    'ai_copilot',
     'evidence',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',

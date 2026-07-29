@@ -12,12 +12,11 @@ import { ActivityBar } from './ActivityBar';
 import { ShellSidebar } from './ShellSidebar';
 import { EditorArea } from './EditorArea';
 import { StatusBar } from './StatusBar';
-import HeaderNew from '../components/HeaderNew';
+import HeaderEnhanced from '../components/HeaderEnhanced';
 import ErrorBoundary from './ErrorBoundary';
 import { LoadingSpinner, DialogLoadingSkeleton } from './LoadingFallback';
 
 // Lazy load heavy components for code splitting
-const CopilotPane = lazy(() => import('./CopilotPane'));
 const CommandPalette = lazy(() => import('./CommandPalette'));
 
 // Default path per studio
@@ -136,7 +135,7 @@ export function Shell() {
       aria-label="Carbon Data Platform"
     >
       {/* Header */}
-      <HeaderNew />
+      <HeaderEnhanced />
 
       {/* Main Content Area */}
       <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -276,12 +275,14 @@ export function Shell() {
               <EditorArea />
             </Allotment.Pane>
 
-            {/* Right Copilot Pane */}
+            {/* Right Copilot Pane — superseded by external Pulse */}
             {copilotVisible && (
               <Allotment.Pane minSize={300} preferredSize={copilotPaneSize} maxSize={600}>
                 <ErrorBoundary>
                   <Suspense fallback={<LoadingSpinner />}>
-                    <CopilotPane onClose={toggleCopilot} />
+                    <Box sx={{ p: 3, textAlign: 'center', color: 'text.secondary' }}>
+                      Pulse AI is now external. See STRATEGY_DATA_TRUST_PLATFORM.md
+                    </Box>
                   </Suspense>
                 </ErrorBoundary>
               </Allotment.Pane>

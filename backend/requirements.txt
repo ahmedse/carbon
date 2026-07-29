@@ -47,18 +47,8 @@ pytest-asyncio
 pytest-cov
 factory-boy
 
-# AI Copilot Dependencies
-fastapi-poe==0.0.36              # POE API client
-chromadb==0.4.22                 # Vector database
-redis==5.0.1                     # Memory cache
-langchain==0.1.20                # LLM orchestration
-langchain-community==0.0.38      # LangChain community integrations
-sentence-transformers==2.5.1     # Embeddings
-tiktoken==0.6.0                  # Token counting
-openai==1.12.0                   # OpenAI compatibility
+# HTTP Client
+requests==2.32.3                        # HTTP requests (pulse_auth, external APIs)
 
-# Knowledge Ingestion Pipeline
-pypdf>=4.0.0                     # PDF document loading
-beautifulsoup4>=4.12.0           # HTML parsing
-markdown>=3.5.0                  # Markdown processing
-lxml>=5.0.0                      # XML/HTML parsing (optional)
+# Cache
+redis==5.0.1                     # Memory cache / message broker

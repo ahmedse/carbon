@@ -10,6 +10,7 @@ __pycache__/
 venv/
 env/
 .venv/
+backend/venv/
 
 # Django-specific files
 *.pot
@@ -129,3 +130,19 @@ backend/dump.rdb
 backend/chroma_db/
 backend/dataschema_uploads/*
 !backend/dataschema_uploads/.gitkeep
+backend/mediafiles/
+
+# Backend runtime
+backend/logs/
+backend/.coverage
+backend/.pytest_cache/
+
+# Project runtime
+.pids/
+logs/
+
+# Superseded tool configs
+.clinerules/
+
+# Indexing output
+indexed_src/
