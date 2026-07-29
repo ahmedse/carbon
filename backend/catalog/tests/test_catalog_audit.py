@@ -49,17 +49,14 @@ class CatalogAuditTests(APITestCase):
         self.assertEqual(GovernanceEvent.objects.filter(entity_type='AssetProfile', entity_id=asset.id).count(), 0)
 
     def test_glossary_delete_emits_delete_event(self):
+        """Test that DELETE is not allowed (hard delete disabled)."""
         term = GlossaryTerm.objects.create(term='Governance', definition='Policy definition')
         self.client.force_authenticate(user=self.admin)
 
         response = self.client.delete(f'/{self._api_prefix()}/catalog/glossary/{term.id}/')
 
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        event = GovernanceEvent.objects.filter(entity_type='GlossaryTerm', entity_id=term.id, action='delete').latest('timestamp')
-        self.assertEqual(event.user, self.admin)
-        self.assertEqual(event.action, 'delete')
-        self.assertEqual(event.before['term'], 'Governance')
-        self.assertEqual(event.after['deleted'], True)
+        # DELETE is explicitly disabled in favor of soft delete via PATCH
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
     def test_compliance_summary_endpoint_returns_recent_activity(self):
         asset = AssetProfile.objects.create(owner=self.admin, steward=self.admin, classification='internal')

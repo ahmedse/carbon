@@ -15,7 +15,7 @@ from core.models import Module
 
 class BatchCalculateAPITests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='batch', password='pass')
+        self.user = User.objects.create_superuser(username='batch', password='pass')
         self.org_unit = OrgUnit.objects.create(name='BatchOrg', slug='batch-org')
         self.module = Module.objects.create(name='BatchMod', scope=2, org_unit=self.org_unit)
         self.table = DataTable.objects.create(module=self.module, name='batch_table')

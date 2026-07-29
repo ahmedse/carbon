@@ -37,6 +37,19 @@ class ModuleViewSet(viewsets.ModelViewSet):
         """
         instance = self.get_object()
 
+        # Governance policy enforcement
+        from catalog.policy_engine import check_policy
+        allowed, blocked_by = check_policy('module_delete', org_unit_id=instance.org_unit_id, module=instance)
+        if not allowed:
+            raise AppFeedback(
+                code="policy_blocked",
+                title="Action blocked by governance policy",
+                detail=f"Delete is blocked by: {', '.join(blocked_by)}",
+                reasons=[f"Active policy '{name}' prevents this action." for name in blocked_by],
+                remediation=["Contact a platform administrator to review or disable the policy."],
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
         # Locked guard
         if getattr(instance, "is_locked", False) and not request.user.is_superuser:
             raise AppFeedback(

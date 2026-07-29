@@ -103,7 +103,7 @@ class OwnerApiEndpointsTest(TestCase):
     def test_carbon_namespace_alias_serves_owner_endpoints(self):
         self.client.force_authenticate(self.owner)
 
-        response = self.client.get('/api/v1/carbon/owner/summary/')
+        response = self.client.get('/carbon-api/carbon/owner/summary/')
 
         self.assertEqual(response.status_code, 200)
         data = response.json()

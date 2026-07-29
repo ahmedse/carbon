@@ -30,13 +30,13 @@ class OrgUnitCRUDTestCase(TestCase):
     def test_list_org_units_authenticated(self):
         """Authenticated user can list org units."""
         self.client.force_authenticate(self.admin_user)
-        response = self.client.get('/mdm/org-units/')
+        response = self.client.get('/carbon-api/mdm/org-units/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
 
     def test_list_org_units_unauthenticated(self):
         """Unauthenticated user gets 401."""
-        response = self.client.get('/mdm/org-units/')
+        response = self.client.get('/carbon-api/mdm/org-units/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_create_org_unit_admin(self):
@@ -49,7 +49,7 @@ class OrgUnitCRUDTestCase(TestCase):
             'parent': self.org_root.id,
             'description': 'Finance division'
         }
-        response = self.client.post('/mdm/org-units/', payload)
+        response = self.client.post('/carbon-api/mdm/org-units/', payload)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['name'], 'Finance')
         self.assertTrue(OrgUnit.objects.filter(name='Finance').exists())
@@ -57,7 +57,7 @@ class OrgUnitCRUDTestCase(TestCase):
     def test_retrieve_org_unit(self):
         """Can retrieve single org unit."""
         self.client.force_authenticate(self.admin_user)
-        response = self.client.get(f'/mdm/org-units/{self.org_root.id}/')
+        response = self.client.get(f'/carbon-api/mdm/org-units/{self.org_root.id}/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['id'], self.org_root.id)
         self.assertEqual(response.data['name'], 'Company')
@@ -66,7 +66,7 @@ class OrgUnitCRUDTestCase(TestCase):
         """Admin can update org unit."""
         self.client.force_authenticate(self.admin_user)
         payload = {'description': 'Updated company description'}
-        response = self.client.patch(f'/mdm/org-units/{self.org_root.id}/', payload)
+        response = self.client.patch(f'/carbon-api/mdm/org-units/{self.org_root.id}/', payload)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.org_root.refresh_from_db()
         self.assertEqual(self.org_root.description, 'Updated company description')
@@ -75,7 +75,7 @@ class OrgUnitCRUDTestCase(TestCase):
         """Can soft-delete org unit without children."""
         org = OrgUnit.objects.create(name='Temp', code='TMP', org_type='other')
         self.client.force_authenticate(self.admin_user)
-        response = self.client.delete(f'/mdm/org-units/{org.id}/')
+        response = self.client.delete(f'/carbon-api/mdm/org-units/{org.id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         org.refresh_from_db()
         self.assertFalse(org.is_active)
@@ -104,7 +104,7 @@ class OrgUnitHierarchyTestCase(TestCase):
     def test_tree_endpoint(self):
         """GET /org-units/{id}/tree/ returns subtree."""
         self.client.force_authenticate(self.admin_user)
-        response = self.client.get(f'/mdm/org-units/{self.org_root.id}/tree/')
+        response = self.client.get(f'/carbon-api/mdm/org-units/{self.org_root.id}/tree/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Should contain root, division, and dept
         self.assertEqual(len(response.data), 3)
@@ -116,7 +116,7 @@ class OrgUnitHierarchyTestCase(TestCase):
     def test_ancestors_endpoint(self):
         """GET /org-units/{id}/ancestors/ returns path to root."""
         self.client.force_authenticate(self.admin_user)
-        response = self.client.get(f'/mdm/org-units/{self.org_dept.id}/ancestors/')
+        response = self.client.get(f'/carbon-api/mdm/org-units/{self.org_dept.id}/ancestors/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Should return org_root and org_division (ancestors, not including self)
         self.assertEqual(len(response.data), 2)
@@ -127,7 +127,7 @@ class OrgUnitHierarchyTestCase(TestCase):
     def test_full_path_in_serializer(self):
         """Serializer includes full_path field."""
         self.client.force_authenticate(self.admin_user)
-        response = self.client.get(f'/mdm/org-units/{self.org_dept.id}/')
+        response = self.client.get(f'/carbon-api/mdm/org-units/{self.org_dept.id}/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # full_path should contain all names
         self.assertIn('Backend', response.data['full_path'])
@@ -137,7 +137,7 @@ class OrgUnitHierarchyTestCase(TestCase):
     def test_children_count(self):
         """Serializer includes children_count."""
         self.client.force_authenticate(self.admin_user)
-        response = self.client.get(f'/mdm/org-units/{self.org_root.id}/')
+        response = self.client.get(f'/carbon-api/mdm/org-units/{self.org_root.id}/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # org_root has 1 child (org_division)
         self.assertEqual(response.data['children_count'], 1)
@@ -145,7 +145,7 @@ class OrgUnitHierarchyTestCase(TestCase):
     def test_descendants_count(self):
         """Serializer includes descendants_count."""
         self.client.force_authenticate(self.admin_user)
-        response = self.client.get(f'/mdm/org-units/{self.org_root.id}/')
+        response = self.client.get(f'/carbon-api/mdm/org-units/{self.org_root.id}/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # org_root has 2 descendants (division and dept, not including self)
         self.assertEqual(response.data['descendants_count'], 2)
@@ -172,9 +172,9 @@ class OrgUnitValidationTestCase(TestCase):
         self.client.force_authenticate(self.admin_user)
         # Try to set org_root's parent to org_division (which is a descendant)
         payload = {'parent': self.org_division.id}
-        response = self.client.patch(f'/mdm/org-units/{self.org_root.id}/', payload)
-        # Should be 403 for this invalid operation
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        response = self.client.patch(f'/carbon-api/mdm/org-units/{self.org_root.id}/', payload)
+        # Should be 400 for validation error (circular reference)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_unique_name_within_parent(self):
         """Cannot create two children with same name under same parent."""
@@ -190,7 +190,7 @@ class OrgUnitValidationTestCase(TestCase):
             'org_type': 'division',
             'parent': self.org_root.id
         }
-        response = self.client.post('/mdm/org-units/', payload)
+        response = self.client.post('/carbon-api/mdm/org-units/', payload)
         # Should be 400 for validation error
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -200,7 +200,7 @@ class OrgUnitValidationTestCase(TestCase):
             name='ToDelete', code='DEL', org_type='other', is_active=True
         )
         self.client.force_authenticate(self.admin_user)
-        response = self.client.delete(f'/mdm/org-units/{org.id}/')
+        response = self.client.delete(f'/carbon-api/mdm/org-units/{org.id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         org.refresh_from_db()
         self.assertFalse(org.is_active)

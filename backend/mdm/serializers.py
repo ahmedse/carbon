@@ -13,7 +13,7 @@ class ReferenceValueSerializer(serializers.ModelSerializer):
             'is_active', 'sort_order', 'valid_from', 'valid_to', 'metadata',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'reference_set']
 
     def validate_code(self, value):
         """Ensure code is alphanumeric with underscores only."""

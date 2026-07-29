@@ -19,37 +19,37 @@ class SwaggerDocumentationTests(APITestCase):
         paths = schema.get('paths', {})
 
         # --- MDM reference-set custom actions ---
-        self.assertIn('/mdm/reference-sets/{id}/values/', paths)
-        self.assertIn('/mdm/reference-sets/{id}/transition/', paths)
-        self.assertIn('/mdm/reference-sets/archive-bulk/', paths)
+        self.assertIn('/carbon-api/mdm/reference-sets/{id}/values/', paths)
+        self.assertIn('/carbon-api/mdm/reference-sets/{id}/transition/', paths)
+        self.assertIn('/carbon-api/mdm/reference-sets/archive-bulk/', paths)
 
         # --- MDM org-unit hierarchy actions ---
-        self.assertIn('/mdm/org-units/{id}/tree/', paths)
-        self.assertIn('/mdm/org-units/{id}/ancestors/', paths)
+        self.assertIn('/carbon-api/mdm/org-units/{id}/tree/', paths)
+        self.assertIn('/carbon-api/mdm/org-units/{id}/ancestors/', paths)
 
         # --- MDM field binding ---
-        self.assertIn('/mdm/bind-field/', paths)
+        self.assertIn('/carbon-api/mdm/bind-field/', paths)
 
         # --- DQ custom actions ---
-        self.assertIn('/dq/rules/{id}/execute/', paths)
-        self.assertIn('/dq/rules/{id}/history/', paths)
-        self.assertIn('/dq/results/{id}/failures/', paths)
+        self.assertIn('/carbon-api/dq/rules/{id}/execute/', paths)
+        self.assertIn('/carbon-api/dq/rules/{id}/history/', paths)
+        self.assertIn('/carbon-api/dq/results/{id}/failures/', paths)
 
         # --- DQ profile / run endpoints ---
-        self.assertIn('/dq/profile/', paths)
-        self.assertIn('/dq/profile/bulk/', paths)
-        self.assertIn('/dq/run/', paths)
-        self.assertIn('/dq/run-validation/', paths)
+        self.assertIn('/carbon-api/dq/profile/', paths)
+        self.assertIn('/carbon-api/dq/profile/bulk/', paths)
+        self.assertIn('/carbon-api/dq/run/', paths)
+        self.assertIn('/carbon-api/dq/run-validation/', paths)
 
         # --- DQ metrics ---
-        self.assertIn('/dq/metrics/', paths)
-        self.assertIn('/dq/metrics/table/{table_id}/', paths)
-        self.assertIn('/dq/metrics/field/{field_id}/', paths)
+        self.assertIn('/carbon-api/dq/metrics/', paths)
+        self.assertIn('/carbon-api/dq/metrics/table/{table_id}/', paths)
+        self.assertIn('/carbon-api/dq/metrics/field/{field_id}/', paths)
 
         # --- Catalog bulk and governance ---
-        self.assertIn('/catalog/assets/archive-bulk/', paths)
-        self.assertIn('/catalog/governance/compliance/', paths)
-        self.assertIn('/catalog/governance-events/', paths)
+        self.assertIn('/carbon-api/catalog/assets/archive-bulk/', paths)
+        self.assertIn('/carbon-api/catalog/governance/compliance/', paths)
+        self.assertIn('/carbon-api/catalog/governance-events/', paths)
 
     def test_key_operations_have_descriptions(self):
         """Documented operations must carry non-empty descriptions."""
@@ -62,16 +62,16 @@ class SwaggerDocumentationTests(APITestCase):
         paths = schema.get('paths', {})
 
         check = [
-            ('/mdm/reference-sets/{id}/values/', 'get'),
-            ('/mdm/reference-sets/{id}/transition/', 'post'),
-            ('/mdm/reference-sets/archive-bulk/', 'post'),
-            ('/mdm/org-units/{id}/tree/', 'get'),
-            ('/mdm/org-units/{id}/ancestors/', 'get'),
-            ('/dq/rules/{id}/execute/', 'post'),
-            ('/dq/profile/', 'post'),
-            ('/dq/run/', 'post'),
-            ('/dq/metrics/', 'get'),
-            ('/catalog/assets/archive-bulk/', 'post'),
+            ('/carbon-api/mdm/reference-sets/{id}/values/', 'get'),
+            ('/carbon-api/mdm/reference-sets/{id}/transition/', 'post'),
+            ('/carbon-api/mdm/reference-sets/archive-bulk/', 'post'),
+            ('/carbon-api/mdm/org-units/{id}/tree/', 'get'),
+            ('/carbon-api/mdm/org-units/{id}/ancestors/', 'get'),
+            ('/carbon-api/dq/rules/{id}/execute/', 'post'),
+            ('/carbon-api/dq/profile/', 'post'),
+            ('/carbon-api/dq/run/', 'post'),
+            ('/carbon-api/dq/metrics/', 'get'),
+            ('/carbon-api/catalog/assets/archive-bulk/', 'post'),
         ]
         for path, method in check:
             with self.subTest(path=path, method=method):

@@ -158,6 +158,7 @@ class DQRuleViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
+        methods=['post'],
         operation_description='Execute a single data quality rule and return the resulting DQ result.',
         responses={201: 'DQ result created', 400: 'Invalid request', 404: 'Rule not found'},
     )
@@ -171,6 +172,7 @@ class DQRuleViewSet(viewsets.ModelViewSet):
         return Response(DQResultSerializer(result).data, status=status.HTTP_201_CREATED)
 
     @swagger_auto_schema(
+        methods=['get'],
         operation_description='Return the recent execution history for a data quality rule.',
         responses={200: 'Recent execution history', 404: 'Rule not found'},
     )
@@ -218,7 +220,7 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
         
         # Optimize with select_related to avoid N+1 queries
         qs = DQResult.objects.select_related(
-            'rule', 'data_table', 'created_by'
+            'rule__data_table', 'rule__created_by'
         )
         
         user = self.request.user
@@ -248,7 +250,7 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(passed=True)
             elif p['passed'].lower() == 'false':
                 qs = qs.filter(passed=False)
-        return qs.order_by('-executed_at').distinct()
+        return qs.order_by('-run_at').distinct()
 
     @swagger_auto_schema(
         operation_description='Return a paged list of DQ execution results for the current scope.',
@@ -263,6 +265,7 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(self.get_serializer(qs[:limit], many=True).data)
 
     @swagger_auto_schema(
+        methods=['get'],
         operation_description='Return a sample of failed rows and reasons for a DQ execution result.',
         responses={200: 'Sample failures', 404: 'Result not found'},
     )

@@ -1,8 +1,10 @@
 from django.test import TestCase, RequestFactory
 from core.middleware import RequestLoggingMiddleware
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 import logging
+
+User = get_user_model()
 
 class LoggingMiddlewareTest(TestCase):
     def setUp(self):
@@ -62,6 +64,7 @@ class LoggingMiddlewareTest(TestCase):
         """Verify slow requests are flagged in logs."""
         request = self.factory.get('/api/test/')
         request.user = self.user
+        self.middleware.process_request(request)  # Initialize correlation_id
         request.start_time = 0  # Simulate very old start time
         
         response = HttpResponse()

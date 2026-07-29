@@ -2,6 +2,8 @@
 # Serializers for Emission Factor Calculator API
 
 from rest_framework import serializers
+from django.utils import timezone
+from django.db.models import Sum
 from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, VerificationRecord, SBTiTarget, CalculationAudit
 
 
@@ -24,11 +26,15 @@ class ReportingPeriodSerializer(serializers.ModelSerializer):
 
 class VerificationRecordSerializer(serializers.ModelSerializer):
     verifier_name = serializers.CharField(source='verifier.username', read_only=True)
+    period_name = serializers.CharField(source='reporting_period.name', read_only=True)
+    period_status = serializers.CharField(source='reporting_period.status', read_only=True)
+    period_start_date = serializers.DateField(source='reporting_period.start_date', read_only=True)
+    period_end_date = serializers.DateField(source='reporting_period.end_date', read_only=True)
 
     class Meta:
         model = VerificationRecord
         fields = '__all__'
-        read_only_fields = ['created_at', 'verifier_name']
+        read_only_fields = ['created_at', 'verifier_name', 'period_name', 'period_status', 'period_start_date', 'period_end_date']
 
 
 class EmissionFactorSerializer(serializers.ModelSerializer):
@@ -77,12 +83,34 @@ class CalculationSerializer(serializers.ModelSerializer):
     module_name = serializers.CharField(source='module.name', read_only=True)
     scope_display = serializers.CharField(source='get_scope_display', read_only=True)
     reporting_period_name = serializers.CharField(source='reporting_period.name', read_only=True)
-    
+    factor_name = serializers.SerializerMethodField()
+    factor_code = serializers.SerializerMethodField()
+    data_row_label = serializers.SerializerMethodField()
+    data_table_name = serializers.SerializerMethodField()
+
+    def get_factor_name(self, obj):
+        return obj.emission_factor.name if obj.emission_factor else None
+
+    def get_factor_code(self, obj):
+        return obj.emission_factor.code if obj.emission_factor else None
+
+    def get_data_row_label(self, obj):
+        return f"Row #{obj.data_row_id}"
+
+    def get_data_table_name(self, obj):
+        if obj.emission_factor:
+            rule = obj.emission_factor.calculation_rules.first()
+            if rule and rule.data_table:
+                return rule.data_table.name or rule.data_table.title
+        return None
+
     class Meta:
         model = Calculation
         fields = [
             'id', 'data_row', 'module', 'module_name',
             'emission_factor', 'emission_factor_name', 'emission_factor_code',
+            'factor_name', 'factor_code',
+            'data_row_label', 'data_table_name',
             'activity_value', 'activity_unit', 
             'co2e_kg', 'co2_kg', 'ch4_kg', 'n2o_kg',
             'scope', 'scope_display', 'category',
@@ -99,7 +127,14 @@ class CalculationRuleSerializer(serializers.ModelSerializer):
     activity_field_name = serializers.CharField(source='activity_field.label', read_only=True)
     emission_factor_name = serializers.CharField(source='emission_factor.name', read_only=True)
     emission_factor_code = serializers.CharField(source='emission_factor.code', read_only=True)
-    
+    last_executed_at = serializers.SerializerMethodField()
+
+    def get_last_executed_at(self, obj):
+        latest_audit = obj.calculationaudit_set.order_by('-triggered_at').first()
+        if latest_audit:
+            return latest_audit.triggered_at
+        return None
+
     class Meta:
         model = CalculationRule
         fields = [
@@ -111,6 +146,7 @@ class CalculationRuleSerializer(serializers.ModelSerializer):
             'factor_selector_field', 'factor_selector_mapping',
             'rule_type', 'unit_conversion_factor', 'custom_formula',
             'is_active', 'auto_calculate',
+            'last_executed_at',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
@@ -249,11 +285,30 @@ class RecentActivityConsoleSerializer(serializers.Serializer):
 
 class SBTiTargetSerializer(serializers.ModelSerializer):
     org_unit_name = serializers.CharField(source='org_unit.name', read_only=True)
+    progress = serializers.SerializerMethodField()
+
+    def get_progress(self, obj):
+        """Return current-year emissions for this target's scope + org_unit."""
+        from decimal import Decimal
+
+        scopes = obj.scope.replace('+', ',').split(',')
+        year = timezone.now().year
+
+        actual = Calculation.objects.filter(
+            module__org_unit_id=obj.org_unit_id,
+            reporting_year=year,
+            scope__in=scopes,
+        ).aggregate(total=Sum('co2e_kg'))['total'] or Decimal('0')
+
+        return {
+            'current_year': year,
+            'current_emissions_tco2e': float(actual),
+        }
 
     class Meta:
         model = SBTiTarget
         fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at', 'org_unit_name']
+        read_only_fields = ['created_at', 'updated_at', 'org_unit_name', 'progress']
 
 
 class CalculationAuditSerializer(serializers.ModelSerializer):

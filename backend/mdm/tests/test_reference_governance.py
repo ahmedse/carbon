@@ -23,8 +23,8 @@ class ReferenceGovernanceTests(APITestCase):
         self.admin.is_staff = True
         self.admin.save()
 
-        self.org_unit = OrgUnit.objects.create(name='Engineering', code='ENG', org_type='college')
-        self.domain = DataDomain.objects.create(name='Engineering Domain', id=self.org_unit.id)
+        self.org_unit = OrgUnit.objects.create(name='Engineering', code='ENG', org_type='college', slug='engineering-gov')
+        self.domain = DataDomain.objects.create(name='Engineering Domain Gov', slug='engineering-domain-gov', id=self.org_unit.id)
         self.group = Group.objects.create(name='admins_group')
         ScopedRole.objects.create(user=self.user1, group=self.group, org_unit=self.org_unit, is_active=True)
 

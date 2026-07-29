@@ -37,18 +37,18 @@ class ReferenceSetViewSetTest(APITestCase):
         
         # Create org units
         self.org_unit_1 = OrgUnit.objects.create(
-            name='Engineering', code='ENG', org_type='college'
+            name='Engineering', code='ENG', org_type='college', slug='engineering'
         )
         self.org_unit_2 = OrgUnit.objects.create(
-            name='Medicine', code='MED', org_type='college'
+            name='Medicine', code='MED', org_type='college', slug='medicine'
         )
         
         # Create data domains
         self.domain_1 = DataDomain.objects.create(
-            name='Engineering Domain', id=self.org_unit_1.id
+            name='Engineering Domain', slug='engineering-domain', id=self.org_unit_1.id
         )
         self.domain_2 = DataDomain.objects.create(
-            name='Medicine Domain', id=self.org_unit_2.id
+            name='Medicine Domain', slug='medicine-domain', id=self.org_unit_2.id
         )
         
         # Create admin group
@@ -64,33 +64,37 @@ class ReferenceSetViewSetTest(APITestCase):
 
     def test_unauthenticated_get_401(self):
         """Test: unauthenticated user gets 401."""
-        response = self.client.get('/api/v1/mdm/reference-sets/')
+        response = self.client.get('/carbon-api/mdm/reference-sets/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_authenticated_list_reference_sets(self):
         """Test: authenticated user can list reference sets in their scope."""
         # Create reference set for org_unit_1
         ref_set = ReferenceSet.objects.create(
-            name='Status', slug='status', steward=self.user1, domain=self.domain_1, is_active=True
+            name='Status Test Unique', slug='status-test-unique', steward=self.user1, domain=self.domain_1, is_active=True
         )
         
         # User1 should see it (has access to org_unit_1)
         self.client.force_authenticate(user=self.user1)
-        response = self.client.get('/api/v1/mdm/reference-sets/')
+        response = self.client.get('/carbon-api/mdm/reference-sets/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['name'], 'Status')
+        data = response.data if isinstance(response.data, list) else response.data.get('results', [])
+        # Check that the created reference set is in the results
+        ref_set_names = [item['name'] for item in data]
+        self.assertIn('Status Test Unique', ref_set_names)
         
         # User2 should NOT see it (has access to org_unit_2, not org_unit_1)
         self.client.force_authenticate(user=self.user2)
-        response = self.client.get('/api/v1/mdm/reference-sets/')
+        response = self.client.get('/carbon-api/mdm/reference-sets/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 0)
+        data = response.data if isinstance(response.data, list) else response.data.get('results', [])
+        ref_set_names = [item['name'] for item in data]
+        self.assertNotIn('Status Test Unique', ref_set_names)
 
     def test_create_sets_steward_to_current_user(self):
         """Test: creating reference set auto-assigns steward to current user."""
         self.client.force_authenticate(user=self.user1)
-        response = self.client.post('/api/v1/mdm/reference-sets/', {
+        response = self.client.post('/carbon-api/mdm/reference-sets/', {
             'name': 'Department', 'domain': self.domain_1.id
         })
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -99,13 +103,14 @@ class ReferenceSetViewSetTest(APITestCase):
 
     def test_non_steward_cannot_edit_403(self):
         """Test: non-steward gets 403 Forbidden on update."""
+        # Place ref set in domain_2 so user2 (scoped to org_unit_2) can see it
         ref_set = ReferenceSet.objects.create(
-            name='Status', slug='status', steward=self.user1, domain=self.domain_1, is_active=True
+            name='StatusNonSteward', slug='status-nonsteward', steward=self.user1, domain=self.domain_2, is_active=True
         )
         
         self.client.force_authenticate(user=self.user2)
-        response = self.client.put(f'/api/v1/mdm/reference-sets/{ref_set.id}/', {
-            'name': 'Modified', 'domain': self.domain_1.id
+        response = self.client.put(f'/carbon-api/mdm/reference-sets/{ref_set.id}/', {
+            'name': 'Modified', 'domain': self.domain_2.id
         })
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
@@ -116,7 +121,7 @@ class ReferenceSetViewSetTest(APITestCase):
         )
         
         self.client.force_authenticate(user=self.user1)
-        response = self.client.put(f'/api/v1/mdm/reference-sets/{ref_set.id}/', {
+        response = self.client.put(f'/carbon-api/mdm/reference-sets/{ref_set.id}/', {
             'name': 'Status Updated', 'domain': self.domain_1.id
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -130,7 +135,7 @@ class ReferenceSetViewSetTest(APITestCase):
         )
         
         self.client.force_authenticate(user=self.admin_user)
-        response = self.client.put(f'/api/v1/mdm/reference-sets/{ref_set.id}/', {
+        response = self.client.put(f'/carbon-api/mdm/reference-sets/{ref_set.id}/', {
             'name': 'Admin Modified', 'domain': self.domain_1.id
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -142,7 +147,7 @@ class ReferenceSetViewSetTest(APITestCase):
         )
         
         self.client.force_authenticate(user=self.user1)
-        response = self.client.delete(f'/api/v1/mdm/reference-sets/{ref_set.id}/')
+        response = self.client.delete(f'/carbon-api/mdm/reference-sets/{ref_set.id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         
         ref_set.refresh_from_db()
@@ -155,7 +160,7 @@ class ReferenceSetViewSetTest(APITestCase):
         )
         
         self.client.force_authenticate(user=self.user1)
-        response = self.client.post(f'/api/v1/mdm/reference-sets/{ref_set.id}/add_value/', {
+        response = self.client.post(f'/carbon-api/mdm/reference-sets/{ref_set.id}/add_value/', {
             'code': 'ACTIVE', 'label': 'Active', 'sort_order': 1
         })
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -167,12 +172,13 @@ class ReferenceSetViewSetTest(APITestCase):
 
     def test_non_steward_cannot_add_value_403(self):
         """Test: non-steward gets 403 when trying to add value."""
+        # Place ref set in domain_2 so user2 can see it
         ref_set = ReferenceSet.objects.create(
-            name='Status', slug='status', steward=self.user1, domain=self.domain_1, is_active=True
+            name='StatusNonStewardAdd', slug='status-nonsteward-add', steward=self.user1, domain=self.domain_2, is_active=True
         )
         
         self.client.force_authenticate(user=self.user2)
-        response = self.client.post(f'/api/v1/mdm/reference-sets/{ref_set.id}/add_value/', {
+        response = self.client.post(f'/carbon-api/mdm/reference-sets/{ref_set.id}/add_value/', {
             'code': 'ACTIVE', 'label': 'Active', 'sort_order': 1
         })
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

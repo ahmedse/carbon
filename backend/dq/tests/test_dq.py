@@ -6,7 +6,8 @@ from rest_framework import status
 
 from accounts.models import ScopedRole
 from dq.models import DQRule, DQResult
-from dataschema.models import DataTable, DataField, DataModule
+from dataschema.models import DataTable, DataField
+from core.models import Module
 from mdm.models import OrgUnit
 
 
@@ -27,15 +28,15 @@ class DQRuleCRUDTestCase(TestCase):
         self.org_unit = OrgUnit.objects.create(
             name='Data Org', slug='data-org', code='DAO', org_type='division'
         )
-        self.data_module = DataModule.objects.create(
-            name='Sales', slug='sales', org_unit=self.org_unit
+        self.data_module, _ = Module.objects.get_or_create(
+            name='Sales', defaults={'scope': 1, 'org_unit': self.org_unit}
         )
         self.data_table = DataTable.objects.create(
-            name='Transactions', slug='transactions', module=self.data_module
+            name='Transactions', module=self.data_module
         )
         self.data_field = DataField.objects.create(
-            name='amount', data_type='decimal',
-            data_table=self.data_table, is_required=True
+            name='amount', type='number', label='Amount',
+            data_table=self.data_table, required=True
         )
 
     def test_list_rules_authenticated(self):
@@ -50,12 +51,12 @@ class DQRuleCRUDTestCase(TestCase):
         )
         
         self.client.force_authenticate(self.admin_user)
-        response = self.client.get('/dq/rules/')
+        response = self.client.get('/carbon-api/dq/rules/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_list_rules_unauthenticated(self):
         """Unauthenticated user gets 401."""
-        response = self.client.get('/dq/rules/')
+        response = self.client.get('/carbon-api/dq/rules/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_create_rule_admin(self):
@@ -70,7 +71,7 @@ class DQRuleCRUDTestCase(TestCase):
             'severity': 'warn',
             'is_active': True
         }
-        response = self.client.post('/dq/rules/', payload)
+        response = self.client.post('/carbon-api/dq/rules/', payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['name'], 'Amount Range Check')
         self.assertTrue(DQRule.objects.filter(name='Amount Range Check').exists())
@@ -85,7 +86,7 @@ class DQRuleCRUDTestCase(TestCase):
             is_active=True
         )
         self.client.force_authenticate(self.admin_user)
-        response = self.client.get(f'/dq/rules/{rule.id}/')
+        response = self.client.get(f'/carbon-api/dq/rules/{rule.id}/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['name'], 'Retrieve Test')
 
@@ -100,7 +101,7 @@ class DQRuleCRUDTestCase(TestCase):
         )
         self.client.force_authenticate(self.admin_user)
         payload = {'severity': 'error'}
-        response = self.client.patch(f'/dq/rules/{rule.id}/', payload)
+        response = self.client.patch(f'/carbon-api/dq/rules/{rule.id}/', payload)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         rule.refresh_from_db()
         self.assertEqual(rule.severity, 'error')
@@ -117,15 +118,15 @@ class DQRuleValidationTestCase(TestCase):
         self.org_unit = OrgUnit.objects.create(
             name='Data Org', slug='data-org', code='DAO', org_type='division'
         )
-        self.data_module = DataModule.objects.create(
-            name='Sales', slug='sales', org_unit=self.org_unit
+        self.data_module, _ = Module.objects.get_or_create(
+            name='Sales', defaults={'scope': 1, 'org_unit': self.org_unit}
         )
         self.data_table = DataTable.objects.create(
-            name='Transactions', slug='transactions', module=self.data_module
+            name='Transactions', module=self.data_module
         )
         self.data_field = DataField.objects.create(
-            name='amount', data_type='decimal',
-            data_table=self.data_table, is_required=True
+            name='amount', type='number', label='Amount',
+            data_table=self.data_table, required=True
         )
 
     def test_invalid_rule_type(self):
@@ -138,7 +139,7 @@ class DQRuleValidationTestCase(TestCase):
             'rule_type': 'invalid_type',
             'severity': 'error'
         }
-        response = self.client.post('/dq/rules/', payload)
+        response = self.client.post('/carbon-api/dq/rules/', payload)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_field_rule_without_data_field(self):
@@ -150,7 +151,7 @@ class DQRuleValidationTestCase(TestCase):
             'rule_type': 'not_null',
             'severity': 'error'
         }
-        response = self.client.post('/dq/rules/', payload)
+        response = self.client.post('/carbon-api/dq/rules/', payload)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
@@ -168,15 +169,15 @@ class DQRuleRBACTestCase(TestCase):
         self.org_unit = OrgUnit.objects.create(
             name='Data Org', slug='data-org', code='DAO', org_type='division'
         )
-        self.data_module = DataModule.objects.create(
-            name='Sales', slug='sales', org_unit=self.org_unit
+        self.data_module, _ = Module.objects.get_or_create(
+            name='Sales', defaults={'scope': 1, 'org_unit': self.org_unit}
         )
         self.data_table = DataTable.objects.create(
-            name='Transactions', slug='transactions', module=self.data_module
+            name='Transactions', module=self.data_module
         )
         self.data_field = DataField.objects.create(
-            name='amount', data_type='decimal',
-            data_table=self.data_table, is_required=True
+            name='amount', type='number', label='Amount',
+            data_table=self.data_table, required=True
         )
 
     def test_admin_sees_all_rules(self):
@@ -189,24 +190,27 @@ class DQRuleRBACTestCase(TestCase):
             is_active=True
         )
         self.client.force_authenticate(self.admin_user)
-        response = self.client.get('/dq/rules/')
+        response = self.client.get('/carbon-api/dq/rules/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
 
     def test_user_without_scopedrole_sees_nothing(self):
         """User without ScopedRole sees no rules (Rule 1: RBAC ABSOLUTE)."""
         self.client.force_authenticate(self.regular_user)
-        response = self.client.get('/dq/rules/')
+        response = self.client.get('/carbon-api/dq/rules/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Should return empty list (no rules accessible)
         self.assertEqual(len(response.data), 0)
 
     def test_user_with_scopedrole_sees_assigned_rules(self):
         """User with ScopedRole sees rules from their org_unit."""
-        # Assign user to org_unit
+        # Create a group and assign user to org_unit
+        from django.contrib.auth.models import Group
+        viewer_group = Group.objects.get_or_create(name='viewer_group')[0]
+        
         ScopedRole.objects.create(
             user=self.regular_user,
-            role='viewer',
+            group=viewer_group,
             org_unit=self.org_unit,
             is_active=True
         )
@@ -221,7 +225,7 @@ class DQRuleRBACTestCase(TestCase):
         )
         
         self.client.force_authenticate(self.regular_user)
-        response = self.client.get('/dq/rules/')
+        response = self.client.get('/carbon-api/dq/rules/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Should see at least the rule we created
         self.assertGreaterEqual(len(response.data), 1)
@@ -238,15 +242,15 @@ class DQResultsTestCase(TestCase):
         self.org_unit = OrgUnit.objects.create(
             name='Data Org', slug='data-org', code='DAO', org_type='division'
         )
-        self.data_module = DataModule.objects.create(
-            name='Sales', slug='sales', org_unit=self.org_unit
+        self.data_module, _ = Module.objects.get_or_create(
+            name='Sales', defaults={'scope': 1, 'org_unit': self.org_unit}
         )
         self.data_table = DataTable.objects.create(
-            name='Transactions', slug='transactions', module=self.data_module
+            name='Transactions', module=self.data_module
         )
         self.data_field = DataField.objects.create(
-            name='amount', data_type='decimal',
-            data_table=self.data_table, is_required=True
+            name='amount', type='number', label='Amount',
+            data_table=self.data_table, required=True
         )
 
     def test_list_results_authenticated(self):
@@ -267,5 +271,5 @@ class DQResultsTestCase(TestCase):
         )
         
         self.client.force_authenticate(self.admin_user)
-        response = self.client.get('/dq/results/')
+        response = self.client.get('/carbon-api/dq/results/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)

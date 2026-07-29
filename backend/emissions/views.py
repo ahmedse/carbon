@@ -188,8 +188,8 @@ class EmissionFactorViewSet(viewsets.ModelViewSet):
         ])
 
 
-class GWPViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for Global Warming Potentials (read-only)."""
+class GWPViewSet(viewsets.ModelViewSet):
+    """ViewSet for Global Warming Potentials (CRUD)."""
     queryset = GWP.objects.all()
     serializer_class = GWPSerializer
     permission_classes = [AdminOrSuperuserOnly]
@@ -242,9 +242,112 @@ class CalculationViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
+        detail = request.query_params.get('detail', '').lower() in ('true', '1', 'yes')
+        if detail:
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
         return Response({
             'count': queryset.count(),
-            'results': list(queryset.values('id', 'module_id', 'reporting_year', 'scope', 'co2e_kg'))
+            'results': list(queryset.values(
+                'id', 'module_id', 'module__name',
+                'reporting_year', 'reporting_period_id',
+                'scope', 'co2e_kg', 'category',
+                'emission_factor__name', 'emission_factor__code',
+                'emission_factor_id',
+                'calculated_at', 'activity_date',
+                'data_row_id',
+            ))
+        })
+
+
+class CalculationSummaryAPIView(APIView):
+    """
+    Aggregated summary of calculations.
+
+    GET /emissions/calculations/summary/?reporting_period_id=N
+
+    Returns period context, totals by scope/status/module, latest run time.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description='Return aggregated calculation summary for a reporting period.',
+        manual_parameters=[
+            openapi.Parameter('reporting_period_id', openapi.IN_QUERY, description='Filter by reporting period', type=openapi.TYPE_INTEGER),
+        ],
+        responses={200: openapi.Response('OK')}
+    )
+    def get(self, request):
+        period_id = request.query_params.get('reporting_period_id')
+        qs = scope_calculations(
+            request.user,
+            Calculation.objects.select_related('module', 'reporting_period', 'emission_factor')
+        )
+        if period_id:
+            qs = qs.filter(reporting_period_id=period_id)
+
+        total_calculations = qs.count()
+        if total_calculations == 0:
+            return Response({
+                'period_id': int(period_id) if period_id else None,
+                'total_calculations': 0,
+                'by_scope': {},
+                'by_status': {},
+                'by_module': [],
+                'latest_run_at': None,
+                'last_audit': None,
+            })
+
+        by_scope_list = list(qs.values('scope').annotate(count=Count('id'), total_co2e_kg=Sum('co2e_kg')).values('scope', 'count', 'total_co2e_kg'))
+        by_scope_dict = {}
+        for item in by_scope_list:
+            scope_val = item.pop('scope')
+            by_scope_dict[scope_val] = item
+
+        by_module_data = qs.values('module_id', 'module__name').annotate(
+            count=Count('id'), total_co2e_kg=Sum('co2e_kg')
+        ).order_by('-total_co2e_kg')
+        by_module = [
+            {
+                'module_id': m['module_id'],
+                'module_name': m['module__name'],
+                'count': m['count'],
+                'total_co2e_kg': float(m['total_co2e_kg'] or 0),
+            }
+            for m in by_module_data
+        ]
+
+        latest_run = qs.aggregate(latest=Max('calculated_at'))
+        latest_run_at = latest_run['latest']
+
+        last_audit = None
+        if period_id:
+            audit = CalculationAudit.objects.filter(
+                reporting_period_id=period_id
+            ).order_by('-triggered_at').first()
+            if audit:
+                last_audit = {
+                    'id': audit.id,
+                    'trigger_type': audit.trigger_type,
+                    'triggered_by_name': audit.triggered_by.username if audit.triggered_by else None,
+                    'triggered_at': audit.triggered_at,
+                    'created_count': audit.created_count,
+                    'skipped_count': audit.skipped_count,
+                    'error_count': audit.error_count,
+                }
+
+        return Response({
+            'period_id': int(period_id) if period_id else None,
+            'total_calculations': total_calculations,
+            'by_scope': by_scope_dict,
+            'by_status': {},
+            'by_module': by_module,
+            'latest_run_at': latest_run_at,
+            'last_audit': last_audit,
         })
 
 
@@ -256,7 +359,7 @@ class CalculationRuleViewSet(viewsets.ModelViewSet):
     - POST /emissions/rules/{id}/execute/ - Run calculations for a rule
     """
     serializer_class = CalculationRuleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
     queryset = CalculationRule.objects.select_related(
         'data_table', 'activity_field', 'emission_factor'
     )
@@ -414,7 +517,7 @@ class CalculateAPIView(APIView):
         "recalculate": false
     }
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
 
     def post(self, request):
         rule_id = request.data.get('rule_id')
@@ -470,7 +573,7 @@ class CalculateAPIView(APIView):
 
 class BatchCalculateAPIView(APIView):
     """Run calculations across multiple tables at once."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
 
     @swagger_auto_schema(
         operation_description="Batch calculate emissions for multiple tables",
@@ -654,7 +757,10 @@ class MyDataAPIView(APIView):
 class SBTiTargetViewSet(viewsets.ModelViewSet):
     """CRUD for SBTi targets — org-scoped visibility."""
     serializer_class = SBTiTargetSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
     def get_queryset(self):
         from accounts.rbac_utils import get_visible_org_units

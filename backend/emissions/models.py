@@ -763,7 +763,16 @@ class CalculationRule(models.Model):
                     skipped += 1
             except Exception as e:
                 errors += 1
-        
+
+        # Trigger DQ profiling when new calculations were created
+        if created > 0:
+            from dq.services import profile_table, run_dq
+            try:
+                profile_table(self.data_table_id)
+                run_dq(self.data_table_id)
+            except Exception:
+                pass  # DQ failures must not block calculation results
+
         return created, skipped, errors
 
 
@@ -868,6 +877,10 @@ class SBTiTarget(models.Model):
         default='draft',
     )
     description = models.TextField(blank=True, default='')
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='sbti_targets_created'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

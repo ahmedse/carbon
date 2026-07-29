@@ -46,6 +46,8 @@ def _perspective_from_group_name(group_name):
         return "data-owner"
     if "analyst" in normalized:
         return "analyst"
+    if "viewer" in normalized:
+        return "viewer"
     if "steward" in normalized:
         return "steward"
     if normalized.endswith("admin") and "carbon" in normalized:
@@ -177,7 +179,7 @@ def me_context(request):
     if is_global and 'admin' not in perspectives:
         perspectives.append('admin')
 
-    perspective_order = {'admin': 0, 'carbon-admin': 1, 'catalog-admin': 2, 'data-owner': 3, 'analyst': 4, 'steward': 5}
+    perspective_order = {'admin': 0, 'carbon-admin': 1, 'catalog-admin': 2, 'data-owner': 3, 'analyst': 4, 'viewer': 5, 'steward': 6}
     perspectives = sorted(set(perspectives), key=lambda value: (perspective_order.get(value, 99), value))
 
     org_units = [org_unit.id for org_unit in get_visible_org_units(user)]
@@ -186,6 +188,13 @@ def me_context(request):
         module_count = Module.objects.count()
     else:
         module_count = len(get_allowed_module_ids(user, VISIBILITY_ROLES))
+
+    # Build modules list for frontend hasAppAccess
+    if is_global:
+        user_modules = list(Module.objects.values('id', 'name'))
+    else:
+        allowed_ids = get_allowed_module_ids(user, VISIBILITY_ROLES)
+        user_modules = list(Module.objects.filter(id__in=allowed_ids).values('id', 'name'))
 
     return Response({
         'user': {
@@ -198,6 +207,7 @@ def me_context(request):
         'is_global_admin': is_global,
         'perspectives': perspectives,
         'org_units': org_units,
+        'modules': user_modules,
         'scoped_roles': scoped_roles_data,
         'module_count': module_count,
     })

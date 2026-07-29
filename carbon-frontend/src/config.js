@@ -129,7 +129,9 @@ export const API_ROUTES = {
   emissionsFactors: "carbon/factors/",
   emissionsCalculations: "carbon/calculations/",
   emissionsRules: "carbon/rules/",
+  emissionsVerification: "carbon/verification/",
   emissionsGWP: "carbon/gwp/",
+  emissionsTargets: "carbon/targets/",
   emissionsReportConfigs: "carbon/report-configs/",
 };
 

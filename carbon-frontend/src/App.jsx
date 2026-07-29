@@ -60,12 +60,17 @@ import DataOwnerPortalPage from "./pages/data-owner/DataOwnerPortalPage";
 import DataOwnerDashboardPage from "./pages/data-owner/DataOwnerDashboardPage";
 import DataOwnerAssetsPage from "./pages/data-owner/DataOwnerAssetsPage";
 import EmissionFactorsPage from "./pages/emissions/EmissionFactorsPage";
+import CalculationRulesPage from "./pages/emissions/CalculationRulesPage";
+import GWPReferencePage from "./pages/emissions/GWPReferencePage";
+import SBTiTargetsPage from "./pages/carbon/SBTiTargetsPage";
 import ReportGeneratorPage from "./pages/emissions/ReportGeneratorPage";
 import SavedReportsPage from "./pages/emissions/SavedReportsPage";
 import ReportingPeriodsPage from "./pages/emissions/ReportingPeriodsPage";
 import CarbonConsolePage from "./pages/carbon/CarbonConsolePage";
 import MyDataPage from "./pages/carbon/MyDataPage";
 import ModuleWorkspacePage from "./pages/carbon/ModuleWorkspacePage";
+import CalculationsPage from "./pages/carbon/CalculationsPage";
+import VerificationPage from "./pages/carbon/VerificationPage";
 import AuditLogPage from "./pages/admin/AuditLogPage";
 
 // New Dashboard Architecture
@@ -191,8 +196,12 @@ export default function App() {
                 <Route path="/carbon/my-data/:moduleId" element={<ModuleWorkspacePage />} />
                 <Route path="/carbon/my-data/:moduleId/:tableId" element={<DataEntryPage />} />
                 <Route path="/carbon/my-data/row/:tableId/:rowId" element={<RowDetailPage />} />
+                <Route path="/carbon/calculations" element={<CalculationsPage />} />
+                <Route path="/carbon/verification" element={<VerificationPage />} />
                 <Route path="/carbon/admin/factors" element={<AdminRoute><EmissionFactorsPage /></AdminRoute>} />
-                <Route path="/carbon/admin/rules" element={<AdminRoute><EmissionFactorsPage /></AdminRoute>} />
+                <Route path="/carbon/admin/rules" element={<AdminRoute><CalculationRulesPage /></AdminRoute>} />
+                <Route path="/carbon/admin/gwp" element={<AdminRoute><GWPReferencePage /></AdminRoute>} />
+                <Route path="/carbon/admin/targets" element={<AdminRoute><SBTiTargetsPage /></AdminRoute>} />
                 <Route path="/carbon/reporting/generate" element={<ReportGeneratorPage />} />
                 <Route path="/carbon/reporting/saved" element={<SavedReportsPage />} />
                 <Route path="/carbon/reporting/periods" element={<AdminRoute><ReportingPeriodsPage /></AdminRoute>} />

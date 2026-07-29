@@ -3,6 +3,11 @@
 import pytest
 from django.urls import reverse
 
+# Role name constants matching the viewset required_role lists
+ADMIN = "admin"
+AUDIT = "auditors_group"
+DATAOWNER = "dataowners_group"
+
 @pytest.fixture
 def setup_schema(db):
     from core.models import Module
@@ -25,9 +30,9 @@ def setup_schema(db):
 @pytest.mark.parametrize(
     "group,expected_status",
     [
-        ("admin", 200),
-        ("audit", 403),
-        ("dataowner", 403),
+        (ADMIN, 200),
+        (AUDIT, 403),
+        (DATAOWNER, 403),
         (None, 403),
     ]
 )
@@ -37,8 +42,10 @@ def test_table_list_access(
     module = setup_schema["module"]
     groups = [group] if group else []
     user = create_user("bob", groups=groups)
-    if group:
-        create_scoped_role(user, group, module=module)
+    if group == ADMIN:
+        create_scoped_role(user, group)  # global admin role for list access
+    elif group:
+        create_scoped_role(user, group, module=module)  # module-scoped
     token = get_token_for_user(user)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
@@ -50,9 +57,9 @@ def test_table_list_access(
 @pytest.mark.parametrize(
     "group,expected_status",
     [
-        ("admin", 200),
-        ("audit", 403),
-        ("dataowner", 403),
+        (ADMIN, 200),
+        (AUDIT, 403),
+        (DATAOWNER, 403),
         (None, 403),
     ]
 )
@@ -62,8 +69,10 @@ def test_field_list_access(
     module = setup_schema["module"]
     groups = [group] if group else []
     user = create_user("bob", groups=groups)
-    if group:
-        create_scoped_role(user, group, module=module)
+    if group == ADMIN:
+        create_scoped_role(user, group)  # global admin role for list access
+    elif group:
+        create_scoped_role(user, group, module=module)  # module-scoped
     token = get_token_for_user(user)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
@@ -75,9 +84,9 @@ def test_field_list_access(
 @pytest.mark.parametrize(
     "group,expected_status_module,expected_status_other_module",
     [
-        ("admin", 200, 200),
-        ("audit", 200, 200),
-        ("dataowner", 200, 403),
+        (ADMIN, 200, 200),
+        (AUDIT, 200, 200),
+        (DATAOWNER, 200, 403),
         (None, 403, 403),
     ]
 )
@@ -97,18 +106,18 @@ def test_row_list_access(
 
     groups = [group] if group else []
     user = create_user("bob", groups=groups)
-    if group == "dataowner":
+    if group == DATAOWNER:
         create_scoped_role(user, group, module=module)
-    elif group in ("admin", "audit"):
+    elif group in (ADMIN, AUDIT):
         create_scoped_role(user, group)
     token = get_token_for_user(user)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
-    url = reverse("dataschema-row-list") + f"?project_id={project.id}&module_id={module.id}"
+    url = reverse("dataschema-row-list") + f"?module_id={module.id}"
     resp = api_client.get(url)
     assert resp.status_code == expected_status_module
 
-    url = reverse("dataschema-row-list") + f"?project_id={project.id}&module_id={other_module.id}"
+    url = reverse("dataschema-row-list") + f"?module_id={other_module.id}"
     resp = api_client.get(url)
     assert resp.status_code == expected_status_other_module
 
@@ -116,9 +125,9 @@ def test_row_list_access(
 @pytest.mark.parametrize(
     "group,expected_status",
     [
-        ("admin", 200),
-        ("audit", 403),
-        ("dataowner", 403),
+        (ADMIN, 200),
+        (AUDIT, 403),
+        (DATAOWNER, 403),
         (None, 403),
     ]
 )
@@ -128,8 +137,10 @@ def test_schema_log_list_access(
     module = setup_schema["module"]
     groups = [group] if group else []
     user = create_user("bob", groups=groups)
-    if group:
-        create_scoped_role(user, group, module=module)
+    if group == ADMIN:
+        create_scoped_role(user, group)  # global admin role for list access
+    elif group:
+        create_scoped_role(user, group, module=module)  # module-scoped
     token = get_token_for_user(user)
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 

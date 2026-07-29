@@ -128,6 +128,49 @@ export async function updateReportConfig(configId, data, token) {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 07 G2 — SBTi Targets API (admin CRUD)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Fetch all SBTi targets
+ */
+export async function fetchSBTiTargets(token) {
+  return apiFetch(API_ROUTES.emissionsTargets, { token });
+}
+
+/**
+ * Create a new SBTi target (admin only)
+ */
+export async function createSBTiTarget(data, token) {
+  return apiFetch(API_ROUTES.emissionsTargets, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Update an existing SBTi target (admin only)
+ */
+export async function updateSBTiTarget(id, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsTargets}${id}/`, {
+    method: "PATCH",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Delete an SBTi target (admin only)
+ */
+export async function deleteSBTiTarget(id, token) {
+  return apiFetch(`${API_ROUTES.emissionsTargets}${id}/`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 /**
  * Delete a report configuration
  */
@@ -196,4 +239,193 @@ export async function downloadReportCsv(params, token) {
   }
   
   return response.blob();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// D3 — Calculations & Verification API (Phase 04 G2)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Fetch calculations with optional filters
+ */
+export async function fetchCalculations({ period, scope, status, search, page = 1, pageSize = 50 } = {}, token) {
+  const params = new URLSearchParams();
+  if (period) params.append("period", period);
+  if (scope) params.append("scope", scope);
+  if (status) params.append("status", status);
+  if (search) params.append("search", search);
+  params.append("page", page);
+  params.append("page_size", pageSize);
+  const qs = params.toString();
+  return apiFetch(`${API_ROUTES.emissionsCalculations}${qs ? `?${qs}` : ""}`, { token });
+}
+
+/**
+ * Fetch a single calculation summary
+ */
+export async function fetchCalculationSummary(calcId, token) {
+  return apiFetch(`${API_ROUTES.emissionsCalculations}${calcId}/`, { token });
+}
+
+/**
+ * Fetch calculation detail with traceability and DQ info
+ */
+export async function fetchCalculationDetail(calcId, token) {
+  return apiFetch(`${API_ROUTES.emissionsCalculations}${calcId}/detail/`, { token });
+}
+
+/**
+ * Recalculate a single calculation (admin/data_owner)
+ */
+export async function recalculateCalculation(calcId, token) {
+  return apiFetch(`${API_ROUTES.emissionsCalculations}${calcId}/recalculate/`, {
+    method: "POST",
+    token,
+  });
+}
+
+/**
+ * Batch recalculate multiple calculations (admin only)
+ */
+export async function batchRecalculateCalculations(calcIds, token) {
+  return apiFetch(`${API_ROUTES.emissionsCalculations}batch-recalculate/`, {
+    method: "POST",
+    body: { calculation_ids: calcIds },
+    token,
+  });
+}
+
+/**
+ * Fetch verification records with optional filters
+ */
+export async function fetchVerificationRecords({ status, period, scope, page = 1, pageSize = 50 } = {}, token) {
+  const params = new URLSearchParams();
+  if (status) params.append("status", status);
+  if (period) params.append("period", period);
+  if (scope) params.append("scope", scope);
+  params.append("page", page);
+  params.append("page_size", pageSize);
+  const qs = params.toString();
+  return apiFetch(`${API_ROUTES.emissionsVerification}${qs ? `?${qs}` : ""}`, { token });
+}
+
+/**
+ * Verify/submit a period's calculations (admin/analyst)
+ */
+export async function verifyPeriod(periodId, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsVerification}${periodId}/verify/`, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Reject a period's calculations with notes
+ */
+export async function rejectPeriod(periodId, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsVerification}${periodId}/reject/`, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Submit a period for verification (data_owner)
+ */
+export async function submitPeriod(periodId, token) {
+  return apiFetch(`${API_ROUTES.emissionsCalculations}${periodId}/submit/`, {
+    method: "POST",
+    token,
+  });
+}
+
+/**
+ * Fetch calculation rules
+ */
+export async function fetchCalculationRules(token) {
+  return apiFetch(API_ROUTES.emissionsRules, { token });
+}
+
+/**
+ * Create a calculation rule (admin only)
+ */
+export async function createCalculationRule(data, token) {
+  return apiFetch(API_ROUTES.emissionsRules, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Update a calculation rule (admin only)
+ */
+export async function updateCalculationRule(ruleId, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsRules}${ruleId}/`, {
+    method: "PATCH",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Delete a calculation rule (admin only)
+ */
+export async function deleteCalculationRule(ruleId, token) {
+  return apiFetch(`${API_ROUTES.emissionsRules}${ruleId}/`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+/**
+ * Execute a calculation rule immediately (admin only)
+ */
+export async function executeCalculationRule(ruleId, data = {}, token) {
+  return apiFetch(`${API_ROUTES.emissionsRules}${ruleId}/execute/`, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Fetch GWP reference values
+ */
+export async function fetchGWPValues(token) {
+  return apiFetch(API_ROUTES.emissionsGWP, { token });
+}
+
+/**
+ * Create a GWP reference value (admin only)
+ */
+export async function createGWPValue(data, token) {
+  return apiFetch(API_ROUTES.emissionsGWP, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Update a GWP reference value (admin only)
+ */
+export async function updateGWPValue(gwpId, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsGWP}${gwpId}/`, {
+    method: "PATCH",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Delete a GWP reference value (admin only)
+ */
+export async function deleteGWPValue(gwpId, token) {
+  return apiFetch(`${API_ROUTES.emissionsGWP}${gwpId}/`, {
+    method: "DELETE",
+    token,
+  });
 }

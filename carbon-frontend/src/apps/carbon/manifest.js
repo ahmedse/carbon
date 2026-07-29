@@ -61,6 +61,8 @@ export default {
       { type: 'group', label: 'My Data' },
       { label: 'Data Entry',           path: '/carbon/my-data',              role: 'carbon:data_owner' },
       { label: 'Emission Sources',     path: '/carbon/my-data?tab=sources',  role: 'carbon:data_owner' },
+      { label: 'Calculations',         path: '/carbon/calculations',         role: 'carbon:data_owner' },
+      { label: 'Verification',         path: '/carbon/verification',         role: 'carbon:data_owner' },
       { type: 'divider' },
 
       // ── Reporting (analyst + admin) ──
@@ -74,6 +76,8 @@ export default {
       { type: 'group', label: 'Configuration' },
       { label: 'Emission Factors',     path: '/carbon/admin/factors',      role: 'carbon:admin' },
       { label: 'Calculation Rules',    path: '/carbon/admin/rules',        role: 'carbon:admin' },
+      { label: 'GWP Reference',        path: '/carbon/admin/gwp',          role: 'carbon:admin' },
+      { label: 'SBTi Targets',         path: '/carbon/admin/targets',      role: 'carbon:admin' },
     ],
   },
 

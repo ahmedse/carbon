@@ -9,6 +9,7 @@ from .views import (
     EmissionFactorViewSet,
     GWPViewSet,
     CalculationViewSet,
+    CalculationSummaryAPIView,
     CalculationRuleViewSet,
     ReportConfigViewSet,
     DashboardAPIView,
@@ -24,6 +25,7 @@ from .views import (
     ConsoleAPIView,
     VerificationRecordViewSet,
     CalculationAuditViewSet,
+    SBTiTargetViewSet,
 )
 
 app_name = 'emissions'
@@ -43,7 +45,13 @@ verification_router.register(r'verifications', VerificationRecordViewSet, basena
 audit_router = DefaultRouter()
 audit_router.register(r'calculation-audits', CalculationAuditViewSet, basename='calculation-audit')
 
+targets_router = DefaultRouter()
+targets_router.register(r'targets', SBTiTargetViewSet, basename='sbti-target')
+
 urlpatterns = [
+    # Calculation summary — MUST come before router include to avoid path collision
+    path('calculations/summary/', CalculationSummaryAPIView.as_view(), name='calculation-summary'),
+
     # ViewSet routes
     path('', include(router.urls)),
     
@@ -52,6 +60,9 @@ urlpatterns = [
     
     # Audit trail routes
     path('', include(audit_router.urls)),
+    
+    # SBTi target routes
+    path('', include(targets_router.urls)),
     
     # Dashboard API
     path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),

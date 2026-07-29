@@ -28,6 +28,8 @@ import FolderIcon from '@mui/icons-material/Folder';
 import GroupIcon from '@mui/icons-material/Group';
 import AppsIcon from '@mui/icons-material/Apps';
 import GridViewIcon from '@mui/icons-material/GridView';
+import CalculateIcon from '@mui/icons-material/Calculate';
+import TrackChangesIcon from '@mui/icons-material/TrackChanges';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
 import { isGlobalAdmin, filterMenuItems } from '../utils/rbac';
@@ -45,6 +47,10 @@ const CARBON_ITEM_ICONS = {
   'Reporting Periods':    AssignmentIcon,
   'Emission Factors':     ScienceIcon,
   'Calculation Rules':    ScienceIcon,
+  'Calculations':         CalculateIcon,
+  'Verification':         VerifiedUserIcon,
+  'GWP Reference':        ScienceIcon,
+  'SBTi Targets':         TrackChangesIcon,
   'Table Manager':        TableChartIcon,
   'Dashboard':            DashboardIcon,
 };

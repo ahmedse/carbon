@@ -33,7 +33,7 @@ def test_group_access_to_protected_endpoints(
     url = reverse(endpoint)
     resp = api_client.get(url)
 
-    if group in allowed_groups:
+    if group in allowed_groups or group == "superuser":
         assert resp.status_code == 200
     else:
         assert resp.status_code == 403

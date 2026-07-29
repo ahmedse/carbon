@@ -8,10 +8,11 @@ from mdm.models import ReferenceSet, ReferenceValue
 class ReferenceDataTests(TestCase):
     def setUp(self):
         self.user = self._create_user()
-        # project removed
-        self.module = Module.objects.create(project=self.project, name='Module 1', description='demo', created_by=self.user)
-        self.table = DataTable.objects.create(title='Test Table', name='test_table', module=self.module, created_by=self.user)
-        self.field = DataField.objects.create(data_table=self.table, name='scope', label='Scope', type='reference', created_by=self.user)
+        from mdm.models import OrgUnit
+        self.org_unit = OrgUnit.objects.create(name='Test Org', slug='test-org', code='TEST', org_type='college')
+        self.module = Module.objects.create(name='Module 1', description='demo', scope=1, org_unit=self.org_unit)
+        self.table = DataTable.objects.create(name='test_table', module=self.module)
+        self.field = DataField.objects.create(data_table=self.table, name='scope', label='Scope', type='reference', required=False)
 
     def _create_user(self):
         from django.contrib.auth import get_user_model

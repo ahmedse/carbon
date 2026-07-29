@@ -105,7 +105,7 @@ class ReportConfigAPITest(TestCase):
             'output_format': 'json',
             'grouping': 'scope'
         }
-        response = self.client.post('/api/v1/carbon/report-configs/', data)
+        response = self.client.post('/carbon-api/carbon/report-configs/', data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['created_by_username'], 'owner1')
         self.assertEqual(response.data['name'], 'My First Report')
@@ -127,7 +127,7 @@ class ReportConfigAPITest(TestCase):
         
         # User1 lists configs
         self.client.force_authenticate(user=self.user1)
-        response = self.client.get('/api/v1/carbon/report-configs/')
+        response = self.client.get('/carbon-api/carbon/report-configs/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]['name'], 'Config 1')
@@ -148,7 +148,7 @@ class ReportConfigAPITest(TestCase):
         
         # Staff lists all configs
         self.client.force_authenticate(user=self.staff_user)
-        response = self.client.get('/api/v1/carbon/report-configs/')
+        response = self.client.get('/carbon-api/carbon/report-configs/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
     
@@ -162,7 +162,7 @@ class ReportConfigAPITest(TestCase):
         )
         
         self.client.force_authenticate(user=self.user1)
-        response = self.client.post(f'/api/v1/carbon/report-configs/{config.id}/run/')
+        response = self.client.post(f'/carbon-api/carbon/report-configs/{config.id}/run/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('total_co2e_tonnes', response.data)
         self.assertIn('scope_breakdown', response.data)
@@ -178,7 +178,7 @@ class ReportConfigAPITest(TestCase):
         self.assertIsNone(config.last_run_at)
         
         self.client.force_authenticate(user=self.user1)
-        self.client.post(f'/api/v1/carbon/report-configs/{config.id}/run/')
+        self.client.post(f'/carbon-api/carbon/report-configs/{config.id}/run/')
         
         config.refresh_from_db()
         self.assertIsNotNone(config.last_run_at)
@@ -209,7 +209,7 @@ class ReportConfigAPITest(TestCase):
         )
         
         self.client.force_authenticate(user=self.user1)
-        response = self.client.post(f'/api/v1/carbon/report-configs/{config.id}/run/')
+        response = self.client.post(f'/carbon-api/carbon/report-configs/{config.id}/run/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Should only see calc1 (50 tonnes), not calc2 (25 tonnes)
         self.assertAlmostEqual(response.data['total_co2e_tonnes'], 50.0, places=1)
@@ -224,7 +224,7 @@ class ReportConfigAPITest(TestCase):
         )
         
         self.client.force_authenticate(user=self.user1)
-        response = self.client.post(f'/api/v1/carbon/report-configs/{config.id}/run/')
+        response = self.client.post(f'/carbon-api/carbon/report-configs/{config.id}/run/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # No Scope 2/3 calculations exist, so should be 0
         self.assertEqual(response.data['total_co2e_tonnes'], 0.0)
@@ -232,13 +232,13 @@ class ReportConfigAPITest(TestCase):
     def test_report_endpoint_returns_data(self):
         """Test that the report endpoint returns data."""
         self.client.force_authenticate(user=self.user1)
-        response = self.client.get('/api/v1/carbon/report/')
+        response = self.client.get('/carbon-api/carbon/report/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('total_emissions_tonnes', response.data['summary'])
     
     def test_unauthenticated_403(self):
         """Test unauthenticated users get 403."""
-        response = self.client.get('/api/v1/carbon/report-configs/')
+        response = self.client.get('/carbon-api/carbon/report-configs/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
     
     def test_delete_own_config(self):
@@ -250,6 +250,6 @@ class ReportConfigAPITest(TestCase):
         )
         
         self.client.force_authenticate(user=self.user1)
-        response = self.client.delete(f'/api/v1/carbon/report-configs/{config.id}/')
+        response = self.client.delete(f'/carbon-api/carbon/report-configs/{config.id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(ReportConfig.objects.filter(id=config.id).exists())
