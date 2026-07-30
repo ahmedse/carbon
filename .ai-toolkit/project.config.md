@@ -1,6 +1,76 @@
 # Project Configuration
 # =====================
 # THIS IS THE ONLY FILE YOU EDIT WHEN COPYING .ai-toolkit TO A NEW PROJECT.
+# All roles read this file first. Keep it factual, concise, and up-to-date.
+
+# ── IDENTITY ──────────────────────────────────────────────────
+PROJECT_NAME="Carbon Data Trust Platform"
+PROJECT_DESCRIPTION="GHG emissions tracking, reporting, and analysis — AASTMT"
+REPO_ROOT="$PWD"
+
+# ── STACK ──────────────────────────────────────────────────────
+BACKEND_FRAMEWORK="Django 5.2.3"
+BACKEND_API="Django REST Framework 3.16.0"
+BACKEND_DB="PostgreSQL (dev: carbon_dev, test: via pytest --reuse-db)"
+BACKEND_CACHE="Redis"
+BACKEND_AUTH="JWT (djangorestframework-simplejwt)"
+BACKEND_VECTOR="ChromaDB (AI copilot embeddings)"
+
+FRONTEND_FRAMEWORK="React 18 + Vite"
+FRONTEND_UI="MUI (Material UI v5/v6)"
+FRONTEND_CHARTS="Chart.js via react-chartjs-2"
+FRONTEND_ROUTER="React Router v6"
+FRONTEND_STATE="React Context API (AuthContext, ThemeContext)"
+
+# ── PATHS ──────────────────────────────────────────────────────
+BACKEND_DIR="backend"
+FRONTEND_DIR="carbon-frontend"
+API_PREFIX="/carbon-api/"
+FRONTEND_BASENAME="/carbon/"
+
+# ── PYTHON ─────────────────────────────────────────────────────
+PYTHON_VERSION="3.12.13"
+VENV_PATH=".venv"
+PYTEST_FLAGS="--reuse-db -q"
+MANAGE_PY="backend/manage.py"
+
+# ── OPS ────────────────────────────────────────────────────────
+OPS_SCRIPT="./manage.sh"
+# Usage:
+#   ./manage.sh start              # start full stack
+#   ./manage.sh start backend      # start one service
+#   ./manage.sh stop
+#   ./manage.sh restart
+#   ./manage.sh manage <django_cmd> # e.g. ./manage.sh manage migrate
+
+# ── DEFAULT TIMEZONE ───────────────────────────────────────────
+DEFAULT_TIMEZONE="Africa/Cairo"
+
+# ── HARD RULES (Non-Negotiable) ─────────────────────────────────
+# 1. NEVER run raw manage.py, npm run dev, vite, or tail -f directly.
+#    ALWAYS use ./manage.sh (OPS_SCRIPT). Raw commands hang terminals.
+# 2. NEVER hardcode timezone-naive datetimes. Use django.utils.timezone.
+# 3. Views are THIN (parse → call service → return). Business logic in services.py.
+# 4. Colors/spacing are TOKENS (theme.palette.*, spacing()). NEVER raw px/hex.
+# 5. Components COMPOSE existing primitives. NEVER duplicate/fork.
+# 6. Permissions are PROXIES (permission classes). NEVER inline auth checks.
+# 7. BEFORE creating anything, consult .ai-toolkit/registry/ (run scan.sh if stale).
+# 8. Every stateful model has explicit STATUS_CHOICES + transition methods.
+# 9. All endpoints follow the unified API contract (shared/api-contract.md).
+# 10. Run verification gate before shipping: ./.ai-toolkit/scripts/verify.sh full
+
+# ── KNOWN TECH DEBT ────────────────────────────────────────────
+# - seed_all.py is procedural (should be Builder pattern)
+# - Some inline sx values in HeaderEnhanced.jsx (should use theme tokens)
+# - No Command pattern for undo in DQ/data entry operations
+# - project.config.md was blank until 2026-07-30 (now populated)
+
+# ── PATTERN SCORECARD ──────────────────────────────────────────
+# See shared/design-patterns.md for full audit
+# Current: 14/23 GoF patterns actively used
+# Gate: ALL 283 backend tests pass. Pattern adherence reviewed.
+# =====================
+# THIS IS THE ONLY FILE YOU EDIT WHEN COPYING .ai-toolkit TO A NEW PROJECT.
 # All role files read this file as Step 1. Update every section below.
 
 ## PROJECT IDENTITY
