@@ -63,7 +63,7 @@ export const AuthProvider = ({ children }) => {
   const loginInFlightRef = useRef(false);
 
   // Debug helper (disabled by default, enable for debugging)
-  const debug = (...args) => { /* if (import.meta.env.DEV) console.log("[Auth]", ...args); */ };
+  const debug = (..._args) => { /* if (import.meta.env.DEV) console.log("[Auth]", ..._args); */ };
 
   // --- Fetch perspective context from backend ---
   const fetchPerspectiveContext = async (token) => {
@@ -106,7 +106,7 @@ export const AuthProvider = ({ children }) => {
       if (Array.isArray(storedPerspectives) && storedPerspectives.length) {
         setAvailablePerspectives(storedPerspectives);
       }
-    } catch {}
+    } catch { /* ignore parse errors */ }
     setLoading(false);
   }, []);
 

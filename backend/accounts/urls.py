@@ -6,6 +6,7 @@ from .views import (
     UserViewSet, GroupViewSet,
     ScopedRoleViewSet, RoleAssignmentAuditLogViewSet,
     LogoutView, my_roles, me_context, change_password, role_registry,
+    platform_apps,
 )
 from .pulse_auth import pulse_auth_view, pulse_provision_view
 
@@ -22,6 +23,8 @@ urlpatterns = [
     path('role-registry/', role_registry, name='role-registry'),
     path('change-password/', change_password, name='change-password'),
     path('logout/', LogoutView.as_view(), name='logout'),
+    path('platform-apps/', platform_apps, name='platform-apps'),
+    path('platform-apps/<str:app_id>/', platform_apps, name='platform-apps-detail'),
     # Pulse AI Copilot integration endpoints
     path('pulse-auth/', pulse_auth_view, name='pulse-auth'),
     path('pulse-provision/', pulse_provision_view, name='pulse-provision'),

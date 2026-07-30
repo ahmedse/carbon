@@ -94,7 +94,7 @@ function processRawData(allRows) {
   const waterByMonth = {};
 
   // Process each data source
-  allRows.forEach(({ scope, rows, moduleName }) => {
+  allRows.forEach(({ scope, rows }) => {
     rows.forEach(row => {
       const values = row.values || {};
       const year = values.reporting_year;
@@ -178,7 +178,7 @@ function getMonthNumber(monthName) {
 }
 
 function formatMonthKey(key) {
-  const [year, month] = key.split('-');
+  const [_year, month] = key.split('-');
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return monthNames[parseInt(month) - 1] || month;
 }

@@ -41,7 +41,7 @@ export default function TableDataPage({
   module_id,
   moduleId,
   tableId,
-  lang,
+  _lang,
   token
 }) {
   const [fields, setFields] = useState([]);
@@ -139,7 +139,7 @@ export default function TableDataPage({
 
   useEffect(() => {
     if (table) fetchRows();
-    // eslint-disable-next-line
+     
   }, [table, fetchRows]);
 
   // Bulk delete

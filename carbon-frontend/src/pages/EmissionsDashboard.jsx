@@ -134,7 +134,7 @@ const StatCard = ({ title, value, unit, subtitle, icon, color, trend, trendValue
   </GlassCard>
 );
 
-const ScopeCard = ({ scope, name, value, percentage, color }) => (
+const ScopeCard = ({ name, value, percentage, color }) => (
   <Box sx={{ flex: 1, minWidth: 180 }}>
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
       <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color }} />

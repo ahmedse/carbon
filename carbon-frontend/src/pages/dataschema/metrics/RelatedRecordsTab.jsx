@@ -4,7 +4,7 @@
 import React from 'react';
 import { Box, Typography, Alert } from '@mui/material';
 
-export default function RelatedRecordsTab({ rowId }) {
+export default function RelatedRecordsTab({ rowId: _rowId }) {
   return (
     <Box>
       <Alert severity="info" sx={{ fontSize: '0.85rem', mb: 2 }}>

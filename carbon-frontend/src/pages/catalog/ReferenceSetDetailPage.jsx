@@ -76,8 +76,8 @@ export default function ReferenceSetDetailPage() {
         domains: Array.isArray(domainsData) ? domainsData : domainsData.results || [],
         users: Array.isArray(usersData) ? usersData : usersData.results || [],
       });
-    } catch (err) {
-      const msg = err.message || 'Failed to load reference set';
+    } catch (_err) {
+      const msg = _err.message || 'Failed to load reference set';
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
@@ -96,7 +96,7 @@ export default function ReferenceSetDetailPage() {
     try {
       const valuesData = await fetchReferenceValues(token, setId);
       setValues(Array.isArray(valuesData) ? valuesData : valuesData.results || []);
-    } catch (err) {
+    } catch (_err) {
       notify({ message: 'Failed to refresh values', type: 'error' });
     }
   };

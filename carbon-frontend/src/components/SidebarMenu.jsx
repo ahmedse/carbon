@@ -106,7 +106,7 @@ function MenuItem({
 function DataEntrySidebar({ collapsed, location, navigate, modules, tablesByModule }) {
   const open = !collapsed;
   const [openScopeMenus, setOpenScopeMenus] = useState({ 1: true, 2: true, 3: true });
-  const [openModuleMenus, setOpenModuleMenus] = useState({});
+  const [_openModuleMenus, setOpenModuleMenus] = useState({});
 
   // Group modules by scope
   const modulesByScope = useMemo(() => {
@@ -477,7 +477,7 @@ function AdminSidebar({ collapsed, location }) {
 
 // --- Dashboard Sidebar (all 5 dashboard views) ---
 function DashboardSidebar({ collapsed, location }) {
-  const open = !collapsed;
+  const _open = !collapsed;
 
   return (
     <List sx={{ pt: 0.5, pb: 2, px: 0.5 }}>

@@ -3,7 +3,7 @@
 
 from rest_framework import serializers
 from django.contrib.auth.models import Group
-from .models import User, ScopedRole, RoleAssignmentAuditLog, GroupMetadata
+from .models import User, ScopedRole, RoleAssignmentAuditLog, GroupMetadata, PlatformAppConfig
 
 class UserSerializer(serializers.ModelSerializer):
     # Write-only: accepted on create/update, never returned in responses.
@@ -162,3 +162,10 @@ class RoleAssignmentAuditLogSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'group', 'org_unit', 'module', 'action', 'timestamp'
         ]
+
+
+class PlatformAppConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlatformAppConfig
+        fields = ['id', 'app_id', 'is_enabled', 'display_order', 'updated_at']
+        read_only_fields = ['id', 'updated_at']

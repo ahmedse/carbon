@@ -136,7 +136,7 @@ export default function ModuleWorkspacePage() {
       .finally(() => setLoading(false));
   }, [moduleId, projectId, token]);
 
-  const breadcrumb = useMemo(() => [
+  const _breadcrumb = useMemo(() => [
     { label: 'Home', path: '/dashboard' },
     { label: 'My Data', path: '/carbon/my-data' },
     { label: module?.name || '...' },

@@ -88,3 +88,37 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
   codebase still has naive-datetime debt (verify.sh flags it); fix on touch.
 - Regression guard: `verify.sh antipatterns` greps for naive datetime.
 - First seen: recurring (existing debt).
+
+### PB-07 — MUI DataGrid crashes: `Cannot read properties of undefined (reading 'size')`
+- Symptom: `gridRowSelectionSelector.js:12 Uncaught TypeError: Cannot read properties of undefined (reading 'size')`
+- Layer: frontend
+- Root cause: `rowSelectionModel` and `onRowSelectionModelChange` are passed to `<DataGrid>` unconditionally, but when `checkboxSelection={false}` the DataGrid does not initialize internal row selection state. The selector then tries to read `.size` on `undefined`.
+- Fix: Conditionally spread `rowSelectionModel`/`onRowSelectionModelChange` only when `checkboxSelection` is true:
+  ```jsx
+  checkboxSelection={isAdmin}
+  {...(isAdmin ? {
+    rowSelectionModel: selectedRows,
+    onRowSelectionModelChange: (ids) => setSelectedRows(ids),
+  } : {})}
+  ```
+- Best practice note: Never pass selection-model props to MUI DataGrid when `checkboxSelection` is false. The grid state machine expects a valid selection object when those props are present.
+- Regression guard: N/A (runtime error, not a grep-able pattern)
+- First seen: 2026-07-30
+
+### PB-08 — API 404 from frontend: singular vs plural route mismatch
+- Symptom: Frontend page 404s with `GET /carbon-api/carbon/verification/` → Django returns "Page not found"
+- Layer: frontend / api-config
+- Root cause: The frontend config (`src/config.js`) used `carbon/verification/` (singular), but the backend Django router registered the ViewSet as `verifications` (plural). DRF `DefaultRouter` uses the registered basename verbatim.
+- Fix: Align the frontend API route with the backend: `"carbon/verifications/"` in `config.js`.
+- Best practice note: When a DRF router registers `r'verifications'`, the generated URL prefix is `verifications/`. Always check `urls.py` router registration when debugging frontend 404s.
+- Regression guard: N/A (config mismatch, not programmatically detectable without integration test)
+- First seen: 2026-07-30
+
+### PB-09 — Duplicate navigation items pointing to same page
+- Symptom: Two sidebar menu items ("Data Entry" and "Emission Sources") both navigate to `/carbon/my-data`, confusing users.
+- Layer: frontend / navigation
+- Root cause: The app manifest declared two distinct menu items for the same page (one with `?tab=sources` query param). Multi-tab pages should have ONE menu entry; tab switching is handled within the page.
+- Fix: Remove the redundant menu item. Keep the canonical entry (`Data Entry` → `/carbon/my-data`).
+- Best practice note: One page = one menu item. Internal tabs/sub-views are navigated within the page, not via separate sidebar entries.
+- Regression guard: N/A
+- First seen: 2026-07-30

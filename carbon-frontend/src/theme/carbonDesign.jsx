@@ -8,7 +8,7 @@
 //   - Subtle borders over heavy shadows
 //   - All tokens in one place — no scattered magic numbers
 
-import { Box, Paper, Typography, useTheme, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
+import { Box, Paper, Typography, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 // ── Spacing Scale ──────────────────────────────────────────────────────────

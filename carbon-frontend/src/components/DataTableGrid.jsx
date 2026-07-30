@@ -26,7 +26,7 @@ function mapRows(rows, fields) {
     const values = { ...row, ...row.values };
     dateFields.forEach(name => {
       if (values[name] && !(values[name] instanceof Date)) {
-        try { values[name] = new Date(values[name]); } catch {}
+        try { values[name] = new Date(values[name]); } catch { /* ignore */ }
       }
     });
     return values;
@@ -281,13 +281,13 @@ export default function DataTableGrid({
   uploadRowFile,
   onSelectionChange,
   onRowSelectionModelChange,
-  onAddNew,
-  onEditRow: parentOnEditRow,
-  onDeleteRow: parentOnDeleteRow,
+  onAddNew: _onAddNew,
+  onEditRow,
+  onDeleteRow,
   fetchRows,
   loading,
   selected,
-  onExportCsv,
+  onExportCsv: _onExportCsv,
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState("edit");
@@ -423,7 +423,7 @@ export default function DataTableGrid({
       {/* Dialog for add/edit (Modal, not closeable by backdrop click) */}
       <Dialog
         open={drawerOpen}
-        onClose={(event, reason) => {
+        onClose={(_event, _reason) => {
           // Only close on explicit button click, not backdrop or escape
           return;
         }}
@@ -480,7 +480,7 @@ export default function DataTableGrid({
       {/* Confirm row delete (Modal Dialog) */}
       <Dialog
         open={!!deleteRow}
-        onClose={(event, reason) => {
+        onClose={(_event, _reason) => {
           // Only close on explicit button click
           return;
         }}

@@ -1,7 +1,7 @@
 // File: src/pages/dashboards/DataQualityDashboard.jsx
 // Data Quality Dashboard - Audit readiness and data completeness tracking
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Box,
   Grid,
@@ -179,7 +179,7 @@ const OverallScoreCard = ({ score, breakdown }) => {
   );
 };
 
-const MetricCard = ({ icon: Icon, title, value, status, description, color }) => (
+const MetricCard = ({ icon: _Icon, title, value, status, description, color }) => (
   <GlassCard sx={{ height: "100%" }}>
     <CardContent sx={{ p: 2.5 }}>
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2 }}>
@@ -194,7 +194,7 @@ const MetricCard = ({ icon: Icon, title, value, status, description, color }) =>
             justifyContent: "center",
           }}
         >
-          <Icon sx={{ color, fontSize: 24 }} />
+          <_Icon sx={{ color, fontSize: 24 }} />
         </Box>
         <Box sx={{ flex: 1 }}>
           <Typography variant="caption" color="#6b7280">
@@ -316,7 +316,7 @@ const ValidationIssuesCard = ({ issues }) => {
   
   const criticalCount = issues.filter((i) => i.severity === "critical").length;
   const warningCount = issues.filter((i) => i.severity === "warning").length;
-  const infoCount = issues.filter((i) => i.severity === "info").length;
+  const _infoCount = issues.filter((i) => i.severity === "info").length;
 
   return (
     <GlassCard sx={{ height: "100%" }}>
@@ -527,8 +527,8 @@ const AuditTrailCard = ({ entries }) => (
 // ============ Main Component ============
 
 export default function DataQualityDashboard() {
-  const { user, context } = useAuth();
-  const { data, loading, error } = useDashboardData(context?.projectId, user?.token);
+  const { user: _user, context } = useAuth();
+  const { data: _data, loading, error } = useDashboardData(context?.projectId, _user?.token);
 
   if (loading) {
     return (

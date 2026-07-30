@@ -71,7 +71,7 @@ const ReportSection = ({ title, icon, children, sx = {} }) => (
   </Paper>
 );
 
-const ScopeSummaryCard = ({ scope, name, emissions, categories, color }) => (
+const ScopeSummaryCard = ({ name, emissions, categories, color }) => (
   <Card
     elevation={0}
     sx={{

@@ -71,7 +71,7 @@ export default function DataEntryPage() {
   const { moduleId, tableId } = useParams();
   const navigate = useNavigate();
   const { token, user, context } = useAuth();
-  const theme = useTheme();
+  const _theme = useTheme();
 
   const [tableMeta, setTableMeta] = useState(null);
   const [fields, setFields] = useState([]);

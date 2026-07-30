@@ -23,7 +23,6 @@ import {
   Chip,
   LinearProgress,
   useTheme,
-  useMediaQuery,
   Divider,
 } from '@mui/material';
 import {
@@ -39,10 +38,10 @@ import MetricCard from '../../components/dashboard/MetricCard';
 
 
 
-const DataQualitySummary = ({ data, theme }) => {
-  if (!data) return null;
-  const total = (data.passing_count || 0) + (data.warning_count || 0) + (data.failing_count || 0) + (data.unknown_count || 0);
-  const passingPct = total > 0 ? Math.round((data.passing_count / total) * 100) : 0;
+const DataQualitySummary = ({ data: _dqData, theme }) => {
+  if (!_dqData) return null;
+  const total = (_dqData.passing_count || 0) + (_dqData.warning_count || 0) + (_dqData.failing_count || 0) + (_dqData.unknown_count || 0);
+  const _passingPct = total > 0 ? Math.round((_dqData.passing_count / total) * 100) : 0;
 
   return (
     <Card>
@@ -54,17 +53,17 @@ const DataQualitySummary = ({ data, theme }) => {
           <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
             <Typography variant="caption">Overall Score</Typography>
             <Typography variant="caption" sx={{ fontWeight: 600 }}>
-              {Math.round(data.avg_quality_score || 0)}%
+              {Math.round(_dqData.avg_quality_score || 0)}%
             </Typography>
           </Stack>
-          <LinearProgress variant="determinate" value={Math.min(data.avg_quality_score || 0, 100)} sx={{ height: 8, borderRadius: 4, bgcolor: theme.palette.action.disabledBackground, '& .MuiLinearProgress-bar': { bgcolor: theme.palette.success.main } }} />
+          <LinearProgress variant="determinate" value={Math.min(_dqData.avg_quality_score || 0, 100)} sx={{ height: 8, borderRadius: 4, bgcolor: theme.palette.action.disabledBackground, '& .MuiLinearProgress-bar': { bgcolor: theme.palette.success.main } }} />
         </Box>
 
         <Grid container spacing={1}>
           <Grid size={{ xs: 6, sm: 3 }}>
             <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: `${theme.palette.success.main}15`, borderLeft: `3px solid ${theme.palette.success.main}` }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: theme.palette.success.dark }}>
-                {data.passing_count}
+                {_dqData.passing_count}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 Passing
@@ -74,7 +73,7 @@ const DataQualitySummary = ({ data, theme }) => {
           <Grid size={{ xs: 6, sm: 3 }}>
             <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: `${theme.palette.warning.main}15`, borderLeft: `3px solid ${theme.palette.warning.main}` }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: theme.palette.warning.dark }}>
-                {data.warning_count}
+                {_dqData.warning_count}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 Warning
@@ -84,7 +83,7 @@ const DataQualitySummary = ({ data, theme }) => {
           <Grid size={{ xs: 6, sm: 3 }}>
             <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: `${theme.palette.error.main}15`, borderLeft: `3px solid ${theme.palette.error.main}` }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: theme.palette.error.dark }}>
-                {data.failing_count}
+                {_dqData.failing_count}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 Failing
@@ -94,7 +93,7 @@ const DataQualitySummary = ({ data, theme }) => {
           <Grid size={{ xs: 6, sm: 3 }}>
             <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: theme.palette.action.disabledBackground, borderLeft: `3px solid ${theme.palette.divider}` }}>
               <Typography variant="h6" sx={{ fontWeight: 700, color: theme.palette.text.secondary }}>
-                {data.unknown_count}
+                {_dqData.unknown_count}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 Unknown
@@ -107,7 +106,7 @@ const DataQualitySummary = ({ data, theme }) => {
   );
 };
 
-const SubmissionStatusCard = ({ data, modulesData, theme }) => {
+const SubmissionStatusCard = ({ _data, modulesData, theme }) => {
   if (!modulesData) return null;
   const { total = 0, with_data = 0, without_data_names = [] } = modulesData;
   const dataCompleteness = total > 0 ? Math.round((with_data / total) * 100) : 0;
@@ -161,7 +160,7 @@ const SubmissionStatusCard = ({ data, modulesData, theme }) => {
 };
 
 export default function DataOwnerDashboardPage() {
-  const { user, context, token } = useAuth();
+  const { user: _ownerUser, context, token } = useAuth();
   const { showNotification } = useNotification();
   const theme = useTheme();
 
@@ -266,7 +265,7 @@ export default function DataOwnerDashboardPage() {
 
   const emissions = dashboardData?.emissions || {};
   const dq = dashboardData?.data_quality || {};
-  const orgUnit = dashboardData?.org_unit || context?.org_units[0];
+  const _orgUnit = dashboardData?.org_unit || context?.org_units[0];
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 } }}>

@@ -23,7 +23,7 @@ function notify(message, type = 'info') {
   window.dispatchEvent(event);
 }
 
-export default function DQMetricsTab({ metrics, rowId, tableId, token }) {
+export default function DQMetricsTab({ metrics, rowId, tableId, token: _token }) {
   const [running, setRunning] = useState(false);
   const [rerunError, setRerunError] = useState(null);
 

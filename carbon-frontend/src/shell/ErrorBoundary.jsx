@@ -12,7 +12,7 @@ class ErrorBoundary extends React.Component {
     this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError(_error) {
     return { hasError: true };
   }
 
@@ -63,7 +63,7 @@ class ErrorBoundary extends React.Component {
               {this.state.error?.message || 'An unexpected error occurred'}
             </Typography>
             
-            {process.env.NODE_ENV === 'development' && this.state.errorInfo && (
+            {import.meta.env.MODE === 'development' && this.state.errorInfo && (
               <Box
                 sx={{
                   textAlign: 'left',

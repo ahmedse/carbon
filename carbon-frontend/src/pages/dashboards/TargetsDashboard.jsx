@@ -1,7 +1,7 @@
 // File: src/pages/dashboards/TargetsDashboard.jsx
 // Targets & Progress Dashboard - SBTi tracking and reduction goals
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Box,
   Grid,
@@ -89,7 +89,7 @@ const GlassCard = ({ children, sx = {}, ...props }) => (
 
 // ============ Target Card Components ============
 
-const MainTargetCard = ({ target, current, baseYear, targetYear, baselineValue, onEdit }) => {
+const MainTargetCard = ({ target, current, baseYear, targetYear, baselineValue, onEdit: _onEdit }) => {
   const totalReduction = ((baselineValue - target) / baselineValue) * 100;
   const achievedReduction = ((baselineValue - current) / baselineValue) * 100;
   const progressPercent = (achievedReduction / totalReduction) * 100;
@@ -228,11 +228,11 @@ const MainTargetCard = ({ target, current, baseYear, targetYear, baselineValue, 
   );
 };
 
-const ScopeTargetCard = ({ scope, name, color, target, current, baselineValue, targetYear }) => {
+const ScopeTargetCard = ({ name, color, target, current, baselineValue, targetYear }) => {
   const reductionTarget = ((baselineValue - target) / baselineValue) * 100;
   const achieved = ((baselineValue - current) / baselineValue) * 100;
   const progress = Math.min((achieved / reductionTarget) * 100, 100);
-  const isOnTrack = progress >= 50;
+  const _isOnTrack = progress >= 50;
 
   return (
     <GlassCard sx={{ height: "100%" }}>
@@ -520,7 +520,7 @@ const MilestonesCard = ({ milestones }) => (
 
 export default function TargetsDashboard() {
   const { user, context } = useAuth();
-  const { data, loading, error } = useDashboardData(context?.projectId, user?.token);
+  const { _data, loading, error } = useDashboardData(context?.projectId, user?.token);
   const { data: yearlyData, loading: yearlyLoading, error: yearlyError } = useYearlyComparison();
   const [targetScenario, setTargetScenario] = useState("1.5c");
 

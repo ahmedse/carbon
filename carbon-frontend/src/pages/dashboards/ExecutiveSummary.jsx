@@ -1,7 +1,7 @@
 // File: src/pages/dashboards/ExecutiveSummary.jsx
 // Executive Summary Dashboard - Current state overview for leadership
 
-import React, { useState, useMemo } from "react";
+import React from "react";
 import {
   Box,
   Grid,
@@ -165,7 +165,7 @@ const EmissionsSummaryCard = ({ total, previousTotal, changePercent, unit = "t C
     ? changePercent 
     : (previousTotal ? ((total - previousTotal) / previousTotal * 100) : 0);
   const isReduction = change < 0;
-  const hasComparison = previousTotal > 0 || changePercent !== undefined;
+  const _hasComparison = previousTotal > 0 || changePercent !== undefined;
   
   return (
     <GlassCard sx={{ height: "100%" }}>
@@ -443,7 +443,7 @@ const QuickInsightsCard = ({ insights }) => (
 // ============ Main Component ============
 
 export default function ExecutiveSummary() {
-  const { context } = useAuth();
+  const { _context } = useAuth();
   const currentYear = new Date().getFullYear();
   const { data, loading, error } = useEmissionsData(currentYear);
   const { comparison } = useEmissionsComparison(currentYear, currentYear - 1);

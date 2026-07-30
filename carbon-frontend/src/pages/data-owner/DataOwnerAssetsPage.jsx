@@ -67,7 +67,7 @@ const QualityStatusBadge = ({ value, score, theme }) => {
 };
 
 export default function DataOwnerAssetsPage() {
-  const { user, context, token } = useAuth();
+  const { user: _user, context, token } = useAuth();
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const [searchParams] = useSearchParams();

@@ -73,14 +73,10 @@ import CalculationsPage from "./pages/carbon/CalculationsPage";
 import VerificationPage from "./pages/carbon/VerificationPage";
 import AuditLogPage from "./pages/admin/AuditLogPage";
 
-// New Dashboard Architecture
-import {
-  ExecutiveSummary,
-  AnalyticsDashboard,
-  TargetsDashboard,
-  DataQualityDashboard,
-  ReportingDashboard,
-} from "./pages/dashboards";
+import PlatformHome from "./pages/PlatformHome";
+
+// Dashboard components — used by /carbon/* domain app routes only
+import { AnalyticsDashboard } from "./pages/dashboards";
 
 /** Redirect legacy /catalog/schemas/:tableId → /catalog/tables/:tableId (preserves id). */
 function RedirectSchemaToTable() {
@@ -122,7 +118,7 @@ function RequireContext() {
 /**
  * Role-aware landing redirect for non-admin users
  * - Data-only users (no admin role) → redirect to first module
- * - Admin users → stay at ExecutiveSummary dashboard
+ * - Admin users → PlatformHome (app portal)
  */
 function RoleAwareLanding() {
   const { availablePerspectives, context, loading } = useAuth();
@@ -152,8 +148,8 @@ function RoleAwareLanding() {
     );
   }
   
-  // For admins and others, show dashboard
-  return <ExecutiveSummary />;
+  // For admins and others, show PlatformHome app portal
+  return <PlatformHome />;
 }
 
 export default function App() {
@@ -171,14 +167,16 @@ export default function App() {
                 <Route path="feedback" element={<Feedback />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/" element={<RoleAwareLanding />} />
-                <Route path="/dashboard" element={<ExecutiveSummary />} />
                 
-                {/* New Dashboard Architecture */}
-                <Route path="/dashboards/executive" element={<ExecutiveSummary />} />
-                <Route path="/dashboards/analytics" element={<AnalyticsDashboard />} />
-                <Route path="/dashboards/targets" element={<TargetsDashboard />} />
-                <Route path="/dashboards/data-quality" element={<DataQualityDashboard />} />
-                <Route path="/dashboards/reporting" element={<ReportingDashboard />} />
+                {/* /dashboard redirects to PlatformHome (/) — backward compat */}
+                <Route path="/dashboard" element={<Navigate to="/" replace />} />
+                
+                {/* Legacy dashboards redirect to domain app equivalents */}
+                <Route path="/dashboards/executive" element={<Navigate to="/carbon/console" replace />} />
+                <Route path="/dashboards/analytics" element={<Navigate to="/carbon/analytics" replace />} />
+                <Route path="/dashboards/targets" element={<Navigate to="/carbon/admin/targets" replace />} />
+                <Route path="/dashboards/data-quality" element={<Navigate to="/catalog/dq-dashboard" replace />} />
+                <Route path="/dashboards/reporting" element={<Navigate to="/carbon/reporting/generate" replace />} />
                 
                 {/* Legacy Dashboard (keeping for backwards compatibility) */}
                 <Route path="/dashboard-legacy" element={<Dashboard />} />

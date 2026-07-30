@@ -19,7 +19,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
-export default function RowOverviewTab({ rowData, onRefresh, onClose }) {
+export default function RowOverviewTab({ rowData, onRefresh, onClose: _onClose }) {
   const handleEdit = () => {
     // Switch to edit tab (handled by parent)
     window.dispatchEvent(

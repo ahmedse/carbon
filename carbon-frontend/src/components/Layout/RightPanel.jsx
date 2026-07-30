@@ -4,7 +4,7 @@ import { Drawer, Box, IconButton, Typography, useTheme } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 
 function RightPanel({ open, onClose, title, width, children }) {
-  const theme = useTheme();
+  const _theme = useTheme();
   const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
 
   return (

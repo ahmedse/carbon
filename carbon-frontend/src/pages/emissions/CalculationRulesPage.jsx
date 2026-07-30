@@ -279,8 +279,8 @@ function ExecuteDialog({ open, rule, onClose, onConfirm, loading }) {
 export default function CalculationRulesPage() {
   const { user, token } = useAuth();
   const [rules, setRules] = useState([]);
-  const [factors, setFactors] = useState([]);
-  const [tables, setTables] = useState([]);
+  const [factors, _setFactors] = useState([]);
+  const [tables, _setTables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);

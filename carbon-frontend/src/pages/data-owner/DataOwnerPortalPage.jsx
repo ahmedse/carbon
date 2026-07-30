@@ -68,7 +68,7 @@ const QualityBadge = ({ status, score, theme }) => {
   );
 };
 
-const QuickStats = ({ assets, domainsCount, modulesWithData, modulesWithoutDataNames, theme }) => {
+const QuickStats = ({ assets, domainsCount, modulesWithData: _modulesWithData, modulesWithoutDataNames, theme }) => {
   return (
     <Grid container spacing={2} sx={{ mb: 4 }}>
       <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -239,7 +239,7 @@ export default function DataOwnerPortalPage() {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const _isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [domains, setDomains] = useState([]);
   const [assets, setAssets] = useState([]);

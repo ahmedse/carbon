@@ -5,7 +5,7 @@ import { Line } from "react-chartjs-2";
 import useEmissionsTrend from "../hooks/useEmissionsTrend";
 import ErrorBoundary from "../components/ErrorBoundary";
 
-export default function EmissionsTrendChart({ tableId, ...props }) {
+export default function EmissionsTrendChart({ tableId }) {
   const { data, loading, error } = useEmissionsTrend(tableId);
 
   if (loading) {

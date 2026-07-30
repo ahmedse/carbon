@@ -38,7 +38,7 @@ export default function FilteredDataGrid({
   rowsPerPageOptions = [25, 50, 100],
   emptyMessage = 'No records found',
   emptySubtext = 'Try adjusting your filters.',
-  toolbar = false,
+  _toolbar = false,
 }) {
   const hasFilters = Boolean(
     searchValue || filterDefs.some((def) => filterValues[def.key])

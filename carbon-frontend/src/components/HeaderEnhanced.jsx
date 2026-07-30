@@ -26,7 +26,7 @@ const PERSPECTIVE_LABELS = {
   admin: 'Admin',
 };
 
-function MenuRow({ icon: Icon, label, onClick, danger, disabled }) {
+function MenuRow({ icon: _Icon, label, onClick, danger, disabled }) {
   return (
     <Box
       onClick={onClick}
@@ -48,7 +48,7 @@ function MenuRow({ icon: Icon, label, onClick, danger, disabled }) {
         transition: "background 120ms",
       }}
     >
-      <Icon sx={{ fontSize: 13, flexShrink: 0 }} />
+      <_Icon sx={{ fontSize: 13, flexShrink: 0 }} />
       <Typography sx={{ fontSize: "0.75rem" }}>{label}</Typography>
     </Box>
   );

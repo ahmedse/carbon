@@ -107,7 +107,7 @@ const ReportResultPanel = ({ report, loading }) => {
 };
 
 export default function SavedReportsPage() {
-  const { user, token } = useAuth();
+  const { user: _user, token } = useAuth();
   const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState({});

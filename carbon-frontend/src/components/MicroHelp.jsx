@@ -22,8 +22,7 @@ export default function MicroHelp({ helpKey, lang = "en", ...props }) {
 
   // Robust: developer warning if key is missing in all languages
   if (!text) {
-    if (import.meta?.env?.DEV || process.env.NODE_ENV === "development") {
-      // eslint-disable-next-line no-console
+    if (import.meta?.env?.DEV || import.meta.env.MODE === 'development') {
       console.warn(
         `[MicroHelp] Missing help text for key "${helpKey}" in language "${lang}".`
       );

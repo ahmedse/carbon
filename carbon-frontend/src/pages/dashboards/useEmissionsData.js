@@ -2,7 +2,7 @@
 // Custom hook for fetching REAL emissions dashboard data from the backend API
 
 import { useState, useEffect, useCallback } from "react";
-import { fetchEmissionsDashboard, fetchEmissionsReport, fetchYearlyComparison } from "../../api/emissions";
+import { fetchEmissionsDashboard, fetchYearlyComparison } from "../../api/emissions";
 import { useAuth } from "../../auth/AuthContext";
 
 /**

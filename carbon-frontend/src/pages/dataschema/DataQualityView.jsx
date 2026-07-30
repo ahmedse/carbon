@@ -1,7 +1,7 @@
 // File: src/pages/dataschema/DataQualityView.jsx
 // Data Quality view within Data Hub context (module-scoped version)
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Box,
   Grid,
@@ -83,7 +83,7 @@ const GlassCard = ({ children, sx = {}, ...props }) => (
   </Card>
 );
 
-const MetricCard = ({ icon: Icon, title, value, subtitle, color, trend, loading }) => (
+const MetricCard = ({ icon: _Icon, title, value, subtitle, color, trend, loading }) => (
   <GlassCard>
     <CardContent>
       <Box display="flex" alignItems="flex-start" justifyContent="space-between" mb={1}>
@@ -99,7 +99,7 @@ const MetricCard = ({ icon: Icon, title, value, subtitle, color, trend, loading 
             color: color,
           }}
         >
-          <Icon sx={{ fontSize: 24 }} />
+          <_Icon sx={{ fontSize: 24 }} />
         </Box>
         {trend && (
           <Chip
@@ -132,7 +132,7 @@ export default function DataQualityView() {
   const { data, loading, error, refreshData } = useDashboardData();
   const isAdmin = availablePerspectives?.includes("admin");
   
-  const [expandedModule, setExpandedModule] = useState(null);
+  const [_expandedModule, _setExpandedModule] = useState(null);
   const [scopeFilter, setScopeFilter] = useState("all");
 
   // Filter modules by user's context and scope

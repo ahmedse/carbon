@@ -197,7 +197,7 @@ export default function Help() {
 
         {/* FAQ Accordion */}
         <Typography variant="h5" fontWeight={700} mb={1}>Frequently Asked Questions</Typography>
-        {faqs.map(({ q, a }, i) => (
+        {faqs.map(({ q, a }, _i) => (
           <Accordion key={q} sx={{ mb: 1 }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography variant="subtitle1" fontWeight={600}>{q}</Typography>

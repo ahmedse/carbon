@@ -1,7 +1,7 @@
 // src/components/SystemDialog.jsx
 // Standard system-wide dialog with drag, resize, explicit close, and modal focus.
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Dialog, DialogTitle, DialogContent, DialogActions, Paper, IconButton, Button } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 
@@ -23,7 +23,7 @@ export default function SystemDialog({
   minHeight = MIN_HEIGHT,
   maxWidth = 'calc(100vw - 48px)',
   maxHeight = 'calc(100vh - 48px)',
-  closeLabel = 'Close',
+  _closeLabel = 'Close',
   cancelLabel = 'Cancel',
   showCancel = true,
   fullWidth = false,

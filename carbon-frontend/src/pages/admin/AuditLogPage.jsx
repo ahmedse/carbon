@@ -175,7 +175,7 @@ function AuditDetailDialog({ open, onClose, audit }) {
 }
 
 export default function AuditLogPage() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const [audits, setAudits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

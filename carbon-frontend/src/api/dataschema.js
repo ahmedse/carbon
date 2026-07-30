@@ -211,7 +211,7 @@ export async function uploadRowFile(token, rowId, field, file, project_id, modul
       token,
       body: formData,
     });
-  } catch (err) {
+  } catch (_err) {
     throw new Error("Network error during file upload");
   }
 

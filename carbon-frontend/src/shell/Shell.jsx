@@ -21,7 +21,7 @@ const CommandPalette = lazy(() => import('./CommandPalette'));
 
 // Default path per studio
 const STUDIO_PATHS = {
-  home:    '/dashboard',
+  home:    '/',
   carbon:  '/carbon/dashboard',   // app studio: default to carbon dashboard
   catalog: '/catalog/domains',
   admin:   '/admin/users',

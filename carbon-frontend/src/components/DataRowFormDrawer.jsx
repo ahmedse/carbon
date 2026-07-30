@@ -37,7 +37,7 @@ function coerceValue(field, value) {
 }
 
 // Helper to validate a single value based on field config and type
-function validateField(field, value, values) {
+function validateField(field, value, _values) {
   if (field.required) {
     if (
       value === "" ||
@@ -142,7 +142,7 @@ function validateField(field, value, values) {
         )
           return `${field.label}: select at most ${rules.maxItems}.`;
       }
-    } catch (e) {
+    } catch (_e) {
       // ignore validation parse error
     }
   }
@@ -150,7 +150,7 @@ function validateField(field, value, values) {
 }
 
 export default function DataRowFormDrawer({
-  open,
+  _open,
   onClose,
   fields = [],
   initial,
@@ -186,7 +186,7 @@ export default function DataRowFormDrawer({
     });
     setValues(newVals);
     setErrors({});
-    // eslint-disable-next-line
+     
   }, [initial, fields]);
 
   const handleChange = (fieldName, value) => {
@@ -329,7 +329,7 @@ export default function DataRowFormDrawer({
                 if (rules.hint) {
                   rangeHint = rules.hint;
                 }
-              } catch {}
+              } catch { /* ignore parse errors */ }
             }
             helper = rangeHint || undefined;
           }

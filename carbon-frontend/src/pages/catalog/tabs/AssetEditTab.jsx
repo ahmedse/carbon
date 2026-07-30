@@ -73,7 +73,7 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
   }, [selectOptions.glossaryTerms]);
 
   // Build tag options
-  const tagOptions = useMemo(() => {
+  const _tagOptions = useMemo(() => {
     const tags = selectOptions.tags || [];
     if (!Array.isArray(tags)) return [];
     return tags.map(t => ({

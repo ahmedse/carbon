@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { TextField, InputAdornment } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 
-function SearchField({ value, onChange, placeholder, onClear, disabled }) {
+function SearchField({ value, onChange, placeholder, _onClear, disabled }) {
   return (
     <TextField
       fullWidth

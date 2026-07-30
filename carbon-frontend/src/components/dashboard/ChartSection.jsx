@@ -6,7 +6,7 @@ import { Accordion, AccordionSummary, AccordionDetails, Typography, Box } from "
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 export default function ChartSection({ 
-  id, 
+  id: _id, 
   title, 
   subtitle, 
   icon, 

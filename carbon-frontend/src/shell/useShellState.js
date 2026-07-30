@@ -11,13 +11,14 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import HelpIcon from '@mui/icons-material/Help';
 import { APP_REGISTRY } from '../apps/registry';
 import { isGlobalAdmin, isCatalogAdmin, hasAppAccess } from '../utils/rbac';
+import { useEnabledApps } from '../hooks/useEnabledApps';
 
 // Platform studios — shell-owned, NOT app-manifest-driven.
 // App studios are injected dynamically from APP_REGISTRY below.
 // NOTE: 'emissions' and 'dataschema' are removed — their functionality lives inside
 //       the Carbon Footprint domain app (carbon studio).
 const PLATFORM_STUDIOS = [
-  { id: 'home',     label: 'Dashboard',       icon: DashboardIcon,          path: '/dashboard'       },
+  { id: 'home',     label: 'Home',            icon: DashboardIcon,          path: '/'               },
   // ── App studios injected here at runtime ──
   { id: 'catalog',  label: 'Catalog Studio', icon: CatalogIcon,            path: '/catalog/domains' },
   { id: 'admin',    label: 'Platform Admin', icon: AdminPanelSettingsIcon, path: '/admin/users'     },
@@ -51,6 +52,7 @@ function setStoredBoolean(key, value) {
 
 export function useShellState() {
   const { availablePerspectives, user, context } = useAuth();
+  const { isAppEnabled } = useEnabledApps();
   const studios = useMemo(() => {
     // Derive app studios from the manifest registry.
     const appStudios = APP_REGISTRY.map(m => ({
@@ -70,7 +72,7 @@ export function useShellState() {
       ...PLATFORM_STUDIOS.slice(homeIdx + 1),
     ];
 
-    // Filter based on user permissions
+    // Filter based on user permissions AND admin enable/disable
     const filtered = combined.filter((s) => {
       // Hide admin studio if not admin
       if (s.id === 'admin') {
@@ -82,9 +84,10 @@ export function useShellState() {
         return isCatalogAdmin(user, availablePerspectives);
       }
       
-      // For app studios, check if user has any access to that app
+      // For app studios, check if admin has disabled the app AND user has access
       const isAppStudio = APP_REGISTRY.some(app => app.id === s.id);
       if (isAppStudio) {
+        if (!isAppEnabled(s.id)) return false;
         return hasAppAccess(s.id, user, context, availablePerspectives);
       }
       
@@ -93,7 +96,7 @@ export function useShellState() {
     });
     
     return filtered;
-  }, [availablePerspectives, user, context]);
+  }, [availablePerspectives, user, context, isAppEnabled]);
 
   const [activeStudio, setActiveStudio] = useState('home');
   const [sidebarVisible, setSidebarVisible] = useState(() => getStoredBoolean('carbon-sidebar-visible', true));

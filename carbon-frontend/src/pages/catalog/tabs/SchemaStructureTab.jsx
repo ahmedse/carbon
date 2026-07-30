@@ -37,7 +37,7 @@ function sortFields(fields = []) {
   return [...fields].sort((a, b) => (Number(a.order ?? 0) - Number(b.order ?? 0)) || (Number(a.id ?? 0) - Number(b.id ?? 0)));
 }
 
-export default function SchemaStructureTab({ entityData, tableId, table, fields = [], onChanged, isAdmin, onEditMetadata }) {
+export default function SchemaStructureTab({ _entityData, tableId, table, fields = [], onChanged, isAdmin, onEditMetadata }) {
   const navigate = useNavigate();
   const { token, user, context } = useAuth();
   const { notify } = useNotification();

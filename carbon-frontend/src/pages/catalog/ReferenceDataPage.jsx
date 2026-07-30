@@ -22,7 +22,7 @@ export default function ReferenceDataPage() {
 
   const [sets, setSets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [_error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingSet, setEditingSet] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);

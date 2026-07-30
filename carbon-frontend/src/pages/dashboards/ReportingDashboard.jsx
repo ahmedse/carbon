@@ -513,7 +513,7 @@ const ReportingCalendarCard = ({ deadlines }) => (
 
 export default function ReportingDashboard() {
   const { user, context } = useAuth();
-  const { data, loading, error } = useDashboardData(context?.projectId, user?.token);
+  const { _data, loading, error } = useDashboardData(context?.projectId, user?.token);
   const [selectedFramework, setSelectedFramework] = useState("cdp");
   const [reportingPeriod, setReportingPeriod] = useState("2025");
 

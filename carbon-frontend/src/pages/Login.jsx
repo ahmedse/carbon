@@ -19,7 +19,7 @@ export default function Login() {
   const [requireProject, setRequireProject] = useState(false);
 
   const location = useLocation();
-  const expired = location.search.includes("expired=1");
+  const _expired = location.search.includes("expired=1");
 
   const navigate = useNavigate();
 

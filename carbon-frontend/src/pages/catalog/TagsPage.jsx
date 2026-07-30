@@ -19,7 +19,7 @@ import { fetchTags, createTag, updateTag, deleteTag } from '../../api/catalog';
 const EMPTY_FORM = { name: '', color: '#2563eb' };
 
 export default function TagsPage() {
-  const navigate = useNavigate();
+  const _navigate = useNavigate();
   const { token } = useAuth();
   const { notify } = useNotification();
 

@@ -554,8 +554,10 @@ export default function CalculationsPage() {
               initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
               disableRowSelectionOnClick
               checkboxSelection={isAdmin}
-              rowSelectionModel={selectedRows}
-              onRowSelectionModelChange={(ids) => setSelectedRows(ids)}
+              {...(isAdmin ? {
+                rowSelectionModel: selectedRows,
+                onRowSelectionModelChange: (ids) => setSelectedRows(ids),
+              } : {})}
               onRowClick={handleRowClick}
               getRowId={(row) => row.id}
               sx={{

@@ -248,7 +248,7 @@ export function NotificationProvider({ children }) {
 export function useNotification() {
   const ctx = useContext(NotificationContext);
   if (!ctx || typeof ctx.notify !== "function") {
-    // eslint-disable-next-line no-console
+     
     console.warn(
       "useNotification called outside of NotificationProvider! Fallback to alert."
     );

@@ -12,11 +12,11 @@ from django.conf import settings
 from django.contrib.auth.models import Group
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
-from .models import User, ScopedRole, RoleAssignmentAuditLog
+from .models import User, ScopedRole, RoleAssignmentAuditLog, PlatformAppConfig
 from .serializers import (
     UserSerializer, GroupSerializer,
     ScopedRoleSerializer, ScopedRoleCreateSerializer,
-    RoleAssignmentAuditLogSerializer
+    RoleAssignmentAuditLogSerializer, PlatformAppConfigSerializer
 )
 from .permissions import HasScopedRole, CanManageScopedRoles
 from .rbac_utils import user_is_global_admin, get_steward_org_unit_ids
@@ -481,5 +481,50 @@ class LogoutView(APIView):
             )
 
         return Response({'detail': 'Logout successful'}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def platform_apps(request, app_id=None):
+    """
+    GET  /accounts/platform-apps/         — list all registered apps with enabled status
+    PUT  /accounts/platform-apps/{app_id}/ — toggle is_enabled (admin only)
+    """
+    from .rbac_utils import user_is_global_admin
+
+    if request.method == 'PUT':
+        if not user_is_global_admin(request.user):
+            raise PermissionDenied('Only platform admins can manage app configuration.')
+        try:
+            config = PlatformAppConfig.objects.get(app_id=app_id)
+        except PlatformAppConfig.DoesNotExist:
+            return Response({'error': f'App {app_id} not found'}, status=404)
+        serializer = PlatformAppConfigSerializer(config, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save(updated_by=request.user)
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+    # GET: return all apps merged with DB config (auto-creates missing records)
+    manifests = _load_app_manifests()
+    configs = {c.app_id: c for c in PlatformAppConfig.objects.all()}
+
+    result = []
+    for manifest in manifests:
+        app_id = manifest['id']
+        config = configs.get(app_id)
+        if not config:
+            config = PlatformAppConfig.objects.create(app_id=app_id, is_enabled=True)
+        result.append({
+            'app_id': app_id,
+            'name': manifest.get('name', app_id),
+            'version': manifest.get('version', '1.0.0'),
+            'is_enabled': config.is_enabled,
+            'display_order': config.display_order,
+            'roles': manifest.get('roles', []),
+            'updated_at': config.updated_at,
+        })
+
+    return Response(result)
 
     

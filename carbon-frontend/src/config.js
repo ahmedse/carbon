@@ -32,7 +32,7 @@ const validateApiConfig = async () => {
         console.log(`API reach check: ${url} -> ${res.status}`);
         reachable = true;
         break;
-      } catch (err) {
+      } catch (_err) {
         // Try next candidate
       }
     }
@@ -79,6 +79,7 @@ export const API_ROUTES = {
   scopedRoles: "accounts/scoped-roles/",
   roleRegistry: "accounts/role-registry/",
   auditLogs: "accounts/role-audit-logs/",
+  platformApps: "accounts/platform-apps/",
 
   // Catalog (domains, glossary, tags, assets, governance)
   domains: "catalog/domains/",
@@ -129,7 +130,7 @@ export const API_ROUTES = {
   emissionsFactors: "carbon/factors/",
   emissionsCalculations: "carbon/calculations/",
   emissionsRules: "carbon/rules/",
-  emissionsVerification: "carbon/verification/",
+  emissionsVerification: "carbon/verifications/",
   emissionsGWP: "carbon/gwp/",
   emissionsTargets: "carbon/targets/",
   emissionsReportConfigs: "carbon/report-configs/",

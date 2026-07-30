@@ -40,7 +40,6 @@ export default function ImportsDetailPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
-  const [tabIndex, setTabIndex] = useState(0);
 
   const [uploadForm, setUploadForm] = useState({
     table_id: '',

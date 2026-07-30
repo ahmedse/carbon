@@ -72,7 +72,7 @@ export default function CarbonConsolePage() {
     catch (err) { setError(err.message || 'Failed to load console data'); }
     finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, []); // eslint-disable-line
+  useEffect(() => { load(); }, []);  
 
   const period   = data?.active_period;
   const stats    = data?.stats;

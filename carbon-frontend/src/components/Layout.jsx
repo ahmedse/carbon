@@ -15,7 +15,7 @@ const COLLAPSED_WIDTH = 56;
 const DEFAULT_WIDTH = 260;
 
 export default function Layout() {
-  const { context, availablePerspectives, currentPerspective, user } = useAuth();
+  const { context, availablePerspectives, currentPerspective, _user } = useAuth();
   
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = localStorage.getItem("sidebarWidth");
@@ -28,7 +28,7 @@ export default function Layout() {
 
   // Determine if user is admin and get org unit info for banner
   const isAdmin = availablePerspectives?.includes('admin');
-  const isDataEntry = currentPerspective === 'data_entry';
+  const _isDataEntry = currentPerspective === 'data_entry';
   
   // Get user's primary org unit name from context
   const userOrgUnitName = context?.org_units?.[0]?.name || null;

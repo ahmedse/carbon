@@ -2,16 +2,11 @@
 // Header with breadcrumbs, title, and close button for schema detail page
 
 import React from 'react';
-import { Box, Typography, IconButton, useTheme, useMediaQuery } from '@mui/material';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Box, Typography, IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import StorageIcon from '@mui/icons-material/Storage';
 
 export default function SchemaDetailHeader({ tableData, onClose }) {
-  const navigate = useNavigate();
-  const { tableId } = useParams();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const getTableDisplayName = () => {
     if (!tableData) return 'Schema Details';

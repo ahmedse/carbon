@@ -55,7 +55,6 @@ export default function ExportsDetailPage() {
   const [editingProject, setEditingProject] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [tabIndex, setTabIndex] = useState(0);
   const [runningId, setRunningId] = useState(null);
 
   useEffect(() => {

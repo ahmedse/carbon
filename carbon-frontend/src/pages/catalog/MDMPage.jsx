@@ -8,16 +8,10 @@ import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
   fetchReferenceSets,
-  createReferenceSet,
-  updateReferenceSet,
   deleteReferenceSet,
   fetchReferenceValues,
-  createReferenceValue,
-  updateReferenceValue,
   deleteReferenceValue,
   fetchOrgUnits,
-  createOrgUnit,
-  updateOrgUnit,
   deleteOrgUnit,
   fetchDataDomains,
 } from '../../api/catalog';
@@ -40,7 +34,6 @@ import {
   Alert,
   Typography,
   useTheme,
-  useMediaQuery,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import SearchIcon from '@mui/icons-material/Search';
@@ -64,7 +57,6 @@ export default function MDMPage() {
   const { notify } = useNotification();
   const navigate = useNavigate();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -116,8 +108,8 @@ export default function MDMPage() {
         setSelectedRefSet(firstSet.id);
         loadRefValues(firstSet.id);
       }
-    } catch (err) {
-      const msg = err.message || 'Failed to load MDM data';
+    } catch (_err) {
+      const msg = _err.message || 'Failed to load MDM data';
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
@@ -130,7 +122,7 @@ export default function MDMPage() {
     try {
       const valsData = await fetchReferenceValues(token, setId);
       setRefValues(Array.isArray(valsData) ? valsData : valsData.results || []);
-    } catch (err) {
+    } catch (_err) {
       notify({ message: 'Failed to load reference values', type: 'error' });
     }
   };

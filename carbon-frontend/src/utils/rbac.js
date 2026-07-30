@@ -154,7 +154,7 @@ export function canAccessRoute(path, user, availablePerspectives = [], context =
 /**
  * Filter menu items based on user permissions
  */
-export function filterMenuItems(items, user, availablePerspectives = [], context = {}) {
+export function filterMenuItems(items, user, availablePerspectives = []) {
   if (!items || !Array.isArray(items)) return [];
   
   // Global admins see everything

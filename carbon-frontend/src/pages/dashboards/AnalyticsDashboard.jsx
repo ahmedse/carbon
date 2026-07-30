@@ -1,7 +1,7 @@
 // File: src/pages/dashboards/AnalyticsDashboard.jsx
 // Analytics Dashboard - Full date range analysis with comparison features
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Grid,
@@ -55,7 +55,6 @@ import {
 } from "chart.js";
 import { fetchEmissionsDashboard } from "../../api/emissions";
 import { useAuth } from "../../auth/AuthContext";
-import { useEmissionsData } from "./useEmissionsData";
 
 Chart.register(
   ArcElement,
@@ -188,7 +187,7 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
 
 // ============ Metric Cards ============
 
-const MetricCard = ({ title, value, unit, change, changeLabel, icon: Icon, color = "#3b82f6" }) => {
+const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, color = "#3b82f6" }) => {
   const isPositive = change < 0; // For emissions, reduction is positive
   
   return (
@@ -206,7 +205,7 @@ const MetricCard = ({ title, value, unit, change, changeLabel, icon: Icon, color
               justifyContent: "center",
             }}
           >
-            <Icon sx={{ color, fontSize: 22 }} />
+            <_Icon sx={{ color, fontSize: 22 }} />
           </Box>
           <Typography variant="subtitle2" color="#6b7280" fontWeight={500}>
             {title}
@@ -240,7 +239,7 @@ const MetricCard = ({ title, value, unit, change, changeLabel, icon: Icon, color
 
 // ============ Chart Components ============
 
-const MonthlyTrendChart = ({ monthlyTrend, showComparison }) => {
+const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) => {
   // Use real monthly data from API
   const months = monthlyTrend?.map(m => m.month_name) || ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const monthlyTotals = monthlyTrend?.map(m => m.total) || [];
@@ -568,7 +567,7 @@ export default function AnalyticsDashboard() {
   const [quickSelect, setQuickSelect] = useState("ytd");
   const [startDate, setStartDate] = useState(dayjs().startOf("year"));
   const [endDate, setEndDate] = useState(dayjs());
-  const [showComparison, setShowComparison] = useState(false);
+  const [_showComparison, _setShowComparison] = useState(false);
   const [viewMode, setViewMode] = useState("charts");
 
   useEffect(() => {
@@ -765,7 +764,7 @@ export default function AnalyticsDashboard() {
         <>
           <Grid container spacing={3} sx={{ mb: 3 }}>
             <Grid size={{ xs: 12, lg: 8 }}>
-              <MonthlyTrendChart monthlyTrend={data?.monthly_trend} showComparison={showComparison} />
+              <MonthlyTrendChart monthlyTrend={data?.monthly_trend} showComparison={_showComparison} />
             </Grid>
             <Grid size={{ xs: 12, lg: 4 }}>
               <ScopeDistributionChart

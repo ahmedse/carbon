@@ -98,6 +98,27 @@ class GroupMetadata(models.Model):
         return f"Metadata for {self.group.name}"
 
 
+class PlatformAppConfig(models.Model):
+    """Runtime configuration for a platform app declared in APP_REGISTRY.
+    Controls enable/disable and display ordering at runtime without code changes.
+    """
+
+    app_id = models.CharField(max_length=50, unique=True, db_index=True)
+    is_enabled = models.BooleanField(default=True, db_index=True)
+    display_order = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Platform App Config"
+        verbose_name_plural = "Platform App Configs"
+        ordering = ["display_order", "app_id"]
+
+    def __str__(self):
+        status = "enabled" if self.is_enabled else "disabled"
+        return f"{self.app_id} ({status})"
+
+
 # --- SYSTEM ROLE NAMES (constants for code clarity) ---
 
 SYSTEM_ROLES = {

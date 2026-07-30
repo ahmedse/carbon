@@ -29,7 +29,7 @@ export default function RowEditTab({
   tableId,
   rowId,
   token,
-  onClose,
+  onClose: _onClose,
 }) {
   // Extract editable field data from the 'values' object
   const extractEditableFields = (data) => {

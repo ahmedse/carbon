@@ -5,6 +5,7 @@ import React, { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Box, List, ListItemButton, ListItemIcon, ListItemText, Typography, IconButton, Tooltip, Divider } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import HomeIcon from '@mui/icons-material/Home';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -60,9 +61,7 @@ function getSidebarItems(studioId) {
   switch (studioId) {
     case 'home':
       return [
-        { label: 'Executive Summary', path: '/dashboards/executive', icon: DashboardIcon },
-        { label: 'Analytics', path: '/dashboards/analytics', icon: BarChartIcon },
-        { label: 'Targets', path: '/dashboards/targets', icon: AssessmentIcon },
+        { label: 'Platform Home', path: '/', icon: HomeIcon },
       ];
     
     case 'carbon': {
@@ -157,7 +156,7 @@ function getStudioTitle(studioId) {
 }
 
 export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
-  const { currentPerspective, availablePerspectives, context, user } = useAuth();
+  const { currentPerspective: _currentPerspective, availablePerspectives, context, user } = useAuth();
   const location = useLocation();
 
   // Filter items based on perspective and available admin status

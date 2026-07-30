@@ -1,6 +1,6 @@
 // src/pages/catalog/DataProductDetailPage.jsx
 // Catalog Studio: a single Data Product (Module) and its tables.
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';

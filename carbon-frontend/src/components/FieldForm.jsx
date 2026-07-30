@@ -37,7 +37,7 @@ export default function FieldForm({ initial, onSubmit, onCancel, lang }) {
     try {
       if (e.target.value.trim()) JSON.parse(e.target.value);
       setValidationErr("");
-    } catch (err) {
+    } catch (_err) {
       setValidationErr("Invalid JSON");
     }
   };

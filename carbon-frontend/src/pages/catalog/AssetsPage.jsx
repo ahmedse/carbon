@@ -9,8 +9,7 @@ import { useNotification } from '../../components/NotificationProvider';
 import { 
   fetchAssetProfiles, 
   fetchDataDomains, 
-  deleteAssetProfile,
-  fetchGovernanceEvents 
+  deleteAssetProfile
 } from '../../api/catalog';
 import {
   Box,
@@ -59,7 +58,7 @@ function QualityStatusBadge({ value, score }) {
     unknown: '#9e9e9e',
   };
 
-  const iconMap = {
+  const _iconMap = {
     passing: '✓',
     warning: '!',
     failing: '✕',
@@ -112,18 +111,18 @@ export default function AssetsPage() {
   const { token } = useAuth();
   const { notify } = useNotification();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const _isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   // State
   const [assets, setAssets] = useState([]);
   const [domains, setDomains] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [_deleteConfirm, setDeleteConfirm] = useState(null);
 
   // Grid state
-  const [paginationModel, setPaginationModel] = useState({ pageSize: 25, page: 0 });
-  const [sortModel, setSortModel] = useState([]);
+  const [_paginationModel, _setPaginationModel] = useState({ pageSize: 25, page: 0 });
+  const [_sortModel, _setSortModel] = useState([]);
 
   // Filter state
   const [searchText, setSearchText] = useState('');
@@ -194,7 +193,7 @@ export default function AssetsPage() {
   }, [assets, searchText, filterDomain, filterClassification, filterQuality, filterAssetType]);
 
   // Handle delete
-  const handleDelete = async (id) => {
+  const _handleDelete = async (id) => {
     setDeleteConfirm(null);
     try {
       await deleteAssetProfile(token, id);
