@@ -7,53 +7,16 @@
 
 ---
 
-## PHASE 1 — Quick Wins & Foundation Cleanup
-**Role:** Backend Worker | **Model:** DeepSeek | **Est. tokens:** ~15K
+## PHASE 1 — Quick Wins & Foundation Cleanup ✅ COMPLETE 2026-07-31
+**Role:** Backend Worker | **Model:** DeepSeek | **Result:** TASKS-RESULT-P1.md — all 5 groups passed
 
-Before extracting services or writing tests, we clean the foundation.
-These are low-risk, high-ROI fixes that every subsequent phase depends on.
-
-### P1.1 — Register PlatformAppConfig in Django admin
-**Why:** Model exists, view works, but no admin registration — can't manage via Django admin.
-**Files:**
-- EDIT `backend/accounts/admin.py` — add `@admin.register(PlatformAppConfig)` class
-- DO NOT TOUCH: models.py, views.py, serializers.py
-
-### P1.2 — Audit and remove unused ML dependencies
-**Why:** 10 ML packages (scikit-learn, xgboost, lightgbm, shap, scipy, matplotlib, seaborn, etc.) — ai_copilot was removed. Are any still imported?
-**Files:**
-- READ (do not edit yet): grep all `import sklearn|import xgboost|import lightgbm|import shap|import matplotlib|import seaborn|import scipy` in backend/
-- If NO imports found: remove from `backend/requirements.txt`
-- If imports found: document in TASK-RESULTS.md which file uses which package
-
-### P1.3 — Audit and remove unused non-ML dependencies
-**Why:** `hijri-converter`, `SQLAlchemy`, `alembic`, `GitPython` — unclear usage.
-**Files:**
-- READ: grep imports of hijri_converter, sqlalchemy (direct, not Django ORM), alembic, git in backend/
-- Same rule as P1.2
-
-### P1.4 — Update project.config.md
-**Why:** Stale references: `BACKEND_VECTOR="ChromaDB (AI copilot embeddings)"` — ai_copilot deleted.
-**Files:**
-- EDIT `.ai-toolkit/project.config.md` — remove/update ChromaDB line, update known tech debt section, note ai_copilot removal
-
-### P1.5 — Remove dead `assets/` and `seed_ai_knowledge.py` references
-**Why:** These appeared in workspace listing but don't exist on disk. Any lingering references?
-**Files:**
-- READ: grep for "seed_ai_knowledge" and "backend/assets" in all .md, .py, .sh files
-- Remove stale references
-
-### Verification Gate (P1)
-```bash
-# Backend check
-./manage.sh manage check --deploy 2>&1 | tail -5
-# Django admin loads without import errors
-./manage.sh shell -c "from accounts.admin import *; print('admin OK')"
-# Requirements clean
-grep -c "^[^#]" backend/requirements.txt  # should be <= current count minus removals
-# Build still passes
-cd carbon-frontend && npm run build 2>&1 | tail -3
-```
+**Delivered:**
+- ✅ P1.1: PlatformAppConfig registered in Django admin
+- ✅ P1.2: 8 ML deps removed (only numpy+pandas kept, verified imports)
+- ✅ P1.3: 4 non-ML deps removed (SQLAlchemy, alembic — resolves P6-G1 dual ORM)
+- ✅ P1.4: project.config.md updated (ChromaDB marked unused, debt items cleared)
+- ✅ P1.5: No stale references to delete — confirmed absent
+- **requirements.txt: 35 → 23 lines**
 
 ---
 
@@ -226,10 +189,8 @@ ls .ai-toolkit/decisions/0002-command-pattern.md
 ## PHASE 6 — Remaining Audit Items (Lower Priority)
 **Role:** Various | **Model:** Budget-appropriate
 
-### P6-G1 — Dual ORM resolution (Backend Worker)
-**Why:** SQLAlchemy + alembic in requirements.txt alongside Django ORM.
-**Investigation:** Is SQLAlchemy used anywhere? If not, remove. If yes, document why.
-**Files:** grep all sqlalchemy imports in backend/
+### P6-G1 — Dual ORM resolution ✅ RESOLVED by P1-G3
+**Why:** SQLAlchemy + alembic removed in Phase 1 — zero imports found anywhere.
 
 ### P6-G2 — Frontend test scaffolding (Frontend Worker)
 **Why:** Zero frontend tests.

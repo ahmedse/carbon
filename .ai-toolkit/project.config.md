@@ -66,8 +66,10 @@ DEFAULT_TIMEZONE="Africa/Cairo"
 # - 6 apps lack services.py (accounts, dataschema, mdm, evidence, importexport, connections) — targeted P2
 # - 0 tests for emissions services (1,101 lines) and dq services (535 lines) — targeted P3
 # - 0 frontend tests — targeted P6-G2
-# - Dual ORM (Django + SQLAlchemy) unclear — targeted P6-G1
-# - 10 ML packages may be unused after ai_copilot removal — targeted P1.2
+# ✅ P1 COMPLETE (2026-07-31): Dual ORM removed (SQLAlchemy/alembic unused)
+# ✅ P1 COMPLETE (2026-07-31): 12 unused deps removed (8 ML + 4 non-ML), 35→23 requirements lines
+# ✅ P1 COMPLETE (2026-07-31): PlatformAppConfig registered in Django admin
+# ✅ P1 COMPLETE (2026-07-31): ai_copilot removed, dead dashboard pages removed
 # - project.config.md was blank until 2026-07-30 (now populated)
 # - Full audit completed 2026-07-31, remediation plan in TASKS-AUDIT-REMEDIATION.md
 
