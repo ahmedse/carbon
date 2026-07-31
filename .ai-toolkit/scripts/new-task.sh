@@ -1,1 +1,0 @@
-/home/ahmed/ai-toolkit/scripts/new-task.sh

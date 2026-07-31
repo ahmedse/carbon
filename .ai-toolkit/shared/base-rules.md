@@ -1,1 +1,0 @@
-/home/ahmed/ai-toolkit/shared/base-rules.md
