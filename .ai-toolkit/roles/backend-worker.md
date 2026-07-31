@@ -23,18 +23,14 @@
 
 ---
 
-## Running the Server (via ops script ONLY)
+## Framework Rules
 
-```bash
-# NEVER: python manage.py runserver  (hangs the terminal)
-./manage.sh start backend       # start detached
-./manage.sh logs backend 100    # check logs (bounded)
-./manage.sh status              # confirm it's up
-./manage.sh restart backend     # after code changes
-./manage.sh migrate             # run migrations
-./manage.sh shell               # Django shell
-```
-One-off Django commands: `./manage.sh manage <command>` (e.g. `./manage.sh manage run_inference`).
+Your backend framework is named in `project.config.md → BACKEND_FRAMEWORK`.
+Read the matching module for server commands, ORM, migrations, service pattern, and timestamps:
+
+- **`frameworks/django.md`** — this project (Django + DRF)
+
+Follow that module exactly. The project-specific layers below are additional to it.
 
 ---
 
@@ -53,55 +49,6 @@ Emissions may import core apps.
 
 New features go in `services/<name>_service.py` as a class.
 Management commands go in `management/commands/` — they call services.
-
----
-
-## Framework Rules (Django)
-
-### Datetimes — Always Timezone-Aware
-```python
-# WRONG
-datetime.now()                          # naive
-datetime(2026, 7, 1)                    # naive
-
-# CORRECT
-from django.utils import timezone
-timezone.now()                          # aware UTC
-```
-Read `project.config.md` → DEFAULT_TIMEZONE for this project's timezone.
-
-### ORM Performance — List/Aggregate Endpoints
-```python
-# For ANY list/aggregate endpoint:
-qs = qs.select_related(None)            # drop heavy parent joins when not needed
-qs = qs.defer('large_json_field', ...)   # drop unused JSONFields
-# Use .values() or .annotate() for aggregates — never Python-side aggregation.
-# Annotate only what you need
-qs = qs.annotate(temp=KeyTextTransform('Temperature_C', 'input_snapshot'))
-```
-Never `select_related()` on models that carry JSONFields — each row deserializes full JSON.
-
-### Service Pattern
-```python
-class SomeService:
-    def __init__(self):
-        pass  # no global state
-
-    def execute(self, *args, **kwargs) -> dict:
-        # Returns {"success": bool, "data": ..., "error": str | None}
-        # NEVER raises uncaught exceptions
-        # NEVER returns None
-        pass
-```
-
-### Migrations
-```bash
-python manage.py makemigrations
-python manage.py showmigrations --plan | grep '\[ \]'  # verify order
-python manage.py migrate
-```
-- NEVER add non-nullable fields without `default=`
-- NEVER rename fields used in feature engineering
 
 ---
 
