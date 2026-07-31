@@ -71,6 +71,13 @@ def get_visible_org_units(user):
     if user_is_global_admin(user):
         return list(OrgUnit.objects.filter(is_active=True).order_by('name'))
 
+    # Users with a global visibility role (org_unit=None, module=None) can see all org units
+    if ScopedRole.objects.filter(
+        user=user, is_active=True, org_unit=None, module=None,
+        group__name__in=VISIBILITY_ROLES,
+    ).exists():
+        return list(OrgUnit.objects.filter(is_active=True).order_by('name'))
+
     allowed_ids = get_allowed_org_unit_ids(user, VISIBILITY_ROLES)
     if not allowed_ids:
         return []

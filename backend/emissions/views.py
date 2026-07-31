@@ -16,7 +16,7 @@ from drf_yasg.utils import swagger_auto_schema
 from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit
 from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units
 from core.models import Module
-from catalog.permissions import AdminOrSuperuserOnly
+from catalog.permissions import AdminOrSuperuserOnly, ReadAnyWriteAdmin
 from dataschema.models import DataRow, DataTable
 from .serializers import (
     ReportingPeriodSerializer,
@@ -56,7 +56,7 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
     - GET /emissions/periods/active/ - Get currently active period
     """
     serializer_class = ReportingPeriodSerializer
-    permission_classes = [AdminOrSuperuserOnly]
+    permission_classes = [ReadAnyWriteAdmin]
     
     def get_queryset(self):
         """Return all reporting periods for authenticated users."""

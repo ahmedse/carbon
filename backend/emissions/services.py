@@ -499,9 +499,17 @@ class OwnerService:
 
     @staticmethod
     def get_org_units(user):
-        """Return org units the user may access for owner pages."""
+        """Return org units the user may access for owner pages.
+        Returns None for unrestricted (superuser/staff/global visibility role)."""
         from accounts.models import ScopedRole
+        from accounts.rbac_utils import VISIBILITY_ROLES
         if user.is_superuser or user.is_staff:
+            return None  # unrestricted
+        # Users with a global visibility role (org_unit=None, module=None) can see all org units
+        if ScopedRole.objects.filter(
+            user=user, is_active=True, org_unit=None, module=None,
+            group__name__in=VISIBILITY_ROLES,
+        ).exists():
             return None  # unrestricted
         return list(
             ScopedRole.objects.filter(user=user, is_active=True)

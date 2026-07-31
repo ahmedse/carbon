@@ -20,7 +20,7 @@ from .serializers import (
     SchemaChangeLogSerializer, TableRelationSerializer
 )
 from accounts.permissions import HasScopedRole, ReadScopedWriteAdmin
-from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role
+from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role, get_visible_module_ids
 from core.models import Module
 from core.feedback import AppFeedback
 from .services import BulkImportService
@@ -74,7 +74,7 @@ class DataTableViewSet(ScopedViewSet):
     queryset = DataTable.objects.all()
     serializer_class = DataTableSerializer
     permission_classes = [IsAuthenticated, ReadScopedWriteAdmin]
-    required_role = ("admin", "admins_group", "dataowners_group", "auditors_group")
+    required_role = ("admin", "admins_group", "dataowners_group", "auditors_group", "viewers_group", "analysts_group")
 
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
@@ -84,11 +84,9 @@ class DataTableViewSet(ScopedViewSet):
         pk = self.kwargs.get('pk')
 
         qs = DataTable.objects.filter(is_archived=False)
-        if not (user.is_superuser or user_has_global_role(user, ["admin", "admins_group"])):
-            allowed = get_allowed_module_ids(
-                user, ["admin", "admins_group", "dataowners_group", "auditors_group"]
-            )
-            qs = qs.filter(module_id__in=allowed)
+        visible = get_visible_module_ids(user)
+        if visible is not None:
+            qs = qs.filter(module_id__in=visible)
         if module_id:
             qs = qs.filter(module_id=module_id)
         if pk:
@@ -188,7 +186,7 @@ class DataFieldViewSet(ScopedViewSet):
     queryset = DataField.objects.all()
     serializer_class = DataFieldSerializer
     permission_classes = [IsAuthenticated, ReadScopedWriteAdmin]
-    required_role = ("admin", "admins_group", "auditors_group", "dataowners_group")
+    required_role = ("admin", "admins_group", "auditors_group", "dataowners_group", "viewers_group", "analysts_group")
 
     def get_queryset(self):
         module = getattr(self, 'module', None)
@@ -243,7 +241,7 @@ class DataRowViewSet(ScopedViewSet):
     serializer_class = DataRowSerializer
 
     def get_required_role(self):
-        return ["admin", "admins_group", "auditors_group", "dataowners_group"]
+        return ["admin", "admins_group", "auditors_group", "dataowners_group", "viewers_group", "analysts_group"]
     
     def log_request(self, request, method, endpoint_desc):
         """Centralized request logging for debugging"""
@@ -282,11 +280,9 @@ class DataRowViewSet(ScopedViewSet):
         data_table_id = self.request.query_params.get("data_table")
 
         qs = DataRow.objects.filter(is_archived=False)
-        if not (user.is_superuser or user_has_global_role(user, ["admin", "admins_group"])):
-            allowed = get_allowed_module_ids(
-                user, ["admin", "admins_group", "dataowners_group", "auditors_group"]
-            )
-            qs = qs.filter(data_table__module_id__in=allowed)
+        visible = get_visible_module_ids(user)
+        if visible is not None:
+            qs = qs.filter(data_table__module_id__in=visible)
         if module_id:
             qs = qs.filter(data_table__module_id=module_id)
         if data_table_id:

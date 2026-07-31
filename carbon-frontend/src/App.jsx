@@ -127,21 +127,13 @@ function RoleAwareLanding() {
 
   // Check if user has admin perspective
   const hasAdminPerspective = availablePerspectives?.includes('admin');
-  
-  // Check if user has data entry perspective but not admin
-  const hasDataOnly = availablePerspectives?.includes('data_entry') && !hasAdminPerspective;
-  
+
   // Users with assigned modules get redirected to their first module
   const firstModule = context?.modules?.[0];
-  
-  // Redirect data-only users to their first module
-  if (hasDataOnly && firstModule) {
-    return <Navigate to={`/modules/${firstModule.id}`} replace />;
-  }
-  
-  // Non-admin users who have modules: redirect to first module (viewer, analyst, data owner)
+
+  // All non-admin users with modules: redirect to Carbon Console (rich landing with icons & actions)
   if (!hasAdminPerspective && firstModule) {
-    return <Navigate to={`/modules/${firstModule.id}`} replace />;
+    return <Navigate to="/carbon/console" replace />;
   }
   
   // No modules assigned - show empty state
