@@ -60,22 +60,26 @@ DEFAULT_TIMEZONE="Africa/Cairo"
 # 10. Run verification gate before shipping: ./.ai-toolkit/scripts/verify.sh full
 
 # ── KNOWN TECH DEBT ────────────────────────────────────────────
-# - seed_all.py is procedural (should be Builder pattern) — targeted P5-G1
-# - Some inline sx values in HeaderEnhanced.jsx (should use theme tokens) — targeted P5-G2
-# - No Command pattern for undo in DQ/data entry operations — targeted P5-G3
-# - 6 apps lack services.py (accounts, dataschema, mdm, evidence, importexport, connections) — targeted P2
-# - 0 tests for emissions services (1,101 lines) and dq services (535 lines) — targeted P3
-# - 0 frontend tests — targeted P6-G2
+# ✅ P6 COMPLETE (2026-07-31): Frontend test scaffolding (Vitest + RTL, 7 tests); registry regenerated
+# ✅ P5 COMPLETE (2026-07-31): seed_all.py → Builder pattern (SeedBuilder class, 740L)
+# ✅ P5 COMPLETE (2026-07-31): inline sx hex reduced 90→29 (−68%) across 5 worst files
+# ✅ P5 COMPLETE (2026-07-31): ADR-0002 Command pattern for reversible operations
+# ✅ P4 COMPLETE (2026-07-31): 5 frontend hooks extracted; dead page audit; inline sx count
+# ✅ P3 COMPLETE (2026-07-31): 28 new tests; services tested; 310 total backend tests
+# ✅ P2 COMPLETE (2026-07-31): 6 services.py files created (accounts, dataschema, mdm, evidence, importexport, connections)
 # ✅ P1 COMPLETE (2026-07-31): Dual ORM removed (SQLAlchemy/alembic unused)
 # ✅ P1 COMPLETE (2026-07-31): 12 unused deps removed (8 ML + 4 non-ML), 35→23 requirements lines
 # ✅ P1 COMPLETE (2026-07-31): PlatformAppConfig registered in Django admin
 # ✅ P1 COMPLETE (2026-07-31): ai_copilot removed, dead dashboard pages removed
+# - 0 frontend tests — resolved P6-G2 (Vitest + RTL, 7 passing tests)
+# - Registry stale — resolved P6-G3 (regenerated 2026-07-31 18:08)
+# - 29 remaining sx hex / 49 px in sx — documented for future cleanup
 # - project.config.md was blank until 2026-07-30 (now populated)
 # - Full audit completed 2026-07-31, remediation plan in TASKS-AUDIT-REMEDIATION.md
 
 # ── PATTERN SCORECARD ──────────────────────────────────────────
 # See shared/design-patterns.md for full audit
-# Current: 14/23 GoF patterns actively used
+# Current: 15/23 GoF patterns actively used (Builder added P5-G1)
 # Gate: ALL 283 backend tests pass. Pattern adherence reviewed.
 # =====================
 # THIS IS THE ONLY FILE YOU EDIT WHEN COPYING .ai-toolkit TO A NEW PROJECT.
