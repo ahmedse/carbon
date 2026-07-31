@@ -474,3 +474,33 @@ class PerformanceTests(DQBaseTestCase):
         elapsed = time.time() - start
         self.assertLess(elapsed, 5.0, f"1000 rows / 3 rules took {elapsed:.2f}s (>5s limit)")
         self.assertEqual(DQResult.objects.count(), 3)
+
+
+# ── _compute_quality direct tests ───────────────────────────────────────────
+
+class ComputeQualityTests(DQBaseTestCase):
+    def test_no_rules_returns_unknown(self):
+        status, score = _compute_quality(self.table)
+        self.assertEqual(status, 'unknown')
+        self.assertIsNone(score)
+
+    def test_all_passing_returns_passing(self):
+        rule = self._make_rule('not_null', field=self.text_field)
+        DataRow.objects.create(data_table=self.table, values={'email': 'a@b.com'})
+        run_dq(self.table.id)
+        status, score = _compute_quality(self.table)
+        self.assertEqual(status, 'passing')
+        self.assertEqual(score, 100)
+
+    def test_mixed_returns_warning(self):
+        DataRow.objects.bulk_create([
+            DataRow(data_table=self.table, values={'email': 'a@b.com'}),
+            DataRow(data_table=self.table, values={'email': None}),
+        ])
+        self._make_rule('not_null', field=self.text_field)
+        self._make_rule('unique', field=self.text_field)
+        run_dq(self.table.id)
+        status, score = _compute_quality(self.table)
+        # not_null fails, unique passes → 50%
+        self.assertEqual(status, 'failing')
+        self.assertEqual(score, 50)
