@@ -1,14 +1,10 @@
 # File: accounts/views.py
 # DRF views for users, scoped roles, and audit logs.
 
-import re
-from pathlib import Path
-
 from rest_framework import status, viewsets
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
-from django.conf import settings
 from django.contrib.auth.models import Group
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
@@ -20,6 +16,7 @@ from .serializers import (
 )
 from .permissions import HasScopedRole, CanManageScopedRoles
 from .rbac_utils import user_is_global_admin, get_steward_org_unit_ids
+from .services import RoleResolutionService, AppManifestService
 from rest_framework.exceptions import PermissionDenied
 from django.db.models import Q
 from rest_framework.decorators import action, api_view, permission_classes
@@ -27,76 +24,6 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.exceptions import TokenError
-
-
-def _normalize_group_name(group_name):
-    return (group_name or "").strip().lower()
-
-
-def _perspective_from_group_name(group_name):
-    normalized = _normalize_group_name(group_name)
-    if not normalized:
-        return None
-
-    if normalized in {"admin", "admins_group"} or (
-        normalized.endswith("admin") and "carbon" not in normalized and "catalog" not in normalized
-    ):
-        return "admin"
-    if "data_owner" in normalized or "dataowner" in normalized or "data-owner" in normalized:
-        return "data-owner"
-    if "analyst" in normalized:
-        return "analyst"
-    if "viewer" in normalized:
-        return "viewer"
-    if "steward" in normalized:
-        return "steward"
-    if normalized.endswith("admin") and "carbon" in normalized:
-        return "carbon-admin"
-    if normalized.endswith("admin") and "catalog" in normalized:
-        return "catalog-admin"
-    return None
-
-
-def _load_app_manifests():
-    app_registry = getattr(settings, "APP_REGISTRY", None)
-    if app_registry:
-        return app_registry
-
-    repo_root = Path(__file__).resolve().parents[2]
-    apps_dir = repo_root / "carbon-frontend" / "src" / "apps"
-    if not apps_dir.exists():
-        return []
-
-    manifests = []
-    for manifest_path in sorted(apps_dir.glob("**/manifest.js")):
-        text = manifest_path.read_text(encoding="utf-8")
-        app_id_match = re.search(r"id:\s*['\"]([^'\"]+)['\"]", text)
-        name_match = re.search(r"name:\s*['\"]([^'\"]+)['\"]", text)
-        version_match = re.search(r"version:\s*['\"]([^'\"]+)['\"]", text)
-
-        roles = []
-        roles_block_match = re.search(r"roles:\s*\[(.*?)\]\s*,", text, re.S)
-        if roles_block_match:
-            roles_block = roles_block_match.group(1)
-            for role_match in re.finditer(
-                r"key:\s*['\"]([^'\"]+)['\"],\s*label:\s*['\"]([^'\"]+)['\"],\s*scoped:\s*(true|false),\s*description:\s*['\"]([^'\"]*)['\"]",
-                roles_block,
-            ):
-                roles.append({
-                    "key": role_match.group(1),
-                    "label": role_match.group(2),
-                    "scoped": role_match.group(3).lower() == "true",
-                    "description": role_match.group(4),
-                })
-
-        manifests.append({
-            "id": app_id_match.group(1) if app_id_match else manifest_path.parent.name,
-            "name": name_match.group(1) if name_match else manifest_path.parent.name,
-            "version": version_match.group(1) if version_match else "1.0.0",
-            "roles": roles,
-        })
-
-    return manifests
 
 
 class LoginRateThrottle(AnonRateThrottle):
@@ -164,7 +91,7 @@ def me_context(request):
     scoped_roles_data = []
     for role in scoped_roles:
         group_name = role.group.name
-        perspective = _perspective_from_group_name(group_name)
+        perspective = RoleResolutionService.perspective_from_group_name(group_name)
         if perspective and perspective not in perspectives:
             perspectives.append(perspective)
 
@@ -379,7 +306,7 @@ def role_registry(request):
         return Response({'detail': 'You do not have permission to access this endpoint.'}, status=403)
 
     role_data = []
-    for app_manifest in _load_app_manifests():
+    for app_manifest in AppManifestService.load_manifests():
         role_data.append({
             'id': app_manifest.get('id'),
             'name': app_manifest.get('name', app_manifest.get('id')),
@@ -506,7 +433,7 @@ def platform_apps(request, app_id=None):
         return Response(serializer.errors, status=400)
 
     # GET: return all apps merged with DB config (auto-creates missing records)
-    manifests = _load_app_manifests()
+    manifests = AppManifestService.load_manifests()
     configs = {c.app_id: c for c in PlatformAppConfig.objects.all()}
 
     result = []

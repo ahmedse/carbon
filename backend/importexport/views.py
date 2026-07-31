@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from .models import ExportProject, ImportJob, ExportJob
 from .serializers import ExportProjectSerializer, ImportJobSerializer, ExportJobSerializer
+from .services import ImportService, ExportService
 from accounts.permissions import ReadAnyWriteGlobalAdmin
 from catalog.permissions import AdminOrSuperuserOnly
 
@@ -29,14 +30,7 @@ class ExportProjectViewSet(viewsets.ModelViewSet):
         Response: { "job_id": <id>, "status": "pending" }
         """
         project = self.get_object()
-        job = ExportJob.objects.create(
-            export_project=project,
-            data_table=project.data_table,
-            format=project.format,
-            filters=project.filters,
-            user=request.user,
-            status='pending',
-        )
+        job = ExportService.run_export(project, user=request.user)
         return Response(
             ExportJobSerializer(job).data,
             status=status.HTTP_201_CREATED
@@ -74,13 +68,12 @@ class ImportJobViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        job = ImportJob.objects.create(
-            data_table_id=data_table_id,
-            source_id=request.data.get('source') or None,
-            file=file_obj,
-            format=format_type,
+        job = ImportService.run_import(
+            data_table_id,
+            file_obj,
+            format_type=format_type,
+            source_id=request.data.get('source'),
             user=request.user,
-            status='pending',
         )
         return Response(
             ImportJobSerializer(job).data,
@@ -103,14 +96,10 @@ class ExportJobViewSet(viewsets.ReadOnlyModelViewSet):
         Return the export file if ready.
         """
         job = self.get_object()
-        if job.status != 'ready':
-            return Response(
-                {'error': f'Export not ready (status: {job.status})'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        if not job.file:
-            return Response(
-                {'error': 'No file available'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        return Response({'download_url': job.file.url})
+        result = ExportService.get_download(job)
+        if 'download_url' in result:
+            return Response(result)
+        return Response(
+            {'error': result['error']},
+            status=result['status_code']
+        )

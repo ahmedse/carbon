@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import Evidence
 from .serializers import EvidenceSerializer, EvidenceUploadSerializer
 from .permissions import IsEvidenceOwnerOrAdmin
+from .services import EvidenceService
 from dataschema.models import DataRow
 
 
@@ -87,44 +88,13 @@ class EvidenceViewSet(viewsets.ModelViewSet):
         
         data_row = serializer.validated_data['data_row']
         files = serializer.validated_data['files']
-        
-        results = []
-        success_count = 0
-        
-        for file in files:
-            try:
-                # Create evidence object
-                mime_type = file.content_type or 'application/octet-stream'
-                evidence = Evidence.objects.create(
-                    data_row=data_row,
-                    file=file,
-                    original_filename=file.name,
-                    file_size=file.size,
-                    mime_type=mime_type,
-                    uploaded_by=request.user
-                )
-                
-                results.append({
-                    'id': evidence.id,
-                    'filename': file.name,
-                    'status': 'success',
-                    'message': 'File uploaded successfully'
-                })
-                success_count += 1
-            
-            except Exception as e:
-                results.append({
-                    'filename': file.name,
-                    'status': 'error',
-                    'message': str(e)
-                })
-        
-        return Response({
-            'results': results,
-            'total': len(files),
-            'success': success_count,
-            'failed': len(files) - success_count
-        }, status=status.HTTP_201_CREATED)
+
+        results = EvidenceService.bulk_store(files, {
+            'data_row': data_row,
+            'uploaded_by': request.user,
+        })
+
+        return Response(results, status=status.HTTP_201_CREATED)
     
     def destroy(self, request, *args, **kwargs):
         """Soft delete: mark evidence as deleted."""

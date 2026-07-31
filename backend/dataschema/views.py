@@ -23,9 +23,7 @@ from accounts.permissions import HasScopedRole, ReadScopedWriteAdmin
 from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role
 from core.models import Module
 from core.feedback import AppFeedback
-import pandas as pd
-import io
-import json
+from .services import BulkImportService
 
 
 def _log_schema_change(user, action, *, data_table=None, data_field=None,
@@ -435,20 +433,20 @@ class DataRowViewSet(ScopedViewSet):
         data_table_id = request.data.get('data_table')
         column_mapping_str = request.data.get('column_mapping')
         mode = request.data.get('mode', 'create')
-        
+
         # Validate required parameters
         if not file:
             return Response(
                 {'error': 'file parameter is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         if not data_table_id:
             return Response(
                 {'error': 'data_table parameter is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # Get DataTable instance
         try:
             data_table = DataTable.objects.get(pk=data_table_id)
@@ -457,70 +455,20 @@ class DataRowViewSet(ScopedViewSet):
                 {'error': f'DataTable with id={data_table_id} not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        # Parse file (CSV or Excel)
+
+        # Delegate to service (raises ValueError with user-facing message on error)
         try:
-            file_content = file.read()
-            if file.name.endswith('.csv'):
-                df = pd.read_csv(io.BytesIO(file_content))
-            elif file.name.endswith(('.xlsx', '.xls')):
-                df = pd.read_excel(io.BytesIO(file_content))
-            else:
-                return Response(
-                    {'error': 'File must be CSV (.csv) or Excel (.xlsx, .xls)'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        except Exception as e:
+            results = BulkImportService.import_rows(
+                data_table, file,
+                column_mapping=column_mapping_str,
+                created_by=request.user,
+            )
+        except ValueError as e:
             return Response(
-                {'error': f'Failed to parse file: {str(e)}'},
+                {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Apply column mapping if provided
-        if column_mapping_str:
-            try:
-                column_mapping = json.loads(column_mapping_str)
-                df = df.rename(columns=column_mapping)
-            except json.JSONDecodeError:
-                return Response(
-                    {'error': 'column_mapping must be valid JSON'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        
-        # Initialize results
-        results = {
-            'created': 0,
-            'failed': 0,
-            'errors': []
-        }
-        
-        # Process each row
-        for idx, row in df.iterrows():
-            row_data = row.to_dict()
-            
-            # Remove NaN values (pandas represents empty cells as NaN)
-            row_data = {k: v for k, v in row_data.items() if pd.notna(v)}
-            
-            # Remove 'id' column if present (Phase 1: create only)
-            row_data.pop('id', None)
-            
-            try:
-                # Validate and create row
-                serializer = DataRowSerializer(data={
-                    'data_table': data_table.id,
-                    'values': row_data
-                })
-                serializer.is_valid(raise_exception=True)
-                serializer.save(created_by=request.user)
-                results['created'] += 1
-            except Exception as e:
-                results['failed'] += 1
-                results['errors'].append({
-                    'row': idx + 2,  # +2 because: 0-indexed + header row
-                    'data': row_data,
-                    'error': str(e)
-                })
-        
+
         return Response(results, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='download-template')
@@ -552,42 +500,9 @@ class DataRowViewSet(ScopedViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Get active fields ordered by position
-        fields = data_table.fields.filter(is_active=True, is_archived=False).order_by('order')
-        
-        # Generate CSV header (use field names, not labels)
-        headers = [f.name for f in fields]
-        csv_rows = [','.join(f'"{h}"' for h in headers)]
-        
-        # Optionally add example row
-        if include_example:
-            example_values = []
-            for f in fields:
-                if f.type == 'string':
-                    example_values.append('"example text"')
-                elif f.type == 'text':
-                    example_values.append('"example multiline text"')
-                elif f.type == 'number':
-                    example_values.append('123')
-                elif f.type == 'date':
-                    example_values.append('"2026-01-01"')
-                elif f.type == 'boolean':
-                    example_values.append('true')
-                elif f.type == 'select':
-                    options = f.options or []
-                    if options:
-                        example_values.append(f'"{options[0].get("value", "")}"')
-                    else:
-                        example_values.append('""')
-                elif f.type == 'multiselect':
-                    example_values.append('""')  # Empty for simplicity
-                elif f.type == 'file':
-                    example_values.append('""')  # Not supported in CSV import
-                else:
-                    example_values.append('""')
-            csv_rows.append(','.join(example_values))
-        
-        csv_content = '\r\n'.join(csv_rows)
+        csv_content = BulkImportService.generate_template(
+            data_table, include_example=include_example
+        )
         
         # Return as file download
         response = HttpResponse(csv_content, content_type='text/csv; charset=utf-8')

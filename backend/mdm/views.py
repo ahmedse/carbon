@@ -14,6 +14,7 @@ from dataschema.models import DataField, DataRow
 from catalog.audit_utils import emit_governance_event
 from .models import ReferenceSet, ReferenceValue, OrgUnit
 from .serializers import ReferenceSetSerializer, ReferenceValueSerializer, OrgUnitSerializer
+from .services import ReferenceSetService, OrgUnitService
 from accounts.permissions import ReadAnyWriteGlobalAdmin
 from catalog.permissions import AdminOrSuperuserOnly
 from accounts.models import ScopedRole
@@ -203,24 +204,15 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
     def transition(self, request, pk=None):
         """POST /mdm/reference-sets/{id}/transition/ to move lifecycle state."""
         ref_set = self.get_object()
-        new_state = request.data.get('state')
-        valid_states = [state for state, _ in ReferenceSet.LIFECYCLE_STATES]
-        if not new_state:
-            raise DRFValidationError({'state': ['This field is required.']})
-        if new_state not in valid_states:
-            raise DRFValidationError(
-                {'state': [f"Invalid state '{new_state}'. Allowed values: {', '.join(valid_states)}"]}
-            )
         try:
-            ref_set.transition_to(new_state, user=request.user)
+            result = ReferenceSetService.transition_set(
+                ref_set, request.data.get('state'), user=request.user
+            )
         except ValueError as exc:
-            raise DRFValidationError({'state': [str(exc)]})
-        return Response({
-            'id': ref_set.id,
-            'name': ref_set.name,
-            'lifecycle_state': ref_set.lifecycle_state,
-            'message': f'Transitioned to {ref_set.lifecycle_state}',
-        })
+            # Service raises ValueError({'state': [...]}) with the exact
+            # messages the view used to raise as DRFValidationError.
+            raise DRFValidationError(exc.args[0] if exc.args else {'state': ['Invalid transition.']})
+        return Response(result)
 
     @swagger_auto_schema(
         methods=['post'],
@@ -232,16 +224,15 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
     def add_value(self, request, pk=None):
         """POST /mdm/reference-sets/{id}/add_value/ -> add value to set."""
         ref_set = self.get_object()
-        
-        # Check permission: only steward can add values
+
+        # Check permission: only steward can add values (authz stays in view)
         if ref_set.steward != request.user and not request.user.is_staff:
             raise PermissionDenied("Only steward can add values to this set")
-        
-        serializer = ReferenceValueSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(reference_set=ref_set)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data, created = ReferenceSetService.add_value(ref_set, request.data)
+        if created:
+            return Response(data, status=status.HTTP_201_CREATED)
+        return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
         methods=['post'],
@@ -275,27 +266,7 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         if not isinstance(ids, list) or not ids:
             return Response({'error': 'ids must be a non-empty list'}, status=status.HTTP_400_BAD_REQUEST)
 
-        results = {'success': [], 'failed': []}
-        for set_id in ids:
-            try:
-                ref_set = ReferenceSet.objects.get(pk=set_id)
-            except ReferenceSet.DoesNotExist:
-                results['failed'].append({'id': set_id, 'error': 'ReferenceSet not found'})
-                continue
-
-            ref_set.is_active = False
-            ref_set.lifecycle_state = ReferenceSet.LIFECYCLE_ARCHIVED
-            ref_set.save(update_fields=['is_active', 'lifecycle_state'])
-            emit_governance_event(
-                entity_type='ReferenceSet',
-                entity_id=ref_set.id,
-                action='delete',
-                before={'is_active': True},
-                after={'is_active': False, 'lifecycle_state': ReferenceSet.LIFECYCLE_ARCHIVED},
-                user=request.user,
-            )
-            results['success'].append(ref_set.id)
-
+        results = ReferenceSetService.archive_bulk(ids, user=request.user)
         return Response(results, status=status.HTTP_200_OK)
 
 
@@ -326,24 +297,12 @@ class ReferenceValueViewSet(viewsets.ModelViewSet):
         except ReferenceSet.DoesNotExist:
             return Response({'error': 'reference_set not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        serializers = []
-        for item in payload:
-            serializer = ReferenceValueSerializer(data=item)
-            if not serializer.is_valid():
-                return Response({'error': 'One or more items failed validation', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-            serializer.validated_data['reference_set'] = ref_set
-            serializers.append(serializer)
+        try:
+            data = ReferenceSetService.bulk_create(payload, ref_set, user=request.user)
+        except ValueError as exc:
+            return Response(exc.args[0], status=status.HTTP_400_BAD_REQUEST)
 
-        objs = [s.save() for s in serializers]
-        emit_governance_event(
-            entity_type='ReferenceValue',
-            entity_id=ref_set.id,
-            action='create',
-            before={},
-            after={'bulk_create': len(objs)},
-            user=self.request.user,
-        )
-        return Response(ReferenceValueSerializer(objs, many=True).data, status=status.HTTP_201_CREATED)
+        return Response(data, status=status.HTTP_201_CREATED)
 
     def get_queryset(self):
         qs = ReferenceValue.objects.all()
@@ -629,8 +588,7 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
     def tree(self, request, pk=None):
         """GET /mdm/org-units/{id}/tree/ -> subtree rooted at this unit."""
         org_unit = self.get_object()
-        children_ids = org_unit.get_descendant_ids(include_self=True)
-        qs = OrgUnit.objects.filter(id__in=children_ids, is_active=True)
+        qs = OrgUnitService.get_tree(org_unit)
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
 
@@ -649,6 +607,6 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
     def ancestors(self, request, pk=None):
         """GET /mdm/org-units/{id}/ancestors/ -> path to root."""
         org_unit = self.get_object()
-        ancestors = org_unit.get_ancestors()
+        ancestors = OrgUnitService.get_ancestors(org_unit)
         serializer = self.get_serializer(ancestors, many=True)
         return Response(serializer.data)
