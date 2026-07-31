@@ -76,7 +76,7 @@ import AuditLogPage from "./pages/admin/AuditLogPage";
 import PlatformHome from "./pages/PlatformHome";
 
 // Dashboard components — used by /carbon/* domain app routes only
-import { AnalyticsDashboard } from "./pages/dashboards";
+import AnalyticsDashboard from "./pages/dashboards/AnalyticsDashboard";
 
 /** Redirect legacy /catalog/schemas/:tableId → /catalog/tables/:tableId (preserves id). */
 function RedirectSchemaToTable() {
