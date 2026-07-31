@@ -14,7 +14,7 @@ BACKEND_API="Django REST Framework 3.16.0"
 BACKEND_DB="PostgreSQL (dev: carbon_dev, test: via pytest --reuse-db)"
 BACKEND_CACHE="Redis"
 BACKEND_AUTH="JWT (djangorestframework-simplejwt)"
-BACKEND_VECTOR="ChromaDB (AI copilot embeddings)"
+BACKEND_VECTOR="ChromaDB (unused — ai_copilot removed 2026-07-31)"
 
 FRONTEND_FRAMEWORK="React 18 + Vite"
 FRONTEND_UI="MUI (Material UI v5/v6)"
@@ -60,10 +60,16 @@ DEFAULT_TIMEZONE="Africa/Cairo"
 # 10. Run verification gate before shipping: ./.ai-toolkit/scripts/verify.sh full
 
 # ── KNOWN TECH DEBT ────────────────────────────────────────────
-# - seed_all.py is procedural (should be Builder pattern)
-# - Some inline sx values in HeaderEnhanced.jsx (should use theme tokens)
-# - No Command pattern for undo in DQ/data entry operations
+# - seed_all.py is procedural (should be Builder pattern) — targeted P5-G1
+# - Some inline sx values in HeaderEnhanced.jsx (should use theme tokens) — targeted P5-G2
+# - No Command pattern for undo in DQ/data entry operations — targeted P5-G3
+# - 6 apps lack services.py (accounts, dataschema, mdm, evidence, importexport, connections) — targeted P2
+# - 0 tests for emissions services (1,101 lines) and dq services (535 lines) — targeted P3
+# - 0 frontend tests — targeted P6-G2
+# - Dual ORM (Django + SQLAlchemy) unclear — targeted P6-G1
+# - 10 ML packages may be unused after ai_copilot removal — targeted P1.2
 # - project.config.md was blank until 2026-07-30 (now populated)
+# - Full audit completed 2026-07-31, remediation plan in TASKS-AUDIT-REMEDIATION.md
 
 # ── PATTERN SCORECARD ──────────────────────────────────────────
 # See shared/design-patterns.md for full audit
