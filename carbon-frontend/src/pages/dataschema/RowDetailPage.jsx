@@ -69,9 +69,8 @@ export default function RowDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const response = await apiFetch(`dataschema/rows/${rowId}/?data_table=${tableId}`, { method: 'GET', token: currentToken }); // fetch row data
-        if (!response.ok) throw new Error(`Failed to fetch row: ${response.status}`);
-        setRowData(await response.json());
+        const rowData = await apiFetch(`dataschema/rows/${rowId}/?data_table=${tableId}`, { method: 'GET', token: currentToken }); // fetch row data
+        setRowData(rowData);
       } catch (err) {
         setError(err.message || 'Failed to load row data');
         notify(`Error: ${err.message}`, 'error');
@@ -115,9 +114,8 @@ export default function RowDetailPage() {
   const handleRefresh = async () => {
     let currentToken = token || localStorage.getItem('access');
     try {
-      const response = await apiFetch(`dataschema/rows/${rowId}/?data_table=${tableId}`, { method: 'GET', token: currentToken }); // refresh row
-      if (!response.ok) throw new Error('Failed to refresh row data');
-      setRowData(await response.json());
+      const rowData = await apiFetch(`dataschema/rows/${rowId}/?data_table=${tableId}`, { method: 'GET', token: currentToken }); // refresh row
+      setRowData(rowData);
     } catch (err) {
       notify(`Refresh error: ${err.message}`, 'error');
     }

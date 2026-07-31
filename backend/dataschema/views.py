@@ -20,7 +20,8 @@ from .serializers import (
     SchemaChangeLogSerializer, TableRelationSerializer
 )
 from accounts.permissions import HasScopedRole, ReadScopedWriteAdmin
-from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role, get_visible_module_ids
+from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role, get_visible_module_ids, VISIBILITY_ROLES
+from accounts.models import ScopedRole
 from core.models import Module
 from core.feedback import AppFeedback
 from .services import BulkImportService
@@ -393,14 +394,24 @@ class DataRowViewSet(ScopedViewSet):
         # Check RBAC: user must have access to the row's table's module
         user = request.user
         if not (user.is_superuser or user_has_global_role(user, ["admin", "admins_group"])):
-            allowed = get_allowed_module_ids(
-                user, ["admin", "admins_group", "dataowners_group", "auditors_group"]
-            )
-            if row.data_table.module_id not in allowed:
-                return Response(
-                    {'error': 'You do not have permission to access this row'},
-                    status=status.HTTP_403_FORBIDDEN
+            # Check global visibility roles (viewers, analysts, auditors, dataowners with global scope)
+            has_global_visibility = ScopedRole.objects.filter(
+                user=user, is_active=True, org_unit=None, module=None,
+                group__name__in=VISIBILITY_ROLES,
+            ).exists()
+            if has_global_visibility:
+                # User has global visibility — allow access to any module
+                pass
+            else:
+                allowed = get_allowed_module_ids(
+                    user, ["admin", "admins_group", "dataowners_group", "auditors_group",
+                           "viewers_group", "analysts_group"]
                 )
+                if row.data_table.module_id not in allowed:
+                    return Response(
+                        {'error': 'You do not have permission to access this row'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
         
         # Serialize and return
         serializer = self.get_serializer(row)
