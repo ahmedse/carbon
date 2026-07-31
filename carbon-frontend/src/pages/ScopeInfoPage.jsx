@@ -24,7 +24,7 @@ import { useAuth } from "../auth/AuthContext";
 const SCOPE_DETAILS = {
   1: {
     label: "Scope 1: Direct Emissions",
-    icon: <Scope1Icon sx={{ fontSize: 40, color: "#43a047", verticalAlign: "middle" }} />,
+    icon: <Scope1Icon sx={{ fontSize: 40, color: "success.main", verticalAlign: "middle" }} />,
     description: "Direct greenhouse gas (GHG) emissions from sources owned or controlled by your organization, such as company vehicles, on-site fuel combustion, or manufacturing activities.",
     examples: [
       "Company-owned vehicles",
@@ -34,7 +34,7 @@ const SCOPE_DETAILS = {
   },
   2: {
     label: "Scope 2: Indirect Energy Emissions",
-    icon: <Scope2Icon sx={{ fontSize: 40, color: "#1e88e5", verticalAlign: "middle" }} />,
+    icon: <Scope2Icon sx={{ fontSize: 40, color: "primary.main", verticalAlign: "middle" }} />,
     description: "Indirect GHG emissions from the generation of purchased electricity, steam, heating, and cooling consumed by your organization.",
     examples: [
       "Purchased electricity for offices and factories",
@@ -43,7 +43,7 @@ const SCOPE_DETAILS = {
   },
   3: {
     label: "Scope 3: Value Chain Emissions",
-    icon: <Scope3Icon sx={{ fontSize: 40, color: "#ff7043", verticalAlign: "middle" }} />,
+    icon: <Scope3Icon sx={{ fontSize: 40, color: "warning.main", verticalAlign: "middle" }} />,
     description: "Other indirect GHG emissions that occur in the value chain of your organization, both upstream and downstream (including suppliers and product use by customers).",
     examples: [
       "Business travel and employee commuting",
@@ -88,7 +88,7 @@ export default function ScopeInfoPage() {
         minHeight: "100vh",
         px: { xs: 1, sm: 3, md: 5 },
         py: { xs: 2, md: 4 },
-        bgcolor: "#f5f7fa"
+        bgcolor: "background.dark"
       }}
     >
       <Typography
@@ -106,7 +106,7 @@ export default function ScopeInfoPage() {
       <Typography
         variant="body1"
         mb={2}
-        sx={{ color: "#444", fontSize: "1.1rem", px: { xs: 0, sm: 1 } }}
+        sx={{ color: "text.secondary", fontSize: "1.1rem", px: { xs: 0, sm: 1 } }}
       >
         {scope.description}
       </Typography>
@@ -163,7 +163,7 @@ export default function ScopeInfoPage() {
                   flexDirection: "column",
                   minHeight: 170,
                   transition: "box-shadow 0.2s",
-                  bgcolor: "#fff",
+                  bgcolor: "background.default",
                 }}
                 onClick={() => navigate(`/modules/${mod.id}`)}
               >

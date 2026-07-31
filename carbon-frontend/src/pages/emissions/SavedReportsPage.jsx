@@ -52,12 +52,12 @@ const formatRelativeTime = (dateString) => {
 
 const ScopeChip = ({ scope }) => {
   const scopeLabels = { 1: 'Scope 1', 2: 'Scope 2', 3: 'Scope 3' };
-  const scopeColors = { 1: '#ff6b6b', 2: '#4dabf7', 3: '#69db7c' };
+  const scopeColors = { 1: 'error.light', 2: 'info.light', 3: 'success.light' };
   return (
     <Chip
       label={scopeLabels[scope] || `Scope ${scope}`}
       size="small"
-      sx={{ backgroundColor: scopeColors[scope] || '#ccc', color: '#fff' }}
+      sx={{ backgroundColor: scopeColors[scope] || 'action.disabledBackground', color: 'common.white' }}
     />
   );
 };
@@ -74,7 +74,7 @@ const ReportResultPanel = ({ report, loading }) => {
   if (!report) return null;
 
   return (
-    <Paper sx={{ p: 2, backgroundColor: '#f5f5f5' }}>
+    <Paper sx={{ p: 2, backgroundColor: 'background.dark' }}>
       <Stack spacing={2}>
         <Box>
           <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
@@ -190,7 +190,7 @@ export default function SavedReportsPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
         <CircularProgress />
       </Box>
     );
@@ -201,10 +201,10 @@ export default function SavedReportsPage() {
       <Box sx={{ p: 3 }}>
         <Card sx={{ textAlign: 'center', py: 6 }}>
           <CardContent>
-            <Typography variant="h6" sx={{ mb: 2, color: '#666' }}>
+            <Typography variant="h6" sx={{ mb: 2, color: 'text.secondary' }}>
               No Saved Reports Yet
             </Typography>
-            <Typography variant="body2" sx={{ color: '#999', mb: 3 }}>
+            <Typography variant="body2" sx={{ color: 'text.disabled', mb: 3 }}>
               Generate your first report to save and reuse configurations.
             </Typography>
             <Button variant="contained" href="/data-owner/reports/generate">
@@ -224,7 +224,7 @@ export default function SavedReportsPage() {
 
       <TableContainer component={Paper}>
         <Table>
-          <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+          <TableHead sx={{ backgroundColor: 'background.dark' }}>
             <TableRow>
               <TableCell sx={{ fontWeight: 'bold' }}>Configuration Name</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Created By</TableCell>
@@ -247,7 +247,7 @@ export default function SavedReportsPage() {
                     <Typography variant="body2">{config.created_by_username}</Typography>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" sx={{ color: '#666' }}>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       {formatRelativeTime(config.last_run_at)}
                     </Typography>
                   </TableCell>
@@ -309,7 +309,7 @@ export default function SavedReportsPage() {
 
                 {expandedId === config.id && (
                   <TableRow>
-                    <TableCell colSpan={6} sx={{ backgroundColor: '#fafafa', p: 2 }}>
+                    <TableCell colSpan={6} sx={{ backgroundColor: 'background.paper', p: 2 }}>
                       <ReportResultPanel
                         report={results[config.id]}
                         loading={running[config.id]}

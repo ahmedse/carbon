@@ -46,6 +46,7 @@ import {
   CheckCircle,
 } from "@mui/icons-material";
 import { Doughnut } from "react-chartjs-2";
+import { useTheme } from "@mui/material/styles";
 import { fetchEmissionsReport, fetchReportingPeriods } from "../api/emissions";
 
 // ============ Styled Components ============
@@ -56,14 +57,15 @@ const ReportSection = ({ title, icon, children, sx = {} }) => (
     sx={{
       p: 4,
       mb: 3,
-      border: "1px solid #e5e7eb",
+      border: "1px solid",
+      borderColor: "divider",
       borderRadius: 2,
       ...sx,
     }}
   >
     <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
       {icon}
-      <Typography variant="h5" sx={{ fontWeight: 700, color: "#111827" }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, color: "text.primary" }}>
         {title}
       </Typography>
     </Box>
@@ -75,32 +77,33 @@ const ScopeSummaryCard = ({ name, emissions, categories, color }) => (
   <Card
     elevation={0}
     sx={{
-      border: "1px solid #e5e7eb",
+      border: "1px solid",
+      borderColor: "divider",
       borderRadius: 2,
       borderLeft: `4px solid ${color}`,
       height: "100%",
     }}
   >
     <CardContent sx={{ p: 3 }}>
-      <Typography variant="overline" sx={{ color: "#6b7280", fontWeight: 600 }}>
+      <Typography variant="overline" sx={{ color: "text.secondary", fontWeight: 600 }}>
         {name}
       </Typography>
-      <Typography variant="h3" sx={{ fontWeight: 700, color: "#111827", my: 1 }}>
+      <Typography variant="h3" sx={{ fontWeight: 700, color: "text.primary", my: 1 }}>
         {emissions.toLocaleString()}
-        <Typography component="span" variant="h6" sx={{ ml: 1, fontWeight: 400, color: "#6b7280" }}>
+        <Typography component="span" variant="h6" sx={{ ml: 1, fontWeight: 400, color: "text.secondary" }}>
           t CO₂e
         </Typography>
       </Typography>
       <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" sx={{ color: "#6b7280", mb: 1 }}>
+      <Typography variant="subtitle2" sx={{ color: "text.secondary", mb: 1 }}>
         Categories:
       </Typography>
       {categories?.map((cat, idx) => (
         <Box key={idx} sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-          <Typography variant="body2" sx={{ color: "#374151" }}>
+          <Typography variant="body2" sx={{ color: "text.primary" }}>
             {cat.name}
           </Typography>
-          <Typography variant="body2" sx={{ fontWeight: 600, color: "#111827" }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: "text.primary" }}>
             {cat.emissions_tonnes.toLocaleString()} t
           </Typography>
         </Box>
@@ -112,6 +115,7 @@ const ScopeSummaryCard = ({ name, emissions, categories, color }) => (
 // ============ Main Component ============
 
 export default function EmissionsReport({ projectId }) {
+  const theme = useTheme();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [report, setReport] = useState(null);
@@ -180,11 +184,11 @@ export default function EmissionsReport({ projectId }) {
     URL.revokeObjectURL(url);
   };
 
-  // Scope colors
+  // Scope colors — resolved from theme tokens (identical values)
   const scopeColors = {
-    1: "#10b981",
-    2: "#3b82f6",
-    3: "#f59e0b",
+    1: theme.palette.success.main,   // #10b981
+    2: theme.palette.primary.light,  // #3b82f6
+    3: theme.palette.warning.main,   // #f59e0b
   };
 
   const scopeIcons = {
@@ -212,7 +216,7 @@ export default function EmissionsReport({ projectId }) {
   if (loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 400 }}>
-        <CircularProgress size={48} sx={{ color: "#10b981" }} />
+        <CircularProgress size={48} sx={{ color: "success.main" }} />
       </Box>
     );
   }
@@ -243,7 +247,7 @@ export default function EmissionsReport({ projectId }) {
         mx: "auto",
         px: { xs: 2, md: 4 },
         py: 4,
-        bgcolor: "#fff",
+        bgcolor: "background.default",
         "@media print": {
           px: 2,
           py: 1,
@@ -256,11 +260,11 @@ export default function EmissionsReport({ projectId }) {
         sx={{
           p: 4,
           mb: 4,
-          background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-          color: "white",
+          background: `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`,
+          color: "common.white",
           borderRadius: 3,
           "@media print": {
-            background: "#10b981",
+            background: theme.palette.success.main,
             borderRadius: 0,
           },
         }}
@@ -335,21 +339,21 @@ export default function EmissionsReport({ projectId }) {
       </Paper>
 
       {/* Executive Summary */}
-      <ReportSection title="Executive Summary" icon={<Description sx={{ color: "#10b981", fontSize: 28 }} />}>
+      <ReportSection title="Executive Summary" icon={<Description sx={{ color: "success.main", fontSize: 28 }} />}>
         <Grid container spacing={4}>
           <Grid size={{ xs: 12, md: 6 }}>
             <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, color: "#374151", mb: 2 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, color: "text.primary", mb: 2 }}>
                 Total GHG Emissions
               </Typography>
-              <Typography variant="h2" sx={{ fontWeight: 800, color: "#111827" }}>
+              <Typography variant="h2" sx={{ fontWeight: 800, color: "text.primary" }}>
                 {report.summary?.total_emissions_tonnes?.toLocaleString() || 0}
-                <Typography component="span" variant="h5" sx={{ ml: 1, fontWeight: 400, color: "#6b7280" }}>
+                <Typography component="span" variant="h5" sx={{ ml: 1, fontWeight: 400, color: "text.secondary" }}>
                   tonnes CO₂e
                 </Typography>
               </Typography>
             </Box>
-            <Typography variant="body1" sx={{ color: "#6b7280", lineHeight: 1.8 }}>
+            <Typography variant="body1" sx={{ color: "text.secondary", lineHeight: 1.8 }}>
               This report presents the greenhouse gas (GHG) emissions inventory for the reporting period,
               calculated following the GHG Protocol Corporate Standard. Emissions are categorized into
               Scope 1 (direct), Scope 2 (indirect from energy), and Scope 3 (value chain) emissions.
@@ -383,7 +387,7 @@ export default function EmissionsReport({ projectId }) {
       </ReportSection>
 
       {/* Scope Breakdown */}
-      <ReportSection title="Emissions by Scope" icon={<Factory sx={{ color: "#3b82f6", fontSize: 28 }} />}>
+      <ReportSection title="Emissions by Scope" icon={<Factory sx={{ color: "primary.light", fontSize: 28 }} />}>
         <Grid container spacing={3}>
           {report.scope_details?.map((scope) => (
             <Grid size={{ xs: 12, md: 4 }} key={scope.scope}>
@@ -407,7 +411,7 @@ export default function EmissionsReport({ projectId }) {
           icon={scopeIcons[scope.scope]}
           sx={{ borderLeft: `4px solid ${scopeColors[scope.scope]}` }}
         >
-          <Typography variant="body1" sx={{ color: "#6b7280", mb: 3 }}>
+          <Typography variant="body1" sx={{ color: "text.secondary", mb: 3 }}>
             {scope.scope === 1 &&
               "Direct GHG emissions from sources owned or controlled by the organization."}
             {scope.scope === 2 &&
@@ -419,7 +423,7 @@ export default function EmissionsReport({ projectId }) {
           <TableContainer>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: "#f9fafb" }}>
+                <TableRow sx={{ bgcolor: "background.paper" }}>
                   <TableCell sx={{ fontWeight: 600 }}>Category</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 600 }}>
                     Emissions (t CO₂e)
@@ -448,7 +452,7 @@ export default function EmissionsReport({ projectId }) {
                     </TableCell>
                   </TableRow>
                 ))}
-                <TableRow sx={{ bgcolor: "#f9fafb" }}>
+                <TableRow sx={{ bgcolor: "background.paper" }}>
                   <TableCell sx={{ fontWeight: 700 }}>Total</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>
                     {scope.total_tonnes.toLocaleString()}
@@ -470,7 +474,8 @@ export default function EmissionsReport({ projectId }) {
       <Accordion
         elevation={0}
         sx={{
-          border: "1px solid #e5e7eb",
+          border: "1px solid",
+          borderColor: "divider",
           borderRadius: "8px !important",
           "&:before": { display: "none" },
           mb: 3,
@@ -487,13 +492,13 @@ export default function EmissionsReport({ projectId }) {
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 600, bgcolor: "#f9fafb" }}>Module</TableCell>
-                  <TableCell sx={{ fontWeight: 600, bgcolor: "#f9fafb" }}>Table</TableCell>
-                  <TableCell sx={{ fontWeight: 600, bgcolor: "#f9fafb" }}>Category</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 600, bgcolor: "#f9fafb" }}>Scope</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, bgcolor: "#f9fafb" }}>Activity</TableCell>
-                  <TableCell sx={{ fontWeight: 600, bgcolor: "#f9fafb" }}>Factor</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, bgcolor: "#f9fafb" }}>CO₂e (t)</TableCell>
+                  <TableCell sx={{ fontWeight: 600, bgcolor: "background.paper" }}>Module</TableCell>
+                  <TableCell sx={{ fontWeight: 600, bgcolor: "background.paper" }}>Table</TableCell>
+                  <TableCell sx={{ fontWeight: 600, bgcolor: "background.paper" }}>Category</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 600, bgcolor: "background.paper" }}>Scope</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, bgcolor: "background.paper" }}>Activity</TableCell>
+                  <TableCell sx={{ fontWeight: 600, bgcolor: "background.paper" }}>Factor</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, bgcolor: "background.paper" }}>CO₂e (t)</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -521,7 +526,7 @@ export default function EmissionsReport({ projectId }) {
                     <TableCell align="right">
                       {parseFloat(row.activity_value).toLocaleString()} {row.activity_unit}
                     </TableCell>
-                    <TableCell sx={{ fontSize: "0.75rem", color: "#6b7280" }}>{row.emission_factor}</TableCell>
+                    <TableCell sx={{ fontSize: "0.75rem", color: "text.secondary" }}>{row.emission_factor}</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>
                       {row.co2e_tonnes.toLocaleString()}
                     </TableCell>
@@ -531,7 +536,7 @@ export default function EmissionsReport({ projectId }) {
             </Table>
           </TableContainer>
           {(report.rows?.length || 0) > 100 && (
-            <Typography variant="body2" sx={{ mt: 2, textAlign: "center", color: "#6b7280" }}>
+            <Typography variant="body2" sx={{ mt: 2, textAlign: "center", color: "text.secondary" }}>
               Showing first 100 of {report.rows.length.toLocaleString()} records
             </Typography>
           )}
@@ -539,34 +544,34 @@ export default function EmissionsReport({ projectId }) {
       </Accordion>
 
       {/* Methodology Note */}
-      <ReportSection title="Methodology" icon={<Description sx={{ color: "#8b5cf6", fontSize: 28 }} />}>
-        <Typography variant="body1" sx={{ color: "#6b7280", lineHeight: 1.8, mb: 2 }}>
+      <ReportSection title="Methodology" icon={<Description sx={{ color: "secondary.main", fontSize: 28 }} />}>
+        <Typography variant="body1" sx={{ color: "text.secondary", lineHeight: 1.8, mb: 2 }}>
           This emissions inventory was prepared in accordance with the Greenhouse Gas Protocol Corporate
           Standard developed by the World Resources Institute (WRI) and the World Business Council for
           Sustainable Development (WBCSD).
         </Typography>
         <Grid container spacing={3}>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#374151", mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "text.primary", mb: 1 }}>
               Organizational Boundary
             </Typography>
-            <Typography variant="body2" sx={{ color: "#6b7280" }}>
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               Operational control approach
             </Typography>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#374151", mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "text.primary", mb: 1 }}>
               GWP Values
             </Typography>
-            <Typography variant="body2" sx={{ color: "#6b7280" }}>
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               IPCC AR6 100-year horizon
             </Typography>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#374151", mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "text.primary", mb: 1 }}>
               Emission Factors
             </Typography>
-            <Typography variant="body2" sx={{ color: "#6b7280" }}>
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               EPA, DEFRA, eGRID databases
             </Typography>
           </Grid>
@@ -574,7 +579,7 @@ export default function EmissionsReport({ projectId }) {
       </ReportSection>
 
       {/* Footer */}
-      <Box sx={{ textAlign: "center", py: 3, color: "#9ca3af", "@media print": { mt: 4 } }}>
+      <Box sx={{ textAlign: "center", py: 3, color: "text.disabled", "@media print": { mt: 4 } }}>
         <Typography variant="body2">
           Generated by Carbon Management Platform • {new Date().toLocaleDateString()}
         </Typography>

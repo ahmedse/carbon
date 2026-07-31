@@ -30,11 +30,11 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
   const getStatusIcon = (status) => {
     switch (status) {
       case 'passed':
-        return <CheckCircleIcon sx={{ color: '#4caf50', mr: 1 }} />;
+        return <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />;
       case 'failed':
-        return <ErrorIcon sx={{ color: '#f44336', mr: 1 }} />;
+        return <ErrorIcon sx={{ color: 'error.main', mr: 1 }} />;
       case 'warning':
-        return <WarningIcon sx={{ color: '#ff9800', mr: 1 }} />;
+        return <WarningIcon sx={{ color: 'warning.main', mr: 1 }} />;
       default:
         return null;
     }
@@ -110,7 +110,7 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
           alignItems: 'center',
           justifyContent: 'space-between',
           p: 1.5,
-          bgcolor: '#f5f5f5',
+          bgcolor: 'background.dark',
           borderRadius: 1,
         }}
       >
@@ -132,7 +132,7 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
 
       {/* Timestamp */}
       {timestamp && (
-        <Typography variant="caption" sx={{ color: '#999', fontSize: '0.75rem' }}>
+        <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>
           Last Run: {new Date(timestamp).toLocaleString()}
         </Typography>
       )}
@@ -170,21 +170,20 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
                 key={idx}
                 sx={{
                   p: 1,
-                  bgcolor: '#fafafa',
+                  bgcolor: 'background.paper',
                   borderRadius: 0.5,
-                  borderLeft: `3px solid ${
-                    result.passed ? '#4caf50' : '#f44336'
-                  }`,
+                  borderLeft: '3px solid',
+                  borderLeftColor: result.passed ? 'success.main' : 'error.main',
                 }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.3 }}>
                   {result.passed ? (
                     <CheckCircleIcon
-                      sx={{ fontSize: '1rem', color: '#4caf50', mr: 0.5 }}
+                      sx={{ fontSize: '1rem', color: 'success.main', mr: 0.5 }}
                     />
                   ) : (
                     <ErrorIcon
-                      sx={{ fontSize: '1rem', color: '#f44336', mr: 0.5 }}
+                      sx={{ fontSize: '1rem', color: 'error.main', mr: 0.5 }}
                     />
                   )}
                   <Typography
@@ -200,7 +199,7 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
                 {result.message && (
                   <Typography
                     variant="caption"
-                    sx={{ fontSize: '0.75rem', color: '#666', display: 'block' }}
+                    sx={{ fontSize: '0.75rem', color: 'text.secondary', display: 'block' }}
                   >
                     {result.message}
                   </Typography>
@@ -213,7 +212,7 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
 
       {/* No results */}
       {results.length === 0 && (
-        <Typography variant="caption" sx={{ color: '#999', fontSize: '0.8rem' }}>
+        <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.8rem' }}>
           No validation results available
         </Typography>
       )}

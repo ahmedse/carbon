@@ -112,7 +112,7 @@ const StatCard = ({ title, value, unit, subtitle, icon, color, trend, trendValue
             size="small"
             icon={trend === "up" ? <TrendingUp sx={{ fontSize: 12 }} /> : <TrendingDown sx={{ fontSize: 12 }} />}
             label={trendValue}
-            sx={{ ...FONT.chip, height: 20, bgcolor: trend === "up" ? "#fee2e2" : "#d1fae5", color: trend === "up" ? "#dc2626" : "#059669" }}
+            sx={{ ...FONT.chip, height: 20, bgcolor: trend === "up" ? "error.light" : "success.light", color: trend === "up" ? "error.dark" : "success.dark" }}
           />
         )}
       </Box>
@@ -429,7 +429,7 @@ export default function EmissionsDashboard({ projectId }) {
   if (loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 400 }}>
-        <CircularProgress size={48} sx={{ color: "#10b981" }} />
+        <CircularProgress size={48} sx={{ color: "success.main" }} />
       </Box>
     );
   }
@@ -510,9 +510,10 @@ export default function EmissionsDashboard({ projectId }) {
               onClick={handleRecalculate}
               disabled={recalculating}
               sx={{
-                bgcolor: "white",
-                border: "1px solid #e5e7eb",
-                "&:hover": { bgcolor: "#f9fafb" },
+                bgcolor: "background.default",
+                border: "1px solid",
+                borderColor: "divider",
+                "&:hover": { bgcolor: "background.paper" },
               }}
             >
               <Refresh sx={{ animation: recalculating ? "spin 1s linear infinite" : "none" }} />
@@ -521,9 +522,10 @@ export default function EmissionsDashboard({ projectId }) {
           <Tooltip title="Download report">
             <IconButton
               sx={{
-                bgcolor: "white",
-                border: "1px solid #e5e7eb",
-                "&:hover": { bgcolor: "#f9fafb" },
+                bgcolor: "background.default",
+                border: "1px solid",
+                borderColor: "divider",
+                "&:hover": { bgcolor: "background.paper" },
               }}
             >
               <Download />
@@ -572,7 +574,7 @@ export default function EmissionsDashboard({ projectId }) {
 
       {/* Scope Breakdown */}
       <GlassCard sx={{ mb: 4, p: 3 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700, color: "#111827", mb: 3 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, color: "text.primary", mb: 3 }}>
           GHG Protocol Scope Breakdown
         </Typography>
         <Box sx={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -595,7 +597,7 @@ export default function EmissionsDashboard({ projectId }) {
         <Grid size={{ xs: 12, lg: 8 }}>
           <GlassCard sx={{ height: "100%" }}>
             <CardContent sx={{ height: "100%", p: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700, color: "#111827", mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 700, color: "text.primary", mb: 3 }}>
                 Monthly Emissions Trend
               </Typography>
               <Box sx={{ height: 350 }}>
@@ -611,7 +613,7 @@ export default function EmissionsDashboard({ projectId }) {
         <Grid size={{ xs: 12, lg: 4 }}>
           <GlassCard sx={{ height: "100%" }}>
             <CardContent sx={{ height: "100%", p: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700, color: "#111827", mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 700, color: "text.primary", mb: 3 }}>
                 Scope Distribution
               </Typography>
               <Box sx={{ height: 350, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -625,7 +627,7 @@ export default function EmissionsDashboard({ projectId }) {
       {/* Category Breakdown */}
       <GlassCard sx={{ mb: 4 }}>
         <CardContent sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: "#111827", mb: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "text.primary", mb: 3 }}>
             Emissions by Category
           </Typography>
           <Box sx={{ height: 400 }}>
@@ -637,7 +639,7 @@ export default function EmissionsDashboard({ projectId }) {
       {/* Category Details Table */}
       <GlassCard>
         <CardContent sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: "#111827", mb: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "text.primary", mb: 3 }}>
             Detailed Category Breakdown
           </Typography>
           <Box sx={{ overflowX: "auto" }}>
