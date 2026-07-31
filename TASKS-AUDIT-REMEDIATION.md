@@ -20,54 +20,16 @@
 
 ---
 
-## PHASE 2 — Service Layer Extraction (Highest Impact Architecture Fix)
-**Role:** Backend Worker | **Model:** DeepSeek | **Est. tokens:** ~40K
+## PHASE 2 — Service Layer Extraction ✅ COMPLETE 2026-07-31
+**Role:** Backend Worker | **Result:** TASKS-RESULT-P2.md — all 4 groups passed
 
-**Hard Rule #3 violation:** 6 apps have no `services.py`, logic lives in views.
-This phase extracts business logic into services, one app per group.
-
-### CONTRACT: shared/api-contract.md, shared/data-layer.md, shared/security.md
-### PATTERN: Facade (design-patterns.md §Facade)
-
----
-
-### P2-G1 — accounts/services.py
-**Current state:** 529 lines in views.py. `_normalize_group_name()`, `_perspective_from_group_name()`, `_load_app_manifests()` are adapter/service functions in views. `pulse_auth.py` has view logic outside views.py.
-**Target:**
-- CREATE `backend/accounts/services.py`
-- MOVE `_normalize_group_name()`, `_perspective_from_group_name()`, `_load_app_manifests()` → services
-- MOVE `generate_pulse_token()` logic → `PulseService`
-- Views become thin: import service, call it, return
-- DO NOT TOUCH: models.py, permissions.py, rbac_utils.py, serializers.py, admin.py
-
-### P2-G2 — dataschema/services.py
-**Current state:** 638 lines in views.py. Bulk import, validation, template download.
-**Target:**
-- CREATE `backend/dataschema/services.py` with `SchemaService`, `BulkImportService`
-- MOVE bulk import logic, validation, template generation out of views
-- DO NOT TOUCH: models.py, serializers.py
-
-### P2-G3 — mdm/services.py
-**Current state:** 654 lines in views.py. Reference sets, org units, transitions, bulk operations.
-**Target:**
-- CREATE `backend/mdm/services.py` with `ReferenceSetService`, `OrgUnitService`
-- MOVE transition logic, bulk create/archive, tree/ancestor resolution
-- DO NOT TOUCH: models.py (already has OrgUnit.get_descendant_ids)
-
-### P2-G4 — evidence + importexport + connections services
-**Current state:** evidence (137 views), importexport (116 views), connections (81 views). Smaller — can batch.
-**Target:**
-- CREATE `backend/evidence/services.py`, `backend/importexport/services.py`, `backend/connections/services.py`
-- MOVE business logic from views → services
-- connections: `ConnectionTestService` (test + rotate_key logic)
-- importexport: `ImportService`, `ExportService` (run + download logic)
-- evidence: `EvidenceService` (upload + bulk + download logic)
-
-### Verification Gate (P2)
-```bash
-# No logic left in views beyond parse→call→return
-# Check views are thin (no complex business logic)
-grep -c "^def \|^class " backend/accounts/services.py
+**Delivered:**
+- ✅ G1: accounts/services.py — RoleResolutionService, AppManifestService, PulseService (166 lines)
+- ✅ G2: dataschema/services.py — BulkImportService, SchemaValidationService (160 lines)
+- ✅ G3: mdm/services.py — ReferenceSetService, OrgUnitService (125 lines)
+- ✅ G4: evidence, importexport, connections — 3 services, 180 lines total
+- **Views: 2301 → 1963 lines (−338). Services: +631 lines. 100 tests passed.**
+- All 6 apps now comply with Hard Rule #3 (views thin, logic in services)
 grep -c "^def \|^class " backend/dataschema/services.py
 grep -c "^def \|^class " backend/mdm/services.py
 # All imports resolve
