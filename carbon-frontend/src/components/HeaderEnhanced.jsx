@@ -78,7 +78,7 @@ export default function HeaderEnhanced() {
   const [anchorEl, setAnchorEl] = useState(null);
 
   const initials = user?.username?.slice(0, 2).toUpperCase() || "U";
-  const primaryRole = user?.roles?.[0];
+  const primaryRole = user?.roles?.[0]?.role;
 
   const handleMenuOpen = (e) => setAnchorEl(e.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);

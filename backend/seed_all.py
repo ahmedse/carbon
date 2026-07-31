@@ -309,7 +309,7 @@ class SeedBuilder:
             ('dataowner1', 'owner123', 'dataowner1@aastmt.edu.eg', False, False, 'dataowners_group', 'Smart Village'),
             ('analyst1', 'analyst123', 'analyst1@aastmt.edu.eg', False, False, 'analysts_group', None),
             ('viewer1', 'viewer123', 'viewer1@aastmt.edu.eg', False, False, 'viewers_group', None),
-            ('transport_officer', 'transport123', 'transport@aastmt.edu.eg', False, False, 'dataowners_group', 'Transport'),
+            ('transport_officer', 'transport123', 'transport@aastmt.edu.eg', False, False, 'dataowners_group', 'Smart Village'),
         ]
         for username, password, email, is_su, is_staff, role_name, ou_name in USERS:
             user, created = User.objects.get_or_create(
@@ -708,7 +708,7 @@ class SeedBuilder:
             ('dataowner1', 'owner123', 'Data Owner - Smart Village'),
             ('analyst1', 'analyst123', 'Analyst - read-only reports'),
             ('viewer1', 'viewer123', 'Viewer - minimal access'),
-            ('transport_officer', 'transport123', 'Scoped Owner - Transport only'),
+            ('transport_officer', 'transport123', 'Scoped Owner - Smart Village'),
         ]
         for u, p, desc in creds:
             print(f"  {u:22} / {p:16}  {desc}")

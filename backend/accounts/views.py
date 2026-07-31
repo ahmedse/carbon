@@ -76,7 +76,7 @@ def me_context(request):
     Frontend uses this to decide which perspective tabs to show and auto-set default perspective.
     """
     from .rbac_utils import (
-        user_is_global_admin, get_allowed_module_ids,
+        user_is_global_admin, get_visible_module_ids,
         get_visible_org_units, VISIBILITY_ROLES
     )
     from core.models import Module
@@ -111,17 +111,13 @@ def me_context(request):
 
     org_units = [org_unit.id for org_unit in get_visible_org_units(user)]
 
-    if is_global:
+    visible_module_ids = get_visible_module_ids(user)
+    if visible_module_ids is None:
         module_count = Module.objects.count()
-    else:
-        module_count = len(get_allowed_module_ids(user, VISIBILITY_ROLES))
-
-    # Build modules list for frontend hasAppAccess
-    if is_global:
         user_modules = list(Module.objects.values('id', 'name'))
     else:
-        allowed_ids = get_allowed_module_ids(user, VISIBILITY_ROLES)
-        user_modules = list(Module.objects.filter(id__in=allowed_ids).values('id', 'name'))
+        module_count = len(visible_module_ids)
+        user_modules = list(Module.objects.filter(id__in=visible_module_ids).values('id', 'name'))
 
     return Response({
         'user': {

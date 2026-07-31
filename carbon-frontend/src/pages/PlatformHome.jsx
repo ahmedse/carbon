@@ -152,7 +152,7 @@ export default function PlatformHome() {
       {accessibleApps.length > 0 ? (
         <Grid container spacing={3}>
           {accessibleApps.map((app) => (
-            <Grid item xs={12} sm={6} md={4} key={app.id}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={app.id}>
               <AppCard app={app} />
             </Grid>
           ))}

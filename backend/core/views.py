@@ -2,7 +2,7 @@ from .models import Module, Feedback
 from .serializers import ModuleSerializer, FeedbackSerializer
 from .feedback import AppFeedback
 from accounts.permissions import HasScopedRole
-from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role
+from accounts.rbac_utils import get_visible_module_ids
 from rest_framework import mixins, viewsets, status
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
@@ -23,12 +23,10 @@ class ModuleViewSet(viewsets.ModelViewSet):
         if getattr(self, 'swagger_fake_view', False):
             return Module.objects.none()
         user = self.request.user
-        if user.is_superuser or user_has_global_role(user, ["admin", "admins_group"]):
+        visible = get_visible_module_ids(user)
+        if visible is None:
             return Module.objects.all()
-        allowed = get_allowed_module_ids(
-            user, ["admin", "admins_group", "dataowners_group", "auditors_group"]
-        )
-        return Module.objects.filter(id__in=allowed)
+        return Module.objects.filter(id__in=visible)
 
     def destroy(self, request, *args, **kwargs):
         """

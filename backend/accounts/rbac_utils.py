@@ -79,7 +79,7 @@ def get_visible_org_units(user):
 
 # --- Visibility helpers (org-scoped READ access) -------------------------------
 ADMIN_ROLES = ["admin", "admins_group"]
-VISIBILITY_ROLES = ["admins_group", "dataowners_group", "auditors_group"]
+VISIBILITY_ROLES = ["admins_group", "dataowners_group", "auditors_group", "viewers_group", "analysts_group"]
 
 
 def user_is_global_admin(user):
@@ -94,11 +94,17 @@ def user_is_global_admin(user):
 def get_visible_module_ids(user):
     """Module ids the user may see across the platform.
 
-    Returns None to mean 'unrestricted' (superuser / global admin).
+    Returns None to mean 'unrestricted' (superuser / global admin or any global visibility role).
     Otherwise returns the set of module ids within the user's allowed org subtree
     (or granted directly at module scope) for any visibility role.
     """
     if user_is_global_admin(user):
+        return None
+    # Users with a global visibility role (org_unit=None, module=None) can see all modules
+    if ScopedRole.objects.filter(
+        user=user, is_active=True, org_unit=None, module=None,
+        group__name__in=VISIBILITY_ROLES,
+    ).exists():
         return None
     return get_allowed_module_ids(user, VISIBILITY_ROLES)
 

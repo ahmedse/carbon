@@ -86,7 +86,7 @@ class DashboardService:
             ],
             'monthly_trend': monthly_trend,
             'data_quality_score': data_quality,
-            'calculation_count': base_qs.count(),
+            'calculation_count': qs.count(),
             'last_updated': qs.order_by('-calculated_at').values_list('calculated_at', flat=True).first(),
         }
 

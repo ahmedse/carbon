@@ -171,7 +171,7 @@ export default function EmissionsDashboard({ projectId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
-  const [selectedYear, setSelectedYear] = useState(2025); // Demo data year
+  const [selectedYear, setSelectedYear] = useState(2026); // Demo data year
   const [recalculating, setRecalculating] = useState(false);
   
   const token = localStorage.getItem("access");

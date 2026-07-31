@@ -17,8 +17,8 @@ export default function NotFound() {
       <Typography variant="h5" color="text.secondary" gutterBottom>
         Page Not Found
       </Typography>
-      <Button variant="contained" component={Link} to="/" sx={{ mt: 2 }}>
-        Go Home
+      <Button variant="contained" component={Link} to="/carbon/dashboard" sx={{ mt: 2 }}>
+        Go to Dashboard
       </Button>
     </Box>
   );

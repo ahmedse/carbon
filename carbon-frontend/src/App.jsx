@@ -131,13 +131,21 @@ function RoleAwareLanding() {
   // Check if user has data entry perspective but not admin
   const hasDataOnly = availablePerspectives?.includes('data_entry') && !hasAdminPerspective;
   
+  // Users with assigned modules get redirected to their first module
+  const firstModule = context?.modules?.[0];
+  
   // Redirect data-only users to their first module
-  if (hasDataOnly) {
-    const firstModule = context?.modules?.[0];
-    if (firstModule) {
-      return <Navigate to={`/modules/${firstModule.id}`} replace />;
-    }
-    // No modules assigned - show empty state
+  if (hasDataOnly && firstModule) {
+    return <Navigate to={`/modules/${firstModule.id}`} replace />;
+  }
+  
+  // Non-admin users who have modules: redirect to first module (viewer, analyst, data owner)
+  if (!hasAdminPerspective && firstModule) {
+    return <Navigate to={`/modules/${firstModule.id}`} replace />;
+  }
+  
+  // No modules assigned - show empty state
+  if (!hasAdminPerspective) {
     return (
       <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
         <h2>No Data Modules Assigned</h2>
