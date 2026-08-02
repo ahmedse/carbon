@@ -2,6 +2,7 @@
 
 import { API_BASE_URL, API_ROUTES } from "../config";
 import { isJwtExpired } from "../jwt";
+import { normalizeError } from "../utils/errorNormalizer";
 
 /** Joins base URL and path, stripping duplicate slashes. */
 function joinUrl(base, path) {
@@ -287,40 +288,14 @@ export async function apiFetch(
         feedback?.detail ||
         (responseData && (responseData.detail || responseData.message)) ||
         `API Error: ${response.status}`;
-      
-      // ===== COMPREHENSIVE ERROR LOGGING =====
-      const errorLog = {
-        timestamp: new Date().toISOString(),
-        endpoint,
-        method,
-        status: response.status,
-        detail,
-        requestBody: body,
-        responseData,
-        responseHeaders: Object.fromEntries(response.headers.entries()),
-      };
-      
-      // Log to console with table format for readability
-      console.group(`🔴 API ERROR - ${method} ${endpoint}`);
-      console.error('Status:', response.status);
-      console.error('Detail:', detail);
-      console.error('Request:', { method, endpoint, body });
-      console.error('Response:', responseData);
-      console.table(errorLog);
-      console.groupEnd();
-      
-      // Store in sessionStorage for backend inspection
-      try {
-        const errorHistory = JSON.parse(sessionStorage.getItem('api_errors') || '[]');
-        errorHistory.push(errorLog);
-        if (errorHistory.length > 50) errorHistory.shift(); // Keep last 50
-        sessionStorage.setItem('api_errors', JSON.stringify(errorHistory));
-      } catch (e) {
-        console.warn('Failed to store error history:', e);
-      }
-      
-      const err = new Error(detail);
-      if (feedback) err.feedback = feedback;
+
+      const normalized = normalizeError(
+        { message: detail, status: response.status, feedback },
+        { endpoint, method }
+      );
+      const err = new Error(normalized.message);
+      err.normalized = normalized;
+      err.feedback = feedback;
       err.status = response.status;
       throw err;
     }
@@ -328,23 +303,15 @@ export async function apiFetch(
     return responseData;
   } catch (error) {
     clearTimeout(timeout);
-    if (error.name === "AbortError") {
-      throw new Error("Request timed out");
-    }
-    if (error.message === "Failed to fetch") {
-      throw new Error("Network error");
-    }
-    
-    // Log unexpected errors
-    console.error('🔴 apiFetch Catch Block:', {
-      endpoint,
-      method,
-      errorMessage: error.message,
-      errorStack: error.stack,
-      timestamp: new Date().toISOString(),
-    });
-    
-    // If not already logged out, propagate error message
-    throw error;
+    // Normalize all errors through the standard shape
+    const normalized = normalizeError(
+      error,
+      { endpoint, method, status: error.status }
+    );
+    const err = new Error(normalized.message);
+    err.normalized = normalized;
+    if (error.feedback) err.feedback = error.feedback;
+    if (error.status) err.status = error.status;
+    throw err;
   }
 }

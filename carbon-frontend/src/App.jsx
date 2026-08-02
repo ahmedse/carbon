@@ -1,5 +1,5 @@
 // src/App.jsx
-import React from "react";
+import React, { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams } from "react-router-dom";
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -9,6 +9,9 @@ import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
 import { Shell } from "./shell/Shell";
 import AdminRoute from "./components/AdminRoute";
+import ErrorBoundary from "./shell/ErrorBoundary";
+import { NetworkStatusProvider } from "./components/NetworkStatusBanner";
+import { LoadingSpinner } from "./shell/LoadingFallback";
 import TableManagerPage from "./pages/TableManagerPage";
 import OrgUnitsPage from "./pages/admin/OrgUnitsPage";
 import OrgUnitDetailPage from "./pages/admin/OrgUnitDetailPage";
@@ -154,13 +157,16 @@ export default function App() {
   const RootLayout = Shell;
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
-     <BrowserRouter basename={import.meta.env.VITE_BASE}>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route element={<RequireAuth />}>
-            <Route element={<RequireContext />}>
-              <Route element={<RootLayout />}>
+    <ErrorBoundary>
+      <NetworkStatusProvider>
+        <LocalizationProvider dateAdapter={AdapterDayjs}>
+          <BrowserRouter basename={import.meta.env.VITE_BASE}>
+            <Suspense fallback={<LoadingSpinner />}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route element={<RequireAuth />}>
+                  <Route element={<RequireContext />}>
+                    <Route element={<RootLayout />}>
                 <Route path="help" element={<Help />} />
                 <Route path="feedback" element={<Feedback />} />
                 <Route path="/settings" element={<SettingsPage />} />
@@ -338,8 +344,11 @@ export default function App() {
             </Route>
           </Route>
           <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </LocalizationProvider>
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </LocalizationProvider>
+      </NetworkStatusProvider>
+    </ErrorBoundary>
   );
 }

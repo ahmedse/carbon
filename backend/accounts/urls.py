@@ -28,6 +28,11 @@ urlpatterns = [
     # Pulse AI Copilot integration endpoints
     path('pulse-auth/', pulse_auth_view, name='pulse-auth'),
     path('pulse-provision/', pulse_provision_view, name='pulse-provision'),
+    # URL aliases for frontend discoverability (P11 hardening)
+    path('audit-log/', RoleAssignmentAuditLogViewSet.as_view({'get': 'list'}), name='audit-log-list'),
+    path('audit-log/<int:pk>/', RoleAssignmentAuditLogViewSet.as_view({'get': 'retrieve'}), name='audit-log-detail'),
+    path('access-control/', ScopedRoleViewSet.as_view({'get': 'list', 'post': 'create'}), name='access-control-list'),
+    path('access-control/<int:pk>/', ScopedRoleViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='access-control-detail'),
 ]
 
 urlpatterns += router.urls

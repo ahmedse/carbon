@@ -83,6 +83,25 @@ export function NotificationProvider({ children }) {
   // Smart router: choose dialog vs toast based on structured content.
   const notifyFromError = useCallback(
     (error, fallbackMessage = "Something went wrong") => {
+      // If the error was normalized by errorNormalizer, check for auth type
+      const normalized = error?.normalized;
+      if (normalized?.type === "auth" && normalized?.status === 401) {
+        // Session expired — trigger re-login instead of a toast
+        setNotification({
+          message: "Your session has expired. Redirecting to login…",
+          type: "warning",
+          duration: 2500,
+          key: Date.now(),
+        });
+        localStorage.clear();
+        setTimeout(() => {
+          window.location.href = `${
+            import.meta.env.VITE_BASE || "/"
+          }login?expired=1`;
+        }, 1500);
+        return;
+      }
+
       const fb = error?.feedback;
       const hasRichContent =
         fb && ((fb.reasons && fb.reasons.length) || (fb.remediation && fb.remediation.length));

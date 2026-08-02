@@ -14,9 +14,15 @@ describe('NotFound', () => {
     expect(screen.getByText('Page Not Found')).toBeInTheDocument();
   });
 
-  it('has a "Go to Dashboard" link pointing to the app home', () => {
+  it('has a search input for page search', () => {
     render(<MemoryRouter><NotFound /></MemoryRouter>);
-    const link = screen.getByRole('link', { name: /go to dashboard/i });
-    expect(link).toHaveAttribute('href', '/');
+    const searchInput = screen.getByPlaceholderText(/search for a page/i);
+    expect(searchInput).toBeInTheDocument();
+  });
+
+  it('has suggested page links including Dashboard', () => {
+    render(<MemoryRouter><NotFound /></MemoryRouter>);
+    const dashboardLink = screen.getByRole('link', { name: /dashboard/i });
+    expect(dashboardLink).toBeInTheDocument();
   });
 });
