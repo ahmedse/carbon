@@ -110,12 +110,22 @@ class OrgUnitSerializer(serializers.ModelSerializer):
         return obj.full_path()
 
     def get_children_count(self, obj):
-        """Count direct children."""
-        return obj.children.filter(is_active=True).count()
+        """Count direct children from prefetched cache (P14 — no DB hit)."""
+        return sum(1 for c in obj.children.all() if c.is_active)
 
     def get_descendants_count(self, obj):
-        """Count all descendants (not including self)."""
-        return len(obj.get_descendant_ids(include_self=False))
+        """Count all active descendants using prefetched children cache (BFS)."""
+        count = 0
+        frontier = [c for c in obj.children.all() if c.is_active]
+        visited = {c.id for c in frontier}
+        while frontier:
+            child = frontier.pop(0)
+            count += 1
+            for grandchild in child.children.all():
+                if grandchild.id not in visited and grandchild.is_active:
+                    visited.add(grandchild.id)
+                    frontier.append(grandchild)
+        return count
 
     def validate_name(self, value):
         """Ensure name is unique within parent scope."""

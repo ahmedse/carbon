@@ -18,6 +18,7 @@ from .serializers import (
     TableProfileSerializer, FieldProfileSerializer, DQRuleSerializer, DQResultSerializer,
 )
 from accounts.permissions import ReadAnyWriteGlobalAdmin, ReadScopedWriteAdmin
+from catalog.permissions import AdminOrSuperuserOnly
 from accounts.rbac_utils import get_allowed_org_unit_ids, user_has_global_role, get_allowed_module_ids
 from accounts.models import ScopedRole
 from .services import profile_table, run_dq, run_single_rule, bulk_profile
@@ -127,7 +128,7 @@ class TableProfileViewSet(viewsets.ReadOnlyModelViewSet):
 
 class DQRuleViewSet(viewsets.ModelViewSet):
     serializer_class = DQRuleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteGlobalAdmin]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'params']
     ordering_fields = ['created_at', 'name', 'severity']
@@ -317,7 +318,7 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ProfileTriggerView(APIView):
     """POST /dq/profile/ — Profile a single table."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminOrSuperuserOnly]
 
     @swagger_auto_schema(
         operation_description=(
@@ -471,7 +472,7 @@ class ProfileTriggerView(APIView):
 
 class BulkProfileView(APIView):
     """POST /dq/profile/bulk/ — Profile multiple tables."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminOrSuperuserOnly]
 
     @swagger_auto_schema(
         operation_description=(
@@ -516,7 +517,7 @@ class BulkProfileView(APIView):
 
 class DQRunView(APIView):
     """POST /dq/run/ — Run a single rule (rule_id) or all rules for a table (data_table_id)."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminOrSuperuserOnly]
 
     @swagger_auto_schema(
         operation_description=(

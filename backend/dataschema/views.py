@@ -84,7 +84,11 @@ class DataTableViewSet(ScopedViewSet):
         module_id = self.request.query_params.get("module_id")
         pk = self.kwargs.get('pk')
 
-        qs = DataTable.objects.filter(is_archived=False)
+        qs = DataTable.objects.select_related(
+            'module'
+        ).prefetch_related(
+            'fields', 'rows'
+        ).filter(is_archived=False)
         visible = get_visible_module_ids(user)
         if visible is not None:
             qs = qs.filter(module_id__in=visible)

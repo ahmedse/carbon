@@ -32,7 +32,8 @@ class DataTableDetailSerializer(serializers.ModelSerializer):
     row_count = serializers.SerializerMethodField()
 
     def get_row_count(self, obj):
-        return obj.rows.filter(is_archived=False).count()
+        # Use prefetched cache — len() avoids COUNT query (P14)
+        return sum(1 for r in obj.rows.all() if not r.is_archived)
 
     class Meta:
         model = DataTable

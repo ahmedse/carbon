@@ -94,9 +94,10 @@ class ProfileEndpointTests(APIBaseTestCase):
         self.assertIn('field_profiles', r.data)
 
     def test_owner_can_profile(self):
+        """P11/P14: Profile is now admin-only. Non-admin data owners get 403."""
         self.client.force_authenticate(self.owner)
         r = self.client.post(f'{BASE}/profile/', {'data_table_id': self.table.id}, format='json')
-        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_outsider_gets_403(self):
         self.client.force_authenticate(self.outsider)

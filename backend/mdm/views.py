@@ -489,8 +489,15 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Filter org units based on query parameters."""
-        # Optimize: select_related parent (OrgUnitSerializer exposes parent_name)
-        qs = OrgUnit.objects.select_related('parent').filter(is_active=True)
+        # Optimize: deep select_related parent chain for full_path + nested
+        # prefetch children for children_count / descendants_count (P14).
+        qs = OrgUnit.objects.select_related(
+            'parent__parent__parent__parent__parent'
+        ).prefetch_related(
+            'children', 'children__children', 'children__children__children',
+            'children__children__children__children',
+            'children__children__children__children__children'
+        ).filter(is_active=True)
         p = self.request.query_params
         
         # Filter by parent

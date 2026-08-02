@@ -199,15 +199,165 @@ class MDMNPlusOneTest(TestCase, NPlusOneListMixin):
             list(OrgUnit.objects.select_related('parent'))
         self.assertLessEqual(len(ctx), 1, f"Too many queries: {len(ctx)}")
 
-    def test_org_units_list_returns_200(self):
-        """GET /mdm/org-units/ returns 200 with parent join in place.
-        NOTE: residual N+1 remains from OrgUnitSerializer method fields
-        (children_count / descendants_count / full_path) — fixing those
-        requires serializer changes (out of P12 scope, see report)."""
-        parent = OrgUnit.objects.create(name="Perf Root2", slug="perf-root2")
-        for i in range(4):
-            OrgUnit.objects.create(name=f"Perf C{i}", slug=f"perf-c{i}", parent=parent)
-        resp, q = self._count('/carbon-api/mdm/org-units/')
+
+class OrgUnitNPlusOneTest(TestCase, NPlusOneListMixin):
+    """P14: Verify OrgUnit list endpoint is free of N+1 after
+    deep select_related (parent chain for full_path) + nested
+    prefetch_related (children for children_count / descendants_count)."""
+
+    def setUp(self):
+        self._make_admin_client()
+        self._seed = 0
+
+    def _make_org_units(self, n):
+        """Create n top-level org units each with a child and grandchild."""
+        for i in range(n):
+            root = OrgUnit.objects.create(
+                name=f"OU_Root_{self._seed}", slug=f"ou-root-{self._seed}"
+            )
+            child = OrgUnit.objects.create(
+                name=f"OU_Child_{self._seed}", slug=f"ou-child-{self._seed}",
+                parent=root,
+            )
+            OrgUnit.objects.create(
+                name=f"OU_Grand_{self._seed}", slug=f"ou-grand-{self._seed}",
+                parent=child,
+            )
+            self._seed += 1
+
+    def test_org_unit_list_no_n_plus_one(self):
+        """GET /mdm/org-units/ — constant query count as units grow."""
+        self._assert_no_n_plus_one(
+            '/carbon-api/mdm/org-units/', self._make_org_units, small=2, large=5, bound=15
+        )
+
+
+class DataTableNPlusOneTest(TestCase, NPlusOneListMixin):
+    """P14: Verify /dataschema/tables/ is free of N+1 after
+    select_related('module') + prefetch_related('fields','rows')."""
+
+    def setUp(self):
+        self._make_admin_client()
+        self.org = OrgUnit.objects.create(name="DTPerfOrg", slug="dt-perf-org")
+        self.module = Module.objects.create(name="DTPerfMod", org_unit=self.org)
+        self._seed = 0
+
+    def _make_tables(self, n):
+        for i in range(n):
+            dt = DataTable.objects.create(
+                title=f"PerfDT_{self._seed}", name=f"perf_dt_{self._seed}",
+                module=self.module,
+            )
+            DataField.objects.create(
+                data_table=dt, name=f"pf_{self._seed}",
+                label=f"PerfField{self._seed}", type="number",
+            )
+            self._seed += 1
+
+    def test_table_list_no_n_plus_one(self):
+        """GET /dataschema/tables/ — constant query count as tables grow."""
+        self._assert_no_n_plus_one(
+            '/carbon-api/dataschema/tables/', self._make_tables, small=2, large=6, bound=10
+        )
+
+
+class DQLockedDownPermissionsTest(TestCase):
+    """P11/P14: Verify DQ admin-write endpoints reject non-admin users (403)
+    and allow superusers (200)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = OrgUnit.objects.create(name="PermOrg", slug="perm-org")
+        cls.module = Module.objects.create(name="PermMod", org_unit=cls.org)
+        cls.table = DataTable.objects.create(
+            title="PermTable", name="perm_table", module=cls.module
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def _login(self, is_superuser=False, suffix=''):
+        tag = 'admin' if is_superuser else 'user'
+        user = User.objects.create_user(
+            username=f"dq_perm_{tag}_{suffix}",
+            password="pass",
+        )
+        user.is_superuser = is_superuser
+        user.save()
+        self.client.force_authenticate(user=user)
+        return user
+
+    # --- Write endpoints must reject non-admin ---
+
+    def test_profile_trigger_rejects_non_admin(self):
+        self._login(is_superuser=False)
+        resp = self.client.post('/carbon-api/dq/profile/',
+                                {'data_table_id': self.table.id}, format='json')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_profile_trigger_allows_admin(self):
+        self._login(is_superuser=True, suffix='pt')
+        resp = self.client.post('/carbon-api/dq/profile/',
+                                {'data_table_id': self.table.id}, format='json')
+        # 200/202 = success, 400 = table empty (passed auth, legit business error)
+        self.assertIn(resp.status_code, [200, 202, 400])
+
+    def test_bulk_profile_rejects_non_admin(self):
+        self._login(is_superuser=False)
+        resp = self.client.post('/carbon-api/dq/profile/bulk/',
+                                {'data_table_ids': [self.table.id]}, format='json')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_bulk_profile_allows_admin(self):
+        self._login(is_superuser=True, suffix='bp')
+        resp = self.client.post('/carbon-api/dq/profile/bulk/',
+                                {'data_table_ids': [self.table.id]}, format='json')
+        # 200/202 = success, 400 = table empty (passed auth)
+        self.assertIn(resp.status_code, [200, 202, 400])
+
+    def test_dq_run_rejects_non_admin(self):
+        self._login(is_superuser=False)
+        resp = self.client.post('/carbon-api/dq/run/',
+                                {'data_table_id': self.table.id}, format='json')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_dq_run_allows_admin(self):
+        self._login(is_superuser=True, suffix='dr')
+        resp = self.client.post('/carbon-api/dq/run/',
+                                {'data_table_id': self.table.id}, format='json')
+        # 200/202 = success, 400 = no rules to run (passed auth)
+        self.assertIn(resp.status_code, [200, 202, 400])
+
+    def test_run_validation_rejects_non_admin(self):
+        self._login(is_superuser=False)
+        resp = self.client.post('/carbon-api/dq/run-validation/',
+                                {'data_table': self.table.id}, format='json')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_run_validation_allows_admin(self):
+        self._login(is_superuser=True, suffix='rv')
+        resp = self.client.post('/carbon-api/dq/run-validation/',
+                                {'data_table': self.table.id}, format='json')
+        self.assertIn(resp.status_code, [200, 202])
+
+    # --- Read endpoints still open to authenticated users ---
+
+    def test_dq_metrics_readable_by_any_auth(self):
+        self._login(is_superuser=False)
+        resp = self.client.get('/carbon-api/dq/metrics/')
         self.assertEqual(resp.status_code, 200)
-        # Loose bound: list query + parent join must keep total under ~1 + 4N
-        self.assertLess(q, 30, f"Org unit list too slow: {q} queries")
+
+    def test_table_dq_metrics_allows_any_auth(self):
+        """Table metrics require scoped table access. Non-admin without scope
+        gets 403 from _check_table_access, which is correct (not a permission
+        class issue). The global metrics endpoint above is unrestricted."""
+        self._login(is_superuser=False)
+        resp = self.client.get(f'/carbon-api/dq/metrics/table/{self.table.id}/')
+        # 403 is expected for users without table scope — that's _check_table_access
+        self.assertEqual(resp.status_code, 403)
+
+    def test_field_dq_metrics_readable_by_any_auth(self):
+        self._login(is_superuser=False)
+        # No fields exist, expect 404 or empty — either is fine as long as not 403
+        resp = self.client.get('/carbon-api/dq/field-metrics/')
+        self.assertNotEqual(resp.status_code, 403)
