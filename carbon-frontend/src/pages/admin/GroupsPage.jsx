@@ -33,9 +33,7 @@ export default function GroupsPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await apiFetch('accounts/groups/', { method: 'GET', token }); // groups list
-      if (!res.ok) throw new Error('Failed to load groups');
-      const data = await res.json();
+      const data = await apiFetch('accounts/groups/', { method: 'GET', token }); // apiFetch returns parsed JSON
       setGroups(Array.isArray(data) ? data : data.results || []);
     } catch (e) {
       setError(e.message || 'Failed to load groups');
@@ -55,15 +53,11 @@ export default function GroupsPage() {
     setError('');
     try {
       const body = { name: form.name.trim(), description: form.description };
-      const res = await apiFetch(editingId ? `accounts/groups/${editingId}/` : 'accounts/groups/', {
+      await apiFetch(editingId ? `accounts/groups/${editingId}/` : 'accounts/groups/', {
         method: editingId ? 'PUT' : 'POST',
         token,
         body,
-      }); // save group
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || body.detail || 'Failed to save group');
-      }
+      }); // apiFetch throws on non-ok, returns parsed JSON
       setDialogOpen(false);
       load();
     } catch (e) {
@@ -77,14 +71,10 @@ export default function GroupsPage() {
     if (!window.confirm(`Delete group "${group.name}"?`)) return;
     setError('');
     try {
-      const res = await apiFetch(`accounts/groups/${group.id}/`, {
+      await apiFetch(`accounts/groups/${group.id}/`, {
         method: 'DELETE',
         token,
-      }); // delete group
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || body.detail || 'Delete failed');
-      }
+      }); // apiFetch throws on non-ok, returns parsed JSON
       load();
     } catch (e) {
       setError(e.message || 'Delete failed');

@@ -42,7 +42,6 @@ function studioFromPath(pathname) {
 }
 
 export function Shell() {
-  useDocumentTitle("Home");
   const navigate = useNavigate();
   const location = useLocation();
 

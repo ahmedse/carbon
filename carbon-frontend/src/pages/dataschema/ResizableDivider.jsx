@@ -3,13 +3,11 @@
 
 import React, { useState, useRef } from 'react';
 import { Box } from '@mui/material';
-import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 const MIN_WIDTH = 250;
 const MAX_WIDTH_PERCENT = 0.5;
 
 export default function ResizableDivider({ onResize }) {
-  useDocumentTitle("ResizableDivider");
   const [isDragging, setIsDragging] = useState(false);
   const dividerRef = useRef(null);
 

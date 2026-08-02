@@ -21,9 +21,7 @@ export default function RoleRegistryPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await apiFetch('accounts/role-registry/', { method: 'GET', token }); // role registry
-        if (!res.ok) throw new Error('Failed to load role registry');
-        const data = await res.json();
+        const data = await apiFetch('accounts/role-registry/', { method: 'GET', token }); // apiFetch returns parsed JSON
         setApps(Array.isArray(data.apps) ? data.apps : []);
       } catch (e) {
         setError(e.message || 'Failed to load role registry');
