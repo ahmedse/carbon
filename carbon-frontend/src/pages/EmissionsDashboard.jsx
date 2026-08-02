@@ -200,11 +200,11 @@ export default function EmissionsDashboard({ projectId }) {
     loadData();
   }, [projectId, selectedYear, token]);
 
-  // Handle recalculation
+  // Handle recalculation — triggers all active calculation rules
   const handleRecalculate = async () => {
     setRecalculating(true);
     try {
-      await triggerCalculations({ project_id: projectId, recalculate: true }, token);
+      await triggerCalculations({ recalculate: true }, token);
       // Refresh data
       const result = await fetchEmissionsDashboard(
         { project_id: projectId, year: selectedYear },

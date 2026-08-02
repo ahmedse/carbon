@@ -208,6 +208,8 @@ export async function generateReport(params, token) {
   }
   if (params.grouping) query.append("grouping", params.grouping);
   
+  if (params.output_format) query.append("output_format", params.output_format);
+  
   const endpoint = `${API_ROUTES.emissionsReport}?${query.toString()}`;
   return apiFetch(endpoint, { token });
 }
@@ -217,7 +219,7 @@ export async function generateReport(params, token) {
  */
 export async function downloadReportCsv(params, token) {
   const query = new URLSearchParams();
-  query.append("format", "csv");
+  query.append("output_format", "csv");
   if (params.reporting_period_id) query.append("reporting_period_id", params.reporting_period_id);
   if (params.custom_start) query.append("custom_start", params.custom_start);
   if (params.custom_end) query.append("custom_end", params.custom_end);

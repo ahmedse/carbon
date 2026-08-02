@@ -466,7 +466,7 @@ class ReportAPIView(APIView):
         period_id = request.query_params.get('reporting_period_id')
         org_unit_id = request.query_params.get('org_unit_id')
         year = request.query_params.get('year', timezone.now().year)
-        report_format = request.query_params.get('format', 'json')
+        report_format = request.query_params.get('output_format', 'json')
 
         data = ReportService.generate_report(
             request.user,
@@ -512,9 +512,14 @@ class CalculateAPIView(APIView):
 
     POST /emissions/calculate/
     {
-        "rule_id": 1,  // OR
-        "reporting_period_id": 1,
+        "rule_id": 1,           // Single rule
+        "reporting_period_id": 1, // optional
         "recalculate": false
+    }
+
+    POST /emissions/calculate/  — recalculate ALL active rules
+    {
+        "recalculate": true
     }
     """
     permission_classes = [AdminOrSuperuserOnly]
@@ -523,6 +528,10 @@ class CalculateAPIView(APIView):
         rule_id = request.data.get('rule_id')
         period_id = request.data.get('reporting_period_id')
         recalculate = request.data.get('recalculate', False)
+
+        # ── Recalculate-all mode: no rule_id, just recalculate=true ──
+        if not rule_id and recalculate:
+            return self._recalculate_all(request, period_id)
 
         rule, period, errors = CalculationEngineService.validate_calculation_request(
             rule_id, period_id=period_id,
@@ -568,6 +577,69 @@ class CalculateAPIView(APIView):
             'total_skipped': skipped,
             'total_errors': err_count,
             'rule': rule.name,
+        })
+
+    def _recalculate_all(self, request, period_id):
+        """Recalculate all active calculation rules. Used by the dashboard."""
+        from emissions.models import CalculationRule
+
+        rules = CalculationRule.objects.filter(is_active=True).select_related('data_table')
+        if not rules.exists():
+            return Response(
+                {'error': 'No active calculation rules found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        total_created = 0
+        total_skipped = 0
+        total_errors = 0
+        rules_processed = 0
+        rule_results = []
+
+        for rule in rules:
+            _, period, errors = CalculationEngineService.validate_calculation_request(
+                rule.id, period_id=period_id,
+            )
+            if errors:
+                rule_results.append({'rule': rule.name, 'status': 'skipped', 'error': errors.get('rule_id', str(errors))})
+                total_errors += 1
+                continue
+
+            created, skipped, err_count = CalculationEngineService.execute_rule(
+                rule, reporting_period=period, user=request.user, recalculate=True,
+            )
+
+            CalculationAudit.objects.create(
+                trigger_type='single',
+                triggered_by=request.user,
+                calculation_rule=rule,
+                data_table=rule.data_table,
+                reporting_period=period,
+                recalculate=True,
+                created_count=created,
+                skipped_count=skipped,
+                error_count=err_count,
+            )
+
+            total_created += created
+            total_skipped += skipped
+            total_errors += err_count
+            rules_processed += 1
+            rule_results.append({
+                'rule': rule.name,
+                'status': 'ok',
+                'created': created,
+                'skipped': skipped,
+                'errors': err_count,
+            })
+
+        return Response({
+            'success': True,
+            'total_created': total_created,
+            'total_skipped': total_skipped,
+            'total_errors': total_errors,
+            'rules_processed': rules_processed,
+            'rule_results': rule_results,
         })
 
 
