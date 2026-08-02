@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Grid } from '@mui/material';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchConsoleData } from '../../api/emissions';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { PageWrapper, SectionHeader, CollapsibleSection } from '../../theme/carbonDesign';
 import PageHeader        from '../../components/Page/PageHeader';
 import LoadingSkeleton   from '../../components/Page/LoadingSkeleton';
@@ -59,6 +60,7 @@ function mapActivity(items) {
 // ── Component ─────────────────────────────────────────────────────────
 
 export default function CarbonConsolePage() {
+  useDocumentTitle("Console");
   const navigate = useNavigate();
   const { user, availablePerspectives } = useAuth();
   const [loading, setLoading] = useState(true);

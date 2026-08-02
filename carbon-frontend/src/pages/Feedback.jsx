@@ -5,8 +5,10 @@ import {
 import FeedbackIcon from "@mui/icons-material/Feedback";
 import { apiFetch } from "../api/api";
 import { API_ROUTES } from "../config";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 
 export default function Feedback() {
+  useDocumentTitle("Feedback");
   const [form, setForm] = useState({
     name: "",
     email: "",

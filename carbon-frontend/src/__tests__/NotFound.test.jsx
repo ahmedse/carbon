@@ -14,9 +14,9 @@ describe('NotFound', () => {
     expect(screen.getByText('Page Not Found')).toBeInTheDocument();
   });
 
-  it('has a "Go to Dashboard" link pointing to the dashboard', () => {
+  it('has a "Go to Dashboard" link pointing to the app home', () => {
     render(<MemoryRouter><NotFound /></MemoryRouter>);
     const link = screen.getByRole('link', { name: /go to dashboard/i });
-    expect(link).toHaveAttribute('href', '/carbon/dashboard');
+    expect(link).toHaveAttribute('href', '/');
   });
 });

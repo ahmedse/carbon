@@ -9,6 +9,8 @@ import {
   CircularProgress, Alert, Chip, MenuItem, Paper, FormControl, InputLabel, Select, InputAdornment,
   IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -20,6 +22,7 @@ import { createDataSchemaTable, deleteDataSchemaTable, fetchDataSchemaTables, up
 import { fetchDataDomains, fetchAssetProfiles } from '../../api/catalog';
 
 export default function SchemaCatalogPage() {
+  useDocumentTitle("Schema Catalog");
   const navigate = useNavigate();
   const { token, user, context } = useAuth();
   const { notify, notifyFromError } = useNotification();

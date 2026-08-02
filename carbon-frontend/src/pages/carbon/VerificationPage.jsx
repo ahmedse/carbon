@@ -42,6 +42,7 @@ import {
   Refresh as RefreshIcon,
   VerifiedUser as ApprovedIcon,
 } from '@mui/icons-material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchVerificationRecords,
@@ -208,6 +209,7 @@ function ApproveDialog({ open, record, onClose, onConfirm, loading }) {
 // ── Main Component ─────────────────────────────────────────────────────
 
 export default function VerificationPage() {
+  useDocumentTitle("Verification");
   const { token } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
 

@@ -15,6 +15,7 @@ import { StatusBar } from './StatusBar';
 import HeaderEnhanced from '../components/HeaderEnhanced';
 import ErrorBoundary from './ErrorBoundary';
 import { LoadingSpinner, DialogLoadingSkeleton } from './LoadingFallback';
+import useDocumentTitle from '../hooks/useDocumentTitle';
 
 // Lazy load heavy components for code splitting
 const CommandPalette = lazy(() => import('./CommandPalette'));
@@ -41,6 +42,7 @@ function studioFromPath(pathname) {
 }
 
 export function Shell() {
+  useDocumentTitle("Home");
   const navigate = useNavigate();
   const location = useLocation();
 

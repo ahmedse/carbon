@@ -25,6 +25,8 @@ import {
   useTheme,
   Divider,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import {
   TrendingDown as TrendingDownIcon,
   TrendingUp as TrendingUpIcon,
@@ -160,6 +162,7 @@ const SubmissionStatusCard = ({ _data, modulesData, theme }) => {
 };
 
 export default function DataOwnerDashboardPage() {
+  useDocumentTitle("My Dashboard");
   const { user: _ownerUser, context, token } = useAuth();
   const { showNotification } = useNotification();
   const theme = useTheme();

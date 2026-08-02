@@ -30,6 +30,8 @@ import {
   useTheme,
   useMediaQuery,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import {
   Search as SearchIcon,
   Info as InfoIcon,
@@ -67,6 +69,7 @@ const QualityStatusBadge = ({ value, score, theme }) => {
 };
 
 export default function DataOwnerAssetsPage() {
+  useDocumentTitle("My Emission Sources");
   const { user: _user, context, token } = useAuth();
   const navigate = useNavigate();
   const { showNotification } = useNotification();

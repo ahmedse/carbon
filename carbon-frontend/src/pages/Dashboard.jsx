@@ -13,6 +13,7 @@ import {
   BarChart,
   PieChart,
 } from "@mui/icons-material";
+import useDocumentTitle from '../hooks/useDocumentTitle';
 import { Line, Bar, Pie, Doughnut } from "react-chartjs-2";
 import {
   Chart,
@@ -46,6 +47,7 @@ Chart.register(
 );
 
 export default function Dashboard() {
+  useDocumentTitle("Dashboard");
   const { user, context } = useAuth();
   const [openPanels, setOpenPanels] = useState(["impact", "trends", "quality"]);
 

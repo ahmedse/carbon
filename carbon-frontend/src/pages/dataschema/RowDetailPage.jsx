@@ -11,6 +11,8 @@ import {
   Alert,
   IconButton,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import CloseIcon from '@mui/icons-material/Close';
 import { useAuth } from '../../auth/AuthContext';
 import { API_BASE_URL, API_ROUTES } from '../../config';
@@ -30,6 +32,7 @@ function notify(message, type = 'info') {
 }
 
 export default function RowDetailPage() {
+  useDocumentTitle("Row Detail");
   const { tableId, rowId } = useParams();
   const { token } = useAuth();
   const navigate = useNavigate();

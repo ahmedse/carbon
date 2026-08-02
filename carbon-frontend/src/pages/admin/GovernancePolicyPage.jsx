@@ -9,6 +9,8 @@ import {
   MenuItem, Chip, CircularProgress, Alert, Switch, FormControlLabel, Tooltip,
   Divider, Stack,
 } from "@mui/material";
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -56,6 +58,7 @@ const EMPTY_FORM = {
 };
 
 export default function GovernancePolicyPage() {
+  useDocumentTitle("Governance Policies");
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
 

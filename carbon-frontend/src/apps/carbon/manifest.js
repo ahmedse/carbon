@@ -16,7 +16,7 @@ export default {
 
   // ── NAMESPACE ─────────────────────────────────────────────────
   // The platform guarantees these are exclusive to this app.
-  routePrefix: '/carbon',            // frontend owns /carbon/*
+  routePrefix: '/carbon/dashboard', // frontend Carbon landing page
   apiPrefix: '/api/v1/carbon',       // backend owns this namespace (new features)
   legacyApiPrefix: '/api/v1/emissions', // stable, unchanged
 

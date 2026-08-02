@@ -14,8 +14,10 @@ import DetailHeader from '../../components/detail/DetailHeader';
 import OrgUnitOverviewTab from './tabs/OrgUnitOverviewTab';
 import OrgUnitEditTab from './tabs/OrgUnitEditTab';
 import OrgUnitSummaryMetrics from './tabs/OrgUnitSummaryMetrics';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 export default function OrgUnitDetailPage() {
+  useDocumentTitle("Org Unit Detail");
   const { orgUnitId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();

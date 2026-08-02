@@ -31,6 +31,8 @@ import {
   IconButton,
   Snackbar,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -277,6 +279,7 @@ function ExecuteDialog({ open, rule, onClose, onConfirm, loading }) {
 // ── Main Component ─────────────────────────────────────────────────────
 
 export default function CalculationRulesPage() {
+  useDocumentTitle("Calculation Rules");
   const { user, token } = useAuth();
   const [rules, setRules] = useState([]);
   const [factors, _setFactors] = useState([]);

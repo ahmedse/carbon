@@ -6,6 +6,8 @@ import {
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Chip, CircularProgress, Alert, Switch, FormControlLabel,
 } from "@mui/material";
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddRounded from "@mui/icons-material/AddRounded";
 import EditRounded from "@mui/icons-material/EditRounded";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
@@ -15,6 +17,7 @@ import { fetchUsers, createUser, updateUser, deleteUser } from "../../api/users"
 const EMPTY_FORM = { username: "", email: "", password: "", is_active: true };
 
 export default function UsersPage() {
+  useDocumentTitle("Users");
   const { user } = useAuth();
   const token = user?.token;
 

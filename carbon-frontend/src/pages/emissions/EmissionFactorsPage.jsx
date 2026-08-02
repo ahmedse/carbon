@@ -25,6 +25,8 @@ import {
   Stack,
   IconButton,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -44,6 +46,7 @@ const ScopeChip = ({ scope }) => {
 };
 
 export default function EmissionFactorsPage() {
+  useDocumentTitle("Emission Factors");
   const { user, token } = useAuth();
   const [factors, setFactors] = useState([]);
   const [categories, setCategories] = useState([]);

@@ -10,6 +10,8 @@ import {
   fetchOwnerAssets,
   fetchOwnerActivity,
 } from '../../api/emissions';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import {
   Box,
   Container,
@@ -235,6 +237,7 @@ const RecentActivityFeed = ({ events, theme }) => {
 };
 
 export default function DataOwnerPortalPage() {
+  useDocumentTitle("Owner Portal");
   const { user, context, token } = useAuth();
   const navigate = useNavigate();
   const { showNotification } = useNotification();

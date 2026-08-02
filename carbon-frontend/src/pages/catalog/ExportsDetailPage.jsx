@@ -28,6 +28,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddIcon from '@mui/icons-material/Add';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -44,6 +46,7 @@ const FORMATS = ['csv', 'excel', 'json'];
 const SCHEDULES = ['manual', 'daily', 'weekly', 'monthly'];
 
 export default function ExportsDetailPage() {
+  useDocumentTitle("Exports");
   const { token } = useAuth();
   const { notify } = useNotification();
 

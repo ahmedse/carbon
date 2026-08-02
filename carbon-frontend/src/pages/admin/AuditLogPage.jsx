@@ -31,6 +31,8 @@ import {
   CardContent,
   Divider,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import {
   Refresh as RefreshIcon,
   Download as DownloadIcon,
@@ -175,6 +177,7 @@ function AuditDetailDialog({ open, onClose, audit }) {
 }
 
 export default function AuditLogPage() {
+  useDocumentTitle("Audit Log");
   const { user: _user } = useAuth();
   const [audits, setAudits] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -30,6 +30,8 @@ import {
   Snackbar,
   LinearProgress,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -306,6 +308,7 @@ function TargetsDrawer({ open, target, onSave, onClose }) {
 // ── Main Component ─────────────────────────────────────────────────────
 
 export default function SBTiTargetsPage() {
+  useDocumentTitle("SBTi Targets");
   const { user, token } = useAuth();
   const [targets, setTargets] = useState([]);
   const [loading, setLoading] = useState(true);

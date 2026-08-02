@@ -25,6 +25,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
@@ -35,6 +37,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { fetchReportingPeriods, createReportingPeriod, updateReportingPeriod, deleteReportingPeriod } from '../../api/emissions-extended';
 
 export default function ReportingPeriodsPage() {
+  useDocumentTitle("Reporting Periods");
   const { token } = useAuth();
   const [error, setError] = useState(null);
   const [periods, setPeriods] = useState([]);

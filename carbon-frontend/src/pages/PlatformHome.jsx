@@ -22,6 +22,7 @@ import { APP_REGISTRY } from '../apps/registry';
 import { useAuth } from '../auth/AuthContext';
 import { hasAppAccess } from '../utils/rbac';
 import { useEnabledApps } from '../hooks/useEnabledApps';
+import useDocumentTitle from '../hooks/useDocumentTitle';
 
 // Icon lookup — maps manifest icon names to MUI icon components.
 // Move 3: replace with a full MUI dynamic icon loader for runtime resolution.
@@ -115,6 +116,7 @@ function NoAppsPlaceholder() {
 }
 
 export default function PlatformHome() {
+  useDocumentTitle("Platform");
   const { availablePerspectives, user, context, loading } = useAuth();
   const { isAppEnabled } = useEnabledApps();
 

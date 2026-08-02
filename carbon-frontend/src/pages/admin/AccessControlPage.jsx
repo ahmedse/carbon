@@ -6,6 +6,8 @@ import {
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   MenuItem, Chip, CircularProgress, Alert,
 } from "@mui/material";
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddRounded from "@mui/icons-material/AddRounded";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
 import { useAuth } from "../../auth/AuthContext";
@@ -17,6 +19,7 @@ import {
 const EMPTY_FORM = { user: "", group: "", org_unit: "" };
 
 export default function AccessControlPage() {
+  useDocumentTitle("Access Control");
   const { user } = useAuth();
   const token = user?.token;
 

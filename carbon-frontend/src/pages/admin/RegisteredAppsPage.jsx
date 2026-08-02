@@ -3,10 +3,13 @@ import {
   Box, Typography, Grid, Card, CardContent, Chip, Alert, Switch,
   FormControlLabel, CircularProgress, Snackbar,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import { API_BASE_URL } from '../../config';
 import { useAuth } from '../../auth/AuthContext';
 
 export default function RegisteredAppsPage() {
+  useDocumentTitle("Registered Apps");
   const { _user } = useAuth();
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);

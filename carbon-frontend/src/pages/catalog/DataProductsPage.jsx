@@ -10,6 +10,8 @@ import {
   CircularProgress, Alert, Chip, Paper, InputAdornment, IconButton, Tooltip,
   Button, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
@@ -30,6 +32,7 @@ const SCOPE_OPTIONS = [1, 2, 3];
 const EMPTY_FORM = { name: '', description: '', scope: 1, org_unit: '' };
 
 export default function DataProductsPage() {
+  useDocumentTitle("Data Products");
   const navigate = useNavigate();
   const { token, user, context, selectProject } = useAuth();
   const { notify, notifyFromError } = useNotification();

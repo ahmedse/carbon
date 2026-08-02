@@ -11,6 +11,7 @@ import TableDataPage from '../components/TableDataPage';
 import PageHeader from '../components/Page/PageHeader';
 import LoadingSkeleton from '../components/Page/LoadingSkeleton';
 import EntityDetailShell from '../components/entity/EntityDetailShell';
+import useDocumentTitle from '../hooks/useDocumentTitle';
 
 /* ── Right panel: Overview tab ── */
 
@@ -68,6 +69,7 @@ function TableFieldsTab({ fields }) {
 /* ── Page component ── */
 
 export default function DataEntryPage() {
+  useDocumentTitle("Data Entry");
   const { moduleId, tableId } = useParams();
   const navigate = useNavigate();
   const { token, user, context } = useAuth();

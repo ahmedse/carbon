@@ -16,8 +16,10 @@ import DetailHeader from '../../components/detail/DetailHeader';
 import DomainOverviewTab from './tabs/DomainOverviewTab';
 import DomainEditTab from './tabs/DomainEditTab';
 import DomainSummaryMetrics from './tabs/DomainSummaryMetrics';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 export default function DomainDetailPage() {
+  useDocumentTitle("Domain Detail");
   const { domainId } = useParams();
   const navigate = useNavigate();
   const { token } = useAuth();

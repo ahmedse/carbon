@@ -15,6 +15,8 @@ import {
   deleteConsumingConnection,
   rotateConsumingConnectionKey,
 } from '../../api/catalog';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import {
   Box,
   Button,
@@ -69,6 +71,7 @@ function TabPanel(props) {
 }
 
 export default function ConnectionsPage() {
+  useDocumentTitle("Connections");
   const { token } = useAuth();
   const [tabValue, setTabValue] = useState(0);
   

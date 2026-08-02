@@ -21,6 +21,7 @@ import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import KeyboardOutlinedIcon from "@mui/icons-material/KeyboardOutlined";
 import { useAuth } from "../auth/AuthContext";
 import { API_BASE_URL } from "../config";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 
 const SECTION_SX = {
   bgcolor: "background.paper",
@@ -151,6 +152,7 @@ function KbdKey({ k }) {
 }
 
 export default function SettingsPage() {
+  useDocumentTitle("Settings");
   const { user } = useAuth();
   const location = useLocation();
   const requestedTab = new URLSearchParams(location.search).get("tab");

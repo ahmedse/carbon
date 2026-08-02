@@ -11,6 +11,8 @@ import {
   fetchReferenceValues,
   fetchDataDomains,
 } from '../../api/catalog';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import { fetchUsers } from '../../api/users';
 import { Box } from '@mui/material';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
@@ -24,6 +26,7 @@ import ReferenceSetValuesTab from './tabs/ReferenceSetValuesTab';
 import ReferenceSetMetricsPanel from './tabs/ReferenceSetMetricsPanel';
 
 export default function ReferenceSetDetailPage() {
+  useDocumentTitle("Reference Set Detail");
   const { setId } = useParams();
   const navigate = useNavigate();
   const { token } = useAuth();

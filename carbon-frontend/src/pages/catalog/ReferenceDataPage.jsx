@@ -7,6 +7,8 @@ import {
   Box, Button, IconButton, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, CircularProgress, Alert, Chip, Tooltip,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import PageContainer from '../../components/layout/PageContainer';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
 import EditIcon from '@mui/icons-material/Edit';
@@ -17,6 +19,7 @@ import { fetchReferenceSets, createReferenceSet, updateReferenceSet, deleteRefer
 const EMPTY_FORM = { name: '', description: '' };
 
 export default function ReferenceDataPage() {
+  useDocumentTitle("Reference Data");
   const { token } = useAuth();
   const { notify } = useNotification();
 

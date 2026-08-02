@@ -9,6 +9,8 @@ import {
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   CircularProgress, Alert, Chip, Paper
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
@@ -19,6 +21,7 @@ import { fetchTags, createTag, updateTag, deleteTag } from '../../api/catalog';
 const EMPTY_FORM = { name: '', color: '#2563eb' };
 
 export default function TagsPage() {
+  useDocumentTitle("Tags");
   const _navigate = useNavigate();
   const { token } = useAuth();
   const { notify } = useNotification();

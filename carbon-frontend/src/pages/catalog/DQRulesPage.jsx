@@ -24,6 +24,8 @@ import {
   Typography,
   Alert,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import { DataGrid } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -115,6 +117,7 @@ function HistoryDialog({ open, onClose, rule, history, loading }) {
 }
 
 export default function DQRulesPage() {
+  useDocumentTitle("DQ Rules");
   const { token } = useAuth();
   const { notify } = useNotification();
   const [rules, setRules] = useState([]);

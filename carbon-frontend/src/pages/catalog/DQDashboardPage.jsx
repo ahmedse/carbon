@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { getOrgDQMetrics, getDQResults, executeDQRule } from '../../api/dq';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 function MetricCard({ label, value, suffix, status, color }) {
   return (
@@ -55,6 +56,7 @@ function statusLabel(result) {
 }
 
 export default function DQDashboardPage() {
+  useDocumentTitle("DQ Dashboard");
   const { token } = useAuth();
   const navigate = useNavigate();
   const { notify } = useNotification();

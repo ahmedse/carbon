@@ -32,6 +32,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -54,6 +56,7 @@ import {
 } from '../../api/catalog';
 
 export default function MetadataManagementPage() {
+  useDocumentTitle("Metadata");
   const location = useLocation();
   const navigate = useNavigate();
   const { token } = useAuth();

@@ -28,12 +28,15 @@ import {
   Alert,
   Typography,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 
 export default function DomainsPage() {
+  useDocumentTitle("Domains");
   const navigate = useNavigate();
   const { token } = useAuth();
   const [domains, setDomains] = useState([]);

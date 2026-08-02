@@ -27,6 +27,8 @@ import {
   IconButton,
   Snackbar,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -191,6 +193,7 @@ function GwpDrawer({ open, gwpValue, onSave, onClose }) {
 // ── Main Component ─────────────────────────────────────────────────────
 
 export default function GWPReferencePage() {
+  useDocumentTitle("GWP Reference");
   const { user, token } = useAuth();
   const [gwpValues, setGwpValues] = useState([]);
   const [loading, setLoading] = useState(true);

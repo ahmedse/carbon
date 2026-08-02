@@ -28,6 +28,8 @@ import {
   Tabs,
   Tab,
 } from "@mui/material";
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import {
   CheckCircle,
   Warning,
@@ -128,6 +130,7 @@ const MetricCard = ({ icon: _Icon, title, value, subtitle, color, trend, loading
 // ============ Main Component ============
 
 export default function DataQualityView() {
+  useDocumentTitle("Data Quality");
   const { context, availablePerspectives } = useAuth();
   const { data, loading, error, refreshData } = useDashboardData();
   const isAdmin = availablePerspectives?.includes("admin");

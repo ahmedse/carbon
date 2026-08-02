@@ -35,6 +35,7 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import EmojiObjectsIcon from "@mui/icons-material/EmojiObjects";
 import StarIcon from "@mui/icons-material/Star";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 
 const steps = [
   {
@@ -93,6 +94,7 @@ const faqs = [
 ];
 
 export default function Help() {
+  useDocumentTitle("Help");
   return (
     <Box maxWidth={900} mx="auto" mt={6} mb={8}>
       <Paper elevation={4} sx={{ p: { xs: 2, sm: 4 }, borderRadius: 4, position: "relative", overflow: "hidden" }}>

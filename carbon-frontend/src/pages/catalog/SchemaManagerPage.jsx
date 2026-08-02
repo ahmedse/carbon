@@ -9,6 +9,8 @@ import {
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   CircularProgress, Alert, Chip, Tooltip
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
@@ -19,6 +21,7 @@ import { fetchDataSchemaTables, createDataSchemaTable, updateDataSchemaTable, de
 const EMPTY_FORM = { title: '', description: '' };
 
 export default function SchemaManagerPage() {
+  useDocumentTitle("Schema Manager");
   const navigate = useNavigate();
   const { token } = useAuth();
   const { notify } = useNotification();

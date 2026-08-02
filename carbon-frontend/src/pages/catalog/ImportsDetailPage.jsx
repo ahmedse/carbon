@@ -22,6 +22,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddIcon from '@mui/icons-material/Add';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -32,6 +34,7 @@ import DetailHeader from '../../components/detail/DetailHeader';
 import HomeIcon from '@mui/icons-material/Home';
 
 export default function ImportsDetailPage() {
+  useDocumentTitle("Imports");
   const { token } = useAuth();
   const { notify } = useNotification();
 

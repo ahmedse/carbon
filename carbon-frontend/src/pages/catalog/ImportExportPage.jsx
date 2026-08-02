@@ -15,6 +15,8 @@ import {
   getExportJobDownloadUrl,
   fetchDataSources,
 } from '../../api/catalog';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import { fetchDataSchemaTables } from '../../api/dataschema';
 import {
   Box,
@@ -72,6 +74,7 @@ function TabPanel(props) {
 }
 
 export default function ImportExportPage() {
+  useDocumentTitle("Import / Export");
   const { token } = useAuth();
   const [tabValue, setTabValue] = useState(0);
   

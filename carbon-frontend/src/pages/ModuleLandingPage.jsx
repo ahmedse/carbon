@@ -6,6 +6,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { NatureRounded, BoltRounded, LocalShippingRounded } from "@mui/icons-material";
+import useDocumentTitle from '../hooks/useDocumentTitle';
 
 const scopeIcons = {
   1: <NatureRounded sx={{ color: "#43a047" }} />,
@@ -24,6 +25,7 @@ const scopeColors = {
 };
 
 export default function ModuleLandingPage() {
+  useDocumentTitle("Module");
   const { moduleId } = useParams();
   const navigate = useNavigate();
   const { context, tablesByModule } = useAuth();

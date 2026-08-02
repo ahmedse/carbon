@@ -13,6 +13,8 @@ import {
   fetchTags,
   fetchGlossaryTerms,
 } from '../../api/catalog';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import { fetchUsers } from '../../api/users';
 import { Box } from '@mui/material';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
@@ -27,6 +29,7 @@ import AssetQualityTab from './tabs/AssetQualityTab';
 import AssetAuditTab from './tabs/AssetAuditTab';
 
 export default function AssetDetailPage() {
+  useDocumentTitle("Asset Detail");
   const { assetId } = useParams();
   const navigate = useNavigate();
   const { token } = useAuth();

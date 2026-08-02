@@ -7,11 +7,14 @@ import {
   Box, Typography, Table, TableHead, TableRow, TableCell, TableBody,
   CircularProgress, Alert, Chip, Paper, Button
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import RefreshIcon from '@mui/icons-material/Refresh';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import { fetchGovernanceEvents } from '../../api/catalog';
 
 export default function GovernancePage() {
+  useDocumentTitle("Governance");
   const { token } = useAuth();
   const { notify } = useNotification();
 

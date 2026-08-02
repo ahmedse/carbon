@@ -52,6 +52,7 @@ import {
   Speed,
 } from "@mui/icons-material";
 import { fetchEmissionsDashboard, triggerCalculations } from "../api/emissions";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 
 // Register Chart.js components
 ChartJS.register(
@@ -168,6 +169,7 @@ const ScopeCard = ({ name, value, percentage, color }) => (
 // ============ Main Component ============
 
 export default function EmissionsDashboard({ projectId }) {
+  useDocumentTitle("Emissions");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);

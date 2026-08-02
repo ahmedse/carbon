@@ -24,6 +24,7 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
+import RuleIcon from '@mui/icons-material/Rule';
 
 // Breadcrumb configuration based on routes
 const ROUTE_CONFIG = {
@@ -112,6 +113,36 @@ const ROUTE_CONFIG = {
     icon: Co2Icon,
     parent: '/carbon/console',
   },
+  '/carbon/admin/rules': {
+    label: 'Calculation Rules',
+    icon: RuleIcon,
+    parent: '/carbon/console',
+  },
+  '/carbon/admin/gwp': {
+    label: 'GWP Reference',
+    icon: Co2Icon,
+    parent: '/carbon/console',
+  },
+  '/carbon/admin/targets': {
+    label: 'SBTi Targets',
+    icon: Co2Icon,
+    parent: '/carbon/console',
+  },
+  '/carbon/analytics': {
+    label: 'Analytics & Trends',
+    icon: DashboardIcon,
+    parent: '/carbon/console',
+  },
+  '/carbon/calculations': {
+    label: 'Calculations',
+    icon: Co2Icon,
+    parent: '/carbon/console',
+  },
+  '/carbon/verification': {
+    label: 'Verification',
+    icon: VerifiedUserIcon,
+    parent: '/carbon/console',
+  },
   '/carbon/my-data': {
     label: 'My Data',
     icon: StorageIcon,
@@ -152,6 +183,16 @@ const ROUTE_CONFIG = {
     icon: StorageIcon,
     parent: '/dataschema',
   },
+  '/modules/:moduleId': {
+    label: 'Module',
+    icon: StorageIcon,
+    parent: '/carbon/my-data',
+  },
+  '/scopes/:scopeId': {
+    label: 'Scope Detail',
+    icon: Co2Icon,
+    parent: null,
+  },
   '/admin': {
     label: 'Admin',
     icon: AdminPanelSettingsIcon,
@@ -169,6 +210,46 @@ const ROUTE_CONFIG = {
   },
   '/admin/roles': {
     label: 'Roles',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin',
+  },
+  '/admin/org-units': {
+    label: 'Organisation Units',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin',
+  },
+  '/admin/org-units/:orgUnitId': {
+    label: 'Organisation Unit',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/org-units',
+  },
+  '/admin/access': {
+    label: 'Access Control',
+    icon: SecurityIcon,
+    parent: '/admin',
+  },
+  '/admin/groups': {
+    label: 'Groups',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin',
+  },
+  '/admin/groups/:groupId': {
+    label: 'Group Detail',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/groups',
+  },
+  '/admin/role-matrix': {
+    label: 'Role Matrix',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin',
+  },
+  '/admin/apps': {
+    label: 'Registered Apps',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin',
+  },
+  '/admin/audit': {
+    label: 'Audit Log',
     icon: AdminPanelSettingsIcon,
     parent: '/admin',
   },
@@ -281,6 +362,41 @@ const ROUTE_CONFIG = {
     label: 'Governance',
     icon: VerifiedUserIcon,
     parent: '/catalog',
+  },
+  '/catalog/policies': {
+    label: 'Governance Policies',
+    icon: VerifiedUserIcon,
+    parent: '/catalog/governance',
+  },
+  '/catalog/dq-dashboard': {
+    label: 'DQ Dashboard',
+    icon: DashboardIcon,
+    parent: '/catalog',
+  },
+  '/catalog/dq-rules': {
+    label: 'DQ Rules',
+    icon: RuleIcon,
+    parent: '/catalog',
+  },
+  '/catalog/assets/:assetId': {
+    label: 'Asset Detail',
+    icon: AssignmentIcon,
+    parent: '/catalog/assets',
+  },
+  '/catalog/domains/:domainId': {
+    label: 'Domain Detail',
+    icon: LocationOnIcon,
+    parent: '/catalog/domains',
+  },
+  '/catalog/tags/:tagId': {
+    label: 'Tag Detail',
+    icon: LabelIcon,
+    parent: '/catalog/tags',
+  },
+  '/catalog/mdm/reference-sets/:setId': {
+    label: 'Reference Set',
+    icon: AccountTreeIcon,
+    parent: '/catalog/mdm',
   },
 };
 

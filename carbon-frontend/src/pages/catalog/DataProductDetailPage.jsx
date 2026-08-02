@@ -9,6 +9,8 @@ import {
   CircularProgress, Alert, Chip, Paper, IconButton, Tooltip,
   Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -31,6 +33,7 @@ const SCOPE_LABEL = { 1: 'Scope 1', 2: 'Scope 2', 3: 'Scope 3' };
 const SCOPE_OPTIONS = [1, 2, 3];
 
 export default function DataProductDetailPage() {
+  useDocumentTitle("Data Product Detail");
   const { moduleId } = useParams();
   const navigate = useNavigate();
   const { token, user, context, selectProject } = useAuth();

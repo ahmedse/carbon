@@ -48,6 +48,7 @@ import {
 import { Doughnut } from "react-chartjs-2";
 import { useTheme } from "@mui/material/styles";
 import { fetchEmissionsReport, fetchReportingPeriods } from "../api/emissions";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 
 // ============ Styled Components ============
 
@@ -115,6 +116,7 @@ const ScopeSummaryCard = ({ name, emissions, categories, color }) => (
 // ============ Main Component ============
 
 export default function EmissionsReport({ projectId }) {
+  useDocumentTitle("Emissions Report");
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

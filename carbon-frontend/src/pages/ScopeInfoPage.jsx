@@ -13,6 +13,8 @@ import {
   TextField,
   InputAdornment
 } from "@mui/material";
+import useDocumentTitle from '../hooks/useDocumentTitle';
+
 import {
   NatureRounded as Scope1Icon,
   BoltRounded as Scope2Icon,
@@ -56,6 +58,7 @@ const SCOPE_DETAILS = {
 };
 
 export default function ScopeInfoPage() {
+  useDocumentTitle("Scope Detail");
   const { scopeId } = useParams();
   const scope = SCOPE_DETAILS[scopeId];
   const { context, tablesByModule } = useAuth();

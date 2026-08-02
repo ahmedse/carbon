@@ -44,6 +44,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { fetchMyData, fetchOwnerActivity } from '../../api/emissions';
 import EntityDetailShell from '../../components/entity/EntityDetailShell';
 import { EmptyState, ErrorAlert, LoadingSkeleton, PageHeader, StatCard } from '../../components';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 // ── Scope config uses MUI palette colour names ─────────────────────────────
 
@@ -261,6 +262,7 @@ function ActivityTab({ activity }) {
 // ── Main page ──────────────────────────────────────────────────────────────
 
 export default function MyDataPage() {
+  useDocumentTitle("My Data");
   const navigate = useNavigate();
   const theme = useTheme();
   const { token } = useAuth();

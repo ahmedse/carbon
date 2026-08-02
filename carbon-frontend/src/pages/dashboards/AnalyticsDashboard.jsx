@@ -40,6 +40,7 @@ import {
   PieChart as PieChartIcon,
   TableChart,
 } from "@mui/icons-material";
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { Line, Bar, Doughnut } from "react-chartjs-2";
 import {
   Chart,
@@ -558,6 +559,7 @@ const DetailedTable = ({ data }) => (
 // ============ Main Component ============
 
 export default function AnalyticsDashboard() {
+  useDocumentTitle("Analytics & Trends");
   const { user, context } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

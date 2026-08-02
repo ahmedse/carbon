@@ -7,6 +7,8 @@ import {
   IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   MenuItem, Chip, CircularProgress, Alert,
 } from "@mui/material";
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddRounded from "@mui/icons-material/AddRounded";
 import EditRounded from "@mui/icons-material/EditRounded";
 import DeleteRounded from "@mui/icons-material/DeleteRounded";
@@ -23,6 +25,7 @@ const ORG_TYPES = [
 const EMPTY_FORM = { name: "", org_type: "department", parent: "", code: "", description: "" };
 
 export default function OrgUnitsPage() {
+  useDocumentTitle("Org Units");
   const navigate = useNavigate();
   const { user } = useAuth();
   const token = user?.token;

@@ -15,6 +15,8 @@ import {
   deleteOrgUnit,
   fetchDataDomains,
 } from '../../api/catalog';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import { fetchUsers } from '../../api/users';
 import {
   Box,
@@ -53,6 +55,7 @@ function TabPanel({ children, value, index }) {
 }
 
 export default function MDMPage() {
+  useDocumentTitle("Master Data");
   const { token } = useAuth();
   const { notify } = useNotification();
   const navigate = useNavigate();

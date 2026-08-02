@@ -5,7 +5,6 @@ import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
 import { Shell } from "./shell/Shell";
@@ -57,7 +56,6 @@ import DataSourcesDetailPage from "./pages/catalog/DataSourcesDetailPage";
 import ExportsDetailPage from "./pages/catalog/ExportsDetailPage";
 import ImportsDetailPage from "./pages/catalog/ImportsDetailPage";
 import DataOwnerPortalPage from "./pages/data-owner/DataOwnerPortalPage";
-import DataOwnerDashboardPage from "./pages/data-owner/DataOwnerDashboardPage";
 import DataOwnerAssetsPage from "./pages/data-owner/DataOwnerAssetsPage";
 import EmissionFactorsPage from "./pages/emissions/EmissionFactorsPage";
 import CalculationRulesPage from "./pages/emissions/CalculationRulesPage";
@@ -131,9 +129,9 @@ function RoleAwareLanding() {
   // Users with assigned modules get redirected to their first module
   const firstModule = context?.modules?.[0];
 
-  // All non-admin users with modules: redirect to Carbon Console (rich landing with icons & actions)
+  // All non-admin users with modules: redirect to Carbon Dashboard
   if (!hasAdminPerspective && firstModule) {
-    return <Navigate to="/carbon/console" replace />;
+    return <Navigate to="/carbon/dashboard" replace />;
   }
   
   // No modules assigned - show empty state
@@ -178,30 +176,28 @@ export default function App() {
                 <Route path="/dashboards/data-quality" element={<Navigate to="/catalog/dq-dashboard" replace />} />
                 <Route path="/dashboards/reporting" element={<Navigate to="/carbon/reporting/generate" replace />} />
                 
-                {/* Legacy Dashboard (keeping for backwards compatibility) */}
-                <Route path="/dashboard-legacy" element={<Dashboard />} />
+                {/* Legacy Dashboard — removed P10a (blank content, dead page) */}
                 
                 {/* Emissions Calculator Routes */}
                 <Route path="/emissions" element={<EmissionsDashboard />} />
-                <Route path="/emissions/dashboard" element={<EmissionsDashboard />} />
                 <Route path="/emissions/report" element={<EmissionsReport />} />
                 
                 {/* Carbon App — all routes under /carbon/* namespace */}
                 <Route path="/carbon/console" element={<CarbonConsolePage />} />
                 <Route path="/carbon/dashboard" element={<EmissionsDashboard />} />
-                <Route path="/carbon/analytics" element={<AnalyticsDashboard />} />
+                <Route path="/carbon/analytics" element={<AdminRoute><AnalyticsDashboard /></AdminRoute>} />
                 <Route path="/carbon/my-data" element={<MyDataPage />} />
                 <Route path="/carbon/my-data/:moduleId" element={<ModuleWorkspacePage />} />
                 <Route path="/carbon/my-data/:moduleId/:tableId" element={<DataEntryPage />} />
                 <Route path="/carbon/my-data/row/:tableId/:rowId" element={<RowDetailPage />} />
-                <Route path="/carbon/calculations" element={<CalculationsPage />} />
-                <Route path="/carbon/verification" element={<VerificationPage />} />
+                <Route path="/carbon/calculations" element={<AdminRoute><CalculationsPage /></AdminRoute>} />
+                <Route path="/carbon/verification" element={<AdminRoute><VerificationPage /></AdminRoute>} />
                 <Route path="/carbon/admin/factors" element={<AdminRoute><EmissionFactorsPage /></AdminRoute>} />
                 <Route path="/carbon/admin/rules" element={<AdminRoute><CalculationRulesPage /></AdminRoute>} />
                 <Route path="/carbon/admin/gwp" element={<AdminRoute><GWPReferencePage /></AdminRoute>} />
                 <Route path="/carbon/admin/targets" element={<AdminRoute><SBTiTargetsPage /></AdminRoute>} />
-                <Route path="/carbon/reporting/generate" element={<ReportGeneratorPage />} />
-                <Route path="/carbon/reporting/saved" element={<SavedReportsPage />} />
+                <Route path="/carbon/reporting/generate" element={<AdminRoute><ReportGeneratorPage /></AdminRoute>} />
+                <Route path="/carbon/reporting/saved" element={<AdminRoute><SavedReportsPage /></AdminRoute>} />
                 <Route path="/carbon/reporting/periods" element={<AdminRoute><ReportingPeriodsPage /></AdminRoute>} />
                 
                 {/* Carbon App — Data Owner Routes (namespace: /carbon/owner/*) */}

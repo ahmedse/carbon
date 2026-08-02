@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import StorageIcon from '@mui/icons-material/Storage';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import { NatureRounded, BoltRounded, LocalShippingRounded } from "@mui/icons-material";
+import useDocumentTitle from '../hooks/useDocumentTitle';
 
 const SCOPE_COLORS = {
   1: { bg: '#e8f5e9', color: '#2e7d32', label: 'Scope 1' },
@@ -19,6 +20,7 @@ const SCOPE_ICONS = {
 };
 
 export default function DataHubHome() {
+  useDocumentTitle("Data Hub");
   const navigate = useNavigate();
   const { context, availablePerspectives, tablesByModule } = useAuth();
   const modules = context?.modules || [];

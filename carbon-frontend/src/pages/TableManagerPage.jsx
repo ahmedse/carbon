@@ -12,10 +12,12 @@ import {
   fetchDataSchemaFields, createDataSchemaField, updateDataSchemaField, deleteDataSchemaField,
   updateDataSchemaFieldOrder
 } from "../api/dataschema";
+import useDocumentTitle from '../hooks/useDocumentTitle';
 import TableFormDrawer from "../components/TableFormDrawer";
 import FieldManagerDrawer from "../components/FieldManagerDrawer";
 
 export default function TableManagerPage() {
+  useDocumentTitle("Table Manager");
   const navigate = useNavigate();
   const { user, context, tablesByModule, refetchTables } = useAuth();
   const lang = "en";

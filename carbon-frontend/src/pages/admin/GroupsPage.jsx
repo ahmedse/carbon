@@ -3,6 +3,8 @@ import {
   Box, Typography, Button, Table, TableHead, TableRow, TableCell, TableBody,
   IconButton, TextField, Chip, CircularProgress, Alert,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import SystemDialog from '../../components/SystemDialog';
 import { useNavigate } from 'react-router-dom';
 import AddRounded from '@mui/icons-material/AddRounded';
@@ -15,6 +17,7 @@ import { apiFetch } from '../../api/api';
 const EMPTY_FORM = { name: '', description: '' };
 
 export default function GroupsPage() {
+  useDocumentTitle("Groups");
   const { user } = useAuth();
   const token = user?.token;
   const navigate = useNavigate();

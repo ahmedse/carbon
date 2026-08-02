@@ -14,8 +14,10 @@ import DetailHeader from '../../components/detail/DetailHeader';
 import TagOverviewTab from './tabs/TagOverviewTab';
 import TagEditTab from './tabs/TagEditTab';
 import TagSummaryMetrics from './tabs/TagSummaryMetrics';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 export default function TagDetailPage() {
+  useDocumentTitle("Tag Detail");
   const { tagId } = useParams();
   const navigate = useNavigate();
   const { token } = useAuth();

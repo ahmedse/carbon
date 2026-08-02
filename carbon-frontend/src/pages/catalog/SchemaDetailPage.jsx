@@ -23,6 +23,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import HomeIcon from '@mui/icons-material/Home';
 import StorageIcon from '@mui/icons-material/Storage';
 import { fetchDataSchemaTables, fetchDataSchemaFields, updateDataSchemaTable } from '../../api/dataschema';
@@ -36,6 +38,7 @@ import SchemaStructureTab from './tabs/SchemaStructureTab';
 import SchemaQualityMetrics from './tabs/SchemaQualityMetrics';
 
 export default function SchemaDetailPage() {
+  useDocumentTitle("Table Schema");
   const { tableId } = useParams();
   const { token, user } = useAuth();
   const { notify } = useNotification();

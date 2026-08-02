@@ -6,9 +6,11 @@ import {
 import { Navigate, useNavigate } from "react-router-dom";
 import aastLogo from "../assets/aast_carbon_logo_.jpg";
 import { useLocation } from "react-router-dom";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 
 
 export default function Login() {
+  useDocumentTitle("Sign In");
   const {
     user, projects, context, loading, login, selectProject,
   } = useAuth();
@@ -19,7 +21,8 @@ export default function Login() {
   const [requireProject, setRequireProject] = useState(false);
 
   const location = useLocation();
-  const _expired = location.search.includes("expired=1");
+  // location.search may contain "expired=1" or "expired%3D1" (double-encoded by some proxies)
+  const sessionExpired = /[?&]expired(?:=|%3D)1/.test(location.search);
 
   const navigate = useNavigate();
 
@@ -110,6 +113,11 @@ export default function Login() {
             Sign in to Carbon Platform
           </Typography>
         </Box>
+        {sessionExpired && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Your session has expired. Please sign in again.
+          </Alert>
+        )}
         <form onSubmit={handleSubmit} autoComplete="on">
           <TextField
             label="Username"

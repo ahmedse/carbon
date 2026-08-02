@@ -8,6 +8,8 @@ import {
   Box, Typography, Card, CardContent, CardHeader, Grid, CircularProgress,
   Alert, Button, Chip, LinearProgress, Paper
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import StorageIcon from '@mui/icons-material/Storage';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -17,6 +19,7 @@ import { fetchDataDomains } from '../../api/catalog';
 import { fetchDataSchemaTables } from '../../api/dataschema';
 
 export default function CatalogHome() {
+  useDocumentTitle("Catalog Studio");
   const navigate = useNavigate();
   const { token } = useAuth();
   const { notify } = useNotification();

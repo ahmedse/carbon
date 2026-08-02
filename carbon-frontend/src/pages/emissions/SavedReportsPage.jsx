@@ -23,6 +23,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import {
   Delete as DeleteIcon,
   Edit as EditIcon,
@@ -107,6 +109,7 @@ const ReportResultPanel = ({ report, loading }) => {
 };
 
 export default function SavedReportsPage() {
+  useDocumentTitle("Saved Reports");
   const { user: _user, token } = useAuth();
   const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(true);

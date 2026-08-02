@@ -7,6 +7,7 @@ import { fetchDataSchemaTables } from '../../api/dataschema';
 import { fetchOwnerActivity } from '../../api/emissions';
 import { CarbonDataGrid, PageHeader, EmptyState, ErrorAlert, LoadingSkeleton } from '../../components';
 import EntityDetailShell from '../../components/entity/EntityDetailShell';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 const SCOPE_META = {
   1: { label: 'Scope 1', color: 'error' },
@@ -104,6 +105,7 @@ function ModuleActivityTab({ activity }) {
 }
 
 export default function ModuleWorkspacePage() {
+  useDocumentTitle("My Data Workspace");
   const navigate = useNavigate();
   const { moduleId } = useParams();
   const { token, context } = useAuth();

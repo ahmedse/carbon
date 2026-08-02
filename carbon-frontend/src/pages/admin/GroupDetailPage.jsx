@@ -10,8 +10,10 @@ import GroupOverviewTab from './tabs/GroupOverviewTab';
 import GroupRoleAssignmentsTab from './tabs/GroupRoleAssignmentsTab';
 import GroupEditTab from './tabs/GroupEditTab';
 import { fetchGroupDetail } from '../../api/groups';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 export default function GroupDetailPage() {
+  useDocumentTitle("Group Detail");
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();

@@ -27,6 +27,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import AddIcon from '@mui/icons-material/Add';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -42,6 +44,7 @@ const EMPTY_FORM = { name: '', source_type: 'database', description: '' };
 const SOURCE_TYPES = ['excel', 'database', 'api', 'iot', 'mdm', 'manual'];
 
 export default function DataSourcesDetailPage() {
+  useDocumentTitle("Data Sources");
   const { token } = useAuth();
   const { notify } = useNotification();
 

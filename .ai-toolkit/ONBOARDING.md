@@ -7,7 +7,8 @@ verified, non-duplicated work.
 ## If you are an AI agent starting a session
 
 1. You have a ROLE. If you weren't told which, ask. Roles: master-architect, researcher,
-   backend-worker, frontend-worker, devops-worker, data-ml-worker, debugger-fixer, curator.
+   backend-worker, frontend-worker, devops-worker, data-ml-worker, debugger-fixer, curator,
+   qa-validator.
 2. Read, in order:
    - `project.config.md` — this project's paths, commands, HARD RULES
    - `shared/base-rules.md` — universal rules (esp. §0 "do the right thing", ops script, verify)
@@ -35,7 +36,7 @@ verified, non-duplicated work.
 | **Roles** | `roles/*` | WHO does the work + their limits |
 | **Rules** | `shared/base-rules.md` | HOW everyone must behave |
 | **Patterns** | `shared/design-patterns.md` | HOW we compose objects (14/23 GoF) |
-| **Contracts** | `shared/{api-contract,security,data-layer,config,design-system,logging,testing,git-workflow}.md` | The RIGHT way per concern |
+| **Contracts** | `shared/{api-contract,security,data-layer,config,design-system,logging,testing,git-workflow,qa-framework}.md` | The RIGHT way per concern |
 | **Registry** | `registry/*` (generated) | WHAT already exists (anti-duplication) |
 | **Decisions** | `decisions/*` | WHY it's built this way (ADRs) |
 | **Troubleshooting** | `troubleshooting/*` | Known bugs + incident runbook |
@@ -52,6 +53,7 @@ verified, non-duplicated work.
 Master Architect  → writes TASKS.md phase (role, files, contract, verification gate)
 Worker            → reads config + base-rules + role + registry + task → builds → verifies
 Worker            → writes TASK-RESULTS.md (files + terminal proof + issues)
+QA/Validator      → reads qa-framework + task → validates at 4 layers → TASK-RESULTS.md
 Master Architect  → reviews proof, decides next phase
 ```
 

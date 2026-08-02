@@ -4,11 +4,13 @@
 import React from "react";
 import { Box, Typography, Button } from "@mui/material";
 import { Link } from "react-router-dom";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 
 /**
  * 404 Not Found page.
  */
 export default function NotFound() {
+  useDocumentTitle("Page Not Found");
   return (
     <Box sx={{ minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
       <Typography variant="h2" color="primary" gutterBottom>
@@ -17,7 +19,7 @@ export default function NotFound() {
       <Typography variant="h5" color="text.secondary" gutterBottom>
         Page Not Found
       </Typography>
-      <Button variant="contained" component={Link} to="/carbon/dashboard" sx={{ mt: 2 }}>
+      <Button variant="contained" component={Link} to="/" sx={{ mt: 2 }}>
         Go to Dashboard
       </Button>
     </Box>

@@ -11,6 +11,8 @@ import {
   fetchDataDomains, 
   deleteAssetProfile
 } from '../../api/catalog';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import {
   Box,
   Button,
@@ -107,6 +109,7 @@ function ClassificationBadge({ value }) {
 }
 
 export default function AssetsPage() {
+  useDocumentTitle("Assets");
   const navigate = useNavigate();
   const { token } = useAuth();
   const { notify } = useNotification();

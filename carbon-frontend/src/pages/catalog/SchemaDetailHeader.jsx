@@ -5,8 +5,10 @@ import React from 'react';
 import { Box, Typography, IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import StorageIcon from '@mui/icons-material/Storage';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 export default function SchemaDetailHeader({ tableData, onClose }) {
+  useDocumentTitle("Table Schema");
 
   const getTableDisplayName = () => {
     if (!tableData) return 'Schema Details';

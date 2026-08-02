@@ -22,10 +22,13 @@ import {
   Typography,
   MenuItem,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import { useAuth } from '../../auth/AuthContext';
 import { fetchReportingPeriods, generateReport, downloadReportCsv, createReportConfig } from '../../api/emissions-extended';
 
 export default function ReportGeneratorPage() {
+  useDocumentTitle("Generate Report");
   const { user: _user, token } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);

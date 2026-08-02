@@ -43,6 +43,7 @@ import {
   Search as SearchIcon,
   Schedule as ScheduledIcon,
 } from '@mui/icons-material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchCalculations,
@@ -273,6 +274,7 @@ function DataQualityTab({ calc }) {
 // ── Main Component ─────────────────────────────────────────────────────
 
 export default function CalculationsPage() {
+  useDocumentTitle("Calculations");
   const { user, token } = useAuth();
   const isAdmin = user?.is_superuser || user?.is_staff;
 

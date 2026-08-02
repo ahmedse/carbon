@@ -3,6 +3,8 @@ import {
   Box, Typography, Alert, Accordion, AccordionSummary, AccordionDetails,
   Table, TableHead, TableRow, TableCell, TableBody, Chip,
 } from '@mui/material';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -10,6 +12,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { apiFetch } from '../../api/api';
 
 export default function RoleRegistryPage() {
+  useDocumentTitle("Role Registry");
   const { user } = useAuth();
   const token = user?.token;
   const [apps, setApps] = useState([]);
