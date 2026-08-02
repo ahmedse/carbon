@@ -11,5 +11,15 @@ export default defineConfig(({ mode }) => {
     server: {
       port: Number(env.VITE_PORT || env.PORT || 5179),
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            mui: ['@mui/material', '@mui/icons-material', '@mui/x-date-pickers'],
+            vendor: ['react', 'react-dom', 'react-router-dom'],
+          },
+        },
+      },
+    },
   }
 })

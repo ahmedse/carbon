@@ -72,7 +72,11 @@ class FieldProfileViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return FieldProfile.objects.none()
-        qs = FieldProfile.objects.all()
+        # Optimize: select_related the FK chain the serializer touches
+        # (data_field.name + org-scope filters on data_field__data_table__module)
+        qs = FieldProfile.objects.select_related(
+            'data_field__data_table__module',
+        )
         user = self.request.user
         if user.is_superuser or user.is_staff:
             pass
@@ -99,7 +103,11 @@ class TableProfileViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return TableProfile.objects.none()
-        qs = TableProfile.objects.all()
+        # Optimize: select_related the FK chain the serializer touches
+        # (data_table.name + org-scope filters on data_table__module)
+        qs = TableProfile.objects.select_related(
+            'data_table__module',
+        )
         user = self.request.user
         if user.is_superuser or user.is_staff:
             pass
@@ -127,14 +135,21 @@ class DQRuleViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return DQRule.objects.none()
+        # Optimize: select_related FK chain + prefetch results (serializer's
+        # get_results_count calls obj.results.count() — prefetch avoids N+1).
+        base_qs = DQRule.objects.select_related(
+            'data_field__data_table__module',
+            'data_table__module',
+            'created_by',
+        ).prefetch_related('results')
         user = self.request.user
         if user.is_superuser or user.is_staff:
-            qs = DQRule.objects.filter(is_active=True)
+            qs = base_qs.filter(is_active=True)
         else:
             org_units = _get_user_org_units(user)
             if not org_units:
                 return DQRule.objects.none()
-            qs = DQRule.objects.filter(is_active=True).filter(
+            qs = base_qs.filter(is_active=True).filter(
                 Q(data_field__data_table__module__org_unit_id__in=org_units) |
                 Q(data_table__module__org_unit_id__in=org_units)
             )

@@ -305,7 +305,8 @@ class ReferenceValueViewSet(viewsets.ModelViewSet):
         return Response(data, status=status.HTTP_201_CREATED)
 
     def get_queryset(self):
-        qs = ReferenceValue.objects.all()
+        # Optimize: select_related reference_set (serializer exposes it)
+        qs = ReferenceValue.objects.select_related('reference_set').all()
         p = self.request.query_params
         if p.get('reference_set'):
             qs = qs.filter(reference_set_id=p['reference_set'])
@@ -488,7 +489,8 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Filter org units based on query parameters."""
-        qs = OrgUnit.objects.filter(is_active=True)
+        # Optimize: select_related parent (OrgUnitSerializer exposes parent_name)
+        qs = OrgUnit.objects.select_related('parent').filter(is_active=True)
         p = self.request.query_params
         
         # Filter by parent

@@ -4,6 +4,7 @@ djangorestframework==3.16.0           # REST API framework
 django-cors-headers==4.7.0            # CORS support
 django-filter==25.1                   # Filtering utilities
 django-debug-toolbar==5.2.0           # Development debugging
+django-silk==5.3.2                    # Development request profiling (P12)
 djangorestframework-simplejwt==5.5.0  # JWT Authentication
 drf-yasg                              # Swagger/OpenAPI generation
 

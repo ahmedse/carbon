@@ -2,6 +2,7 @@
 
 import os
 import logging
+import sys
 import warnings
 from datetime import timedelta
 from pathlib import Path
@@ -9,6 +10,10 @@ from dotenv import load_dotenv
 
 
 logger = logging.getLogger(__name__)
+
+# Detect when running under pytest / Django test runner so dev-only profilers
+# (silk) can be excluded from the test request pipeline.
+RUNNING_TESTS = bool("pytest" in sys.modules or "test" in sys.argv)
 
 # Suppress ONNX Runtime GPU warnings (harmless - we don't need GPU)
 warnings.filterwarnings('ignore', category=UserWarning, module='onnxruntime')
@@ -78,7 +83,7 @@ INSTALLED_APPS = [
 ]
 
 if DJANGO_ENV == "development":
-    INSTALLED_APPS += ['debug_toolbar']
+    INSTALLED_APPS += ['debug_toolbar', 'silk']
 
 AUTH_USER_MODEL = 'accounts.User'
 
@@ -96,6 +101,10 @@ MIDDLEWARE = [
 
 if DJANGO_ENV == "development":
     MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+# Silk records every request (incl. DB writes) — keep it out of test runs so
+# CaptureQueriesContext assertions stay deterministic.
+if DJANGO_ENV == "development" and not RUNNING_TESTS:
+    MIDDLEWARE.insert(0, 'silk.middleware.SilkyMiddleware')
 
 # CORS
 if DJANGO_ENV == "development":
