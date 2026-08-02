@@ -1,89 +1,9 @@
-# Project Configuration
-# =====================
-# THIS IS THE ONLY FILE YOU EDIT WHEN COPYING .ai-toolkit TO A NEW PROJECT.
-# All roles read this file first. Keep it factual, concise, and up-to-date.
-
-# ── IDENTITY ──────────────────────────────────────────────────
-PROJECT_NAME="Carbon Data Trust Platform"
-PROJECT_DESCRIPTION="GHG emissions tracking, reporting, and analysis — AASTMT"
-REPO_ROOT="$PWD"
-
-# ── STACK ──────────────────────────────────────────────────────
-BACKEND_FRAMEWORK="Django 5.2.3"
-BACKEND_API="Django REST Framework 3.16.0"
-BACKEND_DB="PostgreSQL (dev: carbon_dev, test: via pytest --reuse-db)"
-BACKEND_CACHE="Redis"
-BACKEND_AUTH="JWT (djangorestframework-simplejwt)"
-BACKEND_VECTOR="ChromaDB (unused — ai_copilot removed 2026-07-31)"
-
-FRONTEND_FRAMEWORK="React 18 + Vite"
-FRONTEND_UI="MUI (Material UI v5/v6)"
-FRONTEND_CHARTS="Chart.js via react-chartjs-2"
-FRONTEND_ROUTER="React Router v6"
-FRONTEND_STATE="React Context API (AuthContext, ThemeContext)"
-
-# ── PATHS ──────────────────────────────────────────────────────
-BACKEND_DIR="backend"
-FRONTEND_DIR="carbon-frontend"
-API_PREFIX="/carbon-api/"
-FRONTEND_BASENAME="/carbon/"
-
-# ── PYTHON ─────────────────────────────────────────────────────
-PYTHON_VERSION="3.12.13"
-VENV_PATH=".venv"
-PYTEST_FLAGS="--reuse-db -q"
-MANAGE_PY="backend/manage.py"
-
-# ── OPS ────────────────────────────────────────────────────────
-OPS_SCRIPT="./manage.sh"
-# Usage:
-#   ./manage.sh start              # start full stack
-#   ./manage.sh start backend      # start one service
-#   ./manage.sh stop
-#   ./manage.sh restart
-#   ./manage.sh manage <django_cmd> # e.g. ./manage.sh manage migrate
-
-# ── DEFAULT TIMEZONE ───────────────────────────────────────────
-DEFAULT_TIMEZONE="Africa/Cairo"
-
-# ── HARD RULES (Non-Negotiable) ─────────────────────────────────
-# 1. NEVER run raw manage.py, npm run dev, vite, or tail -f directly.
-#    ALWAYS use ./manage.sh (OPS_SCRIPT). Raw commands hang terminals.
-# 2. NEVER hardcode timezone-naive datetimes. Use django.utils.timezone.
-# 3. Views are THIN (parse → call service → return). Business logic in services.py.
-# 4. Colors/spacing are TOKENS (theme.palette.*, spacing()). NEVER raw px/hex.
-# 5. Components COMPOSE existing primitives. NEVER duplicate/fork.
-# 6. Permissions are PROXIES (permission classes). NEVER inline auth checks.
-# 7. BEFORE creating anything, consult .ai-toolkit/registry/ (run scan.sh if stale).
-# 8. Every stateful model has explicit STATUS_CHOICES + transition methods.
-# 9. All endpoints follow the unified API contract (shared/api-contract.md).
-# 10. Run verification gate before shipping: ./.ai-toolkit/scripts/verify.sh full
-
-# ── KNOWN TECH DEBT ────────────────────────────────────────────
-# ✅ P6 COMPLETE (2026-07-31): Frontend test scaffolding (Vitest + RTL, 7 tests); registry regenerated
-# ✅ P5 COMPLETE (2026-07-31): seed_all.py → Builder pattern (SeedBuilder class, 740L)
-# ✅ P5 COMPLETE (2026-07-31): inline sx hex reduced 90→29 (−68%) across 5 worst files
-# ✅ P5 COMPLETE (2026-07-31): ADR-0002 Command pattern for reversible operations
-# ✅ P4 COMPLETE (2026-07-31): 5 frontend hooks extracted; dead page audit; inline sx count
-# ✅ P3 COMPLETE (2026-07-31): 28 new tests; services tested; 310 total backend tests
-# ✅ P2 COMPLETE (2026-07-31): 6 services.py files created (accounts, dataschema, mdm, evidence, importexport, connections)
-# ✅ P1 COMPLETE (2026-07-31): Dual ORM removed (SQLAlchemy/alembic unused)
-# ✅ P1 COMPLETE (2026-07-31): 12 unused deps removed (8 ML + 4 non-ML), 35→23 requirements lines
-# ✅ P1 COMPLETE (2026-07-31): PlatformAppConfig registered in Django admin
-# ✅ P1 COMPLETE (2026-07-31): ai_copilot removed, dead dashboard pages removed
-# - 0 frontend tests — resolved P6-G2 (Vitest + RTL, 7 passing tests)
-# - Registry stale — resolved P6-G3 (regenerated 2026-07-31 18:08)
-# - 29 remaining sx hex / 49 px in sx — documented for future cleanup
-# - project.config.md was blank until 2026-07-30 (now populated)
-# - Full audit completed 2026-07-31, remediation plan in TASKS-AUDIT-REMEDIATION.md
-
-# ── PATTERN SCORECARD ──────────────────────────────────────────
-# See shared/design-patterns.md for full audit
-# Current: 15/23 GoF patterns actively used (Builder added P5-G1)
-# Gate: ALL 283 backend tests pass. Pattern adherence reviewed.
-# =====================
+# PROJECT CONFIG — Carbon Data Trust Platform
+# ============================================
 # THIS IS THE ONLY FILE YOU EDIT WHEN COPYING .ai-toolkit TO A NEW PROJECT.
 # All role files read this file as Step 1. Update every section below.
+# Format: one KEY=VALUE per line. Keep it factual, concise, and up-to-date.
+# Last audited: 2026-08-02.
 
 ## PROJECT IDENTITY
 PROJECT_NAME=Carbon
@@ -108,16 +28,23 @@ OPS_DJANGO=./manage.sh manage <django-command>          # arbitrary manage.py co
 BACKEND_DIR=backend/
 BACKEND_FRAMEWORK=Django 5.2 + Django REST Framework
 BACKEND_PORT=8009
-BACKEND_VENV=backend/.venv/
-BACKEND_ACTIVATE=cd /home/ahmed/aast/carbon/backend && source .venv/bin/activate
+BACKEND_VENV=.venv                                      # repo-root venv — backend/venv and backend/.venv do NOT exist
+BACKEND_ACTIVATE=cd /home/ahmed/aast/carbon && source .venv/bin/activate
 BACKEND_CHECK_CMD=python manage.py check
 BACKEND_DB=PostgreSQL on localhost:5432
 BACKEND_QUEUE=Redis 127.0.0.1:6379
 BACKEND_API_PREFIX=carbon-api
 
+## PYTHON
+PYTHON_VERSION=3.12.13
+VENV_PATH=.venv                                         # repo root; verify.sh resolves $VENV_PATH/bin/python (never `source`)
+PYTEST_FLAGS=--reuse-db -q
+MANAGE_PY=backend/manage.py
+
 ## FRONTEND
 FRONTEND_DIR=carbon-frontend/
-FRONTEND_FRAMEWORK=Vite + React + MUI (zinc/blue theme, compact density)
+FRONTEND_FRAMEWORK=React 19.1 + Vite 6
+FRONTEND_UI=MUI v7.1 (zinc/blue theme, compact density)
 FRONTEND_PORT=5179
 FRONTEND_LINT_CMD=cd /home/ahmed/aast/carbon/carbon-frontend && npm run lint
 FRONTEND_BUILD_CMD=cd /home/ahmed/aast/carbon/carbon-frontend && npm run build
@@ -151,7 +78,7 @@ DEPLOY_VERIFY=docker exec <container> grep -c <marker> /app/<path>  ← must be 
 
 ## ARCHITECTURE — Django Apps
 # Core platform apps (NEVER import emissions):
-ARCH_CORE_APPS=accounts, core, catalog, mdm, dq, dataschema
+ARCH_CORE_APPS=accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport
 # Hosted apps (may import core apps, never the reverse):
 ARCH_HOSTED_APPS=emissions
 # Superseded / out of active scope:
@@ -165,7 +92,7 @@ ARCH_ADMIN_GROUP=admins_group
 
 RULE_1=Tenant model/code is FULLY removed. Do NOT reintroduce tenant, multi-tenancy, or tenant_id anywhere.
 RULE_2=Project model is FULLY removed (replaced by OrgUnit in mdm). Do NOT reintroduce Project.
-RULE_3=Core apps (catalog, mdm, dq, dataschema, accounts, core) MUST NOT import from emissions. Emissions may import core.
+RULE_3=Core apps (accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport) MUST NOT import from emissions. Emissions may import core.
 RULE_4=API prefix is /carbon-api/ (config/urls.py). All backend routes are under this prefix.
 RULE_5=Frontend base path is /carbon/. Vite base + router basename must use this.
 RULE_6=Do NOT add pgvector, LLM gateway, or AI copilot features in-repo. Pulse is the external AI system.
@@ -197,13 +124,17 @@ FRONTEND_API=carbon-frontend/src/api/api.js
 FRONTEND_THEME=carbon-frontend/src/theme/carbonTheme.js
 FRONTEND_MANIFEST=carbon-frontend/src/apps/carbon/manifest.js
 
+## WORKER MODEL POLICY (budget directive, 2026-08-02)
+WORKER_MODEL_POLICY=ALL worker roles (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer)=DeepSeek-V3; researcher+curator=DeepSeek-R1; master-architect=Claude Sonnet / GPT-5; Kimi models OFF roster (cost).
+WORKER_MODEL_RUNTIME=Workers run on DeepSeek via VSCode Copilot custom models.
+
 ## TESTING (see .ai-toolkit/shared/testing.md for strategy)
 BACKEND_TEST_CMD=./manage.sh test                          # Django TestCase + DRF APIClient
 BACKEND_TEST_SINGLE=./manage.sh test <app>.tests.test_x    # run one module
 BACKEND_TEST_DIR=<app>/tests/test_*.py
-FRONTEND_E2E=cd carbon-frontend && npm run test:e2e         # Playwright critical journeys
-FRONTEND_E2E_DIR=carbon-frontend/e2e/
-FRONTEND_UNIT=NONE (no unit runner configured — recommend adding vitest for component/unit tests)
+BACKEND_TEST_COUNT=329 passing (as of 2026-08-02)
+FRONTEND_UNIT=Vitest 4 + RTL — cd carbon-frontend && npm test (3 files, 8 tests as of 2026-08-02)
+FRONTEND_E2E=NONE (no Playwright, no e2e/ dir)
 
 ## TROUBLESHOOTING
 PLAYBOOK=.ai-toolkit/troubleshooting/playbook.md           # known issues → verified fixes
@@ -213,15 +144,26 @@ DEBUGGING_GUIDE=.ai-toolkit/shared/debugging.md            # methodology + never
 GOTCHAS_FILE=/memories/repo/carbon-gotchas.md
 # Read this before debugging. Contains verified incident forensics.
 
+## KNOWN TECH DEBT (audit 2026-08-02)
+DEBT_SX_TOKENS=34 hex / 52 px in sx props; ~237 hardcoded hex total across 37 frontend files — cleanup pending
+DEBT_FRONTEND_TESTS=Frontend unit tests minimal (3 files / 8 tests); no e2e (no Playwright); no CI
+DEBT_GUARD_HOOK=guard.sh NOT wired (.github/hooks/ absent) — manual/CI use only, wiring pending
+DEBT_REGISTRY=Registry is auto-generated — run ./.ai-toolkit/scripts/scan.sh if stale
+DEBT_DONE_P1_P6=2026-07-31 remediation complete: dual ORM removed, 12 unused deps removed, ai_copilot + dead dashboard pages removed, 6 services.py created, 28 backend tests added, 5 frontend hooks extracted, ADR-0002 Command pattern, SeedBuilder (seed_all.py), sx hex 90→34, Vitest+RTL scaffolding, registry regenerated
+
+## PATTERN SCORECARD (see shared/design-patterns.md for full audit)
+PATTERN_SCORECARD=15/23 GoF patterns actively used (Builder added P5-G1)
+PATTERN_GATE=ALL 329 backend tests pass. Pattern adherence reviewed.
+
 ## TOOLKIT INTERNALS (auto-generated / shared — reference paths)
 REGISTRY_DIR=.ai-toolkit/registry/            # auto-generated codebase inventory (scan.sh)
 DECISIONS_DIR=.ai-toolkit/decisions/          # ADRs — architectural decisions
 SCAN_CMD=./.ai-toolkit/scripts/scan.sh        # regenerate the registry
 VERIFY_CMD=./.ai-toolkit/scripts/verify.sh    # verification gate (backend|frontend|tests|antipatterns|all|full)
 RETRO_CMD=./.ai-toolkit/scripts/retro.sh      # gather learnings for retrospective (playbook + ADRs + warnings)
-GUARD_HOOK=.github/hooks/guard-secrets.json   # PreToolUse hook → scripts/guard.sh blocks hardcoded secrets
+GUARD_HOOK=NOT WIRED — .github/hooks/guard-secrets.json does not exist; scripts/guard.sh available for manual/CI use (hook wiring pending)
 ONBOARDING=.ai-toolkit/ONBOARDING.md          # start-here bootstrap for a fresh chat
 DEFINITION_OF_DONE=.ai-toolkit/shared/definition-of-done.md   # the completion gate
 INCIDENT_RUNBOOK=.ai-toolkit/troubleshooting/incident.md      # prod-down runbook
 SHARED_CONTRACTS=.ai-toolkit/shared/          # api-contract, security, data-layer, config, design-system, logging, testing, debugging, git-workflow
-ROLES_DIR=.ai-toolkit/roles/                  # 8 roles: master-architect, scientific-researcher, 5 workers, curator (evolution agent)
+ROLES_DIR=.ai-toolkit/roles/                  # 10 roles: master-architect, researcher, 6 workers (backend, frontend, devops, data-ml, debugger-fixer, qa-validator), product-designer, curator

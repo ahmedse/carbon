@@ -38,10 +38,12 @@ Worker (Zoo/You)  → read config + role + registry → build → verify → TAS
 You (Master)      → review proof → next phase OR done
 ```
 
-### The enforcement is LIVE:
+### The enforcement is available but NOT wired:
 
-The secret-blocking hook (`.github/hooks/guard-secrets.json` → `scripts/guard.sh`) is active NOW.
-Try creating a file with `API_KEY = "sk-realkey123..."` — Copilot will **deny** the save.
+The secret-blocking script (`scripts/guard.sh`) exists and works, but the hook
+(`.github/hooks/guard-secrets.json`) does NOT exist yet — nothing runs before edits today.
+You can test guard.sh manually (see "Testing It Works" below) and wire it into CI or a
+PreToolUse hook later (wiring pending).
 
 ---
 
@@ -63,7 +65,7 @@ cd /path/to/newproject
 echo 'Read `.ai-toolkit/ONBOARDING.md` first. You are Master Architect for the Carbon Data Trust Platform.' \
   > /path/to/newproject/.github/copilot-instructions.md
 
-# Done. All 7 roles are ready. The hook is live.
+# Done. All 10 roles are ready. (The guard hook is NOT wired by default — see above.)
 ```
 
 The toolkit is **100% portable** — the roles/contracts/scripts don't hardcode project paths.
@@ -109,7 +111,7 @@ The toolkit **captures** every lesson but doesn't auto-update rules. Here's how 
 
 ### Automatic (happens on every use)
 - **Registry** (`registry/*.md`): `scan.sh` regenerates from codebase → always current
-- **Hook** (`.github/hooks/`): Blocks secrets on every edit → no config needed
+- **Guard script** (`scripts/guard.sh`): blocks secrets when run — manual/CI only until `.github/hooks/` is wired (pending)
 
 ### Worker-added (manual append after fixes/decisions)
 - **Playbook** (`troubleshooting/playbook.md`): Debugger appends after every confirmed bug fix

@@ -20,16 +20,20 @@ Tell the agent:
 
 ## Role Reference
 
+**Model policy (budget directive, 2026-08-02):** all worker roles run **DeepSeek-V3** (via VSCode Copilot custom models); researcher + curator run **DeepSeek-R1**; Master Architect stays on **Claude Sonnet / GPT-5**. Kimi models are off the roster (cost).
+
 | Role | File | Recommended Model | Cognitive Mode | Tools |
 |------|------|-------------------|---------------|-------|
 | **Master Architect** | `roles/master-architect.md` | Sonnet / GPT-5 | Plan + Decompose | read, search, edit, todo |
-| **Scientific Researcher** | `roles/researcher.md` | Sonnet / DeepSeek-R1 | Experiment + Analyze | read, search, edit, terminal |
-| **Backend Worker** | `roles/backend-worker.md` | DeepSeek-V3 / Sonnet | Execute (Python/Django) | read, edit, terminal |
-| **Frontend Worker** | `roles/frontend-worker.md` | DeepSeek-V3 / Kimi K3 | Execute (React/MUI) | read, edit, terminal |
-| **DevOps Worker** | `roles/devops-worker.md` | Haiku / DeepSeek | Execute (Docker/VPS) | read, edit, terminal |
-| **Data/ML Worker** | `roles/data-ml-worker.md` | Sonnet / DeepSeek | Experiment + Analyze | read, edit, terminal |
-| **Debugger/Fixer** | `roles/debugger-fixer.md` | DeepSeek / Sonnet | Diagnose + Hotfix | read, edit, terminal |
-| **Curator** | `roles/curator.md` | Sonnet / o1 / DeepSeek-R1 | Evolve + Reason | read, search, edit (contracts) |
+| **Scientific Researcher** | `roles/researcher.md` | DeepSeek-R1 | Experiment + Analyze | read, search, edit, terminal |
+| **Backend Worker** | `roles/backend-worker.md` | DeepSeek-V3 | Execute (Python/Django) | read, edit, terminal |
+| **Frontend Worker** | `roles/frontend-worker.md` | DeepSeek-V3 | Execute (React/MUI) | read, edit, terminal |
+| **DevOps Worker** | `roles/devops-worker.md` | DeepSeek-V3 | Execute (Docker/VPS) | read, edit, terminal |
+| **Data/ML Worker** | `roles/data-ml-worker.md` | DeepSeek-V3 | Execute (Data/ETL) | read, edit, terminal |
+| **Debugger/Fixer** | `roles/debugger-fixer.md` | DeepSeek-V3 | Diagnose + Hotfix | read, edit, terminal |
+| **QA/Validator** | `roles/qa-validator.md` | DeepSeek-V3 | Validate + Evidence (4-layer) | read, search, browser, terminal |
+| **Product/UX Designer** | `roles/product-designer.md` | DeepSeek-V3 | Discover + Design (story/journey/acceptance) | read, search, edit |
+| **Curator** | `roles/curator.md` | DeepSeek-R1 | Evolve + Reason | read, search, edit (contracts) |
 
 ---
 
@@ -87,7 +91,7 @@ Read relevant ADRs before touching an area. Master owns them.
 | `scripts/new-task.sh <role> "<title>"` | Scaffold a TASKS.md phase |
 | `scripts/scan.sh [section]` | Regenerate the registry from the codebase |
 | `scripts/verify.sh [target]` | Verification gate: backend/frontend/tests/antipatterns/all/full |
-| `scripts/guard.sh` | Deterministic PreToolUse hook — blocks hardcoded secrets (via `.github/hooks/`) |
+| `scripts/guard.sh` | Blocks hardcoded secrets — manual/CI use; PreToolUse hook (`.github/hooks/`) NOT wired yet |
 | `scripts/retro.sh [since-date]` | Gather learnings for retrospective (playbook + ADRs + current warnings) |
 
 ## Toolkit Evolution (the Learning Loop)
@@ -96,7 +100,7 @@ The toolkit **captures** learnings but doesn't auto-update rules. Here's the fee
 
 ### Automatic (no human needed)
 - **Registry**: `scan.sh` regenerates it from the codebase → always current
-- **Hook enforcement**: Runs on every edit → adapts to new file types
+- **Hook enforcement**: NOT wired yet (pending) — `guard.sh` runs manually/CI until `.github/hooks/` is created
 
 ### Worker-added (manual append)
 - **Playbook entries**: Debugger/Fixer adds after every confirmed fix (RULE 9 in debugging.md)
@@ -128,8 +132,10 @@ The toolkit evolves from your team's actual experience, not generic best-practic
 
 ## Enforcement (deterministic, not guidance)
 
-- `.github/hooks/guard-secrets.json` runs `scripts/guard.sh` before every edit and **denies**
-  writes that introduce a hardcoded secret. This is the one piece that cannot be talked out of.
+- **Guard hook is NOT wired yet (pending).** `.github/hooks/guard-secrets.json` does not exist,
+  so nothing runs before edits today. `scripts/guard.sh` is available for manual use and can be
+  wired into CI or a PreToolUse hook later — once wired, it **denies** writes that introduce a
+  hardcoded secret. This is the one piece that cannot be talked out of.
 - `scripts/verify.sh` is the completion gate — see `shared/definition-of-done.md`.
 
 ---
