@@ -3,7 +3,7 @@
 // Used by PlatformHome and ActivityBar to hide disabled apps.
 
 import { useState, useEffect } from 'react';
-import { API_BASE_URL } from '../config';
+import { apiFetch } from '../api/api';
 
 let cachedPromise = null;
 let cachedApps = null;
@@ -28,9 +28,8 @@ export function useEnabledApps() {
           setApps(data);
           setLoading(false);
         }
-      }).catch((err) => {
+      }).catch((_err) => {
         if (!cancelled) {
-          setError(err.message);
           setLoading(false);
         }
       });
@@ -43,12 +42,8 @@ export function useEnabledApps() {
       return;
     }
 
-    cachedPromise = fetch(`${API_BASE_URL.replace(/\/$/, '')}/accounts/platform-apps/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }).then((res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    });
+    // Use apiFetch for JWT auto-refresh (was raw fetch → 401 on expired tokens)
+    cachedPromise = apiFetch('/accounts/platform-apps/');
 
     let cancelled = false;
     cachedPromise.then((data) => {
