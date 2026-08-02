@@ -20,11 +20,11 @@ Tell the agent:
 
 ## Role Reference
 
-**Model policy (budget directive, 2026-08-02):** all worker roles run **DeepSeek-V3** (via VSCode Copilot custom models); researcher + curator run **DeepSeek-R1**; Master Architect stays on **Claude Sonnet / GPT-5**. Kimi models are off the roster (cost).
+**Model policy (budget directive, 2026-08-02):** all worker roles run **DeepSeek-V3** (via VSCode Copilot custom models); researcher + curator run **DeepSeek-R1**; Master Architect runs **DeepSeek V4 Pro**. Kimi models are off the roster (cost).
 
 | Role | File | Recommended Model | Cognitive Mode | Tools |
 |------|------|-------------------|---------------|-------|
-| **Master Architect** | `roles/master-architect.md` | Sonnet / GPT-5 | Plan + Decompose | read, search, edit, todo |
+| **Master Architect** | `roles/master-architect.md` | DeepSeek V4 Pro | Plan + Decompose | read, search, edit, todo |
 | **Scientific Researcher** | `roles/researcher.md` | DeepSeek-R1 | Experiment + Analyze | read, search, edit, terminal |
 | **Backend Worker** | `roles/backend-worker.md` | DeepSeek-V3 | Execute (Python/Django) | read, edit, terminal |
 | **Frontend Worker** | `roles/frontend-worker.md` | DeepSeek-V3 | Execute (React/MUI) | read, edit, terminal |

@@ -9,14 +9,6 @@ function joinUrl(base, path) {
   return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
 
-/** Builds a query string from params object (ignores undefined/null/empty). */
-function buildQuery(params) {
-  return Object.entries(params)
-    .filter(([, v]) => v !== undefined && v !== null && v !== "")
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-    .join("&");
-}
-
 /** Returns true if endpoint should receive project/module params. */
 function needsProjectModuleParams(endpoint) {
   const ep = endpoint.replace(/^\/+/, "");
@@ -66,7 +58,7 @@ async function getValidAccessToken(token) {
     if (refresh) {
       try {
         accessToken = await refreshAccessToken();
-      } catch (e) {
+      } catch (_e) {
         globalLogout();
         throw new Error("Session expired");
       }
@@ -77,7 +69,7 @@ async function getValidAccessToken(token) {
   if (isJwtExpired(accessToken)) {
     try {
       accessToken = await refreshAccessToken();
-    } catch (e) {
+    } catch (_e) {
       globalLogout();
       throw new Error("Session expired");
     }
@@ -211,8 +203,8 @@ export async function apiFetch(
 
   // Debug logging (only in development)
   if (
-    typeof process !== "undefined" &&
-    process.env.NODE_ENV === "development"
+    typeof import.meta.env !== "undefined" &&
+    import.meta.env.MODE === "development"
   ) {
     // Do NOT log sensitive tokens
     console.debug("[apiFetch]", { endpoint, method, url, project_id, module_id, body });
@@ -222,7 +214,7 @@ export async function apiFetch(
   if (accessToken && isJwtExpired(accessToken)) {
     try {
       accessToken = await refreshAccessToken();
-    } catch (e) {
+    } catch (_e) {
       globalLogout();
       throw new Error("Session expired");
     }
@@ -272,7 +264,7 @@ export async function apiFetch(
         clearTimeout(timeout);
         const retryIsJson = response.headers.get("content-type")?.includes("application/json");
         responseData = retryIsJson ? await response.json() : await response.text();
-      } catch (refreshError) {
+      } catch (_refreshError) {
         globalLogout();
         throw new Error("Session expired");
       }

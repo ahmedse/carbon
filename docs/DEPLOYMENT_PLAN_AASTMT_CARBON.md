@@ -475,6 +475,11 @@ table_schema:
 
 ## 5. Users & Scoped Roles
 
+> ⚠️ **Security (2026-08):** Real passwords are NOT stored in this repo.
+> Replace `<set-at-deploy>` with real values only at deploy time (seed
+> script, `.env.production`, or vault). Rotate existing accounts before
+> production.
+
 ### User Definitions
 
 ```yaml
@@ -483,49 +488,49 @@ users:
     email: ahmed@aastmt.edu.eg
     role: Platform Administrator
     is_superuser: true
-    password: AdminPa_132  # existing
+    password: <set-at-deploy>  # set at deploy time, never committed
     
   - username: ali
     email: ali.hassan@aastmt.edu.eg
     first_name: Ali
     last_name: Hassan
     role: Carbon Analyst
-    password: Ali2026!
+    password: <set-at-deploy>
     
   - username: fatima_facilities
     email: fatima.ahmed@aastmt.edu.eg
     first_name: Fatima
     last_name: Ahmed
     role: Facilities Data Owner
-    password: Fatima2026!
+    password: <set-at-deploy>
     
   - username: mohammed_transport
     email: mohammed.omar@aastmt.edu.eg
     first_name: Mohammed
     last_name: Omar
     role: Transportation Data Owner
-    password: Mohammed2026!
+    password: <set-at-deploy>
     
   - username: sarah_analyst
     email: sarah.mohamed@aastmt.edu.eg
     first_name: Sarah
     last_name: Mohamed
     role: Carbon Analyst
-    password: Sarah2026!
+    password: <set-at-deploy>
     
   - username: youssef_energy
     email: youssef.ibrahim@aastmt.edu.eg
     first_name: Youssef
     last_name: Ibrahim
     role: Energy Data Entry
-    password: Youssef2026!
+    password: <set-at-deploy>
     
   - username: layla_auditor
     email: layla.zaki@aastmt.edu.eg
     first_name: Layla
     last_name: Zaki
     role: Carbon Auditor
-    password: Layla2026!
+    password: <set-at-deploy>
 ```
 
 ### Scoped Role Assignments
@@ -797,40 +802,43 @@ python manage.py shell < scripts/verify_deployment.py
 
 ## 10. Login Credentials Summary
 
+> ⚠️ **Security (2026-08):** Passwords were rotated and removed from this
+> repo. Set real passwords at deploy time — never commit plaintext.
+
 ```
 Platform Administrator:
   username: ahmed
-  password: AdminPa_132
+  password: <set-at-deploy>
   access: Full platform + all modules
 
 Carbon Domain Admin:
   username: ali
-  password: Ali2026!
+  password: <set-at-deploy>
   access: All carbon modules (admin level)
 
 Facilities Data Owner:
   username: fatima_facilities
-  password: Fatima2026!
+  password: <set-at-deploy>
   access: Scope 1 & 2 modules (facilities org unit)
 
 Transportation Data Owner:
   username: mohammed_transport
-  password: Mohammed2026!
+  password: <set-at-deploy>
   access: Scope 1 module (transport fleet)
 
 Energy Data Entry:
   username: youssef_energy
-  password: Youssef2026!
+  password: <set-at-deploy>
   access: Scope 2 module (data entry only)
 
 Carbon Analyst:
   username: sarah_analyst
-  password: Sarah2026!
+  password: <set-at-deploy>
   access: All carbon modules (read + analyze)
 
 Carbon Auditor:
   username: layla_auditor
-  password: Layla2026!
+  password: <set-at-deploy>
   access: All carbon modules (read-only, verification)
 ```
 

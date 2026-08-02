@@ -12,8 +12,8 @@ Previous content (Phase 08 hardening) was completed 2026-07-29 and is superseded
 
 | Phase | Title | Status | Result record |
 |---|---|---|---|
-| E0 | Gate & toolkit trust | ⬜ READY FOR WORKER (debugger-fixer, DeepSeek-V3) | — |
-| E1 | Security lockdown | ⬜ blocked on E0 | — |
+| E0 | Gate & toolkit trust | ✅ DONE 2026-08-02 (Master-verified) | TASK-RESULTS-E0.md |
+| E1 | Security lockdown | ⬜ READY FOR WORKER (backend-worker, DeepSeek-V3) | — |
 | E2 | Carbon deployment blockers | ⬜ blocked on E1 | — |
 | E3 | Carbon enterprise features | ⬜ blocked on E2 | — |
 | E4 | Frontend hygiene & design system | ⬜ can parallel E2/E3-backend | — |
@@ -25,9 +25,9 @@ canonical grid factor · PDF at go-live? · PROD_* values · CI platform.
 
 ## Worker activation (paste to a DeepSeek-V3 chat)
 
-> Your role is **debugger-fixer** for the Carbon Data Trust Platform.
+> Your role is **backend-worker** for the Carbon Data Trust Platform.
 > 1. Read `.ai-toolkit/project.config.md`
 > 2. Read `.ai-toolkit/shared/base-rules.md`
-> 3. Read `.ai-toolkit/roles/debugger-fixer.md`
-> 4. Read `plans/CARBON_ENTERPRISE_READINESS_PLAN.md` — Phase E0
-> 5. Confirm your role and begin. Report to `TASK-RESULTS-E0.md` with terminal proof.
+> 3. Read `.ai-toolkit/roles/backend-worker.md`
+> 4. Read `plans/CARBON_ENTERPRISE_READINESS_PLAN.md` — Phase E1
+> 5. Confirm your role and begin. Report to `TASK-RESULTS-E1.md` with terminal proof.

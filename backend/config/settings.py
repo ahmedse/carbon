@@ -29,6 +29,11 @@ if os.getenv("DJANGO_ENV") == "production":
 # Environment
 DJANGO_ENV = os.getenv("DJANGO_ENV", "development").lower()
 
+# Single predicate for all development-only surface (debug toolbars, silk,
+# swagger, CORS). URLs and settings gate on this — never on DEBUG directly,
+# so DEBUG=True in a production env cannot enable dev tooling by accident.
+IS_DEVELOPMENT = DJANGO_ENV == "development"
+
 def get_env(name, default=None, required=False):
     v = os.getenv(name, default)
     if required and v is None:
@@ -82,7 +87,7 @@ INSTALLED_APPS = [
     'drf_yasg',
 ]
 
-if DJANGO_ENV == "development":
+if IS_DEVELOPMENT:
     INSTALLED_APPS += ['debug_toolbar', 'silk']
 
 AUTH_USER_MODEL = 'accounts.User'
@@ -99,15 +104,15 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-if DJANGO_ENV == "development":
+if IS_DEVELOPMENT:
     MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
 # Silk records every request (incl. DB writes) — keep it out of test runs so
 # CaptureQueriesContext assertions stay deterministic.
-if DJANGO_ENV == "development" and not RUNNING_TESTS:
+if IS_DEVELOPMENT and not RUNNING_TESTS:
     MIDDLEWARE.insert(0, 'silk.middleware.SilkyMiddleware')
 
 # CORS
-if DJANGO_ENV == "development":
+if IS_DEVELOPMENT:
     CORS_ALLOW_ALL_ORIGINS = True
     CORS_ALLOWED_ORIGINS = []
 else:

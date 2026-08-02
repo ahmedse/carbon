@@ -2,7 +2,7 @@
 // Offline/online detection banner + context for API call awareness.
 // Listens to window online/offline events and persists state via a simple context.
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import { Box, Typography, Snackbar, Alert } from "@mui/material";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
 

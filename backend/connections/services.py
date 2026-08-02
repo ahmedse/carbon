@@ -4,6 +4,19 @@
 # status codes), never DRF Response objects. Zero behavioral change vs. the
 # logic previously in views.
 
+# Mask shown on every read path (API + admin) for stored connection config.
+MASK_VALUE = "***"
+
+
+def mask_config(config):
+    """Return a masked copy of a connection config dict: same keys, every
+    value replaced with MASK_VALUE. Never reveals stored secrets on read
+    paths. Non-dict values pass through unchanged."""
+    if not isinstance(config, dict):
+        return config
+    return {key: MASK_VALUE for key in config}
+
+
 class ConnectionService:
     """Data source connectivity tests and consuming-connection key rotation."""
 

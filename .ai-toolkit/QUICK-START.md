@@ -2,7 +2,7 @@
 
 ## What You Built
 
-A **self-enforcing, self-learning coding system** for AI agents. 44 files, 8 roles, 11 contracts.
+A **self-enforcing, self-learning coding system** for AI agents. 44 files, 10 roles, 11 contracts.
 
 **Three goals achieved:**
 1. ✅ **Minimize duplication** — Registry (auto-scan) + "read before write" rule
@@ -36,27 +36,28 @@ A **self-enforcing, self-learning coding system** for AI agents. 44 files, 8 rol
 
 ```bash
 cp -r .ai-toolkit/ /path/to/newproject/
-cp -r .github/hooks/ /path/to/newproject/.github/
 nano /path/to/newproject/.ai-toolkit/project.config.md  # edit ONE file
 cd /path/to/newproject && ./.ai-toolkit/scripts/scan.sh  # generate registry
 echo 'Read `.ai-toolkit/ONBOARDING.md`' > /path/to/newproject/.github/copilot-instructions.md
-# Done. 8 roles ready, hook live.
+# Done. 10 roles ready.
 ```
 
 ---
 
-## The 8 Roles
+## The 10 Roles
 
 | Role | When to Use | Model | Mode |
 |------|-------------|-------|------|
-| **Master Architect** | Planning, decomposition, TASKS.md specs | Sonnet / GPT-5 | Plan |
-| **Scientific Researcher** | Design & run experiments, analyze results | Sonnet / DeepSeek-R1 | Experiment |
-| **Backend Worker** | Python, Django, API, services, DB | DeepSeek-V3 / Sonnet | Execute |
-| **Frontend Worker** | React, MUI, hooks, UI | DeepSeek-V3 / Kimi K3 | Execute |
-| **DevOps Worker** | Docker, deploy, VPS, cron | Haiku / DeepSeek | Execute |
-| **Data/ML Worker** | Experiments, forecasting, analysis | Sonnet / DeepSeek | Execute |
-| **Debugger/Fixer** | Prod hotfixes, regression tests | DeepSeek / Sonnet | Fix |
-| **Curator** | Monthly retro, evolve contracts (NEW) | Sonnet / o1 | Evolve |
+| **Master Architect** | Planning, decomposition, TASKS.md specs | DeepSeek V4 Pro | Plan |
+| **Scientific Researcher** | Design & run experiments, analyze results | DeepSeek-R1 | Experiment |
+| **Backend Worker** | Python, Django, API, services, DB | DeepSeek-V3 | Execute |
+| **Frontend Worker** | React, MUI, hooks, UI | DeepSeek-V3 | Execute |
+| **DevOps Worker** | Docker, deploy, VPS, cron | DeepSeek-V3 | Execute |
+| **Data/ML Worker** | Experiments, forecasting, analysis | DeepSeek-V3 | Execute |
+| **Debugger/Fixer** | Prod hotfixes, regression tests | DeepSeek-V3 | Fix |
+| **QA Validator** | Verification, test planning, validation gates | DeepSeek-V3 | Validate |
+| **Product Designer** | UX design, design system, wireframes | DeepSeek-V3 | Design |
+| **Curator** | Monthly retro, evolve contracts | DeepSeek-R1 | Evolve |
 
 ---
 
@@ -107,7 +108,7 @@ Knowledge compounds. Mistakes don't repeat.
 | `activate.sh <role>` | Print worker activation prompt | Before starting a role chat |
 | `scan.sh` | Regenerate registry from codebase | After adding services/components/endpoints |
 | `verify.sh [target]` | Verification gate (backend/frontend/tests/antipatterns/all/full) | Before shipping, in DoD |
-| `guard.sh` | Deterministic secret-blocking hook (auto-runs via `.github/hooks/`) | Automatic (no manual run) |
+| `guard.sh` | Deterministic secret-blocking hook (manual/CI; .github/hooks/ wiring pending) | On every commit (once wired) |
 | `retro.sh [date]` | Gather learnings for retrospective | Monthly or after major work |
 | `new-task.sh <role> "title"` | Scaffold a TASKS.md phase | When Master writes a new task |
 
@@ -119,7 +120,7 @@ Knowledge compounds. Mistakes don't repeat.
    - Runs BEFORE every file edit
    - **DENIES** writes with hardcoded `API_KEY = "sk-..."` patterns
    - Cannot be talked out of (fail-open on edge cases)
-   - Live NOW in this project
+   - Available for manual/CI use (hook wiring via .github/hooks/ pending)
 
 2. **Verification Gate** (`verify.sh` + `definition-of-done.md`):
    - 7-part completion checklist (correct, reuses, verified, tested, safe, clean, captured)

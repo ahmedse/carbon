@@ -10,7 +10,7 @@
 
 | Role | Model | Used for |
 |---|---|---|
-| Master Architect | Claude Sonnet / GPT-5 | specs, review, ADRs (this document) |
+| Master Architect | DeepSeek V4 Pro | specs, review, ADRs (handed over 2026-08-02) |
 | All workers (backend, frontend, devops, debugger, qa) | **DeepSeek-V3** (VSCode Copilot custom model) | execution |
 | Researcher / Curator | DeepSeek-R1 | analysis, retrospectives |
 | Kimi | **off roster** (cost) | — |

@@ -695,7 +695,7 @@ describe('Login Page', () => {
     renderLogin();
     
     await user.type(screen.getByLabelText(/email/i), 'test@example.com');
-    await user.type(screen.getByLabelText(/password/i), 'password123');
+    await user.type(screen.getByLabelText(/password/i), '<test-password>');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
     
     await waitFor(() => {
@@ -753,7 +753,7 @@ describe('AuthContext', () => {
     const wrapper = ({ children }) => <AuthProvider>{children}</AuthProvider>;
     const { result } = renderHook(() => useAuth(), { wrapper });
     
-    await result.current.login('test@example.com', 'password123');
+    await result.current.login('test@example.com', '<test-password>');
     
     await waitFor(() => {
       expect(result.current.isAuthenticated).toBe(true);
@@ -766,7 +766,7 @@ describe('AuthContext', () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     
     // Login first
-    await result.current.login('test@example.com', 'password123');
+    await result.current.login('test@example.com', '<test-password>');
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
     
     // Logout

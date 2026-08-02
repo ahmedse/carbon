@@ -74,13 +74,15 @@ DEPLOYMENT COMPLETE
 ======================================================================
 LOGIN CREDENTIALS
 ======================================================================
-ahmed             / AdminPa_132     (Platform Admin)
-ali               / Ali2026!        (Carbon Domain Admin)
-fatima_facilities / Fatima2026!     (Facilities Data Owner)
-mohammed_transport/ Mohammed2026!   (Transport Data Owner)
-sarah_analyst     / Sarah2026!      (Carbon Analyst)
-youssef_energy    / Youssef2026!    (Energy Data Entry)
-layla_auditor     / Layla2026!      (Carbon Auditor)
+> ⚠️ Credentials rotated 2026-08. Real passwords are NOT stored in this
+> repo — set them at deploy time and rotate again before production.
+ahmed             / <set-at-deploy>     (Platform Admin)
+ali               / <set-at-deploy>     (Carbon Domain Admin)
+fatima_facilities / <set-at-deploy>     (Facilities Data Owner)
+mohammed_transport/ <set-at-deploy>     (Transport Data Owner)
+sarah_analyst     / <set-at-deploy>     (Carbon Analyst)
+youssef_energy    / <set-at-deploy>     (Energy Data Entry)
+layla_auditor     / <set-at-deploy>     (Carbon Auditor)
 ======================================================================
 ```
 
@@ -88,10 +90,10 @@ layla_auditor     / Layla2026!      (Carbon Auditor)
 
 ### 1. Login and Verify
 ```bash
-# Login as Ali (Carbon Admin)
+# Login as Ali (Carbon Admin) — use the real password set at deploy time
 curl -X POST http://localhost:8009/carbon-api/token/ \
   -H "Content-Type: application/json" \
-  -d '{"username":"ali","password":"Ali2026!"}'
+  -d '{"username":"ali","password":"<set-at-deploy>"}'
 
 # Get user context
 curl http://localhost:8009/carbon-api/accounts/me_context/ \

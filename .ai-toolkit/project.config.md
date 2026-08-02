@@ -125,7 +125,7 @@ FRONTEND_THEME=carbon-frontend/src/theme/carbonTheme.js
 FRONTEND_MANIFEST=carbon-frontend/src/apps/carbon/manifest.js
 
 ## WORKER MODEL POLICY (budget directive, 2026-08-02)
-WORKER_MODEL_POLICY=ALL worker roles (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer)=DeepSeek-V3; researcher+curator=DeepSeek-R1; master-architect=Claude Sonnet / GPT-5; Kimi models OFF roster (cost).
+WORKER_MODEL_POLICY=ALL worker roles (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer)=DeepSeek-V3; researcher+curator=DeepSeek-R1; master-architect=DeepSeek V4 Pro; Kimi models OFF roster (cost).
 WORKER_MODEL_RUNTIME=Workers run on DeepSeek via VSCode Copilot custom models.
 
 ## TESTING (see .ai-toolkit/shared/testing.md for strategy)
