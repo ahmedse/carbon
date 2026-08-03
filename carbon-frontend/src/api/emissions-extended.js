@@ -311,33 +311,74 @@ export async function fetchVerificationRecords({ status, period, scope, page = 1
   return apiFetch(`${API_ROUTES.emissionsVerification}${qs ? `?${qs}` : ""}`, { token });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// E2 — Verification & Period State-Machine Actions
+// ═══════════════════════════════════════════════════════════════════════════
+
 /**
- * Verify/submit a period's calculations (admin/analyst)
+ * Verify a verification record (admin/analyst).
+ * POST /carbon-api/carbon/verifications/{id}/verify/
  */
-export async function verifyPeriod(periodId, data, token) {
-  return apiFetch(`${API_ROUTES.emissionsVerification}${periodId}/verify/`, {
+export async function verifyVerificationRecord(verificationId, token) {
+  return apiFetch(`${API_ROUTES.emissionsVerification}${verificationId}/verify/`, {
     method: "POST",
-    body: data,
     token,
   });
 }
 
 /**
- * Reject a period's calculations with notes
+ * Reject a verification record with notes (admin/analyst).
+ * POST /carbon-api/carbon/verifications/{id}/reject/
  */
-export async function rejectPeriod(periodId, data, token) {
-  return apiFetch(`${API_ROUTES.emissionsVerification}${periodId}/reject/`, {
+export async function rejectVerificationRecord(verificationId, notes, token) {
+  return apiFetch(`${API_ROUTES.emissionsVerification}${verificationId}/reject/`, {
     method: "POST",
-    body: data,
+    body: { notes },
     token,
   });
 }
 
+// ── Reporting Period state-machine actions ──────────────────────────────
+
 /**
- * Submit a period for verification (data_owner)
+ * Submit a period for verification (data_owner).
+ * POST /carbon-api/carbon/periods/{id}/submit/
  */
 export async function submitPeriod(periodId, token) {
-  return apiFetch(`${API_ROUTES.emissionsCalculations}${periodId}/submit/`, {
+  return apiFetch(`${API_ROUTES.emissionsPeriods}${periodId}/submit/`, {
+    method: "POST",
+    token,
+  });
+}
+
+/**
+ * Open a period for data entry (from draft or locked).
+ * POST /carbon-api/carbon/periods/{id}/open/
+ */
+export async function openPeriod(periodId, token) {
+  return apiFetch(`${API_ROUTES.emissionsPeriods}${periodId}/open/`, {
+    method: "POST",
+    token,
+  });
+}
+
+/**
+ * Lock a period for review (admin only).
+ * POST /carbon-api/carbon/periods/{id}/lock/
+ */
+export async function lockPeriod(periodId, token) {
+  return apiFetch(`${API_ROUTES.emissionsPeriods}${periodId}/lock/`, {
+    method: "POST",
+    token,
+  });
+}
+
+/**
+ * Close a verified period (admin only).
+ * POST /carbon-api/carbon/periods/{id}/close/
+ */
+export async function closePeriod(periodId, token) {
+  return apiFetch(`${API_ROUTES.emissionsPeriods}${periodId}/close/`, {
     method: "POST",
     token,
   });

@@ -46,8 +46,8 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchVerificationRecords,
-  verifyPeriod,
-  rejectPeriod,
+  verifyVerificationRecord,
+  rejectVerificationRecord,
 } from '../../api/emissions-extended';
 import PageHeader from '../../components/Page/PageHeader';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
@@ -68,6 +68,18 @@ const SCOPE_CFG = {
   1: { label: 'Scope 1', palette: 'success' },
   2: { label: 'Scope 2', palette: 'info' },
   3: { label: 'Scope 3', palette: 'warning' },
+};
+
+// ── Period status config ──────────────────────────────────────────────────
+
+const PERIOD_STATUS_CFG = {
+  draft:     { label: 'Draft',     color: 'default' },
+  open:      { label: 'Open',      color: 'info' },
+  locked:    { label: 'Locked',    color: 'warning' },
+  submitted: { label: 'Submitted', color: 'secondary' },
+  verified:  { label: 'Verified',  color: 'success' },
+  rejected:  { label: 'Rejected',  color: 'error' },
+  closed:    { label: 'Closed',    color: 'default' },
 };
 
 // ── Status config ────────────────────────────────────────────────────────
@@ -146,7 +158,7 @@ function RejectDialog({ open, record, onClose, onConfirm, loading }) {
       <DialogTitle>Reject Period</DialogTitle>
       <DialogContent>
         <Typography sx={{ fontSize: '0.85rem', mb: 2 }}>
-          Reject verification for <strong>{record?.period_name || record?.period || record?.id}</strong>?
+          Reject verification for <strong>{record?.period_label || record?.period_name || record?.id}</strong>?
         </Typography>
         <TextField
           autoFocus
@@ -184,7 +196,7 @@ function ApproveDialog({ open, record, onClose, onConfirm, loading }) {
       <DialogTitle>Confirm Approval</DialogTitle>
       <DialogContent>
         <Typography sx={{ fontSize: '0.85rem' }}>
-          Approve verification for <strong>{record?.period_name || record?.period || record?.id}</strong>?
+          Approve verification for <strong>{record?.period_label || record?.period_name || record?.id}</strong>?
           <Box component="span" sx={{ display: 'block', mt: 1, fontSize: '0.78rem', color: 'text.secondary' }}>
             This confirms the calculation data is accurate and complete.
           </Box>
@@ -259,8 +271,8 @@ export default function VerificationPage() {
     if (!record) return;
     setActionLoading(true);
     try {
-      await verifyPeriod(record.period_id || record.id, { status: 'verified' }, token);
-      setSnackbar({ open: true, message: `Approved: ${record.period_name || record.period || record.id}`, severity: 'success' });
+      await verifyVerificationRecord(record.id, token);
+      setSnackbar({ open: true, message: `Approved: ${record.period_label || record.period_name || record.id}`, severity: 'success' });
       setApproveDialog({ open: false, record: null });
       await loadRecords();
     } catch (err) {
@@ -273,8 +285,8 @@ export default function VerificationPage() {
   const handleReject = async (record, notes) => {
     setActionLoading(true);
     try {
-      await rejectPeriod(record.period_id || record.id, { notes }, token);
-      setSnackbar({ open: true, message: `Rejected: ${record.period_name || record.period || record.id}`, severity: 'warning' });
+      await rejectVerificationRecord(record.id, notes, token);
+      setSnackbar({ open: true, message: `Rejected: ${record.period_label || record.period_name || record.id}`, severity: 'warning' });
       setRejectDialog({ open: false, record: null });
       await loadRecords();
     } catch (err) {
@@ -291,28 +303,27 @@ export default function VerificationPage() {
   const columns = useMemo(() => {
     const base = [
       {
-        field: 'period_name',
+        field: 'period_label',
         headerName: 'Period',
-        flex: 1.2,
-        minWidth: 140,
+        flex: 1.5,
+        minWidth: 220,
         renderCell: (params) => (
-          <Typography sx={{ fontSize: '0.8rem', fontWeight: 500 }}>{params.value || params.row.period || '—'}</Typography>
+          <Typography sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
+            {params.value || params.row.period_name || '—'}
+          </Typography>
         ),
       },
       {
-        field: 'scope',
-        headerName: 'Scope',
-        width: 90,
-        renderCell: (params) => <ScopeBadge value={params.value} />,
+        field: 'period_status',
+        headerName: 'Period Status',
+        width: 120,
+        renderCell: (params) => {
+          const cfg = PERIOD_STATUS_CFG[params.value] || PERIOD_STATUS_CFG.draft;
+          return <Chip label={cfg.label} size="small" color={cfg.color} variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />;
+        },
       },
       {
-        field: 'status',
-        headerName: 'Status',
-        width: 110,
-        renderCell: (params) => <StatusChip status={params.value} />,
-      },
-      {
-        field: 'total_co2e',
+        field: 'total_co2e_tonnes',
         headerName: 'tCO₂e',
         width: 110,
         align: 'right',
@@ -320,51 +331,76 @@ export default function VerificationPage() {
         valueFormatter: (value) => fmtNum(value),
       },
       {
-        field: 'submitted_by_name',
-        headerName: 'Submitted By',
-        width: 140,
+        field: 'scope_summary',
+        headerName: 'Scope Summary',
+        flex: 1,
+        minWidth: 160,
+        renderCell: (params) => {
+          const summary = params.value;
+          if (!summary || typeof summary !== 'object' || Object.keys(summary).length === 0) {
+            return <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>—</Typography>;
+          }
+          return (
+            <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+              {Object.entries(summary).map(([scope, tonnes]) => (
+                <Chip
+                  key={scope}
+                  label={`S${scope}: ${fmtNum(tonnes)}`}
+                  size="small"
+                  sx={{
+                    height: 20,
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    bgcolor: 'action.hover',
+                  }}
+                />
+              ))}
+            </Stack>
+          );
+        },
+      },
+      {
+        field: 'status',
+        headerName: 'Verification',
+        width: 110,
+        renderCell: (params) => <StatusChip status={params.value} />,
+      },
+      {
+        field: 'verifier_name',
+        headerName: 'Verifier',
+        width: 130,
         renderCell: (params) => (
-          <Typography sx={{ fontSize: '0.78rem' }}>{params.value || params.row.submitted_by || '—'}</Typography>
+          <Typography sx={{ fontSize: '0.78rem' }}>{params.value || '—'}</Typography>
         ),
       },
       {
-        field: 'submitted_at',
-        headerName: 'Submitted At',
+        field: 'created_at',
+        headerName: 'Created',
         width: 150,
         valueFormatter: (value) => fmtDate(value),
       },
     ];
 
-    // Add verified columns for non-pending tabs
+    // Add verified_at for non-pending tabs
     if (!isPendingTab) {
-      base.push(
-        {
-          field: 'verified_by_name',
-          headerName: 'Verified By',
-          width: 140,
-          renderCell: (params) => (
-            <Typography sx={{ fontSize: '0.78rem' }}>{params.value || params.row.verified_by || '—'}</Typography>
-          ),
-        },
-        {
-          field: 'verified_at',
-          headerName: 'Verified At',
-          width: 150,
-          valueFormatter: (value) => fmtDate(value),
-        }
-      );
+      base.push({
+        field: 'verified_at',
+        headerName: 'Verified At',
+        width: 150,
+        valueFormatter: (value) => fmtDate(value),
+      });
     }
 
-    // Add notes column for rejected items
-    if (activeTab === 0) {
+    // Add notes column for pending/rejected
+    if (isPendingTab) {
       base.push({
-        field: 'rejection_notes',
+        field: 'notes',
         headerName: 'Notes',
         flex: 1,
         minWidth: 120,
         renderCell: (params) => (
           <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontStyle: 'italic' }}>
-            {params.value || params.row.notes || '—'}
+            {params.value || '—'}
           </Typography>
         ),
       });
@@ -409,7 +445,7 @@ export default function VerificationPage() {
     }
 
     return base;
-  }, [isPendingTab, activeTab]);
+  }, [isPendingTab]);
 
   // ── Render ────────────────────────────────────────────────────────────
 
