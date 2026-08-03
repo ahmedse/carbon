@@ -179,12 +179,12 @@ const ROUTE_CONFIG = {
     parent: '/carbon/data-entry',
   },
   '/schema-admin': {
-    label: 'Schema Admin',
+    label: 'Table Manager',
     icon: StorageIcon,
     parent: '/dataschema',
   },
   '/modules/:moduleId': {
-    label: 'Module',
+    label: 'Data Product',
     icon: StorageIcon,
     parent: '/carbon/my-data',
   },

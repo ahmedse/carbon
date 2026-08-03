@@ -20,7 +20,7 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import KeyboardOutlinedIcon from "@mui/icons-material/KeyboardOutlined";
 import { useAuth } from "../auth/AuthContext";
-import { API_BASE_URL } from "../config";
+import { apiFetch } from "../api/api";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 
 const SECTION_SX = {
@@ -183,16 +183,11 @@ export default function SettingsPage() {
 
   // Fetch profile on mount
   useEffect(() => {
-    const token = localStorage.getItem("access");
-    if (!token) {
+    if (!localStorage.getItem("access")) {
       setMeLoading(false);
       return;
     }
-    const baseUrl = API_BASE_URL.replace(/\/$/, '');
-    fetch(`${baseUrl}/accounts/my-roles/`, { // my-roles endpoint
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? r.json() : null))
+    apiFetch('accounts/my-roles/')
       .then((d) => setMeData(d))
       .catch(() => {})
       .finally(() => setMeLoading(false));
@@ -260,32 +255,16 @@ export default function SettingsPage() {
 
     setPwLoading(true);
     try {
-      const token = localStorage.getItem("access");
-      const baseUrl = API_BASE_URL.replace(/\/$/, '');
-      const res = await fetch(`${baseUrl}/accounts/change-password/`, { // change-password endpoint
+      await apiFetch('accounts/change-password/', {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ current_password: currentPw, new_password: newPw }),
+        body: { current_password: currentPw, new_password: newPw },
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setPwError(
-          data?.detail ||
-            data?.current_password?.[0] ||
-            data?.new_password?.[0] ||
-            "Failed to change password."
-        );
-      } else {
-        setCurrentPw("");
-        setNewPw("");
-        setConfirmPw("");
-        setToast("Password changed successfully.");
-      }
-    } catch {
-      setPwError("Network error — could not change password.");
+      setCurrentPw("");
+      setNewPw("");
+      setConfirmPw("");
+      setToast("Password changed successfully.");
+    } catch (err) {
+      setPwError(err?.message || "Network error — could not change password.");
     } finally {
       setPwLoading(false);
     }

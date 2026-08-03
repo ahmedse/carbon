@@ -41,7 +41,7 @@ export function StatusBar({
       const moduleId = moduleMatch[1];
       const module = context?.modules?.find(m => String(m.id) === moduleId);
       if (module) {
-        return `Module: ${module.name}`;
+        return `Data Product: ${module.name}`;
       }
     }
 
@@ -53,7 +53,7 @@ export function StatusBar({
       const table = context?.tablesByModule?.[moduleId]?.find(t => String(t.id) === tableId);
       
       if (table) {
-        return `${module?.name || 'Module'} › ${table.title}`;
+        return `${module?.name || 'Data Product'} › ${table.title}`;
       }
     }
 

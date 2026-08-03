@@ -3,10 +3,10 @@ import React, { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams } from "react-router-dom";
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { Box, Typography } from '@mui/material';
 import { useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
 const NotFound = React.lazy(() => import("./pages/NotFound"));
-import Layout from "./components/Layout";
 import { Shell } from "./shell/Shell";
 import AdminRoute from "./components/AdminRoute";
 import ErrorBoundary from "./shell/ErrorBoundary";
@@ -34,17 +34,13 @@ const EmissionsDashboard = React.lazy(() => import("./pages/EmissionsDashboard")
 const EmissionsReport = React.lazy(() => import("./pages/EmissionsReport"));
 const SettingsPage = React.lazy(() => import("./pages/SettingsPage"));
 const RowDetailPage = React.lazy(() => import("./pages/dataschema/RowDetailPage"));
-const DomainsPage = React.lazy(() => import("./pages/catalog/DomainsPage"));
-const GlossaryPage = React.lazy(() => import("./pages/catalog/GlossaryPage"));
 const MetadataManagementPage = React.lazy(() => import("./pages/catalog/MetadataManagementPage"));
 const AssetsPage = React.lazy(() => import("./pages/catalog/AssetsPage"));
 const MDMPage = React.lazy(() => import("./pages/catalog/MDMPage"));
 const ConnectionsPage = React.lazy(() => import("./pages/catalog/ConnectionsPage"));
 const ImportExportPage = React.lazy(() => import("./pages/catalog/ImportExportPage"));
 const CatalogHome = React.lazy(() => import("./pages/catalog/CatalogHome"));
-const SchemaCatalogPage = React.lazy(() => import("./pages/catalog/SchemaCatalogPage"));
 const SchemaDetailPage = React.lazy(() => import("./pages/catalog/SchemaDetailPage"));
-const SchemaManagerPage = React.lazy(() => import("./pages/catalog/SchemaManagerPage"));
 const DataProductsPage = React.lazy(() => import("./pages/catalog/DataProductsPage"));
 const DataProductDetailPage = React.lazy(() => import("./pages/catalog/DataProductDetailPage"));
 const DomainDetailPage = React.lazy(() => import("./pages/catalog/DomainDetailPage"));
@@ -53,13 +49,11 @@ const AssetDetailPage = React.lazy(() => import("./pages/catalog/AssetDetailPage
 const DQDashboardPage = React.lazy(() => import("./pages/catalog/DQDashboardPage"));
 const DQRulesPage = React.lazy(() => import("./pages/catalog/DQRulesPage"));
 const ReferenceSetDetailPage = React.lazy(() => import("./pages/catalog/ReferenceSetDetailPage"));
-const TagsPage = React.lazy(() => import("./pages/catalog/TagsPage"));
 const ReferenceDataPage = React.lazy(() => import("./pages/catalog/ReferenceDataPage"));
 const GovernancePage = React.lazy(() => import("./pages/catalog/GovernancePage"));
 const DataSourcesDetailPage = React.lazy(() => import("./pages/catalog/DataSourcesDetailPage"));
 const ExportsDetailPage = React.lazy(() => import("./pages/catalog/ExportsDetailPage"));
 const ImportsDetailPage = React.lazy(() => import("./pages/catalog/ImportsDetailPage"));
-const DataOwnerPortalPage = React.lazy(() => import("./pages/data-owner/DataOwnerPortalPage"));
 const DataOwnerAssetsPage = React.lazy(() => import("./pages/data-owner/DataOwnerAssetsPage"));
 const EmissionFactorsPage = React.lazy(() => import("./pages/emissions/EmissionFactorsPage"));
 const CalculationRulesPage = React.lazy(() => import("./pages/emissions/CalculationRulesPage"));
@@ -139,12 +133,12 @@ function RoleAwareLanding() {
   // No modules assigned - show empty state
   if (!hasAdminPerspective) {
     return (
-      <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-        <h2>No Data Modules Assigned</h2>
-        <p style={{ color: '#666' }}>
-          Contact your administrator to get access to data entry modules.
-        </p>
-      </div>
+      <Box sx={{ p: 8, textAlign: 'center' }}>
+        <Typography variant="h6">No Data Products Assigned</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Contact your administrator to get access to data products.
+        </Typography>
+      </Box>
     );
   }
   

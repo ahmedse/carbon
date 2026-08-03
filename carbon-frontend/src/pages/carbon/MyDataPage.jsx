@@ -397,11 +397,6 @@ export default function MyDataPage() {
     },
   ], [navigate]);
 
-  const breadcrumbs = [
-    { label: 'Home',    path: '/dashboard' },
-    { label: 'My Data' },
-  ];
-
   const rightPanelTabs = [
     { label: 'Overview', render: () => <SourceOverviewTab mod={selected} theme={theme} /> },
     { label: 'Activity', render: () => <ActivityTab activity={activity} /> },
@@ -430,14 +425,14 @@ export default function MyDataPage() {
   // ── Loading / error states ─────────────────────────────────────────────
   if (loading) return (
     <Box>
-      <PageHeader title="My Data" subtitle="Loading…" breadcrumbs={breadcrumbs} />
+      <PageHeader title="My Data" subtitle="Loading…" />
       <LoadingSkeleton variant="table" />
     </Box>
   );
 
   if (error) return (
     <Box>
-      <PageHeader title="My Data" breadcrumbs={breadcrumbs} />
+      <PageHeader title="My Data" />
       <ErrorAlert message={error} onRetry={load} />
     </Box>
   );
@@ -582,7 +577,6 @@ export default function MyDataPage() {
           <PageHeader
             title="My Data"
             subtitle={orgUnit?.name || ''}
-            breadcrumbs={breadcrumbs}
           />
         }
         mainContent={mainContent}

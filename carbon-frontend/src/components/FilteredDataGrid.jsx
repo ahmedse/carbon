@@ -18,7 +18,7 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import StandardDataGrid from './StandardDataGrid';
 import PageContainer from './layout/PageContainer';
-import PageHeader from './layout/PageHeader';
+import PageHeader from './Page/PageHeader';
 
 export default function FilteredDataGrid({
   title,

@@ -626,3 +626,21 @@ const createCarbonTheme = (mode = 'light') => {
 
 export default createCarbonTheme;
 export { brandColors, lightColors, darkColors };
+
+// Chart color palette — use these in Recharts/MUI charts for consistent theming
+export const chartPalette = {
+  blue: '#2563eb',
+  green: '#10b981',
+  yellow: '#f59e0b',
+  red: '#ef4444',
+  purple: '#8b5cf6',
+  teal: '#14b8a6',
+  orange: '#f97316',
+  pink: '#ec4899',
+  indigo: '#6366f1',
+  gray: '#71717a',
+  // Semantic aliases
+  scope1: '#ef4444',
+  scope2: '#f59e0b',
+  scope3: '#2563eb',
+};

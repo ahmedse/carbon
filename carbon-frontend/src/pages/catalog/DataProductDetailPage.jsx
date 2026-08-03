@@ -26,7 +26,7 @@ import { updateModule, deleteModule } from '../../api/modules';
 import { fetchOrgUnits } from '../../api/orgUnits';
 import { DATA_PRODUCTS, DATA_PRODUCT } from '../../constants/terminology';
 import PageContainer from '../../components/layout/PageContainer';
-import PageHeader from '../../components/layout/PageHeader';
+import PageHeader from '../../components/Page/PageHeader';
 
 const QUALITY_COLOR = { passing: 'success', warning: 'warning', failing: 'error', unknown: 'default' };
 const SCOPE_LABEL = { 1: 'Scope 1', 2: 'Scope 2', 3: 'Scope 3' };

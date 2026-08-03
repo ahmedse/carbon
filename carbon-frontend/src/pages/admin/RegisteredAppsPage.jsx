@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
-import { API_BASE_URL } from '../../config';
+import { apiFetch } from '../../api/api';
 import { useAuth } from '../../auth/AuthContext';
 
 export default function RegisteredAppsPage() {
@@ -19,12 +19,7 @@ export default function RegisteredAppsPage() {
   const fetchApps = useCallback(async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('access');
-      const res = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/accounts/platform-apps/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await apiFetch('accounts/platform-apps/');
       setApps(data);
     } catch (err) {
       setError(err.message);
@@ -37,17 +32,10 @@ export default function RegisteredAppsPage() {
 
   const handleToggle = async (appId, currentEnabled) => {
     try {
-      const token = localStorage.getItem('access');
-      const res = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/accounts/platform-apps/${appId}/`, {
+      const updated = await apiFetch(`accounts/platform-apps/${appId}/`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ is_enabled: !currentEnabled }),
+        body: { is_enabled: !currentEnabled },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const updated = await res.json();
       setApps(prev => prev.map(a => a.app_id === appId ? { ...a, is_enabled: updated.is_enabled } : a));
       setSnackbar({ open: true, message: `${appId} ${updated.is_enabled ? 'enabled' : 'disabled'}` });
     } catch (err) {
