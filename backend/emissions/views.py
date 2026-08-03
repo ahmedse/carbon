@@ -6,7 +6,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission, SAFE_METHODS
 from django.db.models import Sum, Count, Q, Max
 from django.utils import timezone
 from decimal import Decimal
@@ -14,7 +14,8 @@ from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 
 from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit
-from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units
+from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units, user_is_global_admin
+from accounts.constants import ADMINS_GROUP
 from core.models import Module
 from catalog.permissions import AdminOrSuperuserOnly, ReadAnyWriteAdmin
 from dataschema.models import DataRow, DataTable
@@ -94,7 +95,7 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def verify(self, request, pk=None):
         """Verify a submitted period (admin/admins_group only)."""
-        if not (request.user.is_superuser or request.user.groups.filter(name='admins_group').exists()):
+        if not (request.user.is_superuser or user_is_global_admin(request.user)):
             return Response({'detail': 'Only admins can verify.'}, status=403)
         period = self.get_object()
         if period.status != 'submitted':
@@ -112,7 +113,7 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         """Reject a submitted period (admin/admins_group only)."""
-        if not (request.user.is_superuser or request.user.groups.filter(name='admins_group').exists()):
+        if not (request.user.is_superuser or user_is_global_admin(request.user)):
             return Response({'detail': 'Only admins can reject.'}, status=403)
         period = self.get_object()
         if period.status != 'submitted':
@@ -195,6 +196,33 @@ class GWPViewSet(viewsets.ModelViewSet):
     permission_classes = [AdminOrSuperuserOnly]
 
 
+class CalculationWritePermission(BasePermission):
+    """
+    Read: any authenticated user can list/view calculations.
+    Write (create/update/delete): requires admins_group or analysts_group role
+    on the target module, or global admin.
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        # Write requires admin or analyst role on the module
+        if user.is_superuser or user_is_global_admin(user):
+            return True
+        # DRF serializers use the FK field name 'module', but callers may also
+        # pass 'module_id' as a query param or data key.
+        module_id = (
+            request.data.get('module_id') or request.query_params.get('module_id') or
+            request.data.get('module') or request.query_params.get('module')
+        )
+        if not module_id:
+            return False
+        from accounts.rbac_utils import user_has_module_role
+        return user_has_module_role(user, module_id, [ADMINS_GROUP, "analysts_group"])
+
+
 class CalculationViewSet(viewsets.ModelViewSet):
     """
     ViewSet for emission calculations.
@@ -208,7 +236,7 @@ class CalculationViewSet(viewsets.ModelViewSet):
     - reporting_year: Filter by year
     """
     serializer_class = CalculationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CalculationWritePermission]
     
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):

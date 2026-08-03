@@ -1,14 +1,12 @@
 # File: accounts/permissions.py
-
-# File: accounts/permissions.py
 from rest_framework import permissions
 from .rbac_utils import (
     user_has_global_role, user_has_module_role, get_allowed_org_unit_ids,
     ADMIN_ROLES, get_steward_org_unit_ids, VISIBILITY_ROLES,
 )
-
-# Read-only roles: can view but NOT create/update/delete
-READ_ONLY_ROLES = {"viewers_group", "analysts_group"}
+from .constants import READ_ONLY_ROLES, ADMINS_GROUP, ADMIN_GROUP
+# Read-only roles: can view but NOT create/update/delete (imported from .constants)
+# READ_ONLY_ROLES = {"viewers_group", "analysts_group"}
 
 
 class HasScopedRole(permissions.BasePermission):
@@ -34,7 +32,7 @@ class HasScopedRole(permissions.BasePermission):
 
         if user.is_superuser:
             return True
-        if user_has_global_role(user, ["admin", "admins_group"]):
+        if user_has_global_role(user, ADMIN_ROLES):
             return True
 
         # For write operations, check the user isn't limited to read-only roles
@@ -71,7 +69,7 @@ class HasScopedRole(permissions.BasePermission):
                     pass
         
         if module_id:
-            if user_has_module_role(user, module_id, ["admin", "admins_group"]):
+            if user_has_module_role(user, module_id, ADMIN_ROLES):
                 return True
             if user_has_module_role(user, module_id, required_roles):
                 return True
@@ -82,7 +80,7 @@ class HasScopedRole(permissions.BasePermission):
                 mod = None
             if mod and mod.org_unit_id:
                 allowed_orgs = get_allowed_org_unit_ids(
-                    user, list(required_roles) + ["admin", "admins_group"]
+                    user, list(required_roles) + list(ADMIN_ROLES)
                 )
                 if mod.org_unit_id in allowed_orgs:
                     return True
@@ -109,7 +107,7 @@ class ReadAnyWriteGlobalAdmin(permissions.BasePermission):
             return True
         if user.is_superuser:
             return True
-        return bool(user_has_global_role(user, ['admins_group']))
+        return bool(user_has_global_role(user, [ADMINS_GROUP]))
 
 
 class ReadScopedWriteAdmin(permissions.BasePermission):
@@ -130,7 +128,7 @@ class ReadScopedWriteAdmin(permissions.BasePermission):
         if request.method not in permissions.SAFE_METHODS:
             if user.is_superuser:
                 return True
-            return bool(user_has_global_role(user, ['admins_group']))
+            return bool(user_has_global_role(user, [ADMINS_GROUP]))
         
         # Read operations: use HasScopedRole logic
         required_roles = getattr(view, 'required_role', None)
@@ -141,7 +139,7 @@ class ReadScopedWriteAdmin(permissions.BasePermission):
         
         if user.is_superuser:
             return True
-        if user_has_global_role(user, ["admin", "admins_group"]):
+        if user_has_global_role(user, ADMIN_ROLES):
             return True
         
         module_id = request.query_params.get("module_id") or request.data.get("module_id")
@@ -168,7 +166,7 @@ class ReadScopedWriteAdmin(permissions.BasePermission):
                 pass
         
         if module_id:
-            if user_has_module_role(user, module_id, ["admin", "admins_group"]):
+            if user_has_module_role(user, module_id, ADMIN_ROLES):
                 return True
             if user_has_module_role(user, module_id, required_roles):
                 return True
@@ -179,7 +177,7 @@ class ReadScopedWriteAdmin(permissions.BasePermission):
                 mod = None
             if mod and mod.org_unit_id:
                 allowed_orgs = get_allowed_org_unit_ids(
-                    user, list(required_roles) + ["admin", "admins_group"]
+                    user, list(required_roles) + list(ADMIN_ROLES)
                 )
                 if mod.org_unit_id in allowed_orgs:
                     return True

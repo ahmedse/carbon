@@ -433,7 +433,7 @@ def create_users_and_roles(org_units, modules):
             'last_name': 'Hassan',
             'password': 'TestUser_132',
             'roles': [
-                {'group': 'carbon_admin', 'org_unit': None, 'module': None},
+                {'group': 'admins_group', 'org_unit': None, 'module': None},
             ]
         },
         {

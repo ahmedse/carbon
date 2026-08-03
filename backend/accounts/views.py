@@ -17,6 +17,7 @@ from .serializers import (
 from .permissions import HasScopedRole, CanManageScopedRoles
 from .rbac_utils import user_is_global_admin, get_steward_org_unit_ids
 from .services import RoleResolutionService, AppManifestService
+from .constants import PROTECTED_GROUPS
 from rest_framework.exceptions import PermissionDenied
 from django.db.models import Q
 from rest_framework.decorators import action, api_view, permission_classes
@@ -165,8 +166,7 @@ class GroupViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         group = self.get_object()
-        protected_groups = {'admin', 'carbon_data_owners_group', 'carbon_analysts_group'}
-        if group.name in protected_groups:
+        if group.name in PROTECTED_GROUPS:
             return Response(
                 {'error': f'Cannot delete protected group: {group.name}'},
                 status=status.HTTP_400_BAD_REQUEST,

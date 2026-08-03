@@ -69,8 +69,9 @@ class GroupSerializer(serializers.ModelSerializer):
         return ScopedRole.objects.filter(group=obj, is_active=True).values('user').distinct().count()
 
     def get_role_type(self, obj):
+        from .constants import VISIBILITY_ROLES, ADMINS_GROUP, ADMIN_GROUP
         name = obj.name.lower()
-        platform_roles = {'admin', 'admins_group', 'audit', 'steward', 'dataowners_group', 'data_owners_group', 'analysts_group', 'data_analysts_group'}
+        platform_roles = {ADMIN_GROUP, ADMINS_GROUP, 'audit', 'steward', 'dataowners_group', 'data_owners_group', 'analysts_group', 'data_analysts_group'}
         if name in platform_roles or name.startswith('admin'):
             return 'platform'
         if '_' in name:
@@ -78,10 +79,11 @@ class GroupSerializer(serializers.ModelSerializer):
         return 'platform'
 
     def get_app_id(self, obj):
+        from .constants import ADMINS_GROUP, ADMIN_GROUP
         name = obj.name.lower()
         if '_' not in name:
             return None
-        if name in {'admins_group', 'admin', 'audit', 'steward'}:
+        if name in {ADMINS_GROUP, ADMIN_GROUP, 'audit', 'steward'}:
             return None
         return name.split('_', 1)[0]
 
@@ -97,7 +99,8 @@ class GroupSerializer(serializers.ModelSerializer):
         return any(token in name for token in ['data_owner', 'dataowner', 'analyst', 'steward'])
 
     def get_is_protected(self, obj):
-        return obj.name.lower() in {'admin', 'admins_group', 'carbon_data_owners_group', 'carbon_analysts_group'}
+        from .constants import PROTECTED_GROUPS
+        return obj.name.lower() in PROTECTED_GROUPS
 
     def get_description(self, obj):
         try:

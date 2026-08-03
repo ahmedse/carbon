@@ -2,6 +2,11 @@
 from django.db import models
 from core.models import Module
 from .models import ScopedRole
+from .constants import (
+    ADMIN_ROLES,
+    VISIBILITY_ROLES,
+    ADMINS_GROUP,
+)
 
 
 def user_has_global_role(user, roles):
@@ -85,8 +90,7 @@ def get_visible_org_units(user):
 
 
 # --- Visibility helpers (org-scoped READ access) -------------------------------
-ADMIN_ROLES = ["admin", "admins_group"]
-VISIBILITY_ROLES = ["admins_group", "dataowners_group", "auditors_group", "viewers_group", "analysts_group"]
+# ADMIN_ROLES, VISIBILITY_ROLES imported from .constants
 
 
 def user_is_global_admin(user):
