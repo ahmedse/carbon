@@ -33,5 +33,16 @@ This folder contains everything needed for a complete end-to-end manual test of 
 | URL | What |
 |-----|------|
 | http://localhost:5179/carbon/my-data | My Data (L1) |
-| http://localhost:8009/admin/ | Django Admin |
 | http://localhost:5179/admin/org-units | Org Units management |
+| http://localhost:5179/admin/users | User management |
+| http://localhost:5179/catalog/products | Module (Data Product) management |
+| http://localhost:5179/schema-admin/table-manager | Table + Field management |
+| http://localhost:5179/catalog/dq-rules | DQ Rules management |
+| http://localhost:5179/carbon/admin/rules | Calculation Rules |
+| http://localhost:5179/carbon/admin/factors | Emission Factors |
+| http://localhost:5179/catalog/policies | Governance Policies |
+| http://localhost:5179/carbon/reporting/periods | Reporting Periods |
+| http://localhost:5179/carbon/calculations | Run Calculations |
+| http://localhost:5179/carbon/verification | Verification |
+
+> **No Django Admin needed.** Everything is in the frontend.

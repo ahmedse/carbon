@@ -71,11 +71,12 @@ AAST (root, already exists)
 # PHASE 1 — FOUNDATION (Admin User)
 
 > **Login as**: `ahmed` / `AdminPa_132`  
-> **Tools**: Django Admin at http://localhost:8009/admin/ + Frontend Admin pages
+> **Tools**: Platform Admin sidebar (Users, Groups, Org Units, Audit) + Catalog Studio + Carbon Configuration pages  
+> **Zero Django Admin needed** — everything is in the frontend at http://localhost:5179
 
 ## 1.1 Create the Alamein Org Unit
 
-- [ ] Go to **Admin > Org Units** in the frontend sidebar
+- [ ] Go to **Platform Admin → Org Units** (`/admin/org-units`)
 - [ ] Click **Add Org Unit**
   - **Name**: `Alamein Campus`
   - **Type**: `campus`
@@ -86,7 +87,7 @@ AAST (root, already exists)
 
 ## 1.2 Create Department Org Units
 
-For each department below, go to Admin > Org Units > Add, set Parent = Alamein Campus:
+For each department below, go to **Platform Admin → Org Units** (`/admin/org-units`) → Add, set Parent = Alamein Campus:
 
 - [ ] **College of Medicine**
   - Name: `College of Medicine / كلية الطب`
@@ -120,8 +121,8 @@ For each department below, go to Admin > Org Units > Add, set Parent = Alamein C
 
 ## 1.3 Create Users
 
-> **OPTION A — Django Admin**: http://localhost:8009/admin/ → Users → Add (do 5 times)  
-> **OPTION B — Shell shortcut** (paste this once):
+> **OPTION A — Platform Admin → Users** (`/admin/users`): Click Add User (do 5 times)  
+> **OPTION B — Shell shortcut** (paste this once in terminal):
 
 ```bash
 cd /home/ahmed/aast/carbon/backend && source ../.venv/bin/activate && python manage.py shell -c "
@@ -160,9 +161,9 @@ print('Done.')
 > You should see ONLY the Transportation module(s). Not Medicine. Not Hotels.  
 > If you see everything, the ScopedRole assignment is wrong (org unit may have a different name — check exact match with the org unit's `name` field).
 
-## 1.4 Create Modules (via Django Admin)
+## 1.4 Create Modules
 
-> http://localhost:8009/admin/core/module/
+> **Catalog Studio → Data Products** (`/catalog/products`) → Add Data Product
 
 For each module below:
 - **Name**: exact match from table
@@ -191,17 +192,17 @@ For each module below:
 > You should see 5 modules (M1, M2, M11, M12, M13, M14, M15).  
 > Also give `alamein.medical` a second ScopedRole for Educational Hospital.
 
-## 1.5 Create Data Tables (via Django Admin)
+## 1.5 Create Data Tables + Fields
 
-> http://localhost:8009/admin/dataschema/datatable/
+> **Schema Admin → Table Manager** (`/schema-admin/table-manager`) — full CRUD for tables AND fields
 
-For each table below:
+For each table below, click **Add Table**:
 - **Module**: select the module
 - **Name**: `table_name` (snake_case — used for API)
 - **Title**: human-readable title
 - **Description**: short description
 
-Then add **Fields** via `http://localhost:8009/admin/dataschema/datafield/`
+Then in the same page, click the **Fields** button on each table row to add fields.
 
 ### M1: Medicine — Diesel Generators
 
@@ -562,9 +563,9 @@ Go to `/carbon/my-data` → Medicine — Electricity → `med_electricity` → e
 - [ ] Verify evidence appears in the Evidence tab
 - [ ] Verify the Trust tab shows "N evidence documents"
 
-## 3.2 Set Up DQ Rules (via Django Admin)
+## 3.2 Set Up DQ Rules
 
-> http://localhost:8009/admin/dq/dqrule/
+> **Catalog Studio → DQ Rules** (`/catalog/dq-rules`) → Add Rule
 
 Create DQ rules for key tables:
 
@@ -589,9 +590,9 @@ Create DQ rules for key tables:
 
 # PHASE 4 — CALCULATIONS
 
-## 4.1 Set Up Calculation Rules (via Django Admin)
+## 4.1 Set Up Calculation Rules
 
-> http://localhost:8009/admin/emissions/calculationrule/
+> **Carbon → Configuration → Calculation Rules** (`/carbon/admin/rules`) → Add Rule
 
 | Table | Activity Field | Emission Factor |
 |---|---|---|
@@ -612,8 +613,7 @@ Create DQ rules for key tables:
 
 ## 4.2 Trigger Calculations
 
-- [ ] In Django Admin, run calculations for each module
-- [ ] Or use the Calculations page in the frontend
+- [ ] Go to **Carbon → Calculations** (`/carbon/calculations`) and run calculations for each module
 - [ ] Verify CO₂e values appear in:
   - [ ] Row detail page — CO₂e chip
   - [ ] Right panel — Lineage tab
@@ -625,7 +625,7 @@ Create DQ rules for key tables:
 
 ## 5.1 Create Governance Policies
 
-> http://localhost:8009/admin/catalog/governancepolicy/
+> **Catalog Studio → Governance Policies** (`/catalog/policies`) → Add Policy
 
 - [ ] **Scope 1 Protection**: Prevent deletion of Scope 1 modules with data
   - policy_type: `module_delete`, scope_type: `scope`, emission_scope: 1, enabled: true
@@ -634,7 +634,7 @@ Create DQ rules for key tables:
 
 ## 5.2 Create Reporting Period
 
-> http://localhost:8009/admin/emissions/reportingperiod/
+> **Carbon → Reporting → Reporting Periods** (`/carbon/reporting/periods`) → Add Period
 
 - [ ] **FY 2024 — Alamein**
   - Name: `FY 2024 — Alamein`
@@ -644,7 +644,7 @@ Create DQ rules for key tables:
 
 ## 5.3 Verification
 
-- [ ] After all data is entered, mark FY 2024 — Alamein as verified
+- [ ] Go to **Carbon → Verification** (`/carbon/verification`) and mark FY 2024 — Alamein as verified
 - [ ] Check that verified data cannot be edited (governance policy test)
 
 ---
