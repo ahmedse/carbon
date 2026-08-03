@@ -58,6 +58,7 @@ import { getOrgDQMetrics } from '../../api/dq';
 import EntityDetailShell from '../../components/entity/EntityDetailShell';
 import useDetailPanel from '../../components/entity/useDetailPanel';
 import { EmptyState, ErrorAlert, LoadingSkeleton, PageHeader, StatCard } from '../../components';
+import { PanelGauge, PanelMetricRow } from '../../components/panel';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 // ── Scope config uses MUI palette colour names ─────────────────────────────
@@ -159,12 +160,10 @@ function TrustTab({ mod, theme, token }) {
   }
 
   const dqScore = mod.quality_score ?? 0;
-  const dqColor = dqScore >= 80 ? 'success.main' : dqScore >= 60 ? 'warning.main' : 'error.main';
   const failingRules = dqMetrics?.failing_rules ?? (mod.quality_score != null && mod.quality_score < 60 ? '—' : 0);
   const isLocked = assetProfile?.governance?.locked ?? false;
   const lastVerified = assetProfile?.governance?.last_verified ?? null;
   const evidenceCount = assetProfile?.evidence_count ?? 0;
-  const qualityStatus = assetProfile?.quality_status ?? (dqScore >= 80 ? 'Passing' : dqScore >= 60 ? 'Warning' : dqScore > 0 ? 'Failing' : 'No data');
 
   return (
     <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -172,78 +171,17 @@ function TrustTab({ mod, theme, token }) {
         Trust
       </Typography>
 
-      {/* DQ Gauge */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-          <CircularProgress
-            variant="determinate"
-            value={Math.min(dqScore, 100)}
-            size={72}
-            thickness={5}
-            sx={{ color: dqColor }}
-          />
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              bottom: 0,
-              right: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.82rem', color: dqColor }}>
-              {Math.round(dqScore)}%
-            </Typography>
-          </Box>
-        </Box>
-        <Box>
-          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>DQ Score</Typography>
-          <Chip
-            label={dqScore >= 80 ? 'Passing' : dqScore >= 60 ? 'Warning' : dqScore > 0 ? 'Failing' : 'No data'}
-            size="small"
-            color={dqScore >= 80 ? 'success' : dqScore >= 60 ? 'warning' : dqScore > 0 ? 'error' : 'default'}
-            variant="outlined"
-            sx={{ height: 20, fontSize: '0.68rem', mt: 0.5 }}
-          />
-        </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <PanelGauge score={dqScore} size={72} label="DQ Score" />
       </Box>
 
       <Divider />
 
-      {/* Detail rows */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 0 }}>
-        {[
-          { label: 'Failing rules', value: `${failingRules}` },
-          { label: 'Locked', value: isLocked ? 'Yes' : 'No' },
-          { label: 'Last verified', value: fmtDate(lastVerified) },
-          { label: 'Evidence', value: `${evidenceCount} docs` },
-          { label: 'Quality status', value: qualityStatus },
-        ].map(({ label, value }) => (
-          <Box
-            key={label}
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: '120px 1fr',
-              gap: 1,
-              py: 1,
-              borderBottom: `1px solid ${theme.palette.divider}`,
-            }}
-          >
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-              {label}
-            </Typography>
-            <Typography
-              component="span"
-              variant="body2"
-              sx={{ fontWeight: 600, color: 'text.primary', fontSize: '0.82rem' }}
-            >
-              {value}
-            </Typography>
-          </Box>
-        ))}
+      <Box>
+        <PanelMetricRow label="Failing rules" value={`${failingRules}`} divider />
+        <PanelMetricRow label="Locked" value={isLocked ? 'Yes' : 'No'} divider />
+        <PanelMetricRow label="Last verified" value={fmtDate(lastVerified)} divider />
+        <PanelMetricRow label="Evidence" value={`${evidenceCount} docs`} divider />
       </Box>
     </Box>
   );
@@ -283,7 +221,7 @@ function ImpactTab({ mod, theme, token }) {
         Impact
       </Typography>
 
-      {/* Dependency chain */}
+      {/* Dependency chain — kept visual */}
       <Box
         sx={{
           display: 'flex',
@@ -306,12 +244,7 @@ function ImpactTab({ mod, theme, token }) {
               label={step.label}
               size="small"
               variant="outlined"
-              sx={{
-                height: 24,
-                fontSize: '0.68rem',
-                fontWeight: 600,
-                borderColor: theme.palette.divider,
-              }}
+              sx={{ height: 24, fontSize: '0.68rem', fontWeight: 600, borderColor: theme.palette.divider }}
             />
             {idx < arr.length - 1 && (
               <Typography sx={{ color: 'text.disabled', fontSize: '0.75rem', mx: -0.25 }}>→</Typography>
@@ -322,53 +255,12 @@ function ImpactTab({ mod, theme, token }) {
 
       <Divider />
 
-      {/* Stats */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 0 }}>
-        {[
-          {
-            label: 'SBTi targets',
-            value: `${sbtiCount} reference${sbtiCount !== 1 ? 's' : ''} this org unit`,
-          },
-          { label: 'Calculations', value: `${rowCount} records linked` },
-          {
-            label: 'Data consumers',
-            value: (
-              <Chip
-                label="Carbon app"
-                size="small"
-                sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }}
-              />
-            ),
-          },
-        ].map(({ label, value }) => (
-          <Box
-            key={label}
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: '120px 1fr',
-              gap: 1,
-              py: 1,
-              borderBottom: `1px solid ${theme.palette.divider}`,
-            }}
-          >
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-              {label}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              {typeof value === 'string' || typeof value === 'number' ? (
-                <Typography
-                  component="span"
-                  variant="body2"
-                  sx={{ fontWeight: 600, color: 'text.primary', fontSize: '0.82rem' }}
-                >
-                  {value}
-                </Typography>
-              ) : (
-                value
-              )}
-            </Box>
-          </Box>
-        ))}
+      <Box>
+        <PanelMetricRow label="SBTi targets" value={`${sbtiCount} reference${sbtiCount !== 1 ? 's' : ''} this org unit`} divider />
+        <PanelMetricRow label="Calculations" value={`${rowCount} records linked`} divider />
+        <PanelMetricRow label="Data consumers" value={(
+          <Chip label="Carbon app" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }} />
+        )} divider />
       </Box>
     </Box>
   );
@@ -650,13 +542,14 @@ export default function MyDataPage() {
     },
   ], [navigate]);
 
-  const { metricsPanel, metricsTabs, activeMetricsTab, onMetricsTabChange, resetTab } = useDetailPanel({
+  const { metricsPanel, metricsTabs, activeMetricsTab, onMetricsTabChange, resetTab, toggleConfigPopup, saveConfig, panelConfigOpen, panelConfig, visibleTabs } = useDetailPanel({
     tabs: [
-      { label: 'Trust',    render: () => <TrustTab mod={selected} theme={theme} token={token} /> },
-      { label: 'Impact',   render: () => <ImpactTab mod={selected} theme={theme} token={token} /> },
-      { label: 'Activity', render: () => <ActivityTab activity={activity} theme={theme} token={token} /> },
+      { label: 'Trust',    description: 'Data quality score, verification status, and evidence completeness', render: () => <TrustTab mod={selected} theme={theme} token={token} /> },
+      { label: 'Impact',   description: 'Environmental impact metrics, SBTi alignment, and data consumers', render: () => <ImpactTab mod={selected} theme={theme} token={token} /> },
+      { label: 'Activity', description: 'Recent changes, calculations, and governance events', render: () => <ActivityTab activity={activity} theme={theme} token={token} /> },
     ],
     storageKey: 'myData:panelTab',
+    configurable: true,
   });
 
   // ── Loading / error states ─────────────────────────────────────────────
@@ -831,6 +724,12 @@ export default function MyDataPage() {
         activeMetricsTab={activeMetricsTab}
         onMetricsTabChange={onMetricsTabChange}
         panelWidthKey="myData:panelWidth"
+        panelConfigurable
+        panelConfig={panelConfig}
+        panelConfigOpen={panelConfigOpen}
+        toggleConfigPopup={toggleConfigPopup}
+        saveConfig={saveConfig}
+        allPanelTabs={['Trust', 'Impact', 'Activity'].map((l) => ({ label: l }))}
       />
 
       <Snackbar open={Boolean(snackbar)} autoHideDuration={4000} onClose={() => setSnackbar(null)}>

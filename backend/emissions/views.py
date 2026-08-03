@@ -286,6 +286,10 @@ class CalculationViewSet(viewsets.ModelViewSet):
         if year:
             queryset = queryset.filter(reporting_year=year)
         
+        data_row_id = self.request.query_params.get('data_row_id')
+        if data_row_id:
+            queryset = queryset.filter(data_row_id=data_row_id)
+        
         queryset = scope_calculations(self.request.user, queryset)
         return queryset
 
@@ -1063,6 +1067,9 @@ class CalculationAuditViewSet(viewsets.ReadOnlyModelViewSet):
         user_id = self.request.query_params.get('user_id')
         if user_id:
             qs = qs.filter(triggered_by_id=user_id)
+        data_table = self.request.query_params.get('data_table')
+        if data_table:
+            qs = qs.filter(data_table_id=data_table)
         return qs
 
 

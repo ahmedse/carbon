@@ -1,5 +1,6 @@
 // File: src/pages/dataschema/tabs/RowOverviewTab.jsx
-// Read-only overview of row data with metadata
+// Read-only overview of row data with metadata, calculation summary, and context.
+// Now receives tableInfo, moduleInfo, calculations from parent for richer display.
 
 import React from 'react';
 import {
@@ -7,156 +8,99 @@ import {
   Paper,
   Typography,
   Grid,
-  Divider,
-  Button,
-  ButtonGroup,
   Card,
   CardContent,
   Stack,
+  Chip,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import DownloadIcon from '@mui/icons-material/Download';
-import RefreshIcon from '@mui/icons-material/Refresh';
 
-export default function RowOverviewTab({ rowData, onRefresh, onClose: _onClose }) {
-  const handleEdit = () => {
-    // Switch to edit tab (handled by parent)
-    window.dispatchEvent(
-      new CustomEvent('switchTab', { detail: { tab: 1 } })
-    );
-  };
+function fmtDate(v) {
+  if (!v) return '—';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+}
 
-  const handleDelete = () => {
-    window.dispatchEvent(new CustomEvent('deleteRow'));
-  };
+export default function RowOverviewTab({ rowData, tableInfo, moduleInfo, calculations }) {
 
-  // Extract metadata and field data
+  // ── Extract metadata and field data ────────────────────────────────
   const metadataFields = ['created_at', 'updated_at', 'created_by', 'updated_by'];
   const nonDataFields = ['id', 'data_table', 'is_archived', 'version', 'values', ...metadataFields];
   const metadata = {};
   const fieldData = {};
 
-  // Extract metadata
   Object.entries(rowData).forEach(([key, value]) => {
-    if (metadataFields.includes(key)) {
-      metadata[key] = value;
-    }
+    if (metadataFields.includes(key)) metadata[key] = value;
   });
 
-  // Extract field data from the 'values' object
   if (rowData.values && typeof rowData.values === 'object') {
-    Object.entries(rowData.values).forEach(([key, value]) => {
-      fieldData[key] = value;
-    });
+    Object.entries(rowData.values).forEach(([key, value]) => { fieldData[key] = value; });
   }
 
-  // Fallback: if values is not nested, extract from rowData
   if (Object.keys(fieldData).length === 0) {
     Object.entries(rowData).forEach(([key, value]) => {
-      if (!nonDataFields.includes(key)) {
-        fieldData[key] = value;
-      }
+      if (!nonDataFields.includes(key)) fieldData[key] = value;
     });
   }
 
-  const convertRowToCSV = (data) => {
-    const keys = Object.keys(data);
-    const headers = keys.join(',');
-    const values = keys
-      .map((k) => {
-        const v = data[k];
-        if (typeof v === 'string' && v.includes(',')) {
-          return `"${v.replace(/"/g, '""')}"`;
-        }
-        return v;
-      })
-      .join(',');
-    return `${headers}\n${values}`;
-  };
-
-  const handleDownload = () => {
-    const csv = convertRowToCSV(fieldData);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `row-${rowData.id}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  // ── Calculations summary ───────────────────────────────────────────
+  const totalCo2e = (calculations || []).reduce((sum, c) => sum + (Number(c.co2e_kg) || 0), 0);
+  const calcCount = (calculations || []).length;
 
   return (
     <Box sx={{ maxWidth: '800px' }}>
-      {/* Action buttons */}
-      <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-        <ButtonGroup variant="outlined" size="small">
-          <Button
-            startIcon={<EditIcon />}
-            onClick={handleEdit}
-            title="Switch to edit mode"
-          >
-            Edit
-          </Button>
-          <Button
-            startIcon={<DeleteIcon />}
-            onClick={handleDelete}
-            color="error"
-            title="Delete this row"
-          >
-            Delete
-          </Button>
-          <Button
-            startIcon={<DownloadIcon />}
-            onClick={handleDownload}
-            title="Download as CSV"
-          >
-            Download
-          </Button>
-          <Button
-            startIcon={<RefreshIcon />}
-            onClick={onRefresh}
-            title="Refresh row data"
-          >
-            Refresh
-          </Button>
-        </ButtonGroup>
-      </Box>
 
-      {/* Data fields */}
+
+      {/* ── Calculation summary card ───────────────────────────────── */}
+      {calcCount > 0 && (
+        <Card sx={{ mb: 3, borderLeft: '4px solid', borderColor: 'warning.main' }}>
+          <CardContent sx={{ py: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>Emission Calculations</Typography>
+            {(calculations || []).map((c, i) => (
+              <Box key={c.id || i} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5, borderBottom: i < calcCount - 1 ? '1px solid' : 'none', borderColor: 'divider' }}>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontSize: '0.78rem', fontWeight: 500 }}>
+                    {c.emission_factor__name || c.emission_factor_name || `Factor #${c.emission_factor_id}`}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled' }}>
+                    {c.calculation_rule__name || c.calculation_rule_name || '—'} · {c.category || '—'} · {fmtDate(c.calculated_at)}
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: 'right', ml: 2 }}>
+                  <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'warning.main' }}>
+                    {(Number(c.co2e_kg) / 1000).toFixed(3)} tCO₂e
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.6rem', color: 'text.disabled' }}>
+                    {c.co2e_kg != null ? `${Number(c.co2e_kg).toFixed(1)} kg` : '—'} · Scope {c.scope || '—'}
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
+            {calcCount > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+                <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>Total</Typography>
+                <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'warning.main' }}>
+                  {(totalCo2e / 1000).toFixed(3)} tCO₂e
+                </Typography>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+
+      {/* ── Data fields ────────────────────────────────────────────── */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-            Row Data
-          </Typography>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Row Data</Typography>
           <Grid container spacing={2}>
             {Object.entries(fieldData).map(([key, value]) => (
               <Grid size={{ xs: 12, sm: 6 }} key={key}>
                 <Box>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: 'block',
-                      fontWeight: 600,
-                      color: '#666',
-                      textTransform: 'capitalize',
-                      mb: 0.5,
-                    }}
-                  >
+                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: 'text.secondary', textTransform: 'capitalize', mb: 0.5 }}>
                     {key.replace(/_/g, ' ')}
                   </Typography>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: '#1a1a1a',
-                      wordBreak: 'break-word',
-                      fontFamily: 'monospace',
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    {value !== null && value !== undefined
-                      ? String(value)
-                      : '(empty)'}
+                  <Typography variant="body2" sx={{ color: 'text.primary', wordBreak: 'break-word', fontFamily: 'monospace', fontSize: '0.9rem' }}>
+                    {value !== null && value !== undefined ? String(value) : '(empty)'}
                   </Typography>
                 </Box>
               </Grid>
@@ -165,80 +109,22 @@ export default function RowOverviewTab({ rowData, onRefresh, onClose: _onClose }
         </CardContent>
       </Card>
 
-      {/* Metadata */}
+      {/* ── Metadata ───────────────────────────────────────────────── */}
       {Object.keys(metadata).length > 0 && (
         <Card>
           <CardContent>
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-              Metadata
-            </Typography>
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Metadata</Typography>
             <Stack spacing={1.5}>
               {metadata.created_at && (
                 <Box>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: 'block',
-                      fontWeight: 600,
-                      color: '#666',
-                      mb: 0.3,
-                    }}
-                  >
-                    Created
-                  </Typography>
-                  <Typography variant="body2">
-                    {new Date(metadata.created_at).toLocaleString()}
-                  </Typography>
+                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: '#666', mb: 0.3 }}>Created</Typography>
+                  <Typography variant="body2">{new Date(metadata.created_at).toLocaleString()}</Typography>
                 </Box>
               )}
               {metadata.updated_at && (
                 <Box>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: 'block',
-                      fontWeight: 600,
-                      color: '#666',
-                      mb: 0.3,
-                    }}
-                  >
-                    Last Modified
-                  </Typography>
-                  <Typography variant="body2">
-                    {new Date(metadata.updated_at).toLocaleString()}
-                  </Typography>
-                </Box>
-              )}
-              {metadata.created_by && (
-                <Box>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: 'block',
-                      fontWeight: 600,
-                      color: '#666',
-                      mb: 0.3,
-                    }}
-                  >
-                    Created By
-                  </Typography>
-                  <Typography variant="body2">{metadata.created_by}</Typography>
-                </Box>
-              )}
-              {metadata.updated_by && (
-                <Box>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: 'block',
-                      fontWeight: 600,
-                      color: '#666',
-                      mb: 0.3,
-                    }}
-                  >
-                    Modified By
-                  </Typography>
-                  <Typography variant="body2">{metadata.updated_by}</Typography>
+                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: '#666', mb: 0.3 }}>Updated</Typography>
+                  <Typography variant="body2">{new Date(metadata.updated_at).toLocaleString()}</Typography>
                 </Box>
               )}
             </Stack>

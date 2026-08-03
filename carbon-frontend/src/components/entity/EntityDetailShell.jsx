@@ -6,6 +6,7 @@ import {
   Chip,
   Divider,
   Grid,
+  IconButton,
   List,
   ListItemButton,
   ListItemText,
@@ -13,10 +14,13 @@ import {
   Stack,
   Tab,
   Tabs,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material';
+import SettingsIcon from '@mui/icons-material/Settings';
 import ResizableDivider from '../../pages/dataschema/ResizableDivider';
+import { PanelConfigDialog } from '../panel';
 
 const DEFAULT_PANEL_WIDTH = 350;
 const MIN_PANEL_WIDTH = 250;
@@ -72,6 +76,13 @@ export default function EntityDetailShell({
   activeMetricsTab,
   onMetricsTabChange,
   panelWidthKey = 'entityDetail:panelWidth',
+  // Configurable panel
+  panelConfigurable = false,
+  panelConfig = {},
+  panelConfigOpen = false,
+  toggleConfigPopup,
+  saveConfig,
+  allPanelTabs = [],
 }) {
   const theme = useTheme();
   const [panelWidth, setPanelWidth] = useState(() => {
@@ -107,19 +118,13 @@ export default function EntityDetailShell({
   };
 
   const handleMainTabChange = (event, nextValue) => {
-    if (onMainTabChange) {
-      onMainTabChange(event, nextValue);
-    } else {
-      setInternalMainTab(nextValue);
-    }
+    setInternalMainTab(nextValue);
+    if (onMainTabChange) onMainTabChange(event, nextValue);
   };
 
   const handleMetricsTabChange = (event, nextValue) => {
-    if (onMetricsTabChange) {
-      onMetricsTabChange(event, nextValue);
-    } else {
-      setInternalMetricsTab(nextValue);
-    }
+    setInternalMetricsTab(nextValue);
+    if (onMetricsTabChange) onMetricsTabChange(event, nextValue);
   };
 
   const handlePanelWidthChange = (newWidth) => {
@@ -152,12 +157,12 @@ export default function EntityDetailShell({
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          height: '100vh',
+          height: '100%',
           bgcolor: 'background.default',
         }}
       >
         {/* Header */}
-        <Box sx={{ bgcolor: 'white' }}>{header}</Box>
+        <Box sx={{ bgcolor: 'white', px: 2, pt: 1.5, pb: 0 }}>{header}</Box>
 
         {/* Three-Column Layout */}
         <Box
@@ -264,13 +269,14 @@ export default function EntityDetailShell({
                 >
                   {/* Metrics Tabs */}
                   {metricsTabs?.length > 0 && (
-                    <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'white' }}>
+                    <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'white', display: 'flex', alignItems: 'center' }}>
                       <Tabs
                         value={metricsTabIndex}
                         onChange={handleMetricsTabChange}
                         variant="scrollable"
                         scrollButtons="auto"
                         sx={{
+                          flex: 1,
                           minHeight: 36,
                           '& .MuiTab-root': {
                             textTransform: 'none',
@@ -284,6 +290,13 @@ export default function EntityDetailShell({
                           <Tab key={idx} label={tab.label} />
                         ))}
                       </Tabs>
+                      {panelConfigurable && (
+                        <Tooltip title="Configure tabs">
+                          <IconButton size="small" onClick={toggleConfigPopup} sx={{ mr: 0.5 }}>
+                            <SettingsIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                     </Box>
                   )}
 
@@ -293,6 +306,17 @@ export default function EntityDetailShell({
                       ? metricsTabs[metricsTabIndex]?.render?.() ?? metricsPanel
                       : metricsPanel}
                   </Box>
+
+                  {/* Config Dialog */}
+                  {panelConfigurable && (
+                    <PanelConfigDialog
+                      open={panelConfigOpen}
+                      onClose={toggleConfigPopup}
+                      tabs={allPanelTabs.map((t) => ({ label: typeof t === 'string' ? t : t.label }))}
+                      config={panelConfig}
+                      onSave={saveConfig}
+                    />
+                  )}
                 </Box>
               )}
             </>

@@ -13,9 +13,25 @@ from catalog.models import AssetProfile
 
 # (table_name, date_field, activity_field)
 TABLES = [
+    # AASTMT legacy tables (month/total_* field names)
     ("monthly_electricity", "month", "total_kwh"),
     ("monthly_water", "month", "total_m3"),
     ("monthly_chilled_water", "month", "total_tr"),
+    # AASTMT 2026 variant tables (period_month/consumption_* field names)
+    ("monthly_electricity", "period_month", "consumption_kwh"),
+    ("monthly_chilled_water", "period_month", "consumption_tr"),
+    ("monthly_water", "period_month", "consumption_m3"),
+    # Comprehensive 2026 seed tables
+    ("electricity_consumption", "period_month", "kwh"),
+    ("water_consumption", "period_month", "m3"),
+    ("chilled_water", "period_month", "tr_hours"),
+    ("fuel_consumption", "period_month", "diesel_liters"),
+    ("refrigerant_usage", "period_month", "r134a_kg"),
+    ("employee_commute", "period_month", "car_km"),
+    ("fleet_fuel_log", "period_month", "gasoline_liters"),
+    ("generator_fuel_log", "period_month", "diesel_liters"),
+    ("paper_consumption", "period_month", "paper_reams"),
+    ("vessel_fuel_log", "period_month", "diesel_liters"),
 ]
 
 

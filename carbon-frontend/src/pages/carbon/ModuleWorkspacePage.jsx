@@ -15,6 +15,7 @@ import { fetchOwnerActivity } from '../../api/emissions';
 import { getTableDQMetrics } from '../../api/dq';
 import { fetchAssetProfiles, fetchGovernancePolicies, fetchGovernanceEvents, fetchTableRelations } from '../../api/catalog';
 import { CarbonDataGrid, PageHeader, EmptyState, ErrorAlert, LoadingSkeleton } from '../../components';
+import { PanelGauge, PanelMetricRow, PanelTable } from '../../components/panel';
 import EntityDetailShell from '../../components/entity/EntityDetailShell';
 import useDetailPanel from '../../components/entity/useDetailPanel';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
@@ -66,7 +67,7 @@ function DetailRow({ label, value, theme }) {
   );
 }
 
-/* ── Health tab — DQ gauge + per-table breakdown ──────────────────────────── */
+/* ── Health tab — DQ gauge + per-table breakdown (PanelTable) ─────────────── */
 
 function ModuleHealthTab({ module, tables, token }) {
   const [tableMetrics, setTableMetrics] = useState({});
@@ -85,11 +86,22 @@ function ModuleHealthTab({ module, tables, token }) {
   }, [token, tables]);
 
   const dqScore = module?.quality_score ?? 0;
-  const dqColor = dqScore >= 80 ? 'success.main' : dqScore >= 60 ? 'warning.main' : 'error.main';
   const completion = tables.length > 0
     ? Math.round((tables.filter((t) => (t.row_count || 0) > 0).length / tables.length) * 100)
     : 0;
   const tablesWithData = tables.filter((t) => (t.row_count || 0) > 0);
+
+  const qualityRows = tablesWithData.map((t) => {
+    const m = tableMetrics[t.id];
+    return {
+      id: t.id,
+      name: t.name || t.title,
+      score: m ? `${Math.round(m.score)}%` : '—',
+      scoreVal: m?.score ?? 0,
+      failing: m ? `${m.failing_rules ?? 0}/${m.total_rules ?? 0}` : '—',
+      rows: t.row_count ?? 0,
+    };
+  });
 
   return (
     <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -97,31 +109,12 @@ function ModuleHealthTab({ module, tables, token }) {
         Health
       </Typography>
 
-      {/* DQ Gauge */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-          <CircularProgress variant="determinate" value={Math.min(dqScore, 100)} size={72} thickness={5} sx={{ color: dqColor }} />
-          <Box sx={{ position: 'absolute', top: 0, left: 0, bottom: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.82rem', color: dqColor }}>
-              {dqScore > 0 ? `${Math.round(dqScore)}%` : '—'}
-            </Typography>
-          </Box>
-        </Box>
-        <Box>
-          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>DQ Score</Typography>
-          <Chip
-            label={dqScore >= 80 ? 'Passing' : dqScore >= 60 ? 'Warning' : dqScore > 0 ? 'Failing' : 'No data'}
-            size="small"
-            color={dqScore >= 80 ? 'success' : dqScore >= 60 ? 'warning' : dqScore > 0 ? 'error' : 'default'}
-            variant="outlined"
-            sx={{ height: 20, fontSize: '0.68rem', mt: 0.5 }}
-          />
-        </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <PanelGauge score={dqScore} size={72} label="DQ Score" />
       </Box>
 
       <Divider />
 
-      {/* Completion bar */}
       <Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
           <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.72rem' }}>Completion</Typography>
@@ -133,47 +126,29 @@ function ModuleHealthTab({ module, tables, token }) {
         </Typography>
       </Box>
 
-      {/* Per-table DQ */}
-      {tablesWithData.length > 0 && (
-        <>
-          <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 700, fontSize: '0.72rem' }}>
-            Table Quality
-          </Typography>
-          {tablesWithData.map((t) => {
-            const m = tableMetrics[t.id];
-            const score = m?.score ?? 0;
-            const sColor = score >= 80 ? 'success.main' : score >= 60 ? 'warning.main' : 'error.main';
-            return (
-              <Box key={t.id}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 600 }}>{t.name || t.title}</Typography>
-                  <Typography sx={{ fontSize: '0.68rem', color: sColor, fontWeight: 700 }}>
-                    {m ? `${Math.round(score)}%` : '—'}
-                  </Typography>
-                </Box>
-                <LinearProgress
-                  variant="determinate"
-                  value={Math.min(score, 100)}
-                  sx={{ height: 4, borderRadius: 99, mb: 0.25, '& .MuiLinearProgress-bar': { bgcolor: sColor } }}
-                />
-                {m && (
-                  <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled' }}>
-                    {m.failing_rules ?? 0} failing / {m.total_rules ?? 0} rules
-                  </Typography>
-                )}
-              </Box>
-            );
-          })}
-        </>
+      {qualityRows.length > 0 && (
+        <PanelTable
+          dense
+          title="Table Quality"
+          columns={[
+            { key: 'name', header: 'Table', width: '40%', render: (v) => <Typography sx={{ fontSize: '0.72rem', fontWeight: 600 }}>{v}</Typography> },
+            { key: 'score', header: 'DQ%', width: '16%', align: 'right', render: (v, row) => (
+              <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: row.scoreVal >= 80 ? 'success.main' : row.scoreVal >= 60 ? 'warning.main' : 'error.main' }}>{v}</Typography>
+            )},
+            { key: 'failing', header: 'Rules', width: '16%', align: 'right' },
+            { key: 'rows', header: 'Rows', width: '16%', align: 'right' },
+          ]}
+          rows={qualityRows}
+          emptyText="No quality data available."
+        />
       )}
     </Box>
   );
 }
 
-/* ── Lineage tab — upstream/downstream table dependencies ─────────────────── */
+/* ── Lineage tab — upstream/downstream table dependencies (PanelTable) ────── */
 
 function ModuleLineageTab({ tables, token }) {
-  const theme = useTheme();
   const [relations, setRelations] = useState([]);
 
   useEffect(() => {
@@ -198,59 +173,34 @@ function ModuleLineageTab({ tables, token }) {
         Lineage
       </Typography>
 
-      {/* Upstream */}
-      <Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-          <LinkIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700 }}>Upstream ({upstream.length})</Typography>
-        </Box>
-        {upstream.length === 0 ? (
-          <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled' }}>No upstream dependencies</Typography>
-        ) : (
-          <Stack spacing={1}>
-            {upstream.map((r) => (
-              <Box key={r.id} sx={{ pl: 2.5, py: 0.75, borderLeft: `2px solid ${theme.palette.divider}` }}>
-                <Typography sx={{ fontSize: '0.72rem', fontWeight: 600 }}>{r.from_table_name || `Table #${r.from_table}`}</Typography>
-                <Typography sx={{ fontSize: '0.65rem', color: 'text.secondary' }}>{r.relation_type || 'references'}</Typography>
-              </Box>
-            ))}
-          </Stack>
-        )}
-      </Box>
+      <PanelTable
+        dense
+        title={`Upstream (${upstream.length})`}
+        columns={[
+          { key: 'name', header: 'Source Table', width: '60%', render: (v) => <Typography sx={{ fontSize: '0.72rem', fontWeight: 600 }}>{v}</Typography> },
+          { key: 'type', header: 'Relation', width: '40%' },
+        ]}
+        rows={upstream.map((r) => ({ id: r.id, name: r.from_table_name || `Table #${r.from_table}`, type: r.relation_type || 'references' }))}
+        emptyText="No upstream dependencies"
+      />
 
-      {/* Downstream */}
-      <Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-          <AccountTreeIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700 }}>Downstream ({downstream.length})</Typography>
-        </Box>
-        {downstream.length === 0 ? (
-          <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled' }}>No downstream consumers</Typography>
-        ) : (
-          <Stack spacing={1}>
-            {downstream.map((r) => (
-              <Box key={r.id} sx={{ pl: 2.5, py: 0.75, borderLeft: `2px solid ${theme.palette.primary.light}` }}>
-                <Typography sx={{ fontSize: '0.72rem', fontWeight: 600 }}>{r.to_table_name || `Table #${r.to_table}`}</Typography>
-                <Typography sx={{ fontSize: '0.65rem', color: 'text.secondary' }}>{r.relation_type || 'consumes'}</Typography>
-              </Box>
-            ))}
-          </Stack>
-        )}
-      </Box>
-
-      {upstream.length === 0 && downstream.length === 0 && (
-        <Typography sx={{ fontSize: '0.72rem', color: 'text.disabled', textAlign: 'center', py: 2 }}>
-          No lineage data available
-        </Typography>
-      )}
+      <PanelTable
+        dense
+        title={`Downstream (${downstream.length})`}
+        columns={[
+          { key: 'name', header: 'Consumer Table', width: '60%', render: (v) => <Typography sx={{ fontSize: '0.72rem', fontWeight: 600 }}>{v}</Typography> },
+          { key: 'type', header: 'Relation', width: '40%' },
+        ]}
+        rows={downstream.map((r) => ({ id: r.id, name: r.to_table_name || `Table #${r.to_table}`, type: r.relation_type || 'consumes' }))}
+        emptyText="No downstream consumers"
+      />
     </Box>
   );
 }
 
-/* ── Governance tab — policy status, lock state, access ────────────────────── */
+/* ── Governance tab — policy status, lock state, access (PanelMetricRow + PanelTable) ── */
 
 function ModuleGovernanceTab({ module, tables, token }) {
-  const theme = useTheme();
   const [policies, setPolicies] = useState([]);
   const [assetProfile, setAssetProfile] = useState(null);
 
@@ -279,7 +229,6 @@ function ModuleGovernanceTab({ module, tables, token }) {
         Governance
       </Typography>
 
-      {/* Lock status */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
         {isLocked ? (
           <LockIcon sx={{ fontSize: 28, color: 'error.main' }} />
@@ -298,36 +247,33 @@ function ModuleGovernanceTab({ module, tables, token }) {
 
       <Divider />
 
-      <DetailRow label="Org unit" value={module?.org_unit_name || module?.name} theme={theme} />
-      <DetailRow label="Last verified" value={fmtDate(lastVerified)} theme={theme} />
-      <DetailRow label="Tables" value={`${tables.length}`} theme={theme} />
+      <PanelMetricRow label="Org unit" value={module?.org_unit_name || module?.name} divider />
+      <PanelMetricRow label="Last verified" value={fmtDate(lastVerified)} divider />
+      <PanelMetricRow label="Tables" value={`${tables.length}`} divider />
 
-      {/* Policies */}
       {relevantPolicies.length > 0 && (
-        <>
-          <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 700, fontSize: '0.72rem', mt: 1 }}>
-            Active Policies ({relevantPolicies.length})
-          </Typography>
-          <Stack spacing={0.75}>
-            {relevantPolicies.map((p) => (
-              <Box key={p.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <ShieldIcon sx={{ fontSize: 14, color: 'secondary.main' }} />
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 600 }}>{p.name}</Typography>
-                  <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled' }}>
-                    {p.policy_type} · {p.scope_type}
-                  </Typography>
-                </Box>
+        <PanelTable
+          dense
+          title={`Active Policies (${relevantPolicies.length})`}
+          columns={[
+            { key: 'name', header: 'Policy', width: '60%', render: (v) => (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <ShieldIcon sx={{ fontSize: 14, color: 'secondary.main', flexShrink: 0 }} />
+                <Typography sx={{ fontSize: '0.72rem', fontWeight: 600 }}>{v}</Typography>
               </Box>
-            ))}
-          </Stack>
-        </>
+            )},
+            { key: 'scopeType', header: 'Scope', width: '20%' },
+            { key: 'policyType', header: 'Type', width: '20%' },
+          ]}
+          rows={relevantPolicies.map((p) => ({ id: p.id, name: p.name, scopeType: p.scope_type || '—', policyType: p.policy_type || '—' }))}
+          emptyText="No active policies."
+        />
       )}
     </Box>
   );
 }
 
-/* ── Activity tab — enhanced with categorization + filters ─────────────────── */
+/* ── Activity tab — chip filter + PanelTable ──────────────────────────────── */
 
 function ModuleActivityTab({ activity, token }) {
   const [filter, setFilter] = useState('all');
@@ -368,7 +314,7 @@ function ModuleActivityTab({ activity, token }) {
 
   return (
     <Box sx={{ p: 1.5 }}>
-      <Stack direction="row" spacing={0.5} sx={{ mb: 1.5, flexWrap: 'wrap', gap: 0.5 }}>
+      <Box sx={{ mb: 1.5, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
         {filterOptions.map((opt) => {
           const isActive = filter === opt.value;
           return (
@@ -383,31 +329,53 @@ function ModuleActivityTab({ activity, token }) {
             />
           );
         })}
-      </Stack>
+      </Box>
 
-      {filtered.length === 0 ? (
-        <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>No recent activity.</Typography>
-      ) : (
-        <Stack divider={<Divider flexItem />} spacing={0}>
-          {filtered.map((item, i) => {
-            const cfg = ACTIVITY_KINDS[item.kind] || ACTIVITY_KINDS.data_change;
-            const Icon = cfg.Icon;
-            return (
-              <Box key={item.id ?? i} sx={{ py: 1, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                <Icon sx={{ fontSize: 14, mt: '2px', color: `${cfg.color}.main`, flexShrink: 0 }} />
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontSize: '0.72rem', lineHeight: 1.35 }}>
-                    {fmtActivityText(item)}
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled', mt: 0.25 }}>
-                    {fmtDate(item.reported_at || item.timestamp || item.created_at)}
-                  </Typography>
-                </Box>
-              </Box>
-            );
-          })}
-        </Stack>
-      )}
+      <PanelTable
+        dense
+        columns={[
+          {
+            key: 'kind',
+            header: 'Type',
+            width: '15%',
+            render: (v) => {
+              const cfg = ACTIVITY_KINDS[v] || ACTIVITY_KINDS.data_change;
+              const Icon = cfg.Icon;
+              return (
+                <Chip
+                  icon={<Icon sx={{ fontSize: 12 }} />}
+                  label={cfg.label}
+                  size="small"
+                  color={cfg.color}
+                  variant="outlined"
+                  sx={{ height: 20, fontSize: '0.6rem' }}
+                />
+              );
+            },
+          },
+          { key: 'detail', header: 'Detail', width: '60%', render: (v) => (
+            <Typography sx={{ fontSize: '0.72rem' }}>{fmtActivityText(v)}</Typography>
+          )},
+          {
+            key: 'when',
+            header: 'When',
+            width: '25%',
+            align: 'right',
+            render: (v) => (
+              <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled' }}>
+                {fmtDate(v)}
+              </Typography>
+            ),
+          },
+        ]}
+        rows={filtered.map((item, i) => ({
+          id: item.id ?? i,
+          kind: item.kind,
+          detail: item,
+          when: item.reported_at || item.timestamp || item.created_at,
+        }))}
+        emptyText="No recent activity."
+      />
     </Box>
   );
 }
@@ -490,14 +458,15 @@ export default function ModuleWorkspacePage() {
     },
   ], [moduleId, navigate]);
 
-  const { metricsPanel, metricsTabs, activeMetricsTab, onMetricsTabChange, resetTab } = useDetailPanel({
+  const { metricsPanel, metricsTabs, activeMetricsTab, onMetricsTabChange, resetTab, toggleConfigPopup, saveConfig, panelConfigOpen, panelConfig } = useDetailPanel({
     tabs: [
-      { label: 'Health',      render: () => <ModuleHealthTab module={module} tables={tables} token={token} /> },
-      { label: 'Lineage',     render: () => <ModuleLineageTab tables={tables} token={token} /> },
-      { label: 'Governance',  render: () => <ModuleGovernanceTab module={module} tables={tables} token={token} /> },
-      { label: 'Activity',    render: () => <ModuleActivityTab activity={activity} token={token} /> },
+      { label: 'Health',      description: 'Data quality overview across all tables in this source', render: () => <ModuleHealthTab module={module} tables={tables} token={token} /> },
+      { label: 'Lineage',     description: 'Upstream and downstream data dependencies and factor provenance', render: () => <ModuleLineageTab tables={tables} token={token} /> },
+      { label: 'Governance',  description: 'Access controls, verification status, and active policies', render: () => <ModuleGovernanceTab module={module} tables={tables} token={token} /> },
+      { label: 'Activity',    description: 'Recent actions, calculations, and governance events for this source', render: () => <ModuleActivityTab activity={activity} token={token} /> },
     ],
     storageKey: 'moduleWorkspace:panelTab',
+    configurable: true,
   });
 
   if (loading) return <LoadingSkeleton variant="detail" />;
@@ -542,6 +511,12 @@ export default function ModuleWorkspacePage() {
       activeMetricsTab={activeMetricsTab}
       onMetricsTabChange={onMetricsTabChange}
       panelWidthKey="moduleWorkspace:panelWidth"
+      panelConfigurable
+      panelConfig={panelConfig}
+      panelConfigOpen={panelConfigOpen}
+      toggleConfigPopup={toggleConfigPopup}
+      saveConfig={saveConfig}
+      allPanelTabs={['Health', 'Lineage', 'Governance', 'Activity'].map((l) => ({ label: l }))}
     />
   );
 }

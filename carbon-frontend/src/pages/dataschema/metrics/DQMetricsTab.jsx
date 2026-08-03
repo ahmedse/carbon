@@ -1,12 +1,11 @@
 // File: src/pages/dataschema/metrics/DQMetricsTab.jsx
-// DQ Metrics display with results and re-run button
+// DQ Metrics display with results and re-run button — uses PanelTable.
 
 import React, { useState } from 'react';
 import {
   Box,
   Typography,
   Chip,
-  Stack,
   Button,
   CircularProgress,
   Alert,
@@ -17,6 +16,7 @@ import ErrorIcon from '@mui/icons-material/Error';
 import WarningIcon from '@mui/icons-material/Warning';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { authFetch } from '../../../api/api';
+import { PanelTable } from '../../../components/panel';
 
 function notify(message, type = 'info') {
   const event = new CustomEvent('notify', { detail: { message, type } });
@@ -27,57 +27,23 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
   const [running, setRunning] = useState(false);
   const [rerunError, setRerunError] = useState(null);
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'passed':
-        return <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />;
-      case 'failed':
-        return <ErrorIcon sx={{ color: 'error.main', mr: 1 }} />;
-      case 'warning':
-        return <WarningIcon sx={{ color: 'warning.main', mr: 1 }} />;
-      default:
-        return null;
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'passed':
-        return 'success';
-      case 'failed':
-        return 'error';
-      case 'warning':
-        return 'warning';
-      default:
-        return 'default';
-    }
+  const getStatusChip = (passed) => {
+    if (passed) return <Chip icon={<CheckCircleIcon />} label="Pass" size="small" color="success" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />;
+    return <Chip icon={<ErrorIcon />} label="Fail" size="small" color="error" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />;
   };
 
   const handleRerun = async () => {
     setRunning(true);
     setRerunError(null);
-
     try {
-      const response = await authFetch(`dq/run-validation/`, {
+      const response = await authFetch('dq/run-validation/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: {
-          data_table: tableId,
-          row_id: rowId,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        body: { data_table: tableId, row_id: rowId },
       });
-
-      if (!response.ok) {
-        throw new Error(`Validation failed: ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`Validation failed: ${response.status}`);
       notify('Validation run started', 'info');
-      // Optionally refetch metrics after a delay
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      setTimeout(() => { window.location.reload(); }, 2000);
     } catch (err) {
       console.error('Rerun error:', err);
       setRerunError(err.message);
@@ -98,124 +64,93 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
   const status = metrics.status || 'unknown';
   const passed = metrics.passed_count || 0;
   const total = metrics.total_count || 0;
+  const hasRules = total > 0;
   const results = metrics.results || [];
   const timestamp = metrics.last_run || null;
 
+  const statusColor = status === 'passed' ? 'success' : status === 'failed' ? 'error' : 'warning';
+
   return (
-    <Stack spacing={2}>
-      {/* Status badge */}
+    <Box>
+      {/* Status badge + re-run */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           p: 1.5,
-          bgcolor: 'background.dark',
+          bgcolor: 'grey.50',
           borderRadius: 1,
+          mb: 2,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          {getStatusIcon(status)}
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block' }}>
-              Status
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Chip
+            label={hasRules ? `${passed}/${total} Checks Passed` : 'No rules'}
+            color={hasRules ? statusColor : 'default'}
+            size="small"
+            variant="outlined"
+          />
+          {timestamp && (
+            <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
+              Last: {new Date(timestamp).toLocaleString()}
             </Typography>
-            <Chip
-              label={`${passed}/${total} Checks Passed`}
-              color={getStatusColor(status)}
-              size="small"
-              variant="outlined"
-            />
-          </Box>
+          )}
         </Box>
+        <Button
+          startIcon={running ? <CircularProgress size={14} /> : <RefreshIcon sx={{ fontSize: 16 }} />}
+          onClick={handleRerun}
+          disabled={running}
+          size="small"
+          variant="outlined"
+          sx={{ minWidth: 'auto', fontSize: '0.68rem', py: 0.25 }}
+        >
+          {running ? 'Running...' : 'Re-run'}
+        </Button>
       </Box>
 
-      {/* Timestamp */}
-      {timestamp && (
-        <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>
-          Last Run: {new Date(timestamp).toLocaleString()}
-        </Typography>
-      )}
-
-      {/* Re-run error */}
       {rerunError && (
-        <Alert severity="error" sx={{ fontSize: '0.8rem' }}>
+        <Alert severity="error" sx={{ fontSize: '0.8rem', mb: 1.5 }}>
           {rerunError}
         </Alert>
       )}
 
-      {/* Re-run button */}
-      <Button
-        startIcon={running ? <CircularProgress size={16} /> : <RefreshIcon />}
-        onClick={handleRerun}
-        disabled={running}
-        size="small"
-        variant="outlined"
-        fullWidth
-      >
-        {running ? 'Running...' : 'Re-run Validation'}
-      </Button>
+      <Divider sx={{ mb: 1.5 }} />
 
-      <Divider />
-
-      {/* Results list */}
-      {results.length > 0 && (
-        <Box>
-          <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
-            Validation Rules
-          </Typography>
-          <Stack spacing={1}>
-            {results.map((result, idx) => (
-              <Box
-                key={idx}
-                sx={{
-                  p: 1,
-                  bgcolor: 'background.paper',
-                  borderRadius: 0.5,
-                  borderLeft: '3px solid',
-                  borderLeftColor: result.passed ? 'success.main' : 'error.main',
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.3 }}>
-                  {result.passed ? (
-                    <CheckCircleIcon
-                      sx={{ fontSize: '1rem', color: 'success.main', mr: 0.5 }}
-                    />
-                  ) : (
-                    <ErrorIcon
-                      sx={{ fontSize: '1rem', color: 'error.main', mr: 0.5 }}
-                    />
-                  )}
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      fontWeight: 600,
-                      fontSize: '0.8rem',
-                    }}
-                  >
-                    {result.rule_name}
-                  </Typography>
-                </Box>
-                {result.message && (
-                  <Typography
-                    variant="caption"
-                    sx={{ fontSize: '0.75rem', color: 'text.secondary', display: 'block' }}
-                  >
-                    {result.message}
-                  </Typography>
-                )}
-              </Box>
-            ))}
-          </Stack>
-        </Box>
-      )}
-
-      {/* No results */}
-      {results.length === 0 && (
-        <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.8rem' }}>
-          No validation results available
-        </Typography>
-      )}
-    </Stack>
+      {/* Results table via PanelTable */}
+      <PanelTable
+        title="Validation Rules"
+        subtitle={hasRules ? `${passed}/${total} passing` : undefined}
+        columns={[
+          {
+            key: 'passed',
+            header: 'Status',
+            width: '25%',
+            render: (v) => getStatusChip(v),
+          },
+          {
+            key: 'rule_name',
+            header: 'Rule',
+            width: '35%',
+            render: (v) => (
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>{v}</Typography>
+            ),
+          },
+          {
+            key: 'message',
+            header: 'Detail',
+            width: '40%',
+            render: (v) => (
+              <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
+                {v || '—'}
+              </Typography>
+            ),
+          },
+        ]}
+        rows={results}
+        emptyText="No validation rules configured for this table. Add rules in Catalog Studio to enable quality checks."
+        loading={false}
+      />
+    </Box>
   );
 }

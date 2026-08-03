@@ -383,12 +383,13 @@ export default function DataEntryPage() {
 
   const { metricsPanel, metricsTabs, activeMetricsTab, onMetricsTabChange } = useDetailPanel({
     tabs: [
-      { label: 'Row Context',  render: () => <RowContextTab table={tableMeta} module={module} token={token} /> },
-      { label: 'Fields+Qual',  render: () => <FieldsQualityTab fields={fields} token={token} /> },
-      { label: 'Evidence',     render: () => <EvidenceTab tableId={tableId} token={token} /> },
-      { label: 'Calculations', render: () => <CalculationsTab table={tableMeta} moduleId={moduleId} token={token} /> },
+      { label: 'Row Context',  description: 'Data quality scores, asset profile, and key metadata for this table', render: () => <RowContextTab table={tableMeta} module={module} token={token} /> },
+      { label: 'Fields+Qual',  description: 'Field-level completeness, uniqueness, and data type validation', render: () => <FieldsQualityTab fields={fields} token={token} /> },
+      { label: 'Evidence',     description: 'Uploaded documents, certificates, and audit trail for this table', render: () => <EvidenceTab tableId={tableId} token={token} /> },
+      { label: 'Calculations', description: 'Emission factor calculations linked to this table data', render: () => <CalculationsTab table={tableMeta} moduleId={moduleId} token={token} /> },
     ],
     storageKey: 'dataEntry:panelTab',
+    configurable: true,
   });
 
   if (!user || !context) {

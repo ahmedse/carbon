@@ -1,11 +1,9 @@
 // File: src/components/TableDataPage.jsx
 
 import React, { useEffect, useState, useCallback } from "react";
-import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Divider, Chip } from "@mui/material";
-import AttachFileIcon from "@mui/icons-material/AttachFile";
+import { Box, Typography, Button } from "@mui/material";
 import UploadIcon from "@mui/icons-material/Upload";
 import DownloadIcon from "@mui/icons-material/Download";
-import AssignmentIcon from "@mui/icons-material/Assignment";
 import { API_BASE_URL } from "../config";
 import { authFetch } from "../api/api";
 import {
@@ -21,10 +19,7 @@ import {
 } from "../api/dataschema";
 import DataTableGrid from "./DataTableGrid";
 import BulkActionBar from "./BulkActionBar";
-import EvidenceUploader from "./evidence/EvidenceUploader";
-import EvidenceViewer from "./evidence/EvidenceViewer";
 import BulkImportWizard from "./import/BulkImportWizard";
-import DQMetricsDrawer from "./dq/DQMetricsDrawer";
 import { useNotification } from "./NotificationProvider";
 
 /**
@@ -50,11 +45,7 @@ export default function TableDataPage({
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState({});
   const [selected, setSelected] = useState([]);
-  const [selectedRowId, setSelectedRowId] = useState(null);
-  const [showEvidenceModal, setShowEvidenceModal] = useState(false);
-  const [evidenceRefreshKey, setEvidenceRefreshKey] = useState(0);
   const [showImportWizard, setShowImportWizard] = useState(false);
-  const [showDQDrawer, setShowDQDrawer] = useState(false);
 
   const notifyCtx = useNotification();
   const notify = typeof notifyCtx?.notify === "function"
@@ -212,11 +203,6 @@ export default function TableDataPage({
   // Row selection handler - track selected row IDs
   const handleRowSelection = (rowIds) => {
     setSelected(rowIds);
-    if (rowIds.length === 1) {
-      setSelectedRowId(rowIds[0]);
-    } else {
-      setSelectedRowId(null);
-    }
   };
 
   // Handle import completion
@@ -309,30 +295,6 @@ export default function TableDataPage({
         >
           Download Template
         </Button>
-
-        <Button
-          startIcon={<AssignmentIcon />}
-          onClick={() => setShowDQDrawer(true)}
-          variant="outlined"
-          size="small"
-        >
-          Data Quality
-        </Button>
-
-        <Button
-          startIcon={<AttachFileIcon />}
-          onClick={() => {
-            if (selected.length === 1) {
-              setSelectedRowId(selected[0]);
-              setShowEvidenceModal(true);
-            }
-          }}
-          disabled={selected.length !== 1}
-          variant="outlined"
-          size="small"
-        >
-          Evidence
-        </Button>
       </Box>
 
       <DataTableGrid
@@ -359,64 +321,6 @@ export default function TableDataPage({
         onAddNew={null}
       />
 
-      <Dialog
-        open={showEvidenceModal}
-        onClose={(event, reason) => {
-          if (reason === 'backdropClick' || reason === 'escapeKeyDown') {
-            return;
-          }
-          setShowEvidenceModal(false);
-        }}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: {
-            minHeight: '60vh',
-            maxHeight: '90vh',
-            resize: 'both',
-            overflow: 'auto'
-          }
-        }}
-      >
-        <DialogTitle>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="h6">Evidence Attachments</Typography>
-            <Chip label={`Row ID: ${selectedRowId}`} size="small" color="primary" variant="outlined" />
-          </Box>
-        </DialogTitle>
-        
-        <DialogContent dividers>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Upload supporting documents (invoices, receipts, photos, etc.) for audit verification.
-          </Typography>
-          
-          <Box sx={{ mt: 2 }}>
-            <EvidenceUploader
-              dataRowId={selectedRowId}
-              token={token}
-              onUploadComplete={() => setEvidenceRefreshKey(prev => prev + 1)}
-            />
-          </Box>
-          
-          <Divider sx={{ my: 3 }} />
-          
-          <Typography variant="subtitle1" gutterBottom>Attached Evidence</Typography>
-          
-          <EvidenceViewer
-            dataRowId={selectedRowId}
-            token={token}
-            key={evidenceRefreshKey}
-            onDelete={() => setEvidenceRefreshKey(prev => prev + 1)}
-          />
-        </DialogContent>
-        
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={() => setShowEvidenceModal(false)} variant="contained">
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
-
       <BulkImportWizard
         open={showImportWizard}
         onClose={() => setShowImportWizard(false)}
@@ -424,13 +328,6 @@ export default function TableDataPage({
         fields={fields}
         token={token}
         onImportComplete={handleImportComplete}
-      />
-
-      <DQMetricsDrawer
-        open={showDQDrawer}
-        onClose={() => setShowDQDrawer(false)}
-        tableId={tableId}
-        token={token}
       />
     </Box>
   );
