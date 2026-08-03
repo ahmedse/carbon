@@ -12,7 +12,7 @@ class ExportProjectSerializer(serializers.ModelSerializer):
         model = ExportProject
         fields = [
             'id', 'name', 'slug', 'description', 'data_table', 'data_table_title',
-            'format', 'filters', 'schedule', 'is_active', 'owner', 'owner_name',
+            'format', 'filters', 'is_active', 'owner', 'owner_name',
             'job_count', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'slug', 'job_count', 'created_at', 'updated_at']

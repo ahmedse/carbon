@@ -1,4 +1,7 @@
 # importexport/views.py
+import os
+
+from django.http import FileResponse
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -80,6 +83,25 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED
         )
 
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        """
+        GET /importexport/import/{id}/download/
+        Serve the uploaded import file.
+        """
+        job = self.get_object()
+        if not job.file:
+            return Response(
+                {'error': 'No file available'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        job.file.open('rb')
+        return FileResponse(
+            job.file,
+            as_attachment=True,
+            filename=os.path.basename(job.file.name),
+        )
+
 
 class ExportJobViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -93,13 +115,22 @@ class ExportJobViewSet(viewsets.ReadOnlyModelViewSet):
     def download(self, request, pk=None):
         """
         GET /importexport/export/{id}/download/
-        Return the export file if ready.
+        Serve the exported file as a download.
         """
         job = self.get_object()
-        result = ExportService.get_download(job)
-        if 'download_url' in result:
-            return Response(result)
-        return Response(
-            {'error': result['error']},
-            status=result['status_code']
+        if job.status != 'ready':
+            return Response(
+                {'error': f'Export not ready (status: {job.status})'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not job.file:
+            return Response(
+                {'error': 'No file available'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        job.file.open('rb')
+        return FileResponse(
+            job.file,
+            as_attachment=True,
+            filename=os.path.basename(job.file.name),
         )
