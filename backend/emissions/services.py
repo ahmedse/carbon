@@ -510,6 +510,56 @@ class CalculationEngineService:
 
         return result
 
+    @staticmethod
+    def recalculate(calculation):
+        """Re-run a single Calculation with its existing parameters.
+
+        Updates co2e_kg, co2_kg, ch4_kg, n2o_kg using the current
+        emission_factor factor_value.  Save and return the updated instance.
+        """
+        ef = calculation.emission_factor
+        activity = calculation.activity_value
+        calculation.co2e_kg = activity * ef.factor_value
+        calculation.co2_kg = (activity * ef.co2_factor) if ef.co2_factor else None
+        calculation.ch4_kg = (activity * ef.ch4_factor) if ef.ch4_factor else None
+        calculation.n2o_kg = (activity * ef.n2o_factor) if ef.n2o_factor else None
+        calculation.calculated_at = timezone.now()
+        calculation.save(update_fields=[
+            'co2e_kg', 'co2_kg', 'ch4_kg', 'n2o_kg', 'calculated_at',
+        ])
+        return calculation
+
+    @staticmethod
+    def batch_recalculate(*, period_id=None, module_id=None, calculation_ids=None):
+        """Re-run multiple calculations and return counts.
+
+        Accepts filters (period_id, module_id) or an explicit list of
+        calculation IDs.  Returns ``{total, recalculated, failed}``.
+        """
+        qs = Calculation.objects.select_related('emission_factor', 'reporting_period')
+
+        if calculation_ids:
+            qs = qs.filter(id__in=calculation_ids)
+        else:
+            if period_id:
+                qs = qs.filter(reporting_period_id=period_id)
+            if module_id:
+                qs = qs.filter(module_id=module_id)
+            if not period_id and not module_id:
+                return {'total': 0, 'recalculated': 0, 'failed': 0}
+
+        total = qs.count()
+        recalculated = 0
+        failed = 0
+        for calc in qs.iterator():
+            try:
+                CalculationEngineService.recalculate(calc)
+                recalculated += 1
+            except Exception:
+                failed += 1
+
+        return {'total': total, 'recalculated': recalculated, 'failed': failed}
+
 
 # ── Owner Service ──────────────────────────────────────────────────────────
 

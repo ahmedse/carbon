@@ -310,6 +310,60 @@ class CalculationViewSet(viewsets.ModelViewSet):
             ))
         })
 
+    @action(detail=True, methods=['post'])
+    def recalculate(self, request, pk=None):
+        """Re-run a single calculation with its existing parameters."""
+        calculation = self.get_object()
+
+        # Gating: reject if period is locked/verified/closed (E2-B3 pattern)
+        period = calculation.reporting_period
+        if period and period.status in {'locked', 'verified', 'closed'}:
+            return Response(
+                {'detail': f'Reporting period is {period.status} and cannot be recalculated.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        try:
+            updated = CalculationEngineService.recalculate(calculation)
+        except Exception as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        serializer = self.get_serializer(updated)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def batch_recalculate(self, request):
+        """Re-run calculations matching period_id, module_id, or explicit IDs."""
+        period_id = request.data.get('period_id')
+        module_id = request.data.get('module_id')
+        calculation_ids = request.data.get('calculation_ids')
+
+        if not period_id and not module_id and not calculation_ids:
+            return Response(
+                {'detail': 'Provide period_id, module_id, or calculation_ids.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Gating: reject if period is locked/verified/closed (E2-B3 pattern)
+        if period_id:
+            from .models import ReportingPeriod
+            period = ReportingPeriod.objects.filter(id=period_id).first()
+            if period and period.status in {'locked', 'verified', 'closed'}:
+                return Response(
+                    {'detail': f'Reporting period is {period.status} and cannot be recalculated.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+        result = CalculationEngineService.batch_recalculate(
+            period_id=period_id,
+            module_id=module_id,
+            calculation_ids=calculation_ids,
+        )
+        return Response(result)
+
 
 class CalculationSummaryAPIView(APIView):
     """
