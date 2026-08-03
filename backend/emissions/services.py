@@ -10,15 +10,22 @@
 
 from decimal import Decimal
 from collections import defaultdict
+import hashlib
+import json
+import logging
 from django.db.models import Sum, Count, Q, Window, F, Max, Exists, OuterRef
+from django.db import transaction
 from django.utils import timezone
+from django.conf import settings
 
-from .models import ReportingPeriod, EmissionFactor, Calculation, CalculationRule, VerificationRecord
+from .models import ReportingPeriod, EmissionFactor, Calculation, CalculationRule, VerificationRecord, ExportAudit
 from core.models import Module
 from core.services import NotificationService
 from catalog.models import AssetProfile
 from dataschema.models import DataRow, DataTable
 from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units
+
+logger = logging.getLogger(__name__)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -53,7 +60,7 @@ class DashboardService:
     """Compute scope breakdown, category breakdown, monthly trends, and DQ score."""
 
     @staticmethod
-    def get_dashboard_data(user, *, period_id=None, year=None):
+    def get_dashboard_data(user, *, period_id=None, year=None, start_date=None, end_date=None):
         base_qs = scope_calculations(user, Calculation.objects.all())
         qs = base_qs
 
@@ -62,6 +69,8 @@ class DashboardService:
             reporting_period = ReportingPeriod.objects.filter(id=period_id).first()
             if reporting_period:
                 qs = qs.filter(reporting_period=reporting_period)
+        elif start_date and end_date:
+            qs = qs.filter(calculated_at__date__gte=start_date, calculated_at__date__lte=end_date)
         else:
             qs = qs.filter(reporting_year=year or timezone.now().year)
 
@@ -237,35 +246,99 @@ class YearlyComparisonService:
 
     @staticmethod
     def _build_sbti_trajectory(baseline_year, baseline_total, years):
-        """SBTi 1.5°C aligned: 50% reduction by 2030."""
-        target_reduction_by_2030 = 0.50
-        years_to_2030 = 2030 - baseline_year if baseline_year else 10
-        annual_reduction = target_reduction_by_2030 / years_to_2030
+        """Build SBTi-aligned trajectory from committed SBTiTarget records.
+
+        Reads the SBTiTarget table (E3-2). Falls back to 50%-by-2030 linear
+        interpolation only when no targets are found for the baseline year.
+        Baseline year comes from ReportingPeriod.is_baseline (no hardcoded 2020).
+        """
+        from .models import SBTiTarget
 
         targets = []
-        for year in years:
-            years_from_baseline = year - baseline_year if baseline_year else 0
-            target_reduction = min(target_reduction_by_2030, annual_reduction * years_from_baseline)
-            target_value = round(float(baseline_total) * (1 - target_reduction), 2) if baseline_total else 0
-            targets.append({
-                'year': year,
-                'target_co2e_tonnes': target_value,
-                'target_reduction_pct': round(target_reduction * 100, 1),
-            })
+        sbti_targets = SBTiTarget.objects.filter(
+            base_year=baseline_year, status__in=['committed', 'approved']
+        ).order_by('target_year')
+
+        if sbti_targets.exists():
+            # Build trajectory from committed SBTi targets
+            reduction_by_year = {}
+            for st in sbti_targets:
+                reduction_by_year[st.target_year] = float(st.reduction_pct)
+
+            # Sort target years
+            target_years = sorted(reduction_by_year.keys())
+            if not target_years:
+                return targets
+
+            for year in years:
+                if year <= baseline_year:
+                    pct = 0.0
+                elif year >= target_years[-1]:
+                    pct = reduction_by_year[target_years[-1]]
+                else:
+                    # Linear interpolation between nearest target years
+                    prev_year = baseline_year
+                    prev_pct = 0.0
+                    next_year = target_years[-1]
+                    next_pct = reduction_by_year[target_years[-1]]
+                    for ty in target_years:
+                        if ty <= year:
+                            prev_year = ty
+                            prev_pct = reduction_by_year[ty]
+                        if ty >= year and ty < next_year:
+                            next_year = ty
+                            next_pct = reduction_by_year[ty]
+
+                    if next_year == prev_year:
+                        pct = prev_pct
+                    else:
+                        pct = prev_pct + (next_pct - prev_pct) * (year - prev_year) / (next_year - prev_year)
+
+                target_value = round(float(baseline_total) * (1 - pct / 100), 2) if baseline_total else 0
+                targets.append({
+                    'year': year,
+                    'target_co2e_tonnes': target_value,
+                    'target_reduction_pct': round(pct, 1),
+                })
+        else:
+            # Fallback: linear 50%-by-2030 (legacy behavior)
+            target_reduction_by_2030 = 0.50
+            years_to_2030 = 2030 - baseline_year if baseline_year else 10
+            annual_reduction = target_reduction_by_2030 / years_to_2030
+
+            for year in years:
+                years_from_baseline = year - baseline_year if baseline_year else 0
+                target_reduction = min(target_reduction_by_2030, annual_reduction * years_from_baseline)
+                target_value = round(float(baseline_total) * (1 - target_reduction), 2) if baseline_total else 0
+                targets.append({
+                    'year': year,
+                    'target_co2e_tonnes': target_value,
+                    'target_reduction_pct': round(target_reduction * 100, 1),
+                })
+
         return targets
 
 
 # ── Report Service ─────────────────────────────────────────────────────────
 
 class ReportService:
-    """GHG Protocol report generation with scope details and optional CSV."""
+    """GHG Protocol report generation: JSON, CSV, and Excel (xlsx).
+
+    Excel workbook (E3-1):
+      - Summary sheet: scope → category breakdown
+      - By-Gas sheet: CO2/CH4/N2O totals from Calculation gas fields
+      - Detail Rows sheet: per-calculation rows
+      - Org-Unit Rollup sheet: per org-unit totals
+    """
 
     @staticmethod
-    def generate_report(user, *, period_id=None, org_unit_id=None, year=None, report_format='json'):
+    def generate_report(user, *, period_id=None, org_unit_id=None, year=None,
+                        report_format='json', grouping='scope'):
         qs = scope_calculations(
             user,
             Calculation.objects.select_related(
-                'module', 'emission_factor', 'data_row', 'data_row__data_table'
+                'module', 'module__org_unit', 'emission_factor',
+                'data_row', 'data_row__data_table'
             ),
         )
 
@@ -289,15 +362,232 @@ class ReportService:
         scope_details = ReportService._build_scope_details(qs)
         rows = ReportService._build_detail_rows(qs)
 
+        # By-gas totals (E3-1)
+        by_gas = ReportService._build_by_gas(qs)
+
+        # Org-unit rollup (E3-1)
+        org_unit_rollup = ReportService._build_org_unit_rollup(qs)
+
+        # Grouping (month|category) applied to detail rows
+        if grouping == 'month':
+            rows = ReportService._group_by_month(rows, qs)
+        elif grouping == 'category':
+            rows = ReportService._group_by_category(rows)
+
         return {
             'title': f"Carbon Emissions Report - {reporting_period.name if reporting_period else year}",
             'reporting_period': reporting_period,
             'generated_at': timezone.now(),
             'summary': summary,
             'scope_details': scope_details,
+            'by_gas': by_gas,
+            'org_unit_rollup': org_unit_rollup,
             'rows': rows,
             'format': report_format,
+            'grouping': grouping,
         }
+
+    @staticmethod
+    def generate_report_xlsx(data, user=None):
+        """Generate an Excel workbook from report data.
+
+        Returns bytes of the .xlsx file. Also writes an ExportAudit record.
+        """
+        import io
+        import xlsxwriter
+
+        output = io.BytesIO()
+        workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+
+        # Formats
+        header_fmt = workbook.add_format({
+            'bold': True, 'bg_color': '#1a365d', 'font_color': 'white',
+            'border': 1, 'text_wrap': True,
+        })
+        number_fmt = workbook.add_format({'num_format': '#,##0.00', 'border': 1})
+        int_fmt = workbook.add_format({'num_format': '#,##0', 'border': 1})
+        pct_fmt = workbook.add_format({'num_format': '0.0%', 'border': 1})
+        cell_fmt = workbook.add_format({'border': 1})
+
+        # ── Sheet 1: Summary ──
+        ws_summary = workbook.add_worksheet('Summary')
+        ws_summary.write(0, 0, 'Scope', header_fmt)
+        ws_summary.write(0, 1, 'Category', header_fmt)
+        ws_summary.write(0, 2, 'Emissions (tonnes CO2e)', header_fmt)
+        ws_summary.write(0, 3, 'Calculation Count', header_fmt)
+        ws_summary.set_column(0, 0, 20)
+        ws_summary.set_column(1, 1, 30)
+        ws_summary.set_column(2, 2, 22)
+        ws_summary.set_column(3, 3, 18)
+
+        row_idx = 1
+        for sd in data.get('scope_details', []):
+            for cat in sd.get('categories', []):
+                ws_summary.write(row_idx, 0, sd['name'], cell_fmt)
+                ws_summary.write(row_idx, 1, cat['name'], cell_fmt)
+                ws_summary.write(row_idx, 2, cat['emissions_tonnes'], number_fmt)
+                ws_summary.write(row_idx, 3, cat['count'], int_fmt)
+                row_idx += 1
+
+        # ── Sheet 2: By-Gas ──
+        by_gas = data.get('by_gas', {})
+        ws_gas = workbook.add_worksheet('By-Gas')
+        ws_gas.write(0, 0, 'Scope', header_fmt)
+        ws_gas.write(0, 1, 'CO2 (t)', header_fmt)
+        ws_gas.write(0, 2, 'CH4 (t CO2e)', header_fmt)
+        ws_gas.write(0, 3, 'N2O (t CO2e)', header_fmt)
+        ws_gas.write(0, 4, 'Total CO2e (t)', header_fmt)
+        ws_gas.set_column(0, 4, 20)
+
+        gas_row = 1
+        for scope_name, gas_data in by_gas.items():
+            ws_gas.write(gas_row, 0, scope_name, cell_fmt)
+            ws_gas.write(gas_row, 1, gas_data.get('co2_tonnes', 0), number_fmt)
+            ws_gas.write(gas_row, 2, gas_data.get('ch4_tonnes', 0), number_fmt)
+            ws_gas.write(gas_row, 3, gas_data.get('n2o_tonnes', 0), number_fmt)
+            ws_gas.write(gas_row, 4, gas_data.get('total_co2e_tonnes', 0), number_fmt)
+            gas_row += 1
+
+        # ── Sheet 3: Detail Rows ──
+        rows = data.get('rows', [])
+        ws_detail = workbook.add_worksheet('Detail Rows')
+        detail_headers = ['Module', 'Table', 'Category', 'Scope', 'Activity',
+                          'Value', 'Unit', 'Factor', 'CO2e kg', 'CO2e t']
+        for col, h in enumerate(detail_headers):
+            ws_detail.write(0, col, h, header_fmt)
+        ws_detail.set_column(0, 9, 18)
+
+        for i, r in enumerate(rows[:5000], 1):
+            ws_detail.write(i, 0, r.get('module', ''), cell_fmt)
+            ws_detail.write(i, 1, r.get('table', ''), cell_fmt)
+            ws_detail.write(i, 2, r.get('category', ''), cell_fmt)
+            ws_detail.write(i, 3, r.get('scope', ''), int_fmt)
+            ws_detail.write(i, 4, r.get('activity_description', ''), cell_fmt)
+            ws_detail.write(i, 5, float(r.get('activity_value', 0)), number_fmt)
+            ws_detail.write(i, 6, r.get('activity_unit', ''), cell_fmt)
+            ws_detail.write(i, 7, r.get('emission_factor', ''), cell_fmt)
+            ws_detail.write(i, 8, float(r.get('co2e_kg', 0)), number_fmt)
+            ws_detail.write(i, 9, float(r.get('co2e_tonnes', 0)), number_fmt)
+
+        # ── Sheet 4: Org-Unit Rollup ──
+        ou_rollup = data.get('org_unit_rollup', [])
+        ws_ou = workbook.add_worksheet('Org-Unit Rollup')
+        ws_ou.write(0, 0, 'Org Unit', header_fmt)
+        ws_ou.write(0, 1, 'Scope 1 (t)', header_fmt)
+        ws_ou.write(0, 2, 'Scope 2 (t)', header_fmt)
+        ws_ou.write(0, 3, 'Scope 3 (t)', header_fmt)
+        ws_ou.write(0, 4, 'Total (t)', header_fmt)
+        ws_ou.write(0, 5, 'Count', header_fmt)
+        ws_ou.set_column(0, 5, 20)
+
+        for i, ou in enumerate(ou_rollup, 1):
+            ws_ou.write(i, 0, ou.get('org_unit_name', ''), cell_fmt)
+            ws_ou.write(i, 1, ou.get('scope1_tonnes', 0), number_fmt)
+            ws_ou.write(i, 2, ou.get('scope2_tonnes', 0), number_fmt)
+            ws_ou.write(i, 3, ou.get('scope3_tonnes', 0), number_fmt)
+            ws_ou.write(i, 4, ou.get('total_tonnes', 0), number_fmt)
+            ws_ou.write(i, 5, ou.get('count', 0), int_fmt)
+
+        workbook.close()
+        file_bytes = output.getvalue()
+        output.close()
+
+        # Write ExportAudit
+        if user and user.is_authenticated:
+            config_dict = {
+                'period_id': data.get('reporting_period', {}).get('id') if isinstance(data.get('reporting_period'), dict) else None,
+                'org_unit_id': data.get('org_unit_id'),
+                'format': 'xlsx',
+                'grouping': data.get('grouping', 'scope'),
+            }
+            config_json = json.dumps(config_dict, sort_keys=True, default=str)
+            config_hash = hashlib.sha256(config_json.encode()).hexdigest()
+            ExportAudit.objects.create(
+                exported_by=user,
+                report_format='xlsx',
+                config_hash=config_hash,
+                row_count=len(rows),
+                file_size_bytes=len(file_bytes),
+                grouping=data.get('grouping', 'scope'),
+            )
+
+        return file_bytes
+
+    @staticmethod
+    def _build_by_gas(qs):
+        """Aggregate CO2, CH4, N2O totals by scope from Calculation gas fields."""
+        by_scope = {}
+        for scope in [1, 2, 3]:
+            scope_qs = qs.filter(scope=scope)
+            agg = scope_qs.aggregate(
+                co2=Sum('co2_kg'),
+                ch4=Sum('ch4_kg'),
+                n2o=Sum('n2o_kg'),
+                total=Sum('co2e_kg'),
+            )
+            by_scope[SCOPE_NAMES.get(scope, f"Scope {scope}")] = {
+                'co2_tonnes': round(float(agg['co2'] or 0) / 1000, 2),
+                'ch4_tonnes': round(float(agg['ch4'] or 0) / 1000, 2),
+                'n2o_tonnes': round(float(agg['n2o'] or 0) / 1000, 2),
+                'total_co2e_tonnes': round(float(agg['total'] or 0) / 1000, 2),
+            }
+        return by_scope
+
+    @staticmethod
+    def _build_org_unit_rollup(qs):
+        """Per-org-unit scope breakdown."""
+        ou_data = qs.values(
+            'module__org_unit_id', 'module__org_unit__name'
+        ).annotate(
+            scope1=Sum('co2e_kg', filter=Q(scope=1)),
+            scope2=Sum('co2e_kg', filter=Q(scope=2)),
+            scope3=Sum('co2e_kg', filter=Q(scope=3)),
+            total=Sum('co2e_kg'),
+            count=Count('id'),
+        ).order_by('module__org_unit__name')
+
+        return [
+            {
+                'org_unit_id': ou['module__org_unit_id'],
+                'org_unit_name': ou['module__org_unit__name'] or 'Unknown',
+                'scope1_tonnes': round(float(ou['scope1'] or 0) / 1000, 2),
+                'scope2_tonnes': round(float(ou['scope2'] or 0) / 1000, 2),
+                'scope3_tonnes': round(float(ou['scope3'] or 0) / 1000, 2),
+                'total_tonnes': round(float(ou['total'] or 0) / 1000, 2),
+                'count': ou['count'],
+            }
+            for ou in ou_data
+        ]
+
+    @staticmethod
+    def _group_by_month(rows, qs):
+        """Group detail rows by month."""
+        monthly = qs.values('reporting_month').annotate(
+            total_kg=Sum('co2e_kg'), count=Count('id')
+        ).order_by('reporting_month')
+        return [
+            {
+                'month': m['reporting_month'] or 0,
+                'month_name': MONTH_NAMES[m['reporting_month']] if m['reporting_month'] and 1 <= m['reporting_month'] <= 12 else 'Unknown',
+                'co2e_tonnes': round(float(m['total_kg'] or 0) / 1000, 2),
+                'count': m['count'],
+            }
+            for m in monthly
+        ]
+
+    @staticmethod
+    def _group_by_category(rows):
+        """Group detail rows by category."""
+        from collections import defaultdict
+        grouped = defaultdict(lambda: {'co2e_tonnes': 0.0, 'count': 0})
+        for r in rows:
+            cat = r.get('category', 'Unknown')
+            grouped[cat]['co2e_tonnes'] += float(r.get('co2e_tonnes', 0))
+            grouped[cat]['count'] += 1
+        return [
+            {'category': k, 'co2e_tonnes': round(v['co2e_tonnes'], 2), 'count': v['count']}
+            for k, v in sorted(grouped.items())
+        ]
 
     @staticmethod
     def _build_summary(qs):
@@ -514,20 +804,70 @@ class CalculationEngineService:
     def recalculate(calculation):
         """Re-run a single Calculation with its existing parameters.
 
-        Updates co2e_kg, co2_kg, ch4_kg, n2o_kg using the current
-        emission_factor factor_value.  Save and return the updated instance.
+        Supersede pattern (E3-3): creates a NEW Calculation row, marks the
+        old one with superseded_by pointing to the successor.  This preserves
+        full audit history — nothing is ever deleted.
         """
+        from datetime import date
+
         ef = calculation.emission_factor
         activity = calculation.activity_value
-        calculation.co2e_kg = activity * ef.factor_value
-        calculation.co2_kg = (activity * ef.co2_factor) if ef.co2_factor else None
-        calculation.ch4_kg = (activity * ef.ch4_factor) if ef.ch4_factor else None
-        calculation.n2o_kg = (activity * ef.n2o_factor) if ef.n2o_factor else None
-        calculation.calculated_at = timezone.now()
-        calculation.save(update_fields=[
-            'co2e_kg', 'co2_kg', 'ch4_kg', 'n2o_kg', 'calculated_at',
-        ])
-        return calculation
+
+        # Check factor validity (E3-3)
+        activity_date = calculation.activity_date or calculation.calculated_at.date()
+
+        # Guard: Django .create() with string input may leave valid_from/valid_to
+        # as strings rather than datetime.date objects.
+        def _as_date(val):
+            if val is None:
+                return None
+            if isinstance(val, str):
+                return date.fromisoformat(val)
+            if isinstance(val, date):
+                return val
+            return None
+
+        valid_from = _as_date(ef.valid_from)
+        valid_to = _as_date(ef.valid_to)
+
+        if valid_to and valid_to < activity_date:
+            raise ValueError(
+                f"Emission factor '{ef.code}' expired on {valid_to} — "
+                f"cannot calculate for activity date {activity_date}"
+            )
+        if valid_from and valid_from > activity_date:
+            raise ValueError(
+                f"Emission factor '{ef.code}' not yet valid (from {valid_from}) — "
+                f"cannot calculate for activity date {activity_date}"
+            )
+
+        # Create successor
+        successor = Calculation.objects.create(
+            data_row=calculation.data_row,
+            module=calculation.module,
+            emission_factor=ef,
+            activity_value=activity,
+            activity_unit=calculation.activity_unit,
+            co2e_kg=activity * ef.factor_value,
+            co2_kg=(activity * ef.co2_factor) if ef.co2_factor else None,
+            ch4_kg=(activity * ef.ch4_factor) if ef.ch4_factor else None,
+            n2o_kg=(activity * ef.n2o_factor) if ef.n2o_factor else None,
+            scope=calculation.scope,
+            category=calculation.category,
+            reporting_period=calculation.reporting_period,
+            reporting_year=calculation.reporting_year,
+            reporting_month=calculation.reporting_month,
+            activity_date=calculation.activity_date,
+            calculation_method='recalculated',
+            is_stale=False,
+        )
+
+        # Mark old as superseded
+        calculation.superseded_by = successor
+        calculation.is_stale = False
+        calculation.save(update_fields=['superseded_by', 'is_stale'])
+
+        return successor
 
     @staticmethod
     def batch_recalculate(*, period_id=None, module_id=None, calculation_ids=None):
@@ -1060,19 +1400,60 @@ class TargetService:
 
     @staticmethod
     def get_progress(target_id, year):
+        """Return % progress and trajectory vs actual for an SBTi target."""
         from .models import SBTiTarget, Calculation
         from decimal import Decimal
 
         target = SBTiTarget.objects.get(pk=target_id)
-        scopes = target.scope.replace('+', ',').split(',')
+        scope_list = [s.strip() for s in target.scope.replace('+', ',').split(',') if s.strip()]
 
+        # Actual emissions for the requested year
         actual = Calculation.objects.filter(
             module__org_unit_id=target.org_unit_id,
             reporting_year=year,
-            scope__in=scopes,
+            scope__in=scope_list,
         ).aggregate(total=Sum('co2e_kg'))['total'] or Decimal('0')
+        actual_tco2e = float(actual) / 1000.0
 
-        # Progress = how much of the reduction achieved (simplified baseline model)
+        # Baseline cohort (for base_year reduction math)
+        base_qs = Calculation.objects.filter(
+            module__org_unit_id=target.org_unit_id,
+            reporting_year=target.base_year,
+            scope__in=scope_list,
+        )
+
+        # Also try activity_date year if reporting_year rows don't exist yet
+        if not base_qs.exists():
+            base_qs = Calculation.objects.filter(
+                module__org_unit_id=target.org_unit_id,
+                activity_date__year=target.base_year,
+                scope__in=scope_list,
+            )
+        base_total = base_qs.aggregate(total=Sum('co2e_kg'))['total'] or Decimal('0')
+        base_tco2e = float(base_total) / 1000.0
+
+        # Trajectory: linear interpolation from baseline to target
+        trajectory = None
+        span_years = float(target.target_year - target.base_year)
+        if span_years > 0 and base_tco2e > 0:
+            target_multiplier = 1.0 - (float(target.reduction_pct) / 100.0)
+            target_tco2e = base_tco2e * target_multiplier
+            # Linear: tco2e_at_year = base_tco2e - (year - base_year) * annual_reduction
+            annual_reduction = (base_tco2e - target_tco2e) / span_years
+            trajectory_tco2e = base_tco2e - (year - target.base_year) * annual_reduction
+            if trajectory_tco2e < target_tco2e:
+                trajectory_tco2e = target_tco2e  # don't overshoot target
+            trajectory = round(trajectory_tco2e, 2)
+
+        # Progress: (baseline - actual) / (baseline - target) * 100
+        progress_pct = None
+        if base_tco2e > 0 and span_years > 0:
+            target_tco2e = base_tco2e * (1.0 - float(target.reduction_pct) / 100.0)
+            reduction_needed = base_tco2e - target_tco2e
+            reduction_achieved = base_tco2e - actual_tco2e
+            if reduction_needed > 0:
+                progress_pct = round((reduction_achieved / reduction_needed) * 100, 1)
+
         return {
             'target_id': target.id,
             'name': target.name,
@@ -1080,9 +1461,29 @@ class TargetService:
             'target_year': target.target_year,
             'target_type': target.target_type,
             'reduction_pct': float(target.reduction_pct),
-            'actual_tco2e': float(actual),
+            'baseline_tco2e': round(base_tco2e, 2),
+            'actual_tco2e': round(actual_tco2e, 2),
+            'trajectory_tco2e': trajectory,
+            'progress_pct': progress_pct,
             'status': target.status,
+            'year': year,
+            'on_track': actual_tco2e <= trajectory if trajectory else None,
         }
+
+    @staticmethod
+    def mark_stale_for_factor(emission_factor, exclude_pk=None):
+        """E3-3: Mark all non-superseded Calculations for a factor as stale.
+
+        Returns the number of Calculations marked stale.
+        """
+        qs = Calculation.objects.filter(
+            emission_factor=emission_factor,
+            superseded_by__isnull=True,
+            is_stale=False,
+        )
+        if exclude_pk:
+            qs = qs.exclude(pk=exclude_pk)
+        return qs.update(is_stale=True)
 
 
 class ReportConfigService:

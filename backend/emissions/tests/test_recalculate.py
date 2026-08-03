@@ -88,9 +88,11 @@ class CalculationRecalculateTests(TestCase):
         self.assertEqual(Decimal(str(data['activity_value'])), Decimal('100'))
         self.assertEqual(data['emission_factor'], self.factor.id)
 
-        # DB was updated too
+        # E3-3: old calc marked superseded, new calc has updated values
         self.calculation.refresh_from_db()
-        self.assertEqual(self.calculation.co2e_kg, Decimal('530.0'))
+        self.assertIsNotNone(self.calculation.superseded_by_id)
+        successor = Calculation.objects.get(id=self.calculation.superseded_by_id)
+        self.assertEqual(successor.co2e_kg, Decimal('530.0'))
 
     def test_recalculate_404_when_not_found(self):
         url = reverse('emissions:calculation-recalculate', args=[99999])
@@ -157,8 +159,9 @@ class CalculationRecalculateTests(TestCase):
         self.assertEqual(data['recalculated'], 2)
         self.assertEqual(data['failed'], 0)
 
-        # Verify the second calculation was updated
-        row2_calc = Calculation.objects.get(data_row=row2)
+        # E3-3: supersede creates new rows; verify successor for row2
+        row2_calc = Calculation.objects.filter(data_row=row2, superseded_by__isnull=True).first()
+        self.assertIsNotNone(row2_calc)
         self.assertEqual(row2_calc.co2e_kg, Decimal('1060.0'))
 
     def test_batch_recalculate_by_module_id(self):

@@ -39,3 +39,6 @@ requests==2.32.3                        # HTTP requests (pulse_auth, external AP
 
 # Cache
 redis==5.0.1                     # Memory cache / message broker
+
+# Reporting
+xlsxwriter==3.2.2                # Excel export for GHG reports (E3-1)

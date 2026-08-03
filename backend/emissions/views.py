@@ -14,7 +14,7 @@ from decimal import Decimal
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit, ExportAudit
 from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units, user_is_global_admin
 from accounts.constants import ADMINS_GROUP
 from core.models import Module
@@ -31,12 +31,14 @@ from .serializers import (
     SBTiTargetSerializer,
     VerificationRecordSerializer,
     CalculationAuditSerializer,
+    ExportAuditSerializer,
 )
 from .services import (
     scope_calculations,
     DashboardService,
     YearlyComparisonService,
     ReportService,
+    TargetService,
     CalculationEngineService,
     OwnerService,
     MyDataService,
@@ -392,10 +394,13 @@ class CalculationSummaryAPIView(APIView):
             qs = qs.filter(reporting_period_id=period_id)
 
         total_calculations = qs.count()
+        stale_count = qs.filter(is_stale=True).count()  # E3-3
+
         if total_calculations == 0:
             return Response({
                 'period_id': int(period_id) if period_id else None,
                 'total_calculations': 0,
+                'stale_count': 0,
                 'by_scope': {},
                 'by_status': {},
                 'by_module': [],
@@ -444,6 +449,7 @@ class CalculationSummaryAPIView(APIView):
         return Response({
             'period_id': int(period_id) if period_id else None,
             'total_calculations': total_calculations,
+            'stale_count': stale_count,
             'by_scope': by_scope_dict,
             'by_status': {},
             'by_module': by_module,
@@ -509,10 +515,23 @@ class DashboardAPIView(APIView):
 
     def get(self, request):
         period_id = request.query_params.get('reporting_period_id')
-        year = request.query_params.get('year', timezone.now().year)
+        year = request.query_params.get('year')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+
+        # Parse date params if provided
+        from datetime import date as dt_date
+        if start_date:
+            start_date = dt_date.fromisoformat(start_date)
+        if end_date:
+            end_date = dt_date.fromisoformat(end_date)
 
         data = DashboardService.get_dashboard_data(
-            request.user, period_id=period_id, year=int(year) if year else None,
+            request.user,
+            period_id=period_id,
+            year=int(year) if year else None,
+            start_date=start_date,
+            end_date=end_date,
         )
 
         # Serialize reporting_period for the response
@@ -553,7 +572,7 @@ class ReportAPIView(APIView):
     """
     Report API for generating emission reports.
 
-    GET /emissions/report/?project_id=1&reporting_period_id=1&format=json
+    GET /emissions/report/?project_id=1&reporting_period_id=1&output_format=json
 
     Generates a detailed emission report suitable for:
     - GHG Protocol reporting
@@ -567,7 +586,12 @@ class ReportAPIView(APIView):
         period_id = request.query_params.get('reporting_period_id')
         org_unit_id = request.query_params.get('org_unit_id')
         year = request.query_params.get('year', timezone.now().year)
-        report_format = request.query_params.get('output_format', 'json')
+        # Fix E3-1 param drift — accept both 'format' and 'output_format'
+        report_format = (
+            request.query_params.get('output_format')
+            or request.query_params.get('format', 'json')
+        )
+        grouping = request.query_params.get('grouping', 'scope')
 
         data = ReportService.generate_report(
             request.user,
@@ -575,7 +599,20 @@ class ReportAPIView(APIView):
             org_unit_id=org_unit_id,
             year=int(year) if year else None,
             report_format=report_format,
+            grouping=grouping,
         )
+
+        # Excel export (E3-1)
+        if report_format == 'xlsx':
+            xlsx_bytes = ReportService.generate_report_xlsx(data, user=request.user)
+            response = HttpResponse(
+                xlsx_bytes,
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            )
+            response['Content-Disposition'] = (
+                f'attachment; filename="emissions_report_{year}.xlsx"'
+            )
+            return response
 
         # CSV export
         if report_format == 'csv':
@@ -942,6 +979,16 @@ class SBTiTargetViewSet(viewsets.ModelViewSet):
             return SBTiTarget.objects.all()
         return SBTiTarget.objects.filter(org_unit_id__in=allowed)
 
+    @action(detail=True, methods=['get'], url_path='progress')
+    def progress(self, request, pk=None):
+        """E3-2: Return real progress % and trajectory comparison for an SBTi target."""
+        year = int(request.query_params.get('year', timezone.now().year))
+        try:
+            data = TargetService.get_progress(int(pk), year)
+        except SBTiTarget.DoesNotExist:
+            return Response({'error': 'Target not found'}, status=404)
+        return Response(data)
+
 
 class ConsoleAPIView(APIView):
     """
@@ -1016,4 +1063,23 @@ class CalculationAuditViewSet(viewsets.ReadOnlyModelViewSet):
         user_id = self.request.query_params.get('user_id')
         if user_id:
             qs = qs.filter(triggered_by_id=user_id)
+        return qs
+
+
+class ExportAuditViewSet(viewsets.ReadOnlyModelViewSet):
+    """E3-1: Read-only audit trail for report exports (xlsx/csv/pdf)."""
+    serializer_class = ExportAuditSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        from accounts.rbac_utils import get_visible_org_units
+        qs = ExportAudit.objects.select_related(
+            'exported_by', 'period', 'org_unit'
+        ).order_by('-exported_at')
+        allowed = get_visible_org_units(self.request.user)
+        if allowed is not None:
+            qs = qs.filter(org_unit_id__in=allowed)
+        format_filter = self.request.query_params.get('report_format')
+        if format_filter:
+            qs = qs.filter(report_format=format_filter)
         return qs

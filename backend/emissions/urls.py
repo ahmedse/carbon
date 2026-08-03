@@ -26,6 +26,7 @@ from .views import (
     VerificationRecordViewSet,
     CalculationAuditViewSet,
     SBTiTargetViewSet,
+    ExportAuditViewSet,
 )
 
 app_name = 'emissions'
@@ -48,6 +49,9 @@ audit_router.register(r'calculation-audits', CalculationAuditViewSet, basename='
 targets_router = DefaultRouter()
 targets_router.register(r'targets', SBTiTargetViewSet, basename='sbti-target')
 
+export_audit_router = DefaultRouter()
+export_audit_router.register(r'export-audits', ExportAuditViewSet, basename='export-audit')
+
 urlpatterns = [
     # Calculation summary — MUST come before router include to avoid path collision
     path('calculations/summary/', CalculationSummaryAPIView.as_view(), name='calculation-summary'),
@@ -63,6 +67,9 @@ urlpatterns = [
     
     # SBTi target routes
     path('', include(targets_router.urls)),
+    
+    # Export audit routes (E3-1)
+    path('', include(export_audit_router.urls)),
     
     # Dashboard API
     path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),

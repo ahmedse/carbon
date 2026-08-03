@@ -244,6 +244,13 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ── Emissions module settings ─────────────────────────────────────────────
+
+# When True, saving a DataRow triggers automatic recalculation of linked
+# CalculationRules where auto_calculate=True (E3-4).
+# Default: False — manual calculation remains the safe default.
+EMISSIONS_AUTO_CALC = get_env("EMISSIONS_AUTO_CALC", "False").lower() == "true"
+
 # SSL and Security settings (controlled by the environment)
 SECURE_SSL_REDIRECT = get_env(
     "DJANGO_SECURE_SSL_REDIRECT",

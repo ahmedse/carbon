@@ -4,7 +4,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from django.db.models import Sum
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, VerificationRecord, SBTiTarget, CalculationAudit
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, VerificationRecord, SBTiTarget, CalculationAudit, ExportAudit
 
 
 class ReportingPeriodSerializer(serializers.ModelSerializer):
@@ -350,6 +350,17 @@ class CalculationAuditSerializer(serializers.ModelSerializer):
         model = CalculationAudit
         fields = '__all__'
         read_only_fields = ['triggered_at', 'triggered_by_name', 'rule_name', 'table_name', 'period_name']
+
+
+class ExportAuditSerializer(serializers.ModelSerializer):
+    """E3-1: Audit trail for report exports."""
+    exported_by_name = serializers.CharField(source='exported_by.username', read_only=True)
+    period_name = serializers.CharField(source='period.name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = ExportAudit
+        fields = '__all__'
+        read_only_fields = ['exported_at', 'exported_by_name', 'period_name']
 
 
 class ConsoleResponseSerializer(serializers.Serializer):

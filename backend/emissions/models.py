@@ -3,6 +3,7 @@
 
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 
 class ReportingPeriod(models.Model):
@@ -468,6 +469,20 @@ class Calculation(models.Model):
         default='auto',
         help_text="Method used: 'auto', 'manual', 'import', etc."
     )
+
+    # Integrity tracking (E3-3)
+    superseded_by = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='supersedes',
+        help_text="Points to the replacement Calculation that supersedes this one"
+    )
+    is_stale = models.BooleanField(
+        default=False,
+        help_text="True if the emission factor used has been edited since this calculation was created"
+    )
     
     class Meta:
         ordering = ['-calculated_at']
@@ -479,6 +494,7 @@ class Calculation(models.Model):
             models.Index(fields=['category', 'reporting_year']),
             models.Index(fields=['reporting_period']),
             models.Index(fields=['activity_date']),
+            models.Index(fields=['is_stale'], name='calc_is_stale_idx'),
         ]
     
     def __str__(self):
@@ -508,7 +524,8 @@ class Calculation(models.Model):
         from decimal import Decimal
         
         activity_decimal = Decimal(str(activity_value))
-        co2e = activity_decimal * emission_factor.factor_value
+        ef_decimal = Decimal(str(emission_factor.factor_value))
+        co2e = activity_decimal * ef_decimal
         
         # Calculate individual gas components if available
         co2_kg = None
@@ -516,11 +533,11 @@ class Calculation(models.Model):
         n2o_kg = None
         
         if emission_factor.co2_factor:
-            co2_kg = activity_decimal * emission_factor.co2_factor
+            co2_kg = activity_decimal * Decimal(str(emission_factor.co2_factor))
         if emission_factor.ch4_factor:
-            ch4_kg = activity_decimal * emission_factor.ch4_factor
+            ch4_kg = activity_decimal * Decimal(str(emission_factor.ch4_factor))
         if emission_factor.n2o_factor:
-            n2o_kg = activity_decimal * emission_factor.n2o_factor
+            n2o_kg = activity_decimal * Decimal(str(emission_factor.n2o_factor))
         
         # If reporting_period provided, extract year from it if not explicitly given
         if reporting_period and not reporting_year:
@@ -699,7 +716,11 @@ class CalculationRule(models.Model):
             if selector_value and selector_value in self.factor_selector_mapping:
                 ef_code = self.factor_selector_mapping[selector_value]
                 ef = EmissionFactor.objects.filter(code=ef_code, is_active=True).first() or ef
-        
+
+        # E3-3: also ensure the default factor is active
+        if ef and not ef.is_active:
+            return None  # silently skip — inactive factors must not produce calculations
+
         # Get activity date if specified
         activity_date = None
         if self.date_field:
@@ -713,6 +734,26 @@ class CalculationRule(models.Model):
                         activity_date = date_value
                 except (ValueError, TypeError):
                     pass
+
+        # E3-3: Enforce factor validity window against activity date
+        if ef:
+            check_date = activity_date or (timezone.now().date())
+
+            # Guard: Django .create() with string dates may leave them as str
+            def _dt(v):
+                if v is None:
+                    return None
+                if isinstance(v, str):
+                    from datetime import date
+                    return date.fromisoformat(v)
+                return v
+
+            vf = _dt(ef.valid_from)
+            vt = _dt(ef.valid_to)
+            if vt and vt < check_date:
+                return None  # factor expired
+            if vf and vf > check_date:
+                return None  # factor not yet valid
         
         # Determine reporting year
         reporting_year = None
@@ -721,7 +762,6 @@ class CalculationRule(models.Model):
         elif activity_date:
             reporting_year = activity_date.year
         else:
-            from django.utils import timezone
             reporting_year = timezone.now().year
         
         # Extract reporting month from DataRow values
@@ -980,3 +1020,36 @@ class CalculationAudit(models.Model):
 
     def __str__(self):
         return f"Audit #{self.id} — {self.get_trigger_type_display()} by {self.triggered_by} ({self.created_count}c/{self.skipped_count}s/{self.error_count}e)"
+
+
+class ExportAudit(models.Model):
+    """Immutable audit trail for every report export.
+
+    Records who exported what, when, with which parameters, and the resulting file size.
+    Written per generated report so admins can trace data exfiltration.
+    """
+    exported_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="User who triggered the export"
+    )
+    exported_at = models.DateTimeField(auto_now_add=True)
+    report_format = models.CharField(max_length=20, help_text="e.g., 'xlsx', 'csv', 'json'")
+    config_hash = models.CharField(max_length=64, help_text="SHA-256 hash of the report config parameters")
+    period_id = models.PositiveIntegerField(null=True, blank=True)
+    org_unit_id = models.PositiveIntegerField(null=True, blank=True)
+    year = models.PositiveIntegerField(null=True, blank=True)
+    grouping = models.CharField(max_length=20, blank=True, default='scope')
+    row_count = models.PositiveIntegerField(default=0)
+    file_size_bytes = models.PositiveIntegerField(default=0, help_text="Size of the generated file in bytes")
+
+    class Meta:
+        verbose_name = "Export Audit"
+        verbose_name_plural = "Export Audits"
+        ordering = ['-exported_at']
+        indexes = [
+            models.Index(fields=['-exported_at'], name='export_audit_exported_at_idx'),
+            models.Index(fields=['exported_by', '-exported_at'], name='export_audit_exported_by_idx'),
+        ]
+
+    def __str__(self):
+        return f"Export #{self.id} — {self.report_format} by {self.exported_by} ({self.row_count} rows)"
