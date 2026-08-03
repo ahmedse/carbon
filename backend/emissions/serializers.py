@@ -30,11 +30,40 @@ class VerificationRecordSerializer(serializers.ModelSerializer):
     period_status = serializers.CharField(source='reporting_period.status', read_only=True)
     period_start_date = serializers.DateField(source='reporting_period.start_date', read_only=True)
     period_end_date = serializers.DateField(source='reporting_period.end_date', read_only=True)
+    period_label = serializers.SerializerMethodField(read_only=True)
+    total_co2e_tonnes = serializers.SerializerMethodField(read_only=True)
+    scope_summary = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = VerificationRecord
         fields = '__all__'
-        read_only_fields = ['created_at', 'verifier_name', 'period_name', 'period_status', 'period_start_date', 'period_end_date']
+        read_only_fields = [
+            'created_at', 'verifier_name', 'period_name', 'period_status',
+            'period_start_date', 'period_end_date', 'period_label',
+            'total_co2e_tonnes', 'scope_summary',
+        ]
+
+    def get_period_label(self, obj):
+        return f"{obj.reporting_period.name} ({obj.reporting_period.start_date} – {obj.reporting_period.end_date})"
+
+    def get_total_co2e_tonnes(self, obj):
+        from .models import Calculation
+        total = Calculation.objects.filter(
+            reporting_period=obj.reporting_period
+        ).aggregate(total=Sum('co2e_kg'))['total']
+        if total is None:
+            return None
+        return round(total / 1000, 2)
+
+    def get_scope_summary(self, obj):
+        from .models import Calculation
+        scopes = Calculation.objects.filter(
+            reporting_period=obj.reporting_period
+        ).values('scope').annotate(total_kg=Sum('co2e_kg'))
+        return {
+            s['scope']: round((s['total_kg'] or 0) / 1000, 2)
+            for s in scopes
+        }
 
 
 class EmissionFactorSerializer(serializers.ModelSerializer):

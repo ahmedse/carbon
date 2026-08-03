@@ -94,6 +94,51 @@ class ReportingPeriod(models.Model):
         today = timezone.now().date()
         return self.start_date <= today <= self.end_date
 
+    # ── State machine ──────────────────────────────────────────────────
+
+    VALID_TRANSITIONS = {
+        'draft': ['open'],
+        'open': ['locked'],
+        'locked': ['submitted'],
+        'submitted': ['verified', 'rejected'],
+        'rejected': ['submitted'],
+        'verified': ['closed'],
+        'closed': [],
+    }
+
+    def can_transition_to(self, new_status):
+        """Return True if the requested status transition is permitted."""
+        return new_status in self.VALID_TRANSITIONS.get(self.status, [])
+
+    def transition_to(self, new_status, user=None):
+        """Advance the reporting period status with validation and optional audit emission."""
+        if new_status == self.status:
+            return self
+        if not self.can_transition_to(new_status):
+            raise ValueError(
+                f"Invalid transition: {self.status} -> {new_status}"
+            )
+        old_status = self.status
+        self.status = new_status
+        update_fields = ['status']
+        if new_status == 'submitted':
+            from django.utils import timezone
+            self.submitted_at = timezone.now()
+            update_fields.append('submitted_at')
+        self.save(update_fields=update_fields)
+
+        if user is not None:
+            from catalog.audit_utils import emit_governance_event
+            emit_governance_event(
+                entity_type='ReportingPeriod',
+                entity_id=self.id,
+                action='transition',
+                before={'status': old_status},
+                after={'status': self.status},
+                user=user,
+            )
+        return self
+
 
 class VerificationRecord(models.Model):
     """Tracks verification actions on reporting periods."""

@@ -13,7 +13,7 @@ from collections import defaultdict
 from django.db.models import Sum, Count, Q, Window, F, Max, Exists, OuterRef
 from django.utils import timezone
 
-from .models import ReportingPeriod, EmissionFactor, Calculation, CalculationRule
+from .models import ReportingPeriod, EmissionFactor, Calculation, CalculationRule, VerificationRecord
 from core.models import Module
 from catalog.models import AssetProfile
 from dataschema.models import DataRow, DataTable
@@ -1107,3 +1107,62 @@ class ReportConfigService:
             'module_breakdown': module_breakdown,
             'generated_at': timezone.now().isoformat(),
         }
+
+
+# ── Verification Service ──────────────────────────────────────────────────
+
+class VerificationService:
+    """Orchestrates the reporting period verification workflow.
+
+    Views delegate here — never contain business logic directly.
+    """
+
+    @staticmethod
+    def submit(period, user):
+        """Transition a draft period to submitted and create a pending VerificationRecord."""
+        period.transition_to('submitted', user)
+        VerificationRecord.objects.update_or_create(
+            reporting_period=period,
+            verifier=user,
+            defaults={'status': 'pending', 'notes': ''},
+        )
+        return period
+
+    @staticmethod
+    def verify(period, user):
+        """Verify a submitted period (admin only). Uses update_or_create so
+        re-verification by the same admin updates instead of raising IntegrityError."""
+        from accounts.rbac_utils import user_is_global_admin
+        from django.core.exceptions import PermissionDenied
+
+        if not user_is_global_admin(user):
+            raise PermissionDenied("Only admins can verify reporting periods.")
+
+        period.transition_to('verified', user)
+        VerificationRecord.objects.update_or_create(
+            reporting_period=period,
+            verifier=user,
+            defaults={'status': 'verified', 'verified_at': timezone.now()},
+        )
+        return period
+
+    @staticmethod
+    def reject(period, user, notes=''):
+        """Reject a submitted period with notes (admin only)."""
+        from accounts.rbac_utils import user_is_global_admin
+        from django.core.exceptions import PermissionDenied
+
+        if not user_is_global_admin(user):
+            raise PermissionDenied("Only admins can reject reporting periods.")
+
+        period.transition_to('rejected', user)
+        VerificationRecord.objects.update_or_create(
+            reporting_period=period,
+            verifier=user,
+            defaults={
+                'status': 'rejected',
+                'notes': notes,
+                'verified_at': timezone.now(),
+            },
+        )
+        return period

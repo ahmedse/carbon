@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission, SAFE_METHODS
+from django.core.exceptions import PermissionDenied
 from django.db.models import Sum, Count, Q, Max
 from django.utils import timezone
 from decimal import Decimal
@@ -41,6 +42,7 @@ from .services import (
     MyDataService,
     ConsoleService,
     ReportConfigService,
+    VerificationService,
 )
 
 
@@ -83,52 +85,38 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
-        """Submit period for verification."""
+        """Submit period for verification. Delegates to VerificationService."""
         period = self.get_object()
-        if period.status != 'draft':
-            return Response({'detail': 'Only draft periods can be submitted.'}, status=400)
-        period.status = 'submitted'
-        period.submitted_at = timezone.now()
-        period.save()
+        try:
+            VerificationService.submit(period, request.user)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
         return Response(ReportingPeriodSerializer(period).data)
 
     @action(detail=True, methods=['post'])
     def verify(self, request, pk=None):
-        """Verify a submitted period (admin/admins_group only)."""
-        if not (request.user.is_superuser or user_is_global_admin(request.user)):
-            return Response({'detail': 'Only admins can verify.'}, status=403)
+        """Verify a submitted period (admin only). Delegates to VerificationService."""
         period = self.get_object()
-        if period.status != 'submitted':
-            return Response({'detail': 'Only submitted periods can be verified.'}, status=400)
-        period.status = 'verified'
-        period.save()
-        VerificationRecord.objects.create(
-            reporting_period=period,
-            verifier=request.user,
-            status='verified',
-            verified_at=timezone.now(),
-        )
-        return Response(ReportingPeriodSerializer(period).data, status=201)
+        try:
+            VerificationService.verify(period, request.user)
+        except PermissionDenied as e:
+            return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        return Response(ReportingPeriodSerializer(period).data)
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        """Reject a submitted period (admin/admins_group only)."""
-        if not (request.user.is_superuser or user_is_global_admin(request.user)):
-            return Response({'detail': 'Only admins can reject.'}, status=403)
+        """Reject a submitted period with notes (admin only). Delegates to VerificationService."""
         period = self.get_object()
-        if period.status != 'submitted':
-            return Response({'detail': 'Only submitted periods can be rejected.'}, status=400)
-        period.status = 'rejected'
-        period.save()
         notes = request.data.get('notes', '')
-        VerificationRecord.objects.create(
-            reporting_period=period,
-            verifier=request.user,
-            status='rejected',
-            notes=notes,
-            verified_at=timezone.now(),
-        )
-        return Response(ReportingPeriodSerializer(period).data, status=201)
+        try:
+            VerificationService.reject(period, request.user, notes)
+        except PermissionDenied as e:
+            return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        return Response(ReportingPeriodSerializer(period).data)
 
 
 class EmissionFactorViewSet(viewsets.ModelViewSet):
@@ -896,6 +884,33 @@ class VerificationRecordViewSet(viewsets.ReadOnlyModelViewSet):
         if period_id:
             qs = qs.filter(reporting_period_id=period_id)
         return qs
+
+    @action(detail=True, methods=['post'])
+    def verify(self, request, pk=None):
+        """Verify the reporting period linked to this verification record."""
+        record = self.get_object()
+        try:
+            VerificationService.verify(record.reporting_period, request.user)
+        except PermissionDenied as e:
+            return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        record.refresh_from_db()
+        return Response(VerificationRecordSerializer(record).data)
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """Reject the reporting period linked to this verification record."""
+        record = self.get_object()
+        notes = request.data.get('notes', '')
+        try:
+            VerificationService.reject(record.reporting_period, request.user, notes)
+        except PermissionDenied as e:
+            return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        record.refresh_from_db()
+        return Response(VerificationRecordSerializer(record).data)
 
 
 class CalculationAuditViewSet(viewsets.ReadOnlyModelViewSet):

@@ -168,7 +168,7 @@ def test_verify_allowed_for_scopedrole_admin(api_client, create_user, create_sco
 
     url = reverse("emissions:reporting-period-verify", args=[period.id])
     resp = api_client.post(url)
-    assert resp.status_code == 201
+    assert resp.status_code == 200
     period.refresh_from_db()
     assert period.status == "verified"
 
