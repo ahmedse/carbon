@@ -415,9 +415,9 @@ class CalculationEngineService:
             if not period:
                 errors['reporting_period_id'] = 'Reporting period not found'
                 return rule, None, errors
-            if period.status == 'closed':
+            if period.status in {'locked', 'verified', 'closed'}:
                 errors['reporting_period_id'] = (
-                    'Reporting period is closed and cannot be used for new calculations.'
+                    f'Reporting period is {period.status} and cannot be used for new calculations.'
                 )
                 return rule, period, errors
 
@@ -456,6 +456,18 @@ class CalculationEngineService:
         period = None
         if period_id:
             period = ReportingPeriod.objects.filter(id=period_id).first()
+            if not period:
+                return {
+                    'total_created': 0, 'total_updated': 0,
+                    'total_skipped': 0, 'total_errors': 1,
+                    'per_table': {}, 'detail': 'Reporting period not found',
+                }
+            if period.status in {'locked', 'verified', 'closed'}:
+                return {
+                    'total_created': 0, 'total_updated': 0,
+                    'total_skipped': 0, 'total_errors': 1,
+                    'per_table': {}, 'detail': f'Reporting period is {period.status} and cannot be used for calculations.',
+                }
 
         result = {
             'total_created': 0,
@@ -1166,3 +1178,47 @@ class VerificationService:
             },
         )
         return period
+
+
+# ── Period Lock Service ──────────────────────────────────────────────────
+
+class PeriodLockService:
+    """Orchestrates period lock/unlock and table-level lock propagation.
+
+    When a period is locked, all DataTables linked via CalculationRule
+    have their is_locked flag set to True, blocking data writes.
+    Unlocking the period flips them back.
+    """
+
+    @staticmethod
+    def open_period(period, user):
+        """Transition a period to 'open' and unlock its tables."""
+        period.transition_to('open', user)
+        PeriodLockService.set_period_tables_locked(period, locked=False)
+        return period
+
+    @staticmethod
+    def lock_period(period, user):
+        """Transition a period to 'locked' and lock its tables."""
+        period.transition_to('locked', user)
+        PeriodLockService.set_period_tables_locked(period, locked=True)
+        return period
+
+    @staticmethod
+    def close_period(period, user):
+        """Transition a period to 'closed'."""
+        period.transition_to('closed', user)
+        return period
+
+    @staticmethod
+    def set_period_tables_locked(period, locked):
+        """Find all DataTables linked via CalculationRule and toggle is_locked.
+
+        Since CalculationRule has a data_table FK but no period FK,
+        we lock all tables that have any active CalculationRule.
+        Row-date-level enforcement is an ADR candidate — not built here.
+        """
+        table_ids = CalculationRule.objects.filter(
+            is_active=True,
+        ).values_list('data_table_id', flat=True).distinct()
+        DataTable.objects.filter(id__in=table_ids).update(is_locked=locked)

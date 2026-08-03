@@ -43,6 +43,7 @@ from .services import (
     ConsoleService,
     ReportConfigService,
     VerificationService,
+    PeriodLockService,
 )
 
 
@@ -114,6 +115,36 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
             VerificationService.reject(period, request.user, notes)
         except PermissionDenied as e:
             return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        return Response(ReportingPeriodSerializer(period).data)
+
+    @action(detail=True, methods=['post'])
+    def open(self, request, pk=None):
+        """Open a period for data entry (from draft or locked). Delegates to PeriodLockService."""
+        period = self.get_object()
+        try:
+            PeriodLockService.open_period(period, request.user)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        return Response(ReportingPeriodSerializer(period).data)
+
+    @action(detail=True, methods=['post'])
+    def lock(self, request, pk=None):
+        """Lock a period for review. Locks linked tables. Delegates to PeriodLockService."""
+        period = self.get_object()
+        try:
+            PeriodLockService.lock_period(period, request.user)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        return Response(ReportingPeriodSerializer(period).data)
+
+    @action(detail=True, methods=['post'])
+    def close(self, request, pk=None):
+        """Close a verified period. Delegates to PeriodLockService."""
+        period = self.get_object()
+        try:
+            PeriodLockService.close_period(period, request.user)
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
         return Response(ReportingPeriodSerializer(period).data)

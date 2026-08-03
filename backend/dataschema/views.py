@@ -247,6 +247,26 @@ class DataRowViewSet(ScopedViewSet):
 
     def get_required_role(self):
         return ["admin", "admins_group", "auditors_group", "dataowners_group", "viewers_group", "analysts_group"]
+
+    def _check_table_not_locked(self, data_table, request):
+        """Raise AppFeedback if the data table is locked and user is not superuser.
+
+        Used to guard against writing data rows on locked tables.
+        The is_locked flag is propagated from period-lock enforcement (E2-B3).
+        """
+        if getattr(data_table, "is_locked", False) and not request.user.is_superuser:
+            raise AppFeedback(
+                code="table_locked",
+                title="Table is locked",
+                detail=f"'{data_table.title}' is locked. Data modifications are blocked.",
+                reasons=["This table has been locked because its reporting period is locked."],
+                remediation=[
+                    "Ask an administrator to unlock the reporting period.",
+                    "Unlocking is available in the period settings.",
+                ],
+                context={"table_id": data_table.id, "is_locked": True},
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
     
     def log_request(self, request, method, endpoint_desc):
         """Centralized request logging for debugging"""
@@ -293,9 +313,30 @@ class DataRowViewSet(ScopedViewSet):
         if data_table_id:
             qs = qs.filter(data_table_id=data_table_id)
         return qs
-    
+
+    def create(self, request, *args, **kwargs):
+        """Guard against writes to locked tables, then delegate to parent."""
+        data_table_id = request.data.get('data_table')
+        if data_table_id:
+            try:
+                data_table = DataTable.objects.get(pk=data_table_id)
+            except DataTable.DoesNotExist:
+                pass
+            else:
+                self._check_table_not_locked(data_table, request)
+        return super().create(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        """Guard against deletes on locked tables."""
+        instance = self.get_object()
+        self._check_table_not_locked(instance.data_table, request)
+        return super().destroy(request, *args, **kwargs)
+
     def update(self, request, *args, **kwargs):
-        """Override to add comprehensive logging for PATCH/PUT operations"""
+        """Override to add lock guard + comprehensive logging for PATCH/PUT operations"""
+        instance = self.get_object()
+        self._check_table_not_locked(instance.data_table, request)
+
         import logging
         logger = logging.getLogger('dataschema.views')
         
@@ -328,7 +369,10 @@ class DataRowViewSet(ScopedViewSet):
             raise
     
     def partial_update(self, request, *args, **kwargs):
-        """Override to add comprehensive logging for PATCH operations"""
+        """Override to add lock guard + comprehensive logging for PATCH operations"""
+        instance = self.get_object()
+        self._check_table_not_locked(instance.data_table, request)
+
         import logging
         logger = logging.getLogger('dataschema.views')
         

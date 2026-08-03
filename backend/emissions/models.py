@@ -99,7 +99,7 @@ class ReportingPeriod(models.Model):
     VALID_TRANSITIONS = {
         'draft': ['open'],
         'open': ['locked'],
-        'locked': ['submitted'],
+        'locked': ['submitted', 'open'],
         'submitted': ['verified', 'rejected'],
         'rejected': ['submitted'],
         'verified': ['closed'],
