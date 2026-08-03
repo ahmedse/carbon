@@ -1,7 +1,7 @@
 # Carbon Domain — Self-Contained Architecture
 
-**Status:** Architecture Design  
-**Date:** 2026-07-25  
+**Status:** ❌ REJECTED — Superseded by `.ai-toolkit/universal/` architecture
+**Date:** 2026-07-25
 **Purpose:** Define a robust, self-contained carbon emissions management system  
 
 ---

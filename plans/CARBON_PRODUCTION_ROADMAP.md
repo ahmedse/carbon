@@ -1,6 +1,6 @@
 # Carbon Production Roadmap — From Platform to User-Ready App
 
-**Current Status:** Phase 1 Backend 100% Complete (Tracks A-F)  
+**Status:** ✅ SUPERSEDED — Replaced by `CARBON_ENTERPRISE_READINESS_PLAN.md` E0-E6
 **Goal:** Production-ready Carbon domain app for end users  
 **Timeline:** 2-3 weeks for MVP user deployment  
 

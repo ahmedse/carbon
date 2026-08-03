@@ -76,7 +76,7 @@ a new app is AI-ready the moment it registers — the AI reasons over the ontolo
          ↑ built on ↑
 ┌───────────────────────────────────────────────────────────────────────────┐
 │  INFRASTRUCTURE                                                             │
-│  Django + DRF · PostgreSQL + pgvector · Redis · Celery · Object Storage    │
+│  Django + DRF · PostgreSQL · Redis · Celery · Object Storage    │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
@@ -207,7 +207,7 @@ describe('apiFetch 401 handling', () => {
   it('apiFetch throws on non-200 response', async () => {
     const { apiFetch } = await import('../api/api');
     // Mock fetch to return 500
-    global.fetch = vi.fn(() =>
+    globalThis.fetch = vi.fn(() =>
       Promise.resolve({
         ok: false,
         status: 500,
@@ -216,6 +216,6 @@ describe('apiFetch 401 handling', () => {
       })
     );
     await expect(apiFetch('test/')).rejects.toThrow();
-    global.fetch.mockRestore();
+    globalThis.fetch.mockRestore();
   });
 });

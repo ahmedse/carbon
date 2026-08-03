@@ -18,7 +18,7 @@ from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, Calculati
 from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units, user_is_global_admin
 from accounts.constants import ADMINS_GROUP
 from core.models import Module
-from catalog.permissions import AdminOrSuperuserOnly, ReadAnyWriteAdmin
+from accounts.permissions import AdminOrSuperuserOnly, ReadAnyWriteAdmin
 from dataschema.models import DataRow, DataTable
 from .serializers import (
     ReportingPeriodSerializer,

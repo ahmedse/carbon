@@ -47,7 +47,7 @@ Ataccama ONE unifies data quality, governance, catalog, MDM/RDM, and observabili
 
 ### 3.2 AI / semantic / agentic — owned by **Pulse** (external), not built in-repo
 - **Pulse** is a separate semantic + agentic system that **integrates with Carbon** (like other hosted systems). It owns embeddings, RAG, LLM orchestration, and agents.
-- Therefore, **in this repo we do NOT build**: pgvector RAG, an LLM gateway, or a homegrown AI copilot. The existing `ai_copilot` app is **superseded by Pulse** and is out of active scope (to be integrated/replaced, not extended).
+- Therefore, **in this repo we do NOT build**: vector RAG, an LLM gateway, or a homegrown AI copilot. The existing `ai_copilot` app is **superseded by Pulse** and is out of active scope (to be integrated/replaced, not extended).
 - The platform's job is to expose **clean, governed, well-cataloged data + metadata** that Pulse (and other apps) consume.
 
 ### 3.3 Platform scope now — the Data Trust core
@@ -92,7 +92,7 @@ What we build here, inside Django + Postgres:
 └───────────────────────────────────────────────────────────────────────┘
          ↑ built on
 ┌───────────────────────────────────────────────────────────────────────┐
-│  INFRASTRUCTURE: Django + DRF · PostgreSQL + pgvector · Redis          │
+│  INFRASTRUCTURE: Django + DRF · PostgreSQL · Redis          │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -115,7 +115,7 @@ See **[`docs/PLATFORM_APP_MODEL.md`](PLATFORM_APP_MODEL.md)** § 3 for the full 
 - [ ] **Data profiling** — completeness, uniqueness, patterns per field.
 - [ ] **DQ status per table/field** — rules, scoring, surfaced in the catalog.
 
-> AI/semantic/RAG (pgvector, LLM gateway, agents) are **owned by Pulse**, not built here. The in-repo `ai_copilot` app is superseded by Pulse.
+> AI/semantic/RAG (LLM gateway, agents) are **owned by Pulse**, not built here. The in-repo `ai_copilot` app is superseded by Pulse.
 
 **Stage 2 — Data Trust features:**
 - Semantic search over catalog + data (embeddings).

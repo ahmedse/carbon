@@ -218,7 +218,7 @@ def test_protected_groups_imported_from_constants(api_client, create_user, creat
 
 @pytest.mark.django_db
 def test_deployed_groups_resolve_to_canonical():
-    """Groups created by deploy_aastmt_carbon.py use canonical names from constants."""
+    """Groups created by deploy_aastmt management command use canonical names from constants."""
     # Simulate deploy script: create groups by canonical names
     canonical_names = [
         ADMINS_GROUP, DATAOWNERS_GROUP, ANALYSTS_GROUP,

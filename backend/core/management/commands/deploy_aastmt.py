@@ -1,7 +1,6 @@
-#!/usr/bin/env python
 """
-AASTMT Carbon Platform - Complete Deployment Script
-====================================================
+AASTMT Carbon Platform - Complete Deployment (Management Command)
+================================================================
 Executes the full deployment plan for AASTMT Carbon domain system.
 
 This script creates:
@@ -13,19 +12,13 @@ This script creates:
 - 14 scoped role assignments
 - 23 sample data rows for January 2026
 
-Run: python backend/deploy_aastmt_carbon.py
+Usage: python manage.py deploy_aastmt
 """
 
-import os
-import sys
-import django
 from datetime import date, datetime
 from decimal import Decimal
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
-django.setup()
-
+from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.db import transaction
@@ -39,26 +32,19 @@ from emissions.models import EmissionFactor, ReportingPeriod
 
 User = get_user_model()
 
-# Color output
-class Colors:
-    GREEN = '\033[92m'
-    BLUE = '\033[94m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BOLD = '\033[1m'
-    END = '\033[0m'
+# ── Output helpers ─────────────────────────────────────────────────────────
 
 def log_success(msg):
-    print(f"{Colors.GREEN}✓{Colors.END} {msg}")
+    print(f"\033[92m✓\033[0m {msg}")
 
 def log_info(msg):
-    print(f"{Colors.BLUE}→{Colors.END} {msg}")
+    print(f"\033[94m→\033[0m {msg}")
 
 def log_warn(msg):
-    print(f"{Colors.YELLOW}⚠{Colors.END} {msg}")
+    print(f"\033[93m⚠\033[0m {msg}")
 
 def log_header(msg):
-    print(f"\n{Colors.BOLD}{msg}{Colors.END}")
+    print(f"\n\033[1m{msg}\033[0m")
     print("=" * 70)
 
 
@@ -670,46 +656,43 @@ def verify_deployment():
     log_info(f"\n✅ Deployment complete! AASTMT Carbon Platform is ready.")
 
 
-def main():
-    """Execute complete deployment."""
-    print("\n" + "="*70)
-    print(f"{Colors.BOLD}AASTMT CARBON PLATFORM - COMPLETE DEPLOYMENT{Colors.END}")
-    print("="*70)
-    
-    try:
-        with transaction.atomic():
-            org_units = create_org_units()
-            ref_sets = create_reference_sets()
-            modules = create_modules(org_units)
-            tables = create_data_tables(modules)
-            create_users_and_roles(org_units, modules)
-            load_sample_data(tables)
-            verify_deployment()
-        
-        log_header("DEPLOYMENT COMPLETE")
-        log_success("All components deployed successfully!")
-        
-        print("\n" + "="*70)
-        print(f"{Colors.BOLD}LOGIN CREDENTIALS{Colors.END}")
-        print("="*70)
-        print("ahmed             / AdminPa_132     (Platform Admin)")
-        print("ali               / TestUser_132    (Carbon Domain Admin)")
-        print("fatima_facilities / TestUser_132    (Facilities Data Owner)")
-        print("mohammed_transport/ TestUser_132   (Transport Data Owner)")
-        print("sarah_analyst     / TestUser_132    (Carbon Analyst)")
-        print("youssef_energy    / TestUser_132    (Energy Data Entry)")
-        print("layla_auditor     / TestUser_132    (Carbon Auditor)")
-        print("="*70)
-        print("\nAccess frontend at: http://localhost:5179/carbon/")
-        print("API docs at: http://localhost:8009/swagger/")
-        print()
-        
-    except Exception as e:
-        log_warn(f"Deployment error: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+class Command(BaseCommand):
+    help = 'Deploy AASTMT Carbon Platform with org units, modules, tables, users, roles, and sample data'
 
+    def handle(self, *args, **options):
+        """Execute complete deployment."""
+        self.stdout.write('\n' + '=' * 70)
+        self.stdout.write(self.style.MIGRATE_HEADING('AASTMT CARBON PLATFORM - COMPLETE DEPLOYMENT'))
+        self.stdout.write('=' * 70)
 
-if __name__ == '__main__':
-    main()
+        try:
+            with transaction.atomic():
+                org_units = create_org_units()
+                ref_sets = create_reference_sets()
+                modules = create_modules(org_units)
+                tables = create_data_tables(modules)
+                create_users_and_roles(org_units, modules)
+                load_sample_data(tables)
+                verify_deployment()
+
+            self.stdout.write('\n' + '=' * 70)
+            self.stdout.write(self.style.MIGRATE_HEADING('DEPLOYMENT COMPLETE'))
+            self.style.SUCCESS('All components deployed successfully!')
+
+            self.stdout.write('\n' + '=' * 70)
+            self.stdout.write(self.style.MIGRATE_HEADING('LOGIN CREDENTIALS'))
+            self.stdout.write('=' * 70)
+            self.stdout.write('ahmed             / AdminPa_132     (Platform Admin)')
+            self.stdout.write('ali               / TestUser_132    (Carbon Domain Admin)')
+            self.stdout.write('fatima_facilities / TestUser_132    (Facilities Data Owner)')
+            self.stdout.write('mohammed_transport/ TestUser_132   (Transport Data Owner)')
+            self.stdout.write('sarah_analyst     / TestUser_132    (Carbon Analyst)')
+            self.stdout.write('youssef_energy    / TestUser_132    (Energy Data Entry)')
+            self.stdout.write('layla_auditor     / TestUser_132    (Carbon Auditor)')
+            self.stdout.write('=' * 70)
+
+        except Exception as e:
+            self.stderr.write(self.style.ERROR(f'Deployment error: {e}'))
+            import traceback
+            traceback.print_exc()
+            raise

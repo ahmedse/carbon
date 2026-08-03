@@ -47,7 +47,7 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         RBAC Logic:
         - Superusers/staff see all reference sets
         - Regular users see only reference sets in their assigned org_units
-        - If user has no org_unit assignments, show all (for now - permissive)
+        - If user has no org_unit assignments, show nothing (restrictive)
         """
         if getattr(self, 'swagger_fake_view', False):
             return ReferenceSet.objects.none()
@@ -73,10 +73,9 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
             user=user, is_active=True
         ).values_list('org_unit_id', flat=True).distinct()
         
-        # If no org units assigned, show all reference sets (permissive mode)
-        # TODO: Make this restrictive once RBAC is fully implemented
+        # If no org units assigned, show nothing (restrictive mode)
         if not user_org_units:
-            return qs.filter(is_active=True)
+            return qs.none()
         
         # Filter reference sets by domain's org_unit or show all if domain is null
         from catalog.models import DataDomain

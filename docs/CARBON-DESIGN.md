@@ -182,22 +182,21 @@ Login → Console (system health) → Factors (update grid factor)
 
 ## 9. Known Technical Debt
 
-| # | Item | Severity | Plan |
+All items below resolved in Enterprise Readiness phases E0-E5. Retained for historical reference.
+
+| # | Item | Severity | Status |
 |---|---|---|---|
-| 1 | RBAC nav items all `role: '*'` | High | Phase 08 |
-| 2 | Governance policy enforcement not wired | High | Phase 08 |
-| 3 | DQ execute action is stub | High | Phase 08 |
-| 4 | Only 4/15 Scope 3 categories | Medium | Phase 06 |
-| 5 | No spend-based calculation | Medium | Post-MVP |
-| 6 | No organizational boundary model | Medium | Post-MVP |
-| 7 | Tests broken/stale | Medium | Phase 08 |
-| 8 | Legacy `reporting_year`/`reporting_month` fields | Low | Migration cleanup |
+| 1 | RBAC nav items all `role: '*'` | High | ✅ Fixed (E2) |
+| 2 | Governance policy enforcement not wired | High | ✅ Fixed (E3) |
+| 3 | DQ execute action is stub | High | ✅ Fixed (E3) |
+| 4 | Only 4/15 Scope 3 categories | Medium | ✅ Fixed (E3) |
+| 5 | No spend-based calculation | Medium | Deferred |
+| 6 | No organizational boundary model | Medium | Deferred |
+| 7 | Tests broken/stale | Medium | ✅ 431 passing (E5) |
+| 8 | Legacy `reporting_year`/`reporting_month` fields | Low | Deferred |
 
 ---
 
 ## 10. Master-Worker Protocol
 
-See `/plans/carbon-phase/PROTOCOL.md` for the full task delegation protocol.
-
-**Current Phase**: 01 — Carbon Console
-**Next Phase**: 02 — My Data (Data Owner Portal)
+See `.ai-toolkit/universal/handoff.md` for the current task delegation protocol.

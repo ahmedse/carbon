@@ -170,6 +170,22 @@ DATABASES = {
     }
 }
 
+# Cache — Redis when available, local-memory fallback
+_redis_url = os.getenv('REDIS_URL', '')
+if _redis_url:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': _redis_url,
+        },
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        },
+    }
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -237,6 +253,9 @@ STATIC_ROOT = get_env("DJANGO_STATIC_ROOT", BASE_DIR / 'staticfiles')
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = get_env("DJANGO_MEDIA_ROOT", BASE_DIR / 'mediafiles')
+
+# drf-yasg compat (ADR 0003: migrate to drf-spectacular)
+SWAGGER_USE_COMPAT_RENDERERS = False
 
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB

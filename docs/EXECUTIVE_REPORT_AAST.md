@@ -26,16 +26,14 @@ A carbon management system for AAST. Tracks emissions, calculates footprint, gen
 - Detailed breakdowns for operations
 - Target tracking against reduction goals
 
-**AI Assistant**
-Built-in AI that understands carbon data:
-- Ask in plain language: *"What's our biggest emission source?"* or *"Compare this quarter to last year"*
-- Get explanations, not just numbers
-- Identifies anomalies and trends automatically
-- Suggests where to focus reduction efforts
-- Answers questions instantly—no need to wait for analyst reports
-- Learns AAST's specific context over time
-
-Makes carbon expertise accessible to anyone, not just specialists.
+**AI Integration (via Pulse)**
+AI capabilities are provided through Pulse, the external semantic + agentic platform:
+- Ask in plain language via Pulse integration: *"What's our biggest emission source?"* or *"Compare this quarter to last year"*
+- Pulse consumes Carbon's governed data + metadata for context-aware answers
+- The Carbon platform exposes clean, cataloged data that Pulse reasons over
+- Identifies anomalies and trends automatically (Pulse agents)
+- Suggests where to focus reduction efforts (Pulse agents)
+- Makes carbon expertise accessible to anyone, not just specialists
 
 ---
 

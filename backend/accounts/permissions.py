@@ -201,3 +201,43 @@ class CanManageScopedRoles(permissions.BasePermission):
         if user_has_global_role(user, ADMIN_ROLES):
             return True
         return bool(get_steward_org_unit_ids(user))
+
+
+# ── Canonical shared permissions (imported by other apps) ──────────────────
+
+class ReadAnyWriteAdmin(permissions.BasePermission):
+    """Any authenticated user can read; only superusers or admins_group can write.
+    
+    CANONICAL DEFINITION. Other apps should import from accounts.permissions.
+    Uses ScopedRole lookup (not user_has_global_role) — any scoped admin qualifies."""
+    def has_permission(self, request, view):
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if user.is_superuser:
+            return True
+        from .models import ScopedRole
+        return ScopedRole.objects.filter(
+            user=user, is_active=True, group__name='admins_group'
+        ).exists()
+
+
+class AdminOrSuperuserOnly(permissions.BasePermission):
+    """Access restricted to superusers and global admins only (read and write).
+    
+    CANONICAL DEFINITION. Other apps should import from accounts.permissions.
+    Only GLOBAL admin roles (org_unit=None, module=None) qualify; scoped admins denied."""
+    def has_permission(self, request, view):
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if user.is_superuser:
+            return True
+        from .models import ScopedRole
+        return ScopedRole.objects.filter(
+            user=user, is_active=True,
+            group__name__in=['admin', 'admins_group'],
+            org_unit__isnull=True, module__isnull=True,
+        ).exists()

@@ -1,81 +1,78 @@
-# Carbon Management Platform
+# Carbon Data Trust Platform
 
-A robust, extensible system for tracking, calculating, and reporting environmental data (water, electricity, vehicles, etc.) across projects and periods. Built for security, auditability, and future scalability.
+Enterprise carbon emissions management platform. Multi-scope GHG tracking, data quality governance, role-based access control, and auditable reporting. Django 5.2 + DRF 3.16 backend, React 18 + MUI 7.1 frontend.
 
 ---
 
 ## 🚀 Overview
 
-- **Multi-project, multi-period, multi-module data collection**
-- **Granular role-based access control (RBAC)**
-- **Auditable calculation and reporting**
-- **Modern React frontend (Material UI) & Django backend**
-- **Supports containerized (Docker) and manual setup**
-- **Designed for extensibility: supports API, advanced analytics, and multi-tenancy**
+- **Multi-scope emissions tracking** (Scope 1/2/3, SBTi targets)
+- **Data quality governance** with profiling, rules, and scoring
+- **Granular role-based access control (RBAC)** with org-unit scoping
+- **Excel GHG inventory** exportable with full audit trail
+- **Modern React frontend** (MUI 7) & Django REST backend
+- **Containerized deployment** via Docker Compose
 
 ---
 
 ## 🏗️ Architecture
 
-- **Frontend**: React (Vite) + Material UI
-- **Backend**: Django + Django REST Framework + JWT Auth
-- **Database**: PostgreSQL (MongoDB planned)
+- **Frontend**: React 18 (Vite) + Material UI 7.1 — port 5179, base `/carbon/`
+- **Backend**: Django 5.2 + DRF 3.16 + JWT Auth — port 8009, prefix `/carbon-api/`
+- **Database**: PostgreSQL + Redis (caching)
 - **DevOps**: Docker, Docker Compose
-- **Documentation & Design**: See [`docs/`](./docs) for API specs, workflows, and diagrams
+- **AI Toolkit**: `.ai-toolkit/` — agent instructions, decisions registry, project config
 
 ---
 
-## 📂 Main Repository Structure
+## 📂 Repository Structure
 
 ```
-carbon-management-platform/
-├── backend/      # Django apps (core logic, API, RBAC)
-├── frontend/     # React app (Material UI, routing, dashboards)
-├── docs/         # Design docs, diagrams, API, workflows
-├── install.md    # Installation & deployment guide (manual & Docker)
-├── progress.md   # Live progress and Kanban board
+carbon/
+├── backend/              # Django apps (accounts, catalog, emissions, dq, mdm, …)
+├── carbon-frontend/      # React app (MUI, routing, dashboards)
+├── docs/                 # Architecture, API, workflows, deployment guides
+│   └── archive/          # Historical task/phase records
+├── plans/                # Architecture & strategy plans
+├── .ai-toolkit/          # Agent customization, ADRs, scripts, patterns
 ├── docker-compose.yml
-└── README.md     # This file!
+├── manage.sh             # Management script
+└── README.md
 ```
 
 ---
 
 ## 🛠️ Quick Start
 
-**For details and troubleshooting, see [install.md](./install.md).**
-
-### 1. Clone the repository
-
 ```bash
-git clone https://github.com/your-org/carbon-management-platform.git
-cd carbon-management-platform
+git clone <repo-url> && cd carbon
+# Backend
+cd backend && cp .env.example .env && pip install -r requirements.txt
+python manage.py migrate && python manage.py runserver 0.0.0.0:8009
+# Frontend
+cd carbon-frontend && npm install && npm run dev
 ```
 
-### 2. Choose your setup:
-
-- **Docker (recommended for most users)**
-- **Manual (for advanced/local development)**
-
----
-
-## 📝 Project Progress
-
-Progress and live tasks are tracked in [progress.md](./progress.md).
+See [docs/QUICKSTART_DEPLOYMENT.md](./docs/QUICKSTART_DEPLOYMENT.md) for Docker setup.
 
 ---
 
 ## 🧭 Documentation
 
-- **Design, Data Model, API**: see [`docs/`](./docs)
-- **Deployment & Operations**: see [install.md](./install.md)
-- **Debugging & Testing**: see [`docs/debug.md`](./docs/debug.md) or [backend/README.md](./backend/README.md)
+- [Documentation Index](./docs/index.md) — full doc listing
+- [API Reference](./docs/api.md)
+- [Data Model](./docs/data-model.md)
+- [Deployment Guide](./docs/SECURITY_DEPLOYMENT.md)
+- [AI Toolkit](./.ai-toolkit/ONBOARDING.md)
 
 ---
 
-## 🤝 Contributing
+## 🧪 Testing
 
-- All team members (devs, testers, analysts, ops) should check [progress.md](./progress.md) and assign themselves tasks.
-- Issues and feature suggestions welcome—please use GitHub Issues.
+```bash
+cd backend && python -m pytest --reuse-db -q  # ≥431 tests
+cd carbon-frontend && npm test -- --run       # ≥25 tests
+```
 
 ---
 

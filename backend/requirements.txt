@@ -6,39 +6,35 @@ django-filter==25.1                   # Filtering utilities
 django-debug-toolbar==5.2.0           # Development debugging
 django-silk==5.3.2                    # Development request profiling (P12)
 djangorestframework-simplejwt==5.5.0  # JWT Authentication
-drf-yasg                              # Swagger/OpenAPI generation
+drf-yasg==1.21.15                     # Swagger/OpenAPI generation
 
-# ASGI/WGI Server
-gunicorn                              # WSGI HTTP server
+# ASGI/WSGI Server
+gunicorn==26.0.0                      # WSGI HTTP server
 
 # Database
 psycopg2-binary==2.9.10               # PostgreSQL adapter
 sqlparse==0.5.3                       # SQL formatting
 
-# Machine Learning
-numpy==2.2.6                          # Numerical computations
+# Data & Computation
 pandas==2.3.0                         # Data manipulation
 
 # Environment and Utilities
 python-dotenv==1.1.0                  # Env variable management
 
-# Logging and Reliability
-colorlog==6.9.0                       # Colorful logging
+# Logging
 python-json-logger==2.0.7             # JSON structured logging
-tenacity==9.1.2                       # Retry strategy
 
 # Testing
-pytest
-pytest-django
-pytest-asyncio
-pytest-cov
-factory-boy
+pytest==9.1.1
+pytest-django==4.12.0
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
 
 # HTTP Client
-requests==2.32.3                        # HTTP requests (pulse_auth, external APIs)
+requests==2.34.2                      # HTTP requests (pulse_auth, external APIs)
 
 # Cache
-redis==5.0.1                     # Memory cache / message broker
+redis==5.0.1                          # Memory cache / message broker
 
 # Reporting
-xlsxwriter==3.2.2                # Excel export for GHG reports (E3-1)
+xlsxwriter==3.2.2                     # Excel export for GHG reports (E3-1)
