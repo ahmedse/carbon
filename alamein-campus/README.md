@@ -6,7 +6,8 @@ This folder contains everything needed for a complete end-to-end manual test of 
 
 | File | Purpose |
 |------|---------|
-| `ALAMEIN_TEST_JOURNEY.md` | **The main document** — complete step-by-step checklist (Phases 1-7) |
+| `ALAMEIN_CHECKLIST.xlsx` | **Open in Excel** — 5-tab spreadsheet: Checklist (with Status dropdown), Module List, Table List, Calc Rules, Users & URLs |
+| `ALAMEIN_TEST_JOURNEY.md` | Full narrative document with all data rows spelled out (Phases 1-7) |
 | `evidence/` | Sample evidence files to upload during Phase 3 |
 | `evidence/README.md` | Descriptions of each evidence file and which row to attach it to |
 
