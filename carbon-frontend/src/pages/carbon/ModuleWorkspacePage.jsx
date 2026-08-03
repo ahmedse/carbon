@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Box, Chip, CircularProgress, Divider, LinearProgress, Stack, Typography, useTheme } from '@mui/material';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { Box, Chip, CircularProgress, Divider, IconButton, LinearProgress, Stack, Tooltip, Typography, useTheme } from '@mui/material';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import LinkIcon from '@mui/icons-material/Link';
@@ -40,8 +40,17 @@ const ACTIVITY_KINDS = {
   calculation:  { label: 'Calc', color: 'warning',  Icon: AssessmentIcon },
 };
 
+function fmtActivityText(item) {
+  if (item.detail || item.message) return item.detail || item.message;
+  const type = item.activity_type || '';
+  const name = item.module_name || '';
+  const tonnes = item.co2e_tonnes != null ? `${Number(item.co2e_tonnes).toFixed(1)} tCO₂e` : '';
+  const parts = [name, tonnes].filter(Boolean);
+  return parts.length ? `${type}${parts.length ? ' · ' : ''}${parts.join(' · ')}` : (type || 'Updated');
+}
+
 function detectActivityKind(item) {
-  const d = (item.detail || item.message || item.event || '').toLowerCase();
+  const d = (item.detail || item.message || item.event || item.activity_type || '').toLowerCase();
   if (d.includes('governance') || d.includes('lock') || d.includes('policy') || d.includes('approve')) return 'governance';
   if (d.includes('dq') || d.includes('quality') || d.includes('check') || d.includes('rule') || d.includes('profile')) return 'dq_run';
   if (d.includes('calc') || d.includes('compute') || d.includes('emission') || d.includes('target')) return 'calculation';
@@ -334,13 +343,13 @@ function ModuleActivityTab({ activity, token }) {
   const merged = useMemo(() => {
     const govMapped = govEvents.map((e) => ({
       id: e.id,
-      detail: e.description || e.event || e.action || 'Governance event',
+      detail: e.action || e.description || e.event || 'Governance event',
       timestamp: e.timestamp || e.created_at,
       kind: 'governance',
     }));
     const actMapped = (activity || []).map((a) => ({ ...a, kind: detectActivityKind(a) }));
     const combined = [...actMapped, ...govMapped];
-    combined.sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
+    combined.sort((a, b) => new Date(b.reported_at || b.timestamp || b.created_at || 0) - new Date(a.reported_at || a.timestamp || a.created_at || 0));
     return combined;
   }, [activity, govEvents]);
 
@@ -388,10 +397,10 @@ function ModuleActivityTab({ activity, token }) {
                 <Icon sx={{ fontSize: 14, mt: '2px', color: `${cfg.color}.main`, flexShrink: 0 }} />
                 <Box sx={{ minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.72rem', lineHeight: 1.35 }}>
-                    {item.detail || item.message || 'Updated'}
+                    {fmtActivityText(item)}
                   </Typography>
                   <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled', mt: 0.25 }}>
-                    {fmtDate(item.timestamp || item.created_at)}
+                    {fmtDate(item.reported_at || item.timestamp || item.created_at)}
                   </Typography>
                 </Box>
               </Box>
@@ -410,6 +419,7 @@ export default function ModuleWorkspacePage() {
   const { token, context } = useAuth();
   const [tables, setTables] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [selectedTableId, setSelectedTableId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -465,15 +475,22 @@ export default function ModuleWorkspacePage() {
       ),
     },
     {
-      field: 'arrow',
+      field: 'actions',
       headerName: '',
-      width: 50,
+      width: 60,
       sortable: false,
-      renderCell: () => <ChevronRightIcon fontSize="small" color="action" />,
+      disableColumnMenu: true,
+      renderCell: ({ row }) => (
+        <Tooltip title="Open table data">
+          <IconButton size="small" onClick={(e) => { e.stopPropagation(); navigate(`/carbon/my-data/${moduleId}/${row.id}`); }}>
+            <VisibilityIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        </Tooltip>
+      ),
     },
-  ], []);
+  ], [moduleId, navigate]);
 
-  const { metricsPanel, metricsTabs, activeMetricsTab, onMetricsTabChange } = useDetailPanel({
+  const { metricsPanel, metricsTabs, activeMetricsTab, onMetricsTabChange, resetTab } = useDetailPanel({
     tabs: [
       { label: 'Health',      render: () => <ModuleHealthTab module={module} tables={tables} token={token} /> },
       { label: 'Lineage',     render: () => <ModuleLineageTab tables={tables} token={token} /> },
@@ -515,7 +532,7 @@ export default function ModuleWorkspacePage() {
               height={420}
               pageSize={20}
               showColumnToggle={false}
-              onRowClick={(params) => navigate(`/carbon/my-data/${moduleId}/${params.row.id}`)}
+              onRowClick={(params) => { setSelectedTableId(params.id); resetTab(); }}
             />
           )}
         </Box>

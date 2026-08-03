@@ -381,8 +381,17 @@ const ACTIVITY_KINDS = {
   calculation: { label: 'Calculation', color: 'warning', Icon: AssessmentIcon },
 };
 
+function fmtActivityText(item) {
+  if (item.detail || item.message) return item.detail || item.message;
+  const type = item.activity_type || '';
+  const name = item.module_name || '';
+  const tonnes = item.co2e_tonnes != null ? `${Number(item.co2e_tonnes).toFixed(1)} tCO₂e` : '';
+  const parts = [name, tonnes].filter(Boolean);
+  return parts.length ? `${type}${parts.length ? ' · ' : ''}${parts.join(' · ')}` : (type || 'Updated');
+}
+
 function detectActivityKind(item) {
-  const detail = (item.detail || item.message || item.event || '').toLowerCase();
+  const detail = (item.detail || item.message || item.event || item.activity_type || '').toLowerCase();
   if (detail.includes('governance') || detail.includes('lock') || detail.includes('policy') || detail.includes('approve')) return 'governance';
   if (detail.includes('dq') || detail.includes('quality') || detail.includes('check') || detail.includes('rule')) return 'dq_run';
   if (detail.includes('calc') || detail.includes('compute') || detail.includes('emission') || detail.includes('target')) return 'calculation';
@@ -412,7 +421,7 @@ function ActivityTab({ activity, theme, token }) {
       kind: detectActivityKind(a),
     }));
     const combined = [...actMapped, ...govMapped];
-    combined.sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
+    combined.sort((a, b) => new Date(b.reported_at || b.timestamp || b.created_at || 0) - new Date(a.reported_at || a.timestamp || a.created_at || 0));
     return combined;
   }, [activity, govEvents]);
 
@@ -474,10 +483,10 @@ function ActivityTab({ activity, theme, token }) {
                 />
                 <Box sx={{ minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.75rem', lineHeight: 1.35 }}>
-                    {item.detail || item.message || 'Updated'}
+                    {fmtActivityText(item)}
                   </Typography>
                   <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled', mt: 0.25 }}>
-                    {fmtDate(item.timestamp || item.created_at)}
+                    {fmtDate(item.reported_at || item.timestamp || item.created_at)}
                   </Typography>
                 </Box>
               </Box>
