@@ -17,6 +17,7 @@ import {
   TextField,
   MenuItem,
   CircularProgress,
+  Tooltip,
   Typography,
   Table,
   TableBody,
@@ -37,6 +38,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useAuth } from '../../auth/AuthContext';
+import PageHeader from '../../components/Page/PageHeader';
 import {
   fetchSBTiTargets,
   createSBTiTarget,
@@ -397,21 +399,22 @@ export default function SBTiTargetsPage() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-          SBTi Targets
-        </Typography>
-        <Stack direction="row" spacing={1}>
-          <IconButton onClick={loadData} size="small">
-            <RefreshIcon />
-          </IconButton>
-          {isAdmin && (
-            <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
-              New Target
-            </Button>
-          )}
-        </Stack>
-      </Stack>
+      <PageHeader
+        title="SBTi Targets"
+        description="Science-Based Targets initiative (SBTi) reduction goals. Define absolute or intensity targets per scope, set base/target years, and track progress toward Paris-aligned decarbonization."
+        actions={
+          <Stack direction="row" spacing={1}>
+            <IconButton onClick={loadData} size="small" sx={{ mr: 0.5 }}>
+              <RefreshIcon />
+            </IconButton>
+            {isAdmin && (
+              <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
+                New Target
+              </Button>
+            )}
+          </Stack>
+        }
+      />
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
@@ -422,13 +425,41 @@ export default function SBTiTargetsPage() {
             <TableRow>
               <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>ID</TableCell>
               <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Name</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Org Unit</TableCell>
-              <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Base Year</TableCell>
-              <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Target Year</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Type</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Scope</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Reduction</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Status</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+                <Tooltip title="The organisational unit responsible for meeting this target." arrow>
+                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Org Unit</Typography>
+                </Tooltip>
+              </TableCell>
+              <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+                <Tooltip title="The baseline year against which emission reductions are measured." arrow>
+                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Base Year</Typography>
+                </Tooltip>
+              </TableCell>
+              <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+                <Tooltip title="The deadline year by which the target must be achieved." arrow>
+                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Target Year</Typography>
+                </Tooltip>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+                <Tooltip title="Absolute = total tCO₂e reduction. Intensity = per-unit reduction (e.g., tCO₂e / MWh)." arrow>
+                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Type</Typography>
+                </Tooltip>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+                <Tooltip title="Which GHG Protocol scope(s) this target covers." arrow>
+                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Scope</Typography>
+                </Tooltip>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+                <Tooltip title="Targeted reduction as a percentage from base year emissions." arrow>
+                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Reduction</Typography>
+                </Tooltip>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+                <Tooltip title="Draft = planning, Committed = pledged, Approved = officially validated." arrow>
+                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Status</Typography>
+                </Tooltip>
+              </TableCell>
               <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Created</TableCell>
               {isAdmin && <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Actions</TableCell>}
             </TableRow>

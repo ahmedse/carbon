@@ -165,6 +165,7 @@ export default function DataProductsPage() {
         icon={Inventory2Icon}
         title={DATA_PRODUCTS}
         subtitle="Governed, org-owned groupings of tables. Open one to manage its tables."
+        description="Data products bundle related tables under a single governance policy with version tracking, access control, and lineage metadata."
         actions={isAdmin && (
           <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
             New {DATA_PRODUCT}

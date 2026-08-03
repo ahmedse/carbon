@@ -100,6 +100,7 @@ export default function CarbonConsolePage() {
     <PageWrapper>
       <PageHeader title="Carbon Overview"
         subtitle="Manage organizational carbon emissions with compact, enterprise-ready tracking."
+        description="Enterprise carbon footprint dashboard showing emissions across Scope 1, 2, and 3 with trend analytics, data quality monitoring, and compliance tracking."
         badge={isAdmin ? { label: 'Admin', color: 'primary' } : undefined} />
 
       <PeriodBanner name={period.name} startDate={period.start_date} endDate={period.end_date}

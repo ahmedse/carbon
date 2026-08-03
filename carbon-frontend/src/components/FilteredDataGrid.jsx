@@ -23,6 +23,7 @@ import PageHeader from './Page/PageHeader';
 export default function FilteredDataGrid({
   title,
   subtitle,
+  description,
   actions,
   rows = [],
   columns = [],
@@ -46,7 +47,7 @@ export default function FilteredDataGrid({
 
   return (
     <PageContainer>
-      <PageHeader title={title} subtitle={subtitle} actions={actions} />
+      <PageHeader title={title} subtitle={subtitle} description={description} actions={actions} />
 
       <Paper sx={{ p: 2, mb: 3, bgcolor: 'background.alt' }}>
         <Stack spacing={2}>

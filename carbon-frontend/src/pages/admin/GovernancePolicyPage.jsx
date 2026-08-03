@@ -9,6 +9,7 @@ import {
   MenuItem, Chip, CircularProgress, Alert, Switch, FormControlLabel, Tooltip,
   Divider, Stack,
 } from "@mui/material";
+import PageHeader from "../../components/Page/PageHeader";
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 import AddIcon from "@mui/icons-material/Add";
@@ -213,15 +214,12 @@ export default function GovernancePolicyPage() {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 3, flexWrap: "wrap", gap: 2 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <PolicyIcon sx={{ fontSize: "2rem", color: "primary.main" }} />
-          <Box>
-            <Typography variant="h5" fontWeight={700}>Governance Policies</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Configure the rules that guard delete and update actions across the platform
-            </Typography>
-          </Box>
-        </Box>
+        <PageHeader
+          icon={PolicyIcon}
+          title="Governance Policies"
+          subtitle="Configure the rules that guard delete and update actions across the platform"
+          description="Define data governance guardrails: deletion protection, update constraints, retention policies, and compliance rules scoped to org units or domains."
+        />
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
           New Policy
         </Button>

@@ -456,6 +456,7 @@ export default function VerificationPage() {
         <PageHeader
           title="Verification Workflow"
           subtitle="Review, approve, or reject period-level emission calculations"
+          description="Independent verification of emission results with auditor workflow. Review calculation evidence, approve valid results, and reject discrepancies with documented justification."
           actions={
             <Stack direction="row" spacing={1}>
               <FormControl size="small" sx={{ minWidth: 120 }}>

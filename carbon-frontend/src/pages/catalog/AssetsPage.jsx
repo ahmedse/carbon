@@ -338,6 +338,7 @@ export default function AssetsPage() {
       <FilteredDataGrid
         title="Asset Profiles"
         subtitle={`${filteredAssets.length} of ${assets.length} assets`}
+        description="Asset profiles define metadata for tables and fields — classification, quality scores, lineage, and ownership. Browse, create, and manage governed data assets."
         actions={(
           <Button
             startIcon={<AddIcon />}

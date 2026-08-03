@@ -18,6 +18,7 @@ import {
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 import { fetchDataSchemaTables } from '../../api/dataschema';
+import PageHeader from '../../components/Page/PageHeader';
 import {
   Box,
   Button,
@@ -232,7 +233,11 @@ export default function ImportExportPage() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h5" sx={{ mb: 2 }}>Import / Export</Typography>
+      <PageHeader
+        title="Import / Export"
+        subtitle="Bulk data ingestion and scheduled export jobs"
+        description="Manage reusable export projects with format, filter, and scheduling options. Import CSV/Excel data into existing tables with validation and error handling."
+      />
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>

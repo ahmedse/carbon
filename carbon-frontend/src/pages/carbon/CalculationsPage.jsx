@@ -443,6 +443,7 @@ export default function CalculationsPage() {
         <PageHeader
           title="Calculations Browser"
           subtitle="View and manage emission calculations across periods and scopes"
+          description="Each row is a calculation result: emission factor × activity data = tCO₂e. Filter by scope, status, and period. Recalculate or batch-process for audit readiness."
           actions={
             <Stack direction="row" spacing={1}>
               <Tooltip title="Refresh">

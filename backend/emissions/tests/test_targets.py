@@ -53,7 +53,7 @@ class SBTiTargetAPITests(TestCase):
         ScopedRole.objects.create(user=self.user, group=admins_group, is_active=True)
 
     def test_create_target(self):
-        resp = self.client.post(reverse('targets-list'), {
+        resp = self.client.post(reverse('carbon:sbti-target-list'), {
             'org_unit': self.org_unit.id, 'name': '2030 Goal',
             'base_year': 2023, 'target_year': 2030,
             'target_type': 'absolute', 'scope': '1+2',
@@ -69,7 +69,7 @@ class SBTiTargetAPITests(TestCase):
             org_unit=self.org_unit, name='T1', base_year=2020, target_year=2030,
             target_type='absolute', scope='1', reduction_pct=Decimal('30')
         )
-        resp = self.client.get(reverse('targets-list'))
+        resp = self.client.get(reverse('carbon:sbti-target-list'))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.json()), 1)
 
@@ -79,7 +79,7 @@ class SBTiTargetAPITests(TestCase):
             target_type='absolute', scope='1', reduction_pct=Decimal('30')
         )
         resp = self.client.patch(
-            reverse('targets-detail', args=[target.id]),
+            reverse('carbon:sbti-target-detail', args=[target.id]),
             {'status': 'committed'}, format='json'
         )
         self.assertEqual(resp.status_code, 200)
@@ -90,5 +90,5 @@ class SBTiTargetAPITests(TestCase):
             org_unit=self.org_unit, name='T1', base_year=2020, target_year=2030,
             target_type='absolute', scope='1', reduction_pct=Decimal('30')
         )
-        resp = self.client.delete(reverse('targets-detail', args=[target.id]))
+        resp = self.client.delete(reverse('carbon:sbti-target-detail', args=[target.id]))
         self.assertEqual(resp.status_code, 204)
