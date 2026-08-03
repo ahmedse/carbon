@@ -16,8 +16,8 @@ Previous content (Phase 08 hardening) was completed 2026-07-29 and is superseded
 | E1 | Security lockdown | ✅ DONE 2026-08-02 (Master-verified) | TASK-RESULTS-E1.md |
 | E2 | Carbon deployment blockers | 🔄 IN PROGRESS | — |
 | E2-B1 | RBAC reconciliation | ✅ DONE 2026-08-02 (Master-verified) | TASK-RESULTS-E2-B1.md |
-| E2-B2 | Verification workflow + state machine | ⬜ READY — E2-B2 next (backend-worker, DeepSeek-V3) | — |
-| E2-B3 | Period-lock enforcement | ⬜ blocked on E2-B2 | — |
+| E2-B2 | Verification workflow + state machine | ✅ DONE 2026-08-03 (Master-verified) | TASK-RESULTS-E2-B2.md |
+| E2-B3 | Period-lock enforcement | ⬜ READY — E2-B3 next | — |
 | E2-B4 | Notifications minimal | ⬜ blocked on E2-B3 | — |
 | E2-B5 | importexport execution | ⬜ blocked on E2-B4 | — |
 | E2-B6 | Recalculate endpoints | ⬜ blocked on E2-B5 | — |
@@ -30,11 +30,6 @@ Previous content (Phase 08 hardening) was completed 2026-07-29 and is superseded
 **Human decisions pending** (see plan header): credential rotation · git history scrub ·
 canonical grid factor · PDF at go-live? · PROD_* values · CI platform.
 
-## Worker activation — E2-B2 (paste to a DeepSeek-V3 chat)
+## Worker activation — E2-B3
 
-> Your role is **backend-worker** for the Carbon Data Trust Platform.
-> 1. Read `.ai-toolkit/project.config.md`
-> 2. Read `.ai-toolkit/shared/base-rules.md`
-> 3. Read `.ai-toolkit/roles/backend-worker.md`
-> 4. Read `plans/CARBON_ENTERPRISE_READINESS_PLAN.md` — Phase E2-B2 (Verification workflow + ReportingPeriod state machine)
-> 5. Confirm your role and begin. Report to `TASK-RESULTS-E2-B2.md` with terminal proof.
+Dispatched via `runSubagent` — no manual paste needed. The master dispatches each phase as a subagent.
