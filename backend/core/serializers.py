@@ -2,7 +2,7 @@
 # DRF serializers for Module models.
 
 from rest_framework import serializers
-from .models import Module, Feedback
+from .models import Module, Feedback, Notification
 
 
 class FeedbackSerializer(serializers.ModelSerializer):
@@ -18,3 +18,10 @@ class ModuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Module
         fields = ['id', 'name', 'description', 'scope', 'org_unit', 'org_unit_name', 'is_locked']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'user', 'verb', 'message', 'link', 'read_at', 'created_at']
+        read_only_fields = ['id', 'user', 'read_at', 'created_at']

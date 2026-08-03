@@ -43,3 +43,27 @@ class Feedback(models.Model):
 
     def __str__(self):
         return f"Feedback from {self.name or 'Anonymous'}"
+
+
+class Notification(models.Model):
+    """In-app notification for lifecycle events (submit/verify/reject/batch_complete)."""
+    user = models.ForeignKey(
+        'accounts.User', on_delete=models.CASCADE, related_name='notifications'
+    )
+    verb = models.CharField(max_length=50, help_text="e.g. submitted, verified, rejected, batch_complete")
+    message = models.TextField(help_text="Human-readable notification body")
+    link = models.CharField(max_length=500, blank=True, default='', help_text="Optional URL to related resource")
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Notification"
+        verbose_name_plural = "Notifications"
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['user', 'read_at']),
+        ]
+
+    def __str__(self):
+        return f"[{self.verb}] {self.message[:80]}"

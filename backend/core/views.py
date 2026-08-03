@@ -1,11 +1,13 @@
-from .models import Module, Feedback
-from .serializers import ModuleSerializer, FeedbackSerializer
+from .models import Module, Feedback, Notification
+from .serializers import ModuleSerializer, FeedbackSerializer, NotificationSerializer
 from .feedback import AppFeedback
 from accounts.permissions import HasScopedRole
 from accounts.rbac_utils import get_visible_module_ids
 from rest_framework import mixins, viewsets, status
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+from django.utils import timezone
 
 
 class ModuleViewSet(viewsets.ModelViewSet):
@@ -102,3 +104,52 @@ class FeedbackViewSet(mixins.CreateModelMixin,
         if self.action == 'list':
             return [IsAdminUser()]
         return [AllowAny()]
+
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    """User-scoped notifications with mark-read actions."""
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Only return notifications for the requesting user."""
+        return Notification.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        """Auto-set user to the requesting user."""
+        serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        """Mark a single notification as read."""
+        notification = self.get_object()
+        if notification.read_at is None:
+            notification.read_at = timezone.now()
+            notification.save(update_fields=['read_at'])
+        return Response(self.get_serializer(notification).data)
+
+    @action(detail=False, methods=['post'])
+    def mark_all_read(self, request):
+        """Mark all unread notifications for the current user as read."""
+        updated = Notification.objects.filter(
+            user=request.user, read_at__isnull=True
+        ).update(read_at=timezone.now())
+        return Response({'marked_read': updated})
+
+    def list(self, request, *args, **kwargs):
+        """Return paginated notifications with unread_count."""
+        queryset = self.filter_queryset(self.get_queryset())
+        unread_count = queryset.filter(read_at__isnull=True).count()
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            result = self.get_paginated_response(serializer.data)
+            result.data['unread_count'] = unread_count
+            return result
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'results': serializer.data,
+            'unread_count': unread_count,
+        })

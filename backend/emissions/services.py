@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from .models import ReportingPeriod, EmissionFactor, Calculation, CalculationRule, VerificationRecord
 from core.models import Module
+from core.services import NotificationService
 from catalog.models import AssetProfile
 from dataschema.models import DataRow, DataTable
 from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units
@@ -500,6 +501,12 @@ class CalculationEngineService:
             result['total_created'] += t['created']
             result['total_skipped'] += t['skipped']
             result['total_errors'] += t['errors']
+
+        # Notify requesting user on batch completion
+        if user is not None:
+            count = result['total_created']
+            _notify_user(user, 'batch_complete',
+                         f"Batch calculation complete: {count} calculations")
 
         return result
 
@@ -1121,6 +1128,26 @@ class ReportConfigService:
         }
 
 
+# ── Notification helpers (module-level — not exported) ────────────────────
+
+def _notify_user(user, verb, message, link=''):
+    """Notify a single user. No-op if user is None."""
+    NotificationService.notify(user, verb, message, link)
+
+
+def _notify_period_event(period, verb, message):
+    """Notify all data-owner users about a period lifecycle event."""
+    from accounts.models import ScopedRole
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    # Find all active users with dataowners_group membership
+    dataowner_ids = ScopedRole.objects.filter(
+        group__name='dataowners_group', is_active=True,
+    ).values_list('user_id', flat=True).distinct()
+    for user in User.objects.filter(id__in=dataowner_ids):
+        NotificationService.notify(user, verb, message)
+
+
 # ── Verification Service ──────────────────────────────────────────────────
 
 class VerificationService:
@@ -1138,6 +1165,9 @@ class VerificationService:
             verifier=user,
             defaults={'status': 'pending', 'notes': ''},
         )
+        # Notify data owners
+        _notify_period_event(period, 'submitted',
+                             f"Period \"{period.name}\" submitted for verification")
         return period
 
     @staticmethod
@@ -1156,6 +1186,9 @@ class VerificationService:
             verifier=user,
             defaults={'status': 'verified', 'verified_at': timezone.now()},
         )
+        # Notify period creator
+        _notify_user(period.created_by, 'verified',
+                     f"Period \"{period.name}\" has been verified")
         return period
 
     @staticmethod
@@ -1177,6 +1210,11 @@ class VerificationService:
                 'verified_at': timezone.now(),
             },
         )
+        # Notify period creator
+        msg = f"Period \"{period.name}\" has been rejected"
+        if notes:
+            msg += f": {notes}"
+        _notify_user(period.created_by, 'rejected', msg)
         return period
 
 
