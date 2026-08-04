@@ -5,6 +5,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
+import { isGlobalAdmin } from '../../authz';
 import {
   Box, Typography, TextField, Card, CardContent, CardHeader, Grid,
   CircularProgress, Alert, Chip, Paper, InputAdornment, IconButton, Tooltip,
@@ -34,7 +35,7 @@ const EMPTY_FORM = { name: '', description: '', scope: 1, org_unit: '' };
 export default function DataProductsPage() {
   useDocumentTitle("Data Products");
   const navigate = useNavigate();
-  const { token, user, context, selectProject } = useAuth();
+  const { token, user, context, selectProject, availablePerspectives, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
 
   const [loading, setLoading] = useState(true);
@@ -50,10 +51,7 @@ export default function DataProductsPage() {
 
   const modules = context?.modules || [];
 
-  const isAdmin = Boolean(
-    user?.is_superuser ||
-    (user?.roles || []).some((r) => r?.active !== false && (r.role === 'admins_group' || r.role === 'admin'))
-  );
+  const isAdmin = isGlobalAdmin(user, availablePerspectives, isGlobalAdminFlag);
 
   const loadData = useCallback(async () => {
     setLoading(true);
