@@ -45,6 +45,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [tablesByModule, setTablesByModule] = useState({});
   const [availablePerspectives, setAvailablePerspectives] = useState([]);
+  const [isGlobalAdminFlag, setIsGlobalAdminFlag] = useState(false);
   const [currentPerspective, setCurrentPerspective] = useState(() => {
     return localStorage.getItem("carbon_perspective") || "dashboards";
   });
@@ -70,6 +71,9 @@ export const AuthProvider = ({ children }) => {
     try {
       const data = await apiFetch('accounts/me/context/', { method: 'GET', token }); // fetch perspective
       setAvailablePerspectives(data.perspectives || []);
+      setIsGlobalAdminFlag(data.is_global_admin === true);
+      // Store the authoritative flag for offline/reload recovery
+      localStorage.setItem("is_global_admin", data.is_global_admin === true ? "1" : "0");
       // Set default perspective based on available ones
       const defaultPerspective = data.perspectives?.[0] || 'dashboards';
       if (!localStorage.getItem("carbon_perspective")) {
@@ -103,6 +107,8 @@ export const AuthProvider = ({ children }) => {
       if (storedUser?.token) setUser(storedUser);
       if (Array.isArray(storedProjects)) setProjects(storedProjects);
       if (storedContext) setContext(storedContext);
+      const storedIsGlobalAdmin = localStorage.getItem("is_global_admin") === "1";
+      setIsGlobalAdminFlag(storedIsGlobalAdmin);
       if (Array.isArray(storedPerspectives) && storedPerspectives.length) {
         setAvailablePerspectives(storedPerspectives);
       }
@@ -366,6 +372,7 @@ export const AuthProvider = ({ children }) => {
         currentPerspective,
         setPerspective: setPerspectiveActive,
         availablePerspectives,
+        isGlobalAdminFlag,
       }}
     >
       {children}

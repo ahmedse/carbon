@@ -66,7 +66,7 @@ export default function CarbonConsolePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
-  const isAdmin = user?.is_superuser || (availablePerspectives || []).includes('admin');
+  const isAdmin = user?.is_superuser || (availablePerspectives || []).some(p => p === 'admin' || p === 'carbon-admin');
 
   const load = async () => {
     setLoading(true); setError(null);

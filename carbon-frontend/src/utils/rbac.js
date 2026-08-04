@@ -2,25 +2,42 @@
 // Centralized RBAC utilities for role-based access control
 
 /**
- * Check if user has admin perspective (platform admin)
+ * Check if user has admin perspective (platform admin).
+ *
+ * Trusts the backend's authoritative is_global_admin flag from me_context.
+ * "admin" perspective is ONLY granted by the backend when is_global_admin=True.
+ * Domain Leads (carbon_lead, etc.) get "{app}-admin" — NOT "admin" — so they
+ * cannot access platform admin pages (Users, Groups, OrgUnits, Access Control).
  */
-export function isGlobalAdmin(user, availablePerspectives = []) {
-  if (!user && !availablePerspectives?.length) return false;
-  
-  const roles = (user?.roles || []).map((r) => r?.role).filter(Boolean).map((r) => r.toLowerCase());
+export function isGlobalAdmin(user, availablePerspectives = [], isGlobalAdminFlag = null) {
+  // Backend-authoritative flag (from me_context.is_global_admin) — most reliable
+  if (isGlobalAdminFlag === true) return true;
+  if (isGlobalAdminFlag === false) return false;
+
+  // Fallback: check perspectives (only if flag not provided)
   const perspectives = availablePerspectives || [];
-  
-  // Check perspectives first (most reliable)
   if (perspectives.includes("admin")) {
     return true;
   }
-  
-  // Check roles
-  if (roles.includes("admin") || roles.includes("admins_group")) {
+
+  // Fallback: check roles for bare "admin" group only
+  const roles = (user?.roles || []).map((r) => r?.role).filter(Boolean).map((r) => r.toLowerCase());
+  if (roles.includes("admin")) {
     return true;
   }
-  
+
   return false;
+}
+
+/**
+ * Check if user is a Domain Lead for a specific app.
+ * Domain Leads have org-scoped administrative access to their app only.
+ * They do NOT have platform admin access.
+ */
+export function isDomainLead(appId, availablePerspectives = []) {
+  if (!appId || !availablePerspectives?.length) return false;
+  const perspectives = availablePerspectives || [];
+  return perspectives.includes(`${appId}-admin`);
 }
 
 /**

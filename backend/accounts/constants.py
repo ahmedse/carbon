@@ -15,8 +15,19 @@ CARBON_ANALYSTS_GROUP = "carbon_analysts_group"
 # Alias for backward compatibility — "admin" is the bare Django group
 ADMIN_GROUP = "admin"
 
+# ── Domain Lead roles (org-scoped, app-specific administration) ───
+# Pattern: {app}_lead → grants "{app}-admin" perspective within org scope.
+# Domain Leads manage their app's domain data/config — NOT platform users/roles/orgs.
+# Platform administration remains reserved for global admins_group (org_unit=None).
+CARBON_LEAD_GROUP = "carbon_lead"
+CATALOG_LEAD_GROUP = "catalog_lead"
+MDM_LEAD_GROUP = "mdm_lead"
+DQ_LEAD_GROUP = "dq_lead"
+
+DOMAIN_LEAD_GROUPS = {CARBON_LEAD_GROUP, CATALOG_LEAD_GROUP, MDM_LEAD_GROUP, DQ_LEAD_GROUP}
+
 # ── Role classification sets ───────────────────────────────────────
-# Roles that confer full platform administration.
+# Roles that confer full platform administration (global only).
 ADMIN_ROLES = {ADMIN_GROUP, ADMINS_GROUP}
 
 # Roles whose holders may VIEW (but not necessarily write) emissions/module data.
@@ -27,6 +38,7 @@ VISIBILITY_ROLES = {
     AUDITORS_GROUP,
     VIEWERS_GROUP,
     ANALYSTS_GROUP,
+    *DOMAIN_LEAD_GROUPS,
 }
 
 # Roles that are READ-ONLY — holders of ONLY these roles cannot create/update/delete.
@@ -51,4 +63,5 @@ ALL_CANONICAL_GROUPS = {
     AUDITORS_GROUP,
     CARBON_DATA_OWNERS_GROUP,
     CARBON_ANALYSTS_GROUP,
+    *DOMAIN_LEAD_GROUPS,
 }

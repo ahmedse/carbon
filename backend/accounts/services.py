@@ -27,10 +27,20 @@ class RoleResolutionService:
         if not normalized:
             return None
 
-        if normalized in {"admin", "admins_group"} or (
-            normalized.endswith("admin") and "carbon" not in normalized and "catalog" not in normalized
-        ):
+        # Platform admin — ONLY the bare "admin" group maps to "admin" perspective.
+        # "admins_group" is handled separately: only global admins_group holders
+        # (org_unit=None) receive the "admin" perspective via me_context's is_global_admin gate.
+        # This prevents org-scoped admins_group holders from seeing platform admin pages.
+        if normalized == "admin":
             return "admin"
+
+        # Domain Leads — org-scoped, app-specific administration.
+        # Pattern: {app}_lead → "{app}-admin" perspective.
+        # e.g. carbon_lead → "carbon-admin", catalog_lead → "catalog-admin"
+        if normalized.endswith("_lead"):
+            app = normalized.replace("_lead", "")
+            return f"{app}-admin"
+
         if "data_owner" in normalized or "dataowner" in normalized or "data-owner" in normalized:
             return "data-owner"
         if "analyst" in normalized:
