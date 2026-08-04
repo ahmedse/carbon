@@ -271,6 +271,7 @@ export function canAccessRoute(expandedCaps, path) {
  * @returns {Array} filtered items (children also filtered)
  */
 export function filterMenuItems(expandedCaps, items) {
+  if (!items || !Array.isArray(items)) return [];
   return items
     .map(item => {
       // Check this item's capability

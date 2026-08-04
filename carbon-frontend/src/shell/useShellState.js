@@ -51,7 +51,7 @@ function setStoredBoolean(key, value) {
 }
 
 export function useShellState() {
-  const { availablePerspectives, user, context } = useAuth();
+  const { availablePerspectives, user, context, userCapabilities } = useAuth();
   const { isAppEnabled } = useEnabledApps();
   const studios = useMemo(() => {
     // Derive app studios from the manifest registry.
@@ -88,7 +88,7 @@ export function useShellState() {
       const isAppStudio = APP_REGISTRY.some(app => app.id === s.id);
       if (isAppStudio) {
         if (!isAppEnabled(s.id)) return false;
-        return hasAppAccess(s.id, user, context, availablePerspectives);
+        return hasAppAccess(s.id, user, context, availablePerspectives, userCapabilities);
       }
       
       // Always show home, settings, help
@@ -96,7 +96,7 @@ export function useShellState() {
     });
     
     return filtered;
-  }, [availablePerspectives, user, context, isAppEnabled]);
+  }, [availablePerspectives, user, context, isAppEnabled, userCapabilities]);
 
   const [activeStudio, setActiveStudio] = useState('home');
   const [sidebarVisible, setSidebarVisible] = useState(() => getStoredBoolean('carbon-sidebar-visible', true));

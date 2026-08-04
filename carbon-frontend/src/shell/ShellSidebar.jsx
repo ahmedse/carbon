@@ -171,6 +171,43 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
   // Filter items by role-based access using centralized RBAC
   items = filterMenuItems(items, user, availablePerspectives, context);
 
+  // Prune empty group headers and orphaned dividers after filtering
+  items = useMemo(() => {
+    if (!items || items.length === 0) return [];
+    const pruned = [];
+    let i = 0;
+    while (i < items.length) {
+      const item = items[i];
+      if (item.type === 'group') {
+        // Look ahead: does this group have any nav items before next group/end?
+        let hasContent = false;
+        for (let j = i + 1; j < items.length; j++) {
+          if (items[j].type === 'group') break; // next group, stop
+          if (!items[j].type || items[j].path) { hasContent = true; break; }
+        }
+        if (hasContent) pruned.push(item);
+      } else if (item.type === 'divider') {
+        // Keep dividers only when preceded and followed by real content
+        const prev = pruned[pruned.length - 1];
+        const isPrevContent = prev && (!prev.type || prev.path);
+        let isNextContent = false;
+        for (let j = i + 1; j < items.length; j++) {
+          if (items[j].type === 'divider') continue;
+          if (items[j].type === 'group') { isNextContent = false; break; }
+          isNextContent = true; break;
+        }
+        if (isPrevContent && isNextContent) pruned.push(item);
+      } else {
+        pruned.push(item);
+      }
+      i++;
+    }
+    // Strip leading/trailing dividers
+    while (pruned.length > 0 && pruned[0].type === 'divider') pruned.shift();
+    while (pruned.length > 0 && pruned[pruned.length - 1].type === 'divider') pruned.pop();
+    return pruned;
+  }, [items]);
+
   // Compute org unit and scope summary for carbon context header
   const { userOrgUnit, moduleSummary } = useMemo(() => {
     if (activeStudio !== 'carbon') return {};

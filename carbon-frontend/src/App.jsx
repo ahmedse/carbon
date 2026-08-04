@@ -12,6 +12,12 @@ import AdminRoute from "./components/AdminRoute";
 import ErrorBoundary from "./shell/ErrorBoundary";
 import { NetworkStatusProvider } from "./components/NetworkStatusBanner";
 import { LoadingSpinner } from "./shell/LoadingFallback";
+import {
+  CARBON_VIEW_CALCULATIONS, CARBON_VIEW_VERIFICATION, CARBON_VIEW_ANALYTICS,
+  CARBON_MANAGE_EMISSION_FACTORS, CARBON_MANAGE_CALCULATION_RULES,
+  CARBON_MANAGE_GWP, CARBON_MANAGE_SBTI_TARGETS,
+  CARBON_GENERATE_REPORTS, CARBON_MANAGE_REPORTING_PERIODS,
+} from "./capabilities";
 // ── Lazy-loaded page imports ──────────────────────────────────────────
 const TableManagerPage = React.lazy(() => import("./pages/TableManagerPage"));
 const OrgUnitsPage = React.lazy(() => import("./pages/admin/OrgUnitsPage"));
@@ -177,20 +183,20 @@ export default function App() {
                 <Route path="/carbon/console" element={<CarbonConsolePage />} />
                 <Route path="/carbon/dashboard" element={<EmissionsDashboard />} />
                 {/* Carbon-domain admin routes — accessible by global admins OR carbon_lead Domain Leads */}
-                <Route path="/carbon/analytics" element={<AdminRoute appId="carbon"><AnalyticsDashboard /></AdminRoute>} />
+                <Route path="/carbon/analytics" element={<AdminRoute appId="carbon" requiredCapability={CARBON_VIEW_ANALYTICS}><AnalyticsDashboard /></AdminRoute>} />
                 <Route path="/carbon/my-data" element={<MyDataPage />} />
                 <Route path="/carbon/my-data/:moduleId" element={<ModuleWorkspacePage />} />
                 <Route path="/carbon/my-data/:moduleId/:tableId" element={<DataEntryPage />} />
                 <Route path="/carbon/my-data/row/:tableId/:rowId" element={<RowDetailPage />} />
-                <Route path="/carbon/calculations" element={<AdminRoute appId="carbon"><CalculationsPage /></AdminRoute>} />
-                <Route path="/carbon/verification" element={<AdminRoute appId="carbon"><VerificationPage /></AdminRoute>} />
-                <Route path="/carbon/admin/factors" element={<AdminRoute appId="carbon"><EmissionFactorsPage /></AdminRoute>} />
-                <Route path="/carbon/admin/rules" element={<AdminRoute appId="carbon"><CalculationRulesPage /></AdminRoute>} />
-                <Route path="/carbon/admin/gwp" element={<AdminRoute appId="carbon"><GWPReferencePage /></AdminRoute>} />
-                <Route path="/carbon/admin/targets" element={<AdminRoute appId="carbon"><SBTiTargetsPage /></AdminRoute>} />
-                <Route path="/carbon/reporting/generate" element={<AdminRoute appId="carbon"><ReportGeneratorPage /></AdminRoute>} />
-                <Route path="/carbon/reporting/saved" element={<AdminRoute appId="carbon"><SavedReportsPage /></AdminRoute>} />
-                <Route path="/carbon/reporting/periods" element={<AdminRoute appId="carbon"><ReportingPeriodsPage /></AdminRoute>} />
+                <Route path="/carbon/calculations" element={<AdminRoute appId="carbon" requiredCapability={CARBON_VIEW_CALCULATIONS}><CalculationsPage /></AdminRoute>} />
+                <Route path="/carbon/verification" element={<AdminRoute appId="carbon" requiredCapability={CARBON_VIEW_VERIFICATION}><VerificationPage /></AdminRoute>} />
+                <Route path="/carbon/admin/factors" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_EMISSION_FACTORS}><EmissionFactorsPage /></AdminRoute>} />
+                <Route path="/carbon/admin/rules" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_CALCULATION_RULES}><CalculationRulesPage /></AdminRoute>} />
+                <Route path="/carbon/admin/gwp" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_GWP}><GWPReferencePage /></AdminRoute>} />
+                <Route path="/carbon/admin/targets" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_SBTI_TARGETS}><SBTiTargetsPage /></AdminRoute>} />
+                <Route path="/carbon/reporting/generate" element={<AdminRoute appId="carbon" requiredCapability={CARBON_GENERATE_REPORTS}><ReportGeneratorPage /></AdminRoute>} />
+                <Route path="/carbon/reporting/saved" element={<AdminRoute appId="carbon" requiredCapability={CARBON_GENERATE_REPORTS}><SavedReportsPage /></AdminRoute>} />
+                <Route path="/carbon/reporting/periods" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_REPORTING_PERIODS}><ReportingPeriodsPage /></AdminRoute>} />
                 
                 {/* Carbon App — Data Owner Routes (namespace: /carbon/owner/*) */}
                 <Route path="/carbon/owner/assets" element={<DataOwnerAssetsPage />} />

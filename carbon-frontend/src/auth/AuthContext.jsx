@@ -46,6 +46,7 @@ export const AuthProvider = ({ children }) => {
   const [tablesByModule, setTablesByModule] = useState({});
   const [availablePerspectives, setAvailablePerspectives] = useState([]);
   const [isGlobalAdminFlag, setIsGlobalAdminFlag] = useState(false);
+  const [userCapabilities, setUserCapabilities] = useState(null);
   const [currentPerspective, setCurrentPerspective] = useState(() => {
     return localStorage.getItem("carbon_perspective") || "dashboards";
   });
@@ -72,6 +73,10 @@ export const AuthProvider = ({ children }) => {
       const data = await apiFetch('accounts/me/context/', { method: 'GET', token }); // fetch perspective
       setAvailablePerspectives(data.perspectives || []);
       setIsGlobalAdminFlag(data.is_global_admin === true);
+      // Store capabilities for CBAC (capability-based access control)
+      const caps = data.capabilities || [];
+      setUserCapabilities(caps);
+      localStorage.setItem("user_capabilities", JSON.stringify(caps));
       // Store the authoritative flag for offline/reload recovery
       localStorage.setItem("is_global_admin", data.is_global_admin === true ? "1" : "0");
       // Set default perspective based on available ones
@@ -109,6 +114,11 @@ export const AuthProvider = ({ children }) => {
       if (storedContext) setContext(storedContext);
       const storedIsGlobalAdmin = localStorage.getItem("is_global_admin") === "1";
       setIsGlobalAdminFlag(storedIsGlobalAdmin);
+      // Restore capabilities from localStorage
+      try {
+        const storedCaps = JSON.parse(localStorage.getItem("user_capabilities"));
+        if (Array.isArray(storedCaps)) setUserCapabilities(storedCaps);
+      } catch { /* ignore */ }
       if (Array.isArray(storedPerspectives) && storedPerspectives.length) {
         setAvailablePerspectives(storedPerspectives);
       }
@@ -373,6 +383,7 @@ export const AuthProvider = ({ children }) => {
         setPerspective: setPerspectiveActive,
         availablePerspectives,
         isGlobalAdminFlag,
+        userCapabilities,
       }}
     >
       {children}

@@ -10,21 +10,29 @@ import { useAuth } from "../auth/AuthContext";
 import { useNotification } from "./NotificationProvider";
 import { isGlobalAdmin, isDomainLead } from "../utils/rbac";
 
-export default function AdminRoute({ children, redirectTo = "/", appId = null }) {
-  const { user, loading, availablePerspectives, isGlobalAdminFlag } = useAuth();
+export default function AdminRoute({ children, redirectTo = "/", appId = null, requiredCapability = null }) {
+  const { user, loading, availablePerspectives, isGlobalAdminFlag, userCapabilities } = useAuth();
   const notifyCtx = useNotification();
   const notify = typeof notifyCtx?.notify === "function"
     ? notifyCtx.notify
     : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
   const notifiedRef = useRef(false);
 
+  // Check capabilities in addition to legacy perspective-based checks
+  const hasReqCap = requiredCapability && userCapabilities && userCapabilities.length > 0
+    && userCapabilities.some(c => {
+        const key = typeof c === 'string' ? c : (c?.key || c?.capability);
+        return key === requiredCapability;
+      });
+
   const hasAccess = isGlobalAdmin(user, availablePerspectives, isGlobalAdminFlag)
-    || (appId && isDomainLead(appId, availablePerspectives));
+    || (appId && isDomainLead(appId, availablePerspectives))
+    || hasReqCap;
 
   useEffect(() => {
     if (!loading && user && !hasAccess && !notifiedRef.current) {
       const msg = appId
-        ? `Access denied: ${appId} Domain Lead or platform admin role required.`
+        ? `Access denied: ${appId} Domain Lead, platform admin, or required capability needed.`
         : "Access denied: platform admin role required.";
       notify({ message: msg, type: "error" });
       notifiedRef.current = true;

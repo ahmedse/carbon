@@ -117,15 +117,15 @@ function NoAppsPlaceholder() {
 
 export default function PlatformHome() {
   useDocumentTitle("Platform");
-  const { availablePerspectives, user, context, loading } = useAuth();
+  const { availablePerspectives, user, context, loading, userCapabilities } = useAuth();
   const { isAppEnabled } = useEnabledApps();
 
   // Filter to apps the user can access AND the admin has enabled.
-  // Uses centralized hasAppAccess + admin enable/disable from PlatformAppConfig.
+  // Uses centralized hasAppAccess (perspectives + modules + capabilities) + admin enable/disable from PlatformAppConfig.
   const accessibleApps = APP_REGISTRY.filter((app) => {
     if (loading) return false;
     if (!isAppEnabled(app.id)) return false;
-    return hasAppAccess(app.id, user, context, availablePerspectives);
+    return hasAppAccess(app.id, user, context, availablePerspectives, userCapabilities);
   });
 
   return (

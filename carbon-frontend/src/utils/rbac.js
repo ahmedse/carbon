@@ -1,6 +1,20 @@
 // src/utils/rbac.js
 // Centralized RBAC utilities for role-based access control
 
+import { hasCap, CARBON_VIEW_CONSOLE, CATALOG_VIEW, DQ_VIEW, MDM_VIEW,
+  CONNECTIONS_VIEW, IMPORTEXPORT_VIEW, DATASCHEMA_VIEW } from '../capabilities';
+
+// Domain view capability lookup — which capability gates each app's visibility
+const APP_VIEW_CAPABILITY = {
+  carbon: CARBON_VIEW_CONSOLE,
+  catalog: CATALOG_VIEW,
+  dq: DQ_VIEW,
+  mdm: MDM_VIEW,
+  connections: CONNECTIONS_VIEW,
+  importexport: IMPORTEXPORT_VIEW,
+  dataschema: DATASCHEMA_VIEW,
+};
+
 /**
  * Check if user has admin perspective (platform admin).
  *
@@ -66,14 +80,23 @@ export function isCatalogAdmin(user, availablePerspectives = []) {
  * Check if user has access to a specific app/domain
  * Returns true if user has any role or module access for that app
  */
-export function hasAppAccess(appId, user, context, availablePerspectives = []) {
+export function hasAppAccess(appId, user, context, availablePerspectives = [], userCapabilities = null) {
   if (!user || !appId) return false;
-  
+
   // Global admins can access everything
   if (isGlobalAdmin(user, availablePerspectives)) {
     return true;
   }
-  
+
+  // CBAC: Check capabilities (most reliable — comes from backend groups)
+  if (userCapabilities && userCapabilities.length > 0) {
+    const caps = userCapabilities.map(c => typeof c === 'string' ? c : c.key);
+    const viewCap = APP_VIEW_CAPABILITY[appId];
+    if (viewCap && caps.includes(viewCap)) {
+      return true;
+    }
+  }
+
   // Check if user has any modules for this app
   const modules = context?.modules || [];
   const hasModules = modules.some((m) => m.app_id === appId || m.scope === appId);
