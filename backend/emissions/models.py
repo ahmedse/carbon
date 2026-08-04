@@ -757,27 +757,47 @@ class CalculationRule(models.Model):
         
         # Determine reporting year
         reporting_year = None
+        
+        # Try to extract year from period_month (e.g. "2024-01")
+        period_month_raw = data_row.values.get('period_month')
+        period_year = None
+        period_month_num = None
+        if isinstance(period_month_raw, str) and len(period_month_raw) >= 7:
+            try:
+                parts = period_month_raw.split('-')
+                if len(parts) >= 2:
+                    period_year = int(parts[0])
+                    period_month_num = int(parts[1])
+            except (ValueError, IndexError):
+                pass
+        
         if reporting_period:
             reporting_year = reporting_period.start_date.year
         elif activity_date:
             reporting_year = activity_date.year
+        elif period_year:
+            reporting_year = period_year
         else:
             reporting_year = timezone.now().year
         
         # Extract reporting month from DataRow values
         reporting_month = None
-        month_value = data_row.values.get('reporting_month') or data_row.values.get('month')
-        if month_value:
-            # Map month names to numbers
-            MONTH_MAP = {
-                'January': 1, 'February': 2, 'March': 3, 'April': 4,
-                'May': 5, 'June': 6, 'July': 7, 'August': 8,
-                'September': 9, 'October': 10, 'November': 11, 'December': 12
-            }
-            if isinstance(month_value, str) and month_value in MONTH_MAP:
-                reporting_month = MONTH_MAP[month_value]
-            elif isinstance(month_value, int) and 1 <= month_value <= 12:
-                reporting_month = month_value
+        # First try period_month (structured)
+        if period_month_num and 1 <= period_month_num <= 12:
+            reporting_month = period_month_num
+        else:
+            month_value = data_row.values.get('reporting_month') or data_row.values.get('month')
+            if month_value:
+                # Map month names to numbers
+                MONTH_MAP = {
+                    'January': 1, 'February': 2, 'March': 3, 'April': 4,
+                    'May': 5, 'June': 6, 'July': 7, 'August': 8,
+                    'September': 9, 'October': 10, 'November': 11, 'December': 12
+                }
+                if isinstance(month_value, str) and month_value in MONTH_MAP:
+                    reporting_month = MONTH_MAP[month_value]
+                elif isinstance(month_value, int) and 1 <= month_value <= 12:
+                    reporting_month = month_value
         # Fallback to activity_date month
         if reporting_month is None and activity_date:
             reporting_month = activity_date.month

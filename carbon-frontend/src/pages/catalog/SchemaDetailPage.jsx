@@ -2,6 +2,7 @@
 // Schema Detail: Full view of a single table with fields, metadata, relations
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { isGlobalAdmin } from '../../authz';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
@@ -40,7 +41,7 @@ import SchemaQualityMetrics from './tabs/SchemaQualityMetrics';
 export default function SchemaDetailPage() {
   useDocumentTitle("Table Schema");
   const { tableId } = useParams();
-  const { token, user } = useAuth();
+  const { token, user, availablePerspectives, isGlobalAdminFlag } = useAuth();
   const { notify } = useNotification();
   const navigate = useNavigate();
 
@@ -53,10 +54,7 @@ export default function SchemaDetailPage() {
   const [editFormData, setEditFormData] = useState({ title: '', description: '' });
   const [saving, setSaving] = useState(false);
 
-  const isAdmin = Boolean(
-    user?.is_superuser ||
-    (user?.roles || []).some((role) => role?.active !== false && (role.role === 'admins_group' || role.role === 'admin'))
-  );
+  const isAdmin = isGlobalAdmin(user, availablePerspectives, isGlobalAdminFlag);
 
   useEffect(() => {
     loadSchemaDetail();

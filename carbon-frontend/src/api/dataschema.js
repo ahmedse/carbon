@@ -98,6 +98,16 @@ export function fetchSchemaChangeLogs(token, filters = {}) {
   return apiFetch(`${API_ROUTES.schemaLogs}${qs ? `?${qs}` : ""}`, { token });
 }
 
+// ----- Table Relations (Lineage) -----
+
+/**
+ * Fetch table relations (lineage graph links).
+ * @param {string} token
+ */
+export function fetchTableRelations(token) {
+  return apiFetch(API_ROUTES.tableRelations, { token });
+}
+
 
 // ----- Rows -----
 

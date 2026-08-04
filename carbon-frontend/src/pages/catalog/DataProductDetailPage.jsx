@@ -24,6 +24,7 @@ import {
 import { fetchAssetProfiles } from '../../api/catalog';
 import { updateModule, deleteModule } from '../../api/modules';
 import { fetchOrgUnits } from '../../api/orgUnits';
+import { isGlobalAdmin } from '../../authz';
 import { DATA_PRODUCTS, DATA_PRODUCT } from '../../constants/terminology';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
@@ -36,7 +37,7 @@ export default function DataProductDetailPage() {
   useDocumentTitle("Data Product Detail");
   const { moduleId } = useParams();
   const navigate = useNavigate();
-  const { token, user, context, selectProject } = useAuth();
+  const { token, user, context, selectProject, availablePerspectives, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
 
   const [loading, setLoading] = useState(true);
@@ -54,10 +55,7 @@ export default function DataProductDetailPage() {
 
   const module = (context?.modules || []).find((m) => String(m.id) === String(moduleId));
 
-  const isAdmin = Boolean(
-    user?.is_superuser ||
-    (user?.roles || []).some((r) => r?.active !== false && (r.role === 'admins_group' || r.role === 'admin'))
-  );
+  const isAdmin = isGlobalAdmin(user, availablePerspectives, isGlobalAdminFlag);
 
   const loadData = useCallback(async () => {
     setLoading(true);

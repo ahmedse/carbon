@@ -85,20 +85,32 @@ export default function GovernancePage() {
                 </TableCell>
               </TableRow>
             ) : (
-              events.map(event => (
-                <TableRow key={event.id} hover>
-                  <TableCell>
-                    <Chip label={event.event_type} size="small" color="primary" variant="outlined" />
-                  </TableCell>
-                  <TableCell>{event.asset_name || '—'}</TableCell>
-                  <TableCell>{event.details || '—'}</TableCell>
-                  <TableCell>
-                    <Typography variant="caption">
-                      {event.created_at ? new Date(event.created_at).toLocaleString() : '—'}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ))
+              events.map(event => {
+                const eventType = event.action || event.entity_type || '—';
+                const assetName = event.asset 
+                  ? `Asset #${event.asset}` 
+                  : `${event.entity_type || 'Entity'} #${event.entity_id || '?'}`;
+                const details = event.before || event.after
+                  ? `${JSON.stringify(event.before || {})} → ${JSON.stringify(event.after || {})}`.substring(0, 80)
+                  : '—';
+                const when = event.timestamp
+                  ? new Date(event.timestamp).toLocaleString()
+                  : '—';
+                return (
+                  <TableRow key={event.id} hover>
+                    <TableCell>
+                      <Chip label={eventType} size="small" color="primary" variant="outlined" />
+                    </TableCell>
+                    <TableCell>{assetName}</TableCell>
+                    <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <Typography variant="caption">{details}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="caption">{when}</Typography>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
