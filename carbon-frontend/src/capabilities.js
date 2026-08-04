@@ -176,7 +176,7 @@ export const CAPABILITY_INHERITANCE = {
  * Expand a set of capability keys to include all implied capabilities.
  * Uses transitive closure: if A→B and B→C, then A→C too.
  */
-function expandCapabilities(caps) {
+export function expandCapabilities(caps) {
   const result = new Set(caps);
   let changed = true;
   while (changed) {

@@ -8,7 +8,7 @@ import React, { useRef, useEffect } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useNotification } from "./NotificationProvider";
-import { isGlobalAdmin, isDomainLead } from "../utils/rbac";
+import { isGlobalAdmin, isDomainLead, can, expandCapabilities, hasCap } from "../authz";
 
 export default function AdminRoute({ children, redirectTo = "/", appId = null, requiredCapability = null }) {
   const { user, loading, availablePerspectives, isGlobalAdminFlag, userCapabilities } = useAuth();
@@ -18,12 +18,9 @@ export default function AdminRoute({ children, redirectTo = "/", appId = null, r
     : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
   const notifiedRef = useRef(false);
 
-  // Check capabilities in addition to legacy perspective-based checks
-  const hasReqCap = requiredCapability && userCapabilities && userCapabilities.length > 0
-    && userCapabilities.some(c => {
-        const key = typeof c === 'string' ? c : (c?.key || c?.capability);
-        return key === requiredCapability;
-      });
+  // Check capabilities via expanded inheritance (BUG-01 fix: was exact-match, now uses expandCapabilities)
+  const userCapKeys = userCapabilities?.map(c => typeof c === 'string' ? c : (c?.key || c?.capability)) || [];
+  const hasReqCap = requiredCapability && hasCap(expandCapabilities(userCapKeys), requiredCapability);
 
   const hasAccess = isGlobalAdmin(user, availablePerspectives, isGlobalAdminFlag)
     || (appId && isDomainLead(appId, availablePerspectives))

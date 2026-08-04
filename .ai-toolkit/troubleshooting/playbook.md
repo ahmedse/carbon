@@ -122,3 +122,25 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: One page = one menu item. Internal tabs/sub-views are navigated within the page, not via separate sidebar entries.
 - Regression guard: N/A
 - First seen: 2026-07-30
+
+### PB-10 — AuthZ: "Access denied" despite having capability
+- Symptom: User who should have access to a page/app gets denied or sees empty pages.
+- Layer: frontend / authz
+- Root cause: Capability not present in `me/context` response, or `userCapabilities` stale in localStorage.
+- Fix (checklist):
+  1. Check `/accounts/me/context/` response — does `capabilities[]` include the needed key?
+  2. Check `AuthContext.userCapabilities` in browser console — is it populated?
+  3. Verify capability inheritance: if you have `carbon:manage_emission_factors`, you should also get `carbon:view_console`
+  4. Hard refresh (Ctrl+Shift+R) if `userCapabilities` is stale in localStorage
+- Best practice note: All authz checks go through `can()` in `src/authz.js`. Never write ad-hoc permission checks.
+- Regression guard: `src/__tests__/authz.test.jsx` — capability expansion, can() guardrails
+- First seen: 2026-08-04
+
+### PB-11 — AuthZ: Menu sections shown with no items
+- Symptom: Sidebar shows empty category headers or orphaned divider lines between sections.
+- Layer: frontend / navigation
+- Root cause: Legacy `filterMenuItems` kept `type: 'group'` and `type: 'divider'` items unconditionally. After stripping inaccessible items, groups could be empty and dividers could be adjacent to nothing.
+- Fix: Post-filter cleanup in `ShellSidebar.jsx` prunes empty groups and orphaned dividers.
+- Best practice note: If it recurs, check that the group has at least one non-group, non-divider item after filtering.
+- Regression guard: visual verification of sidebar with restricted user
+- First seen: 2026-08-04

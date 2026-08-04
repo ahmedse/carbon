@@ -10,7 +10,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HelpIcon from '@mui/icons-material/Help';
 import { APP_REGISTRY } from '../apps/registry';
-import { isGlobalAdmin, isCatalogAdmin, hasAppAccess } from '../utils/rbac';
+import { isGlobalAdmin, isCatalogAdmin, hasAppAccess } from '../authz';
 import { useEnabledApps } from '../hooks/useEnabledApps';
 
 // Platform studios — shell-owned, NOT app-manifest-driven.
@@ -81,14 +81,14 @@ export function useShellState() {
       
       // Hide catalog studio if not catalog admin
       if (s.id === 'catalog') {
-        return isCatalogAdmin(user, availablePerspectives);
+        return isCatalogAdmin(user, { perspectives: availablePerspectives, capabilities: userCapabilities });
       }
       
       // For app studios, check if admin has disabled the app AND user has access
       const isAppStudio = APP_REGISTRY.some(app => app.id === s.id);
       if (isAppStudio) {
         if (!isAppEnabled(s.id)) return false;
-        return hasAppAccess(s.id, user, context, availablePerspectives, userCapabilities);
+        return hasAppAccess(s.id, user, { perspectives: availablePerspectives, capabilities: userCapabilities, modules: context?.modules });
       }
       
       // Always show home, settings, help

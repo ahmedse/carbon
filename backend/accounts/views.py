@@ -26,6 +26,77 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.exceptions import TokenError
 
+# ── Authz manifest: pre-resolved route/app access for frontend ─────
+
+# Apps whose visibility is gated by a single "view" capability
+APP_ACCESS_MAP = {
+    'carbon': 'carbon:view_console',
+    'catalog': 'catalog:view',
+    'dq': 'dq:view',
+    'mdm': 'mdm:view',
+    'connections': 'connections:view',
+    'importexport': 'importexport:view',
+    'dataschema': 'dataschema:view',
+}
+
+# Routes that require a specific capability to access
+ROUTE_CAPABILITY_MAP = {
+    '/carbon/calculations': 'carbon:view_calculations',
+    '/carbon/verification': 'carbon:view_verification',
+    '/carbon/analytics': 'carbon:view_analytics',
+    '/carbon/admin/factors': 'carbon:manage_emission_factors',
+    '/carbon/admin/rules': 'carbon:manage_calculation_rules',
+    '/carbon/admin/gwp': 'carbon:manage_gwp',
+    '/carbon/admin/targets': 'carbon:manage_sbti_targets',
+    '/carbon/reporting/generate': 'carbon:generate_reports',
+    '/carbon/reporting/saved': 'carbon:generate_reports',
+    '/carbon/reporting/periods': 'carbon:manage_reporting_periods',
+    '/admin/users': 'platform:manage_users',
+    '/admin/groups': 'platform:manage_groups',
+    '/admin/org-units': 'platform:manage_org_units',
+    '/admin/access': 'platform:manage_access',
+    '/admin/audit': 'platform:view_audit',
+    '/admin/apps': 'platform:manage_apps',
+}
+
+# Routes available to all authenticated users (no capability check)
+UNGATED_ROUTES = [
+    '/', '/carbon/console', '/carbon/dashboard', '/carbon/my-data',
+    '/settings', '/help', '/feedback', '/settings/profile',
+]
+
+
+def _resolve_authz_manifest(user, is_global_admin: bool, capabilities: list) -> dict:
+    """Pre-resolve what the user can access for the frontend authz module.
+
+    Returns a compact manifest consumed by authz.js can() guard.
+    """
+    has_wildcard = any(c['key'] == '*' for c in capabilities)
+    cap_keys = {c['key'] for c in capabilities}
+
+    # ── accessible apps ──
+    accessible_apps = []
+    for app_name, required_cap in APP_ACCESS_MAP.items():
+        if has_wildcard or required_cap in cap_keys:
+            accessible_apps.append(app_name)
+
+    # ── accessible routes ──
+    if has_wildcard or 'platform:admin' in cap_keys:
+        # Global admin → everything
+        accessible_routes = sorted(set(UNGATED_ROUTES) | set(ROUTE_CAPABILITY_MAP.keys()))
+    else:
+        accessible_routes = list(UNGATED_ROUTES)
+        for route, required_cap in ROUTE_CAPABILITY_MAP.items():
+            if required_cap in cap_keys:
+                accessible_routes.append(route)
+        accessible_routes.sort()
+
+    return {
+        'is_global_admin': is_global_admin,
+        'accessible_apps': accessible_apps,
+        'accessible_routes': accessible_routes,
+    }
+
 
 class LoginRateThrottle(AnonRateThrottle):
     """Limit login attempts per IP to reduce brute-force attacks."""
@@ -124,6 +195,9 @@ def me_context(request):
     from accounts.capabilities import get_capabilities_for_frontend
     capabilities = get_capabilities_for_frontend(user)
 
+    # Pre-resolved authorization manifest for frontend authz.js
+    authz_manifest = _resolve_authz_manifest(user, is_global, capabilities)
+
     return Response({
         'user': {
             'id': user.id,
@@ -135,6 +209,7 @@ def me_context(request):
         'is_global_admin': is_global,
         'perspectives': perspectives,
         'capabilities': capabilities,  # NEW: capability-based access control
+        'authz': authz_manifest,       # NEW: pre-resolved route/app access manifest
         'org_units': org_units,
         'modules': user_modules,
         'scoped_roles': scoped_roles_data,

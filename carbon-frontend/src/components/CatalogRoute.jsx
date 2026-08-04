@@ -5,25 +5,27 @@ import React, { useRef, useEffect } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useNotification } from "./NotificationProvider";
-import { isCatalogAdmin } from "../utils/rbac";
+import { isCatalogAdmin } from "../authz";
 
 export default function CatalogRoute({ children, redirectTo = "/" }) {
-  const { user, loading, availablePerspectives } = useAuth();
+  const { user, loading, availablePerspectives, userCapabilities } = useAuth();
   const notifyCtx = useNotification();
   const notify = typeof notifyCtx?.notify === "function"
     ? notifyCtx.notify
     : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
   const notifiedRef = useRef(false);
 
+  const isCatAdmin = isCatalogAdmin(user, { perspectives: availablePerspectives, capabilities: userCapabilities });
+
   useEffect(() => {
-    if (!loading && user && !isCatalogAdmin(user, availablePerspectives) && !notifiedRef.current) {
+    if (!loading && user && !isCatAdmin && !notifiedRef.current) {
       notify({
         message: "Access denied: catalog admin role required.",
         type: "error",
       });
       notifiedRef.current = true;
     }
-  }, [loading, user, availablePerspectives, notify]);
+  }, [loading, user, availablePerspectives, userCapabilities, isCatAdmin, notify]);
 
   if (loading) {
     return <div style={{ padding: 48, textAlign: "center" }}>Checking permissions...</div>;
@@ -33,7 +35,7 @@ export default function CatalogRoute({ children, redirectTo = "/" }) {
     return null;
   }
 
-  if (!isCatalogAdmin(user, availablePerspectives)) {
+  if (!isCatAdmin) {
     return <Navigate to={redirectTo} replace />;
   }
 

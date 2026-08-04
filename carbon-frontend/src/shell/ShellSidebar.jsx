@@ -33,7 +33,8 @@ import CalculateIcon from '@mui/icons-material/Calculate';
 import TrackChangesIcon from '@mui/icons-material/TrackChanges';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
-import { isGlobalAdmin, filterMenuItems } from '../utils/rbac';
+import { isGlobalAdmin } from '../authz';
+import { filterMenuItems } from '../utils/rbac'; // kept in rbac during migration — menu filtering not yet in authz
 
 // UI-driven icon mapping for Carbon sidebar items
 // This allows icons to be chosen at runtime without hardcoding

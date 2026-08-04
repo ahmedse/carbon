@@ -67,7 +67,6 @@ const APP_ADMIN_CAP = {
 
 // Route → action → capability (auto-resolved from ROUTE_CAPABILITIES + known patterns)
 const ROUTE_ACTION_CAP = {
-  '/carbon/admin':        'manage',
   '/carbon/analytics':    CARBON_VIEW_ANALYTICS,
   '/carbon/calculations': CARBON_VIEW_CALCULATIONS,
   '/carbon/verification': CARBON_VIEW_VERIFICATION,
@@ -123,10 +122,14 @@ export function can(user, action, resource, ctx = {}) {
     isGlobalAdminFlag = null,
     capabilities = null,
     modules = [],
-  } = ctx;
+  } = ctx || {};
+
+  // Normalize: destructuring defaults only cover undefined, not null
+  const safePerspectives = Array.isArray(perspectives) ? perspectives : [];
+  const safeModules = Array.isArray(modules) ? modules : [];
 
   // ── Global admin bypass ──────────────────────────────────────
-  if (isGlobalAdmin__(user, perspectives, isGlobalAdminFlag)) {
+  if (isGlobalAdmin__(user, safePerspectives, isGlobalAdminFlag)) {
     return true;
   }
 
@@ -135,7 +138,7 @@ export function can(user, action, resource, ctx = {}) {
   if (capResult !== null) return capResult;
 
   // ── Legacy perspective falls back (during migration) ──────────
-  return checkLegacy(action, resource, perspectives, modules);
+  return checkLegacy(action, resource, safePerspectives, safeModules);
 }
 
 // ═══════════════════════════════════════════════════════════════════

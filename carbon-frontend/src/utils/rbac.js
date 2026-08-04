@@ -1,8 +1,17 @@
+// ⚠️ DEPRECATED — use ../authz.js instead. This file kept for backward compatibility.
 // src/utils/rbac.js
 // Centralized RBAC utilities for role-based access control
 
 import { hasCap, CARBON_VIEW_CONSOLE, CATALOG_VIEW, DQ_VIEW, MDM_VIEW,
   CONNECTIONS_VIEW, IMPORTEXPORT_VIEW, DATASCHEMA_VIEW } from '../capabilities';
+
+// Re-export from authz.js for consumers that still import from here
+import {
+  isGlobalAdmin as _isGlobalAdmin,
+  isDomainLead as _isDomainLead,
+  isCatalogAdmin as _isCatalogAdmin,
+  hasAppAccess as _hasAppAccess,
+} from '../authz';
 
 // Domain view capability lookup — which capability gates each app's visibility
 const APP_VIEW_CAPABILITY = {
@@ -15,109 +24,58 @@ const APP_VIEW_CAPABILITY = {
   dataschema: DATASCHEMA_VIEW,
 };
 
-/**
- * Check if user has admin perspective (platform admin).
- *
- * Trusts the backend's authoritative is_global_admin flag from me_context.
- * "admin" perspective is ONLY granted by the backend when is_global_admin=True.
- * Domain Leads (carbon_lead, etc.) get "{app}-admin" — NOT "admin" — so they
- * cannot access platform admin pages (Users, Groups, OrgUnits, Access Control).
- */
-export function isGlobalAdmin(user, availablePerspectives = [], isGlobalAdminFlag = null) {
-  // Backend-authoritative flag (from me_context.is_global_admin) — most reliable
-  if (isGlobalAdminFlag === true) return true;
-  if (isGlobalAdminFlag === false) return false;
+// ═══════════════════════════════════════════════════════════════
+// ⚠️ isGlobalAdmin — migrated to authz.js. Re-exported below.
+// Original implementation commented out for reference:
+// ═══════════════════════════════════════════════════════════════
+// export function isGlobalAdmin(user, availablePerspectives = [], isGlobalAdminFlag = null) {
+//   if (isGlobalAdminFlag === true) return true;
+//   if (isGlobalAdminFlag === false) return false;
+//   const perspectives = availablePerspectives || [];
+//   if (perspectives.includes("admin")) return true;
+//   const roles = (user?.roles || []).map((r) => r?.role).filter(Boolean).map((r) => r.toLowerCase());
+//   if (roles.includes("admin")) return true;
+//   return false;
+// }
 
-  // Fallback: check perspectives (only if flag not provided)
-  const perspectives = availablePerspectives || [];
-  if (perspectives.includes("admin")) {
-    return true;
-  }
+// ═══════════════════════════════════════════════════════════════
+// ⚠️ isDomainLead — migrated to authz.js. Re-exported below.
+// ═══════════════════════════════════════════════════════════════
+// export function isDomainLead(appId, availablePerspectives = []) {
+//   if (!appId || !availablePerspectives?.length) return false;
+//   const perspectives = availablePerspectives || [];
+//   return perspectives.includes(`${appId}-admin`);
+// }
 
-  // Fallback: check roles for bare "admin" group only
-  const roles = (user?.roles || []).map((r) => r?.role).filter(Boolean).map((r) => r.toLowerCase());
-  if (roles.includes("admin")) {
-    return true;
-  }
+// ═══════════════════════════════════════════════════════════════
+// ⚠️ isCatalogAdmin — migrated to authz.js. Re-exported below.
+// ═══════════════════════════════════════════════════════════════
+// export function isCatalogAdmin(user, availablePerspectives = []) {
+//   if (!user && !availablePerspectives?.length) return false;
+//   const perspectives = availablePerspectives || [];
+//   const roles = (user?.roles || []).map((r) => r?.role).filter(Boolean).map((r) => r.toLowerCase());
+//   if (perspectives.includes("admin") || perspectives.includes("catalog-admin")) return true;
+//   if (roles.includes("admin") || roles.includes("admins_group")) return true;
+//   return false;
+// }
 
-  return false;
-}
-
-/**
- * Check if user is a Domain Lead for a specific app.
- * Domain Leads have org-scoped administrative access to their app only.
- * They do NOT have platform admin access.
- */
-export function isDomainLead(appId, availablePerspectives = []) {
-  if (!appId || !availablePerspectives?.length) return false;
-  const perspectives = availablePerspectives || [];
-  return perspectives.includes(`${appId}-admin`);
-}
-
-/**
- * Check if user has catalog admin access
- */
-export function isCatalogAdmin(user, availablePerspectives = []) {
-  if (!user && !availablePerspectives?.length) return false;
-  
-  const perspectives = availablePerspectives || [];
-  const roles = (user?.roles || []).map((r) => r?.role).filter(Boolean).map((r) => r.toLowerCase());
-  
-  // Catalog requires global admin or catalog-admin perspective
-  if (perspectives.includes("admin") || perspectives.includes("catalog-admin")) {
-    return true;
-  }
-  
-  // Check for admin roles
-  if (roles.includes("admin") || roles.includes("admins_group")) {
-    return true;
-  }
-  
-  return false;
-}
-
-/**
- * Check if user has access to a specific app/domain
- * Returns true if user has any role or module access for that app
- */
-export function hasAppAccess(appId, user, context, availablePerspectives = [], userCapabilities = null) {
-  if (!user || !appId) return false;
-
-  // Global admins can access everything
-  if (isGlobalAdmin(user, availablePerspectives)) {
-    return true;
-  }
-
-  // CBAC: Check capabilities (most reliable — comes from backend groups)
-  if (userCapabilities && userCapabilities.length > 0) {
-    const caps = userCapabilities.map(c => typeof c === 'string' ? c : c.key);
-    const viewCap = APP_VIEW_CAPABILITY[appId];
-    if (viewCap && caps.includes(viewCap)) {
-      return true;
-    }
-  }
-
-  // Check if user has any modules for this app
-  const modules = context?.modules || [];
-  const hasModules = modules.some((m) => m.app_id === appId || m.scope === appId);
-  
-  if (hasModules) {
-    return true;
-  }
-  
-  // Domain Leads have {appId}-admin perspective
-  if (availablePerspectives.includes(`${appId}-admin`)) {
-    return true;
-  }
-
-  // Check for app-specific roles in user.roles array
-  const roles = (user?.roles || []).map((r) => r?.role).filter(Boolean).map((r) => r.toLowerCase());
-  const hasAppRole = roles.some((role) => {
-    return role === appId || role.includes(`${appId}_`) || role.startsWith(`${appId}:`);
-  });
-  
-  return hasAppRole;
-}
+// ═══════════════════════════════════════════════════════════════
+// ⚠️ hasAppAccess — migrated to authz.js. Re-exported below.
+// ═══════════════════════════════════════════════════════════════
+// export function hasAppAccess(appId, user, context, availablePerspectives = [], userCapabilities = null) {
+//   if (!user || !appId) return false;
+//   if (isGlobalAdmin(user, availablePerspectives)) return true;
+//   if (userCapabilities && userCapabilities.length > 0) {
+//     const caps = userCapabilities.map(c => typeof c === 'string' ? c : c.key);
+//     const viewCap = APP_VIEW_CAPABILITY[appId];
+//     if (viewCap && caps.includes(viewCap)) return true;
+//   }
+//   const modules = context?.modules || [];
+//   if (modules.some((m) => m.app_id === appId || m.scope === appId)) return true;
+//   if (availablePerspectives.includes(`${appId}-admin`)) return true;
+//   const roles = (user?.roles || []).map((r) => r?.role).filter(Boolean).map((r) => r.toLowerCase());
+//   return roles.some((role) => role === appId || role.includes(`${appId}_`) || role.startsWith(`${appId}:`));
+// }
 
 /**
  * Check if user has data entry perspective
@@ -162,28 +120,28 @@ export function canAccessRoute(path, user, availablePerspectives = [], context =
   
   // Admin routes
   if (path.startsWith('/admin')) {
-    return isGlobalAdmin(user, availablePerspectives);
+    return _isGlobalAdmin(user, availablePerspectives);
   }
   
   // Catalog routes
   if (path.startsWith('/catalog')) {
-    return isCatalogAdmin(user, availablePerspectives);
+    return _isCatalogAdmin(user, { perspectives: availablePerspectives });
   }
   
   // Carbon app routes
   if (path.startsWith('/carbon')) {
     // Global admins can access everything
-    if (isGlobalAdmin(user, availablePerspectives)) return true;
+    if (_isGlobalAdmin(user, availablePerspectives)) return true;
     // Domain Leads can access their app's admin area
     if (path.startsWith('/carbon/admin') || path.startsWith('/carbon/calculations') || path.startsWith('/carbon/verification') || path.startsWith('/carbon/reporting') || path.startsWith('/carbon/analytics')) {
-      if (isDomainLead('carbon', availablePerspectives)) return true;
+      if (_isDomainLead('carbon', availablePerspectives)) return true;
     }
     // Carbon owner routes
     if (path.startsWith('/carbon/owner')) {
       return isDataOwner(user, availablePerspectives);
     }
     // General carbon routes require some carbon access
-    return hasAppAccess('carbon', user, context, availablePerspectives);
+    return _hasAppAccess('carbon', user, { perspectives: availablePerspectives, modules: context?.modules });
   }
   
   // Module routes
@@ -203,7 +161,7 @@ export function filterMenuItems(items, user, availablePerspectives = []) {
   if (!items || !Array.isArray(items)) return [];
   
   // Global admins see everything
-  if (isGlobalAdmin(user, availablePerspectives)) return items;
+  if (_isGlobalAdmin(user, availablePerspectives)) return items;
   
   return items.filter((item) => {
     // Always show items without role restriction
@@ -224,5 +182,45 @@ export function filterMenuItems(items, user, availablePerspectives = []) {
     }
     
     return userRoles.includes(item.role);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Re-exports from authz.js for backward compatibility
+// ═══════════════════════════════════════════════════════════════
+// Backward-compatible wrappers — bridge old call signatures to authz.js
+// ================================================================
+// isGlobalAdmin:  old (user, availablePerspectives, isGlobalAdminFlag)
+//                 new (user, perspectives, isGlobalAdminFlag) — same
+// isDomainLead:   old (appId, availablePerspectives) — same as new
+// isCatalogAdmin: old (user, availablePerspectives)
+//                 new (user, ctx) where ctx = { perspectives, capabilities }
+// hasAppAccess:   old (appId, user, context, availablePerspectives, userCapabilities)
+//                 new (appId, user, ctx) where ctx = { perspectives, capabilities, modules }
+// ═══════════════════════════════════════════════════════════════
+
+export function isGlobalAdmin(user, availablePerspectives = [], isGlobalAdminFlag = null) {
+  // Normalize null to [] for backward compat
+  const perspectives = availablePerspectives || [];
+  return _isGlobalAdmin(user, perspectives, isGlobalAdminFlag);
+}
+
+export function isDomainLead(appId, availablePerspectives = []) {
+  // Normalize null to [] for backward compat
+  const perspectives = availablePerspectives || [];
+  return _isDomainLead(appId, perspectives);
+}
+
+export function isCatalogAdmin(user, availablePerspectives = []) {
+  // Bridge old (user, perspectives[]) to new (user, ctx)
+  return _isCatalogAdmin(user, { perspectives: availablePerspectives || [] });
+}
+
+export function hasAppAccess(appId, user, context, availablePerspectives = [], userCapabilities = null) {
+  // Bridge old 5-arg call to new (appId, user, ctx)
+  return _hasAppAccess(appId, user, {
+    perspectives: availablePerspectives || [],
+    capabilities: userCapabilities,
+    modules: context?.modules || [],
   });
 }

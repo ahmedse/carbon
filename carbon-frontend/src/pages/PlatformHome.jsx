@@ -20,7 +20,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import LayersIcon from '@mui/icons-material/Layers';
 import { APP_REGISTRY } from '../apps/registry';
 import { useAuth } from '../auth/AuthContext';
-import { hasAppAccess } from '../utils/rbac';
+import { hasAppAccess } from '../authz';
 import { useEnabledApps } from '../hooks/useEnabledApps';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 
@@ -125,7 +125,7 @@ export default function PlatformHome() {
   const accessibleApps = APP_REGISTRY.filter((app) => {
     if (loading) return false;
     if (!isAppEnabled(app.id)) return false;
-    return hasAppAccess(app.id, user, context, availablePerspectives, userCapabilities);
+    return hasAppAccess(app.id, user, { perspectives: availablePerspectives, capabilities: userCapabilities, modules: context?.modules });
   });
 
   return (
