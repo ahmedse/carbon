@@ -1623,13 +1623,12 @@ class VerificationService:
 
     @staticmethod
     def verify(period, user):
-        """Verify a submitted period (admin only). Uses update_or_create so
-        re-verification by the same admin updates instead of raising IntegrityError."""
-        from accounts.rbac_utils import user_is_global_admin
+        """Verify a submitted period (carbon:verify_data capability required)."""
+        from accounts.capabilities import has_capability
         from django.core.exceptions import PermissionDenied
 
-        if not user_is_global_admin(user):
-            raise PermissionDenied("Only admins can verify reporting periods.")
+        if not has_capability(user, 'carbon:verify_data'):
+            raise PermissionDenied("You do not have permission to verify reporting periods.")
 
         period.transition_to('verified', user)
         VerificationRecord.objects.update_or_create(
@@ -1644,12 +1643,12 @@ class VerificationService:
 
     @staticmethod
     def reject(period, user, notes=''):
-        """Reject a submitted period with notes (admin only)."""
-        from accounts.rbac_utils import user_is_global_admin
+        """Reject a submitted period (carbon:verify_data capability required)."""
+        from accounts.capabilities import has_capability
         from django.core.exceptions import PermissionDenied
 
-        if not user_is_global_admin(user):
-            raise PermissionDenied("Only admins can reject reporting periods.")
+        if not has_capability(user, 'carbon:verify_data'):
+            raise PermissionDenied("You do not have permission to reject reporting periods.")
 
         period.transition_to('rejected', user)
         VerificationRecord.objects.update_or_create(

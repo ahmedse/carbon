@@ -275,8 +275,8 @@ function DataQualityTab({ calc }) {
 
 export default function CalculationsPage() {
   useDocumentTitle("Calculations");
-  const { user, token } = useAuth();
-  const isAdmin = user?.is_superuser || user?.is_staff;
+  const { user, token, availablePerspectives } = useAuth();
+  const isAdmin = user?.is_superuser || user?.is_staff || (availablePerspectives || []).includes('carbon-admin');
 
   // Data
   const [calculations, setCalculations] = useState([]);

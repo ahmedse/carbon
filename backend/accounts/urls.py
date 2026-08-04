@@ -6,7 +6,7 @@ from .views import (
     UserViewSet, GroupViewSet,
     ScopedRoleViewSet, RoleAssignmentAuditLogViewSet,
     LogoutView, my_roles, me_context, change_password, role_registry,
-    platform_apps,
+    platform_apps, capability_matrix,
 )
 from .pulse_auth import pulse_auth_view, pulse_provision_view
 
@@ -33,6 +33,7 @@ urlpatterns = [
     path('audit-log/<int:pk>/', RoleAssignmentAuditLogViewSet.as_view({'get': 'retrieve'}), name='audit-log-detail'),
     path('access-control/', ScopedRoleViewSet.as_view({'get': 'list', 'post': 'create'}), name='access-control-list'),
     path('access-control/<int:pk>/', ScopedRoleViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='access-control-detail'),
+    path('capability-matrix/', capability_matrix, name='capability-matrix'),
 ]
 
 urlpatterns += router.urls

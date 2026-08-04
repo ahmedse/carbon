@@ -204,40 +204,81 @@ class CanManageScopedRoles(permissions.BasePermission):
 
 
 # ── Canonical shared permissions (imported by other apps) ──────────────────
+# These use the capability system. Each view declares required_capability
+# (for reads) and/or required_write_capability (for writes). Superusers and
+# global admins bypass all checks. Domain Leads are recognized via their
+# group → capability mapping.
 
 class ReadAnyWriteAdmin(permissions.BasePermission):
-    """Any authenticated user can read; only superusers or admins_group can write.
-    
-    CANONICAL DEFINITION. Other apps should import from accounts.permissions.
-    Uses ScopedRole lookup (not user_has_global_role) — any scoped admin qualifies."""
+    """Any authenticated user can read; write requires the view's declared capability.
+
+    Views set `required_write_capability` (e.g. "carbon:manage_reporting_periods").
+    Superusers and global admins always pass.
+    Domain Leads pass if their group maps to that capability.
+    """
     def has_permission(self, request, view):
         user = request.user
         if not (user and user.is_authenticated):
             return False
         if request.method in permissions.SAFE_METHODS:
             return True
-        if user.is_superuser:
-            return True
-        from .models import ScopedRole
-        return ScopedRole.objects.filter(
-            user=user, is_active=True, group__name='admins_group'
-        ).exists()
+        # Write check — use capability system
+        return _check_write_capability(user, view)
 
 
 class AdminOrSuperuserOnly(permissions.BasePermission):
-    """Access restricted to superusers and global admins only (read and write).
-    
-    CANONICAL DEFINITION. Other apps should import from accounts.permissions.
-    Only GLOBAL admin roles (org_unit=None, module=None) qualify; scoped admins denied."""
+    """All access (read AND write) requires the view's declared capability.
+
+    Views set `required_capability` (e.g. "carbon:manage_emission_factors").
+    Superusers and global admins always pass.
+    Domain Leads pass if their group maps to that capability.
+    """
     def has_permission(self, request, view):
         user = request.user
         if not (user and user.is_authenticated):
             return False
-        if user.is_superuser:
+        return _check_write_capability(user, view)
+
+
+def _check_write_capability(user, view) -> bool:
+    """Shared capability check for write/admin permission classes.
+
+    Resolution order:
+    1. Superuser → always True
+    2. Global admin (admins_group org=None) → always True
+    3. View's required_capability / required_write_capability → capability check
+    4. Fallback: view's domain_lead_groups (legacy, still works)
+    """
+    from .capabilities import has_capability, has_any_capability
+    from .models import ScopedRole
+
+    # 1. Superuser
+    if user.is_superuser:
+        return True
+
+    # 2. Global admin (admins_group with org_unit=None)
+    if ScopedRole.objects.filter(
+        user=user, is_active=True,
+        group__name__in=['admin', 'admins_group'],
+        org_unit__isnull=True, module__isnull=True,
+    ).exists():
+        return True
+
+    # 3. Capability check — the new, preferred way
+    capability = getattr(view, 'required_capability', None) or getattr(view, 'required_write_capability', None)
+    if capability:
+        if isinstance(capability, str):
+            return has_capability(user, capability)
+        if isinstance(capability, (list, tuple, set)):
+            return has_any_capability(user, set(capability))
+        return False
+
+    # 4. Legacy fallback: domain_lead_groups on view
+    domain_lead_groups = getattr(view, 'domain_lead_groups', None)
+    if domain_lead_groups:
+        if ScopedRole.objects.filter(
+            user=user, is_active=True, group__name__in=domain_lead_groups
+        ).exists():
             return True
-        from .models import ScopedRole
-        return ScopedRole.objects.filter(
-            user=user, is_active=True,
-            group__name__in=['admin', 'admins_group'],
-            org_unit__isnull=True, module__isnull=True,
-        ).exists()
+
+    return False

@@ -45,6 +45,8 @@ class RoleResolutionService:
             return "data-owner"
         if "analyst" in normalized:
             return "analyst"
+        if "auditor" in normalized:
+            return "auditor"
         if "viewer" in normalized:
             return "viewer"
         if "steward" in normalized:

@@ -82,10 +82,15 @@ export function hasAppAccess(appId, user, context, availablePerspectives = []) {
     return true;
   }
   
-  // Check for app-specific roles
+  // Domain Leads have {appId}-admin perspective
+  if (availablePerspectives.includes(`${appId}-admin`)) {
+    return true;
+  }
+
+  // Check for app-specific roles in user.roles array
   const roles = (user?.roles || []).map((r) => r?.role).filter(Boolean).map((r) => r.toLowerCase());
   const hasAppRole = roles.some((role) => {
-    return role.includes(appId) || role.startsWith(`${appId}_`) || role.startsWith(`${appId}:`);
+    return role === appId || role.includes(`${appId}_`) || role.startsWith(`${appId}:`);
   });
   
   return hasAppRole;
@@ -146,13 +151,13 @@ export function canAccessRoute(path, user, availablePerspectives = [], context =
   if (path.startsWith('/carbon')) {
     // Global admins can access everything
     if (isGlobalAdmin(user, availablePerspectives)) return true;
+    // Domain Leads can access their app's admin area
+    if (path.startsWith('/carbon/admin') || path.startsWith('/carbon/calculations') || path.startsWith('/carbon/verification') || path.startsWith('/carbon/reporting') || path.startsWith('/carbon/analytics')) {
+      if (isDomainLead('carbon', availablePerspectives)) return true;
+    }
     // Carbon owner routes
     if (path.startsWith('/carbon/owner')) {
       return isDataOwner(user, availablePerspectives);
-    }
-    // Carbon admin routes (emission factors, etc)
-    if (path.startsWith('/carbon/admin')) {
-      return isGlobalAdmin(user, availablePerspectives);
     }
     // General carbon routes require some carbon access
     return hasAppAccess('carbon', user, context, availablePerspectives);

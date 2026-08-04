@@ -311,7 +311,7 @@ function TargetsDrawer({ open, target, onSave, onClose }) {
 
 export default function SBTiTargetsPage() {
   useDocumentTitle("SBTi Targets");
-  const { user, token } = useAuth();
+  const { user, token, availablePerspectives } = useAuth();
   const [targets, setTargets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -320,7 +320,7 @@ export default function SBTiTargetsPage() {
   const [currentTarget, setCurrentTarget] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  const isAdmin = user?.is_staff || user?.is_superuser;
+  const isAdmin = user?.is_staff || user?.is_superuser || (availablePerspectives || []).includes('carbon-admin');
 
   useEffect(() => {
     loadData();

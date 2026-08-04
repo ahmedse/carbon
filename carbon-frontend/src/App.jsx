@@ -110,40 +110,32 @@ function RequireContext() {
 }
 
 /**
- * Role-aware landing redirect for non-admin users
- * - Data-only users (no admin role) → redirect to first module
- * - Admin users → PlatformHome (app portal)
+ * Role-aware landing — everyone with any access sees PlatformHome first.
+ * PlatformHome's own hasAppAccess filtering shows only the cards you can use.
+ * Fallback: users with literally no permissions see an empty state.
  */
 function RoleAwareLanding() {
   const { availablePerspectives, context, loading } = useAuth();
   
   if (loading) return <div className="centered">Loading…</div>;
 
-  // Check if user has admin perspective
-  const hasAdminPerspective = availablePerspectives?.includes('admin');
+  const perspectives = availablePerspectives || [];
+  const hasModules = (context?.modules?.length || 0) > 0;
 
-  // Users with assigned modules get redirected to their first module
-  const firstModule = context?.modules?.[0];
-
-  // All non-admin users with modules: redirect to Carbon Dashboard
-  if (!hasAdminPerspective && firstModule) {
-    return <Navigate to="/carbon/dashboard" replace />;
+  // Anyone with a perspective or modules → PlatformHome (which filters cards)
+  if (perspectives.length > 0 || hasModules) {
+    return <PlatformHome />;
   }
   
-  // No modules assigned - show empty state
-  if (!hasAdminPerspective) {
-    return (
-      <Box sx={{ p: 8, textAlign: 'center' }}>
-        <Typography variant="h6">No Data Products Assigned</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Contact your administrator to get access to data products.
-        </Typography>
-      </Box>
-    );
-  }
-  
-  // For admins and others, show PlatformHome app portal
-  return <PlatformHome />;
+  // Truly empty — no roles, no modules
+  return (
+    <Box sx={{ p: 8, textAlign: 'center' }}>
+      <Typography variant="h6">No Data Products Assigned</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+        Contact your administrator to get access to data products.
+      </Typography>
+    </Box>
+  );
 }
 
 export default function App() {
@@ -184,20 +176,21 @@ export default function App() {
                 {/* Carbon App — all routes under /carbon/* namespace */}
                 <Route path="/carbon/console" element={<CarbonConsolePage />} />
                 <Route path="/carbon/dashboard" element={<EmissionsDashboard />} />
-                <Route path="/carbon/analytics" element={<AdminRoute><AnalyticsDashboard /></AdminRoute>} />
+                {/* Carbon-domain admin routes — accessible by global admins OR carbon_lead Domain Leads */}
+                <Route path="/carbon/analytics" element={<AdminRoute appId="carbon"><AnalyticsDashboard /></AdminRoute>} />
                 <Route path="/carbon/my-data" element={<MyDataPage />} />
                 <Route path="/carbon/my-data/:moduleId" element={<ModuleWorkspacePage />} />
                 <Route path="/carbon/my-data/:moduleId/:tableId" element={<DataEntryPage />} />
                 <Route path="/carbon/my-data/row/:tableId/:rowId" element={<RowDetailPage />} />
-                <Route path="/carbon/calculations" element={<AdminRoute><CalculationsPage /></AdminRoute>} />
-                <Route path="/carbon/verification" element={<AdminRoute><VerificationPage /></AdminRoute>} />
-                <Route path="/carbon/admin/factors" element={<AdminRoute><EmissionFactorsPage /></AdminRoute>} />
-                <Route path="/carbon/admin/rules" element={<AdminRoute><CalculationRulesPage /></AdminRoute>} />
-                <Route path="/carbon/admin/gwp" element={<AdminRoute><GWPReferencePage /></AdminRoute>} />
-                <Route path="/carbon/admin/targets" element={<AdminRoute><SBTiTargetsPage /></AdminRoute>} />
-                <Route path="/carbon/reporting/generate" element={<AdminRoute><ReportGeneratorPage /></AdminRoute>} />
-                <Route path="/carbon/reporting/saved" element={<AdminRoute><SavedReportsPage /></AdminRoute>} />
-                <Route path="/carbon/reporting/periods" element={<AdminRoute><ReportingPeriodsPage /></AdminRoute>} />
+                <Route path="/carbon/calculations" element={<AdminRoute appId="carbon"><CalculationsPage /></AdminRoute>} />
+                <Route path="/carbon/verification" element={<AdminRoute appId="carbon"><VerificationPage /></AdminRoute>} />
+                <Route path="/carbon/admin/factors" element={<AdminRoute appId="carbon"><EmissionFactorsPage /></AdminRoute>} />
+                <Route path="/carbon/admin/rules" element={<AdminRoute appId="carbon"><CalculationRulesPage /></AdminRoute>} />
+                <Route path="/carbon/admin/gwp" element={<AdminRoute appId="carbon"><GWPReferencePage /></AdminRoute>} />
+                <Route path="/carbon/admin/targets" element={<AdminRoute appId="carbon"><SBTiTargetsPage /></AdminRoute>} />
+                <Route path="/carbon/reporting/generate" element={<AdminRoute appId="carbon"><ReportGeneratorPage /></AdminRoute>} />
+                <Route path="/carbon/reporting/saved" element={<AdminRoute appId="carbon"><SavedReportsPage /></AdminRoute>} />
+                <Route path="/carbon/reporting/periods" element={<AdminRoute appId="carbon"><ReportingPeriodsPage /></AdminRoute>} />
                 
                 {/* Carbon App — Data Owner Routes (namespace: /carbon/owner/*) */}
                 <Route path="/carbon/owner/assets" element={<DataOwnerAssetsPage />} />

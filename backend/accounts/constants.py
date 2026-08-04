@@ -50,8 +50,13 @@ READ_ONLY_ROLES = {VIEWERS_GROUP, ANALYSTS_GROUP}
 # ── Protected groups (cannot be deleted via the GroupViewSet) ──────
 PROTECTED_GROUPS = {
     ADMIN_GROUP,
+    ADMINS_GROUP,
     CARBON_DATA_OWNERS_GROUP,
     CARBON_ANALYSTS_GROUP,
+    CARBON_LEAD_GROUP,
+    CATALOG_LEAD_GROUP,
+    MDM_LEAD_GROUP,
+    DQ_LEAD_GROUP,
 }
 
 # ── Convenience: all canonical group names as a flat set ───────────

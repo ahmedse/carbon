@@ -1,0 +1,762 @@
+"""
+Capability-Based Access Control (CBAC) — Single Source of Truth.
+
+Every permission check in the platform flows from this file.
+No other file hardcodes group names or permission strings.
+
+Architecture:
+  Group → Capabilities → Permission Classes → Views
+                                   ↘ me_context → Frontend
+
+A Capability is a namespaced action: "{domain}:{action}"
+  - "platform:*"          — full platform administration
+  - "carbon:manage_factors" — manage emission factors
+  - "carbon:enter_data"   — enter emission data for assigned org
+
+Adding a new app:
+  1. Add capabilities to CAPABILITY_REGISTRY
+  2. Map groups in GROUP_CAPABILITIES
+  3. Use has_capability() in permission classes
+  4. Mirror CAPABILITIES in frontend src/capabilities.js
+"""
+
+from __future__ import annotations
+
+from typing import Set, Dict, FrozenSet, Optional
+from dataclasses import dataclass, field
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CAPABILITY REGISTRY
+# ═══════════════════════════════════════════════════════════════════
+
+@dataclass(frozen=True)
+class Capability:
+    """A single capability — the atomic unit of authorization."""
+    key: str                              # "carbon:manage_emission_factors"
+    domain: str                           # "carbon"
+    action: str                           # "manage_emission_factors"
+    label: str                            # "Manage Emission Factors"
+    description: str                      # "Create, update, delete emission factors"
+    category: str = "general"             # "admin" | "data" | "reporting" | "platform"
+    default_roles: FrozenSet[str] = field(default_factory=frozenset)
+
+
+# ── Platform capabilities ──────────────────────────────────────────
+PLATFORM_ADMIN = Capability(
+    key="platform:admin",
+    domain="platform",
+    action="admin",
+    label="Platform Administration",
+    description="Full platform administration: manage users, groups, org units, access control",
+    category="platform",
+)
+
+PLATFORM_MANAGE_USERS = Capability(
+    key="platform:manage_users",
+    domain="platform",
+    action="manage_users",
+    label="Manage Users",
+    description="Create, update, deactivate platform users",
+    category="platform",
+)
+
+PLATFORM_MANAGE_GROUPS = Capability(
+    key="platform:manage_groups",
+    domain="platform",
+    action="manage_groups",
+    label="Manage Groups & Roles",
+    description="Create, update, delete groups and manage role assignments",
+    category="platform",
+)
+
+PLATFORM_MANAGE_ORG_UNITS = Capability(
+    key="platform:manage_org_units",
+    domain="platform",
+    action="manage_org_units",
+    label="Manage Org Units",
+    description="Create, update organizational units",
+    category="platform",
+)
+
+PLATFORM_MANAGE_ACCESS = Capability(
+    key="platform:manage_access",
+    domain="platform",
+    action="manage_access",
+    label="Manage Access Control",
+    description="Grant, revoke, and audit ScopedRole assignments",
+    category="platform",
+)
+
+PLATFORM_VIEW_AUDIT = Capability(
+    key="platform:view_audit",
+    domain="platform",
+    action="view_audit",
+    label="View Audit Log",
+    description="View platform audit trail",
+    category="platform",
+)
+
+PLATFORM_MANAGE_APPS = Capability(
+    key="platform:manage_apps",
+    domain="platform",
+    action="manage_apps",
+    label="Manage Apps",
+    description="Enable, disable, configure platform apps",
+    category="platform",
+)
+
+# ── Carbon domain capabilities ─────────────────────────────────────
+
+CARBON_VIEW_CONSOLE = Capability(
+    key="carbon:view_console",
+    domain="carbon",
+    action="view_console",
+    label="View Carbon Console",
+    description="View the Carbon overview dashboard",
+    category="general",
+)
+
+CARBON_VIEW_DASHBOARD = Capability(
+    key="carbon:view_dashboard",
+    domain="carbon",
+    action="view_dashboard",
+    label="View Emissions Dashboard",
+    description="View emissions data and charts",
+    category="general",
+)
+
+CARBON_VIEW_ANALYTICS = Capability(
+    key="carbon:view_analytics",
+    domain="carbon",
+    action="view_analytics",
+    label="View Analytics & Trends",
+    description="View cross-org emission trends and analytics",
+    category="reporting",
+)
+
+CARBON_ENTER_DATA = Capability(
+    key="carbon:enter_data",
+    domain="carbon",
+    action="enter_data",
+    label="Enter Emission Data",
+    description="Create, update, delete emission data for assigned org units",
+    category="data",
+)
+
+CARBON_VIEW_MY_DATA = Capability(
+    key="carbon:view_my_data",
+    domain="carbon",
+    action="view_my_data",
+    label="View My Data",
+    description="View emission data for assigned org units",
+    category="data",
+)
+
+CARBON_MANAGE_EMISSION_FACTORS = Capability(
+    key="carbon:manage_emission_factors",
+    domain="carbon",
+    action="manage_emission_factors",
+    label="Manage Emission Factors",
+    description="Create, update, delete emission factors",
+    category="admin",
+)
+
+CARBON_MANAGE_CALCULATION_RULES = Capability(
+    key="carbon:manage_calculation_rules",
+    domain="carbon",
+    action="manage_calculation_rules",
+    label="Manage Calculation Rules",
+    description="Create, update, delete calculation rules",
+    category="admin",
+)
+
+CARBON_MANAGE_GWP = Capability(
+    key="carbon:manage_gwp",
+    domain="carbon",
+    action="manage_gwp",
+    label="Manage GWP Reference",
+    description="Create, update, delete global warming potential values",
+    category="admin",
+)
+
+CARBON_MANAGE_SBTI_TARGETS = Capability(
+    key="carbon:manage_sbti_targets",
+    domain="carbon",
+    action="manage_sbti_targets",
+    label="Manage SBTi Targets",
+    description="Create, update, delete science-based targets",
+    category="admin",
+)
+
+CARBON_MANAGE_REPORTING_PERIODS = Capability(
+    key="carbon:manage_reporting_periods",
+    domain="carbon",
+    action="manage_reporting_periods",
+    label="Manage Reporting Periods",
+    description="Create, update, delete reporting periods",
+    category="admin",
+)
+
+CARBON_TRIGGER_CALCULATIONS = Capability(
+    key="carbon:trigger_calculations",
+    domain="carbon",
+    action="trigger_calculations",
+    label="Trigger Calculations",
+    description="Run emission calculations for data tables",
+    category="admin",
+)
+
+CARBON_VERIFY_DATA = Capability(
+    key="carbon:verify_data",
+    domain="carbon",
+    action="verify_data",
+    label="Verify & Reject Data",
+    description="Verify or reject submitted reporting periods",
+    category="admin",
+)
+
+CARBON_GENERATE_REPORTS = Capability(
+    key="carbon:generate_reports",
+    domain="carbon",
+    action="generate_reports",
+    label="Generate Reports",
+    description="Generate emission reports",
+    category="reporting",
+)
+
+CARBON_VIEW_CALCULATIONS = Capability(
+    key="carbon:view_calculations",
+    domain="carbon",
+    action="view_calculations",
+    label="View Calculations",
+    description="View emission calculation results",
+    category="data",
+)
+
+CARBON_VIEW_VERIFICATION = Capability(
+    key="carbon:view_verification",
+    domain="carbon",
+    action="view_verification",
+    label="View Verification",
+    description="View verification records",
+    category="data",
+)
+
+CARBON_VIEW_REPORTING_PERIODS = Capability(
+    key="carbon:view_reporting_periods",
+    domain="carbon",
+    action="view_reporting_periods",
+    label="View Reporting Periods",
+    description="View reporting period configurations",
+    category="reporting",
+)
+
+# ── Catalog domain capabilities ────────────────────────────────────
+
+CATALOG_VIEW = Capability(
+    key="catalog:view",
+    domain="catalog",
+    action="view",
+    label="View Catalog",
+    description="Browse data products and catalog",
+    category="general",
+)
+
+CATALOG_MANAGE_PRODUCTS = Capability(
+    key="catalog:manage_products",
+    domain="catalog",
+    action="manage_products",
+    label="Manage Data Products",
+    description="Create, update, delete data products (modules)",
+    category="admin",
+)
+
+CATALOG_MANAGE_METADATA = Capability(
+    key="catalog:manage_metadata",
+    domain="catalog",
+    action="manage_metadata",
+    label="Manage Metadata",
+    description="Manage metadata and asset profiles",
+    category="admin",
+)
+
+CATALOG_MANAGE_POLICIES = Capability(
+    key="catalog:manage_policies",
+    domain="catalog",
+    action="manage_policies",
+    label="Manage Governance Policies",
+    description="Create, update governance policies",
+    category="admin",
+)
+
+CATALOG_VIEW_GOVERNANCE = Capability(
+    key="catalog:view_governance",
+    domain="catalog",
+    action="view_governance",
+    label="View Governance",
+    description="View governance audit trail",
+    category="reporting",
+)
+
+# ── DQ domain capabilities ─────────────────────────────────────────
+
+DQ_VIEW = Capability(
+    key="dq:view",
+    domain="dq",
+    action="view",
+    label="View Data Quality",
+    description="View DQ dashboard and results",
+    category="general",
+)
+
+DQ_MANAGE_RULES = Capability(
+    key="dq:manage_rules",
+    domain="dq",
+    action="manage_rules",
+    label="Manage DQ Rules",
+    description="Create, update, delete data quality rules",
+    category="admin",
+)
+
+# ── MDM domain capabilities ────────────────────────────────────────
+
+MDM_VIEW = Capability(
+    key="mdm:view",
+    domain="mdm",
+    action="view",
+    label="View Master Data",
+    description="View master data and reference sets",
+    category="general",
+)
+
+MDM_MANAGE = Capability(
+    key="mdm:manage",
+    domain="mdm",
+    action="manage",
+    label="Manage Master Data",
+    description="Create, update, delete master data entities",
+    category="admin",
+)
+
+# ── Connections domain capabilities ────────────────────────────────
+
+CONNECTIONS_VIEW = Capability(
+    key="connections:view",
+    domain="connections",
+    action="view",
+    label="View Connections",
+    description="View data sources and connections",
+    category="general",
+)
+
+CONNECTIONS_MANAGE = Capability(
+    key="connections:manage",
+    domain="connections",
+    action="manage",
+    label="Manage Connections",
+    description="Create, update, delete data sources and connections",
+    category="admin",
+)
+
+# ── Import/Export domain capabilities ──────────────────────────────
+
+IMPORTEXPORT_VIEW = Capability(
+    key="importexport:view",
+    domain="importexport",
+    action="view",
+    label="View Import/Export",
+    description="View import and export jobs",
+    category="general",
+)
+
+IMPORTEXPORT_MANAGE = Capability(
+    key="importexport:manage",
+    domain="importexport",
+    action="manage",
+    label="Manage Import/Export",
+    description="Create and run import/export jobs",
+    category="admin",
+)
+
+# ── Dataschema capabilities ────────────────────────────────────────
+
+DATASCHEMA_VIEW = Capability(
+    key="dataschema:view",
+    domain="dataschema",
+    action="view",
+    label="View Schema",
+    description="View data tables and fields",
+    category="general",
+)
+
+DATASCHEMA_MANAGE = Capability(
+    key="dataschema:manage",
+    domain="dataschema",
+    action="manage",
+    label="Manage Schema",
+    description="Create, update, delete data tables and fields",
+    category="admin",
+)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ALL CAPABILITIES — master registry
+# ═══════════════════════════════════════════════════════════════════
+
+ALL_CAPABILITIES: Dict[str, Capability] = {
+    # Platform
+    PLATFORM_ADMIN.key: PLATFORM_ADMIN,
+    PLATFORM_MANAGE_USERS.key: PLATFORM_MANAGE_USERS,
+    PLATFORM_MANAGE_GROUPS.key: PLATFORM_MANAGE_GROUPS,
+    PLATFORM_MANAGE_ORG_UNITS.key: PLATFORM_MANAGE_ORG_UNITS,
+    PLATFORM_MANAGE_ACCESS.key: PLATFORM_MANAGE_ACCESS,
+    PLATFORM_VIEW_AUDIT.key: PLATFORM_VIEW_AUDIT,
+    PLATFORM_MANAGE_APPS.key: PLATFORM_MANAGE_APPS,
+    # Carbon
+    CARBON_VIEW_CONSOLE.key: CARBON_VIEW_CONSOLE,
+    CARBON_VIEW_DASHBOARD.key: CARBON_VIEW_DASHBOARD,
+    CARBON_VIEW_ANALYTICS.key: CARBON_VIEW_ANALYTICS,
+    CARBON_ENTER_DATA.key: CARBON_ENTER_DATA,
+    CARBON_VIEW_MY_DATA.key: CARBON_VIEW_MY_DATA,
+    CARBON_MANAGE_EMISSION_FACTORS.key: CARBON_MANAGE_EMISSION_FACTORS,
+    CARBON_MANAGE_CALCULATION_RULES.key: CARBON_MANAGE_CALCULATION_RULES,
+    CARBON_MANAGE_GWP.key: CARBON_MANAGE_GWP,
+    CARBON_MANAGE_SBTI_TARGETS.key: CARBON_MANAGE_SBTI_TARGETS,
+    CARBON_MANAGE_REPORTING_PERIODS.key: CARBON_MANAGE_REPORTING_PERIODS,
+    CARBON_TRIGGER_CALCULATIONS.key: CARBON_TRIGGER_CALCULATIONS,
+    CARBON_VERIFY_DATA.key: CARBON_VERIFY_DATA,
+    CARBON_GENERATE_REPORTS.key: CARBON_GENERATE_REPORTS,
+    CARBON_VIEW_CALCULATIONS.key: CARBON_VIEW_CALCULATIONS,
+    CARBON_VIEW_VERIFICATION.key: CARBON_VIEW_VERIFICATION,
+    CARBON_VIEW_REPORTING_PERIODS.key: CARBON_VIEW_REPORTING_PERIODS,
+    # Catalog
+    CATALOG_VIEW.key: CATALOG_VIEW,
+    CATALOG_MANAGE_PRODUCTS.key: CATALOG_MANAGE_PRODUCTS,
+    CATALOG_MANAGE_METADATA.key: CATALOG_MANAGE_METADATA,
+    CATALOG_MANAGE_POLICIES.key: CATALOG_MANAGE_POLICIES,
+    CATALOG_VIEW_GOVERNANCE.key: CATALOG_VIEW_GOVERNANCE,
+    # DQ
+    DQ_VIEW.key: DQ_VIEW,
+    DQ_MANAGE_RULES.key: DQ_MANAGE_RULES,
+    # MDM
+    MDM_VIEW.key: MDM_VIEW,
+    MDM_MANAGE.key: MDM_MANAGE,
+    # Connections
+    CONNECTIONS_VIEW.key: CONNECTIONS_VIEW,
+    CONNECTIONS_MANAGE.key: CONNECTIONS_MANAGE,
+    # Import/Export
+    IMPORTEXPORT_VIEW.key: IMPORTEXPORT_VIEW,
+    IMPORTEXPORT_MANAGE.key: IMPORTEXPORT_MANAGE,
+    # Dataschema
+    DATASCHEMA_VIEW.key: DATASCHEMA_VIEW,
+    DATASCHEMA_MANAGE.key: DATASCHEMA_MANAGE,
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CAPABILITY INHERITANCE (IMPLIED CAPABILITIES)
+# ═══════════════════════════════════════════════════════════════════
+#
+# When a group has capability X, it automatically also has all
+# capabilities in IMPLIES[X]. This eliminates repetition and makes
+# group mappings DRY.
+#
+# Rule: admin capabilities imply their view counterparts.
+# Example: carbon:manage_emission_factors → carbon:view_console
+#
+# Adding a new app: add IMPLIES entries so that manage → view flows
+# automatically, without touching every group definition.
+
+IMPLIES: Dict[str, Set[str]] = {
+    # ── Platform ──
+    PLATFORM_ADMIN.key: {
+        PLATFORM_MANAGE_USERS.key,
+        PLATFORM_MANAGE_GROUPS.key,
+        PLATFORM_MANAGE_ORG_UNITS.key,
+        PLATFORM_MANAGE_ACCESS.key,
+        PLATFORM_VIEW_AUDIT.key,
+        PLATFORM_MANAGE_APPS.key,
+    },
+
+    # ── Carbon admin → view ──
+    CARBON_MANAGE_EMISSION_FACTORS.key: {CARBON_VIEW_CONSOLE.key},
+    CARBON_MANAGE_CALCULATION_RULES.key: {CARBON_VIEW_CONSOLE.key},
+    CARBON_MANAGE_GWP.key: {CARBON_VIEW_CONSOLE.key},
+    CARBON_MANAGE_SBTI_TARGETS.key: {CARBON_VIEW_CONSOLE.key},
+    CARBON_MANAGE_REPORTING_PERIODS.key: {CARBON_VIEW_REPORTING_PERIODS.key, CARBON_VIEW_CONSOLE.key},
+    CARBON_TRIGGER_CALCULATIONS.key: {CARBON_VIEW_CALCULATIONS.key, CARBON_VIEW_CONSOLE.key},
+    CARBON_VERIFY_DATA.key: {CARBON_VIEW_VERIFICATION.key, CARBON_VIEW_CONSOLE.key},
+
+    # ── Carbon data → view ──
+    CARBON_ENTER_DATA.key: {CARBON_VIEW_MY_DATA.key, CARBON_VIEW_CONSOLE.key},
+
+    # ── Carbon reporting → view ──
+    CARBON_GENERATE_REPORTS.key: {CARBON_VIEW_CONSOLE.key, CARBON_VIEW_DASHBOARD.key},
+    CARBON_VIEW_ANALYTICS.key: {CARBON_VIEW_CONSOLE.key, CARBON_VIEW_DASHBOARD.key},
+
+    # ── Catalog admin → view ──
+    CATALOG_MANAGE_PRODUCTS.key: {CATALOG_VIEW.key},
+    CATALOG_MANAGE_METADATA.key: {CATALOG_VIEW.key},
+    CATALOG_MANAGE_POLICIES.key: {CATALOG_VIEW.key, CATALOG_VIEW_GOVERNANCE.key},
+
+    # ── DQ admin → view ──
+    DQ_MANAGE_RULES.key: {DQ_VIEW.key},
+
+    # ── MDM admin → view ──
+    MDM_MANAGE.key: {MDM_VIEW.key},
+
+    # ── Connections admin → view ──
+    CONNECTIONS_MANAGE.key: {CONNECTIONS_VIEW.key},
+
+    # ── Import/Export admin → view ──
+    IMPORTEXPORT_MANAGE.key: {IMPORTEXPORT_VIEW.key},
+
+    # ── Dataschema admin → view ──
+    DATASCHEMA_MANAGE.key: {DATASCHEMA_VIEW.key},
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# GROUP → CAPABILITY MAPPING
+# ═══════════════════════════════════════════════════════════════════
+#
+# Each group maps to a set of capability keys.
+# "*" is a wildcard — grants ALL capabilities (including future ones).
+# Inheritance (IMPLIES) is automatically expanded — you only declare
+# the HIGHEST-LEVEL capabilities; views are auto-inherited.
+#
+# To add a new app: add its capabilities here for each relevant group.
+# No other file needs to change.
+
+GROUP_CAPABILITIES: Dict[str, Set[str]] = {
+    # ── Platform Administrators ──
+    "admin": {"*"},
+    "admins_group": {"*"},
+
+    # ── Domain Leads (org-scoped app admins) ──
+    # Implied: view_console and other views auto-inherited from admin caps
+    "carbon_lead": {
+        CARBON_MANAGE_EMISSION_FACTORS.key,
+        CARBON_MANAGE_CALCULATION_RULES.key,
+        CARBON_MANAGE_GWP.key,
+        CARBON_MANAGE_SBTI_TARGETS.key,
+        CARBON_MANAGE_REPORTING_PERIODS.key,
+        CARBON_TRIGGER_CALCULATIONS.key,
+        CARBON_VERIFY_DATA.key,
+        CARBON_ENTER_DATA.key,
+        CARBON_GENERATE_REPORTS.key,
+        CARBON_VIEW_ANALYTICS.key,
+    },
+
+    "catalog_lead": {
+        CATALOG_MANAGE_PRODUCTS.key,
+        CATALOG_MANAGE_METADATA.key,
+        CATALOG_MANAGE_POLICIES.key,
+    },
+
+    "mdm_lead": {
+        MDM_MANAGE.key,
+    },
+
+    "dq_lead": {
+        DQ_MANAGE_RULES.key,
+    },
+
+    # ── Data Owners (org-scoped write) ──
+    "dataowners_group": {
+        CARBON_ENTER_DATA.key,
+        CARBON_VIEW_CALCULATIONS.key,
+        CARBON_VIEW_VERIFICATION.key,
+        CARBON_VIEW_CONSOLE.key,
+        CARBON_VIEW_DASHBOARD.key,
+    },
+
+    # ── Analysts (cross-org read + reporting) ──
+    "analysts_group": {
+        CARBON_VIEW_ANALYTICS.key,
+        CARBON_GENERATE_REPORTS.key,
+        CARBON_VIEW_CALCULATIONS.key,
+        CARBON_VIEW_VERIFICATION.key,
+        CARBON_VIEW_REPORTING_PERIODS.key,
+        CARBON_VIEW_CONSOLE.key,
+        CARBON_VIEW_DASHBOARD.key,
+        CARBON_VIEW_MY_DATA.key,
+    },
+
+    # ── Viewers (org-scoped read-only) ──
+    "viewers_group": {
+        CARBON_VIEW_CALCULATIONS.key,
+        CARBON_VIEW_CONSOLE.key,
+        CARBON_VIEW_DASHBOARD.key,
+        CARBON_VIEW_MY_DATA.key,
+    },
+
+    # ── Auditors (org-scoped read + audit) ──
+    "auditors_group": {
+        CARBON_VIEW_CALCULATIONS.key,
+        CARBON_VIEW_VERIFICATION.key,
+        CARBON_VIEW_CONSOLE.key,
+        CARBON_VIEW_DASHBOARD.key,
+        CARBON_VIEW_MY_DATA.key,
+        CATALOG_VIEW_GOVERNANCE.key,
+    },
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CAPABILITY RESOLUTION ENGINE
+# ═══════════════════════════════════════════════════════════════════
+
+def _expand_capabilities(caps: Set[str]) -> FrozenSet[str]:
+    """Expand a set of capability keys to include all implied capabilities.
+
+    Uses transitive closure over IMPLIES: if A→B and B→C, then A→C too.
+    """
+    result = set(caps)
+    changed = True
+    while changed:
+        changed = False
+        for cap in list(result):
+            for implied_cap in IMPLIES.get(cap, set()):
+                if implied_cap not in result:
+                    result.add(implied_cap)
+                    changed = True
+    return frozenset(result)
+
+
+def get_user_capabilities(user) -> FrozenSet[str]:
+    """Return the expanded set of capability keys for an authenticated user.
+
+    Computed from the user's active ScopedRole group memberships.
+    Superusers get "*" (all capabilities).
+    Inheritance (IMPLIES) is automatically expanded.
+    Results are cached on the request object for the lifetime of the request.
+    """
+    if user is None or not getattr(user, "is_authenticated", False):
+        return frozenset()
+
+    # Check request-level cache
+    if hasattr(user, "_cached_capabilities"):
+        return user._cached_capabilities
+
+    if getattr(user, "is_superuser", False):
+        caps: FrozenSet[str] = frozenset({"*"})
+        user._cached_capabilities = caps
+        return caps
+
+    from accounts.models import ScopedRole
+    group_names = set(
+        ScopedRole.objects.filter(user=user, is_active=True)
+        .values_list("group__name", flat=True)
+        .distinct()
+    )
+
+    caps: Set[str] = set()
+    for group_name in group_names:
+        group_caps = GROUP_CAPABILITIES.get(group_name, set())
+        if "*" in group_caps:
+            # Wildcard group — grant ALL defined capabilities
+            caps = set(ALL_CAPABILITIES.keys())
+            break
+        caps.update(group_caps)
+
+    # Expand inheritance
+    expanded = _expand_capabilities(caps)
+    user._cached_capabilities = expanded
+    return expanded
+
+
+def has_capability(user, capability_key: str) -> bool:
+    """Check if user has a specific capability (including implied)."""
+    caps = get_user_capabilities(user)
+    if "*" in caps:
+        return True
+    return capability_key in caps
+
+
+def has_any_capability(user, capability_keys: Set[str]) -> bool:
+    """Check if user has ANY of the given capabilities."""
+    caps = get_user_capabilities(user)
+    if "*" in caps:
+        return True
+    return bool(caps & capability_keys)
+
+
+def has_all_capabilities(user, capability_keys: Set[str]) -> bool:
+    """Check if user has ALL of the given capabilities."""
+    caps = get_user_capabilities(user)
+    if "*" in caps:
+        return True
+    return capability_keys.issubset(caps)
+
+
+def get_capabilities_for_frontend(user) -> list:
+    """Serialize capabilities for the frontend me_context response.
+
+    Returns a sorted list of {key, domain, action, label, category} dicts.
+    """
+    caps = get_user_capabilities(user)
+    if "*" in caps:
+        keys = set(ALL_CAPABILITIES.keys())
+    else:
+        keys = caps
+
+    return sorted(
+        [{"key": k, "domain": c.domain, "action": c.action,
+          "label": c.label, "category": c.category}
+         for k, c in ALL_CAPABILITIES.items() if k in keys],
+        key=lambda x: (x["domain"], x["category"], x["label"])
+    )
+
+
+def get_capability(capability_key: str) -> Optional[Capability]:
+    """Look up a capability by its key."""
+    return ALL_CAPABILITIES.get(capability_key)
+
+
+def get_capability_matrix() -> list:
+    """Return the full capability matrix for the admin UI.
+
+    Used by the capability-matrix API endpoint to render a read-only
+    overview of what each group grants.
+
+    Each row: {
+        group: str,
+        is_wildcard: bool,
+        capabilities: [{key, label, domain, category, inherited}]
+    }
+    """
+    rows = []
+    for group_name, declared_caps in sorted(GROUP_CAPABILITIES.items()):
+        if "*" in declared_caps:
+            rows.append({
+                "group": group_name,
+                "is_wildcard": True,
+                "capabilities": [
+                    {"key": k, "label": c.label, "domain": c.domain,
+                     "category": c.category, "inherited": False}
+                    for k, c in ALL_CAPABILITIES.items()
+                ],
+            })
+            continue
+
+        expanded = _expand_capabilities(declared_caps)
+        cap_list = []
+        for key in sorted(expanded):
+            c = ALL_CAPABILITIES.get(key)
+            if not c:
+                continue
+            cap_list.append({
+                "key": key,
+                "label": c.label,
+                "domain": c.domain,
+                "category": c.category,
+                "inherited": key not in declared_caps,
+            })
+        rows.append({
+            "group": group_name,
+            "is_wildcard": False,
+            "capabilities": cap_list,
+        })
+    return rows

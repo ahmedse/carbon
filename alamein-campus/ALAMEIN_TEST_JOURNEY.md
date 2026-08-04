@@ -60,7 +60,7 @@ AAST (root, already exists)
 
 | Username | Password | Role | Scoped Org Unit |
 |---|---|---|---|
-| `alamein.admin` | `Alamein_2026` | Admin (all) | — |
+| `alamein.admin` | `Alamein_2026` | Domain Lead (Carbon) | Alamein Campus |
 | `alamein.medical` | `Alamein_2026` | Data Owner | College of Medicine + Educational Hospital |
 | `alamein.transport` | `Alamein_2026` | Data Owner | Transportation |
 | `alamein.finance` | `Alamein_2026` | Data Owner | Financial Affairs |
@@ -133,10 +133,10 @@ from mdm.models import OrgUnit
 
 User = get_user_model()
 dataowners, _ = Group.objects.get_or_create(name='dataowners_group')
-admins, _ = Group.objects.get_or_create(name='admins_group')
+carbon_lead, _ = Group.objects.get_or_create(name='carbon_lead')
 
 specs = [
-    ('alamein.admin', 'alamein.admin@aast.edu', 'Alamein_2026', admins, None),
+    ('alamein.admin', 'alamein.admin@aast.edu', 'Alamein_2026', carbon_lead, None),
     ('alamein.medical', 'alamein.medical@aast.edu', 'Alamein_2026', dataowners, 'College of Medicine / كلية الطب'),
     ('alamein.finance', 'alamein.finance@aast.edu', 'Alamein_2026', dataowners, 'Financial Affairs / الشؤون المادية'),
     ('alamein.transport', 'alamein.transport@aast.edu', 'Alamein_2026', dataowners, 'Transportation / النقل'),

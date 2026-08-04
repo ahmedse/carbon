@@ -63,6 +63,7 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
     """
     serializer_class = ReportingPeriodSerializer
     permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'carbon:manage_reporting_periods'
     
     def get_queryset(self):
         """Return all reporting periods for authenticated users."""
@@ -165,6 +166,7 @@ class EmissionFactorViewSet(viewsets.ModelViewSet):
     """
     serializer_class = EmissionFactorSerializer
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'carbon:manage_emission_factors'
     
     def get_queryset(self):
         queryset = EmissionFactor.objects.all()
@@ -215,6 +217,7 @@ class GWPViewSet(viewsets.ModelViewSet):
     queryset = GWP.objects.all()
     serializer_class = GWPSerializer
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'carbon:manage_gwp'
 
 
 class CalculationWritePermission(BasePermission):
@@ -241,6 +244,10 @@ class CalculationWritePermission(BasePermission):
         if not module_id:
             return False
         from accounts.rbac_utils import user_has_module_role
+        from accounts.capabilities import has_capability
+        # Carbon Domain Leads + admins can write calculations
+        if has_capability(user, 'carbon:trigger_calculations'):
+            return True
         return user_has_module_role(user, module_id, [ADMINS_GROUP, "analysts_group"])
 
 
@@ -471,6 +478,7 @@ class CalculationRuleViewSet(viewsets.ModelViewSet):
     """
     serializer_class = CalculationRuleSerializer
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'carbon:manage_calculation_rules'
     queryset = CalculationRule.objects.select_related(
         'data_table', 'activity_field', 'emission_factor'
     )
@@ -665,6 +673,7 @@ class CalculateAPIView(APIView):
     }
     """
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'carbon:trigger_calculations'
 
     def post(self, request):
         rule_id = request.data.get('rule_id')
@@ -788,6 +797,7 @@ class CalculateAPIView(APIView):
 class BatchCalculateAPIView(APIView):
     """Run calculations across multiple tables at once."""
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'carbon:trigger_calculations'
 
     @swagger_auto_schema(
         operation_description="Batch calculate emissions for multiple tables",
@@ -972,6 +982,7 @@ class SBTiTargetViewSet(viewsets.ModelViewSet):
     """CRUD for SBTi targets — org-scoped visibility."""
     serializer_class = SBTiTargetSerializer
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'carbon:manage_sbti_targets'
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

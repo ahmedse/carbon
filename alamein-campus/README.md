@@ -23,7 +23,7 @@ This folder contains everything needed for a complete end-to-end manual test of 
 | Username | Password | Role |
 |----------|----------|------|
 | `ahmed` | `AdminPa_132` | Super admin (use for Phase 1 setup) |
-| `alamein.admin` | `Alamein_2026` | Alamein campus admin |
+| `alamein.admin` | `Alamein_2026` | Carbon Domain Lead (Alamein Campus) |
 | `alamein.medical` | `Alamein_2026` | College of Medicine + Hospital |
 | `alamein.transport` | `Alamein_2026` | Transportation |
 | `alamein.finance` | `Alamein_2026` | Financial Affairs |

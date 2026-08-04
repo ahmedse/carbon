@@ -398,4 +398,5 @@ export const useAuth = () => useContext(AuthContext) || {
   currentPerspective: 'dashboards',
   setPerspective: () => {},
   availablePerspectives: [],
+  isGlobalAdminFlag: false,
 };

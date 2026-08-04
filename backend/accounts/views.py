@@ -120,6 +120,10 @@ def me_context(request):
         module_count = len(visible_module_ids)
         user_modules = list(Module.objects.filter(id__in=visible_module_ids).values('id', 'name'))
 
+    # Capability-based access control — single source of truth for frontend
+    from accounts.capabilities import get_capabilities_for_frontend
+    capabilities = get_capabilities_for_frontend(user)
+
     return Response({
         'user': {
             'id': user.id,
@@ -130,6 +134,7 @@ def me_context(request):
         'roles': role_names,
         'is_global_admin': is_global,
         'perspectives': perspectives,
+        'capabilities': capabilities,  # NEW: capability-based access control
         'org_units': org_units,
         'modules': user_modules,
         'scoped_roles': scoped_roles_data,
@@ -449,5 +454,54 @@ def platform_apps(request, app_id=None):
         })
 
     return Response(result)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def capability_matrix(request):
+    """
+    GET /accounts/capability-matrix/
+
+    Returns the full capability inheritance matrix for admin UI.
+    Accessible to any authenticated admin user.
+
+    Response:
+    {
+        matrix: [{group, is_wildcard, capabilities: [{key, label, domain, category, inherited}]}],
+        inheritance: [{from, to}],
+        domains: [{domain, label, capabilities: [{key, label, category}]}]
+    }
+    """
+    from accounts.capabilities import get_capability_matrix, IMPLIES, ALL_CAPABILITIES
+    from accounts.rbac_utils import user_is_global_admin
+
+    # Only admins can see the matrix
+    if not user_is_global_admin(request.user):
+        from accounts.capabilities import has_capability
+        if not has_capability(request.user, 'platform:manage_access'):
+            raise PermissionDenied('Only platform admins can view the capability matrix.')
+
+    matrix = get_capability_matrix()
+
+    # Inheritance edges for visualization
+    inheritance = []
+    for from_cap, to_set in sorted(IMPLIES.items()):
+        for to_cap in sorted(to_set):
+            inheritance.append({"from": from_cap, "to": to_cap})
+
+    # Domains for grouping
+    domains_dict = {}
+    for key, c in sorted(ALL_CAPABILITIES.items()):
+        if c.domain not in domains_dict:
+            domains_dict[c.domain] = {"domain": c.domain, "label": c.domain.title(), "capabilities": []}
+        domains_dict[c.domain]["capabilities"].append({
+            "key": key, "label": c.label, "category": c.category, "action": c.action,
+        })
+
+    return Response({
+        "matrix": matrix,
+        "inheritance": inheritance,
+        "domains": sorted(domains_dict.values(), key=lambda d: d["domain"]),
+    })
 
     

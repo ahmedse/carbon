@@ -102,6 +102,28 @@ def user_is_global_admin(user):
     return user_has_global_role(user, ADMIN_ROLES)
 
 
+def user_is_domain_lead(user, app_name=None):
+    """True if the user holds an active {app_name}_lead ScopedRole (any scope).
+
+    If app_name is None, returns True for ANY domain lead group.
+    Domain Leads manage their app's data/config within their org scope.
+    They are NOT platform admins.
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    from .constants import DOMAIN_LEAD_GROUPS
+    qs = ScopedRole.objects.filter(
+        user=user, is_active=True,
+    )
+    if app_name:
+        lead_group = f"{app_name}_lead"
+        # Only check if this is a known domain lead group
+        if lead_group in DOMAIN_LEAD_GROUPS:
+            return qs.filter(group__name=lead_group).exists()
+        return False
+    return qs.filter(group__name__in=DOMAIN_LEAD_GROUPS).exists()
+
+
 def get_visible_module_ids(user):
     """Module ids the user may see across the platform.
 
