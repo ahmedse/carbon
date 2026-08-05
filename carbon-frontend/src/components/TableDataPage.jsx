@@ -21,6 +21,7 @@ import DataTableGrid from "./DataTableGrid";
 import BulkActionBar from "./BulkActionBar";
 import BulkImportWizard from "./import/BulkImportWizard";
 import { useNotification } from "./NotificationProvider";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 
 /**
  * TableDataPage
@@ -39,6 +40,8 @@ export default function TableDataPage({
   _lang,
   token
 }) {
+  useDocumentTitle("Table Data");
+
   const [fields, setFields] = useState([]);
   const [table, setTable] = useState(null);
   const [loading, setLoading] = useState(true);

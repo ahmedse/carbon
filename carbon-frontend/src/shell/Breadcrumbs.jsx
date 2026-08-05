@@ -511,7 +511,22 @@ function resolveCrumbLabel(crumb, modules, tablesByModule) {
 
   // Row detail: /carbon/my-data/row/:tableId/:rowId
   if (segs[0] === 'carbon' && segs[1] === 'my-data' && segs[2] === 'row' && segs.length >= 5) {
+    const tableId = segs[3];
     const rowId = segs[4];
+    let tableName = '';
+    let moduleName = '';
+    // Look up table → module from auth context
+    for (const [modId, tables] of Object.entries(tablesByModule || {})) {
+      const t = (tables || []).find((x) => String(x.id) === String(tableId));
+      if (t) {
+        tableName = t.title || t.name || '';
+        const mod = (modules || []).find((m) => String(m.id) === String(modId));
+        moduleName = mod?.name || mod?.title || '';
+        break;
+      }
+    }
+    const context = [moduleName, tableName].filter(Boolean).join(' · ');
+    if (rowId && context) return `Row #${rowId} (${context})`;
     if (rowId) return `Row #${rowId}`;
   }
 

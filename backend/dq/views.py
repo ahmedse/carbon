@@ -665,11 +665,37 @@ class TableDQMetricsView(APIView):
             Q(data_table=table) | Q(data_field__data_table=table), is_active=True
         ).distinct()
         field_profiles = FieldProfile.objects.filter(data_field__data_table=table)
+
+        # Compute rule-level stats from latest DQResults
+        total_rules = len(rules)
+        failing_rules = 0
+        latest_scores = []
+        if total_rules > 0:
+            from django.db.models import OuterRef, Subquery
+            latest_results = DQResult.objects.filter(
+                rule=OuterRef('pk')
+            ).order_by('-run_at')
+            rule_ids = [r.id for r in rules]
+            for rule_id in rule_ids:
+                latest = DQResult.objects.filter(rule_id=rule_id).order_by('-run_at').first()
+                if latest:
+                    if not latest.passed:
+                        failing_rules += 1
+                    latest_scores.append(latest.score)
+
+        overall_score = (
+            round(sum(latest_scores) / len(latest_scores))
+            if latest_scores else 0
+        )
+
         return Response({
             'table_id': table.id,
             'table_name': table.name,
             'row_count': profile.row_count if profile else 0,
             'completeness_pct': profile.completeness_pct if profile else 0,
+            'total_rules': total_rules,
+            'failing_rules': failing_rules,
+            'score': overall_score,
             'field_profiles': FieldProfileSerializer(field_profiles, many=True).data,
             'active_rules': DQRuleSerializer(rules, many=True).data,
         })

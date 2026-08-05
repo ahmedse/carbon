@@ -1609,8 +1609,10 @@ class VerificationService:
 
     @staticmethod
     def submit(period, user):
-        """Transition a draft period to submitted and create a pending VerificationRecord."""
+        """Transition a draft period to submitted, unlock tables, and create a pending VerificationRecord."""
         period.transition_to('submitted', user)
+        # Unlock tables so a new open period can accept data entries
+        PeriodLockService.set_period_tables_locked(period, locked=False)
         VerificationRecord.objects.update_or_create(
             reporting_period=period,
             verifier=user,

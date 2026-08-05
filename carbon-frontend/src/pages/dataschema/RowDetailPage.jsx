@@ -340,9 +340,15 @@ function RowHistoryTab({ rowId, tableId, token }) {
           const results = Array.isArray(data.results) ? data.results : (Array.isArray(data) ? data : []);
           setEvents(results.map(e => ({
             id: e.id,
-            action: e.action || e.event || 'update',
-            description: e.description || e.detail || '',
-            timestamp: e.timestamp || e.created_at || e.performed_at,
+            action: e.rule_name || (e.trigger_type === 'batch' ? 'Batch calc' : e.trigger_type === 'single' ? 'Rule calc' : 'Calc update'),
+            description: [
+              e.rule_name ? `${e.rule_name}` : '',
+              e.triggered_by_name ? `by ${e.triggered_by_name}` : '',
+              e.created_count ? `${e.created_count} created` : '',
+              e.skipped_count ? `${e.skipped_count} skipped` : '',
+              e.error_count ? `${e.error_count} errors` : '',
+            ].filter(Boolean).join(' · '),
+            timestamp: e.triggered_at || e.timestamp || e.created_at || e.performed_at,
             kind: 'calc',
           })));
         }

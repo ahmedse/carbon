@@ -482,7 +482,7 @@ export default function ModuleWorkspacePage() {
       header={(
         <PageHeader
           title={module?.name || 'Loading...'}
-          subtitle={`${SCOPE_META[module?.scope]?.label || 'Scope'} — ${tables.length} tables, ${module?.row_count || 0} rows`}
+          subtitle={`${SCOPE_META[module?.scope]?.label || 'Scope'} — ${tables.length} tables, ${tables.reduce((sum, t) => sum + (t.row_count || 0), 0)} rows`}
           description="Browse, filter, edit, and manage rows in each table. Use the DQ panel for quality checks. Add new rows or import data from CSV."
           badge={SCOPE_META[module?.scope]?.label ? { label: SCOPE_META[module?.scope]?.label, color: SCOPE_META[module?.scope]?.color } : undefined}
         />
