@@ -16,12 +16,14 @@ class EvidenceSerializer(serializers.ModelSerializer):
     deleted_by_name = serializers.CharField(source='deleted_by.get_full_name', read_only=True, allow_null=True)
     deleted_by_username = serializers.CharField(source='deleted_by.username', read_only=True, allow_null=True)
     download_url = serializers.SerializerMethodField()
+    original_filename = serializers.CharField(required=False, allow_blank=True, max_length=255)
     
     class Meta:
         model = Evidence
         fields = [
             'id',
             'data_row',
+            'file',
             'original_filename',
             'file_size',
             'mime_type',
@@ -52,6 +54,16 @@ class EvidenceSerializer(serializers.ModelSerializer):
         if obj.id:
             return f'/carbon-api/evidence/{obj.id}/download/'
         return None
+    
+    def create(self, validated_data):
+        """Auto-populate original_filename, file_size, and mime_type from uploaded file."""
+        uploaded_file = validated_data.get('file')
+        if uploaded_file:
+            if not validated_data.get('original_filename'):
+                validated_data['original_filename'] = uploaded_file.name
+            validated_data['file_size'] = uploaded_file.size
+            validated_data['mime_type'] = uploaded_file.content_type or 'application/octet-stream'
+        return super().create(validated_data)
 
 
 class EvidenceUploadSerializer(serializers.Serializer):

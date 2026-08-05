@@ -68,22 +68,10 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         if user.is_superuser or user.is_staff:
             return qs.filter(is_active=True)
         
-        # Get user's accessible org_unit IDs from ScopedRole
-        user_org_units = ScopedRole.objects.filter(
-            user=user, is_active=True
-        ).values_list('org_unit_id', flat=True).distinct()
-        
-        # If no org units assigned, show nothing (restrictive mode)
-        if not user_org_units:
-            return qs.none()
-        
-        # Filter reference sets by domain's org_unit or show all if domain is null
-        from catalog.models import DataDomain
-        domains_in_scope = DataDomain.objects.filter(id__in=user_org_units)
-        return qs.filter(
-            models.Q(domain__in=domains_in_scope) | models.Q(domain__isnull=True),
-            is_active=True
-        )
+        # Reference sets are shared governance resources visible to all
+        # authenticated users. Domain-scoping is done at the AssetProfile level.
+        # Non-staff users see only active reference sets.
+        return qs.filter(is_active=True)
 
     def perform_create(self, serializer):
         """Auto-assign steward to current user on create."""

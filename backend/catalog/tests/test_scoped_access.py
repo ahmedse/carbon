@@ -23,8 +23,8 @@ class AssetProfileScopedAccessTest(TestCase):
         self.admin_user = User.objects.create_user(
             username='admin', password='admin123', is_staff=True, is_superuser=True
         )
-        self.owner1 = User.objects.create_user(username='owner1', password='pass123', is_staff=True)
-        self.owner2 = User.objects.create_user(username='owner2', password='pass123', is_staff=True)
+        self.owner1 = User.objects.create_user(username='owner1', password='pass123')
+        self.owner2 = User.objects.create_user(username='owner2', password='pass123')
         self.outsider = User.objects.create_user(username='outsider', password='pass123')
         
         # Create org units
@@ -64,25 +64,35 @@ class AssetProfileScopedAccessTest(TestCase):
         self.assertIn(self.asset2.id, asset_ids)
     
     def test_owner1_sees_only_their_assets(self):
-        """Owner1 without global admin role gets 403 (AdminOrSuperuserOnly)."""
+        """Owner1 sees only their org-unit assets (ReadAnyWriteGlobalAdmin allows reads)."""
         self.client.force_authenticate(user=self.owner1)
         response = self.client.get('/carbon-api/catalog/assets/')
         
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        results = response.data if isinstance(response.data, list) else response.data.get('results', [])
+        asset_ids = [a['id'] for a in results]
+        self.assertIn(self.asset1.id, asset_ids)
+        self.assertNotIn(self.asset2.id, asset_ids)
     
     def test_owner2_sees_only_their_assets(self):
-        """Owner2 without global admin role gets 403 (AdminOrSuperuserOnly)."""
+        """Owner2 sees only their org-unit assets (ReadAnyWriteGlobalAdmin allows reads)."""
         self.client.force_authenticate(user=self.owner2)
         response = self.client.get('/carbon-api/catalog/assets/')
         
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        results = response.data if isinstance(response.data, list) else response.data.get('results', [])
+        asset_ids = [a['id'] for a in results]
+        self.assertNotIn(self.asset1.id, asset_ids)
+        self.assertIn(self.asset2.id, asset_ids)
     
     def test_outsider_sees_no_assets(self):
-        """User without scoped role should get 403."""
+        """User without scoped role sees empty list (authenticated but no org scope)."""
         self.client.force_authenticate(user=self.outsider)
         response = self.client.get('/carbon-api/catalog/assets/')
         
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        results = response.data if isinstance(response.data, list) else response.data.get('results', [])
+        self.assertEqual(len(results), 0)
 
 
 class OwnerDashboardAccessTest(TestCase):

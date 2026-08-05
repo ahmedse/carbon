@@ -18,7 +18,6 @@ from .serializers import (
     TableProfileSerializer, FieldProfileSerializer, DQRuleSerializer, DQResultSerializer,
 )
 from accounts.permissions import ReadAnyWriteGlobalAdmin, ReadScopedWriteAdmin
-from catalog.permissions import AdminOrSuperuserOnly
 from accounts.rbac_utils import get_allowed_org_unit_ids, user_has_global_role, get_allowed_module_ids
 from accounts.models import ScopedRole
 from .services import profile_table, run_dq, run_single_rule, bulk_profile
@@ -274,11 +273,10 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
     )
     def list(self, request, *args, **kwargs):
         qs = self.filter_queryset(self.get_queryset())
-        limit = min(int(request.query_params.get('limit', 50)), 200)
-        page = self.paginate_queryset(qs[:limit])
+        page = self.paginate_queryset(qs)
         if page is not None:
             return self.get_paginated_response(self.get_serializer(page, many=True).data)
-        return Response(self.get_serializer(qs[:limit], many=True).data)
+        return Response(self.get_serializer(qs, many=True).data)
 
     @swagger_auto_schema(
         methods=['get'],
@@ -318,7 +316,7 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ProfileTriggerView(APIView):
     """POST /dq/profile/ — Profile a single table."""
-    permission_classes = [IsAuthenticated, AdminOrSuperuserOnly]
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description=(
@@ -472,7 +470,7 @@ class ProfileTriggerView(APIView):
 
 class BulkProfileView(APIView):
     """POST /dq/profile/bulk/ — Profile multiple tables."""
-    permission_classes = [IsAuthenticated, AdminOrSuperuserOnly]
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description=(
@@ -517,7 +515,7 @@ class BulkProfileView(APIView):
 
 class DQRunView(APIView):
     """POST /dq/run/ — Run a single rule (rule_id) or all rules for a table (data_table_id)."""
-    permission_classes = [IsAuthenticated, AdminOrSuperuserOnly]
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_description=(
@@ -606,10 +604,38 @@ class DQMetricsView(APIView):
             ) / total_rows
         else:
             weighted_completeness = 0.0
+        
+        # Add rule-level metrics
+        from .models import DQRule, DQResult
+        if user.is_superuser or user.is_staff:
+            rules = DQRule.objects.filter(is_active=True)
+            results = DQResult.objects.all()
+        else:
+            org_units = _get_user_org_units(user)
+            rules = DQRule.objects.filter(
+                Q(data_field__data_table__module__org_unit_id__in=org_units) |
+                Q(data_table__module__org_unit_id__in=org_units),
+                is_active=True,
+            ).distinct()
+            results = DQResult.objects.filter(
+                Q(rule__data_field__data_table__module__org_unit_id__in=org_units) |
+                Q(rule__data_table__module__org_unit_id__in=org_units),
+            ).distinct()
+        
+        total_rules = rules.count()
+        latest_results = results.order_by('rule_id', '-run_at').distinct('rule_id')
+        passing_rules = latest_results.filter(passed=True).count()
+        failing_rules = latest_results.filter(passed=False).count()
+        overall_score = round(passing_rules / total_rules * 100, 1) if total_rules > 0 else 0.0
+        
         return Response({
             'table_count': profiles.count(),
             'total_rows': total_rows,
             'completeness_pct': round(weighted_completeness, 2),
+            'total_rules': total_rules,
+            'passing_rules': passing_rules,
+            'failing_rules': failing_rules,
+            'overall_score': overall_score,
         })
 
 

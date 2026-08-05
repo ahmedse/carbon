@@ -68,28 +68,27 @@ class ReferenceSetViewSetTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_authenticated_list_reference_sets(self):
-        """Test: authenticated user can list reference sets in their scope."""
+        """Test: authenticated users see all active reference sets (shared governance data)."""
         # Create reference set for org_unit_1
         ref_set = ReferenceSet.objects.create(
             name='Status Test Unique', slug='status-test-unique', steward=self.user1, domain=self.domain_1, is_active=True
         )
         
-        # User1 should see it (has access to org_unit_1)
+        # User1 should see it
         self.client.force_authenticate(user=self.user1)
         response = self.client.get('/carbon-api/mdm/reference-sets/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.data if isinstance(response.data, list) else response.data.get('results', [])
-        # Check that the created reference set is in the results
         ref_set_names = [item['name'] for item in data]
         self.assertIn('Status Test Unique', ref_set_names)
         
-        # User2 should NOT see it (has access to org_unit_2, not org_unit_1)
+        # User2 should ALSO see it (reference sets are shared governance resources)
         self.client.force_authenticate(user=self.user2)
         response = self.client.get('/carbon-api/mdm/reference-sets/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.data if isinstance(response.data, list) else response.data.get('results', [])
         ref_set_names = [item['name'] for item in data]
-        self.assertNotIn('Status Test Unique', ref_set_names)
+        self.assertIn('Status Test Unique', ref_set_names)
 
     def test_create_sets_steward_to_current_user(self):
         """Test: creating reference set auto-assigns steward to current user."""

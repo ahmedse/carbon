@@ -155,7 +155,19 @@ def profile_table(table_id):
             )
     
     table_completeness = round(mean(completeness_all), 2) if completeness_all else 0.0
-    tp = TableProfile.objects.create(data_table=table, row_count=n, completeness_pct=table_completeness)
+    # Deduplicate: update existing TableProfile or create new one.
+    # Clean up old field profiles before creating new ones.
+    from django.utils import timezone
+    tp, _created = TableProfile.objects.update_or_create(
+        data_table=table,
+        defaults={
+            'row_count': n,
+            'completeness_pct': table_completeness,
+            'profiled_at': timezone.now(),
+        },
+    )
+    # Delete old field profiles for this table (replace with fresh ones)
+    FieldProfile.objects.filter(data_field__data_table=table).delete()
     
     total_duration_ms = (time.time() - start_time) * 1000
     perf_logger.info(
