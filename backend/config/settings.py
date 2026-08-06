@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'connections',
     'importexport',
     'evidence',
+    'simulation',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -202,7 +203,8 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',
         'user': '1000/hour',
-        'login': '5/minute',
+        # Development: allow rapid logins for E2E testing
+        'login': '1000/minute' if IS_DEVELOPMENT else '5/minute',
     },
 }
 

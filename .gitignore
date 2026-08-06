@@ -98,6 +98,21 @@ coverage/
 *~
 *.bak
 *.tmp
+
+# E2E test artifacts
+carbon-frontend/test-results/
+carbon-frontend/playwright-report/
+carbon-frontend/blob-report/
+carbon-frontend/playwright/.cache/
+carbon-frontend/playwright/.auth/
+
+# Runtime media uploads (test-generated)
+mediafiles/evidence/
+mediafiles/exports/
+mediafiles/imports/
+
+# Simulation artifacts
+backend/simulation/
 *.orig
 *.rej
 
