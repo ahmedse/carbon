@@ -143,7 +143,6 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
-        methods=['get'],
         operation_description='Return reference values valid on a given date, optionally filtered to active values only.',
         manual_parameters=[
             openapi.Parameter('date', openapi.IN_QUERY, description='ISO date to query historical values', type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE, required=False),
@@ -178,7 +177,6 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         return Response(ReferenceValueSerializer(qs, many=True).data)
 
     @swagger_auto_schema(
-        methods=['post'],
         operation_description='Advance a reference set through its lifecycle states.',
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -202,7 +200,6 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         return Response(result)
 
     @swagger_auto_schema(
-        methods=['post'],
         operation_description='Add a new reference value to this reference set.',
         request_body=openapi.Schema(type=openapi.TYPE_OBJECT),
         responses={201: 'Value created', 400: 'Validation error'},
@@ -222,7 +219,6 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
-        methods=['post'],
         operation_description=(
             'Archive multiple reference sets in one request. '
             'Sets is_active=False and lifecycle_state=archived for each ID. '
@@ -262,7 +258,6 @@ class ReferenceValueViewSet(viewsets.ModelViewSet):
     permission_classes = [ReadAnyWriteGlobalAdmin]
 
     @swagger_auto_schema(
-        methods=['post'],
         operation_description='Create multiple reference values atomically for bulk import workflows.',
         request_body=openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
         responses={201: 'Bulk-create succeeded', 400: 'One or more values failed validation'},
@@ -570,7 +565,6 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
-        methods=['get'],
         operation_description=(
             'Return the full subtree of org units rooted at this unit, '
             'including self and all active descendants (breadth-first order).'
@@ -589,7 +583,6 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @swagger_auto_schema(
-        methods=['get'],
         operation_description=(
             'Return the ancestor chain from the root org unit down to this unit\'s parent '
             '(ordered root-first). Self is not included.'

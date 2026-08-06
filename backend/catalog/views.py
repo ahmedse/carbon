@@ -149,7 +149,6 @@ class AssetProfileViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'put', 'head', 'options']  # profiles are auto-managed; no create/delete
 
     @swagger_auto_schema(
-        methods=['post'],
         operation_description='Archive multiple asset profiles in one request.',
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
