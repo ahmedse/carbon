@@ -292,6 +292,9 @@ if SECURE_SSL_REDIRECT:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
+# Trust the X-Forwarded-Proto header from nginx (SSL terminated at reverse proxy)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 # Logging
 from pythonjsonlogger import jsonlogger
 
