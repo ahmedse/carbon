@@ -1,30 +1,52 @@
 // File: src/components/AdminRoute.jsx
-// Guards admin pages. Two modes:
-//   - Without appId: platform admin only (global admins). Used for Users, Groups, OrgUnits, Access Control.
-//   - With appId: global admins OR Domain Leads for that app. Used for app-domain admin pages.
-// Domain Leads (carbon_lead, etc.) manage app data/config within org scope.
+// Guards admin pages. Wired to the unified can() authorization gate.
+// Two modes:
+//   - Without appId: platform admin routes (Users, Groups, OrgUnits, Access Control, Audit, Apps).
+//     Gate: can(user, 'access_route', routePath, ctx)
+//   - With appId: domain admin pages (e.g. carbon admin, catalog admin).
+//     Gate: can(user, 'manage', appId, ctx)
+//   - With requiredCapability: explicit capability check via can(user, 'access_route', path, ctx)
+//     where the path is looked up in ROUTE_CAPABILITIES to find the matching capability.
 
 import React, { useRef, useEffect } from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useNotification } from "./NotificationProvider";
-import { isGlobalAdmin, isDomainLead, expandCapabilities, hasCap } from "../authz";
+import { can } from "../authz";
+import { expandCapabilities, hasCap } from "../capabilities";
 
 export default function AdminRoute({ children, redirectTo = "/", appId = null, requiredCapability = null }) {
-  const { user, loading, availablePerspectives, isGlobalAdminFlag, userCapabilities } = useAuth();
+  const { user, loading, availablePerspectives, isGlobalAdminFlag, userCapabilities, context } = useAuth();
+  const location = useLocation();
   const notifyCtx = useNotification();
   const notify = typeof notifyCtx?.notify === "function"
     ? notifyCtx.notify
     : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
   const notifiedRef = useRef(false);
 
-  // Check capabilities via expanded inheritance (BUG-01 fix: was exact-match, now uses expandCapabilities)
-  const userCapKeys = userCapabilities?.map(c => typeof c === 'string' ? c : (c?.key || c?.capability)) || [];
-  const hasReqCap = requiredCapability && hasCap(expandCapabilities(userCapKeys), requiredCapability);
+  // Build unified auth context
+  const authCtx = {
+    perspectives: availablePerspectives,
+    isGlobalAdminFlag,
+    capabilities: userCapabilities,
+    modules: context?.modules || [],
+  };
 
-  const hasAccess = isGlobalAdmin(user, availablePerspectives, isGlobalAdminFlag)
-    || (appId && isDomainLead(appId, availablePerspectives))
-    || hasReqCap;
+  // Compute access using the unified can() gate
+  let hasAccess = false;
+  if (appId) {
+    // Domain admin page: check manage + access_route as fallback
+    hasAccess = can(user, 'manage', appId, authCtx)
+      || can(user, 'access_route', location.pathname, authCtx);
+  } else {
+    // Platform admin page: check access_route against the current path
+    hasAccess = can(user, 'access_route', location.pathname, authCtx);
+  }
+  // requiredCapability overrides: check if user has the explicit capability
+  if (requiredCapability && !hasAccess && user) {
+    const caps = (userCapabilities || []).map(c => typeof c === 'string' ? c : (c?.key || c?.capability));
+    hasAccess = hasCap(expandCapabilities(caps), requiredCapability);
+  }
 
   useEffect(() => {
     if (!loading && user && !hasAccess && !notifiedRef.current) {
@@ -34,7 +56,7 @@ export default function AdminRoute({ children, redirectTo = "/", appId = null, r
       notify({ message: msg, type: "error" });
       notifiedRef.current = true;
     }
-  }, [loading, user, availablePerspectives, isGlobalAdminFlag, hasAccess, appId, notify]);
+  }, [loading, user, hasAccess, appId, notify]);
 
   if (loading) {
     return <div style={{ padding: 48, textAlign: "center" }}>Checking permissions...</div>;

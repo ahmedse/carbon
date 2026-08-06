@@ -33,8 +33,8 @@ import CalculateIcon from '@mui/icons-material/Calculate';
 import TrackChangesIcon from '@mui/icons-material/TrackChanges';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
-import { isGlobalAdmin } from '../authz';
-import { filterMenuItems } from '../utils/rbac'; // kept in rbac during migration — menu filtering not yet in authz
+import { can } from '../authz';
+import { MENU_ITEM_CAPABILITIES } from '../capabilities';
 
 // UI-driven icon mapping for Carbon sidebar items
 // This allows icons to be chosen at runtime without hardcoding
@@ -156,21 +156,73 @@ function getStudioTitle(studioId) {
     || 'Carbon';
 }
 
+/**
+ * Filter sidebar items by CBAC (capability-based access control).
+ * Uses can(user, 'view_menu', label, ctx) for each navigable item.
+ * 
+ * Items are filtered out if they have a required capability (from MENU_ITEM_CAPABILITIES)
+ * and the user lacks it. Items without a mapped capability pass through.
+ * Dividers and group headers always pass through.
+ *
+ * @param {Array} items — sidebar items with {label, path, type?, role?}
+ * @param {object} user — current user from AuthContext
+ * @param {object} authCtx — {perspectives, isGlobalAdminFlag, capabilities, modules}
+ * @returns {Array} filtered items
+ */
+function filterItemsByCapability(items, user, authCtx) {
+  if (!items || !Array.isArray(items)) return [];
+  if (!user) return items; // no user yet, show all (loading state)
+
+  return items.filter(item => {
+    // Dividers and group headers always pass through
+    if (item.type === 'divider' || item.type === 'group') return true;
+
+    // Items with an explicit role marker (legacy admin gating)
+    if (item.role && item.role !== '*') {
+      // Admin-gated items: check via can() access_route
+      if (item.path) {
+        return can(user, 'access_route', item.path, authCtx);
+      }
+    }
+
+    // Items with a label mapped in MENU_ITEM_CAPABILITIES
+    if (item.label && MENU_ITEM_CAPABILITIES[item.label]) {
+      return can(user, 'view_menu', item.label, authCtx);
+    }
+
+    // If item has a path, try route-based check
+    if (item.path && item.path !== '/') {
+      return can(user, 'access_route', item.path, authCtx);
+    }
+
+    // No capability requirement → visible to all authenticated users
+    return true;
+  });
+}
+
 export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
-  const { currentPerspective: _currentPerspective, availablePerspectives, context, user } = useAuth();
+  const { currentPerspective: _currentPerspective, availablePerspectives, isGlobalAdminFlag, userCapabilities, context, user } = useAuth();
   const location = useLocation();
 
-  // Filter items based on perspective and available admin status
+  // Build unified auth context for can() calls
+  const authCtx = useMemo(() => ({
+    perspectives: availablePerspectives,
+    isGlobalAdminFlag,
+    capabilities: userCapabilities,
+    modules: context?.modules || [],
+  }), [availablePerspectives, isGlobalAdminFlag, userCapabilities, context]);
+
+  // Filter items based on capability-based access (CBAC)
   let items = getSidebarItems(activeStudio);
   const title = getStudioTitle(activeStudio);
-  
-  // If in admin studio, filter based on whether user has admin perspective
-  if (activeStudio === 'admin' && !isGlobalAdmin(user, availablePerspectives)) {
+
+  // If in admin studio, gate with can() — only platform admins see it
+  if (activeStudio === 'admin' && !can(user, 'access_route', '/admin/users', authCtx)) {
     items = []; // Hide all admin items for non-admin users
   }
-  
-  // Filter items by role-based access using centralized RBAC
-  items = filterMenuItems(items, user, availablePerspectives, context);
+
+  // Filter items by CBAC: each menu item gated by can(user, 'view_menu', label, authCtx)
+  items = filterItemsByCapability(items, user, authCtx);
 
   // Prune empty group headers and orphaned dividers after filtering
   items = useMemo(() => {

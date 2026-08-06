@@ -1,6 +1,8 @@
-// ⚠️ DEPRECATED — use ../authz.js instead. This file kept for backward compatibility.
+// ⚠️ FULLY DEPRECATED — use ../authz.js and ../capabilities.js instead.
+// This file is retained ONLY for backward-compatible re-exports.
+// All new code MUST import directly from authz.js or capabilities.js.
+// No imports remain of filterMenuItems or canAccessRoute from this file as of Phase 4.
 // src/utils/rbac.js
-// Centralized RBAC utilities for role-based access control
 
 import { CARBON_VIEW_CONSOLE, CATALOG_VIEW, DQ_VIEW, MDM_VIEW,
   CONNECTIONS_VIEW, IMPORTEXPORT_VIEW, DATASCHEMA_VIEW } from '../capabilities';

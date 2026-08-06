@@ -494,3 +494,282 @@ describe('Edge cases', () => {
     })).toBe(true);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// Test Suite 10: can() — view_menu (CBAC sidebar gating)
+// ═══════════════════════════════════════════════════════════════════
+
+describe('can() — view_menu (sidebar capability-gating)', () => {
+  it('Overview with carbon:view_console → true', () => {
+    expect(can(mockUser, 'view_menu', 'Overview', {
+      capabilities: ['carbon:view_console'],
+    })).toBe(true);
+  });
+
+  it('Emission Factors with carbon:manage_emission_factors → true', () => {
+    expect(can(mockUser, 'view_menu', 'Emission Factors', {
+      capabilities: ['carbon:manage_emission_factors'],
+    })).toBe(true);
+  });
+
+  it('Emission Factors with only carbon:view_console → false', () => {
+    expect(can(mockUser, 'view_menu', 'Emission Factors', {
+      capabilities: ['carbon:view_console'],
+    })).toBe(false);
+  });
+
+  it('Calculation Rules with carbon:manage_calculation_rules → true', () => {
+    expect(can(mockUser, 'view_menu', 'Calculation Rules', {
+      capabilities: ['carbon:manage_calculation_rules'],
+    })).toBe(true);
+  });
+
+  it('GWP Reference with carbon:manage_gwp → true', () => {
+    expect(can(mockUser, 'view_menu', 'GWP Reference', {
+      capabilities: ['carbon:manage_gwp'],
+    })).toBe(true);
+  });
+
+  it('SBTi Targets with carbon:manage_sbti_targets → true', () => {
+    expect(can(mockUser, 'view_menu', 'SBTi Targets', {
+      capabilities: ['carbon:manage_sbti_targets'],
+    })).toBe(true);
+  });
+
+  it('Reporting Periods with carbon:view_reporting_periods → true', () => {
+    expect(can(mockUser, 'view_menu', 'Reporting Periods', {
+      capabilities: ['carbon:view_reporting_periods'],
+    })).toBe(true);
+  });
+
+  it('Reporting Periods via manage inheritance → true', () => {
+    // carbon:manage_reporting_periods implies carbon:view_reporting_periods
+    expect(can(mockUser, 'view_menu', 'Reporting Periods', {
+      capabilities: ['carbon:manage_reporting_periods'],
+    })).toBe(true);
+  });
+
+  it('Generate Report with carbon:generate_reports → true', () => {
+    expect(can(mockUser, 'view_menu', 'Generate Report', {
+      capabilities: ['carbon:generate_reports'],
+    })).toBe(true);
+  });
+
+  it('Saved Reports with carbon:generate_reports → true', () => {
+    expect(can(mockUser, 'view_menu', 'Saved Reports', {
+      capabilities: ['carbon:generate_reports'],
+    })).toBe(true);
+  });
+
+  it('Verification with carbon:verify_data → true (inheritance)', () => {
+    // carbon:verify_data implies carbon:view_verification
+    expect(can(mockUser, 'view_menu', 'Verification', {
+      capabilities: ['carbon:verify_data'],
+    })).toBe(true);
+  });
+
+  it('Data Entry with carbon:enter_data → true (inheritance)', () => {
+    // carbon:enter_data implies carbon:view_my_data
+    expect(can(mockUser, 'view_menu', 'Data Entry', {
+      capabilities: ['carbon:enter_data'],
+    })).toBe(true);
+  });
+
+  it('Analytics & Trends with carbon:view_analytics → true', () => {
+    expect(can(mockUser, 'view_menu', 'Analytics & Trends', {
+      capabilities: ['carbon:view_analytics'],
+    })).toBe(true);
+  });
+
+  it('Analytics & Trends inheritance: carbon:view_analytics implies view_console', () => {
+    // carbon:view_analytics → carbon:view_console (not tested by view_menu itself,
+    // but Overview check confirms inherited view_console works)
+    expect(can(mockUser, 'view_menu', 'Overview', {
+      capabilities: ['carbon:view_analytics'],
+    })).toBe(true);
+  });
+
+  it('Emissions Dashboard with carbon:view_dashboard → true', () => {
+    expect(can(mockUser, 'view_menu', 'Emissions Dashboard', {
+      capabilities: ['carbon:view_dashboard'],
+    })).toBe(true);
+  });
+
+  it('Unknown menu label → capability check returns null, legacy default true', () => {
+    expect(can(mockUser, 'view_menu', 'Some Unknown Menu Item', {
+      capabilities: [],
+    })).toBe(true);
+  });
+
+  it('view_menu with no capabilities → legacy fallback true', () => {
+    // No capabilities at all → capability check returns null → legacy returns true for view_menu
+    expect(can(mockUser, 'view_menu', 'Emission Factors', {})).toBe(true);
+  });
+
+  it('view_menu with global admin → true regardless of capabilities', () => {
+    expect(can(mockUser, 'view_menu', 'Emission Factors', {
+      perspectives: ['admin'],
+      capabilities: [], // no carbon caps
+    })).toBe(true);
+  });
+
+  it('Calculations with carbon:view_calculations → true', () => {
+    expect(can(mockUser, 'view_menu', 'Calculations', {
+      capabilities: ['carbon:view_calculations'],
+    })).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Test Suite 11: can() — AdminRoute wiring patterns
+// ═══════════════════════════════════════════════════════════════════
+
+describe('can() — AdminRoute wiring patterns', () => {
+  const adminUser = { id: 1, username: 'admin', roles: [{ role: 'admin' }] };
+  const carbonLeadUser = { id: 2, username: 'carbon_lead', roles: [] };
+  const catalogLeadUser = { id: 3, username: 'catalog_lead', roles: [] };
+
+  it('platform admin routes: /admin/users with platform:manage_users → true', () => {
+    expect(can(adminUser, 'access_route', '/admin/users', {
+      capabilities: ['platform:manage_users'],
+    })).toBe(true);
+  });
+
+  it('platform admin routes: /admin/users with perspectives admin → true', () => {
+    expect(can(adminUser, 'access_route', '/admin/users', {
+      perspectives: ['admin'],
+    })).toBe(true);
+  });
+
+  it('platform admin routes: /admin/users with platform:admin → all admin routes accessible', () => {
+    expect(can(adminUser, 'access_route', '/admin/groups', {
+      capabilities: ['platform:admin'],
+    })).toBe(true);
+    expect(can(adminUser, 'access_route', '/admin/org-units', {
+      capabilities: ['platform:admin'],
+    })).toBe(true);
+    expect(can(adminUser, 'access_route', '/admin/access', {
+      capabilities: ['platform:admin'],
+    })).toBe(true);
+    expect(can(adminUser, 'access_route', '/admin/audit', {
+      capabilities: ['platform:admin'],
+    })).toBe(true);
+  });
+
+  it('domain admin: manage carbon with carbon:manage_emission_factors → true', () => {
+    expect(can(carbonLeadUser, 'manage', 'carbon', {
+      capabilities: ['carbon:manage_emission_factors'],
+    })).toBe(true);
+  });
+
+  it('domain admin: manage carbon with carbon-admin perspective → true', () => {
+    expect(can(carbonLeadUser, 'manage', 'carbon', {
+      perspectives: ['carbon-admin'],
+    })).toBe(true);
+  });
+
+  it('domain admin: manage catalog with catalog:manage_products → true', () => {
+    expect(can(catalogLeadUser, 'manage', 'catalog', {
+      capabilities: ['catalog:manage_products'],
+    })).toBe(true);
+  });
+
+  it('AdminRoute combo: manage + access_route for carbon admin pages', () => {
+    // AdminRoute checks: can(user, 'manage', 'carbon') || can(user, 'access_route', path)
+    // Domain lead manages carbon AND can access /carbon/admin/factors
+    expect(can(carbonLeadUser, 'manage', 'carbon', {
+      capabilities: ['carbon:manage_emission_factors'],
+    })).toBe(true);
+    expect(can(carbonLeadUser, 'access_route', '/carbon/admin/factors', {
+      capabilities: ['carbon:manage_emission_factors'],
+    })).toBe(true);
+  });
+
+  it('AdminRoute: non-admin user fails both manage and access_route', () => {
+    expect(can(mockUser, 'manage', 'carbon', {
+      capabilities: ['carbon:view_console'],
+    })).toBe(false);
+    expect(can(mockUser, 'access_route', '/carbon/admin/factors', {
+      capabilities: ['carbon:view_console'],
+    })).toBe(false);
+  });
+
+  it('AdminRoute with isGlobalAdminFlag: backend-authoritative bypass → true', () => {
+    expect(can(mockUser, 'access_route', '/admin/users', {
+      isGlobalAdminFlag: true,
+      perspectives: [],
+      capabilities: [],
+    })).toBe(true);
+  });
+
+  it('AdminRoute with isGlobalAdminFlag false → no bypass, falls through', () => {
+    expect(can(mockUser, 'access_route', '/admin/users', {
+      isGlobalAdminFlag: false,
+      perspectives: [],
+      capabilities: [],
+    })).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Test Suite 12: canAccessRoute wrapper
+// ═══════════════════════════════════════════════════════════════════
+
+describe('canAccessRoute wrapper', () => {
+  it('delegates to can() with access_route for a known route', async () => {
+    const { canAccessRoute } = await import('../authz');
+    expect(canAccessRoute('/carbon/calculations', mockUser, {
+      capabilities: ['carbon:view_calculations'],
+    })).toBe(true);
+  });
+
+  it('denies a known admin route without capabilities', async () => {
+    const { canAccessRoute } = await import('../authz');
+    expect(canAccessRoute('/admin/users', mockUser, {
+      capabilities: [],
+      perspectives: [],
+    })).toBe(false);
+  });
+
+  it('allows unknown routes (default-allow legacy)', async () => {
+    const { canAccessRoute } = await import('../authz');
+    // Unknown routes like /settings/profile are default-allow
+    // (they are not gated by AdminRoute in production — only admin/* paths go through it)
+    expect(canAccessRoute('/settings/profile', mockUser, {
+      capabilities: [],
+      perspectives: [],
+    })).toBe(true);
+  });
+
+  it('denies with null user', async () => {
+    const { canAccessRoute } = await import('../authz');
+    expect(canAccessRoute('/admin/users', null, {})).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Test Suite 13: checkLegacy default behavior
+// ═══════════════════════════════════════════════════════════════════
+
+describe('checkLegacy — default allow for ungated routes', () => {
+  it('home path (/) is accessible to any authenticated user', () => {
+    expect(can(mockUser, 'access_route', '/', {
+      capabilities: [],
+      perspectives: [],
+    })).toBe(true);
+  });
+
+  it('/settings/profile is accessible (ungated route)', () => {
+    expect(can(mockUser, 'access_route', '/settings/profile', {
+      capabilities: [],
+      perspectives: [],
+    })).toBe(true);
+  });
+
+  it('/help is accessible (ungated route)', () => {
+    expect(can(mockUser, 'access_route', '/help', {
+      capabilities: [],
+      perspectives: [],
+    })).toBe(true);
+  });
+});

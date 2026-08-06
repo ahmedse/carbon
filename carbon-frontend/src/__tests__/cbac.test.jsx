@@ -18,7 +18,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 const theme = createTheme();
@@ -1400,10 +1400,11 @@ describe('AdminRoute Component', () => {
       availablePerspectives: ['admin'],
       context: { modules: [] },
       isGlobalAdminFlag: true,
+      userCapabilities: [],
     });
     const { default: AdminRoute } = await import('../components/AdminRoute');
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/admin/users']}>
         <AdminRoute>
           <div>Admin Content</div>
         </AdminRoute>
@@ -1423,13 +1424,19 @@ describe('AdminRoute Component', () => {
     });
     const { default: AdminRoute } = await import('../components/AdminRoute');
     render(
-      <MemoryRouter>
-        <AdminRoute>
-          <div>Admin Content</div>
-        </AdminRoute>
+      <MemoryRouter initialEntries={['/admin/users']}>
+        <Routes>
+          <Route path="/admin/*" element={
+            <AdminRoute>
+              <div>Admin Content</div>
+            </AdminRoute>
+          } />
+          <Route path="/" element={<div>Home</div>} />
+        </Routes>
       </MemoryRouter>
     );
     expect(screen.queryByText('Admin Content')).not.toBeInTheDocument();
+    expect(screen.getByText('Home')).toBeInTheDocument();
   });
 
   it('shows loading state when loading', async () => {
@@ -1482,10 +1489,11 @@ describe('AdminRoute Component', () => {
       availablePerspectives: ['carbon-admin'],
       context: { modules: [] },
       isGlobalAdminFlag: false,
+      userCapabilities: [],
     });
     const { default: AdminRoute } = await import('../components/AdminRoute');
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/carbon/admin/factors']}>
         <AdminRoute appId="carbon">
           <div>Carbon Admin Content</div>
         </AdminRoute>
@@ -1505,14 +1513,20 @@ describe('AdminRoute Component', () => {
     });
     const { default: AdminRoute } = await import('../components/AdminRoute');
     render(
-      <MemoryRouter>
-        <AdminRoute appId="catalog">
-          <div>Catalog Admin Content</div>
-        </AdminRoute>
+      <MemoryRouter initialEntries={['/admin/catalog']}>
+        <Routes>
+          <Route path="/admin/*" element={
+            <AdminRoute appId="catalog">
+              <div>Catalog Admin Content</div>
+            </AdminRoute>
+          } />
+          <Route path="/" element={<div>Home</div>} />
+        </Routes>
       </MemoryRouter>
     );
     // Carbon lead should not access catalog admin
     expect(screen.queryByText('Catalog Admin Content')).not.toBeInTheDocument();
+    expect(screen.getByText('Home')).toBeInTheDocument();
   });
 
   it('uses custom redirectTo path', async () => {
@@ -1527,12 +1541,19 @@ describe('AdminRoute Component', () => {
     const { default: AdminRoute } = await import('../components/AdminRoute');
     render(
       <MemoryRouter initialEntries={['/admin/test']}>
-        <AdminRoute redirectTo="/unauthorized">
-          <div>Admin Content</div>
-        </AdminRoute>
+        <Routes>
+          <Route path="/admin/*" element={
+            <AdminRoute redirectTo="/unauthorized">
+              <div>Admin Content</div>
+            </AdminRoute>
+          } />
+          <Route path="/unauthorized" element={<div>Access Denied</div>} />
+          <Route path="/" element={<div>Home</div>} />
+        </Routes>
       </MemoryRouter>
     );
     expect(screen.queryByText('Admin Content')).not.toBeInTheDocument();
+    expect(screen.getByText('Access Denied')).toBeInTheDocument();
   });
 
   it('notifies user on access denied', async () => {
@@ -1548,14 +1569,20 @@ describe('AdminRoute Component', () => {
       availablePerspectives: [],
       context: { modules: [] },
       isGlobalAdminFlag: false,
+      userCapabilities: [],
     });
 
     const { default: AdminRoute } = await import('../components/AdminRoute');
     render(
-      <MemoryRouter>
-        <AdminRoute>
-          <div>Admin Content</div>
-        </AdminRoute>
+      <MemoryRouter initialEntries={['/admin/users']}>
+        <Routes>
+          <Route path="/admin/*" element={
+            <AdminRoute>
+              <div>Admin Content</div>
+            </AdminRoute>
+          } />
+          <Route path="/" element={<div>Home</div>} />
+        </Routes>
       </MemoryRouter>
     );
 
@@ -1580,14 +1607,20 @@ describe('AdminRoute Component', () => {
       availablePerspectives: [],
       context: { modules: [] },
       isGlobalAdminFlag: false,
+      userCapabilities: [],
     });
 
     const { default: AdminRoute } = await import('../components/AdminRoute');
     render(
-      <MemoryRouter>
-        <AdminRoute appId="carbon">
-          <div>Admin Content</div>
-        </AdminRoute>
+      <MemoryRouter initialEntries={['/admin/carbon']}>
+        <Routes>
+          <Route path="/admin/*" element={
+            <AdminRoute appId="carbon">
+              <div>Admin Content</div>
+            </AdminRoute>
+          } />
+          <Route path="/" element={<div>Home</div>} />
+        </Routes>
       </MemoryRouter>
     );
 
@@ -1613,14 +1646,18 @@ describe('AdminRoute Component', () => {
       availablePerspectives: [],
       context: { modules: [] },
       isGlobalAdminFlag: false,
+      userCapabilities: [],
     });
 
     const { default: AdminRoute } = await import('../components/AdminRoute');
+    const AdminRouteEl = (
+      <AdminRoute>
+        <div>Admin Content</div>
+      </AdminRoute>
+    );
     const { rerender } = render(
-      <MemoryRouter>
-        <AdminRoute>
-          <div>Admin Content</div>
-        </AdminRoute>
+      <MemoryRouter initialEntries={['/admin/users']}>
+        {AdminRouteEl}
       </MemoryRouter>
     );
 
@@ -1628,12 +1665,11 @@ describe('AdminRoute Component', () => {
       expect(notifyMock).toHaveBeenCalled();
     });
 
-    // Force rerender
+    // Force rerender with the same element (no Routes wrapper needed since
+    // we just test that the notification guard ref prevents duplicates)
     rerender(
-      <MemoryRouter>
-        <AdminRoute>
-          <div>Admin Content</div>
-        </AdminRoute>
+      <MemoryRouter initialEntries={['/admin/users']}>
+        {AdminRouteEl}
       </MemoryRouter>
     );
 
