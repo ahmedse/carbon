@@ -4,7 +4,7 @@
 
 // API Base URL - read from environment variable
 // Fallback is for development only - should always be set in .env
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1/";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/carbon-api/";
 
 // API timeout (milliseconds)
 export const API_TIMEOUT = parseInt(import.meta.env.VITE_API_TIMEOUT || "30000", 10);
