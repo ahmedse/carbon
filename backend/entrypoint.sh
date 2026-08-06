@@ -8,7 +8,7 @@ echo "==> Running database migrations..."
 python manage.py migrate --noinput
 
 echo "==> Bootstrapping platform (groups, apps, CBAC)..."
-python manage.py bootstrap_platform
+python manage.py bootstrap_platform || echo "⚠ Bootstrap had issues — continuing anyway"
 
 echo "==> Collecting static files..."
 python manage.py collectstatic --noinput

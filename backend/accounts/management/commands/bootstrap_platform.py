@@ -14,7 +14,8 @@ Called by entrypoint.sh after migrate (before gunicorn).
 """
 
 from django.core.management.base import BaseCommand
-from django.contrib.auth.models import Group, User
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from accounts.constants import (
     ADMIN_GROUP, ADMINS_GROUP, DATAOWNERS_GROUP, ANALYSTS_GROUP,
     VIEWERS_GROUP, AUDITORS_GROUP, CARBON_DATA_OWNERS_GROUP,
@@ -225,8 +226,16 @@ class Command(BaseCommand):
     # ── Superuser → admins_group ─────────────────────────────────────────────
 
     def _assign_superusers(self):
+        User = get_user_model()
         assigned = 0
-        admins_group = Group.objects.get(name=ADMINS_GROUP)
+
+        try:
+            admins_group = Group.objects.get(name=ADMINS_GROUP)
+        except Group.DoesNotExist:
+            self.stdout.write(self.style.WARNING(
+                f"  ⚠ admins_group not found — skipping superuser assignment"
+            ))
+            return
 
         for user in User.objects.filter(is_superuser=True):
             if not user.groups.filter(pk=admins_group.pk).exists():
