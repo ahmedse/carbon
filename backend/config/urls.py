@@ -22,7 +22,7 @@ def health_check(request):
 
 
 urlpatterns = [
-    path(f'{api_prefix}/admin/', admin.site.urls),
+    path('admin/', admin.site.urls),
     path(f'{api_prefix}/health/', health_check),
 
     # JWT Auth endpoints under API prefix
