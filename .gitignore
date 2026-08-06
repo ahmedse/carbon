@@ -58,6 +58,10 @@ dist/
 *.DS_Store
 Thumbs.db
 ehthumbs.db
+*.sql
+*.dump
+*.rdb
+raw/
 .idea/
 *.iml
 .vscode/
