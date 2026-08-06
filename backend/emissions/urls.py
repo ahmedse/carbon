@@ -27,6 +27,9 @@ from .views import (
     CalculationAuditViewSet,
     SBTiTargetViewSet,
     ExportAuditViewSet,
+    OrganizationalBoundaryViewSet,
+    BaseYearViewSet,
+    RecalculationTriggerViewSet,
 )
 
 app_name = 'emissions'
@@ -52,6 +55,16 @@ targets_router.register(r'targets', SBTiTargetViewSet, basename='sbti-target')
 export_audit_router = DefaultRouter()
 export_audit_router.register(r'export-audits', ExportAuditViewSet, basename='export-audit')
 
+# GHG Protocol Phase 2 routers
+boundary_router = DefaultRouter()
+boundary_router.register(r'boundaries', OrganizationalBoundaryViewSet, basename='organizational-boundary')
+
+base_year_router = DefaultRouter()
+base_year_router.register(r'base-years', BaseYearViewSet, basename='base-year')
+
+recalc_router = DefaultRouter()
+recalc_router.register(r'recalculation-triggers', RecalculationTriggerViewSet, basename='recalculation-trigger')
+
 urlpatterns = [
     # Calculation summary — MUST come before router include to avoid path collision
     path('calculations/summary/', CalculationSummaryAPIView.as_view(), name='calculation-summary'),
@@ -70,6 +83,11 @@ urlpatterns = [
     
     # Export audit routes (E3-1)
     path('', include(export_audit_router.urls)),
+
+    # GHG Protocol Phase 2 routes
+    path('', include(boundary_router.urls)),
+    path('', include(base_year_router.urls)),
+    path('', include(recalc_router.urls)),
     
     # Dashboard API
     path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),

@@ -47,6 +47,17 @@ class ReportingPeriod(models.Model):
     # Metadata
     description = models.TextField(blank=True, help_text="Optional description or notes")
     is_baseline = models.BooleanField(default=False, help_text="Is this the baseline period for comparisons?")
+
+    # GHG Protocol: Organizational boundary
+    organizational_boundary = models.ForeignKey(
+        'OrganizationalBoundary',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reporting_periods',
+        help_text="Organizational boundary for this reporting period"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
@@ -470,6 +481,44 @@ class Calculation(models.Model):
         help_text="Method used: 'auto', 'manual', 'import', etc."
     )
 
+    # GHG Protocol: Scope 2 dual calculation tag
+    scope2_method = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        choices=[('location_based', 'Location-Based'), ('market_based', 'Market-Based')],
+        help_text="For Scope 2 calculations: which method produced this result"
+    )
+
+    # GHG Protocol: emission factor version snapshot at calculation time
+    emission_factor_snapshot = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Snapshot of the emission factor values used at calculation time"
+    )
+    factor_applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when the emission factor was applied"
+    )
+
+    # Activity data quality rollup
+    @property
+    def data_quality_tier(self):
+        """Inherit quality tier from the calculation rule that produced this result."""
+        rule = self.emission_factor.calculation_rules.first() if self.emission_factor else None
+        return rule.data_quality_tier if rule else None
+
+    @property
+    def quality_score(self):
+        """Normalized quality score 0–100 based on IPCC tier and factor precision."""
+        tier = self.data_quality_tier or 1
+        base = {1: 50, 2: 75, 3: 100}.get(tier, 50)
+        # Small bonus if factor had per-gas breakdown
+        if self.co2_kg is not None or self.ch4_kg is not None:
+            base = min(base + 5, 100)
+        return base
+
     # Integrity tracking (E3-3)
     superseded_by = models.ForeignKey(
         'self',
@@ -503,7 +552,8 @@ class Calculation(models.Model):
     @classmethod
     def create_from_data_row(cls, data_row, emission_factor, activity_value, activity_unit, 
                              reporting_year, reporting_month=None, reporting_period=None,
-                             activity_date=None, calculated_by=None):
+                             activity_date=None, calculated_by=None, scope2_method=None,
+                             emission_factor_snapshot=None):
         """
         Factory method to create a calculation from a data row.
         
@@ -560,7 +610,10 @@ class Calculation(models.Model):
             reporting_month=reporting_month,
             activity_date=activity_date,
             calculated_by=calculated_by,
-            calculation_method='auto'
+            calculation_method='auto',
+            scope2_method=scope2_method,
+            emission_factor_snapshot=emission_factor_snapshot,
+            factor_applied_at=timezone.now() if emission_factor_snapshot else None,
         )
 
 
@@ -663,6 +716,32 @@ class CalculationRule(models.Model):
         default=True,
         help_text="Automatically calculate when data is saved"
     )
+
+    # GHG Protocol: Scope 2 dual calculation
+    SCOPE2_METHOD_CHOICES = [
+        ('location_based', 'Location-Based'),
+        ('market_based', 'Market-Based'),
+        ('dual', 'Both (Location + Market)'),
+    ]
+    scope2_calculation_method = models.CharField(
+        max_length=20,
+        choices=SCOPE2_METHOD_CHOICES,
+        default='location_based',
+        help_text="Scope 2 calculation method per GHG Protocol: location-based (grid avg), market-based (contractual), or both"
+    )
+
+    # GHG Protocol: Activity data quality tier (IPCC 2006 Guidelines)
+    DATA_QUALITY_TIER_CHOICES = [
+        (1, 'Tier 1 — Default/IER factors'),
+        (2, 'Tier 2 — Country-specific factors'),
+        (3, 'Tier 3 — Facility-specific / direct measurement'),
+    ]
+    data_quality_tier = models.PositiveSmallIntegerField(
+        choices=DATA_QUALITY_TIER_CHOICES,
+        default=1,
+        help_text="IPCC data quality tier for the activity data feeding this rule"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
@@ -801,19 +880,67 @@ class CalculationRule(models.Model):
         # Fallback to activity_date month
         if reporting_month is None and activity_date:
             reporting_month = activity_date.month
-        
-        # Create the calculation
-        return Calculation.create_from_data_row(
-            data_row=data_row,
-            emission_factor=ef,
-            activity_value=activity_value,
-            activity_unit=ef.activity_unit,
-            reporting_year=reporting_year,
-            reporting_month=reporting_month,
-            reporting_period=reporting_period,
-            activity_date=activity_date,
-            calculated_by=user
-        )
+
+        # Build emission factor version snapshot (GHG Protocol 2.5)
+        ef_snapshot = {
+            'factor_id': ef.id,
+            'factor_code': ef.code,
+            'factor_name': ef.name,
+            'factor_value': str(ef.factor_value),
+            'factor_unit': ef.factor_unit,
+            'activity_unit': ef.activity_unit,
+            'source': ef.source,
+            'valid_from': str(ef.valid_from) if ef.valid_from else None,
+            'valid_to': str(ef.valid_to) if ef.valid_to else None,
+            'co2_factor': str(ef.co2_factor) if ef.co2_factor else None,
+            'ch4_factor': str(ef.ch4_factor) if ef.ch4_factor else None,
+            'n2o_factor': str(ef.n2o_factor) if ef.n2o_factor else None,
+            'snapshot_at': timezone.now().isoformat(),
+        }
+
+        # GHG Protocol: Scope 2 dual calculation
+        results = []
+        scope2_mode = self.scope2_calculation_method if ef.scope == 2 else 'location_based'
+
+        if scope2_mode in ('location_based', 'dual'):
+            results.append(Calculation.create_from_data_row(
+                data_row=data_row,
+                emission_factor=ef,
+                activity_value=activity_value,
+                activity_unit=ef.activity_unit,
+                reporting_year=reporting_year,
+                reporting_month=reporting_month,
+                reporting_period=reporting_period,
+                activity_date=activity_date,
+                calculated_by=user,
+                scope2_method='location_based',
+                emission_factor_snapshot=ef_snapshot,
+            ))
+
+        if scope2_mode in ('market_based', 'dual'):
+            # Try to find a market-based counterpart factor
+            market_ef = ef
+            if self.factor_selector_mapping and '__market__' in self.factor_selector_mapping:
+                market_code = self.factor_selector_mapping['__market__']
+                market_ef = EmissionFactor.objects.filter(code=market_code, is_active=True).first() or ef
+
+            results.append(Calculation.create_from_data_row(
+                data_row=data_row,
+                emission_factor=market_ef,
+                activity_value=activity_value,
+                activity_unit=market_ef.activity_unit,
+                reporting_year=reporting_year,
+                reporting_month=reporting_month,
+                reporting_period=reporting_period,
+                activity_date=activity_date,
+                calculated_by=user,
+                scope2_method='market_based',
+                emission_factor_snapshot=ef_snapshot,
+            ))
+
+        # Return the first (primary) calculation for backward compatibility;
+        # dual results are accessible via the Calculation model queryset.
+        return results[0] if results else None
     
     def calculate_for_table(self, reporting_period=None, user=None, recalculate=False):
         """
@@ -1073,3 +1200,195 @@ class ExportAudit(models.Model):
 
     def __str__(self):
         return f"Export #{self.id} — {self.report_format} by {self.exported_by} ({self.row_count} rows)"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GHG Protocol Phase 2 Models
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class OrganizationalBoundary(models.Model):
+    """
+    GHG Protocol organizational boundary definition.
+
+    Defines which entities, assets, and operations are included in the
+    GHG inventory and under which consolidation approach per the
+    GHG Protocol Corporate Standard, Chapter 3.
+    """
+
+    CONSOLIDATION_APPROACH_CHOICES = [
+        ('equity_share', 'Equity Share'),
+        ('financial_control', 'Financial Control'),
+        ('operational_control', 'Operational Control'),
+    ]
+
+    name = models.CharField(max_length=200, help_text="e.g., 'AASTMT Equity Share Boundary'")
+    consolidation_approach = models.CharField(
+        max_length=30,
+        choices=CONSOLIDATION_APPROACH_CHOICES,
+        default='operational_control',
+        help_text="GHG Protocol consolidation approach"
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Narrative description of entities/assets included/excluded"
+    )
+    included_org_units = models.ManyToManyField(
+        'mdm.OrgUnit',
+        blank=True,
+        related_name='organizational_boundaries',
+        help_text="Org units within this boundary"
+    )
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_boundaries',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Organizational Boundary"
+        verbose_name_plural = "Organizational Boundaries"
+        indexes = [
+            models.Index(fields=['consolidation_approach']),
+            models.Index(fields=['is_active']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_consolidation_approach_display()})"
+
+
+class BaseYear(models.Model):
+    """
+    GHG Protocol base year definition with recalculation policy.
+
+    Per GHG Protocol Corporate Standard, Chapter 5: companies shall
+    choose a base year against which future emissions are compared.
+    A base year recalculation policy defines when adjustments are required.
+    """
+
+    RECALC_POLICY_CHOICES = [
+        ('significant_only', 'Recalculate only for significant changes'),
+        ('all_changes', 'Recalculate for all structural changes'),
+        ('never', 'Fixed base year — do not recalculate'),
+    ]
+
+    year = models.PositiveIntegerField(help_text="Base year (e.g., 2024)")
+    reporting_period = models.OneToOneField(
+        ReportingPeriod,
+        on_delete=models.PROTECT,
+        related_name='base_year',
+        help_text="Reporting period serving as the base year"
+    )
+    recalculation_policy = models.CharField(
+        max_length=30,
+        choices=RECALC_POLICY_CHOICES,
+        default='significant_only',
+        help_text="Policy for when base year emissions should be recalculated"
+    )
+    significance_threshold_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=5.00,
+        help_text="Significance threshold (%) that triggers recalculation"
+    )
+    description = models.TextField(blank=True, help_text="Rationale for base year selection")
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ['-year']
+        verbose_name = "Base Year"
+        verbose_name_plural = "Base Years"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['year'],
+                condition=models.Q(is_active=True),
+                name='unique_active_base_year',
+            ),
+        ]
+
+    def __str__(self):
+        return f"Base Year {self.year} — {self.reporting_period.name if self.reporting_period else 'N/A'}"
+
+
+class RecalculationTrigger(models.Model):
+    """
+    Records an event that triggers base year recalculation per GHG Protocol.
+
+    Types:
+    - structural_change: merger, acquisition, divestiture
+    - methodology_change: improved emission factor, new calculation method
+    - error_correction: significant error discovered in base year data
+    - threshold_exceeded: significance threshold crossed
+    """
+
+    TRIGGER_TYPE_CHOICES = [
+        ('structural_change', 'Structural Change'),
+        ('methodology_change', 'Methodology Change'),
+        ('error_correction', 'Error Correction'),
+        ('threshold_exceeded', 'Significance Threshold Exceeded'),
+    ]
+
+    RESOLUTION_CHOICES = [
+        ('open', 'Open — Requires Recalculation'),
+        ('in_progress', 'In Progress'),
+        ('recalculated', 'Recalculated'),
+        ('dismissed', 'Dismissed'),
+    ]
+
+    base_year = models.ForeignKey(
+        BaseYear,
+        on_delete=models.CASCADE,
+        related_name='recalculation_triggers',
+    )
+    trigger_type = models.CharField(max_length=30, choices=TRIGGER_TYPE_CHOICES)
+    description = models.TextField(help_text="Description of the event that triggered recalculation")
+    variance_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Measured variance from base year (%)"
+    )
+    resolution_status = models.CharField(
+        max_length=20,
+        choices=RESOLUTION_CHOICES,
+        default='open',
+    )
+    resolution_notes = models.TextField(blank=True)
+
+    triggered_at = models.DateTimeField(auto_now_add=True)
+    triggered_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-triggered_at']
+        verbose_name = "Recalculation Trigger"
+        verbose_name_plural = "Recalculation Triggers"
+        indexes = [
+            models.Index(fields=['base_year', 'resolution_status']),
+            models.Index(fields=['trigger_type']),
+        ]
+
+    def __str__(self):
+        return f"Trigger #{self.id}: {self.get_trigger_type_display()} — {self.get_resolution_status_display()}"

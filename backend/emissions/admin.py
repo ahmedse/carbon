@@ -2,7 +2,10 @@
 # Django admin registration for emissions app models.
 
 from django.contrib import admin
-from .models import EmissionFactor, GWP, Calculation, ReportingPeriod, CalculationRule
+from .models import (
+    EmissionFactor, GWP, Calculation, ReportingPeriod, CalculationRule,
+    OrganizationalBoundary, BaseYear, RecalculationTrigger,
+)
 
 
 @admin.register(ReportingPeriod)
@@ -204,3 +207,35 @@ class CalculationRuleAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related(
             'data_table', 'activity_field', 'emission_factor'
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GHG Protocol Phase 2 Admin Registrations
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@admin.register(OrganizationalBoundary)
+class OrganizationalBoundaryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'consolidation_approach', 'is_active', 'created_at']
+    list_filter = ['consolidation_approach', 'is_active']
+    search_fields = ['name', 'description']
+    ordering = ['-created_at']
+
+
+@admin.register(BaseYear)
+class BaseYearAdmin(admin.ModelAdmin):
+    list_display = ['year', 'reporting_period', 'recalculation_policy',
+                   'significance_threshold_pct', 'is_active']
+    list_filter = ['recalculation_policy', 'is_active']
+    search_fields = ['description']
+    ordering = ['-year']
+
+
+@admin.register(RecalculationTrigger)
+class RecalculationTriggerAdmin(admin.ModelAdmin):
+    list_display = ['id', 'base_year', 'trigger_type', 'variance_pct',
+                   'resolution_status', 'triggered_at']
+    list_filter = ['trigger_type', 'resolution_status']
+    search_fields = ['description', 'resolution_notes']
+    ordering = ['-triggered_at']
+    readonly_fields = ['triggered_at', 'resolved_at']

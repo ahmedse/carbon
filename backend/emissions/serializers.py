@@ -4,20 +4,25 @@
 from rest_framework import serializers
 from django.utils import timezone
 from django.db.models import Sum
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, VerificationRecord, SBTiTarget, CalculationAudit, ExportAudit
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, VerificationRecord, SBTiTarget, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger
 
 
 class ReportingPeriodSerializer(serializers.ModelSerializer):
     """Serializer for reporting periods."""
     duration_days = serializers.IntegerField(read_only=True)
     is_active = serializers.BooleanField(read_only=True)
+    organizational_boundary_name = serializers.CharField(
+        source='organizational_boundary.name', read_only=True
+    )
     
     class Meta:
         model = ReportingPeriod
         fields = [
             'id', 'name',
             'start_date', 'end_date', 'period_type', 'status',
-            'description', 'is_baseline', 'duration_days', 'is_active',
+            'description', 'is_baseline',
+            'organizational_boundary', 'organizational_boundary_name',
+            'duration_days', 'is_active',
             'submitted_at',
             'created_at', 'updated_at'
         ]
@@ -116,6 +121,8 @@ class CalculationSerializer(serializers.ModelSerializer):
     factor_code = serializers.SerializerMethodField()
     data_row_label = serializers.SerializerMethodField()
     data_table_name = serializers.SerializerMethodField()
+    quality_score = serializers.IntegerField(read_only=True)
+    data_quality_tier = serializers.IntegerField(read_only=True)
 
     def get_factor_name(self, obj):
         return obj.emission_factor.name if obj.emission_factor else None
@@ -145,9 +152,11 @@ class CalculationSerializer(serializers.ModelSerializer):
             'scope', 'scope_display', 'category',
             'reporting_period', 'reporting_period_name',
             'reporting_year', 'reporting_month', 'activity_date',
-            'calculated_at', 'calculated_by', 'calculation_method'
+            'calculated_at', 'calculated_by', 'calculation_method',
+            'scope2_method', 'emission_factor_snapshot', 'factor_applied_at',
+            'is_stale', 'quality_score', 'data_quality_tier',
         ]
-        read_only_fields = ['calculated_at']
+        read_only_fields = ['calculated_at', 'quality_score', 'data_quality_tier']
 
 
 class CalculationRuleSerializer(serializers.ModelSerializer):
@@ -175,6 +184,7 @@ class CalculationRuleSerializer(serializers.ModelSerializer):
             'factor_selector_field', 'factor_selector_mapping',
             'rule_type', 'unit_conversion_factor', 'custom_formula',
             'is_active', 'auto_calculate',
+            'scope2_calculation_method', 'data_quality_tier',
             'last_executed_at',
             'created_at', 'updated_at'
         ]
@@ -369,3 +379,78 @@ class ConsoleResponseSerializer(serializers.Serializer):
     stats = StatsConsoleSerializer()
     alerts = AlertConsoleSerializer(many=True)
     recent_activity = RecentActivityConsoleSerializer(many=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GHG Protocol Phase 2 Serializers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class OrganizationalBoundarySerializer(serializers.ModelSerializer):
+    consolidation_approach_display = serializers.CharField(
+        source='get_consolidation_approach_display', read_only=True
+    )
+    included_org_units_names = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrganizationalBoundary
+        fields = [
+            'id', 'name', 'consolidation_approach', 'consolidation_approach_display',
+            'description', 'included_org_units', 'included_org_units_names',
+            'is_active', 'created_at', 'updated_at', 'created_by',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
+
+    def get_included_org_units_names(self, obj):
+        return [ou.name for ou in obj.included_org_units.all()]
+
+
+class BaseYearSerializer(serializers.ModelSerializer):
+    reporting_period_name = serializers.CharField(
+        source='reporting_period.name', read_only=True
+    )
+    recalculation_policy_display = serializers.CharField(
+        source='get_recalculation_policy_display', read_only=True
+    )
+    open_triggers_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BaseYear
+        fields = [
+            'id', 'year', 'reporting_period', 'reporting_period_name',
+            'recalculation_policy', 'recalculation_policy_display',
+            'significance_threshold_pct', 'description', 'is_active',
+            'open_triggers_count',
+            'created_at', 'updated_at', 'created_by',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by',
+                           'reporting_period_name', 'open_triggers_count']
+
+    def get_open_triggers_count(self, obj):
+        return obj.recalculation_triggers.filter(resolution_status='open').count()
+
+
+class RecalculationTriggerSerializer(serializers.ModelSerializer):
+    trigger_type_display = serializers.CharField(
+        source='get_trigger_type_display', read_only=True
+    )
+    resolution_status_display = serializers.CharField(
+        source='get_resolution_status_display', read_only=True
+    )
+    base_year_label = serializers.CharField(source='base_year.__str__', read_only=True)
+    triggered_by_name = serializers.CharField(
+        source='triggered_by.username', read_only=True
+    )
+
+    class Meta:
+        model = RecalculationTrigger
+        fields = [
+            'id', 'base_year', 'base_year_label',
+            'trigger_type', 'trigger_type_display',
+            'description', 'variance_pct',
+            'resolution_status', 'resolution_status_display',
+            'resolution_notes',
+            'triggered_at', 'triggered_by', 'triggered_by_name',
+            'resolved_at',
+        ]
+        read_only_fields = ['id', 'triggered_at', 'triggered_by_name', 'base_year_label']

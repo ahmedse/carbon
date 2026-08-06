@@ -2,6 +2,7 @@
 # REST API Views for Emission Factor Calculator.
 # Business logic lives in emissions/services.py — views are thin.
 
+from django.http import HttpResponse
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -14,7 +15,7 @@ from decimal import Decimal
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit, ExportAudit
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger
 from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units, user_is_global_admin
 from accounts.constants import ADMINS_GROUP
 from core.models import Module
@@ -32,6 +33,9 @@ from .serializers import (
     VerificationRecordSerializer,
     CalculationAuditSerializer,
     ExportAuditSerializer,
+    OrganizationalBoundarySerializer,
+    BaseYearSerializer,
+    RecalculationTriggerSerializer,
 )
 from .services import (
     scope_calculations,
@@ -151,6 +155,124 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
         return Response(ReportingPeriodSerializer(period).data)
+
+    @swagger_auto_schema(
+        method='get',
+        operation_description='Generate a GHG Protocol Inventory Report PDF for this reporting period.',
+        responses={200: 'PDF file', 404: 'Period not found'},
+    )
+    @action(detail=True, methods=['get'])
+    def inventory_report(self, request, pk=None):
+        """
+        Generate a GHG Protocol inventory report PDF.
+
+        GET /emissions/periods/{id}/inventory-report/
+
+        Generates a PDF containing:
+        - Organizational boundary statement
+        - Methodology description
+        - Scope 1/2/3 totals
+        - Base year comparison (if base year exists)
+        - Verification status
+        """
+        period = self.get_object()
+
+        # Gather data
+        calcs = Calculation.objects.filter(reporting_period=period).select_related(
+            'emission_factor', 'module', 'data_row'
+        )
+
+        scope_totals = {}
+        for scope in [1, 2, 3]:
+            total = calcs.filter(scope=scope).aggregate(t=Sum('co2e_kg'))['t'] or 0
+            scope_totals[scope] = round(total / 1000, 2)  # tonnes
+
+        # Scope 2 dual breakdown
+        scope2_location = calcs.filter(scope=2, scope2_method='location_based').aggregate(
+            t=Sum('co2e_kg')
+        )['t'] or 0
+        scope2_market = calcs.filter(scope=2, scope2_method='market_based').aggregate(
+            t=Sum('co2e_kg')
+        )['t'] or 0
+
+        boundary = period.organizational_boundary
+        boundary_statement = (
+            f"{boundary.name}: {boundary.get_consolidation_approach_display()}"
+            if boundary else "Not specified"
+        )
+
+        base_year_data = None
+        try:
+            base_year = period.base_year
+            if base_year:
+                base_calcs = Calculation.objects.filter(
+                    reporting_period=base_year.reporting_period
+                )
+                base_total = base_calcs.aggregate(t=Sum('co2e_kg'))['t'] or 0
+                current_total = calcs.aggregate(t=Sum('co2e_kg'))['t'] or 0
+                base_year_data = {
+                    'year': base_year.year,
+                    'total_tco2e': round(float(base_total) / 1000, 2),
+                    'current_tco2e': round(float(current_total) / 1000, 2),
+                    'change_pct': round(
+                        ((current_total - base_total) / base_total * 100) if base_total else 0, 2
+                    ),
+                    'recalculation_policy': base_year.get_recalculation_policy_display(),
+                }
+        except BaseYear.DoesNotExist:
+            pass
+
+        # Quality
+        quality_tiers = {}
+        for calc in calcs.select_related('emission_factor'):
+            tier = calc.data_quality_tier or 1
+            quality_tiers[tier] = quality_tiers.get(tier, 0) + 1
+        avg_quality = round(
+            sum(k * v for k, v in quality_tiers.items()) / sum(quality_tiers.values()), 1
+        ) if quality_tiers else 0
+
+        verification = period.verifications.order_by('-created_at').first()
+
+        report_data = {
+            'title': f'GHG Inventory Report — {period.name}',
+            'reporting_period': ReportingPeriodSerializer(period).data,
+            'generated_at': timezone.now().isoformat(),
+            'boundary_statement': boundary_statement,
+            'consolidation_approach': boundary.consolidation_approach if boundary else None,
+            'scope_totals_tco2e': scope_totals,
+            'total_tco2e': round(sum(scope_totals.values()), 2),
+            'scope2_location_tco2e': round(float(scope2_location) / 1000, 2),
+            'scope2_market_tco2e': round(float(scope2_market) / 1000, 2),
+            'base_year_comparison': base_year_data,
+            'calculation_count': calcs.count(),
+            'avg_data_quality_tier': avg_quality,
+            'verification_status': verification.status if verification else 'unverified',
+            'verification_notes': verification.notes if verification else None,
+            'methodology': (
+                f"Emissions calculated using the {boundary.get_consolidation_approach_display()}"
+                f" consolidation approach per the GHG Protocol Corporate Standard."
+                if boundary else "GHG Protocol Corporate Standard methodology."
+            ),
+        }
+
+        # Accept both json and pdf output; default to json for now
+        fmt = request.query_params.get('format', 'json')
+        if fmt == 'pdf':
+            try:
+                from .pdf_utils import generate_inventory_pdf
+                pdf = generate_inventory_pdf(report_data)
+                response = HttpResponse(pdf, content_type='application/pdf')
+                response['Content-Disposition'] = (
+                    f'attachment; filename="GHG_Inventory_{period.name}.pdf"'
+                )
+                return response
+            except ImportError:
+                return Response(
+                    {'detail': 'PDF generation requires WeasyPrint. Install with: pip install weasyprint'},
+                    status=status.HTTP_501_NOT_IMPLEMENTED,
+                )
+
+        return Response(report_data)
 
 
 class EmissionFactorViewSet(viewsets.ModelViewSet):
@@ -1101,3 +1223,92 @@ class ExportAuditViewSet(viewsets.ReadOnlyModelViewSet):
         if format_filter:
             qs = qs.filter(report_format=format_filter)
         return qs
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GHG Protocol Phase 2 ViewSets
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class OrganizationalBoundaryViewSet(viewsets.ModelViewSet):
+    """ViewSet for GHG Protocol organizational boundaries."""
+    serializer_class = OrganizationalBoundarySerializer
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'carbon:manage_reporting_periods'
+
+    def get_queryset(self):
+        return OrganizationalBoundary.objects.prefetch_related('included_org_units').all()
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class BaseYearViewSet(viewsets.ModelViewSet):
+    """ViewSet for GHG Protocol base years."""
+    serializer_class = BaseYearSerializer
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'carbon:manage_reporting_periods'
+
+    def get_queryset(self):
+        return BaseYear.objects.select_related('reporting_period').all()
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def recalculate(self, request, pk=None):
+        """Trigger base year recalculation — creates a RecalculationTrigger entry."""
+        base_year = self.get_object()
+        trigger_type = request.data.get('trigger_type', 'threshold_exceeded')
+        description = request.data.get('description', 'Manual recalculation requested')
+        variance_pct = request.data.get('variance_pct')
+
+        trigger = RecalculationTrigger.objects.create(
+            base_year=base_year,
+            trigger_type=trigger_type,
+            description=description,
+            variance_pct=variance_pct,
+            triggered_by=request.user,
+        )
+        return Response(
+            RecalculationTriggerSerializer(trigger).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RecalculationTriggerViewSet(viewsets.ModelViewSet):
+    """ViewSet for base year recalculation triggers."""
+    serializer_class = RecalculationTriggerSerializer
+    permission_classes = [ReadAnyWriteAdmin]
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']  # no delete
+
+    def get_queryset(self):
+        qs = RecalculationTrigger.objects.select_related('base_year', 'triggered_by').all()
+        base_year_id = self.request.query_params.get('base_year_id')
+        if base_year_id:
+            qs = qs.filter(base_year_id=base_year_id)
+        resolution = self.request.query_params.get('resolution_status')
+        if resolution:
+            qs = qs.filter(resolution_status=resolution)
+        return qs
+
+    @action(detail=True, methods=['post'])
+    def resolve(self, request, pk=None):
+        """Resolve a recalculation trigger."""
+        trigger = self.get_object()
+        new_status = request.data.get('resolution_status', 'recalculated')
+        notes = request.data.get('resolution_notes', '')
+
+        if new_status not in dict(RecalculationTrigger.RESOLUTION_CHOICES):
+            return Response(
+                {'detail': f'Invalid resolution status: {new_status}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        trigger.resolution_status = new_status
+        trigger.resolution_notes = notes
+        if new_status in ('recalculated', 'dismissed'):
+            from django.utils import timezone
+            trigger.resolved_at = timezone.now()
+        trigger.save()
+        return Response(RecalculationTriggerSerializer(trigger).data)
