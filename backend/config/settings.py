@@ -75,7 +75,6 @@ INSTALLED_APPS = [
     'connections',
     'importexport',
     'evidence',
-    'simulation',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -89,7 +88,7 @@ INSTALLED_APPS = [
 ]
 
 if IS_DEVELOPMENT:
-    INSTALLED_APPS += ['debug_toolbar', 'silk']
+    INSTALLED_APPS += ['debug_toolbar', 'silk', 'simulation']
 
 AUTH_USER_MODEL = 'accounts.User'
 
