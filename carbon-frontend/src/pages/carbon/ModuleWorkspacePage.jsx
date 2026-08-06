@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Box, Chip, CircularProgress, Divider, IconButton, LinearProgress, Stack, Tooltip, Typography, useTheme } from '@mui/material';
+import { Box, Chip, CircularProgress, Divider, IconButton, LinearProgress, Stack, Tooltip, Typography } from '@mui/material';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -387,7 +387,7 @@ export default function ModuleWorkspacePage() {
   const { token, context } = useAuth();
   const [tables, setTables] = useState([]);
   const [activity, setActivity] = useState([]);
-  const [selectedTableId, setSelectedTableId] = useState(null);
+  const [_selectedTableId, setSelectedTableId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 

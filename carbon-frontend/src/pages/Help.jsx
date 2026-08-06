@@ -70,58 +70,6 @@ const steps = [
   },
 ];
 
-// ── Administrator Setup Guide ────────────────────────────────
-const adminSetupSteps = [
-  {
-    label: "Create a User Account",
-    description:
-      "Go to Admin → Users and click 'Add User'. Fill in username, email, and password. New users start with no permissions.",
-  },
-  {
-    label: "Assign Django Groups",
-    description:
-      "In the user edit screen, assign one or more groups: admins_group (platform admin, sees everything), carbon_lead (manage carbon app), data_owners (enter data), analysts (view & report), viewers (read-only), auditors (audit access). Each group maps to specific capabilities.",
-  },
-  {
-    label: "Assign Scoped Roles (Optional)",
-    description:
-      "Go to Admin → Access Control to assign a scoped role. Scoped roles bind a user + group to a specific org_unit and/or module. This is how you grant a data_owner access to only their department's data.",
-  },
-  {
-    label: "Assign Modules (Optional)",
-    description:
-      "Users with module assignments in their context will see the corresponding domain app on the Platform Home. Modules are assigned via scoped roles or through the Catalog Studio.",
-  },
-  {
-    label: "Enable the App (Admin Only)",
-    description:
-      "Go to Admin → Registered Apps and toggle each domain app ON. Only enabled apps appear on the Platform Home, even for users who would otherwise have access.",
-  },
-  {
-    label: "Verify Access",
-    description:
-      "Log in as the user and check Platform Home. The user should see cards for each domain app they have access to. If they see 'No Applications Available', review: (1) Is the app enabled? (2) Does the user have a group with capabilities for that app? (3) Does the user have modules or scoped roles linking them to that app?",
-  },
-];
-
-const accessChecklist = [
-  { check: "App is enabled in Admin → Registered Apps", detail: "Toggle each app ON. Disabled apps are hidden from everyone." },
-  { check: "User has a Django group assigned", detail: "admins_group = full access. carbon_lead = carbon app admin. data_owners = data entry. analysts = view + report. viewers = read-only." },
-  { check: "User has scoped roles if org-restricted", detail: "Without scoped roles, group members see all org data. Add scoped roles in Admin → Access Control to restrict by org_unit." },
-  { check: "User has modules in their context", detail: "Module assignments appear in the user's me_context. Data owners need modules to enter data. Analysts may not need modules for read access." },
-  { check: "Platform App Config shows is_enabled=true", detail: "Backend PlatformAppConfig table controls per-app enable/disable. The frontend useEnabledApps hook reads /accounts/platform-apps/." },
-];
-
-const roleToAppTable = [
-  { role: "admins_group", apps: "All apps", notes: "Superuser or global admin — sees every app and admin panel" },
-  { role: "carbon_lead", apps: "Carbon Footprint", notes: "Manage emission factors, rules, GWP, periods, trigger calculations, verify data" },
-  { role: "catalog_lead", apps: "Catalog", notes: "Manage data products, metadata, policies, governance" },
-  { role: "data_owners", apps: "Carbon (data entry)", notes: "Enter and manage data for assigned org units and modules" },
-  { role: "analysts", apps: "Carbon (view + reports)", notes: "View dashboards, analytics, generate reports, export data" },
-  { role: "viewers", apps: "Carbon (read-only)", notes: "View console and dashboards only" },
-  { role: "auditors", apps: "All (read-only)", notes: "View audit logs and data across all apps" },
-];
-
 const faqs = [
   {
     q: "How do I create a new table or module?",

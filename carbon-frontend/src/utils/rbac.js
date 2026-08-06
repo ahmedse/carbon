@@ -2,7 +2,7 @@
 // src/utils/rbac.js
 // Centralized RBAC utilities for role-based access control
 
-import { hasCap, CARBON_VIEW_CONSOLE, CATALOG_VIEW, DQ_VIEW, MDM_VIEW,
+import { CARBON_VIEW_CONSOLE, CATALOG_VIEW, DQ_VIEW, MDM_VIEW,
   CONNECTIONS_VIEW, IMPORTEXPORT_VIEW, DATASCHEMA_VIEW } from '../capabilities';
 
 // Re-export from authz.js for consumers that still import from here

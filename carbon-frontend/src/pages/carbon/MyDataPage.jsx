@@ -130,7 +130,7 @@ function StatusChip({ row }) {
 
 // ── Right panel: Trust tab ────────────────────────────────────────────────
 
-function TrustTab({ mod, theme, token }) {
+function TrustTab({ mod, _theme, token }) {
   const [dqMetrics, setDqMetrics] = useState(null);
   const [assetProfile, setAssetProfile] = useState(null);
 
@@ -542,7 +542,7 @@ export default function MyDataPage() {
     },
   ], [navigate]);
 
-  const { metricsPanel, metricsTabs, activeMetricsTab, onMetricsTabChange, resetTab, toggleConfigPopup, saveConfig, panelConfigOpen, panelConfig, visibleTabs } = useDetailPanel({
+  const { metricsPanel, metricsTabs, activeMetricsTab, onMetricsTabChange, resetTab, toggleConfigPopup, saveConfig, panelConfigOpen, panelConfig } = useDetailPanel({
     tabs: [
       { label: 'Trust',    description: 'Data quality score, verification status, and evidence completeness', render: () => <TrustTab mod={selected} theme={theme} token={token} /> },
       { label: 'Impact',   description: 'Environmental impact metrics, SBTi alignment, and data consumers', render: () => <ImpactTab mod={selected} theme={theme} token={token} /> },

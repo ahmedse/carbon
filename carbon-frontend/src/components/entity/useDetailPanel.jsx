@@ -87,7 +87,7 @@ export default function useDetailPanel({
   }, [storageKey]);
 
   // ── Tab labels for config dialog (always all tabs) ──
-  const allTabLabels = useMemo(() => tabs.map((t) => t.label), [tabs]);
+  const _allTabLabels = useMemo(() => tabs.map((t) => t.label), [tabs]);
 
   // ── Build metrics panel JSX ──
   const metricsPanel = useMemo(

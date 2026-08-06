@@ -8,7 +8,7 @@ import React, { useRef, useEffect } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useNotification } from "./NotificationProvider";
-import { isGlobalAdmin, isDomainLead, can, expandCapabilities, hasCap } from "../authz";
+import { isGlobalAdmin, isDomainLead, expandCapabilities, hasCap } from "../authz";
 
 export default function AdminRoute({ children, redirectTo = "/", appId = null, requiredCapability = null }) {
   const { user, loading, availablePerspectives, isGlobalAdminFlag, userCapabilities } = useAuth();

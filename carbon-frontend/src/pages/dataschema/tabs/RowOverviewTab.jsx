@@ -20,7 +20,7 @@ function fmtDate(v) {
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
 }
 
-export default function RowOverviewTab({ rowData, tableInfo, moduleInfo, calculations }) {
+export default function RowOverviewTab({ rowData, _tableInfo, _moduleInfo, calculations }) {
 
   // ── Extract metadata and field data ────────────────────────────────
   const metadataFields = ['created_at', 'updated_at', 'created_by', 'updated_by'];
