@@ -7,6 +7,9 @@ set -e
 echo "==> Running database migrations..."
 python manage.py migrate --noinput
 
+echo "==> Bootstrapping platform (groups, apps, CBAC)..."
+python manage.py bootstrap_platform
+
 echo "==> Collecting static files..."
 python manage.py collectstatic --noinput
 

@@ -63,6 +63,74 @@ API_PREFIX = get_env("DJANGO_API_PREFIX", "/api/v1/")
 # File upload path for dataschema files
 DATASCHEMA_UPLOAD_PATH = get_env("DATASCHEMA_UPLOAD_PATH", "dataschema_uploads/")
 
+# ── Platform App Registry (bootstrap_platform syncs these to DB) ──
+# Mirrors frontend manifests in carbon-frontend/src/apps/*/manifest.js
+# Used by AppManifestService.load_manifests() for runtime resolution.
+APP_REGISTRY = [
+    {
+        "id": "carbon",
+        "name": "Carbon Footprint",
+        "version": "1.0.0",
+        "description": "GHG emissions tracking, reporting, and analysis",
+        "roles": [
+            {"key": "carbon:data_owner", "label": "Data Owner", "scoped": True,
+             "description": "CRUD on assigned org-unit data"},
+            {"key": "carbon:analyst", "label": "Analyst", "scoped": False,
+             "description": "Read-only, cross-org visibility"},
+            {"key": "carbon:admin", "label": "Carbon Admin", "scoped": False,
+             "description": "Manage factors, rules, periods"},
+        ],
+    },
+    {
+        "id": "catalog",
+        "name": "Data Catalog",
+        "version": "1.0.0",
+        "description": "Data product catalog, metadata, governance policies",
+        "roles": [
+            {"key": "catalog:admin", "label": "Catalog Admin", "scoped": True,
+             "description": "Manage data products and metadata"},
+        ],
+    },
+    {
+        "id": "mdm",
+        "name": "Master Data Management",
+        "version": "1.0.0",
+        "description": "Org units, reference data, hierarchy management",
+        "roles": [],
+    },
+    {
+        "id": "dq",
+        "name": "Data Quality",
+        "version": "1.0.0",
+        "description": "Data quality rules, profiling, dashboards",
+        "roles": [
+            {"key": "dq:admin", "label": "DQ Admin", "scoped": True,
+             "description": "Create and manage DQ rules"},
+        ],
+    },
+    {
+        "id": "connections",
+        "name": "Connections",
+        "version": "1.0.0",
+        "description": "External data sources and connection management",
+        "roles": [],
+    },
+    {
+        "id": "importexport",
+        "name": "Import / Export",
+        "version": "1.0.0",
+        "description": "Data import and export job management",
+        "roles": [],
+    },
+    {
+        "id": "dataschema",
+        "name": "Data Schema",
+        "version": "1.0.0",
+        "description": "Data table and field schema management",
+        "roles": [],
+    },
+]
+
 # Application definition
 INSTALLED_APPS = [
     'accounts',
