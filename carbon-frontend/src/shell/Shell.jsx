@@ -1,7 +1,7 @@
 // File: src/shell/Shell.jsx
 // Root IDE shell layout with activity bar, resizable sidebar, editor area, and copilot pane
 
-import React, { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Drawer } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { Allotment } from 'allotment';
@@ -55,6 +55,7 @@ export function Shell() {
   });
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const pulseMountRef = useRef(null);
 
   const drawerWidthClamped = useMemo(() => {
     const min = 160;
@@ -110,6 +111,30 @@ export function Shell() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleSidebar, toggleCopilot]);
+
+  // Mount / unmount Pulse widget inside the copilot pane
+  useEffect(() => {
+    let pulseInstance = null;
+
+    if (copilotVisible && pulseMountRef.current && window.PulseWidget) {
+      // Small delay to let the DOM settle (the Allotment pane needs to finish layout)
+      const timer = setTimeout(() => {
+        pulseInstance = window.PulseWidget.mount(pulseMountRef.current, {
+          instanceId: 'carbon',
+          pulseHost: 'http://localhost:9100',
+        });
+      }, 100);
+
+      return () => {
+        clearTimeout(timer);
+        if (pulseInstance?.unmount) pulseInstance.unmount();
+      };
+    }
+
+    return () => {
+      if (pulseInstance?.unmount) pulseInstance.unmount();
+    };
+  }, [copilotVisible]);
 
   const handleSidebarNavigate = (item) => {
     navigate(item.path);
@@ -275,15 +300,15 @@ export function Shell() {
               <EditorArea />
             </Allotment.Pane>
 
-            {/* Right Copilot Pane — superseded by external Pulse */}
+            {/* Right Copilot Pane — Pulse AI */}
             {copilotVisible && (
               <Allotment.Pane minSize={300} preferredSize={copilotPaneSize} maxSize={600}>
                 <ErrorBoundary>
-                  <Suspense fallback={<LoadingSpinner />}>
-                    <Box sx={{ p: 3, textAlign: 'center', color: 'text.secondary' }}>
-                      Pulse AI is now external. See STRATEGY_DATA_TRUST_PLATFORM.md
-                    </Box>
-                  </Suspense>
+                  <Box
+                    ref={pulseMountRef}
+                    id="pulse-mount"
+                    sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}
+                  />
                 </ErrorBoundary>
               </Allotment.Pane>
             )}

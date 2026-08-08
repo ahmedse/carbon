@@ -4,7 +4,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const BASE_URL = process.env.CARBON_BASE_URL || 'http://127.0.0.1:5179';
-const API_URL = process.env.CARBON_API_URL || 'http://127.0.0.1:8000';
+const API_URL = process.env.CARBON_API_URL || 'http://127.0.0.1:8009';
 
 export default defineConfig({
   testDir: './journeys',
@@ -44,8 +44,8 @@ export default defineConfig({
   // Start the dev server if not already running
   webServer: process.env.CI ? undefined : [
     {
-      command: 'cd ../backend && python manage.py runserver 0.0.0.0:8000 --noreload 2>&1',
-      port: 8000,
+      command: 'cd ../backend && python manage.py runserver 0.0.0.0:8009 --noreload 2>&1',
+      port: 8009,
       reuseExistingServer: true,
       timeout: 30_000,
     },
