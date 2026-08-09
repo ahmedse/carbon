@@ -66,11 +66,17 @@ BACKEND_TZ_USAGE=django.utils.timezone.now()  ← ALWAYS. Never datetime.now()
 FRONTEND_TZ_USAGE=dayjs with timezone plugin
 
 ## PRODUCTION
-PROD_HOST=TBD
+PROD_HOST=72.60.83.189
 PROD_USER=ahmed
-PROD_STACK_PATH=TBD
-PROD_CONTAINER=TBD
-PROD_DB=TBD
+PROD_SSH=carbon-prod
+PROD_STACK_PATH=/srv/carbon
+PROD_CONTAINER=carbon-backend
+PROD_PORT=8006
+PROD_DB=carbon_prod (PostgreSQL 16 on host, accessed via host.docker.internal)
+PROD_DOMAIN=carbon.clearturn.tech
+PROD_SSL=Let's Encrypt (certbot)
+PROD_DEPLOY_SCRIPT=deploy/carbon/redeploy-carbon.sh
+PROD_TAG=v1.2.0
 
 ## DEPLOY MODEL
 DEPLOY_TYPE=Docker (docker-compose.yml at repo root)
@@ -83,6 +89,18 @@ ARCH_CORE_APPS=accounts, core, catalog, mdm, dq, dataschema, connections, eviden
 ARCH_HOSTED_APPS=emissions
 # Superseded / out of active scope:
 ARCH_SUPERSEDED=ai_copilot (Pulse owns AI/RAG now)
+# Pulse AI Brain — Task-oriented contract (v2.0.0, inspired by Google A2A Protocol)
+# FULL SPEC: docs/PULSE_CONTRACT_SPEC.md — THIS IS THE AUTHORITATIVE DOCUMENT
+ARCH_PULSE_HOST=http://127.0.0.1:9100
+ARCH_PULSE_ENDPOINT=/instances/carbon
+ARCH_PULSE_CONTRACT=Task envelope (id, type, payload, meta) via POST /tasks + GET /tasks/{id}. Carbon generates task ID (UUID v4, idempotent). Pulse returns {task_id, status, result, error}. Status: pending|working|completed|failed|partial. Carbon NEVER imports Pulse SDKs; Pulse NEVER calls Carbon.
+ARCH_PULSE_TASK_1=dq.validate (sync, 10s) — NL DQ rule validation. Carbon sends rules+rows → Pulse returns {results: [{rule_id, status, failing_rows, explanation, confidence}]}
+ARCH_PULSE_TASK_2=classification.infer (sync, 5s) — Auto-classify DataField metadata → glossary terms, PII detection, data type suggestions
+ARCH_PULSE_TASK_3=query.answer (stream, 15s) — NL question → structured answer with data payload
+ARCH_PULSE_TASK_4=dq.suggest (async, 60s) — Propose DQ rules from table profile statistics
+ARCH_PULSE_TASK_5=anomaly.detect (async, 120s) — Scan DQ profile snapshots for anomalous patterns
+ARCH_PULSE_TASK_6=report.draft (async, 60s) — Dashboard data → narrative GHG report draft
+ARCH_PULSE_DISCOVERY=Agent Card at GET /instances/carbon/agent-card — Carbon reads on startup to validate supported task types
 # RBAC:
 ARCH_RBAC=ScopedRole (user, group, org_unit, module) — org-subtree-scoped visibility + admin
 ARCH_ADMIN_GROUP=admins_group
@@ -95,7 +113,9 @@ RULE_2=Project model is FULLY removed (replaced by OrgUnit in mdm). Do NOT reint
 RULE_3=Core apps (accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport) MUST NOT import from emissions. Emissions may import core.
 RULE_4=API prefix is /carbon-api/ (config/urls.py). All backend routes are under this prefix.
 RULE_5=Frontend base path is /carbon/. Vite base + router basename must use this.
-RULE_6=Do NOT add pgvector, LLM gateway, or AI copilot features in-repo. Pulse is the external AI system.
+RULE_6=Do NOT add pgvector, LLM gateway, or AI copilot features in-repo. Pulse is the external AI system. Carbon sends structured data via POST to Pulse; Pulse returns structured results. Carbon owns the trigger, Pulse owns the reasoning.
+RULE_13=Pulse integration uses TASK ENVELOPE contract (docs/PULSE_CONTRACT_SPEC.md). Carbon NEVER imports Pulse SDKs or depends on Pulse being online. Single endpoint POST /instances/carbon/tasks with {auth, task:{id,type,payload}} → {task_id,status,result}. Graceful degradation: timeout 10s sync, 60s async; fall back to deterministic path on failure.
+RULE_14=DQ Level 2 (nl_check rules) are evaluated by Pulse. Carbon sends row data + natural language rule → Pulse returns {passed, explanation, failed_rows}. DQ executor Phase A (deterministic: unique/threshold/reference_integrity) runs locally; Phase B (nl_check) calls Pulse.
 RULE_7=UI labels: "Data Product" = Module (in code). "Table" = DataTable. NEVER use "Schema" as a label for a table.
 RULE_8=Design tokens only — NO hardcoded hex colors, raw px spacing, or inline font sizes. Theme controls all.
 RULE_9=ONE breadcrumb — shell/src/Breadcrumbs.jsx. NEVER render breadcrumbs inside pages.

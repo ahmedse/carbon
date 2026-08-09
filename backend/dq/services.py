@@ -342,9 +342,102 @@ def _evaluate_rule(rule, rows):
             if not ok:
                 failures.append({'row': r.id, 'value': v})
 
+    elif rule.rule_type == 'nl_check':
+        return _evaluate_nl_check(rule, rows)
+
     failed = len(failures)
     score = 100 if checked == 0 else round((checked - failed) / checked * 100)
     return (failed == 0), checked, failed, failures[:20], score
+
+
+def _evaluate_nl_check(rule, rows):
+    """Evaluate an NL Check rule by delegating to Pulse.
+
+    Handles graceful degradation: returns passed=True if Pulse is unavailable
+    so that NL checks never block data workflows.
+
+    Returns the standard 5-tuple: (passed, checked, failed, failures, score).
+    """
+    prompt = rule.params.get('prompt', '') if rule.params else ''
+    if not prompt or not rows:
+        return True, 0, 0, [], 100
+
+    try:
+        from pulse_gateway import PulseGateway
+    except ImportError:
+        logger.warning('pulse_gateway module not available for rule %s', rule.id)
+        return True, 0, 0, [], 100
+
+    field = rule.data_field
+    field_names = [field.name] if field else list(rows[0].values.keys()) if rows else []
+
+    gateway = PulseGateway()
+    rows_payload = [
+        r.values if hasattr(r, 'values') else r
+        for r in rows
+    ]
+
+    rules_payload = [{
+        'id': str(rule.id),
+        'prompt': prompt,
+        'fields': field_names,
+        'severity': rule.severity or 'error',
+    }]
+
+    response = gateway.validate_dq_rules(
+        rules=rules_payload,
+        rows=rows_payload,
+        context={
+            'table_name': rule.data_table.name if rule.data_table else '',
+            'row_count_hint': len(rows),
+        },
+    )
+
+    status = response.get('status', 'pulse_unavailable')
+
+    if status == 'pulse_unavailable':
+        logger.warning('Pulse unavailable for NL check rule %s', rule.id)
+        return True, len(rows), 0, [], 100
+
+    if status != 'completed':
+        logger.warning(
+            'Pulse returned status=%s for NL check rule %s',
+            status, rule.id,
+        )
+        return True, len(rows), 0, [], 100
+
+    results = response.get('result', {}).get('results', [])
+    if not results:
+        return True, len(rows), 0, [], 100
+
+    rule_result = results[0]
+    result_status = rule_result.get('status', 'error')
+
+    if result_status == 'error':
+        logger.warning(
+            'Pulse NL check error for rule %s: %s',
+            rule.id, rule_result.get('explanation', ''),
+        )
+        return True, len(rows), 0, [], 100
+
+    if result_status == 'pass':
+        return True, len(rows), 0, [], 100
+
+    # fail
+    failing_rows = rule_result.get('failing_rows', [])
+    failed_count = len(failing_rows)
+    checked = len(rows)
+    failures = [
+        {
+            'row': rows[idx].id if hasattr(rows[idx], 'id') else idx,
+            'explanation': rule_result.get('explanation', ''),
+            'confidence': rule_result.get('confidence'),
+        }
+        for idx in failing_rows[:20]
+    ]
+    score = round((checked - failed_count) / checked * 100) if checked else 100
+
+    return False, checked, failed_count, failures, score
 
 
 def _compute_quality(table):

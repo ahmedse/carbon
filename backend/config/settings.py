@@ -460,3 +460,7 @@ if DJANGO_ENV == "development":
 
 # Custom API prefix (used in urls.py)
 API_PREFIX = API_PREFIX
+
+# Pulse AI/RAG integration (DQ Level 2)
+PULSE_URL = os.environ.get('PULSE_URL', 'http://127.0.0.1:9100/instances/carbon')
+PULSE_API_KEY = os.environ.get('PULSE_API_KEY', '')

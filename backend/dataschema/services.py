@@ -54,6 +54,7 @@ class BulkImportService:
         }
 
         # Process each row
+        fields = list(data_table.fields.filter(is_active=True, is_archived=False))
         for idx, row in df.iterrows():
             row_data = row.to_dict()
 
@@ -62,6 +63,20 @@ class BulkImportService:
 
             # Remove 'id' column if present (Phase 1: create only)
             row_data.pop('id', None)
+
+            # Pre-validate against field metadata (Level 1 — fast, no DB write)
+            from .validators import validate_row
+            field_errors = validate_row(row_data, fields)
+            if field_errors:
+                results['failed'] += 1
+                results['errors'].append({
+                    'row': idx + 2,  # +2 because: 0-indexed + header row
+                    'data': row_data,
+                    'error': '; '.join(
+                        f"{e['field']}: {e['message']}" for e in field_errors
+                    ),
+                })
+                continue  # skip serializer entirely for invalid rows
 
             try:
                 # Validate and create row
@@ -133,28 +148,13 @@ class SchemaValidationService:
     def validate_field(field, value):
         """
         Validate a single value against a DataField's type constraints.
-        Mirrors the exact rules in DataRowSerializer.validate.
+        Delegates to the unified validate_row() for Level 1 validation.
 
         Returns None on success; raises ValueError with the same messages
         the serializer uses (as {field_name: message}).
         """
-        # Type: number
-        if field.type == 'number':
-            if not isinstance(value, (int, float)):
-                raise ValueError({field.name: "Must be a number."})
-            if value < 0:
-                raise ValueError({field.name: "Negative values are not allowed. Please enter zero or a positive number."})
-        # Type: boolean
-        if field.type == 'boolean' and not isinstance(value, bool):
-            raise ValueError({field.name: "Must be true or false."})
-        # Type: select
-        if field.type == 'select':
-            allowed = [opt['value'] for opt in field.options or []]
-            if value not in allowed:
-                raise ValueError({field.name: f"Value must be one of {allowed}."})
-        # Type: multiselect
-        if field.type == 'multiselect':
-            allowed = [opt['value'] for opt in field.options or []]
-            if not isinstance(value, list) or not all(v in allowed for v in value):
-                raise ValueError({field.name: f"All values must be in {allowed}."})
+        from .validators import validate_row
+        errors = validate_row({field.name: value}, [field])
+        if errors:
+            raise ValueError({errors[0]['field']: errors[0]['message']})
         return None

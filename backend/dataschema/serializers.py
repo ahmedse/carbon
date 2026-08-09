@@ -74,33 +74,14 @@ class DataRowSerializer(serializers.ModelSerializer):
             elif values is None:
                 values = {}
 
-            required_fields = data_table.fields.filter(required=True).values_list('name', flat=True)
-            missing = [f for f in required_fields if f not in values or values[f] in (None, '', [])]
-            if missing:
-                raise serializers.ValidationError({f: "This field is required." for f in missing})
-
-            for f in data_table.fields.all():
-                if f.name in values:
-                    val = values[f.name]
-                    # Type: number
-                    if f.type == 'number':
-                        if not isinstance(val, (int, float)):
-                            raise serializers.ValidationError({f.name: "Must be a number."})
-                        if val < 0:
-                            raise serializers.ValidationError({f.name: "Negative values are not allowed. Please enter zero or a positive number."})
-                    # Type: boolean
-                    if f.type == 'boolean' and not isinstance(val, bool):
-                        raise serializers.ValidationError({f.name: "Must be true or false."})
-                    # Type: select
-                    if f.type == 'select':
-                        allowed = [opt['value'] for opt in f.options or []]
-                        if val not in allowed:
-                            raise serializers.ValidationError({f.name: f"Value must be one of {allowed}."})
-                    # Type: multiselect
-                    if f.type == 'multiselect':
-                        allowed = [opt['value'] for opt in f.options or []]
-                        if not isinstance(val, list) or not all(v in allowed for v in val):
-                            raise serializers.ValidationError({f.name: f"All values must be in {allowed}."})
+            # Unified Level 1 validation against field metadata (P19)
+            from .validators import validate_row
+            fields = list(data_table.fields.filter(is_active=True))
+            errors = validate_row(values, fields)
+            if errors:
+                raise serializers.ValidationError(
+                    {e['field']: e['message'] for e in errors}
+                )
         return data
 
     class Meta:

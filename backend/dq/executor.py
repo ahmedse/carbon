@@ -80,6 +80,10 @@ class DQRuleExecutor:
             passed, failed_count, sample_failures = self._validate_threshold(
                 data_sample, params
             )
+        elif rule_type == 'nl_check':
+            passed, failed_count, sample_failures = self._validate_nl_check(
+                data_sample, self.rule
+            )
         elif rule_type == 'custom':
             # Custom rules can be user-defined
             passed = True
@@ -394,6 +398,95 @@ class DQRuleExecutor:
                     })
 
         return failed_count == 0, failed_count, failures
+
+    def _validate_nl_check(self, data: list, rule) -> tuple:
+        """Validate rows against a natural-language DQ rule via Pulse.
+
+        Sends rule + rows to Pulse. Gracefully degrades: if Pulse is
+        unreachable, returns (True, 0, []) — treating the rule as passed
+        to avoid blocking workflows.
+
+        Returns:
+            (passed: bool, failed_count: int, sample_failures: list)
+        """
+        if not data or not rule.params.get('prompt'):
+            return True, 0, []
+
+        try:
+            from pulse_gateway import PulseGateway
+        except ImportError:
+            logger.warning('pulse_gateway module not available')
+            return True, 0, []
+
+        field = rule.data_field
+        field_names = [field.name] if field else list(data[0].keys()) if data else []
+
+        gateway = PulseGateway()
+        rows = [
+            {k: v for k, v in row.items() if not data or k in row}
+            for row in data
+        ]
+
+        rules_payload = [{
+            'id': str(rule.id),
+            'prompt': rule.params.get('prompt', ''),
+            'fields': field_names,
+            'severity': rule.severity or 'error',
+        }]
+
+        response = gateway.validate_dq_rules(
+            rules=rules_payload,
+            rows=rows,
+            context={
+                'table_name': rule.data_table.name if rule.data_table else '',
+                'row_count_hint': len(data),
+            },
+        )
+
+        status = response.get('status', 'pulse_unavailable')
+
+        if status == 'pulse_unavailable':
+            logger.warning('Pulse unavailable for NL check rule %s', rule.id)
+            return True, 0, []
+
+        if status != 'completed':
+            logger.warning(
+                'Pulse returned status=%s for NL check rule %s (task_id=%s)',
+                status, rule.id, response.get('task_id', ''),
+            )
+            return True, 0, []
+
+        # Parse results
+        results = response.get('result', {}).get('results', [])
+        if not results:
+            return True, 0, []
+
+        rule_result = results[0]
+        result_status = rule_result.get('status', 'error')
+
+        if result_status == 'error':
+            logger.warning(
+                'Pulse NL check error for rule %s: %s',
+                rule.id, rule_result.get('explanation', ''),
+            )
+            return True, 0, []
+
+        if result_status == 'pass':
+            return True, 0, []
+
+        # result_status == 'fail'
+        failing_rows = rule_result.get('failing_rows', [])
+        failed_count = len(failing_rows)
+        sample_failures = [
+            {
+                'row': idx,
+                'explanation': rule_result.get('explanation', ''),
+                'confidence': rule_result.get('confidence'),
+            }
+            for idx in failing_rows[:10]
+        ]
+
+        return False, failed_count, sample_failures
 
     def _create_error_result(self, error_message: str) -> DQResult:
         """Create a failed result for execution errors."""

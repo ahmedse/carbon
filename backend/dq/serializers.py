@@ -62,7 +62,8 @@ class DQRuleSerializer(serializers.ModelSerializer):
 
     def validate_rule_type(self, value):
         """Validate rule_type is one of allowed types."""
-        ALLOWED = ['not_null', 'unique', 'allowed_values', 'range', 'regex', 'reference_integrity', 'threshold', 'custom']
+        ALLOWED = ['not_null', 'unique', 'allowed_values', 'range', 'regex',
+                   'reference_integrity', 'threshold', 'custom', 'nl_check']
         if value not in ALLOWED:
             raise serializers.ValidationError(
                 f"rule_type must be one of {ALLOWED}"
