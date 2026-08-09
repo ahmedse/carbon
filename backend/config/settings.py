@@ -220,6 +220,8 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 # Phase 1.5: Inject DJANGO_ENV into all admin templates
                 'config.context_processors.django_env',
+                # Phase 1.9: Inject health status into admin templates
+                'config.admin_health.health_context_processor',
             ],
         },
     },
@@ -295,7 +297,7 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,

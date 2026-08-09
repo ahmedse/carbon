@@ -1,0 +1,39 @@
+{% extends "admin/index.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .health-status-bar {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+  }
+  .health-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 4px; }
+  .health-dot.green { background: #28a745; }
+  .health-dot.yellow { background: #ffc107; }
+  .health-dot.red { background: #dc3545; }
+  .health-dot.grey { background: #6c757d; }
+  .health-separator { color: #ccc; margin: 0 4px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if health_status %}
+<div class="health-status-bar">
+  <strong>System Health:</strong>
+  {% for name, check in health_status.checks.items %}
+    <span class="health-dot {{ check.status }}" title="{{ name }}"></span>
+    {{ check.label }}
+    {% if not forloop.last %}<span class="health-separator">|</span>{% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+{{ block.super }}
+{% endblock %}

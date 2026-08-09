@@ -5,10 +5,10 @@ from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path, include
-from django.http import JsonResponse
 from rest_framework_simplejwt.views import TokenRefreshView
 from accounts.views import ThrottledTokenObtainPairView
 from accounts.password_reset_signals import NotifyingPasswordResetView
+from .health_views import health_check, metrics_view
 
 # API prefix, e.g. '/api/v1/' or '/carbon/api/'
 api_prefix = getattr(settings, "API_PREFIX", "/api/v1/").strip("/")
@@ -19,13 +19,10 @@ api_prefix = getattr(settings, "API_PREFIX", "/api/v1/").strip("/")
 IS_DEVELOPMENT = getattr(settings, "IS_DEVELOPMENT", False)
 
 
-def health_check(request):
-    return JsonResponse({"status": "ok"})
-
-
 urlpatterns = [
     path('admin/', admin.site.urls),
     path(f'{api_prefix}/health/', health_check),
+    path(f'{api_prefix}/health/metrics/', metrics_view),
 
     # JWT Auth endpoints under API prefix
     path(f'{api_prefix}/token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
