@@ -100,6 +100,15 @@ def profile_table(table_id):
     fields = list(table.fields.filter(is_active=True, is_archived=False))
     completeness_all = []
     field_profile_data = []
+    # Collect per-column stats for TableProfile summary JSON fields
+    null_counts_dict = {}
+    distinct_counts_dict = {}
+    min_values_dict = {}
+    max_values_dict = {}
+    mean_values_dict = {}
+
+    # Clean up old field profiles before creating new ones
+    FieldProfile.objects.filter(data_field__data_table=table).delete()
     
     for f in fields:
         field_start = time.time()
@@ -121,6 +130,12 @@ def profile_table(table_id):
                     pass
             if nums:
                 minv, maxv, meanv = str(min(nums)), str(max(nums)), mean(nums)
+        # Collect for TableProfile summary JSON
+        null_counts_dict[f.name] = null_count
+        distinct_counts_dict[f.name] = distinct
+        min_values_dict[f.name] = minv if minv != '' else None
+        max_values_dict[f.name] = maxv if maxv != '' else None
+        mean_values_dict[f.name] = meanv
         counts = {}
         for v in non_empty:
             k = str(v)
@@ -156,18 +171,20 @@ def profile_table(table_id):
     
     table_completeness = round(mean(completeness_all), 2) if completeness_all else 0.0
     # Deduplicate: update existing TableProfile or create new one.
-    # Clean up old field profiles before creating new ones.
     from django.utils import timezone
     tp, _created = TableProfile.objects.update_or_create(
         data_table=table,
         defaults={
             'row_count': n,
             'completeness_pct': table_completeness,
+            'null_counts': null_counts_dict,
+            'distinct_counts': distinct_counts_dict,
+            'min_values': min_values_dict,
+            'max_values': max_values_dict,
+            'mean_values': mean_values_dict,
             'profiled_at': timezone.now(),
         },
     )
-    # Delete old field profiles for this table (replace with fresh ones)
-    FieldProfile.objects.filter(data_field__data_table=table).delete()
     
     total_duration_ms = (time.time() - start_time) * 1000
     perf_logger.info(

@@ -1,6 +1,6 @@
 # dq/serializers.py
 from rest_framework import serializers
-from .models import TableProfile, FieldProfile, DQRule, DQResult
+from .models import TableProfile, FieldProfile, DQRule, DQResult, DQProfileConfig
 
 
 class TableProfileSerializer(serializers.ModelSerializer):
@@ -10,10 +10,20 @@ class TableProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = TableProfile
         fields = [
-            'id', 'data_table', 'table_name', 'row_count', 
-            'completeness_pct', 'profiled_at'
+            'id', 'data_table', 'table_name', 'row_count',
+            'completeness_pct', 'null_counts', 'distinct_counts',
+            'min_values', 'max_values', 'mean_values', 'profiled_at'
         ]
-        read_only_fields = ['id', 'profiled_at']
+        read_only_fields = fields
+
+
+DQProfileConfigSerializer = type('DQProfileConfigSerializer', (serializers.ModelSerializer,), {
+    'Meta': type('Meta', (), {
+        'model': DQProfileConfig,
+        'fields': ['id', 'auto_profile_enabled', 'freshness_threshold_hours',
+                    'volume_anomaly_pct', 'sample_size'],
+    })
+})
 
 
 class FieldProfileSerializer(serializers.ModelSerializer):
