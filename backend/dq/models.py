@@ -13,7 +13,87 @@ RULE_TYPES = [
     ('nl_check', 'NL Check'),
 ]
 SEVERITY_CHOICES = [('info', 'Info'), ('warn', 'Warn'), ('error', 'Error')]
-SCOPE_CHOICES = [('table', 'Table'), ('field', 'Field')]
+RULE_LEVELS = [
+    ('field_validation', 'Field Validation'),
+    ('business_rule', 'Business Rule'),
+]
+
+
+class RuleTag(models.Model):
+    """Categorization tags for DQ rules (e.g. 'PII', 'financial', 'regulatory')."""
+    name = models.CharField(max_length=100, unique=True)
+    color = models.CharField(max_length=7, default='#6366f1',
+        help_text='Hex color for UI badge (e.g. #6366f1)')
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class DQRule(models.Model):
+    """Standalone data quality rule. Assigned to fields via RuleFieldAssignment.
+
+    Two levels:
+      - field_validation: checked at data entry time by validators.py
+      - business_rule:    runs independently via Pulse scheduler / services.py
+    """
+    name = models.CharField(max_length=255)
+    rule_level = models.CharField(max_length=20, choices=RULE_LEVELS, default='field_validation')
+    rule_type = models.CharField(max_length=20, choices=RULE_TYPES)
+    params = models.JSONField(default=dict, blank=True)
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='error')
+    is_active = models.BooleanField(default=True)
+    description = models.TextField(blank=True, help_text='What this rule checks and why')
+    tags = models.ManyToManyField(RuleTag, blank=True, related_name='rules')
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='created_dq_rules'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name or f'{self.rule_type} ({self.get_rule_level_display()})'
+
+
+class RuleFieldAssignment(models.Model):
+    """M2M through table: which fields a DQ rule applies to.
+
+    data_field may be NULL for table-level business rules
+    (e.g. 'row count must be > 100').
+    data_table is always set (denormalized for fast lookup).
+    """
+    rule = models.ForeignKey(DQRule, on_delete=models.CASCADE, related_name='field_assignments')
+    data_field = models.ForeignKey(
+        DataField, null=True, blank=True, on_delete=models.CASCADE, related_name='rule_assignments'
+    )
+    data_table = models.ForeignKey(
+        DataTable, on_delete=models.CASCADE, related_name='rule_assignments'
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['rule', 'data_field'],
+                condition=models.Q(data_field__isnull=False),
+                name='unique_rule_field'
+            ),
+            models.UniqueConstraint(
+                fields=['rule', 'data_table'],
+                condition=models.Q(data_field__isnull=True),
+                name='unique_rule_table'
+            ),
+        ]
+        ordering = ['data_table__name', 'data_field__name']
+
+    def __str__(self):
+        target = self.data_field.name if self.data_field else f'Table:{self.data_table.name}'
+        return f'{self.rule.name} → {target}'
 
 
 class TableProfile(models.Model):
@@ -57,36 +137,12 @@ class FieldProfile(models.Model):
         ordering = ['-profiled_at']
 
 
-class DQRule(models.Model):
-    """Data quality rule with scope (table or field level)."""
-    scope = models.CharField(max_length=10, choices=SCOPE_CHOICES, default='field')
-    name = models.CharField(max_length=255, default='')  # Rule name for display
-    data_table = models.ForeignKey(
-        DataTable, null=True, blank=True, on_delete=models.CASCADE, related_name='dq_rules'
-    )
-    data_field = models.ForeignKey(
-        DataField, null=True, blank=True, on_delete=models.CASCADE, related_name='dq_rules'
-    )
-    rule_type = models.CharField(max_length=20, choices=RULE_TYPES)
-    params = models.JSONField(default=dict, blank=True)
-    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='error')
-    is_active = models.BooleanField(default=True)
-    created_by = models.ForeignKey(
-        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='created_dq_rules'
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return self.name or f"{self.rule_type} on {self.data_field or self.data_table}"
-
-
 class DQResult(models.Model):
-    """Results of executing a DQ rule."""
+    """Results of executing a DQ rule against a specific field/table."""
     rule = models.ForeignKey(DQRule, on_delete=models.CASCADE, related_name='results')
+    data_field = models.ForeignKey(
+        DataField, null=True, blank=True, on_delete=models.SET_NULL, related_name='dq_results'
+    )
     run_at = models.DateTimeField(auto_now_add=True)
     passed = models.BooleanField(default=True)
     checked_count = models.PositiveIntegerField(default=0)
@@ -96,6 +152,10 @@ class DQResult(models.Model):
 
     class Meta:
         ordering = ['-run_at']
+        indexes = [
+            models.Index(fields=['rule', '-run_at']),
+            models.Index(fields=['data_field', '-run_at']),
+        ]
 
 
 class DQProfileConfig(models.Model):

@@ -209,12 +209,20 @@ def profile_table(table_id):
     }
 
 
-def _evaluate_rule(rule, rows):
+def _evaluate_rule(rule, rows, field=None):
     """Evaluate a single DQ rule against a list of DataRow objects.
+
+    Args:
+        rule: DQRule instance
+        rows: list of DataRow objects
+        field: DataField instance (auto-resolved from first field_assignment if None)
 
     Returns (passed, checked_count, failed_count, sample_failures[:20], score).
     """
-    field = rule.data_field
+    if field is None:
+        first_assn = rule.field_assignments.select_related('data_field').first()
+        if first_assn:
+            field = first_assn.data_field
     fname = field.name if field else None
     checked = 0
     failures = []
@@ -350,7 +358,7 @@ def _evaluate_rule(rule, rows):
     return (failed == 0), checked, failed, failures[:20], score
 
 
-def _evaluate_nl_check(rule, rows):
+def _evaluate_nl_check(rule, rows, field=None):
     """Evaluate an NL Check rule by delegating to Pulse.
 
     Handles graceful degradation: returns passed=True if Pulse is unavailable
@@ -368,7 +376,6 @@ def _evaluate_nl_check(rule, rows):
         logger.warning('pulse_gateway module not available for rule %s', rule.id)
         return True, 0, 0, [], 100
 
-    field = rule.data_field
     field_names = [field.name] if field else list(rows[0].values.keys()) if rows else []
 
     gateway = PulseGateway()
@@ -388,7 +395,7 @@ def _evaluate_nl_check(rule, rows):
         rules=rules_payload,
         rows=rows_payload,
         context={
-            'table_name': rule.data_table.name if rule.data_table else '',
+            'table_name': field.data_table.name if field and hasattr(field, 'data_table') and field.data_table else '',
             'row_count_hint': len(rows),
         },
     )
@@ -536,8 +543,10 @@ def suggest_rules_for_table(table_id: int) -> dict:
 
 def _compute_quality(table):
     """Compute quality_status and quality_score from latest DQResult for each active rule."""
+    field_ids = list(table.fields.values_list('id', flat=True))
     rules = list(DQRule.objects.filter(
-        Q(data_table=table) | Q(data_field__data_table=table),
+        Q(field_assignments__data_table_id=table.id) |
+        Q(field_assignments__data_field_id__in=field_ids),
         is_active=True,
     ).distinct())
     if not rules:
@@ -563,11 +572,14 @@ def _rollup_to_catalog(table, rules, results, user=None):
     # --- Per-field rollup ---
     by_field = {}
     for rule in rules:
-        if not rule.data_field_id:
-            continue
-        result = next((r for r in results if r.rule_id == rule.id), None)
-        if result:
-            by_field.setdefault(rule.data_field_id, []).append(result)
+        for assn in rule.field_assignments.all():
+            if not assn.data_field_id:
+                continue
+            result = next((r for r in results if r.rule_id == rule.id and r.data_field_id == assn.data_field_id), None)
+            if not result:
+                result = next((r for r in results if r.rule_id == rule.id), None)
+            if result:
+                by_field.setdefault(assn.data_field_id, []).append(result)
     for fid, field_results in by_field.items():
         passed_count = sum(1 for r in field_results if r.passed)
         total = len(field_results)
@@ -618,7 +630,7 @@ def run_dq(table_id, user=None):
     table = DataTable.objects.get(id=table_id)
     rows = _rows(table, chunk=True)
     row_count = len(rows)
-    
+
     # Warn on very large datasets
     if row_count > 100000:
         perf_logger.warning(
@@ -630,50 +642,54 @@ def run_dq(table_id, user=None):
                 'warning': 'Dataset exceeds 100k rows - execution may be slow'
             }}
         )
-    
+
     field_ids = list(table.fields.values_list('id', flat=True))
     rules = list(DQRule.objects.filter(is_active=True).filter(
-        Q(data_table_id=table_id) | Q(data_field_id__in=field_ids)
-    ).select_related('data_field'))
-    
+        Q(field_assignments__data_table_id=table_id) |
+        Q(field_assignments__data_field_id__in=field_ids)
+    ).prefetch_related('field_assignments__data_field').distinct())
+
     results = []
     for rule in rules:
-        rule_start = time.time()
-        try:
-            passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
-            results.append(DQResult.objects.create(
-                rule=rule, passed=passed, checked_count=checked,
-                failed_count=failed, sample_failures=sample, score=score,
-            ))
-            rule_duration_ms = (time.time() - rule_start) * 1000
-            
-            # Log slow rule execution
-            if rule_duration_ms > 2000:
-                perf_logger.warning(
-                    'Slow DQ rule execution',
+        assignments = rule.field_assignments.all()
+        for assn in assignments:
+            rule_start = time.time()
+            field = assn.data_field  # may be None for table-level
+            try:
+                passed, checked, failed, sample, score = _evaluate_rule(rule, rows, field=field)
+                results.append(DQResult.objects.create(
+                    rule=rule,
+                    data_field=field,
+                    passed=passed, checked_count=checked,
+                    failed_count=failed, sample_failures=sample, score=score,
+                ))
+                rule_duration_ms = (time.time() - rule_start) * 1000
+
+                if rule_duration_ms > 2000:
+                    perf_logger.warning(
+                        'Slow DQ rule execution',
+                        extra={'structured': {
+                            'event': 'dq_rule_slow',
+                            'table_id': table_id,
+                            'rule_id': rule.id,
+                            'rule_type': rule.rule_type,
+                            'duration_ms': round(rule_duration_ms, 2),
+                            'row_count': row_count
+                        }}
+                    )
+            except Exception as exc:
+                logger.error(
+                    f'DQ rule execution failed: {exc}',
                     extra={'structured': {
-                        'event': 'dq_rule_slow',
+                        'event': 'dq_rule_error',
                         'table_id': table_id,
                         'rule_id': rule.id,
                         'rule_type': rule.rule_type,
-                        'duration_ms': round(rule_duration_ms, 2),
-                        'row_count': row_count
-                    }}
+                        'error': str(exc)
+                    }},
+                    exc_info=True
                 )
-        except Exception as exc:
-            logger.error(
-                f'DQ rule execution failed: {exc}',
-                extra={'structured': {
-                    'event': 'dq_rule_error',
-                    'table_id': table_id,
-                    'rule_id': rule.id,
-                    'rule_type': rule.rule_type,
-                    'error': str(exc)
-                }},
-                exc_info=True
-            )
-            # Continue with other rules even if one fails
-            continue
+                continue
     
     _rollup_to_catalog(table, rules, results, user=user)
     
@@ -704,53 +720,53 @@ def run_dq(table_id, user=None):
 
 
 def run_single_rule(rule_id, user=None):
-    """Run a single DQ rule by ID. Returns response dict with DQResult data."""
+    """Run a single DQ rule by ID across all its field assignments. Returns list of result dicts."""
     start_time = time.time()
-    rule = DQRule.objects.select_related('data_field', 'data_table').get(id=rule_id)
-    table = rule.data_table or (rule.data_field.data_table if rule.data_field else None)
-    if table is None:
-        raise ValueError("Rule has no associated table or field")
-    
-    rows = _rows(table, chunk=True)
-    passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
-    result = DQResult.objects.create(
-        rule=rule, passed=passed, checked_count=checked,
-        failed_count=failed, sample_failures=sample, score=score,
-    )
-    
-    # Rollup quality for this table
-    all_rules = list(DQRule.objects.filter(is_active=True).filter(
-        Q(data_table=table) | Q(data_field__data_table=table)
-    ).distinct())
-    _rollup_to_catalog(table, all_rules, [result], user=user)
-    
-    duration_ms = (time.time() - start_time) * 1000
-    perf_logger.info(
-        'Single rule execution completed',
-        extra={'structured': {
-            'event': 'dq_rule_execute',
+    rule = DQRule.objects.prefetch_related('field_assignments__data_field',
+        'field_assignments__data_table').get(id=rule_id)
+
+    all_results = []
+    assignments = rule.field_assignments.all()
+
+    if not assignments:
+        raise ValueError("Rule has no field assignments. Assign at least one field or table first.")
+
+    for assn in assignments:
+        field = assn.data_field
+        table = assn.data_table
+        if table is None:
+            continue
+        rows = _rows(table, chunk=True)
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows, field=field)
+        result = DQResult.objects.create(
+            rule=rule, data_field=field, passed=passed,
+            checked_count=checked, failed_count=failed,
+            sample_failures=sample, score=score,
+        )
+        all_results.append({
             'rule_id': rule.id,
-            'rule_type': rule.rule_type,
+            'rule_name': rule.name,
+            'data_field_id': field.id if field else None,
+            'data_field_name': field.name if field else None,
             'table_id': table.id,
-            'passed': passed,
-            'checked_count': checked,
-            'failed_count': failed,
-            'score': score,
-            'duration_ms': round(duration_ms, 2)
-        }}
-    )
-    
-    return {
-        'rule_id': rule.id,
-        'rule_name': rule.name,
-        'passed': result.passed,
-        'checked_count': result.checked_count,
-        'failed_count': result.failed_count,
-        'score': result.score,
-        'sample_failures': result.sample_failures,
-        'run_at': result.run_at.isoformat(),
-        'result_id': result.id,
-    }
+            'passed': result.passed,
+            'checked_count': result.checked_count,
+            'failed_count': result.failed_count,
+            'score': result.score,
+            'sample_failures': result.sample_failures,
+            'run_at': result.run_at.isoformat(),
+            'result_id': result.id,
+        })
+
+    # Rollup quality for all affected tables
+    tables = {a.data_table for a in assignments if a.data_table}
+    all_rules = list(DQRule.objects.filter(is_active=True).filter(
+        field_assignments__data_table__in=[t.id for t in tables]
+    ).distinct())
+    for table in tables:
+        _rollup_to_catalog(table, all_rules, [result], user=user)
+
+    return all_results
 
 
 def bulk_profile(table_ids, user=None):

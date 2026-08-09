@@ -13,6 +13,7 @@ import TableChartIcon from '@mui/icons-material/TableChart';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import RuleIcon from '@mui/icons-material/Rule';
 import HistoryIcon from '@mui/icons-material/History';
+import ArticleIcon from '@mui/icons-material/Article';
 import PeopleIcon from '@mui/icons-material/People';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import SecurityIcon from '@mui/icons-material/Security';
@@ -29,6 +30,7 @@ import FolderIcon from '@mui/icons-material/Folder';
 import GroupIcon from '@mui/icons-material/Group';
 import AppsIcon from '@mui/icons-material/Apps';
 import GridViewIcon from '@mui/icons-material/GridView';
+import SettingsIcon from '@mui/icons-material/Settings';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import TrackChangesIcon from '@mui/icons-material/TrackChanges';
 import { useAuth } from '../auth/AuthContext';
@@ -101,6 +103,9 @@ function getSidebarItems(studioId) {
         { label: 'Data Sources', path: '/catalog/sources', icon: StorageIcon },
         { label: 'Exports', path: '/catalog/exports', icon: DownloadIcon },
         { label: 'Imports', path: '/catalog/imports', icon: UploadIcon },
+        { type: 'divider' },
+        { type: 'group', label: 'Schema Tools' },
+        { label: 'Table Manager', path: '/schema-admin/table-manager', icon: TableChartIcon },
       ];
     
     case 'admin':
@@ -110,10 +115,14 @@ function getSidebarItems(studioId) {
         { label: 'Org Units', path: '/admin/org-units', icon: AccountTreeIcon, role: 'admin' },
         { label: 'Access Control', path: '/admin/access', icon: SecurityIcon, role: 'admin' },
         { label: 'Audit Log', path: '/admin/audit', icon: HistoryIcon, role: 'admin' },
+        { label: 'System Logs', path: '/admin/logs', icon: ArticleIcon, role: 'admin' },
         { type: 'divider' },
         { type: 'group', label: 'App Management' },
         { label: 'Registered Apps', path: '/admin/apps', icon: AppsIcon, role: 'admin' },
         { label: 'Role Registry', path: '/admin/role-matrix', icon: GridViewIcon, role: 'admin' },
+        { type: 'divider' },
+        { type: 'group', label: 'System Settings' },
+        { label: 'Platform Config', path: '/admin/config', icon: SettingsIcon, role: 'admin' },
       ];
     
     case 'settings':

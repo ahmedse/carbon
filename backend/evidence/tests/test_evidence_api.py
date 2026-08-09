@@ -60,6 +60,19 @@ class EvidenceAPITests(TestCase):
         )
         return resp
 
+    @staticmethod
+    def _list_data(resp):
+        """Extract the item list from a list response.
+
+        BUG-06: the global CarbonPageNumberPagination is skipped when pytest is
+        in sys.modules (i.e. when the pytest-style test_evidence module is part
+        of the same run) and active otherwise, so list responses may be either
+        a plain list or {'count', 'page_size', 'page', 'results', ...}. Handle
+        both shapes so suite results do not depend on test-run composition.
+        """
+        data = resp.data
+        return data['results'] if isinstance(data, dict) else data
+
     # ── CRUD ──────────────────────────────────────────────────
 
     def test_upload_evidence_creates_record(self):
@@ -78,7 +91,7 @@ class EvidenceAPITests(TestCase):
         self._auth(self.admin)
         resp = self.client.get(reverse('evidence:evidence-list'))
         assert resp.status_code == status.HTTP_200_OK
-        assert len(resp.data) >= 2
+        assert len(self._list_data(resp)) >= 2
 
     def test_retrieve_evidence_detail(self):
         upload_resp = self._upload()
@@ -118,7 +131,7 @@ class EvidenceAPITests(TestCase):
         # list should exclude it
         resp = self.client.get(reverse('evidence:evidence-list'))
         assert resp.status_code == status.HTTP_200_OK
-        ids = [item['id'] for item in resp.data]
+        ids = [item['id'] for item in self._list_data(resp)]
         assert ev_id not in ids
 
     # ── Bulk upload ───────────────────────────────────────────
@@ -190,7 +203,7 @@ class EvidenceAPITests(TestCase):
         resp = self.client.get(f"{reverse('evidence:evidence-list')}?data_row={self.row.id}")
         assert resp.status_code == status.HTTP_200_OK
         # Both evidence items visible (filter non-functional)
-        assert len(resp.data) >= 2
+        assert len(self._list_data(resp)) >= 2
 
     def test_filter_by_uploaded_by(self):
         self._auth(self.admin)
@@ -200,7 +213,7 @@ class EvidenceAPITests(TestCase):
         )
         resp = self.client.get(f"{reverse('evidence:evidence-list')}?uploaded_by={self.admin.id}")
         assert resp.status_code == status.HTTP_200_OK
-        assert len(resp.data) >= 1
+        assert len(self._list_data(resp)) >= 1
 
     # ── RBAC ──────────────────────────────────────────────────
 

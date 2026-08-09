@@ -11,30 +11,41 @@ logger = logging.getLogger(__name__)
 class DQRuleExecutor:
     """Executes DQ rules against data rows and generates results."""
 
-    def __init__(self, rule: DQRule):
-        """Initialize executor with a rule."""
+    def __init__(self, rule: DQRule, field=None):
+        """Initialize executor with a rule and optional specific field.
+
+        If field is None and rule has field_assignments, the first field
+        assignment is used.
+        """
         self.rule = rule
+        assignments = list(rule.field_assignments.select_related('data_field', 'data_table').all())
+        if not assignments:
+            raise ValueError(f"Rule {rule.id} has no field assignments.")
+        if field:
+            self.field = field
+            self.table = field.data_table if hasattr(field, 'data_table') else assignments[0].data_table
+        else:
+            assn = assignments[0]
+            self.field = assn.data_field
+            self.table = assn.data_table
         self.results = []
 
     def execute(self, data_sample: list = None) -> DQResult:
         """
         Execute rule against data sample.
-        
+
         Args:
             data_sample: List of row dictionaries to validate.
                         If None, uses all rows in data source.
-        
+
         Returns:
             DQResult object with execution outcome.
         """
         try:
-            if self.rule.scope == 'field' and self.rule.data_field:
+            if self.field:
                 result = self._execute_field_rule(data_sample)
-            elif self.rule.scope == 'table' and self.rule.data_table:
-                result = self._execute_table_rule(data_sample)
             else:
-                raise ValueError(f"Invalid rule scope or missing target: {self.rule.scope}")
-            
+                result = self._execute_table_rule(data_sample)
             return result
         except Exception as e:
             logger.error(f"Error executing rule {self.rule.id}: {str(e)}")
@@ -146,7 +157,7 @@ class DQRuleExecutor:
         failures = []
         
         for idx, row in enumerate(data):
-            value = row.get(self.rule.data_field.name if self.rule.data_field else 'value')
+            value = row.get(self.field.name if self.field else 'value')
             if value is None or value == '':
                 failed_count += 1
                 if len(failures) < 10:
@@ -169,7 +180,7 @@ class DQRuleExecutor:
         failures = []
         
         for idx, row in enumerate(data):
-            value = row.get(self.rule.data_field.name if self.rule.data_field else 'value')
+            value = row.get(self.field.name if self.field else 'value')
             
             if value in seen:
                 failed_count += 1
@@ -195,7 +206,7 @@ class DQRuleExecutor:
         failures = []
         
         for idx, row in enumerate(data):
-            value = row.get(self.rule.data_field.name if self.rule.data_field else 'value')
+            value = row.get(self.field.name if self.field else 'value')
             
             if value not in allowed:
                 failed_count += 1
@@ -220,7 +231,7 @@ class DQRuleExecutor:
         failures = []
         
         for idx, row in enumerate(data):
-            value = row.get(self.rule.data_field.name if self.rule.data_field else 'value')
+            value = row.get(self.field.name if self.field else 'value')
             
             try:
                 numeric_value = float(value)
@@ -261,7 +272,7 @@ class DQRuleExecutor:
         failures = []
         
         for idx, row in enumerate(data):
-            value = str(row.get(self.rule.data_field.name if self.rule.data_field else 'value', ''))
+            value = str(row.get(self.field.name if self.field else 'value', ''))
             
             if not compiled_pattern.match(value):
                 failed_count += 1
@@ -283,7 +294,7 @@ class DQRuleExecutor:
         from mdm.models import ReferenceSet
 
         rs_id = params.get('reference_set_id')
-        field = self.rule.data_field
+        field = self.field
         if rs_id is None and field and hasattr(field, 'reference_set_id'):
             rs_id = field.reference_set_id
 
@@ -373,7 +384,7 @@ class DQRuleExecutor:
 
         failed_count = 0
         failures = []
-        field_name = self.rule.data_field.name if self.rule.data_field else 'value'
+        field_name = self.field.name if self.field else 'value'
 
         for idx, row in enumerate(data):
             value = row.get(field_name)
@@ -418,7 +429,7 @@ class DQRuleExecutor:
             logger.warning('pulse_gateway module not available')
             return True, 0, []
 
-        field = rule.data_field
+        field = getattr(self, 'field', None) or getattr(rule, 'field', None)
         field_names = [field.name] if field else list(data[0].keys()) if data else []
 
         gateway = PulseGateway()
@@ -438,7 +449,7 @@ class DQRuleExecutor:
             rules=rules_payload,
             rows=rows,
             context={
-                'table_name': rule.data_table.name if rule.data_table else '',
+                'table_name': self.table.name if self.table else '',
                 'row_count_hint': len(data),
             },
         )

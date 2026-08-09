@@ -14,8 +14,11 @@ from django.db.models import Q
 logger = logging.getLogger(__name__)
 
 from .models import TableProfile, FieldProfile, DQRule, DQResult
+from .models import FreshnessCheck, SchemaSnapshot, SchemaChange, RuleTag, RuleFieldAssignment
 from .serializers import (
     TableProfileSerializer, FieldProfileSerializer, DQRuleSerializer, DQResultSerializer,
+    FreshnessCheckSerializer, SchemaSnapshotSerializer, SchemaChangeSerializer,
+    RuleTagSerializer, RuleFieldAssignmentSerializer,
 )
 from accounts.permissions import ReadAnyWriteGlobalAdmin, ReadScopedWriteAdmin, AdminOrSuperuserOnly
 from accounts.rbac_utils import get_allowed_org_unit_ids, user_has_global_role, get_allowed_module_ids
@@ -49,11 +52,11 @@ def _check_rule_access(user, rule):
     if user.is_superuser or user.is_staff:
         return
     org_units = list(_get_user_org_units(user))
-    has_access = False
-    if rule.data_field_id and rule.data_field:
-        has_access = rule.data_field.data_table.module.org_unit_id in org_units
-    elif rule.data_table_id and rule.data_table:
-        has_access = rule.data_table.module.org_unit_id in org_units
+    # Check through RuleFieldAssignment M2M
+    assignments = rule.field_assignments.select_related('data_table__module').all()
+    has_access = any(
+        a.data_table.module.org_unit_id in org_units for a in assignments
+    )
     if not has_access:
         raise PermissionDenied("You don't have access to this rule's data.")
 
@@ -129,48 +132,59 @@ class DQRuleViewSet(viewsets.ModelViewSet):
     serializer_class = DQRuleSerializer
     permission_classes = [IsAuthenticated, ReadAnyWriteGlobalAdmin]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['name', 'params']
-    ordering_fields = ['created_at', 'name', 'severity']
+    search_fields = ['name', 'description', 'rule_type']
+    ordering_fields = ['created_at', 'name', 'severity', 'rule_level']
 
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return DQRule.objects.none()
-        # Optimize: select_related FK chain + prefetch results (serializer's
-        # get_results_count calls obj.results.count() — prefetch avoids N+1).
-        base_qs = DQRule.objects.select_related(
-            'data_field__data_table__module',
-            'data_table__module',
-            'created_by',
-        ).prefetch_related('results')
+        # Optimize: prefetch M2M through tables + tags
+        base_qs = DQRule.objects.prefetch_related(
+            'field_assignments__data_table__module',
+            'field_assignments__data_field',
+            'tags',
+            'results',
+        ).select_related('created_by').filter(is_active=True)
         user = self.request.user
         if user.is_superuser or user.is_staff:
-            qs = base_qs.filter(is_active=True)
+            qs = base_qs
         else:
             org_units = _get_user_org_units(user)
             if not org_units:
                 return DQRule.objects.none()
-            qs = base_qs.filter(is_active=True).filter(
-                Q(data_field__data_table__module__org_unit_id__in=org_units) |
-                Q(data_table__module__org_unit_id__in=org_units)
+            qs = base_qs.filter(
+                field_assignments__data_table__module__org_unit_id__in=org_units
             )
         p = self.request.query_params
+        if p.get('rule_level'):
+            qs = qs.filter(rule_level=p['rule_level'])
+        if p.get('rule_type'):
+            qs = qs.filter(rule_type=p['rule_type'])
+        if p.get('tag'):
+            qs = qs.filter(tags__id=p['tag'])
         if p.get('data_table'):
-            qs = qs.filter(Q(data_table_id=p['data_table']) | Q(data_field__data_table_id=p['data_table']))
+            qs = qs.filter(field_assignments__data_table_id=p['data_table'])
         if p.get('data_field'):
-            qs = qs.filter(data_field_id=p['data_field'])
+            qs = qs.filter(field_assignments__data_field_id=p['data_field'])
         return qs.distinct()
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
     def destroy(self, request, *args, **kwargs):
-        return Response(
-            {
-                'detail': 'Hard delete not supported; use PATCH {"is_active": false} to deactivate this rule.',
-                'resource': 'DQRule',
-            },
-            status=status.HTTP_405_METHOD_NOT_ALLOWED,
-        )
+        rule = self.get_object()
+        if rule.results.exists():
+            return Response(
+                {
+                    'detail': 'This rule is locked because it has execution history. '
+                              'Deactivate it instead by setting is_active=false.',
+                    'code': 'rule_locked',
+                    'is_locked': True,
+                    'results_count': rule.results.count(),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     @swagger_auto_schema(
         operation_description='Execute a single data quality rule and return the resulting DQ result.',
@@ -215,6 +229,101 @@ class DQRuleViewSet(viewsets.ModelViewSet):
             'trend': trend,
         })
 
+    @swagger_auto_schema(
+        operation_description=(
+            'Bulk-execute multiple DQ rules or all rules for a table. '
+            'Provide either rule_ids (array) or data_table_id (int).'
+        ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'rule_ids': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(type=openapi.TYPE_INTEGER),
+                    description='List of DQRule IDs to execute',
+                ),
+                'data_table_id': openapi.Schema(
+                    type=openapi.TYPE_INTEGER,
+                    description='Run all active rules for this DataTable',
+                ),
+            },
+        ),
+        responses={
+            200: openapi.Response(description='Bulk execution summary with total/passed/failed/results'),
+            400: 'Neither rule_ids nor data_table_id provided',
+        },
+    )
+    @action(detail=False, methods=['post'], url_path='bulk-execute')
+    def bulk_execute(self, request):
+        """POST /dq/rules/bulk-execute/ — Execute multiple rules at once."""
+        rule_ids = request.data.get('rule_ids')
+        table_id = request.data.get('data_table_id')
+
+        if not rule_ids and not table_id:
+            return Response(
+                {'error': 'Either rule_ids (array) or data_table_id (int) is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Resolve rules
+        if rule_ids:
+            if not isinstance(rule_ids, list):
+                return Response(
+                    {'error': 'rule_ids must be an array of integers'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            rules = DQRule.objects.filter(
+                id__in=rule_ids, is_active=True
+            ).prefetch_related('field_assignments__data_field', 'field_assignments__data_table')
+        else:
+            try:
+                table = DataTable.objects.get(id=table_id)
+            except DataTable.DoesNotExist:
+                return Response(
+                    {'error': f'Table {table_id} not found'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            _check_table_access(request.user, table)
+            field_ids = list(table.fields.values_list('id', flat=True))
+            rules = DQRule.objects.filter(is_active=True).filter(
+                Q(field_assignments__data_table_id=table_id) |
+                Q(field_assignments__data_field_id__in=field_ids)
+            ).prefetch_related('field_assignments__data_field', 'field_assignments__data_table')
+
+        if not rules.exists():
+            return Response({
+                'total': 0, 'passed': 0, 'failed': 0, 'results': [],
+                'message': 'No active rules found to execute',
+            })
+
+        results = []
+        passed = 0
+        failed = 0
+        for rule in rules:
+            _check_rule_access(request.user, rule)
+            try:
+                result = run_single_rule(rule.id, user=request.user)
+                results.append(result)
+                if result['passed']:
+                    passed += 1
+                else:
+                    failed += 1
+            except Exception as exc:
+                results.append({
+                    'rule_id': rule.id,
+                    'rule_name': rule.name,
+                    'passed': False,
+                    'error': str(exc),
+                })
+                failed += 1
+
+        return Response({
+            'total': len(results),
+            'passed': passed,
+            'failed': failed,
+            'results': results,
+        })
+
 
 # ---------------------------------------------------------------------------
 # DQResult read + failures action
@@ -233,7 +342,7 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
         
         # Optimize with select_related to avoid N+1 queries
         qs = DQResult.objects.select_related(
-            'rule__data_table', 'rule__created_by'
+            'rule__created_by', 'data_field', 'data_field__data_table'
         )
         
         user = self.request.user
@@ -244,8 +353,8 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
             if not org_units:
                 return DQResult.objects.none()
             qs = qs.filter(
-                Q(rule__data_field__data_table__module__org_unit_id__in=org_units) |
-                Q(rule__data_table__module__org_unit_id__in=org_units)
+                Q(rule__field_assignments__data_table__module__org_unit_id__in=org_units) |
+                Q(rule__field_assignments__data_field__data_table__module__org_unit_id__in=org_units)
             )
         
         p = self.request.query_params
@@ -255,8 +364,8 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(rule_id=p['rule'])
         if p.get('data_table_id'):
             qs = qs.filter(
-                Q(rule__data_table_id=p['data_table_id']) |
-                Q(rule__data_field__data_table_id=p['data_table_id'])
+                Q(rule__field_assignments__data_table_id=p['data_table_id']) |
+                Q(rule__field_assignments__data_field__data_table_id=p['data_table_id'])
             )
         if p.get('passed') is not None:
             if p['passed'].lower() == 'true':
@@ -286,7 +395,10 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
         result = self.get_object()
         _check_rule_access(request.user, result.rule)
         rule = result.rule
-        field_name = rule.data_field.name if rule.data_field else None
+        field_name = None
+        first_assn = rule.field_assignments.select_related('data_field').first()
+        if first_assn and first_assn.data_field:
+            field_name = first_assn.data_field.name
         raw_failures = result.sample_failures[:100]
         failures = []
         for f in raw_failures:
@@ -541,7 +653,8 @@ class DQRunView(APIView):
 
         if rule_id:
             try:
-                rule = DQRule.objects.select_related('data_field', 'data_table').get(id=rule_id)
+                rule = DQRule.objects.prefetch_related('field_assignments__data_field',
+                    'field_assignments__data_table').get(id=rule_id)
             except DQRule.DoesNotExist:
                 return Response({'error': f'Rule {rule_id} not found'}, status=status.HTTP_404_NOT_FOUND)
             _check_rule_access(request.user, rule)
@@ -610,13 +723,11 @@ class DQMetricsView(APIView):
         else:
             org_units = _get_user_org_units(user)
             rules = DQRule.objects.filter(
-                Q(data_field__data_table__module__org_unit_id__in=org_units) |
-                Q(data_table__module__org_unit_id__in=org_units),
+                field_assignments__data_table__module__org_unit_id__in=org_units,
                 is_active=True,
             ).distinct()
             results = DQResult.objects.filter(
-                Q(rule__data_field__data_table__module__org_unit_id__in=org_units) |
-                Q(rule__data_table__module__org_unit_id__in=org_units),
+                rule__field_assignments__data_table__module__org_unit_id__in=org_units,
             ).distinct()
         
         total_rules = rules.count()
@@ -845,6 +956,123 @@ class DQSuggestView(APIView):
             )
 
         return Response(result)
+
+
+# ── Phase 1.8: Freshness & Schema Monitoring ViewSets ─────────────────────
+
+class FreshnessCheckViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = FreshnessCheckSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['checked_at', 'is_fresh']
+    ordering = ['-checked_at']
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return FreshnessCheck.objects.none()
+        qs = FreshnessCheck.objects.select_related('data_table__module')
+        user = self.request.user
+        if user.is_superuser or user.is_staff:
+            pass
+        else:
+            org_units = _get_user_org_units(user)
+            if not org_units:
+                return FreshnessCheck.objects.none()
+            qs = qs.filter(data_table__module__org_unit_id__in=org_units)
+        p = self.request.query_params
+        if p.get('data_table'):
+            qs = qs.filter(data_table_id=p['data_table'])
+        if p.get('is_fresh') is not None:
+            qs = qs.filter(is_fresh=p['is_fresh'].lower() == 'true')
+        return qs.distinct()
+
+
+class SchemaSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = SchemaSnapshotSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['snapshot_at', 'row_count']
+    ordering = ['-snapshot_at']
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return SchemaSnapshot.objects.none()
+        qs = SchemaSnapshot.objects.select_related('data_table__module')
+        user = self.request.user
+        if user.is_superuser or user.is_staff:
+            pass
+        else:
+            org_units = _get_user_org_units(user)
+            if not org_units:
+                return SchemaSnapshot.objects.none()
+            qs = qs.filter(data_table__module__org_unit_id__in=org_units)
+        p = self.request.query_params
+        if p.get('data_table'):
+            qs = qs.filter(data_table_id=p['data_table'])
+        return qs.distinct()
+
+
+class SchemaChangeViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = SchemaChangeSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['detected_at', 'change_type']
+    ordering = ['-detected_at']
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return SchemaChange.objects.none()
+        qs = SchemaChange.objects.select_related('data_table__module')
+        user = self.request.user
+        if user.is_superuser or user.is_staff:
+            pass
+        else:
+            org_units = _get_user_org_units(user)
+            if not org_units:
+                return SchemaChange.objects.none()
+            qs = qs.filter(data_table__module__org_unit_id__in=org_units)
+        p = self.request.query_params
+        if p.get('data_table'):
+            qs = qs.filter(data_table_id=p['data_table'])
+        if p.get('change_type'):
+            qs = qs.filter(change_type=p['change_type'])
+        return qs.distinct()
+
+
+# ── Rule Tags & Field Assignments ─────────────────────────────────────────
+
+class RuleTagViewSet(viewsets.ModelViewSet):
+    """Full CRUD for rule categorization tags."""
+    queryset = RuleTag.objects.all()
+    serializer_class = RuleTagSerializer
+    permission_classes = [IsAuthenticated, ReadAnyWriteGlobalAdmin]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name']
+    ordering_fields = ['name']
+
+
+class RuleFieldAssignmentViewSet(viewsets.ModelViewSet):
+    """Create/delete field assignments for a DQ rule.
+
+    POST   /dq/rule-assignments/  {rule, data_field?, data_table}
+    DELETE /dq/rule-assignments/{id}/
+    """
+    queryset = RuleFieldAssignment.objects.select_related('data_table__module', 'data_field')
+    serializer_class = RuleFieldAssignmentSerializer
+    permission_classes = [IsAuthenticated, ReadAnyWriteGlobalAdmin]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['rule__name', 'data_field__name', 'data_table__name']
+    ordering_fields = ['data_table__name', 'data_field__name']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_superuser or user.is_staff:
+            return qs
+        org_units = _get_user_org_units(user)
+        if not org_units:
+            return RuleFieldAssignment.objects.none()
+        return qs.filter(data_table__module__org_unit_id__in=org_units)
 
 
 

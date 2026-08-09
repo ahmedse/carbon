@@ -138,12 +138,12 @@ export default function PulsePane() {
   const retriesRef = useRef(0);
   const [state, setState] = useState(STATE.LOADING);
   const [errorMsg, setErrorMsg] = useState("");
-  const [pulseLoaded, setPulseLoaded] = useState(false);
 
-  // Watch the global flag set by index.html and poll for PulseWidget
+  // Watch the global flag set by index.html and poll for PulseWidget.
+  // Transition LOADING → READY (widget found) or OFFLINE (script never arrived).
   useEffect(() => {
     if (window.PulseWidget) {
-      setPulseLoaded(true);
+      setState(STATE.READY);
       return;
     }
 
@@ -151,8 +151,8 @@ export default function PulsePane() {
     const startedAt = Date.now();
     const poll = setInterval(() => {
       if (window.PulseWidget) {
-        setPulseLoaded(true);
         clearInterval(poll);
+        setState(STATE.READY);
         return;
       }
       if (Date.now() - startedAt > LOAD_TIMEOUT_MS) {
@@ -164,9 +164,18 @@ export default function PulsePane() {
     return () => clearInterval(poll);
   }, []);
 
-  // Mount PulseWidget when copilot opens AND script is loaded
+  // Mount PulseWidget into its DEDICATED container (no React children ever
+  // live inside it, so external DOM mutation cannot orphan React nodes).
+  // Leaving READY (retry / reload) unmounts the widget so the container is clean.
   useEffect(() => {
-    if (!pulseLoaded || !mountRef.current) return;
+    if (state !== STATE.READY) {
+      if (pulseRef.current?.unmount) {
+        try { pulseRef.current.unmount(); } catch { /* best-effort */ }
+        pulseRef.current = null;
+      }
+      return;
+    }
+    if (!mountRef.current) return;
 
     const timer = setTimeout(() => {
       try {
@@ -174,7 +183,6 @@ export default function PulsePane() {
           instanceId: PULSE_INSTANCE,
           pulseHost: PULSE_HOST,
         });
-        setState(STATE.READY);
       } catch (err) {
         console.error("Pulse mount failed:", err);
         setErrorMsg(err.message || "Failed to initialize copilot");
@@ -182,10 +190,8 @@ export default function PulsePane() {
       }
     }, 150); // let DOM settle
 
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [pulseLoaded]);
+    return () => clearTimeout(timer);
+  }, [state]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -205,10 +211,9 @@ export default function PulsePane() {
     setState(STATE.LOADING);
     setErrorMsg("");
 
-    // Re-attempt: if PulseWidget already on window, mount directly
+    // Re-attempt: if PulseWidget already on window, re-enter READY to re-mount
     if (window.PulseWidget) {
-      setPulseLoaded(false); // force re-mount
-      setTimeout(() => setPulseLoaded(true), 100);
+      setTimeout(() => setState(STATE.READY), 100);
       return;
     }
 
@@ -216,9 +221,8 @@ export default function PulsePane() {
     const startedAt = Date.now();
     const poll = setInterval(() => {
       if (window.PulseWidget) {
-        setPulseLoaded(false);
-        setTimeout(() => setPulseLoaded(true), 100);
         clearInterval(poll);
+        setState(STATE.READY);
         return;
       }
       if (Date.now() - startedAt > LOAD_TIMEOUT_MS) {
@@ -230,7 +234,6 @@ export default function PulsePane() {
 
   return (
     <Box
-      ref={mountRef}
       sx={{
         height: "100%",
         width: "100%",
@@ -242,8 +245,12 @@ export default function PulsePane() {
       {state === STATE.LOADING && <LoadingState />}
       {state === STATE.OFFLINE && <OfflineState onRetry={handleRetry} />}
       {state === STATE.ERROR && <ErrorState message={errorMsg} onRetry={handleRetry} />}
-      {/* READY state: PulseWidget fills this container via mountRef */}
-      {state === STATE.READY && <Box sx={{ flex: 1 }} />}
+      {/* READY state: PulseWidget mounts into this DEDICATED container.
+          It is always empty from React's perspective — no React children,
+          so React never tries to remove DOM nodes the widget injected. */}
+      {state === STATE.READY && (
+        <Box ref={mountRef} sx={{ flex: 1, minHeight: 0, overflow: "hidden" }} />
+      )}
     </Box>
   );
 }

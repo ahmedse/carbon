@@ -51,6 +51,7 @@ from .services import (
     VerificationService,
     PeriodLockService,
 )
+from core.services import NotificationService
 
 
 class ReportingPeriodViewSet(viewsets.ModelViewSet):
@@ -99,6 +100,7 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
             VerificationService.submit(period, request.user)
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        NotificationService.on_period_submitted(period, request.user)
         return Response(ReportingPeriodSerializer(period).data)
 
     @action(detail=True, methods=['post'])
@@ -111,6 +113,7 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
             return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        NotificationService.on_period_verified(period, request.user)
         return Response(ReportingPeriodSerializer(period).data)
 
     @action(detail=True, methods=['post'])
@@ -124,6 +127,7 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
             return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        NotificationService.on_period_rejected(period, request.user, notes)
         return Response(ReportingPeriodSerializer(period).data)
 
     @action(detail=True, methods=['post'])
@@ -497,6 +501,12 @@ class CalculationViewSet(viewsets.ModelViewSet):
             module_id=module_id,
             calculation_ids=calculation_ids,
         )
+        if result.get('recalculated', 0) > 0:
+            NotificationService.on_batch_calculation_complete(
+                period_name="batch",
+                tables_count=0,
+                calculations_count=result['recalculated'],
+            )
         return Response(result)
 
 
@@ -1214,11 +1224,11 @@ class ExportAuditViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         from accounts.rbac_utils import get_visible_org_units
         qs = ExportAudit.objects.select_related(
-            'exported_by', 'period', 'org_unit'
+            'exported_by'
         ).order_by('-exported_at')
         allowed = get_visible_org_units(self.request.user)
         if allowed is not None:
-            qs = qs.filter(org_unit_id__in=allowed)
+            qs = qs.filter(org_unit_id__in=[ou.id for ou in allowed])
         format_filter = self.request.query_params.get('report_format')
         if format_filter:
             qs = qs.filter(report_format=format_filter)

@@ -23,5 +23,6 @@ class ModuleSerializer(serializers.ModelSerializer):
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
+        ref_name = 'CoreNotification'
         fields = ['id', 'user', 'verb', 'message', 'link', 'read_at', 'created_at']
         read_only_fields = ['id', 'user', 'read_at', 'created_at']

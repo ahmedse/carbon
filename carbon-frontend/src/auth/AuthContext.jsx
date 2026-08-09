@@ -4,35 +4,47 @@ import { fetchModules } from "../api/modules";
 import { apiFetch } from "../api/api"; // <-- Add this import
 
 // --- Helpers for token management ---
+// SimpleJWT rotates refresh tokens and blacklists the old one. Two concurrent
+// refresh calls (10-min interval + tab-focus refresh) race: the first rotates,
+// the second is rejected with 401 on the now-blacklisted token and would force
+// a spurious logout. Share one in-flight promise so all callers await the SAME
+// refresh. (Multiple browser tabs still race — see storage-event note below.)
+let refreshInFlight = null;
+
 async function refreshAccessToken() {
-  const refresh = localStorage.getItem("refresh");
-  if (!refresh) throw new Error("No refresh token");
-  const res = await fetch(`${API_BASE_URL}${API_ROUTES.tokenRefresh}`, { // internal token refresh
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh }),
-  });
-  if (!res.ok) throw new Error("Session expired or invalid refresh token");
-  const data = await res.json();
-  if (!data.access) throw new Error("No access token in refresh response");
-  localStorage.setItem("access", data.access);
-  // If backend rotates refresh tokens, persist the new refresh token too.
-  if (data.refresh) {
-    localStorage.setItem("refresh", data.refresh);
-    try {
-      const storedUser = JSON.parse(localStorage.getItem("user"));
-      if (storedUser && typeof storedUser === "object") {
-        localStorage.setItem(
-          "user",
-          JSON.stringify({ ...storedUser, refresh: data.refresh })
-        );
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const refresh = localStorage.getItem("refresh");
+    if (!refresh) throw new Error("No refresh token");
+    const res = await fetch(`${API_BASE_URL}${API_ROUTES.tokenRefresh}`, { // internal token refresh
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh }),
+    });
+    if (!res.ok) throw new Error("Session expired or invalid refresh token");
+    const data = await res.json();
+    if (!data.access) throw new Error("No access token in refresh response");
+    localStorage.setItem("access", data.access);
+    // If backend rotates refresh tokens, persist the new refresh token too.
+    if (data.refresh) {
+      localStorage.setItem("refresh", data.refresh);
+      try {
+        const storedUser = JSON.parse(localStorage.getItem("user"));
+        if (storedUser && typeof storedUser === "object") {
+          localStorage.setItem(
+            "user",
+            JSON.stringify({ ...storedUser, refresh: data.refresh })
+          );
+        }
+      } catch {
+        // Ignore storage sync errors.
       }
-    } catch {
-      // Ignore storage sync errors.
     }
-  }
-  // Optionally update user state if needed
-  return data.access;
+    return data.access;
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 // --- Auth Context ---
@@ -346,12 +358,13 @@ export const AuthProvider = ({ children }) => {
           batch.map(async (mod) => {
             try {
               // Use apiFetch for auto JWT refresh
-              const tables = await apiFetch(API_ROUTES.tables, {
+              const data = await apiFetch(API_ROUTES.tables, {
                 project_id: context.projectId,
                 module_id: mod.id,
                 token: user.token, // optional, apiFetch can also use localStorage
               });
-              grouped[String(mod.id)] = tables;
+              // API returns paginated { results: [...] } — extract array
+              grouped[String(mod.id)] = Array.isArray(data) ? data : (data?.results || []);
             } catch (err) {
               // Optionally, handle unauthorized (if still fails), or set as empty
               grouped[String(mod.id)] = [];

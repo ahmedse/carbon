@@ -25,6 +25,7 @@ class SwaggerDocumentationTests(APITestCase):
 
         # --- MDM org-unit hierarchy actions ---
         self.assertIn('/mdm/org-units/{id}/tree/', paths)
+        self.assertIn('/mdm/org-units/tree/', paths)
         self.assertIn('/mdm/org-units/{id}/ancestors/', paths)
 
         # --- MDM field binding ---
@@ -66,6 +67,7 @@ class SwaggerDocumentationTests(APITestCase):
             ('/mdm/reference-sets/{id}/transition/', 'post'),
             ('/mdm/reference-sets/archive-bulk/', 'post'),
             ('/mdm/org-units/{id}/tree/', 'get'),
+            ('/mdm/org-units/tree/', 'get'),
             ('/mdm/org-units/{id}/ancestors/', 'get'),
             ('/dq/rules/{id}/execute/', 'post'),
             ('/dq/profile/', 'post'),

@@ -16,7 +16,7 @@ from core.models import Module
 from dataschema.models import DataTable, DataField, DataRow
 from mdm.models import OrgUnit, ReferenceSet, ReferenceValue
 from catalog.models import AssetProfile, GovernanceEvent
-from dq.models import DQRule, DQResult
+from dq.models import DQRule, DQResult, RuleFieldAssignment
 from dq.services import (
     _evaluate_rule, _is_empty, profile_table, run_dq,
     run_single_rule, bulk_profile, _compute_quality,
@@ -67,15 +67,21 @@ class DQBaseTestCase(TestCase):
         return list(DataRow.objects.filter(data_table=self.table, is_archived=False))
 
     def _make_rule(self, rule_type, field=None, params=None, **kwargs):
-        return DQRule.objects.create(
+        """Create a DQRule with a RuleFieldAssignment."""
+        rule = DQRule.objects.create(
             name=f'{rule_type} rule',
             rule_type=rule_type,
-            data_table=self.table if field is None else None,
-            data_field=field,
+            rule_level='field_validation' if field else 'business_rule',
             params=params or {},
             is_active=True,
             **kwargs,
         )
+        RuleFieldAssignment.objects.create(
+            rule=rule,
+            data_table=self.table,
+            data_field=field,
+        )
+        return rule
 
 
 # ---------------------------------------------------------------------------
@@ -505,7 +511,10 @@ class RunSingleRuleTests(DQBaseTestCase):
 
     def test_run_single_rule_returns_correct_shape(self):
         rule = self._make_rule('not_null', field=self.text_field)
-        result = run_single_rule(rule.id, user=self.user)
+        results = run_single_rule(rule.id, user=self.user)
+        self.assertIsInstance(results, list)
+        self.assertGreater(len(results), 0)
+        result = results[0]
         self.assertIn('rule_id', result)
         self.assertIn('passed', result)
         self.assertIn('score', result)

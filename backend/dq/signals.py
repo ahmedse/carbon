@@ -20,7 +20,11 @@ def notify_dq_violation(sender, instance, created, **kwargs):
         from accounts.models import notify_event
         
         rule_name = instance.rule.name if instance.rule else 'Unknown Rule'
-        table_name = instance.rule.data_table.name if instance.rule and instance.rule.data_table else 'Unknown Table'
+        table_name = 'Unknown Table'
+        if instance.rule:
+            first_assn = instance.rule.field_assignments.select_related('data_table').first()
+            if first_assn and first_assn.data_table:
+                table_name = first_assn.data_table.name
         
         severity = 'error' if instance.failed_count > 10 else 'warning'
         

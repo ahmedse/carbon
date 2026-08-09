@@ -1,5 +1,5 @@
 // src/pages/catalog/tabs/DQRuleDialog.jsx
-// Create/edit a DQ rule. Fields/enums match backend dq.DQRule.
+// Create/edit a DQ rule. Fields/enums match backend dq.DQRule (M2M assignments).
 import React, { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField,
@@ -8,7 +8,7 @@ import {
 import { fetchDataSchemaFields } from '../../../api/dataschema';
 import { fetchReferenceSets } from '../../../api/catalog';
 
-// Matches backend RULE_TYPES / SEVERITY_CHOICES / SCOPE_CHOICES exactly.
+// Matches backend RULE_TYPES / SEVERITY_CHOICES exactly.
 const RULE_TYPES = [
   { value: 'not_null', label: 'Not Null' },
   { value: 'unique', label: 'Unique' },
@@ -27,13 +27,18 @@ const THRESHOLD_OPERATORS = [
   { value: 'neq', label: '≠ (not equal)' },
 ];
 const SEVERITIES = ['info', 'warn', 'error'];
-const SCOPES = ['field', 'table'];
+const RULE_LEVELS = [
+  { value: 'field_validation', label: 'Field Validation' },
+  { value: 'business_rule', label: 'Business Rule' },
+  { value: 'relation_integrity', label: 'Relation Integrity' },
+];
 
 const emptyForm = {
   name: '',
-  scope: 'field',
+  rule_level: 'field_validation',
   rule_type: 'not_null',
   data_field: '',
+  data_table: '',
   severity: 'error',
   is_active: true,
   // param helpers (flattened for the form)
@@ -60,12 +65,16 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [],
     if (!open) return;
     if (rule) {
       const p = rule.params || {};
+      // Derive data_table / data_field from first field_assignment
+      const firstAssn = (rule.field_assignments && rule.field_assignments.length > 0)
+        ? rule.field_assignments[0]
+        : {};
       setForm({
         name: rule.name || '',
-        scope: rule.scope || 'field',
+        rule_level: rule.rule_level || 'field_validation',
         rule_type: rule.rule_type || 'not_null',
-        data_field: rule.data_field || '',
-        data_table: rule.data_table || '',
+        data_field: firstAssn.data_field || '',
+        data_table: firstAssn.data_table || '',
         severity: rule.severity || 'error',
         is_active: rule.is_active !== false,
         values: Array.isArray(p.values) ? p.values.join(', ') : '',
@@ -155,22 +164,22 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [],
 
   const handleSubmit = async () => {
     if (!form.name.trim()) { setError('Rule name is required'); return; }
-    if (form.scope === 'field' && !form.data_field) {
-      setError('Select a field for a field-scoped rule'); return;
-    }
+    if (!form.data_table) { setError('Select a table'); return; }
     if (form.rule_type === 'threshold' && form.threshold_value === '') {
       setError('Threshold value is required'); return;
     }
 
     const payload = {
       name: form.name.trim(),
-      scope: form.scope,
+      rule_level: form.rule_level,
       rule_type: form.rule_type,
       severity: form.severity,
       is_active: form.is_active,
       params: buildParams(),
-      data_table: form.data_table,
-      data_field: form.scope === 'field' ? form.data_field : null,
+      field_assignments_write: [{
+        data_table: Number(form.data_table),
+        data_field: form.data_field ? Number(form.data_field) : null,
+      }],
     };
 
     setSaving(true);
@@ -182,6 +191,8 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [],
       setSaving(false);
     }
   };
+
+  const isFieldRule = form.rule_level === 'field_validation';
 
   const renderParams = () => {
     switch (form.rule_type) {
@@ -294,18 +305,19 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [],
         </FormControl>
 
         <FormControl fullWidth margin="normal">
-          <InputLabel>Scope</InputLabel>
-          <Select value={form.scope} label="Scope" onChange={(e) => set('scope', e.target.value)}>
-            {SCOPES.map((s) => (
-              <MenuItem key={s} value={s}>{s === 'field' ? 'Field' : 'Table'}</MenuItem>
+          <InputLabel>Rule Level</InputLabel>
+          <Select value={form.rule_level} label="Rule Level" onChange={(e) => set('rule_level', e.target.value)}>
+            {RULE_LEVELS.map((s) => (
+              <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>
             ))}
           </Select>
         </FormControl>
 
-        {form.scope === 'field' && (
-          <FormControl fullWidth margin="normal" required>
+        {isFieldRule && (
+          <FormControl fullWidth margin="normal">
             <InputLabel>Field</InputLabel>
             <Select value={form.data_field} label="Field" onChange={(e) => set('data_field', e.target.value)}>
+              <MenuItem value=""><em>None (optional)</em></MenuItem>
               {tableFields.map((f) => (
                 <MenuItem key={f.id} value={f.id}>{f.name || f.label || `Field #${f.id}`}</MenuItem>
               ))}

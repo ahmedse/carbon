@@ -174,11 +174,56 @@ class PlatformAppConfigSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'updated_at']
 
 
+# ── Phase 1.2-1.4: Platform Configuration Serializers ─────────────────────────
+
+from .models import EmailConfig, BackupConfig, LogConfig, APIConfig
+
+
+class EmailConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmailConfig
+        fields = [
+            'id', 'backend', 'host', 'port', 'username', 'password',
+            'use_tls', 'use_ssl', 'from_email', 'from_name', 'enabled', 'updated_at',
+        ]
+        read_only_fields = ['id', 'updated_at']
+        extra_kwargs = {
+            'password': {'write_only': True, 'required': False, 'allow_blank': True},
+        }
+
+
+class BackupConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BackupConfig
+        fields = [
+            'id', 'frequency', 'retention_days', 's3_bucket', 's3_path',
+            'enabled', 'last_backup_at', 'last_backup_size_bytes', 'updated_at',
+        ]
+        read_only_fields = ['id', 'last_backup_at', 'last_backup_size_bytes', 'updated_at']
+
+
+class LogConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LogConfig
+        fields = [
+            'id', 'default_level', 'retention_days', 'json_format', 'db_log_level', 'updated_at',
+        ]
+        read_only_fields = ['id', 'updated_at']
+
+
+class APIConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = APIConfig
+        fields = ['id', 'page_size', 'max_page_size', 'enable_pagination', 'updated_at']
+        read_only_fields = ['id', 'updated_at']
+
+
 # ── Phase 1.6: Notification Serializer ──────────────────────────────────────
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         from .models import UserAlert
         model = UserAlert
+        ref_name = 'UserAlertNotification'
         fields = ['id', 'title', 'body', 'category', 'is_read', 'link', 'created_at']
         read_only_fields = ['id', 'title', 'body', 'category', 'link', 'created_at']

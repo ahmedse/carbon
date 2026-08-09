@@ -3,7 +3,7 @@ import { useAuth } from "../auth/AuthContext";
 import {
   Box, Button, TextField, Typography, Alert, Paper, CircularProgress, MenuItem, Select,
 } from "@mui/material";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { INSTANCE_LOGO, PLATFORM_NAME } from "../config/branding";
@@ -142,6 +142,11 @@ export default function Login() {
             autoComplete="current-password"
           />
           {error && <Alert severity="error" sx={{ mt: 2, borderRadius: 2 }}>{error}</Alert>}
+          <Typography variant="body2" sx={{ textAlign: 'right', mt: 0.5 }}>
+            <Link to="/forgot-password" color="primary" style={{ textDecoration: 'none' }}>
+              Forgot Password?
+            </Link>
+          </Typography>
           <Button
             fullWidth
             variant="contained"

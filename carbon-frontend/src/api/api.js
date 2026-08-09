@@ -32,21 +32,35 @@ function sanitizeUrl(url) {
   return params.toString() ? `${base}?${params.toString()}` : base;
 }
 
+// ── Refresh serialization ────────────────────────────────────────────────
+// SimpleJWT rotates refresh tokens and blacklists the old one. Two concurrent
+// refresh calls (10-min interval + tab-focus refresh, or parallel 401 retries)
+// race: the first rotates, the second is rejected with 401 on the now-
+// blacklisted token and would force a spurious logout. Share one in-flight
+// promise so all callers await the SAME refresh.
+let refreshInFlight = null;
+
 /** Refreshes the access token using refresh token in localStorage. */
 async function refreshAccessToken() {
-  const refresh = localStorage.getItem("refresh");
-  if (!refresh) throw new Error("No refresh token");
-  const res = await fetch(joinUrl(API_BASE_URL, API_ROUTES.tokenRefresh), { // internal refresh helper
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh }),
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const refresh = localStorage.getItem("refresh");
+    if (!refresh) throw new Error("No refresh token");
+    const res = await fetch(joinUrl(API_BASE_URL, API_ROUTES.tokenRefresh), { // internal refresh helper
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh }),
+    });
+    if (!res.ok) throw new Error("Session expired");
+    const data = await res.json();
+    if (!data.access) throw new Error("No new access token");
+    localStorage.setItem("access", data.access);
+    if (data.refresh) localStorage.setItem("refresh", data.refresh);
+    return data.access;
+  })().finally(() => {
+    refreshInFlight = null;
   });
-  if (!res.ok) throw new Error("Session expired");
-  const data = await res.json();
-  if (!data.access) throw new Error("No new access token");
-  localStorage.setItem("access", data.access);
-  if (data.refresh) localStorage.setItem("refresh", data.refresh);
-  return data.access;
+  return refreshInFlight;
 }
 
 /** Returns the currently valid access token, refreshing if expired. */
@@ -296,18 +310,19 @@ export async function apiFetch(
   } catch (error) {
     clearTimeout(timeout);
     // Detect AbortController timeout (including Chrome quirk where abort throws TypeError)
+    let err = error;
     if (error.name === "AbortError" || controller.signal.aborted) {
-      error = new Error("Request timed out");
+      err = new Error("Request timed out");
     }
     // Normalize all errors through the standard shape
     const normalized = normalizeError(
-      error,
-      { endpoint, method, status: error.status }
+      err,
+      { endpoint, method, status: err.status }
     );
-    const err = new Error(normalized.message);
-    err.normalized = normalized;
-    if (error.feedback) err.feedback = error.feedback;
-    if (error.status) err.status = error.status;
-    throw err;
+    const finalErr = new Error(normalized.message);
+    finalErr.normalized = normalized;
+    if (err.feedback) finalErr.feedback = err.feedback;
+    if (err.status) finalErr.status = err.status;
+    throw finalErr;
   }
 }

@@ -59,7 +59,10 @@ export default function TableManagerPage() {
   // Compose all tables
   const allTables = [];
   modules.forEach(mod => {
-    (tablesByModule[String(mod.id)] || []).forEach(table => {
+    const tables = Array.isArray(tablesByModule[String(mod.id)])
+      ? tablesByModule[String(mod.id)]
+      : (tablesByModule[String(mod.id)]?.results || []);
+    tables.forEach(table => {
       if (
         (table.module && (String(table.module) === String(mod.id) || table.module === mod.name || table.module === mod.slug)) ||
         (table.module_id && String(table.module_id) === String(mod.id))

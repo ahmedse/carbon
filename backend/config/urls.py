@@ -59,6 +59,9 @@ urlpatterns = [
     # Phase 1.1: Email test endpoint (admin diagnostic)
     path(f'{api_prefix}/email/test/', include('accounts.email_urls')),
 
+    # Phase 1: Centralized log viewer (admin only)
+    path(f'{api_prefix}/system/logs/', include('config.log_urls')),
+
     # App endpoints under API prefix
     path(f'{api_prefix}/accounts/', include('accounts.urls')),
     path(f'{api_prefix}/core/', include('core.urls')),

@@ -6,6 +6,8 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { Box, Typography } from '@mui/material';
 import { useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
+const ForgotPasswordPage = React.lazy(() => import("./pages/ForgotPasswordPage"));
+const ResetPasswordPage = React.lazy(() => import("./pages/ResetPasswordPage"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 import { Shell } from "./shell/Shell";
 import AdminRoute from "./components/AdminRoute";
@@ -54,6 +56,7 @@ const TagDetailPage = React.lazy(() => import("./pages/catalog/TagDetailPage"));
 const AssetDetailPage = React.lazy(() => import("./pages/catalog/AssetDetailPage"));
 const DQDashboardPage = React.lazy(() => import("./pages/catalog/DQDashboardPage"));
 const DQRulesPage = React.lazy(() => import("./pages/catalog/DQRulesPage"));
+const DQHubPage = React.lazy(() => import("./pages/catalog/DQHubPage"));
 const ReferenceSetDetailPage = React.lazy(() => import("./pages/catalog/ReferenceSetDetailPage"));
 const ReferenceDataPage = React.lazy(() => import("./pages/catalog/ReferenceDataPage"));
 const GovernancePage = React.lazy(() => import("./pages/catalog/GovernancePage"));
@@ -74,6 +77,8 @@ const ModuleWorkspacePage = React.lazy(() => import("./pages/carbon/ModuleWorksp
 const CalculationsPage = React.lazy(() => import("./pages/carbon/CalculationsPage"));
 const VerificationPage = React.lazy(() => import("./pages/carbon/VerificationPage"));
 const AuditLogPage = React.lazy(() => import("./pages/admin/AuditLogPage"));
+const LogViewerPage = React.lazy(() => import("./pages/admin/LogViewerPage"));
+const PlatformConfigPage = React.lazy(() => import("./pages/admin/PlatformConfigPage"));
 const AnalyticsDashboard = React.lazy(() => import("./pages/dashboards/AnalyticsDashboard"));
 
 import PlatformHome from "./pages/PlatformHome";
@@ -155,6 +160,8 @@ export default function App() {
             <Suspense fallback={<LoadingSpinner />}>
               <Routes>
                 <Route path="/login" element={<Login />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password/:uidb64/:token" element={<ResetPasswordPage />} />
                 <Route element={<RequireAuth />}>
                   <Route element={<RequireContext />}>
                     <Route element={<RootLayout />}>
@@ -170,7 +177,7 @@ export default function App() {
                 <Route path="/dashboards/executive" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/dashboards/analytics" element={<Navigate to="/carbon/analytics" replace />} />
                 <Route path="/dashboards/targets" element={<Navigate to="/carbon/admin/targets" replace />} />
-                <Route path="/dashboards/data-quality" element={<Navigate to="/catalog/dq-dashboard" replace />} />
+                <Route path="/dashboards/data-quality" element={<Navigate to="/catalog/dq" replace />} />
                 <Route path="/dashboards/reporting" element={<Navigate to="/carbon/reporting/generate" replace />} />
                 
                 {/* Legacy Dashboard — removed P10a (blank content, dead page) */}
@@ -283,6 +290,8 @@ export default function App() {
                   }
                 />
                 <Route path="/admin/audit" element={<AdminRoute><AuditLogPage /></AdminRoute>} />
+                <Route path="/admin/logs" element={<AdminRoute><LogViewerPage /></AdminRoute>} />
+                <Route path="/admin/config" element={<AdminRoute><PlatformConfigPage /></AdminRoute>} />
                 <Route path="/admin/policies" element={<Navigate to="/catalog/policies" replace />} />
                 <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
                  <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />
@@ -317,8 +326,9 @@ export default function App() {
                   <Route path="/catalog/domains/:domainId" element={<DomainDetailPage />} />
                   <Route path="/catalog/assets" element={<AssetsPage />} />
                   <Route path="/catalog/assets/:assetId" element={<AssetDetailPage />} />
-                  <Route path="/catalog/dq-dashboard" element={<DQDashboardPage />} />
-                  <Route path="/catalog/dq-rules" element={<DQRulesPage />} />
+                  <Route path="/catalog/dq" element={<DQHubPage />} />
+                  <Route path="/catalog/dq-dashboard" element={<Navigate to="/catalog/dq" replace />} />
+                  <Route path="/catalog/dq-rules" element={<Navigate to="/catalog/dq" replace />} />
                   <Route path="/catalog/mdm" element={<MDMPage />} />
                   <Route path="/catalog/mdm/reference-sets/:setId" element={<ReferenceSetDetailPage />} />
                   <Route path="/catalog/connections" element={<ConnectionsPage />} />

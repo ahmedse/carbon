@@ -365,12 +365,11 @@ class CalculationAuditSerializer(serializers.ModelSerializer):
 class ExportAuditSerializer(serializers.ModelSerializer):
     """E3-1: Audit trail for report exports."""
     exported_by_name = serializers.CharField(source='exported_by.username', read_only=True)
-    period_name = serializers.CharField(source='period.name', read_only=True, allow_null=True)
 
     class Meta:
         model = ExportAudit
         fields = '__all__'
-        read_only_fields = ['exported_at', 'exported_by_name', 'period_name']
+        read_only_fields = ['exported_at', 'exported_by_name']
 
 
 class ConsoleResponseSerializer(serializers.Serializer):

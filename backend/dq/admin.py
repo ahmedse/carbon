@@ -2,7 +2,7 @@
 from django.contrib import admin
 from .models import (
     TableProfile, FieldProfile, DQRule, DQResult, DQProfileConfig,
-    FreshnessCheck, SchemaSnapshot, SchemaChange,
+    FreshnessCheck, SchemaSnapshot, SchemaChange, RuleTag, RuleFieldAssignment,
 )
 from .services import profile_table
 
@@ -53,8 +53,23 @@ class FieldProfileAdmin(admin.ModelAdmin):
 
 @admin.register(DQRule)
 class DQRuleAdmin(admin.ModelAdmin):
-    list_display = ('name', 'rule_type', 'scope', 'severity', 'is_active', 'created_at')
-    list_filter = ('rule_type', 'severity', 'is_active', 'scope')
+    list_display = ('name', 'rule_type', 'rule_level', 'severity', 'is_active', 'created_at')
+    list_filter = ('rule_type', 'severity', 'is_active', 'rule_level', 'tags')
+    search_fields = ['name', 'description']
+    filter_horizontal = ('tags',)
+
+
+@admin.register(RuleTag)
+class RuleTagAdmin(admin.ModelAdmin):
+    list_display = ('name', 'color')
+    search_fields = ['name']
+
+
+@admin.register(RuleFieldAssignment)
+class RuleFieldAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('rule', 'data_field', 'data_table')
+    list_filter = ('data_table',)
+    search_fields = ['rule__name', 'data_field__name', 'data_table__name']
 
 
 @admin.register(DQResult)

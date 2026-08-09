@@ -149,3 +149,50 @@ export function runTableValidation(token, tableId) {
     body: { data_table: tableId },
   });
 }
+
+/**
+ * Bulk execute multiple DQ rules by rule IDs or all active rules for a table.
+ * POST /dq/rules/bulk-execute/
+ * @param {string} token
+ * @param {{ rule_ids?: number[], data_table_id?: number }} params
+ */
+export function bulkExecuteRules(token, { rule_ids, data_table_id } = {}) {
+  return apiFetch('dq/rules/bulk-execute/', {
+    method: 'POST',
+    token,
+    body: { rule_ids, data_table_id },
+  });
+}
+
+/**
+ * Fetch freshness checks (optionally filtered).
+ * GET /dq/freshness/
+ */
+export function getFreshnessChecks(filters = {}, token) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([k, v]) => { if (v != null) params.set(k, v); });
+  const qs = params.toString();
+  return apiFetch(`dq/freshness/${qs ? `?${qs}` : ''}`, { token });
+}
+
+/**
+ * Fetch schema snapshots.
+ * GET /dq/schema-snapshots/
+ */
+export function getSchemaSnapshots(filters = {}, token) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([k, v]) => { if (v != null) params.set(k, v); });
+  const qs = params.toString();
+  return apiFetch(`dq/schema-snapshots/${qs ? `?${qs}` : ''}`, { token });
+}
+
+/**
+ * Fetch schema changes.
+ * GET /dq/schema-changes/
+ */
+export function getSchemaChanges(filters = {}, token) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([k, v]) => { if (v != null) params.set(k, v); });
+  const qs = params.toString();
+  return apiFetch(`dq/schema-changes/${qs ? `?${qs}` : ''}`, { token });
+}

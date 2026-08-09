@@ -9,6 +9,7 @@ Security lockdown guarantees:
 """
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
+from django.urls import reverse
 from rest_framework.test import APIClient
 
 from connections.models import DataSource
@@ -17,6 +18,18 @@ from connections.services import MASK_VALUE
 User = get_user_model()
 
 SECRET = "SuperSecret-2026-E1"
+
+
+def _list_data(resp):
+    """Unwrap a list response body regardless of pagination shape.
+
+    config.pagination.CarbonPageNumberPagination skips pagination when pytest
+    is in sys.modules, so list responses are either {count, page_size, page,
+    results} dicts (Django test runs) or plain lists (combined runs with
+    pytest-importing modules). PB-15 / BUG-06 taught us to be shape-agnostic.
+    """
+    data = resp.data
+    return data["results"] if isinstance(data, dict) else data
 
 
 class DataSourceConfigMaskingTests(TestCase):
@@ -49,7 +62,7 @@ class DataSourceConfigMaskingTests(TestCase):
     def test_list_never_leaks_stored_secret(self):
         resp = self.client.get(self.list_url)
         assert resp.status_code == 200
-        config = resp.data[0]["connection_config"]
+        config = _list_data(resp)[0]["connection_config"]
         assert config["password"] == MASK_VALUE
         assert SECRET not in resp.content.decode()
 
@@ -105,8 +118,9 @@ class DataSourceAdminMaskingTests(TestCase):
     def test_admin_change_page_never_shows_secret(self):
         admin_client = Client()
         admin_client.force_login(self.admin)
-        resp = admin_client.get(
-            f"/carbon-api/admin/connections/datasource/{self.source.id}/change/"
+        change_url = reverse(
+            "admin:connections_datasource_change", args=[self.source.id]
         )
+        resp = admin_client.get(change_url)
         assert resp.status_code == 200
         assert SECRET not in resp.content.decode()

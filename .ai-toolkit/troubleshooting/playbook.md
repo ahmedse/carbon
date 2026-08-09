@@ -144,3 +144,48 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: If it recurs, check that the group has at least one non-group, non-divider item after filtering.
 - Regression guard: visual verification of sidebar with restricted user
 - First seen: 2026-08-04
+
+### PB-12 — Browser ERR_CONNECTION_RESET while curl works (stale port forward after Vite restart)
+- Symptom: "carbon web not working" — browser page shows `net::ERR_CONNECTION_RESET` on asset loads + WebSocket handshake failure to `ws://localhost:5179/carbon/?token=...`; navigation/reload times out. But `curl http://localhost:5179/carbon/` returns 200 and backend health is OK.
+- Layer: infra / dev-environment
+- Root cause: Remote workspace port forward. The browser runs on the local client and reaches the dev server through a VS Code port forward. When the Vite dev server was restarted (old PID 373612 stopped, new PID 386139 started), the port forward became stale/wedged: requests to 5179 from the browser were reset, while terminal curl (same host) succeeded. Browser console timestamps predate the current process start time — first clue.
+- Fix: `./manage.sh restart frontend` — cleanly restarts Vite, which re-establishes the port forward. Then open a fresh browser page; login redirects to `/carbon/login` (session tokens were lost with the restart), sign in again.
+- Best practice note: After ANY frontend restart in a remote workspace, the browser must be reloaded/reopened — do not reuse a pre-restart tab. Verify with a fresh page, not curl alone (curl does not traverse the port forward).
+- Regression guard: N/A (infra). Diagnostic checklist: 1) compare process start time vs browser console error timestamps; 2) curl the port from terminal; 3) if curl OK but browser fails → port forward stale → restart service.
+- First seen: 2026-08-09
+
+### PB-13 — Phase 2 fields NULL on legacy calculations (scope2_method / emission_factor_snapshot / factor_applied_at)
+- Symptom: `Calculation.objects.filter(scope=2, scope2_method__isnull=True).count()` → 362; `emission_factor_snapshot__isnull=True` → all 1993. QA reports BUG-02: Phase 2 GHG Protocol fields unpopulated on existing calculations.
+- Layer: data
+- Root cause: Rows created by the pre-Phase-2 code path (`Calculation.objects.create()` without Phase 2 kwargs). The fields only populate through `Calculation.create_from_data_row()` / `CalculationRule.calculate_for_row()` — the code path added in migration 0011. Legacy rows never went through it.
+- Fix: Non-destructive data migration `emissions/0012_phase2_backfill.py`. For every `Calculation` with a NULL snapshot it: builds the snapshot dict exactly like `calculate_for_row` (`str(ef.factor_value)` — note the decimal_places=10 scale keeps trailing zeros, e.g. `'0.4584000000'`), sets `scope2_method='location_based'` when `scope == 2`, sets `factor_applied_at=calculated_at`, and saves with `update_fields`. Idempotent: filters on `emission_factor_snapshot__isnull=True`.
+- Best practice note: Prefer a backfill migration over `setup_carbon_app --recalculate` (recalculate deletes + recomputes rows, rewriting `calculated_by` and destroying the audit trail). Backfill is additive and reversible (noop reverse).
+- Regression guard: `backend/emissions/tests/test_phase2_backfill.py` — 4 tests: legacy row starts NULL; backfill populates method+snapshot+applied_at; idempotent on second run; scope-1 rows get snapshot but NOT scope2_method. Assert factor_value against a FRESH DB read (`EmissionFactor.objects.get(pk=...)`) because the in-memory instance holds the pre-rounding Decimal.
+- First seen: 2026-08-09
+
+### PB-14 — /mdm/org-units/ exposes full org tree to non-admin users (BUG-03 / F-07)
+- Symptom: Data owner `alamein.transport` calls `GET /carbon-api/mdm/org-units/` and receives all 23 org units. Should receive only `النقل — Transportation` (id=5) and its subtree. QA evidence: 8 results for the scoped user.
+- Layer: backend / rbac
+- Root cause: `OrgUnitViewSet.get_queryset()` filtered only on `is_active=True` + query params — no RBAC scoping. The platform's established visibility helper `get_visible_org_units(user)` (accounts/rbac_utils.py) was already used by `me/context` and emissions services, but the mdm org-units API bypassed it.
+- Fix: In `OrgUnitViewSet.get_queryset()`, resolve `visible_ids = {ou.id for ou in get_visible_org_units(user)}`; return `OrgUnit.objects.none()` when empty; otherwise apply the existing select_related/prefetch_related optimizations + `filter(id__in=visible_ids, is_active=True)`. The helper already handles: superusers/global admins → all; global visibility-role holders → all; org-scoped users → assigned subtree expanded to descendants; no roles → [].
+- Best practice note: Any endpoint returning OrgUnit rows must scope via `get_visible_org_units(user)` — never a bare `OrgUnit.objects.filter(...)`. `get_object()` inherits scoping automatically (out-of-scope → 404).
+- Regression guard: `backend/mdm/tests/test_org_units.py` → `OrgUnitRbacScopingTestCase` (4 tests): data owner sees only own subtree; out-of-scope retrieve → 404; admin sees all; no-role user sees []. List responses are paginated — unwrap `response.data['results']`.
+- First seen: 2026-08-09
+
+### PB-15 — Evidence list tests intermittently fail depending on test-run composition (BUG-06)
+- Symptom: `manage.py test evidence.tests.test_evidence_api` (alone) → `ERROR: test_soft_deleted_not_in_list` — `TypeError: string indices must be integers, not 'str'` at `[item['id'] for item in resp.data]`. But `manage.py test evidence.tests.test_evidence_api evidence.tests.test_evidence` → OK. QA audit recorded the same tests as "fail intermittently / pass in isolation, fail in suite".
+- Layer: tests / pagination interaction
+- Root cause: `config/pagination.py::CarbonPageNumberPagination.paginate_queryset` skips pagination when `'pytest' in sys.modules or 'test' in sys.argv[0]`. `manage.py test` never matches `'test' in sys.argv[0]` (argv[0] == "manage.py"), so Django-test runs paginate — UNLESS the pytest-style module `evidence/tests/test_evidence.py` (which does `import pytest`) is part of the same run, which puts `pytest` in `sys.modules` and disables pagination globally. Result: list responses are `{count, page_size, page, results}` dicts or plain lists depending on run composition; `test_soft_deleted_not_in_list` crashed on the dict, and `test_list_evidence`/`test_filter_*` only passed spuriously (`len(dict)` counts keys).
+- Fix (test-only, per audit "not a runtime bug"): added `_list_data(resp)` static helper in `EvidenceAPITests` that unwraps `data['results']` when `resp.data` is a dict, and used it in `test_list_evidence`, `test_soft_deleted_not_in_list`, `test_filter_by_data_row`, `test_filter_by_uploaded_by`. file_size/`self.pdf_file` items from the audit were already consistent (content `b'PDF content here'` is 16 bytes; `_fresh_pdf()` used everywhere).
+- Best practice: Django API tests that assert on list bodies must be shape-agnostic (`isinstance(data, dict) and 'results' in data`) whenever the global pagination class can be active; do not rely on pytest module imports leaking into `sys.modules`.
+- Regression guard: `backend/evidence/tests/test_evidence_api.py` — run module ALONE (`manage.py test evidence.tests.test_evidence_api`) which is the mode that previously failed; 3 consecutive runs GREEN.
+- First seen: 2026-08-09 (documented in TASK-RESULT-QA-FULL.md BUG-06)
+
+### PB-16 — Frontend "Failed to fetch dynamically imported module" (Vite lazy route) — transient after dev-server restart/dep re-optimization
+- Symptom: React error boundary in `AdminRoute.jsx:24` — `Failed to fetch dynamically imported module: http://localhost:5179/carbon/src/pages/admin/RegisteredAppsPage.jsx`. The page 404s or resets even though the file exists and lints clean. Often preceded/followed by `net::ERR_CONNECTION_RESET` on the initial page load.
+- Layer: frontend / dev infra (Vite dev server)
+- Root cause: transient — Vite was mid-restart or re-optimizing `node_modules/.vite/deps`, which invalidates module URLs by bumping the `?v=<hash>` cache-buster. The browser's stale module URL (from the previous HMR graph) fails to fetch; the first request after a Vite restart can also hit a dead socket (ERR_CONNECTION_RESET) while curl succeeds (PB-12). Not a code bug: `App.jsx` lazy import path exists, module transforms to valid JS (curl → HTTP 200, ~22KB), route renders.
+- Fix: no code change. Hard-refresh the browser tab after the dev server settles; if it recurs, restart the Vite dev server to clear the stale `?v=` module cache.
+- Best practice: when triaging "failed to fetch dynamically imported module", verify in order — (1) file exists + lints clean, (2) `curl -s -o /dev/null -w "%{http_code}" <module URL>` returns 200 with valid JS, (3) navigate to the route in a fresh tab. Only if the module 404s/500s persistently is it a real code bug.
+- Regression guard: N/A (environmental) — checked live: `/carbon/admin/apps` renders all 7 registered apps after refresh.
+- First seen: 2026-08-09

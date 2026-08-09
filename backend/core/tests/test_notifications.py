@@ -203,7 +203,7 @@ class NotificationLifecycleTests(TestCase):
         self.period.save()
 
     def test_notification_on_period_submit(self):
-        """Notification created for data owners when period is submitted."""
+        """Notification created for admins when period is submitted."""
         self._set_status('locked')
         self.period.refresh_from_db()
         self.assertEqual(self.period.status, 'locked')
@@ -212,32 +212,30 @@ class NotificationLifecycleTests(TestCase):
             reverse('emissions:reporting-period-submit', args=[self.period.id])
         )
         self.assertEqual(resp.status_code, 200, f"Got {resp.status_code}: {resp.data}")
-        # Data owner should have a 'submitted' notification
         self.assertTrue(
             Notification.objects.filter(
-                user=self.data_owner, verb='submitted',
+                user=self.admin, verb='submitted',
                 message__contains='submitted for verification',
             ).exists()
         )
 
     def test_notification_on_period_verify(self):
-        """Notification created for period creator when period is verified."""
+        """Notification created for admins when period is verified."""
         self._set_status('submitted')
         self.client.force_authenticate(self.admin)
         resp = self.client.post(
             reverse('emissions:reporting-period-verify', args=[self.period.id])
         )
         self.assertEqual(resp.status_code, 200)
-        # Creator (admin) should have a 'verified' notification
         self.assertTrue(
             Notification.objects.filter(
                 user=self.admin, verb='verified',
-                message__contains='has been verified',
+                message__contains='was verified',
             ).exists()
         )
 
     def test_notification_on_period_reject(self):
-        """Notification created for period creator when period is rejected."""
+        """Notification created for admins when period is rejected."""
         self._set_status('submitted')
         self.client.force_authenticate(self.admin)
         resp = self.client.post(
@@ -246,10 +244,9 @@ class NotificationLifecycleTests(TestCase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 200)
-        # Creator (admin) should have a 'rejected' notification with notes
         n = Notification.objects.filter(
             user=self.admin, verb='rejected',
-            message__contains='has been rejected',
+            message__contains='was rejected',
         ).first()
         self.assertIsNotNone(n)
         self.assertIn('Missing data in scope 2', n.message)

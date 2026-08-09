@@ -10,6 +10,7 @@ from .views import (
 )
 from .notification_views import NotificationViewSet
 from .pulse_auth import pulse_auth_view, pulse_provision_view
+from .config_views import EmailConfigView, BackupConfigView, LogConfigView, APIConfigView
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet)
@@ -36,6 +37,11 @@ urlpatterns = [
     path('access-control/', ScopedRoleViewSet.as_view({'get': 'list', 'post': 'create'}), name='access-control-list'),
     path('access-control/<int:pk>/', ScopedRoleViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='access-control-detail'),
     path('capability-matrix/', capability_matrix, name='capability-matrix'),
+    # Platform configuration (singletons)
+    path('config/email/', EmailConfigView.as_view(), name='email-config'),
+    path('config/backup/', BackupConfigView.as_view(), name='backup-config'),
+    path('config/logging/', LogConfigView.as_view(), name='log-config'),
+    path('config/api/', APIConfigView.as_view(), name='api-config'),
 ]
 
 urlpatterns += router.urls

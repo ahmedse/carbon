@@ -451,9 +451,10 @@ class FieldOptionsView(APIView):
 class OrgUnitViewSet(viewsets.ModelViewSet):
     """CRUD for organisational units. Supports tree hierarchy via parent FK.
     
-    RBAC: All authenticated users can read org units. Only admin can write.
+    RBAC: All authenticated users can read org units — but only the ones in
+    their assigned org subtree (get_visible_org_units). Only admin can write.
     Endpoints:
-    - GET    /mdm/org-units/                List all org units (with optional filters)
+    - GET    /mdm/org-units/                List org units visible to the user (scoped)
     - POST   /mdm/org-units/                Create new org unit (admin only)
     - GET    /mdm/org-units/{id}/           Detail
     - PUT    /mdm/org-units/{id}/           Update (admin only)
@@ -470,7 +471,20 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
     ordering = ['name']
 
     def get_queryset(self):
-        """Filter org units based on query parameters."""
+        """Filter org units based on query parameters + RBAC visibility.
+
+        RBAC (BUG-03 / F-07): non-admin users see ONLY the org units in their
+        assigned subtree (via get_visible_org_units — org-scoped roles expanded
+        to descendants). Global admins and global visibility-role holders keep
+        full visibility. Users with no org scope see nothing (restrictive).
+        """
+        if getattr(self, 'swagger_fake_view', False):
+            return OrgUnit.objects.none()
+        user = self.request.user
+        from accounts.rbac_utils import get_visible_org_units
+        visible_ids = {ou.id for ou in get_visible_org_units(user)}
+        if not visible_ids:
+            return OrgUnit.objects.none()
         # Optimize: deep select_related parent chain for full_path + nested
         # prefetch children for children_count / descendants_count (P14).
         qs = OrgUnit.objects.select_related(
@@ -479,7 +493,7 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
             'children', 'children__children', 'children__children__children',
             'children__children__children__children',
             'children__children__children__children__children'
-        ).filter(is_active=True)
+        ).filter(id__in=visible_ids, is_active=True)
         p = self.request.query_params
         
         # Filter by parent
@@ -581,6 +595,48 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
         qs = OrgUnitService.get_tree(org_unit)
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
+
+    @swagger_auto_schema(
+        operation_description=(
+            'Return the full visible org-unit hierarchy as a nested tree. '
+            'Only org units visible to the current user (RBAC-scoped subtree) '
+            'are included; roots are the visible units with no visible parent. '
+            'Each node is an OrgUnit object plus a "children" key (omitted when '
+            'empty).'
+        ),
+        responses={
+            200: openapi.Response(description='Nested list of visible OrgUnit objects with children'),
+        },
+    )
+    @action(detail=False, methods=['get'], url_path='tree')
+    def list_tree(self, request):
+        """GET /mdm/org-units/tree/ -> full visible org tree (nested).
+
+        BUG-04 (E16): the per-unit /{id}/tree/ action only returned one subtree;
+        the spec also documents a list-level tree endpoint. Builds a nested
+        structure from the RBAC-scoped queryset (get_visible_org_units), so a
+        scoped user sees their own subtree and a user with no scope sees [].
+        """
+        qs = self.get_queryset()
+        nodes = list(qs)
+
+        # Roots = visible units whose parent is NOT visible (incl. no parent).
+        visible_ids = {node.id for node in nodes}
+        by_id = {node.id: node for node in nodes}
+        children_map = {}
+        for node in nodes:
+            if node.parent_id in visible_ids:
+                children_map.setdefault(node.parent_id, []).append(node)
+        roots = [node for node in nodes if node.parent_id not in visible_ids]
+
+        def build(node):
+            data = OrgUnitSerializer(node).data
+            kids = children_map.get(node.id, [])
+            if kids:
+                data['children'] = [build(k) for k in kids]
+            return data
+
+        return Response([build(r) for r in roots])
 
     @swagger_auto_schema(
         operation_description=(

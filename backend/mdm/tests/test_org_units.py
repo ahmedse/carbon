@@ -1,6 +1,7 @@
 """Tests for OrgUnit hierarchy CRUD and tree operations."""
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from rest_framework.test import APIClient
 from rest_framework import status
 
@@ -9,6 +10,18 @@ from mdm.models import OrgUnit
 
 
 User = get_user_model()
+
+
+def _list_data(resp):
+    """Unwrap a list response body regardless of pagination shape.
+
+    config.pagination.CarbonPageNumberPagination skips pagination when pytest
+    is in sys.modules, so list responses are either {count, page_size, page,
+    results} dicts (Django test runs) or plain lists (combined runs with
+    pytest-importing modules). PB-15 / BUG-06 taught us to be shape-agnostic.
+    """
+    data = resp.data
+    return data['results'] if isinstance(data, dict) else data
 
 
 class OrgUnitCRUDTestCase(TestCase):
@@ -204,3 +217,106 @@ class OrgUnitValidationTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         org.refresh_from_db()
         self.assertFalse(org.is_active)
+
+
+class OrgUnitRbacScopingTestCase(TestCase):
+    """BUG-03 (F-07): /mdm/org-units/ must scope results to the user's
+    org subtree (get_visible_org_units), not return all org units."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin_user = User.objects.create_user(
+            username='admin-rbac', password='admin', is_staff=True, is_superuser=True
+        )
+        # Tree: AAST -> CollegeEng -> Transportation (+ Facilities sibling)
+        self.aast = OrgUnit.objects.create(
+            name='AAST', slug='aast', code='AAST', org_type='company'
+        )
+        self.college = OrgUnit.objects.create(
+            name='College of Engineering', slug='college-eng', code='CE',
+            org_type='college', parent=self.aast,
+        )
+        self.transport = OrgUnit.objects.create(
+            name='Transportation', slug='transportation', code='TR',
+            org_type='department', parent=self.college,
+        )
+        self.facilities = OrgUnit.objects.create(
+            name='Facilities', slug='facilities', code='FA',
+            org_type='department', parent=self.college,
+        )
+        # Data owner scoped to Transportation (mirrors alamein.transport)
+        self.data_owner = User.objects.create_user(
+            username='alamein.transport', password='Transport_123'
+        )
+        group, _ = Group.objects.get_or_create(name='dataowners_group')
+        ScopedRole.objects.create(
+            user=self.data_owner, group=group, org_unit=self.transport
+        )
+
+    def test_data_owner_sees_only_own_subtree(self):
+        """Bug repro: data owner gets ALL org units; must get only their subtree."""
+        self.client.force_authenticate(self.data_owner)
+        response = self.client.get('/carbon-api/mdm/org-units/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = {ou['name'] for ou in _list_data(response)}
+        self.assertEqual(names, {'Transportation'})
+
+    def test_scoped_user_cannot_retrieve_out_of_scope_org(self):
+        """Data owner must NOT be able to retrieve an org outside their subtree."""
+        self.client.force_authenticate(self.data_owner)
+        response = self.client.get(f'/carbon-api/mdm/org-units/{self.facilities.id}/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_admin_sees_all_org_units(self):
+        """Admins/superusers keep full visibility."""
+        self.client.force_authenticate(self.admin_user)
+        response = self.client.get('/carbon-api/mdm/org-units/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = {ou['name'] for ou in _list_data(response)}
+        self.assertEqual(names, {'AAST', 'College of Engineering', 'Transportation', 'Facilities'})
+
+    def test_user_without_roles_sees_nothing(self):
+        """Restrictive default: authenticated user with no org scope sees []."""
+        orphan = User.objects.create_user(username='no-scope', password='pass123')
+        self.client.force_authenticate(orphan)
+        response = self.client.get('/carbon-api/mdm/org-units/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(_list_data(response), [])
+    # ── BUG-04 (E16): list-level /mdm/org-units/tree/ ──────────
+
+    def test_list_level_tree_returns_nested_visible_tree(self):
+        """BUG-04 repro: GET /mdm/org-units/tree/ must return the full visible
+        org tree as a nested structure (was 404 — only /{id}/tree/ existed)."""
+        self.client.force_authenticate(self.admin_user)
+        response = self.client.get('/carbon-api/mdm/org-units/tree/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data, list)
+        self.assertEqual([r['name'] for r in response.data], ['AAST'])
+        root = response.data[0]
+        self.assertEqual(
+            [c['name'] for c in root['children']],
+            ['College of Engineering'],
+        )
+        grandchildren = root['children'][0]['children']
+        self.assertEqual(
+            {g['name'] for g in grandchildren},
+            {'Transportation', 'Facilities'},
+        )
+
+    def test_list_level_tree_scoped_to_user_subtree(self):
+        """List-level tree must respect RBAC visibility (BUG-03 rule): the
+        scoped data owner sees only their own unit as the tree root."""
+        self.client.force_authenticate(self.data_owner)
+        response = self.client.get('/carbon-api/mdm/org-units/tree/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([r['name'] for r in response.data], ['Transportation'])
+        # No children below Transportation in this fixture
+        self.assertNotIn('children', response.data[0])
+
+    def test_list_level_tree_empty_for_no_role_user(self):
+        """Authenticated user with no org scope sees an empty tree."""
+        orphan = User.objects.create_user(username='no-scope2', password='pass123')
+        self.client.force_authenticate(orphan)
+        response = self.client.get('/carbon-api/mdm/org-units/tree/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
