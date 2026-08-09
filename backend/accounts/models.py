@@ -355,3 +355,185 @@ class APIConfig(models.Model):
     def load(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+# ── Phase 1.6: Notification System ────────────────────────────────────────────
+
+
+class UserAlert(models.Model):
+    """Phase 1.6 — In-app user alert/notification with category routing."""
+
+    class Category(models.TextChoices):
+        SYSTEM = 'system', 'System'
+        DQ_VIOLATION = 'dq_violation', 'DQ Violation'
+        SECURITY = 'security', 'Security'
+        WORKFLOW = 'workflow', 'Workflow'
+        BACKUP = 'backup', 'Backup'
+        IMPORT = 'import', 'Import'
+        OTHER = 'other', 'Other'
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='alerts')
+    title = models.CharField(max_length=255)
+    body = models.TextField(blank=True, default='')
+    category = models.CharField(max_length=32, choices=Category.choices, default=Category.SYSTEM)
+    link = models.CharField(max_length=512, blank=True, default='', help_text='Optional deep-link URL')
+    is_read = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['user', 'is_read', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.category}: {self.title[:60]}"
+
+
+class NotificationChannel(models.Model):
+    """Per-user channel preferences."""
+
+    class ChannelType(models.TextChoices):
+        IN_APP = 'in_app', 'In-App Only'
+        EMAIL = 'email', 'Email Only'
+        BOTH = 'both', 'Both'
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='notification_channel')
+    channel_type = models.CharField(max_length=10, choices=ChannelType.choices, default=ChannelType.IN_APP)
+    enabled = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username} — {self.channel_type} {'(on)' if self.enabled else '(off)'}"
+
+
+class NotificationRule(models.Model):
+    """Admin-configured rule: when X happens, notify Y via Z."""
+
+    class EventType(models.TextChoices):
+        DQ_VIOLATION = 'dq_violation', 'DQ Violation'
+        DQ_RULE_FAILURE = 'dq_rule_failure', 'DQ Rule Execution Failure'
+        PASSWORD_RESET = 'password_reset', 'Password Reset Request'
+        BACKUP_FAILURE = 'backup_failure', 'Backup Failure'
+        BACKUP_SUCCESS = 'backup_success', 'Backup Success'
+        IMPORT_COMPLETE = 'import_complete', 'Import Complete'
+        IMPORT_FAILURE = 'import_failure', 'Import Failure'
+        SYSTEM_ALERT = 'system_alert', 'System Alert'
+
+    class Severity(models.TextChoices):
+        INFO = 'info', 'Info'
+        WARNING = 'warning', 'Warning'
+        ERROR = 'error', 'Error'
+        CRITICAL = 'critical', 'Critical'
+
+    class ChannelType(models.TextChoices):
+        IN_APP = 'in_app', 'In-App'
+        EMAIL = 'email', 'Email'
+        BOTH = 'both', 'Both'
+
+    event_type = models.CharField(max_length=32, choices=EventType.choices)
+    min_severity = models.CharField(max_length=10, choices=Severity.choices, default=Severity.WARNING)
+    channel = models.CharField(max_length=10, choices=ChannelType.choices, default=ChannelType.IN_APP)
+    group_target = models.ForeignKey(Group, on_delete=models.SET_NULL, null=True, blank=True,
+                                     help_text='Notify all users in this group')
+    enabled = models.BooleanField(default=True)
+    description = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['event_type', '-min_severity']
+
+    def __str__(self):
+        group = f"→ {self.group_target.name}" if self.group_target else "→ all"
+        return f"{self.get_event_type_display()} ({self.min_severity}) {self.channel} {group}"
+
+
+# ── Notification helper ───────────────────────────────────────────────────────
+
+def notify_event(event_type, title, body, severity='warning', link='', category=None, user=None, group=None):
+    """Create notifications for matching rules. Called by various app signals.
+    
+    When a specific user is provided (e.g., password reset), notification is created
+    directly without checking NotificationRules. Rules gate broadcast events only.
+    
+    Args:
+        event_type: One of NotificationRule.EventType values
+        title, body: Notification content
+        severity: One of NotificationRule.Severity values
+        link: Optional deep-link URL
+        category: Notification.Category override (auto-derived from event_type if None)
+        user: Specific user to notify (used for password_reset, etc.)
+        group: Django Group to notify (used for DQ violations, etc.)
+    """
+    from accounts.models import UserAlert, NotificationRule, NotificationChannel
+
+    # Map event_type → UserAlert.Category
+    category_map = {
+        'dq_violation': UserAlert.Category.DQ_VIOLATION,
+        'dq_rule_failure': UserAlert.Category.DQ_VIOLATION,
+        'password_reset': UserAlert.Category.SECURITY,
+        'backup_failure': UserAlert.Category.BACKUP,
+        'backup_success': UserAlert.Category.BACKUP,
+        'import_complete': UserAlert.Category.IMPORT,
+        'import_failure': UserAlert.Category.IMPORT,
+        'system_alert': UserAlert.Category.SYSTEM,
+    }
+    notif_category = category or category_map.get(event_type, UserAlert.Category.OTHER)
+
+    # Find matching enabled rules
+    rules = list(NotificationRule.objects.filter(
+        enabled=True,
+        event_type=event_type,
+    ).select_related('group_target'))
+
+    severity_rank = {s.value: i for i, s in enumerate(NotificationRule.Severity)}
+    event_rank = severity_rank.get(severity, 1)
+    rules = [r for r in rules if severity_rank.get(r.min_severity, 0) <= event_rank]
+
+    if not rules:
+        return  # No matching rules — no notifications needed
+
+    # Determine target users
+    if user:
+        users = [user]
+    elif group:
+        users = list(group.user_set.all())
+    else:
+        from django.contrib.auth import get_user_model
+        UserModel = get_user_model()
+        users = list(UserModel.objects.filter(is_active=True))
+
+    # Also add users from rule.group_target
+    for rule in rules:
+        if rule.group_target:
+            users.extend(rule.group_target.user_set.all())
+
+    users = list(set(users))  # deduplicate
+
+    # Create alerts for each user
+    for u in users:
+        _create_alert_for_user(u, title, body, notif_category, link)
+
+    # TODO Phase 2: Send email notifications for rules with channel=email or both
+
+
+def _create_alert_for_user(user, title, body, category, link):
+    """Create a single UserAlert for a user, respecting their channel preferences."""
+    from accounts.models import UserAlert, NotificationChannel
+    
+    try:
+        channel_pref = user.notification_channel
+        if not channel_pref.enabled:
+            return
+    except NotificationChannel.DoesNotExist:
+        pass  # No preference set — default to allow
+    
+    UserAlert.objects.create(
+        user=user,
+        title=title,
+        body=body,
+        category=category,
+        link=link,
+    )

@@ -8,6 +8,7 @@ from django.urls import path, include
 from django.http import JsonResponse
 from rest_framework_simplejwt.views import TokenRefreshView
 from accounts.views import ThrottledTokenObtainPairView
+from accounts.password_reset_signals import NotifyingPasswordResetView
 
 # API prefix, e.g. '/api/v1/' or '/carbon/api/'
 api_prefix = getattr(settings, "API_PREFIX", "/api/v1/").strip("/")
@@ -30,10 +31,10 @@ urlpatterns = [
     path(f'{api_prefix}/token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path(f'{api_prefix}/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
-    # Phase 1.1: Password Reset (Django auth views — API-style)
+    # Phase 1.1/1.6: Password Reset (with in-app notification)
     path(
         f'{api_prefix}/password-reset/',
-        auth_views.PasswordResetView.as_view(
+        NotifyingPasswordResetView.as_view(
             email_template_name='accounts/password_reset_email.html',
             subject_template_name='accounts/password_reset_subject.txt',
             html_email_template_name='accounts/password_reset_email.html',

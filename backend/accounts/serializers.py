@@ -172,3 +172,13 @@ class PlatformAppConfigSerializer(serializers.ModelSerializer):
         model = PlatformAppConfig
         fields = ['id', 'app_id', 'is_enabled', 'display_order', 'updated_at']
         read_only_fields = ['id', 'updated_at']
+
+
+# ── Phase 1.6: Notification Serializer ──────────────────────────────────────
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import UserAlert
+        model = UserAlert
+        fields = ['id', 'title', 'body', 'category', 'is_read', 'link', 'created_at']
+        read_only_fields = ['id', 'title', 'body', 'category', 'link', 'created_at']

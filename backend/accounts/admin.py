@@ -10,6 +10,7 @@ from .models import (
     User, ScopedRole, RoleAssignmentAuditLog, PlatformAppConfig,
     EmailConfig, PasswordPolicy, BackupConfig, BackupRecord,
     LogConfig, APIConfig,
+    UserAlert, NotificationChannel, NotificationRule,
 )
 
 @admin.register(User)
@@ -178,3 +179,46 @@ class APIConfigAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+# ── Phase 1.6: Notification Admin ─────────────────────────────────────────────
+
+@admin.register(UserAlert)
+class UserAlertAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user', 'title', 'category', 'is_read', 'created_at']
+    list_filter = ['category', 'is_read', 'created_at']
+    search_fields = ['title', 'body', 'user__username']
+    readonly_fields = ['user', 'title', 'body', 'category', 'link', 'created_at']
+    date_hierarchy = 'created_at'
+    actions = ['mark_as_read', 'mark_as_unread']
+
+    def has_add_permission(self, request):
+        return False  # Notifications are system-generated
+
+    def has_change_permission(self, request, obj=None):
+        return False  # Read-only in admin
+
+    @admin.action(description='Mark selected as read')
+    def mark_as_read(self, request, queryset):
+        count = queryset.update(is_read=True)
+        self.message_user(request, f'{count} notification(s) marked as read.', messages.SUCCESS)
+
+    @admin.action(description='Mark selected as unread')
+    def mark_as_unread(self, request, queryset):
+        count = queryset.update(is_read=False)
+        self.message_user(request, f'{count} notification(s) marked as unread.', messages.SUCCESS)
+
+
+@admin.register(NotificationChannel)
+class NotificationChannelAdmin(admin.ModelAdmin):
+    list_display = ['user', 'channel_type', 'enabled', 'updated_at']
+    list_filter = ['channel_type', 'enabled']
+    search_fields = ['user__username']
+
+
+@admin.register(NotificationRule)
+class NotificationRuleAdmin(admin.ModelAdmin):
+    list_display = ['event_type', 'min_severity', 'channel', 'group_target', 'enabled', 'updated_at']
+    list_filter = ['event_type', 'min_severity', 'channel', 'enabled']
+    list_editable = ['enabled', 'min_severity']
+    search_fields = ['description', 'event_type']

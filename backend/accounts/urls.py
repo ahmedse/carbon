@@ -8,6 +8,7 @@ from .views import (
     LogoutView, my_roles, me_context, change_password, role_registry,
     platform_apps, capability_matrix,
 )
+from .notification_views import NotificationViewSet
 from .pulse_auth import pulse_auth_view, pulse_provision_view
 
 router = DefaultRouter()
@@ -16,6 +17,7 @@ router.register(r'roles', GroupViewSet, basename='role')
 router.register(r'groups', GroupViewSet, basename='group')
 router.register(r'scoped-roles', ScopedRoleViewSet, basename='scopedrole')
 router.register(r'role-audit-logs', RoleAssignmentAuditLogViewSet, basename='roleassignmentauditlog')
+router.register(r'notifications', NotificationViewSet, basename='user-alert')
 
 urlpatterns = [
     path('my-roles/', my_roles, name='my-roles'),
