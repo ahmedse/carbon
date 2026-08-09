@@ -9,7 +9,7 @@ User = get_user_model()
 RULE_TYPES = [
     ('not_null', 'Not Null'), ('unique', 'Unique'),
     ('allowed_values', 'Allowed Values'), ('range', 'Range'), ('regex', 'Regex'),
-    ('reference_integrity', 'Reference Integrity'),
+    ('reference_integrity', 'Reference Integrity'), ('threshold', 'Threshold'),
 ]
 SEVERITY_CHOICES = [('info', 'Info'), ('warn', 'Warn'), ('error', 'Error')]
 SCOPE_CHOICES = [('table', 'Table'), ('field', 'Field')]

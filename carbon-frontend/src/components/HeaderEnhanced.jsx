@@ -5,7 +5,11 @@ import React, { useState } from "react";
 import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Tooltip, Box, Avatar, Divider, Popover, Tabs, Tab, useTheme } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
-import aastLogo from "../assets/aast_carbon_logo_.jpg";
+import { 
+  INSTANCE_LOGO, 
+  INSTANCE_NAME, 
+  PLATFORM_NAME 
+} from "../config/branding";
 import { 
   KeyboardArrowDown, 
   Notifications, 
@@ -101,9 +105,9 @@ export default function HeaderEnhanced() {
       <Toolbar sx={{ minHeight: 56, px: 2 }}>
         {/* Logo and title */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <img src={aastLogo} alt="Logo" style={{ height: 32, borderRadius: 6 }} />
+          <img src={INSTANCE_LOGO} alt="Logo" style={{ height: 32, borderRadius: 6 }} />
           <Typography fontWeight={600} fontSize="1rem" color="text.primary">
-            AASTMT Carbon Platform
+            {INSTANCE_NAME ? `${INSTANCE_NAME} · ${PLATFORM_NAME}` : PLATFORM_NAME}
           </Typography>
         </Box>
 

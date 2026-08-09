@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AAST Carbon Platform</title>
+    <title>Carbon Data Trust</title>
     <style>
       html, body {
         margin: 0;
@@ -22,10 +22,11 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <!-- Pulse AI Copilot Widget -->
-    <script src="http://localhost:9100/widget/pulse.js"
+    <!-- Pulse AI Copilot Widget (async — non-blocking, loads when available) -->
+    <script async src="http://localhost:9100/widget/pulse.js"
             data-instance="carbon"
             data-host="http://localhost:9100"
-            data-auto="false"></script>
+            data-auto="false"
+            onerror="console.debug('Pulse widget not available')"></script>
   </body>
 </html>

@@ -23,6 +23,7 @@ import { useAuth } from '../auth/AuthContext';
 import { hasAppAccess } from '../authz';
 import { useEnabledApps } from '../hooks/useEnabledApps';
 import useDocumentTitle from '../hooks/useDocumentTitle';
+import { INSTANCE_NAME, PLATFORM_NAME } from '../config/branding';
 
 // Icon lookup — maps manifest icon names to MUI icon components.
 // Move 3: replace with a full MUI dynamic icon loader for runtime resolution.
@@ -143,10 +144,10 @@ export default function PlatformHome() {
           variant="h4"
           sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}
         >
-          Carbon Data Trust Platform
+          {PLATFORM_NAME}
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Trusted data platform hosting domain applications for AASTMT
+          Trusted data platform hosting domain applications{INSTANCE_NAME ? ` for ${INSTANCE_NAME}` : ''}
         </Typography>
       </Box>
 

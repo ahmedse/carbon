@@ -6,6 +6,7 @@ import {
   FormControl, InputLabel, Select, MenuItem, Box, Alert, FormControlLabel, Switch,
 } from '@mui/material';
 import { fetchDataSchemaFields } from '../../../api/dataschema';
+import { fetchReferenceSets } from '../../../api/catalog';
 
 // Matches backend RULE_TYPES / SEVERITY_CHOICES / SCOPE_CHOICES exactly.
 const RULE_TYPES = [
@@ -13,7 +14,17 @@ const RULE_TYPES = [
   { value: 'unique', label: 'Unique' },
   { value: 'allowed_values', label: 'Allowed Values' },
   { value: 'range', label: 'Range' },
-  { value: 'regex', label: 'Regex' },
+  { value: 'regex', label: 'Regex Pattern' },
+  { value: 'reference_integrity', label: 'Reference Integrity' },
+  { value: 'threshold', label: 'Threshold' },
+];
+const THRESHOLD_OPERATORS = [
+  { value: 'gte', label: '≥ (greater or equal)' },
+  { value: 'gt', label: '> (greater than)' },
+  { value: 'lte', label: '≤ (less or equal)' },
+  { value: 'lt', label: '< (less than)' },
+  { value: 'eq', label: '= (equal)' },
+  { value: 'neq', label: '≠ (not equal)' },
 ];
 const SEVERITIES = ['info', 'warn', 'error'];
 const SCOPES = ['field', 'table'];
@@ -30,6 +41,9 @@ const emptyForm = {
   min: '',
   max: '',
   pattern: '',
+  reference_set_id: '',
+  threshold_operator: 'gte',
+  threshold_value: '',
 };
 
 export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [], token }) {
@@ -40,6 +54,7 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [],
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [tableFields, setTableFields] = useState([]);
+  const [referenceSets, setReferenceSets] = useState([]);
 
   useEffect(() => {
     if (!open) return;
@@ -57,6 +72,9 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [],
         min: p.min ?? '',
         max: p.max ?? '',
         pattern: p.pattern ?? '',
+        reference_set_id: p.reference_set_id ?? '',
+        threshold_operator: p.operator || 'gte',
+        threshold_value: p.value ?? '',
       });
     } else {
       setForm({
@@ -87,6 +105,20 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [],
     fetchFields();
   }, [form.data_table, token]);
 
+  // Fetch available reference sets for reference_integrity rule type
+  useEffect(() => {
+    if (!token || !open) return;
+    const load = async () => {
+      try {
+        const data = await fetchReferenceSets(token);
+        setReferenceSets(Array.isArray(data) ? data : data.results || []);
+      } catch {
+        setReferenceSets([]);
+      }
+    };
+    load();
+  }, [open, token]);
+
   const buildParams = () => {
     switch (form.rule_type) {
       case 'allowed_values':
@@ -104,6 +136,18 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [],
       }
       case 'regex':
         return { pattern: form.pattern };
+      case 'reference_integrity': {
+        const params = {};
+        if (form.reference_set_id) {
+          params.reference_set_id = Number(form.reference_set_id);
+        }
+        return params;
+      }
+      case 'threshold':
+        return {
+          operator: form.threshold_operator || 'gte',
+          value: Number(form.threshold_value),
+        };
       default:
         return {};
     }
@@ -113,6 +157,9 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [],
     if (!form.name.trim()) { setError('Rule name is required'); return; }
     if (form.scope === 'field' && !form.data_field) {
       setError('Select a field for a field-scoped rule'); return;
+    }
+    if (form.rule_type === 'threshold' && form.threshold_value === '') {
+      setError('Threshold value is required'); return;
     }
 
     const payload = {
@@ -164,6 +211,52 @@ export default function DQRuleDialog({ open, onClose, onSave, rule, tables = [],
             onChange={(e) => set('pattern', e.target.value)}
             fullWidth margin="normal" helperText="e.g. ^[A-Z]{2}[0-9]{4}$"
           />
+        );
+      case 'reference_integrity':
+        return (
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Reference Set</InputLabel>
+            <Select
+              value={form.reference_set_id}
+              label="Reference Set"
+              onChange={(e) => set('reference_set_id', e.target.value)}
+            >
+              <MenuItem value=""><em>Use field default</em></MenuItem>
+              {referenceSets.map((rs) => (
+                <MenuItem key={rs.id} value={rs.id}>
+                  {rs.name || rs.code || `Set #${rs.id}`}
+                </MenuItem>
+              ))}
+            </Select>
+            <Box sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.5 }}>
+              Leave empty to use the reference set bound to the selected field.
+            </Box>
+          </FormControl>
+        );
+      case 'threshold':
+        return (
+          <Box sx={{ mt: 1 }}>
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Operator</InputLabel>
+              <Select
+                value={form.threshold_operator}
+                label="Operator"
+                onChange={(e) => set('threshold_operator', e.target.value)}
+              >
+                {THRESHOLD_OPERATORS.map((op) => (
+                  <MenuItem key={op.value} value={op.value}>{op.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="Threshold value"
+              type="number"
+              value={form.threshold_value}
+              onChange={(e) => set('threshold_value', e.target.value)}
+              fullWidth margin="normal"
+              helperText="Numeric comparison value"
+            />
+          </Box>
         );
       default:
         return null;

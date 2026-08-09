@@ -45,6 +45,7 @@ const RULE_TYPE_LABELS = {
   range: 'Range',
   regex: 'Regex',
   reference_integrity: 'Reference Integrity',
+  threshold: 'Threshold',
 };
 
 const SEVERITY_COLORS = {

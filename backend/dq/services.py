@@ -291,6 +291,40 @@ def _evaluate_rule(rule, rows):
             if str(v) not in allowed:
                 failures.append({'row': r.id, 'value': v})
 
+    elif rule.rule_type == 'threshold':
+        from django.db import models as dj_models
+        op = rule.params.get('operator', 'gte')
+        threshold_val = rule.params.get('value')
+        for r in rows:
+            v = r.values.get(fname)
+            if _is_empty(v):
+                continue
+            checked += 1
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                failures.append({'row': r.id, 'value': v})
+                continue
+            ok = False
+            if threshold_val is not None:
+                tv = float(threshold_val)
+                if op == 'gte':
+                    ok = fv >= tv
+                elif op == 'gt':
+                    ok = fv > tv
+                elif op == 'lte':
+                    ok = fv <= tv
+                elif op == 'lt':
+                    ok = fv < tv
+                elif op == 'eq':
+                    ok = fv == tv
+                elif op == 'neq':
+                    ok = fv != tv
+                else:
+                    ok = True  # unknown operator → pass
+            if not ok:
+                failures.append({'row': r.id, 'value': v})
+
     failed = len(failures)
     score = 100 if checked == 0 else round((checked - failed) / checked * 100)
     return (failed == 0), checked, failed, failures[:20], score

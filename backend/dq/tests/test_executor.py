@@ -315,6 +315,96 @@ class ReferenceIntegrityRuleTests(DQBaseTestCase):
         self.assertEqual(failed, 2)
 
 
+class ThresholdRuleTests(DQBaseTestCase):
+    """Threshold: single-operator numeric inequality checks (gte, gt, lte, lt, eq, neq)."""
+
+    def test_gte_passes_when_above(self):
+        rows = self._make_rows([{'score': '50'}, {'score': '100'}])
+        rule = self._make_rule('threshold', field=self.num_field,
+                               params={'operator': 'gte', 'value': 50})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertTrue(passed)
+        self.assertEqual(failed, 0)
+
+    def test_gte_fails_when_below(self):
+        rows = self._make_rows([{'score': '30'}, {'score': '60'}])
+        rule = self._make_rule('threshold', field=self.num_field,
+                               params={'operator': 'gte', 'value': 50})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertFalse(passed)
+        self.assertEqual(failed, 1)
+
+    def test_lt_passes_when_below(self):
+        rows = self._make_rows([{'score': '10'}, {'score': '49'}])
+        rule = self._make_rule('threshold', field=self.num_field,
+                               params={'operator': 'lt', 'value': 50})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertTrue(passed)
+
+    def test_lt_fails_when_equal_or_above(self):
+        rows = self._make_rows([{'score': '50'}, {'score': '100'}])
+        rule = self._make_rule('threshold', field=self.num_field,
+                               params={'operator': 'lt', 'value': 50})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertFalse(passed)
+        self.assertEqual(failed, 2)
+
+    def test_eq_exact_match(self):
+        rows = self._make_rows([{'score': '0'}, {'score': '0'}])
+        rule = self._make_rule('threshold', field=self.num_field,
+                               params={'operator': 'eq', 'value': 0})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertTrue(passed)
+
+    def test_eq_fails_on_mismatch(self):
+        rows = self._make_rows([{'score': '0'}, {'score': '5'}])
+        rule = self._make_rule('threshold', field=self.num_field,
+                               params={'operator': 'eq', 'value': 0})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertFalse(passed)
+        self.assertEqual(failed, 1)
+
+    def test_neq_passes_on_difference(self):
+        rows = self._make_rows([{'score': '1'}, {'score': '2'}])
+        rule = self._make_rule('threshold', field=self.num_field,
+                               params={'operator': 'neq', 'value': 0})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertTrue(passed)
+        self.assertEqual(failed, 0)
+
+    def test_neq_fails_on_match(self):
+        rows = self._make_rows([{'score': '0'}, {'score': '1'}])
+        rule = self._make_rule('threshold', field=self.num_field,
+                               params={'operator': 'neq', 'value': 0})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertFalse(passed)
+        self.assertEqual(failed, 1)
+
+    def test_non_numeric_fails(self):
+        rows = self._make_rows([{'score': 'abc'}, {'score': '50'}])
+        rule = self._make_rule('threshold', field=self.num_field,
+                               params={'operator': 'gte', 'value': 0})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertFalse(passed)
+        self.assertEqual(failed, 1)
+
+    def test_empty_rows_skipped(self):
+        rows = self._make_rows([{'score': None}, {'score': ''}, {'score': '50'}])
+        rule = self._make_rule('threshold', field=self.num_field,
+                               params={'operator': 'gte', 'value': 0})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertEqual(checked, 1)
+        self.assertTrue(passed)
+
+    def test_default_operator_is_gte(self):
+        rows = self._make_rows([{'score': '100'}, {'score': '-5'}])
+        rule = self._make_rule('threshold', field=self.num_field,
+                               params={'value': 0})
+        passed, checked, failed, sample, score = _evaluate_rule(rule, rows)
+        self.assertFalse(passed)
+        self.assertEqual(failed, 1)
+
+
 # ---------------------------------------------------------------------------
 # profile_table service
 # ---------------------------------------------------------------------------

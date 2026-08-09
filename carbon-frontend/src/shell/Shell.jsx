@@ -1,7 +1,7 @@
 // File: src/shell/Shell.jsx
 // Root IDE shell layout with activity bar, resizable sidebar, editor area, and copilot pane
 
-import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Box, Drawer } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { Allotment } from 'allotment';
@@ -14,6 +14,7 @@ import { EditorArea } from './EditorArea';
 import { StatusBar } from './StatusBar';
 import HeaderEnhanced from '../components/HeaderEnhanced';
 import ErrorBoundary from './ErrorBoundary';
+import PulsePane from './PulsePane';
 import { LoadingSpinner, DialogLoadingSkeleton } from './LoadingFallback';
 
 // Lazy load heavy components for code splitting
@@ -55,7 +56,6 @@ export function Shell() {
   });
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const pulseMountRef = useRef(null);
 
   const drawerWidthClamped = useMemo(() => {
     const min = 160;
@@ -111,30 +111,6 @@ export function Shell() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleSidebar, toggleCopilot]);
-
-  // Mount / unmount Pulse widget inside the copilot pane
-  useEffect(() => {
-    let pulseInstance = null;
-
-    if (copilotVisible && pulseMountRef.current && window.PulseWidget) {
-      // Small delay to let the DOM settle (the Allotment pane needs to finish layout)
-      const timer = setTimeout(() => {
-        pulseInstance = window.PulseWidget.mount(pulseMountRef.current, {
-          instanceId: 'carbon',
-          pulseHost: 'http://localhost:9100',
-        });
-      }, 100);
-
-      return () => {
-        clearTimeout(timer);
-        if (pulseInstance?.unmount) pulseInstance.unmount();
-      };
-    }
-
-    return () => {
-      if (pulseInstance?.unmount) pulseInstance.unmount();
-    };
-  }, [copilotVisible]);
 
   const handleSidebarNavigate = (item) => {
     navigate(item.path);
@@ -283,6 +259,7 @@ export function Shell() {
         {/* Resizable Main + Copilot Panes */}
         <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <Allotment
+            key={copilotVisible ? '2panes' : '1pane'}
             onChange={(sizes) => {
               if (copilotVisible && sizes.length >= 2) {
                 const w = sizes[sizes.length - 1];
@@ -304,11 +281,7 @@ export function Shell() {
             {copilotVisible && (
               <Allotment.Pane minSize={300} preferredSize={copilotPaneSize} maxSize={600}>
                 <ErrorBoundary>
-                  <Box
-                    ref={pulseMountRef}
-                    id="pulse-mount"
-                    sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}
-                  />
+                  <PulsePane />
                 </ErrorBoundary>
               </Allotment.Pane>
             )}

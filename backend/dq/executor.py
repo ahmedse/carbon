@@ -72,6 +72,14 @@ class DQRuleExecutor:
             passed, failed_count, sample_failures = self._validate_regex(
                 data_sample, params
             )
+        elif rule_type == 'reference_integrity':
+            passed, failed_count, sample_failures = self._validate_reference_integrity(
+                data_sample, params
+            )
+        elif rule_type == 'threshold':
+            passed, failed_count, sample_failures = self._validate_threshold(
+                data_sample, params
+            )
         elif rule_type == 'custom':
             # Custom rules can be user-defined
             passed = True
@@ -262,6 +270,130 @@ class DQRuleExecutor:
         
         passed = failed_count == 0
         return passed, failed_count, failures
+
+    def _validate_reference_integrity(self, data: list, params: dict) -> tuple:
+        """Check that field values reference a valid code in a ReferenceSet."""
+        if not data:
+            return True, 0, []
+
+        from mdm.models import ReferenceSet
+
+        rs_id = params.get('reference_set_id')
+        field = self.rule.data_field
+        if rs_id is None and field and hasattr(field, 'reference_set_id'):
+            rs_id = field.reference_set_id
+
+        if rs_id:
+            try:
+                ref_set = ReferenceSet.objects.get(id=rs_id)
+                allowed = {
+                    str(c) for c in
+                    ref_set.get_current_values().values_list('code', flat=True)
+                }
+            except ReferenceSet.DoesNotExist:
+                allowed = set()
+        else:
+            allowed = set()
+
+        if not allowed:
+            # No reference set → all non-empty values fail
+            failed_count = 0
+            failures = []
+            for idx, row in enumerate(data):
+                value = row.get(field.name if field else 'value')
+                if value is not None and value != '':
+                    failed_count += 1
+                    if len(failures) < 10:
+                        failures.append({
+                            'row': idx, 'value': value,
+                            'reason': 'No reference set configured',
+                        })
+            return failed_count == 0, failed_count, failures
+
+        failed_count = 0
+        failures = []
+        for idx, row in enumerate(data):
+            value = row.get(field.name if field else 'value')
+            if value is None or value == '':
+                continue
+            if str(value) not in allowed:
+                failed_count += 1
+                if len(failures) < 10:
+                    failures.append({
+                        'row': idx, 'value': value,
+                        'reason': f'Value not in reference set (allowed: {sorted(allowed)[:10]}...)',
+                    })
+
+        return failed_count == 0, failed_count, failures
+
+    def _validate_threshold(self, data: list, params: dict) -> tuple:
+        """Check that numeric field values satisfy a single inequality operator.
+
+        Supported params:
+            operator: gte | gt | lte | lt | eq | neq  (default: gte)
+            value:   numeric threshold to compare against
+
+        Examples:
+            {"operator": "gte", "value": 0}   → value must be >= 0
+            {"operator": "lt",  "value": 100} → value must be < 100
+            {"operator": "eq",  "value": 0}   → value must == 0
+        """
+        if not data:
+            return True, 0, []
+
+        op = params.get('operator', 'gte')
+        threshold_val = params.get('value')
+
+        if threshold_val is None:
+            return True, 0, []
+
+        try:
+            tv = float(threshold_val)
+        except (TypeError, ValueError):
+            logger.error(f"Invalid threshold value: {threshold_val}")
+            return False, len(data), [{'reason': f'Invalid threshold value: {threshold_val}'}]
+
+        OPS = {
+            'gte': lambda x: x >= tv,
+            'gt':  lambda x: x > tv,
+            'lte': lambda x: x <= tv,
+            'lt':  lambda x: x < tv,
+            'eq':  lambda x: x == tv,
+            'neq': lambda x: x != tv,
+        }
+
+        check = OPS.get(op)
+        if check is None:
+            logger.error(f"Unknown threshold operator: {op}")
+            return False, len(data), [{'reason': f'Unknown operator: {op}'}]
+
+        failed_count = 0
+        failures = []
+        field_name = self.rule.data_field.name if self.rule.data_field else 'value'
+
+        for idx, row in enumerate(data):
+            value = row.get(field_name)
+            if value is None or value == '':
+                continue
+            try:
+                fv = float(value)
+            except (TypeError, ValueError):
+                failed_count += 1
+                if len(failures) < 10:
+                    failures.append({
+                        'row': idx, 'value': value,
+                        'reason': f'Value cannot be converted to numeric',
+                    })
+                continue
+            if not check(fv):
+                failed_count += 1
+                if len(failures) < 10:
+                    failures.append({
+                        'row': idx, 'value': value,
+                        'reason': f'Value {fv} fails {op} {tv}',
+                    })
+
+        return failed_count == 0, failed_count, failures
 
     def _create_error_result(self, error_message: str) -> DQResult:
         """Create a failed result for execution errors."""

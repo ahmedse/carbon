@@ -4,9 +4,9 @@ import {
   Box, Button, TextField, Typography, Alert, Paper, CircularProgress, MenuItem, Select,
 } from "@mui/material";
 import { Navigate, useNavigate } from "react-router-dom";
-import aastLogo from "../assets/aast_carbon_logo_.jpg";
 import { useLocation } from "react-router-dom";
 import useDocumentTitle from "../hooks/useDocumentTitle";
+import { INSTANCE_LOGO, PLATFORM_NAME } from "../config/branding";
 
 
 export default function Login() {
@@ -105,12 +105,12 @@ export default function Login() {
         boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
       }}>
         <Box sx={{ textAlign: "center", mb: 3 }}>
-          <img src={aastLogo} alt="Logo" style={{ height: 44, marginBottom: 12, borderRadius: 6 }} />
+          <img src={INSTANCE_LOGO} alt="Logo" style={{ height: 44, marginBottom: 12, borderRadius: 6 }} />
           <Typography variant="h5" fontWeight={600} sx={{ color: "text.primary" }}>
             Welcome back
           </Typography>
           <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-            Sign in to Carbon Platform
+            Sign in to {PLATFORM_NAME}
           </Typography>
         </Box>
         {sessionExpired && (

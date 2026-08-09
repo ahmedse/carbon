@@ -52,12 +52,14 @@ class DQRuleSerializer(serializers.ModelSerializer):
 
     def validate_rule_type(self, value):
         """Validate rule_type is one of allowed types."""
-        ALLOWED = ['not_null', 'unique', 'allowed_values', 'range', 'regex', 'reference_integrity', 'custom']
+        ALLOWED = ['not_null', 'unique', 'allowed_values', 'range', 'regex', 'reference_integrity', 'threshold', 'custom']
         if value not in ALLOWED:
             raise serializers.ValidationError(
                 f"rule_type must be one of {ALLOWED}"
             )
         return value
+
+    THRESHOLD_OPERATORS = {'gte', 'gt', 'lte', 'lt', 'eq', 'neq'}
 
     def validate(self, data):
         """Ensure either data_table or data_field is provided, but not both."""
@@ -69,6 +71,28 @@ class DQRuleSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("data_table is required for table-level rules")
         if scope == 'field' and not data_field:
             raise serializers.ValidationError("data_field is required for field-level rules")
+        
+        # Validate threshold rule params
+        rule_type = data.get('rule_type')
+        if rule_type == 'threshold':
+            params = data.get('params', {})
+            if not isinstance(params, dict):
+                raise serializers.ValidationError({"params": "params must be a JSON object"})
+            
+            operator = params.get('operator', 'gte')
+            if operator not in self.THRESHOLD_OPERATORS:
+                raise serializers.ValidationError({
+                    "params": f"operator must be one of {sorted(self.THRESHOLD_OPERATORS)}, got '{operator}'"
+                })
+            
+            if 'value' not in params:
+                raise serializers.ValidationError({"params": "value is required for threshold rules"})
+            try:
+                float(params['value'])
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({
+                    "params": f"value must be numeric, got '{params['value']}'"
+                })
         
         return data
 

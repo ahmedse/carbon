@@ -73,6 +73,12 @@ raw/
 *.seed.lock
 docker-compose.override.yml
 
+# Runtime directories
+mediafiles/
+logs/
+.pids/
+.pytest_cache/
+
 # Kubernetes-related files
 *.yaml.lock
 
