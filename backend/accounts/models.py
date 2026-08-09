@@ -232,3 +232,126 @@ class PasswordPolicy(models.Model):
     def load(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+# ── Phase 1.2: DB Backup Configuration ────────────────────────────────────────
+
+class BackupConfig(models.Model):
+    """Singleton — automated DB backup configuration."""
+
+    FREQUENCY_CHOICES = [
+        ('daily', 'Daily (2 AM)'),
+        ('twice_daily', 'Twice Daily (2 AM + 2 PM)'),
+        ('hourly', 'Hourly'),
+        ('manual', 'Manual Only'),
+    ]
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default='daily')
+    retention_days = models.IntegerField(default=30, help_text='Auto-delete backups older than N days')
+    s3_bucket = models.CharField(max_length=255, blank=True, default='', help_text='Optional S3 bucket for offsite storage')
+    s3_path = models.CharField(max_length=255, blank=True, default='', help_text='S3 key prefix, e.g. carbon-backups/')
+    enabled = models.BooleanField(default=True)
+    last_backup_at = models.DateTimeField(null=True, blank=True)
+    last_backup_size_bytes = models.BigIntegerField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Backup Configuration'
+        verbose_name_plural = 'Backup Configuration'
+
+    def __str__(self):
+        return f"Backup ({self.frequency}, {self.retention_days}d retention)"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class BackupRecord(models.Model):
+    """Log of each backup execution."""
+
+    STATUS_CHOICES = [
+        ('success', 'Success'),
+        ('failed', 'Failed'),
+        ('running', 'Running'),
+    ]
+    filename = models.CharField(max_length=255)
+    size_bytes = models.BigIntegerField(default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='running')
+    location = models.CharField(max_length=512, blank=True, default='', help_text='File path or S3 URI')
+    error_message = models.TextField(blank=True, default='')
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Backup Record'
+        verbose_name_plural = 'Backup Records'
+        ordering = ['-started_at']
+
+    def __str__(self):
+        return f"Backup {self.filename} ({self.status}) — {self.started_at:%Y-%m-%d %H:%M}"
+
+
+# ── Phase 1.3: Log Configuration ──────────────────────────────────────────────
+
+class LogConfig(models.Model):
+    """Singleton — logging configuration."""
+
+    LEVEL_CHOICES = [
+        ('DEBUG', 'DEBUG'),
+        ('INFO', 'INFO'),
+        ('WARNING', 'WARNING'),
+        ('ERROR', 'ERROR'),
+    ]
+    default_level = models.CharField(max_length=10, choices=LEVEL_CHOICES, default='INFO')
+    retention_days = models.IntegerField(default=90, help_text='Auto-delete request logs older than N days')
+    json_format = models.BooleanField(default=True, help_text='Use JSON structured logging')
+    db_log_level = models.CharField(max_length=10, choices=LEVEL_CHOICES, default='ERROR', help_text='Min level for DB logging (prevents fillup)')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Log Configuration'
+        verbose_name_plural = 'Log Configuration'
+
+    def __str__(self):
+        return f"Log Config ({self.default_level}, {self.retention_days}d retention)"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+# ── Phase 1.4: API Configuration ──────────────────────────────────────────────
+
+class APIConfig(models.Model):
+    """Singleton — DRF API configuration (pagination, versioning)."""
+
+    page_size = models.IntegerField(default=50, help_text='Default items per page')
+    max_page_size = models.IntegerField(default=200, help_text='Maximum allowed items per page')
+    enable_pagination = models.BooleanField(default=True, help_text='Global pagination toggle')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'API Configuration'
+        verbose_name_plural = 'API Configuration'
+
+    def __str__(self):
+        return f"API Config (page_size={self.page_size}, pagination={'on' if self.enable_pagination else 'off'})"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

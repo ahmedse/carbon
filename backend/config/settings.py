@@ -211,17 +211,29 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                # Phase 1.5: Inject DJANGO_ENV into all admin templates
+                'config.context_processors.django_env',
             ],
         },
     },
 ]
+
+# Phase 1.5: Environment flags
+DJANGO_ENV = get_env("DJANGO_ENV", "development")
+DJANGO_ENV_LABEL = {
+    'development': 'DEV',
+    'staging': 'STAGING',
+    'production': 'PRODUCTION',
+}.get(DJANGO_ENV, DJANGO_ENV.upper())
+STAGING = DJANGO_ENV == 'staging'
+PRODUCTION = DJANGO_ENV == 'production'
 
 WSGI_APPLICATION = 'config.wsgi.application'
 APPEND_SLASH = False
@@ -277,6 +289,9 @@ REST_FRAMEWORK = {
         # Development: allow rapid logins for E2E testing
         'login': '1000/minute' if IS_DEVELOPMENT else '5/minute',
     },
+    # Phase 1.4: Default API pagination (overridable via APIConfig model)
+    'DEFAULT_PAGINATION_CLASS': 'config.pagination.CarbonPageNumberPagination',
+    'PAGE_SIZE': 50,
 }
 
 SIMPLE_JWT = {

@@ -1,0 +1,19 @@
+{% extends "admin/base_site.html" %}
+{% comment %}
+Phase 1.5 — Environment badge override for admin base template.
+Shows DEV yellow / STAGING red / PRODUCTION green badge.
+{% endcomment %}
+
+{% block usertools %}
+{% with env=DJANGO_ENV|default:"development" %}
+{% with badge_color="green"|default_if_none:env %}
+<div style="display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 12px;
+  {% if env == 'production' %}background: #16a34a; color: #fff;
+  {% elif env == 'staging' %}background: #dc2626; color: #fff;
+  {% else %}background: #eab308; color: #000;{% endif %}">
+  {{ env|upper }}
+</div>
+{% endwith %}
+{% endwith %}
+{{ block.super }}
+{% endblock %}

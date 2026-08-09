@@ -67,3 +67,39 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"[{self.verb}] {self.message[:80]}"
+
+
+# ── Phase 1.3: Request Log (DB-stored) ────────────────────────────────────────
+
+class RequestLog(models.Model):
+    """Persisted request log for admin viewing. Only ERROR+ by default."""
+
+    LEVEL_CHOICES = [
+        ('DEBUG', 'DEBUG'),
+        ('INFO', 'INFO'),
+        ('WARNING', 'WARNING'),
+        ('ERROR', 'ERROR'),
+    ]
+    correlation_id = models.CharField(max_length=36, db_index=True)
+    level = models.CharField(max_length=10, choices=LEVEL_CHOICES, default='INFO', db_index=True)
+    method = models.CharField(max_length=10)  # GET, POST, etc.
+    path = models.CharField(max_length=512)
+    user = models.CharField(max_length=150, blank=True, default='anonymous')
+    user_id = models.IntegerField(null=True, blank=True)
+    status_code = models.IntegerField(null=True, blank=True, db_index=True)
+    duration_ms = models.FloatField(null=True, blank=True)
+    remote_addr = models.GenericIPAddressField(null=True, blank=True)
+    slow_request = models.BooleanField(default=False, db_index=True)
+    timestamp = models.DateTimeField(db_index=True)
+
+    class Meta:
+        verbose_name = 'Request Log'
+        verbose_name_plural = 'Request Logs'
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['level', '-timestamp']),
+            models.Index(fields=['status_code', '-timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.timestamp:%Y-%m-%d %H:%M:%S} [{self.level}] {self.method} {self.path} → {self.status_code}"
