@@ -46,7 +46,23 @@ export function normalizeError(error, context = {}) {
   const status = error?.status ?? context?.status ?? null;
   const feedback = error?.feedback ?? null;
 
-  // Network / fetch failure
+  // Timeout / abort (check FIRST — Chrome may throw TypeError instead of AbortError on abort)
+  if (
+    error?.name === "AbortError" ||
+    error?.message === "Request timed out"
+  ) {
+    return {
+      type: "network",
+      message: "The request timed out. Please try again.",
+      canRetry: true,
+      status: null,
+      feedback: null,
+      correlationId,
+      timestamp,
+    };
+  }
+
+  // Network / fetch failure (only when NOT an abort/timeout)
   if (
     !status &&
     (error?.message === "Failed to fetch" ||
@@ -56,19 +72,6 @@ export function normalizeError(error, context = {}) {
     return {
       type: "network",
       message: "Unable to reach the server. Check your connection and try again.",
-      canRetry: true,
-      status: null,
-      feedback: null,
-      correlationId,
-      timestamp,
-    };
-  }
-
-  // Timeout
-  if (error?.message === "Request timed out") {
-    return {
-      type: "network",
-      message: "The request timed out. Please try again.",
       canRetry: true,
       status: null,
       feedback: null,

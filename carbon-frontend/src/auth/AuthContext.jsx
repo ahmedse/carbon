@@ -167,11 +167,28 @@ export const AuthProvider = ({ children }) => {
     );
     resetTimers();
 
+    // --- Proactive refresh when user returns to the tab ---
+    // Browser throttles setInterval for background tabs to 1/min,
+    // so a 10-min refresh timer can miss the 15-min (now 60-min) expiry window.
+    // On visibility change → visible, immediately refresh the access token.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        debug('Tab re-focused — proactive token refresh');
+        refreshAccessToken().catch(() => {
+          // Silently fail — the next API call will trigger a proper refresh or logout
+          debug('Proactive refresh on tab focus failed');
+        });
+        resetTimers();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     // --- Cleanup on unmount/logout ---
     return () => {
       ["mousemove", "keydown", "mousedown", "touchstart"].forEach(e =>
         window.removeEventListener(e, resetTimers)
       );
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
       if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
     };
@@ -321,23 +338,28 @@ export const AuthProvider = ({ children }) => {
     if (!user || !context?.projectId || !context?.modules) return;
     try {
       const grouped = {};
-      await Promise.all(
-        context.modules.map(async (mod) => {
-          try {
-            // Use apiFetch for auto JWT refresh
-            const tables = await apiFetch(API_ROUTES.tables, {
-              project_id: context.projectId,
-              module_id: mod.id,
-              token: user.token, // optional, apiFetch can also use localStorage
-            });
-            grouped[String(mod.id)] = tables;
-          } catch (err) {
-            // Optionally, handle unauthorized (if still fails), or set as empty
-            grouped[String(mod.id)] = [];
-            if (import.meta.env.DEV) console.error("Failed to fetch tables for module", mod.id, err);
-          }
-        })
-      );
+      // Limit concurrency to avoid browser connection pool exhaustion
+      const CONCURRENCY = 5;
+      for (let i = 0; i < context.modules.length; i += CONCURRENCY) {
+        const batch = context.modules.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          batch.map(async (mod) => {
+            try {
+              // Use apiFetch for auto JWT refresh
+              const tables = await apiFetch(API_ROUTES.tables, {
+                project_id: context.projectId,
+                module_id: mod.id,
+                token: user.token, // optional, apiFetch can also use localStorage
+              });
+              grouped[String(mod.id)] = tables;
+            } catch (err) {
+              // Optionally, handle unauthorized (if still fails), or set as empty
+              grouped[String(mod.id)] = [];
+              if (import.meta.env.DEV) console.error("Failed to fetch tables for module", mod.id, err);
+            }
+          })
+        );
+      }
       setTablesByModule(grouped);
     } catch (err) {
       setTablesByModule({});

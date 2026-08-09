@@ -9,8 +9,12 @@ import { useNotification } from '../../components/NotificationProvider';
 import { 
   fetchAssetProfiles, 
   fetchDataDomains, 
-  deleteAssetProfile
+  deleteAssetProfile,
+  createAssetProfile,
+  fetchGlossaryTerms,
+  fetchTags,
 } from '../../api/catalog';
+import { fetchUsers } from '../../api/users';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 import {
@@ -122,6 +126,24 @@ export default function AssetsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [_deleteConfirm, setDeleteConfirm] = useState(null);
+
+  // Create dialog state
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createError, setCreateError] = useState(null);
+  const [createForm, setCreateForm] = useState({
+    description: '',
+    domain: '',
+    owner: '',
+    steward: '',
+    classification: '',
+    semantic_type: '',
+    glossary_term: '',
+  });
+  const [createFormUsers, setCreateFormUsers] = useState([]);
+  const [createFormGlossary, setCreateFormGlossary] = useState([]);
+  const [createFormTags, setCreateFormTags] = useState([]);
+  const [createFormAllTags, setCreateFormAllTags] = useState([]);
 
   // Grid state
   const [_paginationModel, _setPaginationModel] = useState({ pageSize: 25, page: 0 });
@@ -328,6 +350,69 @@ export default function AssetsPage() {
     setFilterAssetType('');
   };
 
+  // --- Create dialog handlers ---
+  const handleOpenCreate = async () => {
+    setCreateError(null);
+    setCreateSaving(false);
+    setCreateForm({
+      description: '',
+      domain: '',
+      owner: '',
+      steward: '',
+      classification: '',
+      semantic_type: '',
+      glossary_term: '',
+    });
+    setCreateFormTags([]);
+    try {
+      const [users, glossary, allTags] = await Promise.all([
+        fetchUsers(token),
+        fetchGlossaryTerms(token),
+        fetchTags(token),
+      ]);
+      setCreateFormUsers(Array.isArray(users) ? users : users?.results || []);
+      setCreateFormGlossary(Array.isArray(glossary) ? glossary : glossary?.results || []);
+      setCreateFormAllTags(Array.isArray(allTags) ? allTags : allTags?.results || []);
+    } catch (_e) {
+      // Non-critical — dialog opens anyway with empty dropdowns
+    }
+    setCreateDialogOpen(true);
+  };
+
+  const handleCloseCreate = () => {
+    if (createSaving) return;
+    setCreateDialogOpen(false);
+  };
+
+  const handleCreateSave = async () => {
+    if (!createForm.description.trim()) {
+      setCreateError('Description is required.');
+      return;
+    }
+    setCreateSaving(true);
+    setCreateError(null);
+    try {
+      const payload = {
+        description: createForm.description.trim(),
+        domain: createForm.domain ? parseInt(createForm.domain) : null,
+        owner: createForm.owner ? parseInt(createForm.owner) : null,
+        steward: createForm.steward ? parseInt(createForm.steward) : null,
+        classification: createForm.classification || null,
+        semantic_type: createForm.semantic_type.trim() || null,
+        glossary_term: createForm.glossary_term ? parseInt(createForm.glossary_term) : null,
+        tags: createFormTags,
+      };
+      await createAssetProfile(token, payload);
+      notify({ message: 'Asset profile created', type: 'success' });
+      setCreateDialogOpen(false);
+      await loadData();
+    } catch (err) {
+      setCreateError(err.message || 'Failed to create asset profile.');
+    } finally {
+      setCreateSaving(false);
+    }
+  };
+
   const hasActiveFilters = 
     searchText || filterDomain || filterClassification || filterQuality || filterAssetType;
 
@@ -343,7 +428,7 @@ export default function AssetsPage() {
           <Button
             startIcon={<AddIcon />}
             variant="contained"
-            onClick={() => navigate('/catalog/assets/new')}
+            onClick={handleOpenCreate}
           >
             New Asset
           </Button>
@@ -412,6 +497,128 @@ export default function AssetsPage() {
         emptyMessage="No assets found"
         emptySubtext={hasActiveFilters ? 'Try adjusting your filters' : 'Assets are auto-created for all tables and fields'}
       />
+
+      {/* Create Asset Dialog */}
+      <Dialog open={createDialogOpen} onClose={handleCloseCreate} maxWidth="sm" fullWidth>
+        <DialogTitle>New Asset Profile</DialogTitle>
+        <DialogContent>
+          {createError && <Alert severity="error" sx={{ mb: 2 }}>{createError}</Alert>}
+          <TextField
+            fullWidth
+            label="Description"
+            margin="normal"
+            required
+            multiline
+            rows={2}
+            value={createForm.description}
+            onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+            autoFocus
+          />
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Domain</InputLabel>
+            <Select
+              value={createForm.domain}
+              label="Domain"
+              onChange={(e) => setCreateForm({ ...createForm, domain: e.target.value })}
+            >
+              <MenuItem value="">— None —</MenuItem>
+              {domains.map((d) => (
+                <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            select
+            fullWidth
+            label="Classification"
+            margin="normal"
+            value={createForm.classification}
+            onChange={(e) => setCreateForm({ ...createForm, classification: e.target.value })}
+          >
+            <MenuItem value="">— None —</MenuItem>
+            <MenuItem value="public">Public</MenuItem>
+            <MenuItem value="internal">Internal</MenuItem>
+            <MenuItem value="confidential">Confidential</MenuItem>
+            <MenuItem value="pii">PII</MenuItem>
+            <MenuItem value="sensitive">Sensitive</MenuItem>
+          </TextField>
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Owner</InputLabel>
+            <Select
+              value={createForm.owner}
+              label="Owner"
+              onChange={(e) => setCreateForm({ ...createForm, owner: e.target.value })}
+            >
+              <MenuItem value="">— None —</MenuItem>
+              {createFormUsers.map((u) => (
+                <MenuItem key={u.id} value={u.id}>{u.username || u.email || u.id}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Steward</InputLabel>
+            <Select
+              value={createForm.steward}
+              label="Steward"
+              onChange={(e) => setCreateForm({ ...createForm, steward: e.target.value })}
+            >
+              <MenuItem value="">— None —</MenuItem>
+              {createFormUsers.map((u) => (
+                <MenuItem key={u.id} value={u.id}>{u.username || u.email || u.id}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            fullWidth
+            label="Semantic Type"
+            margin="normal"
+            value={createForm.semantic_type}
+            onChange={(e) => setCreateForm({ ...createForm, semantic_type: e.target.value })}
+          />
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Glossary Term</InputLabel>
+            <Select
+              value={createForm.glossary_term}
+              label="Glossary Term"
+              onChange={(e) => setCreateForm({ ...createForm, glossary_term: e.target.value })}
+            >
+              <MenuItem value="">— None —</MenuItem>
+              {createFormGlossary.map((g) => (
+                <MenuItem key={g.id} value={g.id}>{g.term || g.name || g.id}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Tags</InputLabel>
+            <Select
+              multiple
+              value={createFormTags}
+              label="Tags"
+              onChange={(e) => setCreateFormTags(e.target.value)}
+              renderValue={(selected) => (
+                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                  {selected.map((tagId) => {
+                    const tag = createFormAllTags.find((t) => t.id === tagId);
+                    return (
+                      <Chip key={tagId} label={tag?.name || tagId} size="small" />
+                    );
+                  })}
+                </Stack>
+              )}
+            >
+              {createFormAllTags.map((t) => (
+                <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCreate} disabled={createSaving}>Cancel</Button>
+          <Button onClick={handleCreateSave} variant="contained" disabled={createSaving} startIcon={createSaving ? <CircularProgress size={16} /> : null}>
+            {createSaving ? 'Creating…' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

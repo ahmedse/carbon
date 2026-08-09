@@ -295,6 +295,10 @@ export async function apiFetch(
     return responseData;
   } catch (error) {
     clearTimeout(timeout);
+    // Detect AbortController timeout (including Chrome quirk where abort throws TypeError)
+    if (error.name === "AbortError" || controller.signal.aborted) {
+      error = new Error("Request timed out");
+    }
     // Normalize all errors through the standard shape
     const normalized = normalizeError(
       error,

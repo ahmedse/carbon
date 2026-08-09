@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
-import { isGlobalAdmin } from '../../authz';
+import { can } from '../../authz';
 import {
   Box, Typography, TextField, Card, CardContent, CardHeader, Grid,
   CircularProgress, Alert, Chip, Paper, InputAdornment, IconButton, Tooltip,
@@ -35,7 +35,7 @@ const EMPTY_FORM = { name: '', description: '', scope: 1, org_unit: '' };
 export default function DataProductsPage() {
   useDocumentTitle("Data Products");
   const navigate = useNavigate();
-  const { token, user, context, selectProject, availablePerspectives, isGlobalAdminFlag } = useAuth();
+  const { token, user, context, selectProject, availablePerspectives, isGlobalAdminFlag, userCapabilities } = useAuth();
   const { notify, notifyFromError } = useNotification();
 
   const [loading, setLoading] = useState(true);
@@ -51,7 +51,11 @@ export default function DataProductsPage() {
 
   const modules = context?.modules || [];
 
-  const isAdmin = isGlobalAdmin(user, availablePerspectives, isGlobalAdminFlag);
+  const canManage = can(user, 'access_route', '/catalog/products', {
+    perspectives: availablePerspectives,
+    isGlobalAdminFlag,
+    capabilities: userCapabilities,
+  });
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -164,7 +168,7 @@ export default function DataProductsPage() {
         title={DATA_PRODUCTS}
         subtitle="Governed, org-owned groupings of tables. Open one to manage its tables."
         description="Data products bundle related tables under a single governance policy with version tracking, access control, and lineage metadata."
-        actions={isAdmin && (
+        actions={canManage && (
           <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
             New {DATA_PRODUCT}
           </Button>
@@ -218,7 +222,7 @@ export default function DataProductsPage() {
                             <VisibilityIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        {isAdmin && (
+                        {canManage && (
                           <>
                             <Tooltip title="Edit">
                               <IconButton size="small" onClick={() => openEdit(m)}>

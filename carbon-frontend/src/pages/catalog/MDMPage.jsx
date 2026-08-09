@@ -9,10 +9,12 @@ import { useNotification } from '../../components/NotificationProvider';
 import {
   fetchReferenceSets,
   deleteReferenceSet,
+  createReferenceSet,
   fetchReferenceValues,
   deleteReferenceValue,
   fetchOrgUnits,
   deleteOrgUnit,
+  createOrgUnit,
   fetchDataDomains,
 } from '../../api/catalog';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
@@ -21,6 +23,10 @@ import { fetchUsers } from '../../api/users';
 import {
   Box,
   Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Tabs,
   Tab,
   TextField,
@@ -84,6 +90,18 @@ export default function MDMPage() {
   // Select options
   const [domains, setDomains] = useState([]);
   const [users, setUsers] = useState([]);
+
+  // Create Reference Set dialog
+  const [refSetDialogOpen, setRefSetDialogOpen] = useState(false);
+  const [refSetForm, setRefSetForm] = useState({ name: '', description: '', domain: '' });
+  const [refSetSaving, setRefSetSaving] = useState(false);
+  const [refSetError, setRefSetError] = useState(null);
+
+  // Create Org Unit dialog
+  const [orgUnitDialogOpen, setOrgUnitDialogOpen] = useState(false);
+  const [orgUnitForm, setOrgUnitForm] = useState({ name: '', code: '', org_type: '', parent: '', description: '' });
+  const [orgUnitSaving, setOrgUnitSaving] = useState(false);
+  const [orgUnitError, setOrgUnitError] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -177,6 +195,79 @@ export default function MDMPage() {
   const handleClearOrgUnitsFilters = () => {
     setSearchOrgUnits('');
     setFilterOrgType('');
+  };
+
+  // --- Create Reference Set dialog handlers ---
+  const handleOpenRefSetDialog = () => {
+    setRefSetError(null);
+    setRefSetForm({ name: '', description: '', domain: '' });
+    setRefSetDialogOpen(true);
+  };
+
+  const handleCloseRefSetDialog = () => {
+    if (refSetSaving) return;
+    setRefSetDialogOpen(false);
+  };
+
+  const handleSaveRefSet = async () => {
+    if (!refSetForm.name.trim()) {
+      setRefSetError('Name is required.');
+      return;
+    }
+    setRefSetSaving(true);
+    setRefSetError(null);
+    try {
+      await createReferenceSet(token, {
+        name: refSetForm.name.trim(),
+        description: refSetForm.description.trim(),
+        domain: refSetForm.domain || null,
+      });
+      notify({ message: 'Reference set created', type: 'success' });
+      setRefSetDialogOpen(false);
+      await loadData();
+    } catch (err) {
+      setRefSetError(err.message || 'Failed to create reference set.');
+    } finally {
+      setRefSetSaving(false);
+    }
+  };
+
+  // --- Create Org Unit dialog handlers ---
+  const handleOpenOrgUnitDialog = () => {
+    setOrgUnitError(null);
+    setOrgUnitForm({ name: '', code: '', org_type: '', parent: '', description: '' });
+    setOrgUnitDialogOpen(true);
+  };
+
+  const handleCloseOrgUnitDialog = () => {
+    if (orgUnitSaving) return;
+    setOrgUnitDialogOpen(false);
+  };
+
+  const handleSaveOrgUnit = async () => {
+    if (!orgUnitForm.name.trim()) {
+      setOrgUnitError('Name is required.');
+      return;
+    }
+    setOrgUnitSaving(true);
+    setOrgUnitError(null);
+    try {
+      await createOrgUnit(token, {
+        name: orgUnitForm.name.trim(),
+        code: orgUnitForm.code.trim() || null,
+        org_type: orgUnitForm.org_type || null,
+        parent: orgUnitForm.parent ? parseInt(orgUnitForm.parent) : null,
+        description: orgUnitForm.description.trim() || null,
+      });
+      notify({ message: 'Org unit created', type: 'success' });
+      setOrgUnitDialogOpen(false);
+      const unitsData = await fetchOrgUnits(token);
+      setOrgUnits(Array.isArray(unitsData) ? unitsData : unitsData.results || []);
+    } catch (err) {
+      setOrgUnitError(err.message || 'Failed to create org unit.');
+    } finally {
+      setOrgUnitSaving(false);
+    }
   };
 
   // Filtered Reference Sets
@@ -545,7 +636,7 @@ export default function MDMPage() {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => navigate('/catalog/mdm/reference-sets/new')}
+            onClick={handleOpenRefSetDialog}
           >
             New Reference Set
           </Button>
@@ -723,7 +814,7 @@ export default function MDMPage() {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => navigate('/catalog/mdm/org-units/new')}
+            onClick={handleOpenOrgUnitDialog}
           >
             New Org Unit
           </Button>
@@ -748,6 +839,121 @@ export default function MDMPage() {
           />
         </Box>
       </TabPanel>
+
+      {/* Create Reference Set Dialog */}
+      <Dialog open={refSetDialogOpen} onClose={handleCloseRefSetDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>New Reference Set</DialogTitle>
+        <DialogContent>
+          {refSetError && <Alert severity="error" sx={{ mb: 2 }}>{refSetError}</Alert>}
+          <TextField
+            fullWidth
+            label="Name"
+            margin="normal"
+            required
+            value={refSetForm.name}
+            onChange={(e) => setRefSetForm({ ...refSetForm, name: e.target.value })}
+            autoFocus
+          />
+          <TextField
+            fullWidth
+            label="Description"
+            margin="normal"
+            multiline
+            rows={2}
+            value={refSetForm.description}
+            onChange={(e) => setRefSetForm({ ...refSetForm, description: e.target.value })}
+          />
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Domain</InputLabel>
+            <Select
+              value={refSetForm.domain}
+              label="Domain"
+              onChange={(e) => setRefSetForm({ ...refSetForm, domain: e.target.value })}
+            >
+              <MenuItem value="">— None —</MenuItem>
+              {domains.map((d) => (
+                <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseRefSetDialog} disabled={refSetSaving}>Cancel</Button>
+          <Button onClick={handleSaveRefSet} variant="contained" disabled={refSetSaving} startIcon={refSetSaving ? <CircularProgress size={16} /> : null}>
+            {refSetSaving ? 'Creating…' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Create Org Unit Dialog */}
+      <Dialog open={orgUnitDialogOpen} onClose={handleCloseOrgUnitDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>New Org Unit</DialogTitle>
+        <DialogContent>
+          {orgUnitError && <Alert severity="error" sx={{ mb: 2 }}>{orgUnitError}</Alert>}
+          <TextField
+            fullWidth
+            label="Name"
+            margin="normal"
+            required
+            value={orgUnitForm.name}
+            onChange={(e) => setOrgUnitForm({ ...orgUnitForm, name: e.target.value })}
+            autoFocus
+          />
+          <TextField
+            fullWidth
+            label="Code"
+            margin="normal"
+            value={orgUnitForm.code}
+            onChange={(e) => setOrgUnitForm({ ...orgUnitForm, code: e.target.value })}
+          />
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Type</InputLabel>
+            <Select
+              value={orgUnitForm.org_type}
+              label="Type"
+              onChange={(e) => setOrgUnitForm({ ...orgUnitForm, org_type: e.target.value })}
+            >
+              <MenuItem value="">— None —</MenuItem>
+              <MenuItem value="university">University</MenuItem>
+              <MenuItem value="campus">Campus</MenuItem>
+              <MenuItem value="college">College</MenuItem>
+              <MenuItem value="department">Department</MenuItem>
+              <MenuItem value="division">Division</MenuItem>
+              <MenuItem value="team">Team</MenuItem>
+              <MenuItem value="facility">Facility</MenuItem>
+              <MenuItem value="other">Other</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Parent</InputLabel>
+            <Select
+              value={orgUnitForm.parent}
+              label="Parent"
+              onChange={(e) => setOrgUnitForm({ ...orgUnitForm, parent: e.target.value })}
+            >
+              <MenuItem value="">— None —</MenuItem>
+              {orgUnits.map((ou) => (
+                <MenuItem key={ou.id} value={ou.id}>{ou.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            fullWidth
+            label="Description"
+            margin="normal"
+            multiline
+            rows={2}
+            value={orgUnitForm.description}
+            onChange={(e) => setOrgUnitForm({ ...orgUnitForm, description: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseOrgUnitDialog} disabled={orgUnitSaving}>Cancel</Button>
+          <Button onClick={handleSaveOrgUnit} variant="contained" disabled={orgUnitSaving} startIcon={orgUnitSaving ? <CircularProgress size={16} /> : null}>
+            {orgUnitSaving ? 'Creating…' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
