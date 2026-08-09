@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import PlatformHome from '../pages/PlatformHome';
+import { PLATFORM_NAME } from '../config/branding';
 
 // Mock dependencies
 vi.mock('../auth/AuthContext', () => ({
@@ -14,7 +15,7 @@ vi.mock('../hooks/useEnabledApps', () => ({
 describe('PlatformHome', () => {
   it('renders the page title', () => {
     render(<MemoryRouter><PlatformHome /></MemoryRouter>);
-    expect(screen.getByRole('heading', { name: /platform/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: PLATFORM_NAME })).toBeInTheDocument();
   });
 
   it('renders without crashing when apps list is empty', () => {

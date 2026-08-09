@@ -1,15 +1,11 @@
 # ─────────────────────────────────────────────────────────────────
-#  Carbon Data Trust Platform — CI
+#  Carbon Data Trust Platform — CI/CD Pipeline
 #
-#  Deploy is pull-based: VPS polls for new tags every 2 min.
-#  See deploy/carbon/setup-auto-deploy.sh for VPS setup.
-#
-#  Workflow:
-#    git tag v1.0.0 && git push && git push --tags
-#    → CI runs here, VPS auto-deploys within 2 min
+#  On main push / PR: backend pytest + frontend build + E2E
+#  On v* tag push:  all of above → deploy to VPS on success
 # ─────────────────────────────────────────────────────────────────
 
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -171,3 +167,71 @@ jobs:
         env:
           VITE_API_BASE_URL: http://127.0.0.1:8000/carbon-api/
         run: npx playwright test --reporter=list
+
+  # ── Deploy to VPS (tag push only, after CI passes) ───────────
+  deploy:
+    needs: [backend, frontend, e2e]
+    if: ${{ success() && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            TAG="${{ github.ref_name }}"
+            echo "=== Deploying $TAG ==="
+
+            cd /srv/carbon
+            git fetch origin --tags --force
+            git checkout -f "$TAG"
+
+            # Backend
+            cd /srv/carbon/backend
+            docker build -t carbon-backend:latest .
+            docker stop carbon-backend 2>/dev/null || true
+            docker rm carbon-backend 2>/dev/null || true
+            docker run -d \
+              --name carbon-backend \
+              --restart unless-stopped \
+              -p 127.0.0.1:8006:8000 \
+              --add-host host.docker.internal:host-gateway \
+              --env-file .env.carbon \
+              -v carbon_static:/static \
+              -v carbon_media:/media \
+              -v carbon_uploads:/app/dataschema_uploads \
+              -v carbon_evidence:/app/evidence \
+              carbon-backend:latest
+
+            # Frontend
+            cd /srv/carbon/carbon-frontend
+            cat > .env.production <<'FRONTENV'
+            VITE_API_BASE_URL=/carbon-api/
+            FRONTENV
+            npm ci --silent
+            npm run build
+
+            # Nginx
+            sudo nginx -t && sudo systemctl reload nginx
+
+            # Health check
+            for i in $(seq 1 15); do
+              if curl -sf http://127.0.0.1:8006/carbon-api/health/ >/dev/null 2>&1; then
+                echo "=== Health OK ==="
+                break
+              fi
+              sleep 2
+            done
+
+            # Prune old images
+            docker image prune -f --filter "until=24h"
+
+            echo "=== Deployed $TAG successfully ==="
