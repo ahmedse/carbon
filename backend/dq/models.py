@@ -113,3 +113,81 @@ class DQProfileConfig(models.Model):
 
     def __str__(self):
         return 'DQ Profile Config'
+
+
+# ── Phase 1.8: Freshness & Schema Monitoring ──────────────────────────────
+
+class FreshnessCheck(models.Model):
+    """Per-table freshness tracking — is data within the expected age window?"""
+    data_table = models.ForeignKey(DataTable, on_delete=models.CASCADE, related_name='freshness_checks')
+    expected_max_age_hours = models.PositiveIntegerField(default=24,
+        help_text='Maximum age of data before it is considered stale')
+    last_data_timestamp = models.DateTimeField(null=True, blank=True,
+        help_text='Timestamp of the newest row in this table')
+    is_fresh = models.BooleanField(default=True)
+    checked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-checked_at']
+        indexes = [
+            models.Index(fields=['data_table', '-checked_at']),
+            models.Index(fields=['is_fresh', '-checked_at']),
+        ]
+
+    def __str__(self):
+        status = 'fresh' if self.is_fresh else 'stale'
+        return f'{self.data_table.name} — {status} @ {self.checked_at:%Y-%m-%d %H:%M}'
+
+
+class SchemaSnapshot(models.Model):
+    """Snapshot of a table's column schema at a point in time."""
+    data_table = models.ForeignKey(DataTable, on_delete=models.CASCADE, related_name='schema_snapshots')
+    column_schema = models.JSONField(
+        help_text='{field_name: {type, is_nullable, position}} per column'
+    )
+    row_count = models.PositiveIntegerField(default=0)
+    snapshot_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-snapshot_at']
+        indexes = [
+            models.Index(fields=['data_table', '-snapshot_at']),
+        ]
+
+    def __str__(self):
+        cols = len(self.column_schema) if isinstance(self.column_schema, dict) else 0
+        return f'{self.data_table.name} — {cols} columns @ {self.snapshot_at:%Y-%m-%d %H:%M}'
+
+
+class SchemaChange(models.Model):
+    """Detected change between two schema snapshots."""
+    CHANGE_TYPES = [
+        ('added', 'Column Added'),
+        ('dropped', 'Column Dropped'),
+        ('modified', 'Column Modified'),
+    ]
+
+    data_table = models.ForeignKey(DataTable, on_delete=models.CASCADE, related_name='schema_changes')
+    snapshot_from = models.ForeignKey(
+        SchemaSnapshot, on_delete=models.SET_NULL, null=True, blank=True, related_name='changes_from'
+    )
+    snapshot_to = models.ForeignKey(
+        SchemaSnapshot, on_delete=models.SET_NULL, null=True, blank=True, related_name='changes_to'
+    )
+    change_type = models.CharField(max_length=10, choices=CHANGE_TYPES)
+    field_name = models.CharField(max_length=255)
+    old_definition = models.JSONField(null=True, blank=True,
+        help_text='Old column definition (or None if added)')
+    new_definition = models.JSONField(null=True, blank=True,
+        help_text='New column definition (or None if dropped)')
+    detected_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-detected_at']
+        indexes = [
+            models.Index(fields=['data_table', '-detected_at']),
+            models.Index(fields=['change_type', '-detected_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.data_table.name}: {self.get_change_type_display()} {self.field_name} @ {self.detected_at:%Y-%m-%d %H:%M}'

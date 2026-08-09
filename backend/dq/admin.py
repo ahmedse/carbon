@@ -1,6 +1,9 @@
 # dq/admin.py
 from django.contrib import admin
-from .models import TableProfile, FieldProfile, DQRule, DQResult, DQProfileConfig
+from .models import (
+    TableProfile, FieldProfile, DQRule, DQResult, DQProfileConfig,
+    FreshnessCheck, SchemaSnapshot, SchemaChange,
+)
 from .services import profile_table
 
 
@@ -59,3 +62,41 @@ class DQResultAdmin(admin.ModelAdmin):
     list_display = ('rule', 'passed', 'checked_count', 'failed_count', 'run_at')
     list_filter = ('passed', 'run_at')
     readonly_fields = ['run_at', 'passed', 'score']
+
+
+@admin.register(FreshnessCheck)
+class FreshnessCheckAdmin(admin.ModelAdmin):
+    list_display = ('data_table', 'is_fresh', 'expected_max_age_hours',
+                    'last_data_timestamp', 'checked_at')
+    list_filter = ('is_fresh', 'checked_at')
+    search_fields = ['data_table__name']
+    readonly_fields = [f.name for f in FreshnessCheck._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(SchemaSnapshot)
+class SchemaSnapshotAdmin(admin.ModelAdmin):
+    list_display = ('data_table', 'col_count', 'row_count', 'snapshot_at')
+    list_filter = ('snapshot_at',)
+    search_fields = ['data_table__name']
+    readonly_fields = [f.name for f in SchemaSnapshot._meta.fields]
+
+    @admin.display(description='Columns')
+    def col_count(self, obj):
+        return len(obj.column_schema) if isinstance(obj.column_schema, dict) else 0
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(SchemaChange)
+class SchemaChangeAdmin(admin.ModelAdmin):
+    list_display = ('data_table', 'change_type', 'field_name', 'detected_at')
+    list_filter = ('change_type', 'detected_at')
+    search_fields = ['data_table__name', 'field_name']
+    readonly_fields = [f.name for f in SchemaChange._meta.fields]
+
+    def has_add_permission(self, request):
+        return False

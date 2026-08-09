@@ -420,6 +420,8 @@ class NotificationRule(models.Model):
         IMPORT_COMPLETE = 'import_complete', 'Import Complete'
         IMPORT_FAILURE = 'import_failure', 'Import Failure'
         SYSTEM_ALERT = 'system_alert', 'System Alert'
+        FRESHNESS_VIOLATION = 'freshness_violation', 'Data Freshness Violation'
+        SCHEMA_CHANGE = 'schema_change', 'Schema Change Detected'
 
     class Severity(models.TextChoices):
         INFO = 'info', 'Info'
@@ -479,6 +481,8 @@ def notify_event(event_type, title, body, severity='warning', link='', category=
         'import_complete': UserAlert.Category.IMPORT,
         'import_failure': UserAlert.Category.IMPORT,
         'system_alert': UserAlert.Category.SYSTEM,
+        'freshness_violation': UserAlert.Category.DQ_VIOLATION,
+        'schema_change': UserAlert.Category.SYSTEM,
     }
     notif_category = category or category_map.get(event_type, UserAlert.Category.OTHER)
 
