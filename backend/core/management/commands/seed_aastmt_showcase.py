@@ -388,25 +388,6 @@ VESSEL_DATA = [
     (date(2025,4,1), 'MV Aida 4', 11800, 80, 'Alexandria'),
 ]
 
-# ── DQ Rules ─────────────────────────────────────────────────────────────────
-
-DQ_RULE_SPECS = [
-    # (table_name_key, scope, name, rule_type, params, severity, field_name)
-    # Electricity table
-    ('monthly_electricity', 'field', 'Consumption kWh Not Null', 'not_null', {}, 'error', 'consumption_kwh'),
-    ('monthly_electricity', 'field', 'Consumption Range 0-200k', 'range', {'min': 0, 'max': 200000}, 'warn', 'consumption_kwh'),
-    ('monthly_electricity', 'table', 'No Duplicate Period/Building', 'unique', {}, 'error', None),
-    # Water table
-    ('monthly_water', 'field', 'Water m3 Not Null', 'not_null', {}, 'error', 'consumption_m3'),
-    ('monthly_water', 'field', 'Water Consumption Range', 'range', {'min': 0, 'max': 2000}, 'warn', 'consumption_m3'),
-    # Fleet table
-    ('fleet_fuel_log', 'field', 'Fuel Liters Not Null', 'not_null', {}, 'error', 'gasoline_liters'),
-    ('fleet_fuel_log', 'field', 'Vehicle Count Range', 'range', {'min': 1, 'max': 200}, 'warn', 'vehicle_count'),
-    # Chilled Water
-    ('monthly_chilled_water', 'field', 'Chilled Water TR Not Null', 'not_null', {}, 'error', 'consumption_tr'),
-    ('monthly_chilled_water', 'field', 'TR Range Check', 'range', {'min': 0, 'max': 200000}, 'info', 'consumption_tr'),
-]
-
 # ── Governance Policies ──────────────────────────────────────────────────────
 
 POLICY_SPECS = [
@@ -475,8 +456,8 @@ class Command(BaseCommand):
         # ── Phase 10: Run Calculations ──
         self._run_calculations()
 
-        # ── Phase 11: DQ Rules & Results ──
-        self._seed_dq_rules()
+        # ── Phase 11: DQ Table Profiles ──
+        self._profile_tables()
 
         # ── Phase 12: Catalog & Governance ──
         self._seed_catalog_governance()
@@ -909,54 +890,21 @@ class Command(BaseCommand):
 
         self.stdout.write(f"  {calc_count} calculations created with audit trail.")
 
-    def _seed_dq_rules(self):
-        self.stdout.write("\n[11/13] Seeding DQ rules & running results...")
-        rules_created = 0
-        results_created = 0
+    def _profile_tables(self):
+        self.stdout.write("\n[11/13] Profiling tables for DQ...")
+        from dq.services import profile_table
 
-        for tbl_name, scope, rule_name, rule_type, params, severity, field_name in DQ_RULE_SPECS:
-            tbl = self._table_cache.get(tbl_name)
-            if not tbl:
-                continue
-            field = self._get_field(tbl, field_name) if field_name else None
+        profiled = 0
+        for tbl_name, tbl in self._table_cache.items():
+            try:
+                profile_table(tbl.id)
+                profiled += 1
+            except Exception as exc:
+                self.stdout.write(self.style.WARNING(
+                    f"  SKIP profiling '{tbl_name}': {exc}"
+                ))
 
-            rule, _ = DQRule.objects.get_or_create(
-                name=rule_name, data_table=tbl,
-                defaults={
-                    'scope': scope, 'rule_type': rule_type, 'params': params,
-                    'severity': severity, 'data_field': field, 'is_active': True,
-                },
-            )
-            rules_created += 1
-
-            # Run a dummy DQ result for each rule
-            rows = DataRow.objects.filter(data_table=tbl)
-            total = rows.count()
-            failed = 0
-
-            # Artificially create mixed results: ~20% of rules fail
-            import random
-            if rule_name == 'No Duplicate Period/Building':
-                failed = 2  # Some duplicates
-            elif 'Range' in rule_name and total > 0:
-                failed = max(1, int(total * 0.1))
-            elif rule_type == 'not_null' and total > 0:
-                failed = max(0, int(total * 0.05))
-
-            passed = failed == 0
-            score = 100 if passed else max(50, 100 - int((failed / max(total, 1)) * 100))
-            sample_failures = []
-            if failed > 0:
-                sample_rows = list(rows[:failed])
-                sample_failures = [{'row_id': r.id, 'reason': f'Sample failure for {rule_name}'} for r in sample_rows]
-
-            DQResult.objects.create(
-                rule=rule, passed=passed, checked_count=total,
-                failed_count=failed, score=score, sample_failures=sample_failures,
-            )
-            results_created += 1
-
-        self.stdout.write(f"  {rules_created} DQ rules, {results_created} results (mixed pass/fail).")
+        self.stdout.write(f"  {profiled} tables profiled.")
 
     def _seed_catalog_governance(self):
         self.stdout.write("\n[12/13] Seeding catalog & governance...")
