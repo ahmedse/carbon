@@ -120,3 +120,11 @@ class DQResultSerializer(serializers.ModelSerializer):
             'checked_count', 'failed_count', 'sample_failures', 'score'
         ]
         read_only_fields = ['id', 'run_at']
+
+
+class DQSuggestResponseSerializer(serializers.Serializer):
+    """Serializer for DQ suggest API response."""
+    table_id = serializers.IntegerField()
+    status = serializers.CharField()
+    suggestions = serializers.ListField(child=serializers.DictField())
+    error = serializers.DictField(required=False)

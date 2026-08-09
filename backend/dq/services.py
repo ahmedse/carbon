@@ -440,6 +440,100 @@ def _evaluate_nl_check(rule, rows):
     return False, checked, failed_count, failures, score
 
 
+def suggest_rules_for_table(table_id: int) -> dict:
+    """Build a table profile payload and send it to Pulse for rule suggestions.
+
+    If no current TableProfile exists, run profile_table() first.
+
+    Returns:
+        {
+            'table_id': int,
+            'status': 'completed' | 'pulse_unavailable',
+            'suggestions': [ {prompt, rationale, suggested_severity, confidence} ],
+            'error': None | {...}
+        }
+    """
+    from pulse_gateway import PulseGateway
+
+    table = DataTable.objects.get(id=table_id)
+
+    # Get or create profile
+    tp = TableProfile.objects.filter(data_table=table).order_by('-profiled_at').first()
+    if not tp:
+        logger.info(f'No profile for table {table_id} — profiling now')
+        profile_table(table_id)
+        tp = TableProfile.objects.filter(data_table=table).order_by('-profiled_at').first()
+        if not tp:
+            return {
+                'table_id': table_id,
+                'status': 'pulse_unavailable',
+                'suggestions': [],
+                'error': {
+                    'code': 'no_profile',
+                    'message': 'Could not profile table — table may have no rows',
+                },
+            }
+
+    # Build field summaries from FieldProfile records
+    field_profiles = FieldProfile.objects.filter(
+        data_field__data_table=table,
+    ).select_related('data_field')
+
+    fields_payload = []
+    for fp in field_profiles:
+        field_entry = {
+            'name': fp.data_field.name,
+            'type': fp.data_field.type,
+            'distinct_count': fp.distinct_count,
+            'completeness_pct': fp.completeness_pct,
+        }
+        # Add numeric stats if available
+        if fp.min_value:
+            field_entry['min'] = fp.min_value
+        if fp.max_value:
+            field_entry['max'] = fp.max_value
+        if fp.mean_value is not None:
+            field_entry['mean'] = round(fp.mean_value, 2)
+        if fp.top_values:
+            field_entry['top_values'] = fp.top_values[:3]
+
+        # Compute approximate stddev from range
+        if 'min' in field_entry and 'max' in field_entry:
+            try:
+                rng = float(field_entry['max']) - float(field_entry['min'])
+                field_entry['stddev'] = round(rng / 4, 2)
+            except (ValueError, TypeError):
+                pass
+
+        fields_payload.append(field_entry)
+
+    table_payload = {
+        'name': table.name,
+        'description': table.title or table.name,
+        'row_count': tp.row_count,
+        'fields': fields_payload,
+    }
+
+    gateway = PulseGateway()
+    response = gateway.suggest_dq_rules(table_payload)
+
+    if response.get('status') == 'pulse_unavailable':
+        return {
+            'table_id': table_id,
+            'status': 'pulse_unavailable',
+            'suggestions': [],
+            'error': response.get('error'),
+        }
+
+    suggestions = response.get('result', {}).get('suggestions', [])
+    return {
+        'table_id': table_id,
+        'status': 'completed',
+        'suggestions': suggestions,
+        'error': None,
+    }
+
+
 def _compute_quality(table):
     """Compute quality_status and quality_score from latest DQResult for each active rule."""
     rules = list(DQRule.objects.filter(

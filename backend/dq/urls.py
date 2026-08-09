@@ -5,6 +5,7 @@ from .views import (
     FieldProfileViewSet, TableProfileViewSet, DQRuleViewSet, DQResultViewSet,
     ProfileTriggerView, BulkProfileView, DQRunView,
     DQMetricsView, TableDQMetricsView, FieldDQMetricsView, RunDQValidationView,
+    DQSuggestView,
 )
 from .config_views import DQProfileConfigView
 
@@ -23,5 +24,6 @@ urlpatterns = [
     path('metrics/table/<int:table_id>/', TableDQMetricsView.as_view(), name='dq-metrics-table'),
     path('metrics/field/<int:field_id>/', FieldDQMetricsView.as_view(), name='dq-metrics-field'),
     path('run-validation/', RunDQValidationView.as_view(), name='dq-run-validation'),
+    path('suggest/', DQSuggestView.as_view(), name='dq-suggest'),
 ]
 urlpatterns += router.urls

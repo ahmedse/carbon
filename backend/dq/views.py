@@ -774,4 +774,77 @@ class RunDQValidationView(APIView):
             return Response({'status': 'error', 'message': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# ---------------------------------------------------------------------------
+# AI-suggested DQ rules via Pulse
+# ---------------------------------------------------------------------------
+
+class DQSuggestView(APIView):
+    """POST /carbon-api/dq/suggest/ — Get AI-suggested DQ rules for a table."""
+    permission_classes = [AdminOrSuperuserOnly]
+
+    @swagger_auto_schema(
+        operation_description=(
+            'Ask Pulse AI to suggest NL-based DQ rules for a table, '
+            'using its current profile (field statistics, distributions). '
+            'Returns a list of suggestions with prompts, rationale, severity, and confidence.'
+        ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'data_table_id': openapi.Schema(
+                    type=openapi.TYPE_INTEGER,
+                    description='ID of the DataTable to suggest rules for',
+                ),
+            },
+            required=['data_table_id'],
+        ),
+        responses={
+            200: openapi.Response(description='Suggestions with prompts and rationale'),
+            400: 'data_table_id is required',
+            404: 'Table not found',
+        },
+    )
+    def post(self, request):
+        table_id = request.data.get('data_table_id')
+        if not table_id:
+            return Response(
+                {'error': 'data_table_id is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            table = DataTable.objects.get(id=table_id)
+        except DataTable.DoesNotExist:
+            return Response(
+                {'error': f'Table {table_id} not found'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        _check_table_access(request.user, table)
+
+        from dq.services import suggest_rules_for_table
+
+        try:
+            result = suggest_rules_for_table(table_id)
+        except Exception as exc:
+            logger.error('Suggest failed for table %s: %s', table_id, exc)
+            return Response(
+                {'error': 'Suggest failed', 'detail': str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if result['status'] == 'pulse_unavailable':
+            return Response(
+                {
+                    'table_id': table_id,
+                    'status': 'pulse_unavailable',
+                    'suggestions': [],
+                    'message': 'Pulse AI is currently unavailable. Please try again later.',
+                },
+                status=status.HTTP_200_OK,  # 200 not 503 — soft failure
+            )
+
+        return Response(result)
+
+
 

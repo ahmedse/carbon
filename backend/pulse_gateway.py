@@ -96,6 +96,81 @@ class PulseGateway:
                 },
             }
 
+    # ── dq.suggest ──────────────────────────────────────────────────────
+
+    def suggest_dq_rules(self, table_profile: dict) -> dict:
+        """Submit dq.suggest task. Async — 60s timeout.
+
+        Args:
+            table_profile: dict with keys name, description, row_count, fields
+                           fields is list of {name, type, distinct_count, min, max, mean, stddev}
+
+        Returns:
+            Pulse response dict or {'status': 'pulse_unavailable', ...}
+        """
+        task_id = str(uuid.uuid4())
+        payload = {
+            'auth': {
+                'instance_id': 'carbon',
+                'api_key': self.api_key,
+            },
+            'task': {
+                'id': task_id,
+                'type': 'dq.suggest',
+                'payload': {'table': table_profile},
+            },
+        }
+
+        try:
+            resp = requests.post(
+                f'{self.base_url}/tasks',
+                json=payload,
+                timeout=60,  # async — Pulse may need time for LLM generation
+                headers={'Content-Type': 'application/json'},
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        except requests.Timeout:
+            logger.warning('Pulse suggest timeout for task %s', task_id)
+            return {
+                'status': 'pulse_unavailable',
+                'error': {
+                    'code': 'timeout',
+                    'message': 'Pulse suggest request timed out after 60s',
+                },
+            }
+
+        except requests.ConnectionError as exc:
+            logger.warning('Pulse unreachable for suggest: %s', exc)
+            return {
+                'status': 'pulse_unavailable',
+                'error': {
+                    'code': 'unreachable',
+                    'message': f'Pulse at {self.base_url} is unreachable',
+                },
+            }
+
+        except requests.RequestException as exc:
+            logger.error('Pulse suggest request failed for task %s: %s', task_id, exc)
+            return {
+                'status': 'pulse_unavailable',
+                'error': {
+                    'code': 'request_failed',
+                    'message': str(exc),
+                },
+            }
+
+        except Exception as exc:
+            logger.error('Pulse suggest failed for task %s: %s', task_id, exc)
+            return {
+                'status': 'pulse_unavailable',
+                'error': {
+                    'code': 'unexpected',
+                    'message': str(exc),
+                },
+            }
+
     # ── Payload Construction ─────────────────────────────────────────────
 
     def _build_dq_validate_payload(self, task_id: str, rules: list, rows: list, context: dict = None) -> dict:
