@@ -2,7 +2,7 @@
 # DRF views for users, scoped roles, and audit logs.
 
 from rest_framework import status, viewsets
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated, IsAdminUser
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from django.contrib.auth.models import Group
@@ -578,5 +578,23 @@ def capability_matrix(request):
         "inheritance": inheritance,
         "domains": sorted(domains_dict.values(), key=lambda d: d["domain"]),
     })
+
+
+# ── Phase 1.1: Email Test Endpoint ──────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def email_test(request):
+    """POST /email/test/ — Send a test email to verify email configuration.
+    Body: {"to": "admin@example.com"}
+    """
+    to_email = request.data.get('to', '').strip()
+    if not to_email:
+        return Response({'success': False, 'error': 'Missing "to" field'}, status=400)
+
+    from .email_config import send_test_email
+    result = send_test_email(to_email)
+    status_code = 200 if result['success'] else 500
+    return Response(result, status=status_code)
 
     

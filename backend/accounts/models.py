@@ -126,3 +126,109 @@ SYSTEM_ROLES = {
     "audit": "audit",
     "dataowner": "dataowner",
 }
+
+
+# ── Phase 1.1: Enterprise Configuration Models ──────────────────────────────
+
+class EmailConfig(models.Model):
+    """Singleton — SMTP / Anymail email backend configuration.
+    Admin-configurable — no .env edits or redeploy needed.
+    """
+
+    BACKEND_CHOICES = [
+        ('anymail.backends.brevo.EmailBackend', 'Brevo (Sendinblue)'),
+        ('anymail.backends.sendgrid.EmailBackend', 'SendGrid'),
+        ('anymail.backends.mailgun.EmailBackend', 'Mailgun'),
+        ('anymail.backends.amazon_ses.EmailBackend', 'Amazon SES'),
+        ('anymail.backends.resend.EmailBackend', 'Resend'),
+        ('django.core.mail.backends.smtp.EmailBackend', 'Generic SMTP'),
+        ('django.core.mail.backends.console.EmailBackend', 'Console (dev only)'),
+    ]
+
+    backend = models.CharField(
+        max_length=100, choices=BACKEND_CHOICES,
+        default='django.core.mail.backends.console.EmailBackend',
+        help_text='Email backend provider'
+    )
+    host = models.CharField(max_length=255, blank=True, default='', help_text='SMTP host')
+    port = models.IntegerField(default=587, help_text='SMTP port (587 TLS, 465 SSL, 25)')
+    username = models.CharField(max_length=255, blank=True, default='', help_text='SMTP username or API key')
+    password = models.CharField(max_length=255, blank=True, default='', help_text='SMTP password or API key')
+    use_tls = models.BooleanField(default=True, help_text='Use STARTTLS')
+    use_ssl = models.BooleanField(default=False, help_text='Use SSL (port 465)')
+    from_email = models.EmailField(max_length=255, default='noreply@carbon.clearturn.tech', help_text='Default From: address')
+    from_name = models.CharField(max_length=100, blank=True, default='Carbon Data Trust', help_text='Display name for From: header')
+    enabled = models.BooleanField(default=True, help_text='Enable outgoing email')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Email Configuration'
+        verbose_name_plural = 'Email Configuration'
+
+    def __str__(self):
+        return f"Email Config ({'enabled' if self.enabled else 'disabled'})"
+
+    def save(self, *args, **kwargs):
+        """Enforce singleton — only one row allowed."""
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        """Return the singleton config, creating defaults if needed."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def as_django_settings(self) -> dict:
+        """Return a dict suitable for assigning to Django's email settings."""
+        return {
+            'EMAIL_BACKEND': self.backend,
+            'EMAIL_HOST': self.host,
+            'EMAIL_PORT': self.port,
+            'EMAIL_HOST_USER': self.username,
+            'EMAIL_HOST_PASSWORD': self.password,
+            'EMAIL_USE_TLS': self.use_tls,
+            'EMAIL_USE_SSL': self.use_ssl,
+            'DEFAULT_FROM_EMAIL': f'{self.from_name} <{self.from_email}>' if self.from_name else self.from_email,
+            # Anymail API keys
+            'ANYMAIL': {
+                'SENDINBLUE_API_KEY': self.password if 'brevo' in self.backend else '',
+                'SENDGRID_API_KEY': self.password if 'sendgrid' in self.backend else '',
+                'MAILGUN_API_KEY': self.password if 'mailgun' in self.backend else '',
+                'AMAZON_SES_ACCESS_KEY_ID': self.username if 'amazon_ses' in self.backend else '',
+                'AMAZON_SES_SECRET_ACCESS_KEY': self.password if 'amazon_ses' in self.backend else '',
+                'RESEND_API_KEY': self.password if 'resend' in self.backend else '',
+            },
+        }
+
+
+class PasswordPolicy(models.Model):
+    """Singleton — configurable password policy for the platform."""
+
+    min_length = models.IntegerField(default=12, help_text='Minimum password length')
+    require_uppercase = models.BooleanField(default=True, help_text='Require at least one uppercase letter')
+    require_lowercase = models.BooleanField(default=True, help_text='Require at least one lowercase letter')
+    require_number = models.BooleanField(default=True, help_text='Require at least one digit')
+    require_special = models.BooleanField(default=True, help_text='Require at least one special character')
+    max_age_days = models.IntegerField(default=90, help_text='Force password change after N days (0 = never)')
+    prevent_reuse_n = models.IntegerField(default=5, help_text='Prevent reuse of last N passwords (0 = unlimited)')
+    lockout_after_n = models.IntegerField(default=5, help_text='Lock account after N failed attempts (0 = never)')
+    lockout_minutes = models.IntegerField(default=15, help_text='Auto-unlock after N minutes')
+    password_reset_timeout_hours = models.IntegerField(default=24, help_text='Reset token expiry in hours')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Password Policy'
+        verbose_name_plural = 'Password Policy'
+
+    def __str__(self):
+        return f"Password Policy (min {self.min_length} chars, {self.max_age_days}d expiry)"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

@@ -33,6 +33,9 @@ pytest-cov==7.1.0
 # HTTP Client
 requests==2.34.2                      # HTTP requests (pulse_auth, external APIs)
 
+# Email
+django-anymail==12.0                  # Multi-provider email backend (Brevo/SendGrid/Mailgun)
+
 # Cache
 redis==5.0.1                          # Memory cache / message broker
 

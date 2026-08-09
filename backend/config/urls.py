@@ -3,6 +3,7 @@
 
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.auth import views as auth_views
 from django.urls import path, include
 from django.http import JsonResponse
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -28,6 +29,37 @@ urlpatterns = [
     # JWT Auth endpoints under API prefix
     path(f'{api_prefix}/token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path(f'{api_prefix}/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+
+    # Phase 1.1: Password Reset (Django auth views — API-style)
+    path(
+        f'{api_prefix}/password-reset/',
+        auth_views.PasswordResetView.as_view(
+            email_template_name='accounts/password_reset_email.html',
+            subject_template_name='accounts/password_reset_subject.txt',
+            html_email_template_name='accounts/password_reset_email.html',
+        ),
+        name='password_reset',
+    ),
+    path(
+        f'{api_prefix}/password-reset/done/',
+        auth_views.PasswordResetDoneView.as_view(),
+        name='password_reset_done',
+    ),
+    path(
+        f'{api_prefix}/password-reset/<uidb64>/<token>/',
+        auth_views.PasswordResetConfirmView.as_view(
+            template_name='accounts/password_reset_confirm.html',
+        ),
+        name='password_reset_confirm',
+    ),
+    path(
+        f'{api_prefix}/password-reset/complete/',
+        auth_views.PasswordResetCompleteView.as_view(),
+        name='password_reset_complete',
+    ),
+
+    # Phase 1.1: Email test endpoint (admin diagnostic)
+    path(f'{api_prefix}/email/test/', include('accounts.email_urls')),
 
     # App endpoints under API prefix
     path(f'{api_prefix}/accounts/', include('accounts.urls')),

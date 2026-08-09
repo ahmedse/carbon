@@ -155,6 +155,10 @@ INSTALLED_APPS = [
     'drf_yasg',
 ]
 
+# Phase 1.1 — Dynamic email config from DB (defaults to console)
+# See accounts/email_config.py for runtime override from EmailConfig model.
+INSTALLED_APPS.insert(0, 'anymail')
+
 if IS_DEVELOPMENT:
     INSTALLED_APPS += ['debug_toolbar', 'silk', 'simulation']
 
@@ -363,7 +367,16 @@ if SECURE_SSL_REDIRECT:
 # Trust the X-Forwarded-Proto header from nginx (SSL terminated at reverse proxy)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-# Logging
+# ── Phase 1.1: Email defaults (overridden at runtime by EmailConfig model) ─
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'Carbon Data Trust <noreply@carbon.clearturn.tech>'
+EMAIL_SUBJECT_PREFIX = '[Carbon] '
+ANYMAIL = {}
+
+# Password reset — token expiry read from PasswordPolicy at runtime
+PASSWORD_RESET_TIMEOUT = 86400  # 24 hours (overridden by PasswordPolicy.load())
+
+# ── Logging ────────────────────────────────────────────────────────────────
 from pythonjsonlogger import jsonlogger
 
 # Ensure logs directory exists
