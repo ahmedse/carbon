@@ -18,7 +18,6 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import SecurityIcon from '@mui/icons-material/Security';
-import LayersIcon from '@mui/icons-material/Layers';
 import LabelIcon from '@mui/icons-material/Label';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
@@ -321,11 +320,6 @@ const ROUTE_CONFIG = {
   '/catalog/tags': {
     label: 'Tags',
     icon: LabelIcon,
-    parent: '/catalog',
-  },
-  '/catalog/reference-data': {
-    label: 'Reference Data',
-    icon: LayersIcon,
     parent: '/catalog',
   },
   '/catalog/mdm': {

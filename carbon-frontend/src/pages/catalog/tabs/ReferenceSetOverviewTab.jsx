@@ -4,6 +4,10 @@
 import React from 'react';
 import { Box, Table, TableBody, TableRow, TableCell, Typography, Chip } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
+import {
+  LIFECYCLE_COLORS,
+  LIFECYCLE_LABELS,
+} from '../../../constants/referenceSetLifecycle';
 
 export default function ReferenceSetOverviewTab({ entityData }) {
   if (!entityData) {
@@ -23,16 +27,28 @@ export default function ReferenceSetOverviewTab({ entityData }) {
   ];
 
   // Governance attributes
+  const lifecycleState = entityData.lifecycle_state || 'draft';
   const governanceAttributes = [
     { label: 'Domain', value: entityData.domain_name || '—' },
     { label: 'Steward', value: entityData.steward_name || '—' },
-    { 
-      label: 'Status', 
+    {
+      label: 'Lifecycle',
+      value: (
+        <Chip
+          label={LIFECYCLE_LABELS[lifecycleState] || lifecycleState}
+          size="small"
+          color={LIFECYCLE_COLORS[lifecycleState] || 'default'}
+          variant={lifecycleState === 'active' ? 'filled' : 'outlined'}
+        />
+      ),
+    },
+    {
+      label: 'Status',
       value: entityData.is_active ? (
         <Chip label="Active" color="success" size="small" />
       ) : (
         <Chip label="Inactive" color="default" size="small" variant="outlined" />
-      )
+      ),
     },
     { label: 'Version', value: entityData.version || '1' },
   ];

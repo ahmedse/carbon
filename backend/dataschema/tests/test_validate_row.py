@@ -110,11 +110,11 @@ class ValidateRowUnitTests(TestCase):
         assert errors[0]['code'] == 'invalid_type'
 
     def test_number_negative(self):
+        """Negative numbers are no longer banned at platform level; use DQ range rules."""
         table = self._make_table()
         fields = [self._make_field(table, name='kwh', type='number')]
         errors = validate_row({'kwh': -5}, fields)
-        assert len(errors) == 1
-        assert errors[0]['code'] == 'negative'
+        assert errors == []
 
     def test_number_zero_allowed(self):
         table = self._make_table()
@@ -340,23 +340,22 @@ class ValidateRowUnitTests(TestCase):
                              options=[{'value': 'red'}]),
         ]
         errors = validate_row({'kwh': -5, 'color': 'blue'}, fields, strict=True)
-        # kwh=-5 triggers both 'negative' (-5 < 0) and 'below_min' (-5 < 0 min)
-        # color='blue' triggers 'not_allowed' = 3 total
-        assert len(errors) == 3
+        # kwh=-5 with min=0 triggers 'below_min'; color='blue' triggers 'not_allowed' = 2 total
+        assert len(errors) == 2
         codes = {e['code'] for e in errors}
-        assert codes == {'negative', 'below_min', 'not_allowed'}
+        assert codes == {'below_min', 'not_allowed'}
 
     def test_non_strict_returns_first_only(self):
         table = self._make_table()
-        # A field with multiple errors: number negative AND below min
+        # A field below its min value
         fields = [
             self._make_field(table, name='kwh', type='number', required=True,
                              validation={'min': 10, 'max': 100}),
         ]
         errors = validate_row({'kwh': -5}, fields, strict=False)
         assert len(errors) == 1
-        # First error for kwh should be 'negative' (checked before min/max)
-        assert errors[0]['code'] == 'negative'
+        # First error for kwh is 'below_min' (negative ban removed)
+        assert errors[0]['code'] == 'below_min'
 
     # ── Edge cases ──────────────────────────────────────────────────
 

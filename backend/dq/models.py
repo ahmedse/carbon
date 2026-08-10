@@ -1,6 +1,7 @@
 # dq/models.py — Data Trust Core: Data Quality & Profiling.
 # domain-agnostic. MUST NOT import from emissions.
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from dataschema.models import DataTable, DataField
 
@@ -16,6 +17,17 @@ SEVERITY_CHOICES = [('info', 'Info'), ('warn', 'Warn'), ('error', 'Error')]
 RULE_LEVELS = [
     ('field_validation', 'Field Validation'),
     ('business_rule', 'Business Rule'),
+]
+
+DIMENSIONS = [
+    ('completeness', 'Completeness'),
+    ('validity', 'Validity'),
+    ('accuracy', 'Accuracy'),
+    ('consistency', 'Consistency'),
+    ('timeliness', 'Timeliness'),
+    ('uniqueness', 'Uniqueness'),
+    ('integrity', 'Integrity'),
+    ('reasonability', 'Reasonability'),
 ]
 
 
@@ -37,8 +49,11 @@ class DQRule(models.Model):
     """Standalone data quality rule. Assigned to fields via RuleFieldAssignment.
 
     Two levels:
-      - field_validation: checked at data entry time by validators.py
-      - business_rule:    runs independently via Pulse scheduler / services.py
+      - field_validation: enforced at write time by the gate (Phase 2)
+      - business_rule:    runs as jobs (Phase 3)
+
+    definition is the source of truth (v1 JSON). name, rule_level, rule_type,
+    severity, is_active, and dimension are denormalized from definition on save.
     """
     name = models.CharField(max_length=255)
     rule_level = models.CharField(max_length=20, choices=RULE_LEVELS, default='field_validation')
@@ -54,8 +69,50 @@ class DQRule(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # v2 fields — definition is the source of truth
+    dimension = models.CharField(
+        max_length=20, choices=DIMENSIONS, default='validity',
+        help_text='DAMA DMBOK2 data quality dimension',
+    )
+    definition = models.JSONField(
+        default=dict, blank=True,
+        help_text='Full v1 rule definition JSON (source of truth)',
+    )
+    version = models.IntegerField(default=1, help_text='Monotonic rule version')
+    archived = models.BooleanField(default=False, help_text='Soft-delete when results exist')
+
     class Meta:
         ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        """Validate definition and sync denormalized columns before saving."""
+        if self.definition:
+            from .rule_schema import validate_definition
+            errors = validate_definition(self.definition)
+            if errors:
+                raise ValidationError({'definition': errors})
+            # Sync denormalized columns from definition
+            d = self.definition
+            self.name = d.get('name', self.name)
+            self.rule_level = 'field' if d.get('level') == 'field' else \
+                              'field_validation' if d.get('level') == 'field_validation' else \
+                              'business_rule' if d.get('level') == 'business' else \
+                              self.rule_level
+            # Normalize level value — map 'field' → 'field_validation', 'business' → 'business_rule'
+            level = d.get('level')
+            if level == 'field':
+                self.rule_level = 'field_validation'
+            elif level == 'business':
+                self.rule_level = 'business_rule'
+            elif level in ('field_validation', 'business_rule'):
+                self.rule_level = level
+            self.rule_type = d.get('type', self.rule_type)
+            self.severity = d.get('severity', self.severity)
+            self.is_active = d.get('active', self.is_active)
+            self.dimension = d.get('dimension', self.dimension)
+            if d.get('description') and not self.description:
+                self.description = d['description']
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name or f'{self.rule_type} ({self.get_rule_level_display()})'
@@ -160,14 +217,10 @@ class DQResult(models.Model):
 
 class DQProfileConfig(models.Model):
     """Phase 1.7: Singleton — configuration for automated profiling & freshness monitoring."""
-    auto_profile_enabled = models.BooleanField(default=False,
-        help_text='When enabled, new/modified tables are profiled automatically')
     freshness_threshold_hours = models.PositiveIntegerField(default=24,
         help_text='Tables not profiled within this window are considered stale')
     volume_anomaly_pct = models.PositiveSmallIntegerField(default=25,
-        help_text='Row count change % that triggers a volume anomaly alert')
-    sample_size = models.PositiveIntegerField(default=1000,
-        help_text='Max rows sampled for top_values/distribution analysis')
+        help_text='Row count change % that triggers a volume anomaly alert (wired in DQ Phase 4)')
 
     class Meta:
         verbose_name = 'DQ Profile Config'
@@ -182,7 +235,7 @@ class FreshnessCheck(models.Model):
     """Per-table freshness tracking — is data within the expected age window?"""
     data_table = models.ForeignKey(DataTable, on_delete=models.CASCADE, related_name='freshness_checks')
     expected_max_age_hours = models.PositiveIntegerField(default=24,
-        help_text='Maximum age of data before it is considered stale')
+        help_text='Snapshot of the global threshold at check time; per-table thresholds not yet supported')
     last_data_timestamp = models.DateTimeField(null=True, blank=True,
         help_text='Timestamp of the newest row in this table')
     is_fresh = models.BooleanField(default=True)

@@ -303,6 +303,8 @@ export async function apiFetch(
       err.normalized = normalized;
       err.feedback = feedback;
       err.status = response.status;
+      // Attach raw payload so callers can map DRF field errors per-field.
+      err.data = responseData;
       throw err;
     }
 

@@ -42,6 +42,7 @@ export default function BaseDetailPage({
   onClose = () => {},
   storageKey = 'detailPage',
   entityData = null,
+  additionalProps = {},
 }) {
   const hasMetricsPanel = metricsTabs.length > 0 || Boolean(MetricsPanelComponent);
   const theme = useTheme();
@@ -202,7 +203,9 @@ export default function BaseDetailPage({
 
           {/* Main content */}
           <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'background.paper' }}>
-            {MainTabComponent && <MainTabComponent entityData={entityData} />}
+            {MainTabComponent && (
+              <MainTabComponent entityData={entityData} additionalProps={additionalProps} />
+            )}
           </Box>
         </Box>
 
@@ -281,7 +284,9 @@ export default function BaseDetailPage({
             {/* Metrics content */}
             {metricsPanelOpen && (
               <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'background.paper' }}>
-                {MetricsTabComponent && <MetricsTabComponent entityData={entityData} />}
+                {MetricsTabComponent && (
+                  <MetricsTabComponent entityData={entityData} additionalProps={additionalProps} />
+                )}
               </Box>
             )}
           </Box>

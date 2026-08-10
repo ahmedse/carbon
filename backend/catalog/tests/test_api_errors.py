@@ -63,12 +63,16 @@ class APIErrorHandlingTests(APITestCase):
         table = DataTable.objects.create(title='DQ Error Table', name='dq_error_table', module=module)
         rule = DQRule.objects.create(
             name='Error Test Rule', rule_type='not_null',
-            data_table=table, is_active=True, created_by=self.admin,
+            is_active=True, created_by=self.admin,
         )
+        from dq.models import RuleFieldAssignment, DQResult
+        RuleFieldAssignment.objects.create(rule=rule, data_table=table)
+        # Rule with execution history → destroy is rejected
+        DQResult.objects.create(rule=rule, passed=True, checked_count=1, failed_count=0, score=100)
         self.client.force_authenticate(user=self.admin)
         api_prefix = settings.API_PREFIX.strip('/')
 
         response = self.client.delete(f'/{api_prefix}/dq/rules/{rule.id}/')
 
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
-        self.assertIn('Hard delete not supported', response.data['detail'])
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn('locked', response.data['detail'])

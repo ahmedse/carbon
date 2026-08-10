@@ -72,20 +72,6 @@ export function getTableProfiles(filters = {}, token) {
   return apiFetch(`dq/table-profiles/${qs ? `?${qs}` : ''}`, { token });
 }
 
-/**
- * Fetch field profiles
- */
-export function getFieldProfiles(filters = {}, token) {
-  const queryParams = new URLSearchParams();
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      queryParams.append(key, value);
-    }
-  });
-  const qs = queryParams.toString();
-  return apiFetch(`dq/field-profiles/${qs ? `?${qs}` : ''}`, { token });
-}
-
 // =====================================================================
 // DQ Rule CRUD — clean wrappers using relative endpoints + apiFetch.
 // apiFetch handles JWT validity/refresh; token is read from localStorage
@@ -147,20 +133,6 @@ export function runTableValidation(token, tableId) {
     method: 'POST',
     token,
     body: { data_table: tableId },
-  });
-}
-
-/**
- * Bulk execute multiple DQ rules by rule IDs or all active rules for a table.
- * POST /dq/rules/bulk-execute/
- * @param {string} token
- * @param {{ rule_ids?: number[], data_table_id?: number }} params
- */
-export function bulkExecuteRules(token, { rule_ids, data_table_id } = {}) {
-  return apiFetch('dq/rules/bulk-execute/', {
-    method: 'POST',
-    token,
-    body: { rule_ids, data_table_id },
   });
 }
 

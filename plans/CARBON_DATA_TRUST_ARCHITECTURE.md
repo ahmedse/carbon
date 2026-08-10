@@ -371,7 +371,7 @@ from dq.models import DQRule
 # Rule: Fuel consumption must be positive
 DQRule.objects.create(
     name="Positive Fuel Consumption",
-    rule_type="value_range",
+    rule_type="range",
     data_table=diesel_table,
     field_name="liters",
     params={"min": 0.01, "max": 10000},
@@ -381,10 +381,10 @@ DQRule.objects.create(
 # Rule: Scope 1 rows must have fuel type
 DQRule.objects.create(
     name="Scope 1 Fuel Type Required",
-    rule_type="completeness",
+    rule_type="not_null",
     data_table=diesel_table,
     field_name="fuel_type",
-    params={"threshold": 100},  # 100% complete
+    params={},
     severity="critical"
 )
 ```

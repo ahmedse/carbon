@@ -44,7 +44,11 @@ class ReferenceSetService:
         Add a new reference value to a reference set.
         Returns (serialized_data, created_bool) — the view decides the HTTP status.
         """
-        serializer = ReferenceValueSerializer(data=value_data)
+        # reference_set is a required serializer field for create; inject it so
+        # clients calling add_value don't have to repeat the set id in the body.
+        data = dict(value_data or {})
+        data.setdefault('reference_set', ref_set.id)
+        serializer = ReferenceValueSerializer(data=data)
         if serializer.is_valid():
             serializer.save(reference_set=ref_set)
             return serializer.data, True

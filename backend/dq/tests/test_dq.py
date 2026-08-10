@@ -6,7 +6,7 @@ from rest_framework import status
 
 from accounts.models import ScopedRole
 from dq.models import DQRule, DQResult, RuleTag, RuleFieldAssignment
-from dataschema.models import DataTable, DataField
+from dataschema.models import DataTable, DataField, DataRow
 from core.models import Module
 from mdm.models import OrgUnit
 
@@ -141,17 +141,39 @@ class DQRuleCRUDTestCase(TestCase):
         r = self.client.delete(f'{BASE}/rules/{rule.id}/')
         self.assertEqual(r.status_code, status.HTTP_204_NO_CONTENT)
 
-    def test_cannot_delete_locked_rule(self):
+    def test_delete_rule_with_results_archives_instead(self):
+        """DELETE on rule with results now archives (200) instead of rejecting (409)."""
         rule = DQRule.objects.create(
             name='Locked Rule', rule_level='field_validation',
-            rule_type='not_null', is_active=True
+            rule_type='not_null', is_active=True,
+            definition={'schema_version': 1, 'name': 'test', 'level': 'field',
+                        'dimension': 'validity', 'type': 'not_null', 'severity': 'error',
+                        'active': True, 'bindings': [{'table': 'test', 'field': 'test'}]},
         )
         _create_field_assignment(rule, data_field=self.data_field)
         DQResult.objects.create(rule=rule, passed=True, checked_count=10, failed_count=0, score=100)
         self.client.force_authenticate(self.admin_user)
         r = self.client.delete(f'{BASE}/rules/{rule.id}/')
-        self.assertEqual(r.status_code, status.HTTP_409_CONFLICT)
-        self.assertTrue(r.data['is_locked'])
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertTrue(r.data['archived'])
+        rule.refresh_from_db()
+        self.assertTrue(rule.archived)
+        self.assertFalse(rule.is_active)
+
+    def test_hard_delete_rule_without_results(self):
+        """DELETE on rule with zero results still hard-deletes."""
+        rule = DQRule.objects.create(
+            name='Clean Rule', rule_level='field_validation',
+            rule_type='not_null', is_active=True,
+            definition={'schema_version': 1, 'name': 'test', 'level': 'field',
+                        'dimension': 'validity', 'type': 'not_null', 'severity': 'error',
+                        'active': True, 'bindings': [{'table': 'test', 'field': 'test'}]},
+        )
+        _create_field_assignment(rule, data_field=self.data_field)
+        self.client.force_authenticate(self.admin_user)
+        r = self.client.delete(f'{BASE}/rules/{rule.id}/')
+        self.assertEqual(r.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(DQRule.objects.filter(id=rule.id).exists())
 
     def test_deactivate_locked_rule(self):
         rule = DQRule.objects.create(
@@ -315,6 +337,32 @@ class DQBulkExecuteTestCase(TestCase):
         r = self.client.post(f'{BASE}/rules/bulk-execute/', {'rule_ids': [1]}, format='json')
         self.assertEqual(r.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_bulk_execute_two_passing_rules(self):
+        """2 passing rules → summary shows 2 passed, 0 failed, len(results)==2."""
+        # Create data so rules have rows to evaluate
+        DataRow.objects.create(data_table=self.data_table, values={'amount': '100'})
+        DataRow.objects.create(data_table=self.data_table, values={'amount': '200'})
+
+        rule1 = DQRule.objects.create(
+            name='Bulk Pass 1', rule_level='field_validation',
+            rule_type='not_null', is_active=True)
+        _create_field_assignment(rule1, data_field=self.data_field)
+
+        rule2 = DQRule.objects.create(
+            name='Bulk Pass 2', rule_level='field_validation',
+            rule_type='range', is_active=True,
+            params={'min': 0, 'max': 1000})
+        _create_field_assignment(rule2, data_field=self.data_field)
+
+        self.client.force_authenticate(self.admin_user)
+        r = self.client.post(f'{BASE}/rules/bulk-execute/',
+                             {'rule_ids': [rule1.id, rule2.id]}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['total'], 2)
+        self.assertEqual(r.data['passed'], 2)
+        self.assertEqual(r.data['failed'], 0)
+        self.assertEqual(len(r.data['results']), 2)
+
 
 class RuleTagTestCase(TestCase):
     def setUp(self):
@@ -338,3 +386,59 @@ class RuleTagTestCase(TestCase):
         self.client.force_authenticate(self.admin_user)
         r = self.client.delete(f'{BASE}/tags/{tag.id}/')
         self.assertEqual(r.status_code, status.HTTP_204_NO_CONTENT)
+
+
+class DQMetricsRegressionTestCase(TestCase):
+    """P0 regression: metrics endpoints must return 200 and correct rule counts."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin_user = User.objects.create_user(
+            username='metrics_admin', password='admin', is_staff=True, is_superuser=True)
+        self.org_unit = OrgUnit.objects.create(
+            name='Metrics Org', slug='metrics-org', code='MTO', org_type='division')
+        self.data_module, _ = Module.objects.get_or_create(
+            name='MetricsModule', defaults={'scope': 1, 'org_unit': self.org_unit})
+        self.data_table = DataTable.objects.create(name='MetricsTable', module=self.data_module)
+        self.data_field = DataField.objects.create(
+            name='score', type='number', label='Score', data_table=self.data_table, required=True)
+
+    def test_table_metrics_200_with_rule_count(self):
+        """GET /dq/metrics/table/<id>/ returns 200 and correct active_rules count."""
+        rule = DQRule.objects.create(
+            name='Table Metric Rule', rule_level='field_validation',
+            rule_type='not_null', is_active=True)
+        _create_field_assignment(rule, data_field=self.data_field)
+        self.client.force_authenticate(self.admin_user)
+        r = self.client.get(f'{BASE}/metrics/table/{self.data_table.id}/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['table_id'], self.data_table.id)
+        self.assertEqual(len(r.data['active_rules']), 1)
+        self.assertEqual(r.data['active_rules'][0]['name'], 'Table Metric Rule')
+
+    def test_table_metrics_rule_assigned_to_table_not_field(self):
+        """Rule assigned to table (data_field=null) is still returned."""
+        rule = DQRule.objects.create(
+            name='Table Level Rule', rule_level='business_rule',
+            rule_type='threshold', is_active=True,
+            params={'operator': 'gte', 'value': 1})
+        RuleFieldAssignment.objects.create(
+            rule=rule, data_table=self.data_table, data_field=None)
+        self.client.force_authenticate(self.admin_user)
+        r = self.client.get(f'{BASE}/metrics/table/{self.data_table.id}/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.data['active_rules']), 1)
+
+    def test_field_metrics_200_with_rule_count(self):
+        """GET /dq/metrics/field/<id>/ returns 200 and correct active_rules count."""
+        rule = DQRule.objects.create(
+            name='Field Metric Rule', rule_level='field_validation',
+            rule_type='range', is_active=True,
+            params={'min': 0, 'max': 100})
+        _create_field_assignment(rule, data_field=self.data_field)
+        self.client.force_authenticate(self.admin_user)
+        r = self.client.get(f'{BASE}/metrics/field/{self.data_field.id}/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['field_id'], self.data_field.id)
+        self.assertEqual(len(r.data['active_rules']), 1)
+        self.assertEqual(r.data['active_rules'][0]['name'], 'Field Metric Rule')

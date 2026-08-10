@@ -24,34 +24,37 @@ def _create_field_assignment(rule, data_field=None, data_table=None):
 
 
 class APIBaseTestCase(TestCase):
-    """Shared fixtures for API tests."""
+    """Shared fixtures for API tests — DB objects created once per class."""
 
-    def setUp(self):
-        self.client = APIClient()
-        self.admin = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
             username='dq_admin', password='pass', is_staff=True, is_superuser=True)
-        self.owner = User.objects.create_user(username='dq_owner', password='pass')
-        self.outsider = User.objects.create_user(username='dq_outsider', password='pass')
-        self.org_unit = OrgUnit.objects.create(
+        cls.owner = User.objects.create_user(username='dq_owner', password='pass')
+        cls.outsider = User.objects.create_user(username='dq_outsider', password='pass')
+        cls.org_unit = OrgUnit.objects.create(
             name='API Test Org', code='APTO', org_type='division')
-        self.module = Module.objects.create(name='API DQ Module', org_unit=self.org_unit)
-        self.table = DataTable.objects.create(
-            title='API DQ Table', name='api_dq_table', module=self.module)
-        self.field = DataField.objects.create(
-            data_table=self.table, name='email', label='Email', type='string')
-        self.ref_set = ReferenceSet.objects.create(name='API Status')
+        cls.module = Module.objects.create(name='API DQ Module', org_unit=cls.org_unit)
+        cls.table = DataTable.objects.create(
+            title='API DQ Table', name='api_dq_table', module=cls.module)
+        cls.field = DataField.objects.create(
+            data_table=cls.table, name='email', label='Email', type='string')
+        cls.ref_set = ReferenceSet.objects.create(name='API Status')
         ReferenceValue.objects.bulk_create([
-            ReferenceValue(reference_set=self.ref_set, code='OK', label='OK', is_active=True),
+            ReferenceValue(reference_set=cls.ref_set, code='OK', label='OK', is_active=True),
         ])
         steward_group, _ = Group.objects.get_or_create(name='data_steward')
         ScopedRole.objects.create(
-            user=self.owner, org_unit=self.org_unit, group=steward_group, is_active=True)
+            user=cls.owner, org_unit=cls.org_unit, group=steward_group, is_active=True)
         DataRow.objects.bulk_create([
-            DataRow(data_table=self.table, values={'email': f'u{i}@x.com'}) for i in range(5)
+            DataRow(data_table=cls.table, values={'email': f'u{i}@x.com'}) for i in range(5)
         ])
-        self.rule = DQRule.objects.create(
+        cls.rule = DQRule.objects.create(
             name='API Not Null', rule_type='not_null', rule_level='field_validation', is_active=True)
-        _create_field_assignment(self.rule, data_field=self.field)
+        _create_field_assignment(cls.rule, data_field=cls.field)
+
+    def setUp(self):
+        self.client = APIClient()
 
 
 # ── POST /dq/profile/ ──
@@ -140,11 +143,12 @@ class DQRunEndpointTests(APIBaseTestCase):
 # ── GET /dq/results/ ──
 
 class DQResultsListTests(APIBaseTestCase):
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
         for i in range(5):
             DQResult.objects.create(
-                rule=self.rule, data_field=self.field,
+                rule=cls.rule, data_field=cls.field,
                 passed=(i % 2 == 0), checked_count=10,
                 failed_count=5 if i % 2 != 0 else 0,
                 score=100 if i % 2 == 0 else 50)
@@ -174,11 +178,12 @@ class DQResultsListTests(APIBaseTestCase):
 # ── GET /dq/rules/{id}/history/ ──
 
 class RuleHistoryTests(APIBaseTestCase):
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
         for s in [100, 95, 90, 85, 80, 75]:
             DQResult.objects.create(
-                rule=self.rule, data_field=self.field,
+                rule=cls.rule, data_field=cls.field,
                 passed=(s >= 90), checked_count=10,
                 failed_count=0 if s >= 90 else 1, score=s)
 
@@ -212,10 +217,11 @@ class RuleHistoryTests(APIBaseTestCase):
 # ── GET /dq/results/{id}/failures/ ──
 
 class ResultFailuresTests(APIBaseTestCase):
-    def setUp(self):
-        super().setUp()
-        self.result = DQResult.objects.create(
-            rule=self.rule, data_field=self.field, passed=False,
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.result = DQResult.objects.create(
+            rule=cls.rule, data_field=cls.field, passed=False,
             checked_count=10, failed_count=3, score=70,
             sample_failures=[{'row': 1, 'value': 'bad1'}, {'row': 2, 'value': 'bad2'}])
 
@@ -242,7 +248,9 @@ class RuleExecuteActionTests(APIBaseTestCase):
     def test_execute_returns_result_fields(self):
         self.client.force_authenticate(self.admin)
         r = self.client.post(f'{BASE}/rules/{self.rule.id}/execute/')
-        self.assertIn('passed', r.data)
+        self.assertIsInstance(r.data, list)
+        self.assertTrue(len(r.data) > 0)
+        self.assertIn('passed', r.data[0])
 
     def test_outsider_cannot_execute_rule(self):
         self.client.force_authenticate(self.outsider)

@@ -59,33 +59,31 @@ class TestDQProfileConfig:
 
     def test_get_defaults(self, db):
         config = DQProfileConfig.objects.create()
-        assert config.auto_profile_enabled is False
         assert config.freshness_threshold_hours == 24
         assert config.volume_anomaly_pct == 25
-        assert config.sample_size == 1000
 
     def test_update(self, db):
         config = DQProfileConfig.objects.create()
-        config.auto_profile_enabled = True
         config.freshness_threshold_hours = 48
+        config.volume_anomaly_pct = 10
         config.save()
         config.refresh_from_db()
-        assert config.auto_profile_enabled is True
         assert config.freshness_threshold_hours == 48
+        assert config.volume_anomaly_pct == 10
 
     def test_api_get(self, api_client, superuser):
         api_client.force_authenticate(superuser)
         url = reverse("dq-profile-config")
         response = api_client.get(url)
         assert response.status_code == 200
-        assert "auto_profile_enabled" in response.data
+        assert "freshness_threshold_hours" in response.data
 
     def test_api_put(self, api_client, superuser):
         api_client.force_authenticate(superuser)
         url = reverse("dq-profile-config")
-        response = api_client.put(url, {"auto_profile_enabled": True}, format="json")
+        response = api_client.put(url, {"freshness_threshold_hours": 48}, format="json")
         assert response.status_code == 200
-        assert response.data["auto_profile_enabled"] is True
+        assert response.data["freshness_threshold_hours"] == 48
 
     def test_api_requires_auth(self, api_client, db):
         url = reverse("dq-profile-config")

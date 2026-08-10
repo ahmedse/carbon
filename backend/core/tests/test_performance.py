@@ -142,11 +142,13 @@ class DQNPlusOneTest(TestCase, NPlusOneListMixin):
         self._assert_no_n_plus_one('/carbon-api/dq/table-profiles/', self._make_profiles)
 
     def _make_rules(self, n):
+        from dq.models import RuleFieldAssignment
         for i in range(n):
             rule = DQRule.objects.create(
-                scope="table", data_table=self.table, rule_type="not_null",
+                rule_type="not_null",
                 name=f"PerfRule{i}",
             )
+            RuleFieldAssignment.objects.create(rule=rule, data_table=self.table)
             DQResult.objects.create(rule=rule, passed=True)
             DQResult.objects.create(rule=rule, passed=False)
 
@@ -157,10 +159,12 @@ class DQNPlusOneTest(TestCase, NPlusOneListMixin):
         self._assert_no_n_plus_one('/carbon-api/dq/rules/', self._make_rules, bound=8)
 
     def _make_results(self, n):
+        from dq.models import RuleFieldAssignment
         rule = DQRule.objects.create(
-            scope="table", data_table=self.table, rule_type="not_null",
+            rule_type="not_null",
             name="PerfResRule",
         )
+        RuleFieldAssignment.objects.create(rule=rule, data_table=self.table)
         for i in range(n):
             DQResult.objects.create(rule=rule, passed=(i % 2 == 0))
 

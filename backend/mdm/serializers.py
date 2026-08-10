@@ -13,7 +13,7 @@ class ReferenceValueSerializer(serializers.ModelSerializer):
             'is_active', 'sort_order', 'valid_from', 'valid_to', 'metadata',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'reference_set']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
     def validate_code(self, value):
         """Ensure code is alphanumeric with underscores only."""
@@ -54,7 +54,7 @@ class ReferenceSetSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'slug', 'value_count', 'steward', 'lifecycle_state', 'created_at', 'updated_at'
+            'id', 'slug', 'value_count', 'lifecycle_state', 'created_at', 'updated_at'
         ]
 
     def get_steward_name(self, obj):
@@ -67,7 +67,14 @@ class ReferenceSetSerializer(serializers.ModelSerializer):
         return obj.steward.username
     
     def get_value_count(self, obj):
-        """Return count of active values."""
+        """Return count of active values.
+
+        Uses the values_count annotation from the view queryset when present
+        (avoids N+1 queries on list views), otherwise falls back to a direct query.
+        """
+        annotated = getattr(obj, 'values_count', None)
+        if annotated is not None:
+            return annotated
         return obj.values.filter(is_active=True).count()
 
     def validate_name(self, value):

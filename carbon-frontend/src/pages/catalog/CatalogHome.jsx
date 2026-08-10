@@ -233,10 +233,10 @@ export default function CatalogHome() {
           <Button
             fullWidth
             variant="outlined"
-            onClick={() => navigate('/catalog/reference-data')}
+            onClick={() => navigate('/catalog/mdm')}
             sx={{ py: 1.5 }}
           >
-            Reference Data
+            Master Data
           </Button>
         </Grid>
       </Grid>

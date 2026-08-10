@@ -1,6 +1,6 @@
 // src/pages/catalog/MDMPage.jsx
-// Master Data Management: Reference Sets, Reference Values, and Org Units
-// Unified architecture using MUI DataGrid, search/filters, and system theme
+// Master Data Management: Reference Sets and Org Units
+// Standard grids with quick-filter toolbar, full CRUD dialogs, all four data states
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -8,25 +8,22 @@ import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
   fetchReferenceSets,
-  deleteReferenceSet,
   createReferenceSet,
-  fetchReferenceValues,
-  deleteReferenceValue,
+  updateReferenceSet,
+  deleteReferenceSet,
   fetchOrgUnits,
-  deleteOrgUnit,
   createOrgUnit,
+  updateOrgUnit,
+  deleteOrgUnit,
   fetchDataDomains,
 } from '../../api/catalog';
+import { fetchUsers } from '../../api/users';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
-import { fetchUsers } from '../../api/users';
 import {
   Box,
   Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Paper,
   Tabs,
   Tab,
   TextField,
@@ -38,12 +35,12 @@ import {
   Chip,
   IconButton,
   Tooltip,
-  CircularProgress,
-  Alert,
   Typography,
-  useTheme,
+  Stack,
+  Grid,
+  Alert,
+  CircularProgress,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
@@ -51,6 +48,44 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import CategoryIcon from '@mui/icons-material/Category';
+
+import PageContainer from '../../components/layout/PageContainer';
+import PageHeader from '../../components/Page/PageHeader';
+import EmptyState from '../../components/Page/EmptyState';
+import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
+import ErrorAlert from '../../components/Page/ErrorAlert';
+import StandardDataGrid from '../../components/StandardDataGrid';
+import SystemDialog from '../../components/SystemDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import {
+  LIFECYCLE_COLORS,
+  LIFECYCLE_LABELS,
+} from '../../constants/referenceSetLifecycle';
+
+const ORG_TYPES = [
+  { value: 'university', label: 'University' },
+  { value: 'campus', label: 'Campus' },
+  { value: 'college', label: 'College' },
+  { value: 'department', label: 'Department' },
+  { value: 'division', label: 'Division' },
+  { value: 'team', label: 'Team' },
+  { value: 'facility', label: 'Facility' },
+  { value: 'other', label: 'Other' },
+];
+
+// Map DRF field-error payload ({field: [msg]}) to {field: msg} for per-field display.
+function mapFieldErrors(err) {
+  const data = err?.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const fieldErrors = {};
+  Object.entries(data).forEach(([key, value]) => {
+    if (key === 'non_field_errors') return;
+    if (Array.isArray(value)) fieldErrors[key] = value[0];
+    else if (typeof value === 'string') fieldErrors[key] = value;
+  });
+  return Object.keys(fieldErrors).length ? fieldErrors : null;
+}
 
 function TabPanel({ children, value, index }) {
   return (
@@ -65,7 +100,6 @@ export default function MDMPage() {
   const { token } = useAuth();
   const { notify } = useNotification();
   const navigate = useNavigate();
-  const theme = useTheme();
 
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -77,11 +111,6 @@ export default function MDMPage() {
   const [filterDomain, setFilterDomain] = useState('');
   const [filterSteward, setFilterSteward] = useState('');
 
-  // Reference Values state
-  const [selectedRefSet, setSelectedRefSet] = useState(null);
-  const [refValues, setRefValues] = useState([]);
-  const [searchRefValues, setSearchRefValues] = useState('');
-
   // Org Units state
   const [orgUnits, setOrgUnits] = useState([]);
   const [searchOrgUnits, setSearchOrgUnits] = useState('');
@@ -91,21 +120,22 @@ export default function MDMPage() {
   const [domains, setDomains] = useState([]);
   const [users, setUsers] = useState([]);
 
-  // Create Reference Set dialog
+  // Reference Set create/edit dialog
   const [refSetDialogOpen, setRefSetDialogOpen] = useState(false);
-  const [refSetForm, setRefSetForm] = useState({ name: '', description: '', domain: '' });
+  const [refSetEditing, setRefSetEditing] = useState(null); // null = create
+  const [refSetForm, setRefSetForm] = useState({ name: '', description: '', domain: '', steward: '' });
+  const [refSetFieldErrors, setRefSetFieldErrors] = useState({});
   const [refSetSaving, setRefSetSaving] = useState(false);
-  const [refSetError, setRefSetError] = useState(null);
 
-  // Create Org Unit dialog
+  // Org Unit create/edit dialog
   const [orgUnitDialogOpen, setOrgUnitDialogOpen] = useState(false);
+  const [orgUnitEditing, setOrgUnitEditing] = useState(null); // null = create
   const [orgUnitForm, setOrgUnitForm] = useState({ name: '', code: '', org_type: '', parent: '', description: '' });
+  const [orgUnitFieldErrors, setOrgUnitFieldErrors] = useState({});
   const [orgUnitSaving, setOrgUnitSaving] = useState(false);
-  const [orgUnitError, setOrgUnitError] = useState(null);
 
-  useEffect(() => {
-    loadData();
-  }, [token]);
+  // Confirm delete dialog
+  const [confirmState, setConfirmState] = useState(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -117,18 +147,10 @@ export default function MDMPage() {
         fetchUsers(token).catch(() => []),
         fetchOrgUnits(token).catch(() => []),
       ]);
-
       setRefSets(Array.isArray(setsData) ? setsData : setsData.results || []);
       setDomains(Array.isArray(domainsData) ? domainsData : domainsData.results || []);
       setUsers(Array.isArray(usersData) ? usersData : usersData.results || []);
       setOrgUnits(Array.isArray(unitsData) ? unitsData : unitsData.results || []);
-
-      // Auto-select first reference set
-      const firstSet = (Array.isArray(setsData) ? setsData : setsData.results || [])[0];
-      if (firstSet) {
-        setSelectedRefSet(firstSet.id);
-        loadRefValues(firstSet.id);
-      }
     } catch (_err) {
       const msg = _err.message || 'Failed to load MDM data';
       setError(msg);
@@ -138,48 +160,168 @@ export default function MDMPage() {
     }
   };
 
-  const loadRefValues = async (setId) => {
-    if (!setId) return;
+  useEffect(() => {
+    loadData();
+  }, [token]);
+
+  // ---- Reference Set dialog handlers ----
+  const openRefSetDialog = (row = null) => {
+    setRefSetFieldErrors({});
+    setRefSetEditing(row);
+    setRefSetForm(row
+      ? {
+          name: row.name || '',
+          description: row.description || '',
+          domain: row.domain || '',
+          steward: row.steward || '',
+        }
+      : { name: '', description: '', domain: '', steward: '' });
+    setRefSetDialogOpen(true);
+  };
+
+  const closeRefSetDialog = () => {
+    if (refSetSaving) return;
+    setRefSetDialogOpen(false);
+    setRefSetEditing(null);
+    setRefSetFieldErrors({});
+  };
+
+  const handleSaveRefSet = async () => {
+    // Client-side validation
+    const errors = {};
+    if (!refSetForm.name.trim()) errors.name = 'Name is required.';
+    setRefSetFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setRefSetSaving(true);
     try {
-      const valsData = await fetchReferenceValues(token, setId);
-      setRefValues(Array.isArray(valsData) ? valsData : valsData.results || []);
-    } catch (_err) {
-      notify({ message: 'Failed to load reference values', type: 'error' });
+      const payload = {
+        name: refSetForm.name.trim(),
+        description: refSetForm.description.trim(),
+        domain: refSetForm.domain || null,
+        steward: refSetForm.steward || null,
+        is_active: refSetEditing ? refSetEditing.is_active : true,
+      };
+      if (refSetEditing) {
+        await updateReferenceSet(token, refSetEditing.id, payload);
+        notify({ message: 'Reference set updated', type: 'success' });
+      } else {
+        await createReferenceSet(token, payload);
+        notify({ message: 'Reference set created', type: 'success' });
+      }
+      closeRefSetDialog();
+      await loadData();
+    } catch (err) {
+      const fieldErrors = mapFieldErrors(err);
+      if (fieldErrors) {
+        setRefSetFieldErrors(fieldErrors);
+      } else {
+        notify({ message: err.message || 'Failed to save reference set', type: 'error' });
+      }
+    } finally {
+      setRefSetSaving(false);
     }
   };
 
-  const handleDeleteRefSet = async (id) => {
-    if (!window.confirm('Delete this reference set? This will also delete all its values.')) return;
+  // ---- Org Unit dialog handlers ----
+  const openOrgUnitDialog = (row = null) => {
+    setOrgUnitFieldErrors({});
+    setOrgUnitEditing(row);
+    setOrgUnitForm(row
+      ? {
+          name: row.name || '',
+          code: row.code || '',
+          org_type: row.org_type || '',
+          parent: row.parent || '',
+          description: row.description || '',
+        }
+      : { name: '', code: '', org_type: '', parent: '', description: '' });
+    setOrgUnitDialogOpen(true);
+  };
+
+  const closeOrgUnitDialog = () => {
+    if (orgUnitSaving) return;
+    setOrgUnitDialogOpen(false);
+    setOrgUnitEditing(null);
+    setOrgUnitFieldErrors({});
+  };
+
+  const handleSaveOrgUnit = async () => {
+    // Client-side validation
+    const errors = {};
+    if (!orgUnitForm.name.trim()) errors.name = 'Name is required.';
+    if (orgUnitForm.parent && orgUnitEditing && String(orgUnitForm.parent) === String(orgUnitEditing.id)) {
+      errors.parent = 'A unit cannot be its own parent.';
+    }
+    setOrgUnitFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setOrgUnitSaving(true);
     try {
-      await deleteReferenceSet(token, id);
-      notify({ message: 'Reference set deleted', type: 'success' });
-      loadData();
+      const payload = {
+        name: orgUnitForm.name.trim(),
+        code: orgUnitForm.code.trim() || null,
+        org_type: orgUnitForm.org_type || null,
+        parent: orgUnitForm.parent ? parseInt(orgUnitForm.parent, 10) : null,
+        description: orgUnitForm.description.trim() || null,
+        is_active: orgUnitEditing ? orgUnitEditing.is_active : true,
+      };
+      if (orgUnitEditing) {
+        await updateOrgUnit(token, orgUnitEditing.id, payload);
+        notify({ message: 'Org unit updated', type: 'success' });
+      } else {
+        await createOrgUnit(token, payload);
+        notify({ message: 'Org unit created', type: 'success' });
+      }
+      closeOrgUnitDialog();
+      await loadData();
     } catch (err) {
-      notify({ message: err.message || 'Failed to delete reference set', type: 'error' });
+      const fieldErrors = mapFieldErrors(err);
+      if (fieldErrors) {
+        setOrgUnitFieldErrors(fieldErrors);
+      } else {
+        notify({ message: err.message || 'Failed to save org unit', type: 'error' });
+      }
+    } finally {
+      setOrgUnitSaving(false);
     }
   };
 
-  const handleDeleteRefValue = async (id) => {
-    if (!window.confirm('Delete this reference value?')) return;
-    try {
-      await deleteReferenceValue(token, id);
-      notify({ message: 'Reference value deleted', type: 'success' });
-      if (selectedRefSet) loadRefValues(selectedRefSet);
-    } catch (err) {
-      notify({ message: err.message || 'Failed to delete reference value', type: 'error' });
-    }
+  // ---- Delete handlers (ConfirmDialog) ----
+  const handleDeleteRefSet = (row) => {
+    setConfirmState({
+      title: 'Delete reference set',
+      message: `Delete "${row.name}"?\nThis will also delete all of its values. This action cannot be undone.`,
+      destructive: true,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await deleteReferenceSet(token, row.id);
+          notify({ message: 'Reference set deleted', type: 'success' });
+          await loadData();
+        } catch (err) {
+          notify({ message: err.message || 'Failed to delete reference set', type: 'error' });
+        }
+      },
+    });
   };
 
-  const handleDeleteOrgUnit = async (id) => {
-    if (!window.confirm('Delete this organizational unit?')) return;
-    try {
-      await deleteOrgUnit(token, id);
-      notify({ message: 'Org unit deleted', type: 'success' });
-      const unitsData = await fetchOrgUnits(token);
-      setOrgUnits(Array.isArray(unitsData) ? unitsData : unitsData.results || []);
-    } catch (err) {
-      notify({ message: err.message || 'Failed to delete org unit', type: 'error' });
-    }
+  const handleDeleteOrgUnit = (row) => {
+    setConfirmState({
+      title: 'Delete org unit',
+      message: `Delete "${row.name}"?\nChild units will be detached (set to no parent). This action cannot be undone.`,
+      destructive: true,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await deleteOrgUnit(token, row.id);
+          notify({ message: 'Org unit deleted', type: 'success' });
+          await loadData();
+        } catch (err) {
+          notify({ message: err.message || 'Failed to delete org unit', type: 'error' });
+        }
+      },
+    });
   };
 
   const handleClearRefSetsFilters = () => {
@@ -188,86 +330,9 @@ export default function MDMPage() {
     setFilterSteward('');
   };
 
-  const handleClearRefValuesFilters = () => {
-    setSearchRefValues('');
-  };
-
   const handleClearOrgUnitsFilters = () => {
     setSearchOrgUnits('');
     setFilterOrgType('');
-  };
-
-  // --- Create Reference Set dialog handlers ---
-  const handleOpenRefSetDialog = () => {
-    setRefSetError(null);
-    setRefSetForm({ name: '', description: '', domain: '' });
-    setRefSetDialogOpen(true);
-  };
-
-  const handleCloseRefSetDialog = () => {
-    if (refSetSaving) return;
-    setRefSetDialogOpen(false);
-  };
-
-  const handleSaveRefSet = async () => {
-    if (!refSetForm.name.trim()) {
-      setRefSetError('Name is required.');
-      return;
-    }
-    setRefSetSaving(true);
-    setRefSetError(null);
-    try {
-      await createReferenceSet(token, {
-        name: refSetForm.name.trim(),
-        description: refSetForm.description.trim(),
-        domain: refSetForm.domain || null,
-      });
-      notify({ message: 'Reference set created', type: 'success' });
-      setRefSetDialogOpen(false);
-      await loadData();
-    } catch (err) {
-      setRefSetError(err.message || 'Failed to create reference set.');
-    } finally {
-      setRefSetSaving(false);
-    }
-  };
-
-  // --- Create Org Unit dialog handlers ---
-  const handleOpenOrgUnitDialog = () => {
-    setOrgUnitError(null);
-    setOrgUnitForm({ name: '', code: '', org_type: '', parent: '', description: '' });
-    setOrgUnitDialogOpen(true);
-  };
-
-  const handleCloseOrgUnitDialog = () => {
-    if (orgUnitSaving) return;
-    setOrgUnitDialogOpen(false);
-  };
-
-  const handleSaveOrgUnit = async () => {
-    if (!orgUnitForm.name.trim()) {
-      setOrgUnitError('Name is required.');
-      return;
-    }
-    setOrgUnitSaving(true);
-    setOrgUnitError(null);
-    try {
-      await createOrgUnit(token, {
-        name: orgUnitForm.name.trim(),
-        code: orgUnitForm.code.trim() || null,
-        org_type: orgUnitForm.org_type || null,
-        parent: orgUnitForm.parent ? parseInt(orgUnitForm.parent) : null,
-        description: orgUnitForm.description.trim() || null,
-      });
-      notify({ message: 'Org unit created', type: 'success' });
-      setOrgUnitDialogOpen(false);
-      const unitsData = await fetchOrgUnits(token);
-      setOrgUnits(Array.isArray(unitsData) ? unitsData : unitsData.results || []);
-    } catch (err) {
-      setOrgUnitError(err.message || 'Failed to create org unit.');
-    } finally {
-      setOrgUnitSaving(false);
-    }
   };
 
   // Filtered Reference Sets
@@ -279,7 +344,8 @@ export default function MDMPage() {
       filtered = filtered.filter(
         (s) =>
           (s.name && s.name.toLowerCase().includes(query)) ||
-          (s.description && s.description.toLowerCase().includes(query))
+          (s.description && s.description.toLowerCase().includes(query)) ||
+          (s.steward_name && s.steward_name.toLowerCase().includes(query))
       );
     }
 
@@ -293,18 +359,6 @@ export default function MDMPage() {
 
     return filtered;
   }, [refSets, searchRefSets, filterDomain, filterSteward]);
-
-  // Filtered Reference Values
-  const filteredRefValues = useMemo(() => {
-    if (!searchRefValues.trim()) return refValues;
-    const query = searchRefValues.toLowerCase();
-    return refValues.filter(
-      (v) =>
-        (v.code && v.code.toLowerCase().includes(query)) ||
-        (v.label && v.label.toLowerCase().includes(query)) ||
-        (v.description && v.description.toLowerCase().includes(query))
-    );
-  }, [refValues, searchRefValues]);
 
   // Filtered Org Units
   const filteredOrgUnits = useMemo(() => {
@@ -335,7 +389,11 @@ export default function MDMPage() {
       flex: 1,
       minWidth: 200,
       renderCell: (params) => (
-        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+        <Typography
+          variant="body2"
+          sx={{ fontWeight: 500, cursor: 'pointer', color: 'primary.main', '&:hover': { textDecoration: 'underline' } }}
+          onClick={() => navigate(`/catalog/mdm/reference-sets/${params.row.id}`)}
+        >
           {params.value}
         </Typography>
       ),
@@ -354,26 +412,51 @@ export default function MDMPage() {
     {
       field: 'domain_name',
       headerName: 'Domain',
-      width: 160,
+      width: 150,
       renderCell: (params) => params.value || '—',
     },
     {
       field: 'steward_name',
       headerName: 'Steward',
-      width: 140,
+      width: 130,
       renderCell: (params) => params.value || '—',
+    },
+    {
+      field: 'lifecycle_state',
+      headerName: 'Lifecycle',
+      width: 120,
+      renderCell: (params) => (
+        <Chip
+          label={LIFECYCLE_LABELS[params.value] || params.value || '—'}
+          size="small"
+          color={LIFECYCLE_COLORS[params.value] || 'default'}
+          variant={params.value === 'active' ? 'filled' : 'outlined'}
+        />
+      ),
     },
     {
       field: 'value_count',
       headerName: 'Values',
-      width: 100,
-      renderCell: (params) => <Chip label={params.value || 0} size="small" />,
+      width: 90,
+      renderCell: (params) => (
+        <Tooltip title="View values">
+          <Chip
+            label={params.value || 0}
+            size="small"
+            color="primary"
+            variant="outlined"
+            clickable
+            onClick={() => navigate(`/catalog/mdm/reference-sets/${params.row.id}`)}
+          />
+        </Tooltip>
+      ),
     },
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 160,
+      width: 150,
       sortable: false,
+      filterable: false,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
           <Tooltip title="View Details">
@@ -384,70 +467,16 @@ export default function MDMPage() {
               <VisibilityIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Delete">
-            <IconButton
-              size="small"
-              color="error"
-              onClick={() => handleDeleteRefSet(params.row.id)}
-            >
-              <DeleteIcon fontSize="small" />
+          <Tooltip title="Edit">
+            <IconButton size="small" onClick={() => openRefSetDialog(params.row)}>
+              <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-        </Box>
-      ),
-    },
-  ];
-
-  // Reference Values Columns
-  const refValuesColumns = [
-    { field: 'code', headerName: 'Code', flex: 1, minWidth: 140 },
-    { field: 'label', headerName: 'Label', flex: 2, minWidth: 200 },
-    {
-      field: 'description',
-      headerName: 'Description',
-      flex: 2,
-      minWidth: 220,
-      renderCell: (params) => params.value || '—',
-    },
-    {
-      field: 'is_active',
-      headerName: 'Active',
-      width: 100,
-      renderCell: (params) => (
-        <Chip
-          label={params.value ? 'Active' : 'Inactive'}
-          size="small"
-          color={params.value ? 'success' : 'default'}
-          variant="outlined"
-        />
-      ),
-    },
-    {
-      field: 'valid_from',
-      headerName: 'Valid From',
-      width: 120,
-      renderCell: (params) =>
-        params.value ? new Date(params.value).toLocaleDateString() : '—',
-    },
-    {
-      field: 'valid_to',
-      headerName: 'Valid To',
-      width: 120,
-      renderCell: (params) =>
-        params.value ? new Date(params.value).toLocaleDateString() : '—',
-    },
-    {
-      field: 'actions',
-      headerName: 'Actions',
-      width: 120,
-      sortable: false,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
           <Tooltip title="Delete">
             <IconButton
               size="small"
               color="error"
-              onClick={() => handleDeleteRefValue(params.row.id)}
+              onClick={() => handleDeleteRefSet(params.row)}
             >
               <DeleteIcon fontSize="small" />
             </IconButton>
@@ -473,7 +502,7 @@ export default function MDMPage() {
     {
       field: 'org_type',
       headerName: 'Type',
-      width: 140,
+      width: 130,
       renderCell: (params) => (
         <Chip label={params.value || 'other'} size="small" variant="outlined" />
       ),
@@ -481,7 +510,7 @@ export default function MDMPage() {
     {
       field: 'code',
       headerName: 'Code',
-      width: 120,
+      width: 110,
       renderCell: (params) => params.value || '—',
     },
     {
@@ -499,23 +528,21 @@ export default function MDMPage() {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 160,
+      width: 120,
       sortable: false,
+      filterable: false,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="View Details">
-            <IconButton
-              size="small"
-              onClick={() => navigate(`/catalog/mdm/org-units/${params.row.id}`)}
-            >
-              <AccountTreeIcon fontSize="small" />
+          <Tooltip title="Edit">
+            <IconButton size="small" onClick={() => openOrgUnitDialog(params.row)}>
+              <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Delete">
             <IconButton
               size="small"
               color="error"
-              onClick={() => handleDeleteOrgUnit(params.row.id)}
+              onClick={() => handleDeleteOrgUnit(params.row)}
             >
               <DeleteIcon fontSize="small" />
             </IconButton>
@@ -525,345 +552,248 @@ export default function MDMPage() {
     },
   ];
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  // Parent options for the org unit dialog (exclude self to prevent cycles)
+  const parentOptions = useMemo(() => {
+    if (!orgUnitEditing) return orgUnits;
+    return orgUnits.filter((u) => u.id !== orgUnitEditing.id);
+  }, [orgUnits, orgUnitEditing]);
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Master Data Management
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Manage reference sets, reference values, and organizational units for controlled vocabularies and governance
-        </Typography>
-      </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
+    <PageContainer>
+      <PageHeader
+        icon={AccountTreeIcon}
+        title="Master Data Management"
+        subtitle="Controlled vocabularies and organizational hierarchy"
+        description="Manage reference sets (values live on the set's detail page) and the organizational unit tree that anchors RBAC and governance."
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => (tabValue === 0 ? openRefSetDialog() : openOrgUnitDialog())}
+          >
+            {tabValue === 0 ? 'New Reference Set' : 'New Org Unit'}
+          </Button>
+        }
+      />
 
       {/* Tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 1 }}>
         <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)}>
           <Tab label={`Reference Sets (${refSets.length})`} />
-          <Tab label={`Reference Values (${refValues.length})`} />
           <Tab label={`Org Units (${orgUnits.length})`} />
         </Tabs>
       </Box>
 
-      {/* Tab 1: Reference Sets */}
+      {/* Tab 0: Reference Sets */}
       <TabPanel value={tabValue} index={0}>
-        {/* Filters Bar */}
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 2,
-            mb: 2,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            p: 2,
-            bgcolor: 'background.alt',
-            borderRadius: 1,
-          }}
-        >
-          <TextField
-            size="small"
-            placeholder="Search reference sets..."
-            value={searchRefSets}
-            onChange={(e) => setSearchRefSets(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ flex: '1 1 250px', minWidth: 200 }}
+        <Paper sx={{ p: 2, mb: 2, bgcolor: 'background.dark' }}>
+          <Grid container spacing={2} alignItems="center">
+            <Grid size={{ xs: 12, md: 4 }}>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Search reference sets..."
+                value={searchRefSets}
+                onChange={(e) => setSearchRefSets(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Domain</InputLabel>
+                <Select
+                  value={filterDomain}
+                  onChange={(e) => setFilterDomain(e.target.value)}
+                  label="Domain"
+                >
+                  <MenuItem value="">All Domains</MenuItem>
+                  {domains.map((d) => (
+                    <MenuItem key={d.id} value={d.id}>
+                      {d.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Steward</InputLabel>
+                <Select
+                  value={filterSteward}
+                  onChange={(e) => setFilterSteward(e.target.value)}
+                  label="Steward"
+                >
+                  <MenuItem value="">All Stewards</MenuItem>
+                  {users.map((u) => (
+                    <MenuItem key={u.id} value={u.id}>
+                      {u.username}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, md: 2 }}>
+              <Button
+                fullWidth
+                size="small"
+                startIcon={<ClearIcon />}
+                onClick={handleClearRefSetsFilters}
+                disabled={!searchRefSets && !filterDomain && !filterSteward}
+              >
+                Clear
+              </Button>
+            </Grid>
+          </Grid>
+        </Paper>
+
+        {loading ? (
+          <LoadingSkeleton variant="table" />
+        ) : error ? (
+          <ErrorAlert message={error} onRetry={loadData} />
+        ) : filteredRefSets.length === 0 ? (
+          <EmptyState
+            icon={<CategoryIcon />}
+            title="No reference sets found"
+            description={
+              refSets.length === 0
+                ? 'Create your first reference set to start building controlled vocabularies.'
+                : 'No reference sets match the current filters.'
+            }
+            actionLabel={refSets.length === 0 ? 'New Reference Set' : undefined}
+            onAction={refSets.length === 0 ? () => openRefSetDialog() : undefined}
           />
-
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Domain</InputLabel>
-            <Select
-              value={filterDomain}
-              onChange={(e) => setFilterDomain(e.target.value)}
-              label="Domain"
-            >
-              <MenuItem value="">All Domains</MenuItem>
-              {domains.map((d) => (
-                <MenuItem key={d.id} value={d.id}>
-                  {d.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Steward</InputLabel>
-            <Select
-              value={filterSteward}
-              onChange={(e) => setFilterSteward(e.target.value)}
-              label="Steward"
-            >
-              <MenuItem value="">All Stewards</MenuItem>
-              {users.map((u) => (
-                <MenuItem key={u.id} value={u.id}>
-                  {u.username}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <Button
-            size="small"
-            startIcon={<ClearIcon />}
-            onClick={handleClearRefSetsFilters}
-            disabled={!searchRefSets && !filterDomain && !filterSteward}
-          >
-            Clear Filters
-          </Button>
-
-          <Box sx={{ flex: 1 }} />
-
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleOpenRefSetDialog}
-          >
-            New Reference Set
-          </Button>
-        </Box>
-
-        {/* DataGrid */}
-        <Box sx={{ height: 500, width: '100%' }}>
-          <DataGrid
-            rows={filteredRefSets}
-            columns={refSetsColumns}
-            pageSizeOptions={[10, 25, 50, 100]}
-            initialState={{
-              pagination: { paginationModel: { pageSize: 25 } },
-            }}
-            disableRowSelectionOnClick
-            sx={{
-              '& .MuiDataGrid-columnHeader': {
-                backgroundColor: theme.palette.background.alt,
-                fontWeight: 600,
-              },
-            }}
-          />
-        </Box>
+        ) : (
+          <StandardDataGrid rows={filteredRefSets} columns={refSetsColumns} toolbar pageSize={25} />
+        )}
       </TabPanel>
 
-      {/* Tab 2: Reference Values */}
+      {/* Tab 1: Org Units */}
       <TabPanel value={tabValue} index={1}>
-        {/* Reference Set Selector + Filters */}
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 2,
-            mb: 2,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            p: 2,
-            bgcolor: 'background.alt',
-            borderRadius: 1,
-          }}
-        >
-          <FormControl size="small" sx={{ minWidth: 240, flex: '1 1 300px' }}>
-            <InputLabel>Select Reference Set</InputLabel>
-            <Select
-              value={selectedRefSet || ''}
-              onChange={(e) => {
-                setSelectedRefSet(e.target.value);
-                loadRefValues(e.target.value);
-              }}
-              label="Select Reference Set"
-            >
-              {refSets.map((set) => (
-                <MenuItem key={set.id} value={set.id}>
-                  {set.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+        <Paper sx={{ p: 2, mb: 2, bgcolor: 'background.dark' }}>
+          <Grid container spacing={2} alignItems="center">
+            <Grid size={{ xs: 12, md: 6 }}>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Search org units..."
+                value={searchOrgUnits}
+                onChange={(e) => setSearchOrgUnits(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Type</InputLabel>
+                <Select
+                  value={filterOrgType}
+                  onChange={(e) => setFilterOrgType(e.target.value)}
+                  label="Type"
+                >
+                  <MenuItem value="">All Types</MenuItem>
+                  {ORG_TYPES.map((t) => (
+                    <MenuItem key={t.value} value={t.value}>
+                      {t.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, md: 2 }}>
+              <Button
+                fullWidth
+                size="small"
+                startIcon={<ClearIcon />}
+                onClick={handleClearOrgUnitsFilters}
+                disabled={!searchOrgUnits && !filterOrgType}
+              >
+                Clear
+              </Button>
+            </Grid>
+          </Grid>
+        </Paper>
 
-          <TextField
-            size="small"
-            placeholder="Search values..."
-            value={searchRefValues}
-            onChange={(e) => setSearchRefValues(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ flex: '1 1 200px' }}
+        {loading ? (
+          <LoadingSkeleton variant="table" />
+        ) : error ? (
+          <ErrorAlert message={error} onRetry={loadData} />
+        ) : filteredOrgUnits.length === 0 ? (
+          <EmptyState
+            icon={<AccountTreeIcon />}
+            title="No org units found"
+            description={
+              orgUnits.length === 0
+                ? 'Create your first org unit to start building the organizational tree.'
+                : 'No org units match the current filters.'
+            }
+            actionLabel={orgUnits.length === 0 ? 'New Org Unit' : undefined}
+            onAction={orgUnits.length === 0 ? () => openOrgUnitDialog() : undefined}
           />
-
-          <Button
-            size="small"
-            startIcon={<ClearIcon />}
-            onClick={handleClearRefValuesFilters}
-            disabled={!searchRefValues}
-          >
-            Clear
-          </Button>
-
-          <Box sx={{ flex: 1 }} />
-
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            disabled={!selectedRefSet}
-            onClick={() => notify({ message: 'Use detail page to add values', type: 'info' })}
-          >
-            New Value
-          </Button>
-        </Box>
-
-        {/* DataGrid */}
-        <Box sx={{ height: 500, width: '100%' }}>
-          <DataGrid
-            rows={filteredRefValues}
-            columns={refValuesColumns}
-            pageSizeOptions={[10, 25, 50, 100]}
-            initialState={{
-              pagination: { paginationModel: { pageSize: 25 } },
-            }}
-            disableRowSelectionOnClick
-            sx={{
-              '& .MuiDataGrid-columnHeader': {
-                backgroundColor: theme.palette.background.alt,
-                fontWeight: 600,
-              },
-            }}
-          />
-        </Box>
+        ) : (
+          <StandardDataGrid rows={filteredOrgUnits} columns={orgUnitsColumns} toolbar pageSize={25} />
+        )}
       </TabPanel>
 
-      {/* Tab 3: Org Units */}
-      <TabPanel value={tabValue} index={2}>
-        {/* Filters Bar */}
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 2,
-            mb: 2,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            p: 2,
-            bgcolor: 'background.alt',
-            borderRadius: 1,
-          }}
-        >
-          <TextField
-            size="small"
-            placeholder="Search org units..."
-            value={searchOrgUnits}
-            onChange={(e) => setSearchOrgUnits(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ flex: '1 1 250px', minWidth: 200 }}
-          />
-
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Type</InputLabel>
-            <Select
-              value={filterOrgType}
-              onChange={(e) => setFilterOrgType(e.target.value)}
-              label="Type"
+      {/* Reference Set create/edit dialog */}
+      <SystemDialog
+        open={refSetDialogOpen}
+        title={refSetEditing ? 'Edit Reference Set' : 'New Reference Set'}
+        width={520}
+        height={560}
+        onClose={closeRefSetDialog}
+        onCancel={closeRefSetDialog}
+        actions={
+          <>
+            <Button onClick={closeRefSetDialog} disabled={refSetSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveRefSet}
+              variant="contained"
+              disabled={refSetSaving}
+              startIcon={refSetSaving ? <CircularProgress size={16} /> : null}
             >
-              <MenuItem value="">All Types</MenuItem>
-              <MenuItem value="university">University</MenuItem>
-              <MenuItem value="campus">Campus</MenuItem>
-              <MenuItem value="college">College</MenuItem>
-              <MenuItem value="department">Department</MenuItem>
-              <MenuItem value="division">Division</MenuItem>
-              <MenuItem value="team">Team</MenuItem>
-              <MenuItem value="facility">Facility</MenuItem>
-              <MenuItem value="other">Other</MenuItem>
-            </Select>
-          </FormControl>
-
-          <Button
-            size="small"
-            startIcon={<ClearIcon />}
-            onClick={handleClearOrgUnitsFilters}
-            disabled={!searchOrgUnits && !filterOrgType}
-          >
-            Clear Filters
-          </Button>
-
-          <Box sx={{ flex: 1 }} />
-
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleOpenOrgUnitDialog}
-          >
-            New Org Unit
-          </Button>
-        </Box>
-
-        {/* DataGrid */}
-        <Box sx={{ height: 500, width: '100%' }}>
-          <DataGrid
-            rows={filteredOrgUnits}
-            columns={orgUnitsColumns}
-            pageSizeOptions={[10, 25, 50, 100]}
-            initialState={{
-              pagination: { paginationModel: { pageSize: 25 } },
-            }}
-            disableRowSelectionOnClick
-            sx={{
-              '& .MuiDataGrid-columnHeader': {
-                backgroundColor: theme.palette.background.alt,
-                fontWeight: 600,
-              },
-            }}
-          />
-        </Box>
-      </TabPanel>
-
-      {/* Create Reference Set Dialog */}
-      <Dialog open={refSetDialogOpen} onClose={handleCloseRefSetDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>New Reference Set</DialogTitle>
-        <DialogContent>
-          {refSetError && <Alert severity="error" sx={{ mb: 2 }}>{refSetError}</Alert>}
+              {refSetSaving ? 'Saving…' : refSetEditing ? 'Save Changes' : 'Create'}
+            </Button>
+          </>
+        }
+      >
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          {refSetFieldErrors.non_field_errors && (
+            <Alert severity="error">{refSetFieldErrors.non_field_errors}</Alert>
+          )}
           <TextField
             fullWidth
             label="Name"
-            margin="normal"
             required
             value={refSetForm.name}
             onChange={(e) => setRefSetForm({ ...refSetForm, name: e.target.value })}
+            error={Boolean(refSetFieldErrors.name)}
+            helperText={refSetFieldErrors.name}
             autoFocus
           />
           <TextField
             fullWidth
             label="Description"
-            margin="normal"
             multiline
             rows={2}
             value={refSetForm.description}
             onChange={(e) => setRefSetForm({ ...refSetForm, description: e.target.value })}
+            error={Boolean(refSetFieldErrors.description)}
+            helperText={refSetFieldErrors.description}
           />
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth error={Boolean(refSetFieldErrors.domain)}>
             <InputLabel>Domain</InputLabel>
             <Select
               value={refSetForm.domain}
@@ -872,41 +802,87 @@ export default function MDMPage() {
             >
               <MenuItem value="">— None —</MenuItem>
               {domains.map((d) => (
-                <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>
+                <MenuItem key={d.id} value={d.id}>
+                  {d.name}
+                </MenuItem>
               ))}
             </Select>
+            {refSetFieldErrors.domain && (
+              <Typography variant="caption" color="error">
+                {refSetFieldErrors.domain}
+              </Typography>
+            )}
           </FormControl>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseRefSetDialog} disabled={refSetSaving}>Cancel</Button>
-          <Button onClick={handleSaveRefSet} variant="contained" disabled={refSetSaving} startIcon={refSetSaving ? <CircularProgress size={16} /> : null}>
-            {refSetSaving ? 'Creating…' : 'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+          <FormControl fullWidth error={Boolean(refSetFieldErrors.steward)}>
+            <InputLabel>Steward</InputLabel>
+            <Select
+              value={refSetForm.steward}
+              label="Steward"
+              onChange={(e) => setRefSetForm({ ...refSetForm, steward: e.target.value })}
+            >
+              <MenuItem value="">— None —</MenuItem>
+              {users.map((u) => (
+                <MenuItem key={u.id} value={u.id}>
+                  {u.username}
+                </MenuItem>
+              ))}
+            </Select>
+            {refSetFieldErrors.steward && (
+              <Typography variant="caption" color="error">
+                {refSetFieldErrors.steward}
+              </Typography>
+            )}
+          </FormControl>
+        </Stack>
+      </SystemDialog>
 
-      {/* Create Org Unit Dialog */}
-      <Dialog open={orgUnitDialogOpen} onClose={handleCloseOrgUnitDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>New Org Unit</DialogTitle>
-        <DialogContent>
-          {orgUnitError && <Alert severity="error" sx={{ mb: 2 }}>{orgUnitError}</Alert>}
+      {/* Org Unit create/edit dialog */}
+      <SystemDialog
+        open={orgUnitDialogOpen}
+        title={orgUnitEditing ? 'Edit Org Unit' : 'New Org Unit'}
+        width={520}
+        height={620}
+        onClose={closeOrgUnitDialog}
+        onCancel={closeOrgUnitDialog}
+        actions={
+          <>
+            <Button onClick={closeOrgUnitDialog} disabled={orgUnitSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveOrgUnit}
+              variant="contained"
+              disabled={orgUnitSaving}
+              startIcon={orgUnitSaving ? <CircularProgress size={16} /> : null}
+            >
+              {orgUnitSaving ? 'Saving…' : orgUnitEditing ? 'Save Changes' : 'Create'}
+            </Button>
+          </>
+        }
+      >
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          {orgUnitFieldErrors.non_field_errors && (
+            <Alert severity="error">{orgUnitFieldErrors.non_field_errors}</Alert>
+          )}
           <TextField
             fullWidth
             label="Name"
-            margin="normal"
             required
             value={orgUnitForm.name}
             onChange={(e) => setOrgUnitForm({ ...orgUnitForm, name: e.target.value })}
+            error={Boolean(orgUnitFieldErrors.name)}
+            helperText={orgUnitFieldErrors.name}
             autoFocus
           />
           <TextField
             fullWidth
             label="Code"
-            margin="normal"
             value={orgUnitForm.code}
             onChange={(e) => setOrgUnitForm({ ...orgUnitForm, code: e.target.value })}
+            error={Boolean(orgUnitFieldErrors.code)}
+            helperText={orgUnitFieldErrors.code}
           />
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth error={Boolean(orgUnitFieldErrors.org_type)}>
             <InputLabel>Type</InputLabel>
             <Select
               value={orgUnitForm.org_type}
@@ -914,17 +890,19 @@ export default function MDMPage() {
               onChange={(e) => setOrgUnitForm({ ...orgUnitForm, org_type: e.target.value })}
             >
               <MenuItem value="">— None —</MenuItem>
-              <MenuItem value="university">University</MenuItem>
-              <MenuItem value="campus">Campus</MenuItem>
-              <MenuItem value="college">College</MenuItem>
-              <MenuItem value="department">Department</MenuItem>
-              <MenuItem value="division">Division</MenuItem>
-              <MenuItem value="team">Team</MenuItem>
-              <MenuItem value="facility">Facility</MenuItem>
-              <MenuItem value="other">Other</MenuItem>
+              {ORG_TYPES.map((t) => (
+                <MenuItem key={t.value} value={t.value}>
+                  {t.label}
+                </MenuItem>
+              ))}
             </Select>
+            {orgUnitFieldErrors.org_type && (
+              <Typography variant="caption" color="error">
+                {orgUnitFieldErrors.org_type}
+              </Typography>
+            )}
           </FormControl>
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth error={Boolean(orgUnitFieldErrors.parent)}>
             <InputLabel>Parent</InputLabel>
             <Select
               value={orgUnitForm.parent}
@@ -932,28 +910,45 @@ export default function MDMPage() {
               onChange={(e) => setOrgUnitForm({ ...orgUnitForm, parent: e.target.value })}
             >
               <MenuItem value="">— None —</MenuItem>
-              {orgUnits.map((ou) => (
-                <MenuItem key={ou.id} value={ou.id}>{ou.name}</MenuItem>
+              {parentOptions.map((ou) => (
+                <MenuItem key={ou.id} value={ou.id}>
+                  {ou.full_path || ou.name}
+                </MenuItem>
               ))}
             </Select>
+            {orgUnitFieldErrors.parent && (
+              <Typography variant="caption" color="error">
+                {orgUnitFieldErrors.parent}
+              </Typography>
+            )}
           </FormControl>
           <TextField
             fullWidth
             label="Description"
-            margin="normal"
             multiline
             rows={2}
             value={orgUnitForm.description}
             onChange={(e) => setOrgUnitForm({ ...orgUnitForm, description: e.target.value })}
+            error={Boolean(orgUnitFieldErrors.description)}
+            helperText={orgUnitFieldErrors.description}
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseOrgUnitDialog} disabled={orgUnitSaving}>Cancel</Button>
-          <Button onClick={handleSaveOrgUnit} variant="contained" disabled={orgUnitSaving} startIcon={orgUnitSaving ? <CircularProgress size={16} /> : null}>
-            {orgUnitSaving ? 'Creating…' : 'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+        </Stack>
+      </SystemDialog>
+
+      {/* Confirm delete dialog */}
+      <ConfirmDialog
+        open={Boolean(confirmState)}
+        title={confirmState?.title || 'Confirm'}
+        message={confirmState?.message || ''}
+        destructive={confirmState?.destructive}
+        confirmLabel={confirmState?.confirmLabel || 'Confirm'}
+        onCancel={() => setConfirmState(null)}
+        onConfirm={async () => {
+          const { onConfirm } = confirmState || {};
+          setConfirmState(null);
+          if (onConfirm) await onConfirm();
+        }}
+      />
+    </PageContainer>
   );
 }

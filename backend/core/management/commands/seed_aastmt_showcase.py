@@ -459,6 +459,9 @@ class Command(BaseCommand):
         # ── Phase 11: DQ Table Profiles ──
         self._profile_tables()
 
+        # ── Phase 11b: DQ Range Rules for numeric fields (P1: de-hardcoded negative ban) ──
+        self._seed_dq_rules()
+
         # ── Phase 12: Catalog & Governance ──
         self._seed_catalog_governance()
 
@@ -905,6 +908,74 @@ class Command(BaseCommand):
                 ))
 
         self.stdout.write(f"  {profiled} tables profiled.")
+
+    def _seed_dq_rules(self):
+        """Seed DQ range rules (min: 0, severity: error) for all numeric emission fields.
+
+        This replaces the previous hardcoded negative-value ban in dataschema validators.
+        Each domain can now independently decide whether negative values are allowed.
+        """
+        self.stdout.write("\n[11b] Seeding DQ range rules for numeric fields...")
+        from dq.models import DQRule, RuleFieldAssignment
+        from django.contrib.contenttypes.models import ContentType
+
+        admin = self._user_cache.get('admin') or User.objects.filter(is_superuser=True).first()
+        numeric_field_map = {
+            'monthly_electricity': ['consumption_kwh', 'cost_egp'],
+            'monthly_chilled_water': ['consumption_tr'],
+            'monthly_water': ['consumption_m3'],
+            'fleet_fuel_log': ['vehicle_count', 'gasoline_liters', 'diesel_liters', 'total_cost_egp'],
+            'generator_fuel_log': ['diesel_liters', 'runtime_hours'],
+            'paper_consumption': ['paper_reams', 'cost_egp'],
+            'vessel_fuel_log': ['diesel_liters', 'voyage_hours'],
+        }
+
+        created = 0
+        for tbl_name, field_names in numeric_field_map.items():
+            tbl = self._table_cache.get(tbl_name)
+            if not tbl:
+                continue
+            for fname in field_names:
+                field = tbl.fields.filter(name=fname).first()
+                if not field:
+                    continue
+                # Idempotent: skip if a range rule already exists for this field
+                existing = RuleFieldAssignment.objects.filter(
+                    data_field=field,
+                    rule__rule_type='range',
+                    rule__params__has_key='min',
+                ).first()
+                if existing:
+                    continue
+
+                rule = DQRule.objects.create(
+                    name=f'{tbl.label or tbl_name} {fname} >= 0',
+                    description=f'Range rule: {fname} must be >= 0 on {tbl_name}.',
+                    rule_level='field_validation',
+                    rule_type='range',
+                    dimension='validity',
+                    severity='error',
+                    params={'min': 0},
+                    definition={
+                        'schema_version': 1,
+                        'name': f'{tbl_name}.{fname} >= 0',
+                        'level': 'field',
+                        'dimension': 'validity',
+                        'type': 'range',
+                        'severity': 'error',
+                        'active': True,
+                        'description': f'Range rule: {fname} >= 0 on {tbl_name}.',
+                        'bindings': [{'table': tbl_name, 'field': fname}],
+                        'params': {'min': 0},
+                    },
+                    version=1,
+                    is_active=True,
+                    created_by=admin,
+                )
+                RuleFieldAssignment.objects.create(rule=rule, data_table=tbl, data_field=field)
+                created += 1
+
+        self.stdout.write(f"  {created} DQ range rules seeded (idempotent).")
 
     def _seed_catalog_governance(self):
         self.stdout.write("\n[12/13] Seeding catalog & governance...")

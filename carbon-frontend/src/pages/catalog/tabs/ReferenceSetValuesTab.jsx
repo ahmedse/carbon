@@ -16,6 +16,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 
 const EMPTY_FORM = {
   code: '',
@@ -27,6 +28,19 @@ const EMPTY_FORM = {
   valid_to: null,
 };
 
+// Map DRF field-error payload ({field: [msg]}) to {field: msg} for per-field display.
+function mapFieldErrors(err) {
+  const data = err?.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const fieldErrors = {};
+  Object.entries(data).forEach(([key, value]) => {
+    if (key === 'non_field_errors') return;
+    if (Array.isArray(value)) fieldErrors[key] = value[0];
+    else if (typeof value === 'string') fieldErrors[key] = value;
+  });
+  return Object.keys(fieldErrors).length ? fieldErrors : null;
+}
+
 export default function ReferenceSetValuesTab({ entityData, additionalProps = {} }) {
   const { token } = useAuth();
   const { notify } = useNotification();
@@ -35,12 +49,15 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
   const [openDialog, setOpenDialog] = useState(false);
   const [editingValue, setEditingValue] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [confirmState, setConfirmState] = useState(null);
 
   const handleOpenCreate = () => {
     setEditingValue(null);
     setFormData(EMPTY_FORM);
+    setFieldErrors({});
     setOpenDialog(true);
   };
 
@@ -55,6 +72,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
       valid_from: value.valid_from ? dayjs(value.valid_from) : null,
       valid_to: value.valid_to ? dayjs(value.valid_to) : null,
     });
+    setFieldErrors({});
     setOpenDialog(true);
   };
 
@@ -62,6 +80,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
     setOpenDialog(false);
     setEditingValue(null);
     setFormData(EMPTY_FORM);
+    setFieldErrors({});
     setError(null);
   };
 
@@ -75,10 +94,19 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
   };
 
   const handleSave = async () => {
-    if (!formData.code.trim() || !formData.label.trim()) {
-      setError('Code and Label are required');
-      return;
+    // Client-side validation
+    const errors = {};
+    if (!formData.code.trim()) errors.code = 'Code is required.';
+    if (!formData.label.trim()) errors.label = 'Label is required.';
+    if (
+      formData.valid_from &&
+      formData.valid_to &&
+      formData.valid_from.isAfter(formData.valid_to, 'day')
+    ) {
+      errors.valid_to = 'Valid To must be on or after Valid From.';
     }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
 
     setSaving(true);
     setError(null);
@@ -108,25 +136,37 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
         onValuesUpdated();
       }
     } catch (err) {
-      const message = err.message || 'Failed to save reference value';
-      setError(message);
-      notify({ message, type: 'error' });
+      const mapped = mapFieldErrors(err);
+      if (mapped) {
+        setFieldErrors(mapped);
+      } else {
+        const message = err.message || 'Failed to save reference value';
+        setError(message);
+        notify({ message, type: 'error' });
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this reference value?')) return;
-    try {
-      await deleteReferenceValue(token, id);
-      notify({ message: 'Reference value deleted', type: 'success' });
-      if (onValuesUpdated) {
-        onValuesUpdated();
-      }
-    } catch (err) {
-      notify({ message: err.message || 'Failed to delete', type: 'error' });
-    }
+  const handleDelete = (row) => {
+    setConfirmState({
+      title: 'Delete reference value',
+      message: `Delete value "${row.code}" (${row.label})?\nThis action cannot be undone.`,
+      destructive: true,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await deleteReferenceValue(token, row.id);
+          notify({ message: 'Reference value deleted', type: 'success' });
+          if (onValuesUpdated) {
+            onValuesUpdated();
+          }
+        } catch (err) {
+          notify({ message: err.message || 'Failed to delete', type: 'error' });
+        }
+      },
+    });
   };
 
   const columns = [
@@ -197,7 +237,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
             <IconButton
               size="small"
               color="error"
-              onClick={() => handleDelete(params.row.id)}
+              onClick={() => handleDelete(params.row)}
             >
               <DeleteIcon fontSize="small" />
             </IconButton>
@@ -251,7 +291,8 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
             onChange={handleChange}
             margin="normal"
             required
-            helperText="Alphanumeric identifier (e.g., SCOPE_1)"
+            error={Boolean(fieldErrors.code)}
+            helperText={fieldErrors.code || 'Alphanumeric identifier (e.g., SCOPE_1)'}
           />
 
           <TextField
@@ -262,7 +303,8 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
             onChange={handleChange}
             margin="normal"
             required
-            helperText="Human-readable display name"
+            error={Boolean(fieldErrors.label)}
+            helperText={fieldErrors.label || 'Human-readable display name'}
           />
 
           <TextField
@@ -274,6 +316,8 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
             margin="normal"
             multiline
             rows={2}
+            error={Boolean(fieldErrors.description)}
+            helperText={fieldErrors.description}
           />
 
           <TextField
@@ -284,7 +328,8 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
             value={formData.sort_order}
             onChange={handleChange}
             margin="normal"
-            helperText="Display order (lower numbers appear first)"
+            error={Boolean(fieldErrors.sort_order)}
+            helperText={fieldErrors.sort_order || 'Display order (lower numbers appear first)'}
           />
 
           <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
@@ -292,12 +337,14 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
               label="Valid From"
               value={formData.valid_from}
               onChange={(value) => handleDateChange('valid_from', value)}
+              slotProps={{ textField: { error: Boolean(fieldErrors.valid_from), helperText: fieldErrors.valid_from, size: 'small', fullWidth: true } }}
               sx={{ flex: 1 }}
             />
             <DatePicker
               label="Valid To"
               value={formData.valid_to}
               onChange={(value) => handleDateChange('valid_to', value)}
+              slotProps={{ textField: { error: Boolean(fieldErrors.valid_to), helperText: fieldErrors.valid_to, size: 'small', fullWidth: true } }}
               sx={{ flex: 1 }}
             />
           </Box>
@@ -312,6 +359,21 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Confirm delete dialog */}
+      <ConfirmDialog
+        open={Boolean(confirmState)}
+        title={confirmState?.title || 'Confirm'}
+        message={confirmState?.message || ''}
+        destructive={confirmState?.destructive}
+        confirmLabel={confirmState?.confirmLabel || 'Confirm'}
+        onCancel={() => setConfirmState(null)}
+        onConfirm={async () => {
+          const { onConfirm } = confirmState || {};
+          setConfirmState(null);
+          if (onConfirm) await onConfirm();
+        }}
+      />
     </DetailTabContent>
   );
 }

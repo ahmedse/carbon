@@ -181,3 +181,101 @@ class ReferenceSetViewSetTest(APITestCase):
             'code': 'ACTIVE', 'label': 'Active', 'sort_order': 1
         })
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    # --- Regression: steward reassignment (audit finding: steward field was read-only) ---
+
+    def test_steward_can_reassign_stewardship(self):
+        """Steward may transfer ownership of a reference set to another user."""
+        ref_set = ReferenceSet.objects.create(
+            name='StewardTransfer', slug='steward-transfer', steward=self.user1, domain=self.domain_1, is_active=True
+        )
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.patch(
+            f'/carbon-api/mdm/reference-sets/{ref_set.id}/',
+            {'steward': self.user2.id},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ref_set.refresh_from_db()
+        self.assertEqual(ref_set.steward, self.user2)
+
+    def test_non_steward_cannot_reassign_stewardship(self):
+        """Non-steward cannot change steward (403)."""
+        ref_set = ReferenceSet.objects.create(
+            name='StewardBlock', slug='steward-block', steward=self.user1, domain=self.domain_1, is_active=True
+        )
+        self.client.force_authenticate(user=self.user2)
+        response = self.client.patch(
+            f'/carbon-api/mdm/reference-sets/{ref_set.id}/',
+            {'steward': self.user2.id},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    # --- Regression: N+1 value_count uses view annotation ---
+
+    def test_value_count_uses_annotation(self):
+        """List response value_count reflects active values (annotation path)."""
+        ref_set = ReferenceSet.objects.create(
+            name='CountedSet', slug='counted-set', steward=self.user1, domain=self.domain_1, is_active=True
+        )
+        ReferenceValue.objects.create(reference_set=ref_set, code='A', label='A', is_active=True)
+        ReferenceValue.objects.create(reference_set=ref_set, code='B', label='B', is_active=True)
+        ReferenceValue.objects.create(reference_set=ref_set, code='C', label='C', is_active=False)
+
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get('/carbon-api/mdm/reference-sets/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data if isinstance(response.data, list) else response.data.get('results', [])
+        row = next(item for item in data if item['id'] == ref_set.id)
+        self.assertEqual(row['value_count'], 2)
+
+    # --- Regression: stewards can CRUD values via generic endpoints ---
+
+    def test_steward_can_create_value_via_generic_endpoint(self):
+        """Steward can create a value on the generic reference-values endpoint."""
+        ref_set = ReferenceSet.objects.create(
+            name='GenericCreate', slug='generic-create', steward=self.user1, domain=self.domain_1, is_active=True
+        )
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.post(
+            '/carbon-api/mdm/reference-values/',
+            {'reference_set': ref_set.id, 'code': 'X1', 'label': 'X One'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_non_steward_cannot_create_value_via_generic_endpoint(self):
+        """Non-steward is denied on the generic reference-values endpoint."""
+        ref_set = ReferenceSet.objects.create(
+            name='GenericDeny', slug='generic-deny', steward=self.user1, domain=self.domain_1, is_active=True
+        )
+        self.client.force_authenticate(user=self.user2)
+        response = self.client.post(
+            '/carbon-api/mdm/reference-values/',
+            {'reference_set': ref_set.id, 'code': 'X2', 'label': 'X Two'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_steward_can_update_and_delete_value_via_generic_endpoint(self):
+        """Steward can update and soft-delete values through the generic endpoint."""
+        ref_set = ReferenceSet.objects.create(
+            name='GenericUpdate', slug='generic-update', steward=self.user1, domain=self.domain_1, is_active=True
+        )
+        value = ReferenceValue.objects.create(reference_set=ref_set, code='Y', label='Y')
+        self.client.force_authenticate(user=self.user1)
+
+        response = self.client.patch(
+            f'/carbon-api/mdm/reference-values/{value.id}/',
+            {'label': 'Y Updated'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        value.refresh_from_db()
+        self.assertEqual(value.label, 'Y Updated')
+
+        response = self.client.delete(f'/carbon-api/mdm/reference-values/{value.id}/')
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        value.refresh_from_db()
+        self.assertFalse(value.is_active)

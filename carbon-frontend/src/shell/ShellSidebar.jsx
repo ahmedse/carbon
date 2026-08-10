@@ -23,7 +23,6 @@ import StorageIcon from '@mui/icons-material/Storage';
 import DownloadIcon from '@mui/icons-material/Download';
 import UploadIcon from '@mui/icons-material/Upload';
 import AssignmentIcon from '@mui/icons-material/Assignment';
-import LayersIcon from '@mui/icons-material/Layers';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import ScienceIcon from '@mui/icons-material/Science';
 import FolderIcon from '@mui/icons-material/Folder';
@@ -95,7 +94,6 @@ function getSidebarItems(studioId) {
         { label: 'Governance Audit', path: '/catalog/governance', icon: VerifiedUserIcon },
         { type: 'divider' },
         { type: 'group', label: 'Master Data' },
-        { label: 'Reference Sets', path: '/catalog/reference-data', icon: LayersIcon },
         { label: 'Master Data', path: '/catalog/mdm', icon: AccountTreeIcon },
         { type: 'divider' },
         { type: 'group', label: 'Data Integration' },

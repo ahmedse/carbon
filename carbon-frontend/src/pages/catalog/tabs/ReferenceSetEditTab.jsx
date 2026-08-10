@@ -1,16 +1,23 @@
 // src/pages/catalog/tabs/ReferenceSetEditTab.jsx
 // Reference Set Edit Tab: Governance form for updating reference set metadata
+// plus lifecycle transition controls.
 
 import React, { useState } from 'react';
 import { 
   Box, TextField, Button, CircularProgress, Alert, 
   MenuItem, FormControl, InputLabel, Select,
-  FormHelperText, Typography, Switch, FormControlLabel
+  FormHelperText, Typography, Switch, FormControlLabel, Chip,
+  Stack
 } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { apiFetch } from '../../../api/api';
+import {
+  LIFECYCLE_COLORS,
+  LIFECYCLE_LABELS,
+  getValidTransitions,
+} from '../../../constants/referenceSetLifecycle';
 
 
 export default function ReferenceSetEditTab({ entityData, additionalProps = {} }) {
@@ -28,6 +35,8 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [transitioning, setTransitioning] = useState(null);
+  const [transitionError, setTransitionError] = useState(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -37,6 +46,36 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
   const handleSwitchChange = (e) => {
     setFormData(prev => ({ ...prev, is_active: e.target.checked }));
   };
+
+  // Transition a reference set to a new lifecycle state.
+  const handleTransition = async (targetState) => {
+    setTransitioning(targetState);
+    setTransitionError(null);
+    try {
+      const response = await apiFetch(`mdm/reference-sets/${entityData.id}/transition/`, {
+        method: 'POST',
+        token,
+        body: { state: targetState },
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.state?.[0] || errData.detail || `Transition failed: ${response.status}`);
+      }
+      notify({ message: `Lifecycle state changed to ${LIFECYCLE_LABELS[targetState] || targetState}`, type: 'success' });
+      if (onRefSetUpdated) {
+        onRefSetUpdated();
+      }
+    } catch (err) {
+      const message = err.message || 'Failed to change lifecycle state';
+      setTransitionError(message);
+      notify({ message, type: 'error' });
+    } finally {
+      setTransitioning(null);
+    }
+  };
+
+  const lifecycleState = entityData?.lifecycle_state || 'draft';
+  const validTransitions = getValidTransitions(lifecycleState);
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -180,6 +219,50 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
         />
         <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4, mt: -1 }}>
           Inactive reference sets are hidden from selection lists
+        </Typography>
+
+        {/* Lifecycle */}
+        <Typography variant="subtitle2" sx={{ mb: 1, mt: 3, fontWeight: 600 }}>Lifecycle</Typography>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+          <Chip
+            label={LIFECYCLE_LABELS[lifecycleState] || lifecycleState}
+            size="small"
+            color={LIFECYCLE_COLORS[lifecycleState] || 'default'}
+            variant={lifecycleState === 'active' ? 'filled' : 'outlined'}
+          />
+          {validTransitions.length === 0 ? (
+            <Typography variant="caption" color="text.secondary">
+              Archived — no further transitions allowed
+            </Typography>
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              Move to:
+            </Typography>
+          )}
+        </Stack>
+
+        {validTransitions.length > 0 && (
+          <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+            {validTransitions.map((state) => (
+              <Button
+                key={state}
+                size="small"
+                variant="outlined"
+                color={LIFECYCLE_COLORS[state] === 'success' ? 'success' : 'primary'}
+                disabled={transitioning !== null}
+                startIcon={transitioning === state ? <CircularProgress size={14} /> : null}
+                onClick={() => handleTransition(state)}
+              >
+                {LIFECYCLE_LABELS[state] || state}
+              </Button>
+            ))}
+          </Stack>
+        )}
+        {transitionError && (
+          <Alert severity="error" sx={{ mb: 1, mt: 1 }}>{transitionError}</Alert>
+        )}
+        <Typography variant="caption" color="text.secondary">
+          Lifecycle: Draft → Active → Deprecated → Archived (deprecated may return to active)
         </Typography>
 
         <Box sx={{ mt: 3, display: 'flex', gap: 1 }}>

@@ -21,8 +21,7 @@ class TableProfileSerializer(serializers.ModelSerializer):
 DQProfileConfigSerializer = type('DQProfileConfigSerializer', (serializers.ModelSerializer,), {
     'Meta': type('Meta', (), {
         'model': DQProfileConfig,
-        'fields': ['id', 'auto_profile_enabled', 'freshness_threshold_hours',
-                    'volume_anomaly_pct', 'sample_size'],
+        'fields': ['id', 'freshness_threshold_hours', 'volume_anomaly_pct'],
     })
 })
 
@@ -87,9 +86,11 @@ class DQRuleSerializer(serializers.ModelSerializer):
             'id', 'rule_level', 'rule_type', 'name', 'description',
             'params', 'severity', 'is_active', 'tags', 'tag_ids',
             'field_assignments', 'field_assignments_write', 'results_count', 'is_locked',
+            'dimension', 'definition', 'version', 'archived',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'results_count', 'is_locked', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'results_count', 'is_locked', 'version',
+                           'created_by', 'created_at', 'updated_at']
 
     def get_results_count(self, obj):
         return obj.results.count()

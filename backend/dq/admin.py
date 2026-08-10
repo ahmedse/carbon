@@ -11,7 +11,6 @@ from .services import profile_table
 class DQProfileConfigAdmin(admin.ModelAdmin):
     """Singleton config for profiling — only one instance allowed."""
     fieldsets = (
-        ('Automated Profiling', {'fields': ('auto_profile_enabled', 'sample_size')}),
         ('Freshness', {'fields': ('freshness_threshold_hours', 'volume_anomaly_pct')}),
     )
 

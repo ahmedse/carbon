@@ -15,7 +15,10 @@ from catalog.audit_utils import emit_governance_event
 from .models import ReferenceSet, ReferenceValue, OrgUnit
 from .serializers import ReferenceSetSerializer, ReferenceValueSerializer, OrgUnitSerializer
 from .services import ReferenceSetService, OrgUnitService
+from .permissions import CanManageReferenceValues
 from accounts.permissions import ReadAnyWriteGlobalAdmin
+from accounts.rbac_utils import user_has_global_role
+from accounts.constants import ADMINS_GROUP
 from catalog.permissions import AdminOrSuperuserOnly
 from accounts.models import ScopedRole
 
@@ -42,12 +45,13 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
     ordering = ['name']
 
     def get_queryset(self):
-        """Filter by user's organization unit scopes via ScopedRole.
-        
-        RBAC Logic:
-        - Superusers/staff see all reference sets
-        - Regular users see only reference sets in their assigned org_units
-        - If user has no org_unit assignments, show nothing (restrictive)
+        """Return active reference sets visible to the requesting user.
+
+        Reference sets are shared governance resources: every authenticated user
+        sees all active sets (domain-level scoping happens on AssetProfile/DataField,
+        not on the set itself). Superusers/staff additionally see inactive sets
+        during maintenance. The values_count annotation prevents N+1 on the
+        serializer's value_count field.
         """
         if getattr(self, 'swagger_fake_view', False):
             return ReferenceSet.objects.none()
@@ -73,6 +77,15 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         # Non-staff users see only active reference sets.
         return qs.filter(is_active=True)
 
+    def _can_write_set(self, obj):
+        """True if the request user may edit obj (steward, staff, or global admin)."""
+        user = self.request.user
+        if user.is_superuser or user.is_staff:
+            return True
+        if user_has_global_role(user, [ADMINS_GROUP]):
+            return True
+        return obj.steward_id == user.id
+
     def perform_create(self, serializer):
         """Auto-assign steward to current user on create."""
         instance = serializer.save(
@@ -96,10 +109,10 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         )
 
     def perform_update(self, serializer):
-        """Check permission before update: only steward or staff can edit."""
+        """Check permission before update: only steward, staff, or global admin can edit."""
         obj = self.get_object()
-        if obj.steward != self.request.user and not self.request.user.is_staff:
-            raise PermissionDenied("Only steward can edit this reference set")
+        if not self._can_write_set(obj):
+            raise PermissionDenied("Only the steward or an admin can edit this reference set")
         before = {
             'name': obj.name,
             'description': obj.description,
@@ -209,9 +222,9 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         """POST /mdm/reference-sets/{id}/add_value/ -> add value to set."""
         ref_set = self.get_object()
 
-        # Check permission: only steward can add values (authz stays in view)
-        if ref_set.steward != request.user and not request.user.is_staff:
-            raise PermissionDenied("Only steward can add values to this set")
+        # Check permission: only steward, staff, or global admin can add values (authz stays in view)
+        if not self._can_write_set(ref_set):
+            raise PermissionDenied("Only the steward or an admin can add values to this set")
 
         data, created = ReferenceSetService.add_value(ref_set, request.data)
         if created:
@@ -255,7 +268,8 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
 
 class ReferenceValueViewSet(viewsets.ModelViewSet):
     serializer_class = ReferenceValueSerializer
-    permission_classes = [ReadAnyWriteGlobalAdmin]
+    # Stewards of the owning set may CRUD their values; admins/staff may too.
+    permission_classes = [CanManageReferenceValues]
 
     @swagger_auto_schema(
         operation_description='Create multiple reference values atomically for bulk import workflows.',

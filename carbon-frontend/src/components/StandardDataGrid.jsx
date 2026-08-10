@@ -13,7 +13,7 @@ export default function StandardDataGrid({
   rowsPerPageOptions = [25, 50, 100],
   checkboxSelection = false,
   hideFooterSelectedRowCount = true,
-  _toolbar = false,
+  toolbar = false,
   _initialState = {
     pagination: { paginationModel: { pageSize: 25, page: 0 } },
   },

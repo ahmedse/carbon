@@ -49,7 +49,7 @@ export default function FilteredDataGrid({
     <PageContainer>
       <PageHeader title={title} subtitle={subtitle} description={description} actions={actions} />
 
-      <Paper sx={{ p: 2, mb: 3, bgcolor: 'background.alt' }}>
+      <Paper sx={{ p: 2, mb: 3, bgcolor: 'background.dark' }}>
         <Stack spacing={2}>
           <TextField
             placeholder="Search by name or description..."

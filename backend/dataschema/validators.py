@@ -102,13 +102,8 @@ def _validate_one_field(field, value, values: dict, ref_cache: dict) -> list[dic
             })
             return errors  # can't check min/max on non-numeric values
 
-        # Negative check
-        if value < 0:
-            errors.append({
-                'field': field_name,
-                'code': 'negative',
-                'message': 'Negative values are not allowed.',
-            })
+        # Negative values are no longer banned at the platform level.
+        # Use DQ range rules (min: 0) seeded per domain to enforce domain-specific bans.
 
         # 6-7. validation.min / validation.max (new — was never read before)
         validation = field.validation or {}

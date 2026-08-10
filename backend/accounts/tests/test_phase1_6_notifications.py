@@ -247,12 +247,13 @@ class TestDQSignal:
         module = Module.objects.create(name="test_module")
         table = DataTable.objects.create(title="test_table", name="test_table", module=module)
         rule = DQRule.objects.create(
-            data_table=table,
             name="not_null_rule",
             rule_type="not_null",
             params={"column": "id"},
             is_active=True,
         )
+        from dq.models import RuleFieldAssignment
+        RuleFieldAssignment.objects.create(rule=rule, data_table=table)
         # Create a failed DQ result — should trigger signal → notification
         DQResult.objects.create(
             rule=rule,

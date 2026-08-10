@@ -1,7 +1,7 @@
 # PULSE INTEGRATION CONTRACT — CARBON DATA TRUST
 
 **Version:** 2.0.0  
-**Status:** Spec — not yet implemented  
+**Status:** v2.0 — dq.validate and dq.suggest implemented Carbon-side; other task types pending.  
 **Last updated:** 2026-08-09  
 **Informed by:** Google A2A Protocol v1.0, MCP, OpenAI Agents SDK
 

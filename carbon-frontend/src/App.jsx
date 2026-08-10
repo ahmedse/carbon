@@ -54,11 +54,8 @@ const DataProductDetailPage = React.lazy(() => import("./pages/catalog/DataProdu
 const DomainDetailPage = React.lazy(() => import("./pages/catalog/DomainDetailPage"));
 const TagDetailPage = React.lazy(() => import("./pages/catalog/TagDetailPage"));
 const AssetDetailPage = React.lazy(() => import("./pages/catalog/AssetDetailPage"));
-const DQDashboardPage = React.lazy(() => import("./pages/catalog/DQDashboardPage"));
-const DQRulesPage = React.lazy(() => import("./pages/catalog/DQRulesPage"));
 const DQHubPage = React.lazy(() => import("./pages/catalog/DQHubPage"));
 const ReferenceSetDetailPage = React.lazy(() => import("./pages/catalog/ReferenceSetDetailPage"));
-const ReferenceDataPage = React.lazy(() => import("./pages/catalog/ReferenceDataPage"));
 const GovernancePage = React.lazy(() => import("./pages/catalog/GovernancePage"));
 const DataSourcesDetailPage = React.lazy(() => import("./pages/catalog/DataSourcesDetailPage"));
 const ExportsDetailPage = React.lazy(() => import("./pages/catalog/ExportsDetailPage"));
@@ -334,7 +331,8 @@ export default function App() {
                   <Route path="/catalog/connections" element={<ConnectionsPage />} />
                   <Route path="/catalog/importexport" element={<ImportExportPage />} />
                   <Route path="/catalog/tags/:tagId" element={<TagDetailPage />} />
-                  <Route path="/catalog/reference-data" element={<ReferenceDataPage />} />
+                  {/* Legacy redirect: Reference Data was merged into the Master Data page */}
+                  <Route path="/catalog/reference-data" element={<Navigate to="/catalog/mdm" replace />} />
                   <Route path="/catalog/governance" element={<GovernancePage />} />
                   <Route path="/catalog/sources" element={<DataSourcesDetailPage />} />
                   <Route path="/catalog/exports" element={<ExportsDetailPage />} />

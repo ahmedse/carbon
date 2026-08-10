@@ -141,8 +141,9 @@ Purpose: produce the *trust signal* surfaced in the catalog.
   `top_values` (JSON), `pattern_summary` (JSON), `profiled_at`.
 - `TableProfile` — rollup per `DataTable`. `data_table`, `row_count`, `completeness_pct`, `profiled_at`.
 - `DQRule` — `scope` (table|field), `data_table`/`data_field` (FK), `rule_type`
-  (not_null | unique | range | regex | allowed_values | reference_integrity),
+  (not_null | unique | allowed_values | range | regex | reference_integrity | threshold | nl_check),
   `params` (JSON), `severity` (info|warn|error), `is_active`.
+  Note: Carbon pushes tasks to Pulse (see PULSE_CONTRACT_SPEC v2.0).
 - `DQResult` — `rule` (FK), `run_at`, `passed` (bool), `failed_count`, `sample_failures` (JSON), `score` (0–100).
 - Rollup: latest results → `AssetProfile.quality_status` / `quality_score` (denormalized write-back).
 

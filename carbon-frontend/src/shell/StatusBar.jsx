@@ -57,11 +57,6 @@ export function StatusBar({
       }
     }
 
-    // Check for Carbon Data Entry quality
-    if (pathname === '/dataschema/quality' || pathname === '/carbon/data-entry/quality') {
-      return 'Carbon Data Entry › Quality';
-    }
-
     // Check for Carbon Data Entry home
     if (pathname === '/dataschema' || pathname === '/carbon/data-entry') {
       return 'Carbon Data Entry';

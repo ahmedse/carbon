@@ -10,6 +10,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied, NotFound
 from django.db.models import Q
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ from accounts.permissions import ReadAnyWriteGlobalAdmin, ReadScopedWriteAdmin, 
 from accounts.rbac_utils import get_allowed_org_unit_ids, user_has_global_role, get_allowed_module_ids
 from accounts.models import ScopedRole
 from .services import profile_table, run_dq, run_single_rule, bulk_profile
-from .executor import DQRuleExecutor
+from .rule_schema import DIMENSIONS
 from dataschema.models import DataTable, DataField
 
 
@@ -134,17 +135,21 @@ class DQRuleViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description', 'rule_type']
     ordering_fields = ['created_at', 'name', 'severity', 'rule_level']
+    filterset_fields = ['rule_level', 'rule_type', 'severity', 'is_active', 'dimension', 'archived']
 
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return DQRule.objects.none()
         # Optimize: prefetch M2M through tables + tags
+        include_archived = self.request.query_params.get('include_archived') == '1'
         base_qs = DQRule.objects.prefetch_related(
             'field_assignments__data_table__module',
             'field_assignments__data_field',
             'tags',
             'results',
-        ).select_related('created_by').filter(is_active=True)
+        ).select_related('created_by')
+        if not include_archived:
+            base_qs = base_qs.filter(archived=False)
         user = self.request.user
         if user.is_superuser or user.is_staff:
             qs = base_qs
@@ -173,16 +178,22 @@ class DQRuleViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         rule = self.get_object()
-        if rule.results.exists():
+        results_count = rule.results.count()
+        if results_count > 0:
+            # Archive instead of hard-deleting when results exist.
+            # Use update() to bypass the save() override which would
+            # resync is_active from definition.active.
+            DQRule.objects.filter(pk=rule.pk).update(
+                archived=True, is_active=False,
+                updated_at=timezone.now(),
+            )
             return Response(
                 {
-                    'detail': 'This rule is locked because it has execution history. '
-                              'Deactivate it instead by setting is_active=false.',
-                    'code': 'rule_locked',
-                    'is_locked': True,
-                    'results_count': rule.results.count(),
+                    'archived': True,
+                    'results_count': results_count,
+                    'detail': f'Rule archived. {results_count} historical results preserved.',
                 },
-                status=status.HTTP_409_CONFLICT,
+                status=status.HTTP_200_OK,
             )
         return super().destroy(request, *args, **kwargs)
 
@@ -195,9 +206,8 @@ class DQRuleViewSet(viewsets.ModelViewSet):
         """POST /dq/rules/{id}/execute/ — Execute this rule."""
         rule = self.get_object()
         _check_rule_access(request.user, rule)
-        executor = DQRuleExecutor(rule)
-        result = executor.execute()
-        return Response(DQResultSerializer(result).data, status=status.HTTP_201_CREATED)
+        result_list = run_single_rule(rule.id, user=request.user)
+        return Response(result_list, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         operation_description='Return the recent execution history for a data quality rule.',
@@ -302,12 +312,13 @@ class DQRuleViewSet(viewsets.ModelViewSet):
         for rule in rules:
             _check_rule_access(request.user, rule)
             try:
-                result = run_single_rule(rule.id, user=request.user)
-                results.append(result)
-                if result['passed']:
-                    passed += 1
-                else:
-                    failed += 1
+                result_list = run_single_rule(rule.id, user=request.user)
+                for result in result_list:
+                    results.append(result)
+                    if result['passed']:
+                        passed += 1
+                    else:
+                        failed += 1
             except Exception as exc:
                 results.append({
                     'rule_id': rule.id,
@@ -736,6 +747,24 @@ class DQMetricsView(APIView):
         failing_rules = latest_results.filter(passed=False).count()
         overall_score = round(passing_rules / total_rules * 100, 1) if total_rules > 0 else 0.0
         
+        # Per-dimension scores: group rules by dimension, average latest DQResult.score
+        scores_by_dimension = {}
+        dim_rules = {}
+        for rule in rules:
+            dim_rules.setdefault(rule.dimension or 'validity', []).append(rule.id)
+
+        for dim_code, _dim_label in DIMENSIONS:
+            dim_rule_ids = dim_rules.get(dim_code, [])
+            if not dim_rule_ids:
+                continue
+            dim_results = [r for r in latest_results if r.rule_id in dim_rule_ids]
+            if dim_results:
+                scores_by_dimension[dim_code] = round(
+                    sum(r.score for r in dim_results) / len(dim_results), 1
+                )
+            else:
+                scores_by_dimension[dim_code] = None
+
         return Response({
             'table_count': profiles.count(),
             'total_rows': total_rows,
@@ -744,6 +773,7 @@ class DQMetricsView(APIView):
             'passing_rules': passing_rules,
             'failing_rules': failing_rules,
             'overall_score': overall_score,
+            'scores_by_dimension': scores_by_dimension,
         })
 
 
@@ -770,7 +800,7 @@ class TableDQMetricsView(APIView):
         _check_table_access(request.user, table)
         profile = TableProfile.objects.filter(data_table=table).first()
         rules = DQRule.objects.filter(
-            Q(data_table=table) | Q(data_field__data_table=table), is_active=True
+            Q(field_assignments__data_table=table) | Q(field_assignments__data_field__data_table=table), is_active=True
         ).distinct()
         field_profiles = FieldProfile.objects.filter(data_field__data_table=table)
 
@@ -835,7 +865,7 @@ class FieldDQMetricsView(APIView):
             if field.data_table.module.org_unit_id not in org_units:
                 raise PermissionDenied("Not authorized for this field")
         profile = FieldProfile.objects.filter(data_field=field).first()
-        rules = DQRule.objects.filter(data_field=field, is_active=True)
+        rules = DQRule.objects.filter(field_assignments__data_field=field, is_active=True).distinct()
         return Response({
             'field_id': field.id,
             'field_name': field.name,
