@@ -3,6 +3,7 @@
 // plus lifecycle transition controls.
 
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Box, TextField, Button, CircularProgress, Alert, 
   MenuItem, FormControl, InputLabel, Select,
@@ -23,6 +24,7 @@ import {
 export default function ReferenceSetEditTab({ entityData, additionalProps = {} }) {
   const { token } = useAuth();
   const { notify } = useNotification();
+  const navigate = useNavigate();
   const { selectOptions = {}, onRefSetUpdated = null } = additionalProps;
 
   const [formData, setFormData] = useState({
@@ -52,21 +54,23 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
     setTransitioning(targetState);
     setTransitionError(null);
     try {
-      const response = await apiFetch(`mdm/reference-sets/${entityData.id}/transition/`, {
+      await apiFetch(`mdm/reference-sets/${entityData.id}/transition/`, {
         method: 'POST',
         token,
         body: { state: targetState },
       });
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.state?.[0] || errData.detail || `Transition failed: ${response.status}`);
-      }
       notify({ message: `Lifecycle state changed to ${LIFECYCLE_LABELS[targetState] || targetState}`, type: 'success' });
+      if (targetState === 'archived') {
+        // Archived sets are hidden from all endpoints; return to the MDM list.
+        navigate('/catalog/mdm');
+        return;
+      }
       if (onRefSetUpdated) {
         onRefSetUpdated();
       }
     } catch (err) {
-      const message = err.message || 'Failed to change lifecycle state';
+      const errData = err.data;
+      const message = errData?.state?.[0] || errData?.detail || err.message || 'Failed to change lifecycle state';
       setTransitionError(message);
       notify({ message, type: 'error' });
     } finally {
@@ -96,18 +100,12 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
         is_active: formData.is_active,
       };
 
-      const response = await apiFetch(`catalog/reference-sets/${entityData.id}/`, {
+      const updatedRefSet = await apiFetch(`catalog/reference-sets/${entityData.id}/`, {
         method: 'PATCH',
         token,
         body: payload,
       }); // update reference set
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || errData.message || `Failed to save: ${response.status}`);
-      }
-
-      const updatedRefSet = await response.json();
       setFormData({
         name: updatedRefSet.name || '',
         description: updatedRefSet.description || '',

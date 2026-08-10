@@ -279,3 +279,39 @@ class ReferenceSetViewSetTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         value.refresh_from_db()
         self.assertFalse(value.is_active)
+
+    def test_deleted_value_hidden_from_active_list(self):
+        """Regression: soft-deleted values must not appear in the active list.
+
+        The Values tab fetches with active=1; a deleted (is_active=False) value
+        must disappear immediately, matching the reference-set contract where
+        archived sets are hidden from all endpoints.
+        """
+        ref_set = ReferenceSet.objects.create(
+            name='HiddenDeleted', slug='hidden-deleted', steward=self.user1, domain=self.domain_1, is_active=True
+        )
+        value = ReferenceValue.objects.create(reference_set=ref_set, code='K', label='Keep me')
+        self.client.force_authenticate(user=self.user1)
+
+        # Before delete: value is visible in the active list.
+        response = self.client.get(
+            '/carbon-api/mdm/reference-values/', {'reference_set': ref_set.id, 'active': '1'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Defensive: DRF pagination may wrap list responses in {'count', 'results'}.
+        data = response.data if isinstance(response.data, list) else response.data.get('results', [])
+        self.assertIn(value.id, {item['id'] for item in data})
+
+        # Soft-delete the value.
+        response = self.client.delete(f'/carbon-api/mdm/reference-values/{value.id}/')
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        # After delete: value is hidden from the active list.
+        response = self.client.get(
+            '/carbon-api/mdm/reference-values/', {'reference_set': ref_set.id, 'active': '1'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data if isinstance(response.data, list) else response.data.get('results', [])
+        self.assertNotIn(value.id, {item['id'] for item in data})
+        value.refresh_from_db()
+        self.assertFalse(value.is_active)

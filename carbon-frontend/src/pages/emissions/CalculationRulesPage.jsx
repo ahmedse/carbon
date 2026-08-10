@@ -294,7 +294,7 @@ export default function CalculationRulesPage() {
   const [currentRule, setCurrentRule] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  const { notifyFromError } = useNotification();
+  const { notify, notifyFromError } = useNotification();
   const isAdmin = user?.is_superuser || user?.groups?.includes('admins_group');
 
   useEffect(() => {
@@ -343,7 +343,15 @@ export default function CalculationRulesPage() {
 
   const handleDelete = async (ruleId) => {
     try {
-      await deleteCalculationRule(ruleId, token);
+      const result = await deleteCalculationRule(ruleId, token);
+      if (result && result.archived) {
+        notify({
+          message: `Rule archived. ${result.audit_count || 0} audit records preserved.`,
+          type: 'info',
+        });
+      } else {
+        notify({ message: 'Rule deleted', type: 'success' });
+      }
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {

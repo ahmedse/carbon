@@ -18,6 +18,7 @@ import { fetchUsers } from '../../api/users';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 import {
+  Autocomplete,
   Box,
   Button,
   Dialog,
@@ -31,12 +32,8 @@ import {
   CircularProgress,
   Alert,
   Typography,
-  Select,
   MenuItem,
-  FormControl,
-  InputLabel,
   Chip,
-  Stack,
   useTheme,
   useMediaQuery,
   Grid,
@@ -417,8 +414,8 @@ export default function AssetsPage() {
     searchText || filterDomain || filterClassification || filterQuality || filterAssetType;
 
   return (
-    <Box sx={{ p: 0 }}>
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {error && <Alert severity="error" sx={{ mx: 2, mt: 2, flexShrink: 0 }}>{error}</Alert>}
 
       <FilteredDataGrid
         title="Asset Profiles"
@@ -514,19 +511,14 @@ export default function AssetsPage() {
             onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
             autoFocus
           />
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Domain</InputLabel>
-            <Select
-              value={createForm.domain}
-              label="Domain"
-              onChange={(e) => setCreateForm({ ...createForm, domain: e.target.value })}
-            >
-              <MenuItem value="">— None —</MenuItem>
-              {domains.map((d) => (
-                <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            value={domains.find((d) => d.id === createForm.domain) || null}
+            options={domains}
+            getOptionLabel={(d) => d.name}
+            isOptionEqualToValue={(opt, val) => opt.id === val.id}
+            onChange={(e, val) => setCreateForm({ ...createForm, domain: val?.id || '' })}
+            renderInput={(params) => <TextField {...params} label="Domain" margin="normal" />}
+          />
           <TextField
             select
             fullWidth
@@ -542,32 +534,22 @@ export default function AssetsPage() {
             <MenuItem value="pii">PII</MenuItem>
             <MenuItem value="sensitive">Sensitive</MenuItem>
           </TextField>
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Owner</InputLabel>
-            <Select
-              value={createForm.owner}
-              label="Owner"
-              onChange={(e) => setCreateForm({ ...createForm, owner: e.target.value })}
-            >
-              <MenuItem value="">— None —</MenuItem>
-              {createFormUsers.map((u) => (
-                <MenuItem key={u.id} value={u.id}>{u.username || u.email || u.id}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Steward</InputLabel>
-            <Select
-              value={createForm.steward}
-              label="Steward"
-              onChange={(e) => setCreateForm({ ...createForm, steward: e.target.value })}
-            >
-              <MenuItem value="">— None —</MenuItem>
-              {createFormUsers.map((u) => (
-                <MenuItem key={u.id} value={u.id}>{u.username || u.email || u.id}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            value={createFormUsers.find((u) => u.id === createForm.owner) || null}
+            options={createFormUsers}
+            getOptionLabel={(u) => u.username || u.email || String(u.id)}
+            isOptionEqualToValue={(opt, val) => opt.id === val.id}
+            onChange={(e, val) => setCreateForm({ ...createForm, owner: val?.id || '' })}
+            renderInput={(params) => <TextField {...params} label="Owner" margin="normal" />}
+          />
+          <Autocomplete
+            value={createFormUsers.find((u) => u.id === createForm.steward) || null}
+            options={createFormUsers}
+            getOptionLabel={(u) => u.username || u.email || String(u.id)}
+            isOptionEqualToValue={(opt, val) => opt.id === val.id}
+            onChange={(e, val) => setCreateForm({ ...createForm, steward: val?.id || '' })}
+            renderInput={(params) => <TextField {...params} label="Steward" margin="normal" />}
+          />
           <TextField
             fullWidth
             label="Semantic Type"
@@ -575,42 +557,28 @@ export default function AssetsPage() {
             value={createForm.semantic_type}
             onChange={(e) => setCreateForm({ ...createForm, semantic_type: e.target.value })}
           />
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Glossary Term</InputLabel>
-            <Select
-              value={createForm.glossary_term}
-              label="Glossary Term"
-              onChange={(e) => setCreateForm({ ...createForm, glossary_term: e.target.value })}
-            >
-              <MenuItem value="">— None —</MenuItem>
-              {createFormGlossary.map((g) => (
-                <MenuItem key={g.id} value={g.id}>{g.term || g.name || g.id}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Tags</InputLabel>
-            <Select
-              multiple
-              value={createFormTags}
-              label="Tags"
-              onChange={(e) => setCreateFormTags(e.target.value)}
-              renderValue={(selected) => (
-                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                  {selected.map((tagId) => {
-                    const tag = createFormAllTags.find((t) => t.id === tagId);
-                    return (
-                      <Chip key={tagId} label={tag?.name || tagId} size="small" />
-                    );
-                  })}
-                </Stack>
-              )}
-            >
-              {createFormAllTags.map((t) => (
-                <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            value={createFormGlossary.find((g) => g.id === createForm.glossary_term) || null}
+            options={createFormGlossary}
+            getOptionLabel={(g) => g.term || g.name || String(g.id)}
+            isOptionEqualToValue={(opt, val) => opt.id === val.id}
+            onChange={(e, val) => setCreateForm({ ...createForm, glossary_term: val?.id || '' })}
+            renderInput={(params) => <TextField {...params} label="Glossary Term" margin="normal" />}
+          />
+          <Autocomplete
+            multiple
+            value={createFormAllTags.filter((t) => createFormTags.includes(t.id))}
+            options={createFormAllTags}
+            getOptionLabel={(t) => t.name}
+            isOptionEqualToValue={(opt, val) => opt.id === val.id}
+            onChange={(e, val) => setCreateFormTags(val.map((t) => t.id))}
+            renderInput={(params) => <TextField {...params} label="Tags" margin="normal" />}
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => (
+                <Chip key={option.id} label={option.name} size="small" {...getTagProps({ index })} />
+              ))
+            }
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseCreate} disabled={createSaving}>Cancel</Button>

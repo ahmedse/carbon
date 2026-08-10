@@ -32,7 +32,11 @@ export function ThemeModeProvider({ children }) {
 }
 
 export function useThemeMode() {
-  return useContext(ThemeModeContext);
+  const context = useContext(ThemeModeContext);
+  if (!context) {
+    return { mode: 'light', toggle: () => {} };
+  }
+  return context;
 }
 
 export const getTheme = (mode) => createCarbonTheme(mode === "dark" ? "dark" : "light");

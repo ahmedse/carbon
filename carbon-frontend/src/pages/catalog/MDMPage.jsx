@@ -30,6 +30,7 @@ import {
   InputAdornment,
   Select,
   MenuItem,
+  Autocomplete,
   FormControl,
   InputLabel,
   Chip,
@@ -89,8 +90,8 @@ function mapFieldErrors(err) {
 
 function TabPanel({ children, value, index }) {
   return (
-    <div role="tabpanel" hidden={value !== index}>
-      {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
+    <div role="tabpanel" hidden={value !== index} style={{ display: value === index ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      {value === index && <Box sx={{ pt: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{children}</Box>}
     </div>
   );
 }
@@ -577,8 +578,8 @@ export default function MDMPage() {
       />
 
       {/* Tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 1 }}>
-        <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)}>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 0.75 }}>
+        <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)} sx={{ minHeight: 32, '& .MuiTab-root': { minHeight: 32, py: 0.5, fontSize: '0.6875rem' } }}>
           <Tab label={`Reference Sets (${refSets.length})`} />
           <Tab label={`Org Units (${orgUnits.length})`} />
         </Tabs>
@@ -586,8 +587,8 @@ export default function MDMPage() {
 
       {/* Tab 0: Reference Sets */}
       <TabPanel value={tabValue} index={0}>
-        <Paper sx={{ p: 2, mb: 2, bgcolor: 'background.dark' }}>
-          <Grid container spacing={2} alignItems="center">
+        <Paper sx={{ p: 0.75, mb: 1, bgcolor: 'background.dark' }}>
+          <Grid container spacing={0.75} alignItems="center">
             <Grid size={{ xs: 12, md: 4 }}>
               <TextField
                 fullWidth
@@ -752,21 +753,16 @@ export default function MDMPage() {
         width={520}
         height={560}
         onClose={closeRefSetDialog}
-        onCancel={closeRefSetDialog}
+        showCancel={false}
         actions={
-          <>
-            <Button onClick={closeRefSetDialog} disabled={refSetSaving}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveRefSet}
-              variant="contained"
-              disabled={refSetSaving}
-              startIcon={refSetSaving ? <CircularProgress size={16} /> : null}
-            >
-              {refSetSaving ? 'Saving…' : refSetEditing ? 'Save Changes' : 'Create'}
-            </Button>
-          </>
+          <Button
+            onClick={handleSaveRefSet}
+            variant="contained"
+            disabled={refSetSaving}
+            startIcon={refSetSaving ? <CircularProgress size={16} /> : null}
+          >
+            {refSetSaving ? 'Saving…' : refSetEditing ? 'Save Changes' : 'Create'}
+          </Button>
         }
       >
         <Stack spacing={2} sx={{ pt: 1 }}>
@@ -793,46 +789,26 @@ export default function MDMPage() {
             error={Boolean(refSetFieldErrors.description)}
             helperText={refSetFieldErrors.description}
           />
-          <FormControl fullWidth error={Boolean(refSetFieldErrors.domain)}>
-            <InputLabel>Domain</InputLabel>
-            <Select
-              value={refSetForm.domain}
-              label="Domain"
-              onChange={(e) => setRefSetForm({ ...refSetForm, domain: e.target.value })}
-            >
-              <MenuItem value="">— None —</MenuItem>
-              {domains.map((d) => (
-                <MenuItem key={d.id} value={d.id}>
-                  {d.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {refSetFieldErrors.domain && (
-              <Typography variant="caption" color="error">
-                {refSetFieldErrors.domain}
-              </Typography>
+          <Autocomplete
+            value={domains.find((d) => d.id === refSetForm.domain) || null}
+            options={domains}
+            getOptionLabel={(o) => o.name || ''}
+            isOptionEqualToValue={(o, v) => o.id === v.id}
+            onChange={(_, v) => setRefSetForm({ ...refSetForm, domain: v ? v.id : '' })}
+            renderInput={(params) => (
+              <TextField {...params} label="Domain" error={Boolean(refSetFieldErrors.domain)} helperText={refSetFieldErrors.domain} />
             )}
-          </FormControl>
-          <FormControl fullWidth error={Boolean(refSetFieldErrors.steward)}>
-            <InputLabel>Steward</InputLabel>
-            <Select
-              value={refSetForm.steward}
-              label="Steward"
-              onChange={(e) => setRefSetForm({ ...refSetForm, steward: e.target.value })}
-            >
-              <MenuItem value="">— None —</MenuItem>
-              {users.map((u) => (
-                <MenuItem key={u.id} value={u.id}>
-                  {u.username}
-                </MenuItem>
-              ))}
-            </Select>
-            {refSetFieldErrors.steward && (
-              <Typography variant="caption" color="error">
-                {refSetFieldErrors.steward}
-              </Typography>
+          />
+          <Autocomplete
+            value={users.find((u) => u.id === refSetForm.steward) || null}
+            options={users}
+            getOptionLabel={(o) => o.username || ''}
+            isOptionEqualToValue={(o, v) => o.id === v.id}
+            onChange={(_, v) => setRefSetForm({ ...refSetForm, steward: v ? v.id : '' })}
+            renderInput={(params) => (
+              <TextField {...params} label="Steward" error={Boolean(refSetFieldErrors.steward)} helperText={refSetFieldErrors.steward} />
             )}
-          </FormControl>
+          />
         </Stack>
       </SystemDialog>
 
@@ -843,21 +819,16 @@ export default function MDMPage() {
         width={520}
         height={620}
         onClose={closeOrgUnitDialog}
-        onCancel={closeOrgUnitDialog}
+        showCancel={false}
         actions={
-          <>
-            <Button onClick={closeOrgUnitDialog} disabled={orgUnitSaving}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveOrgUnit}
-              variant="contained"
-              disabled={orgUnitSaving}
-              startIcon={orgUnitSaving ? <CircularProgress size={16} /> : null}
-            >
-              {orgUnitSaving ? 'Saving…' : orgUnitEditing ? 'Save Changes' : 'Create'}
-            </Button>
-          </>
+          <Button
+            onClick={handleSaveOrgUnit}
+            variant="contained"
+            disabled={orgUnitSaving}
+            startIcon={orgUnitSaving ? <CircularProgress size={16} /> : null}
+          >
+            {orgUnitSaving ? 'Saving…' : orgUnitEditing ? 'Save Changes' : 'Create'}
+          </Button>
         }
       >
         <Stack spacing={2} sx={{ pt: 1 }}>
@@ -902,26 +873,16 @@ export default function MDMPage() {
               </Typography>
             )}
           </FormControl>
-          <FormControl fullWidth error={Boolean(orgUnitFieldErrors.parent)}>
-            <InputLabel>Parent</InputLabel>
-            <Select
-              value={orgUnitForm.parent}
-              label="Parent"
-              onChange={(e) => setOrgUnitForm({ ...orgUnitForm, parent: e.target.value })}
-            >
-              <MenuItem value="">— None —</MenuItem>
-              {parentOptions.map((ou) => (
-                <MenuItem key={ou.id} value={ou.id}>
-                  {ou.full_path || ou.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {orgUnitFieldErrors.parent && (
-              <Typography variant="caption" color="error">
-                {orgUnitFieldErrors.parent}
-              </Typography>
+          <Autocomplete
+            value={parentOptions.find((o) => o.id === orgUnitForm.parent) || null}
+            options={parentOptions}
+            getOptionLabel={(o) => o.full_path || o.name || ''}
+            isOptionEqualToValue={(o, v) => o.id === v.id}
+            onChange={(_, v) => setOrgUnitForm({ ...orgUnitForm, parent: v ? v.id : '' })}
+            renderInput={(params) => (
+              <TextField {...params} label="Parent" error={Boolean(orgUnitFieldErrors.parent)} helperText={orgUnitFieldErrors.parent} />
             )}
-          </FormControl>
+          />
           <TextField
             fullWidth
             label="Description"

@@ -383,9 +383,8 @@ export default function DataTableGrid({
         </Box>
       )}
 
-      <div style={{ position: "relative" }}>
+      <div style={{ position: "relative", height: '100%' }}>
         <DataGrid
-          autoHeight
           rows={mappedRows}
           columns={columns}
           checkboxSelection
@@ -400,7 +399,8 @@ export default function DataTableGrid({
             borderRadius: 2,
             boxShadow: 1,
             opacity: loading ? 0.4 : 1,
-            pointerEvents: loading ? "none" : "auto"
+            pointerEvents: loading ? "none" : "auto",
+            height: '100%',
           }}
         />
         {loading && (

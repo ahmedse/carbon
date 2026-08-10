@@ -226,6 +226,38 @@ class DataFieldViewSet(ScopedViewSet):
         )
 
     def perform_destroy(self, instance):
+        # Dependency check: DQ rule assignments
+        rule_assignments = instance.rule_assignments.count()
+        if rule_assignments > 0:
+            raise AppFeedback(
+                code="field_has_rules",
+                title="Cannot delete field",
+                detail=f"'{instance.name}' is assigned to {rule_assignments} DQ rule(s).",
+                reasons=["Remove the DQ rule assignments from this field first."],
+                remediation=[],
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        # Dependency check: reference set bindings
+        if instance.reference_set_id:
+            raise AppFeedback(
+                code="field_bound_to_reference_set",
+                title="Cannot delete field",
+                detail=f"'{instance.name}' is bound to reference set '{instance.reference_set.name}'.",
+                reasons=["Remove the reference set binding first."],
+                remediation=[],
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        # Dependency check: catalog profile
+        if hasattr(instance, 'catalog_profile') and instance.catalog_profile:
+            raise AppFeedback(
+                code="field_has_catalog_profile",
+                title="Cannot delete field",
+                detail=f"'{instance.name}' has a catalog profile.",
+                reasons=["Delete the catalog profile first."],
+                remediation=[],
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        # Existing audit + delete
         before = DataFieldSerializer(instance).data
         parent_table = instance.data_table
         _log_schema_change(
@@ -327,10 +359,16 @@ class DataRowViewSet(ScopedViewSet):
         return super().create(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        """Guard against deletes on locked tables."""
+        """Soft-delete: set is_archived=True. Guard against writes on locked tables."""
         instance = self.get_object()
         self._check_table_not_locked(instance.data_table, request)
-        return super().destroy(request, *args, **kwargs)
+        instance.is_archived = True
+        instance.save(update_fields=['is_archived', 'updated_at'])
+        _log_schema_change(
+            self.request.user, "archive", data_table=instance.data_table,
+            notes=f"Archived row {instance.id} (table '{instance.data_table.title}')",
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def update(self, request, *args, **kwargs):
         """Override to add lock guard + comprehensive logging for PATCH/PUT operations"""

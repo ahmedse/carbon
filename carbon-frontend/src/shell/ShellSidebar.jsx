@@ -311,8 +311,8 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          px: 2,
-          py: 1.5,
+          px: 1,
+          py: 0.75,
           borderBottom: '1px solid',
           borderColor: 'divider',
           flexShrink: 0,
@@ -320,7 +320,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
       >
         <Typography
           sx={{
-            fontSize: '0.8125rem',
+            fontSize: '0.6875rem',
             fontWeight: 600,
             color: 'text.primary',
             textTransform: 'uppercase',
@@ -334,13 +334,13 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
             size="small"
             onClick={onCollapse}
             sx={{
-              width: 24,
-              height: 24,
+              width: 20,
+              height: 20,
               color: 'text.secondary',
               '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
             }}
           >
-            <ChevronLeftIcon sx={{ fontSize: 16 }} />
+            <ChevronLeftIcon sx={{ fontSize: 14 }} />
           </IconButton>
         </Tooltip>
       </Box>
@@ -349,8 +349,8 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
       {activeStudio === 'carbon' && (userOrgUnit || moduleSummary) && (
         <Box
           sx={{
-            px: 2,
-            py: 1,
+            px: 1,
+            py: 0.5,
             borderBottom: '1px solid',
             borderColor: 'divider',
             flexShrink: 0,
@@ -359,8 +359,8 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
           }}
         >
           {userOrgUnit && (
-            <Box display="flex" alignItems="center" gap={0.5} mb={0.25}>
-              <LocationOnIcon sx={{ fontSize: 12, color: 'primary.main' }} aria-hidden="true" />
+            <Box display="flex" alignItems="center" gap={0.5} mb={0.125}>
+              <LocationOnIcon sx={{ fontSize: 10, color: 'primary.main' }} aria-hidden="true" />
               <Typography
                 variant="caption"
                 sx={{
@@ -380,7 +380,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
           {moduleSummary && (
             <Typography
               variant="caption"
-              sx={{ color: 'text.secondary', display: 'block', fontSize: '0.6875rem' }}
+              sx={{ color: 'text.secondary', display: 'block', fontSize: '0.625rem' }}
             >
               {moduleSummary}
             </Typography>
@@ -393,8 +393,8 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
         sx={{
           flex: 1,
           overflow: 'auto',
-          py: 1,
-          px: 1,
+          py: 0.25,
+          px: 0.5,
         }}
       >
         {items.length === 0 ? (
@@ -419,7 +419,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                 // Skip consecutive dividers
                 if (!lastWasDivider && rendered.length > 0) {
                   rendered.push(
-                    <Divider key={`divider-${index}`} sx={{ my: 0.5 }} />
+                    <Divider key={`divider-${index}`} sx={{ my: 0.25 }} />
                   );
                   lastWasDivider = true;
                 }
@@ -433,15 +433,15 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                     key={`group-${item.label}`}
                     variant="caption"
                     sx={{
-                      px: 1.5,
-                      py: 1,
+                      px: 1,
+                      py: 0.5,
                       fontWeight: 600,
                       textTransform: 'uppercase',
-                      fontSize: '0.7rem',
+                      fontSize: '0.6rem',
                       color: 'text.secondary',
                       letterSpacing: '0.05em',
                       display: 'block',
-                      mt: 1,
+                      mt: 0.5,
                     }}
                   >
                     {item.label}
@@ -461,24 +461,25 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                   onClick={() => onNavigate(item)}
                   selected={isActive}
                   sx={{
-                    borderRadius: 1,
-                    mb: 0.5,
-                    py: 1,
-                    px: 1.5,
+                    borderRadius: 0.75,
+                    mb: 0.25,
+                    py: 0.5,
+                    px: 1,
+                    minHeight: 'unset',
                     bgcolor: isActive ? 'action.selected' : 'transparent',
                     '&:hover': {
                       bgcolor: 'action.hover',
                     },
                   }}
                 >
-                  <ListItemIcon sx={{ minWidth: 36 }}>
-                    <Icon sx={{ fontSize: 18, color: isActive ? 'primary.main' : 'text.secondary' }} />
+                  <ListItemIcon sx={{ minWidth: 28 }}>
+                    <Icon sx={{ fontSize: 16, color: isActive ? 'primary.main' : 'text.secondary' }} />
                   </ListItemIcon>
                   <ListItemText
                     primary={item.label}
                     primaryTypographyProps={{
-                      fontSize: '0.8125rem',
-                      fontWeight: isActive ? 700 : 500,
+                      fontSize: '0.6875rem',
+                      fontWeight: isActive ? 600 : 500,
                       color: isActive ? 'text.primary' : 'text.secondary',
                     }}
                   />

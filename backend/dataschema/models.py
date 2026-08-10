@@ -102,6 +102,7 @@ class DataRow(models.Model):
     updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_rows')
     is_archived = models.BooleanField(default=False)
     version = models.PositiveIntegerField(default=1)
+    dq_flags = models.JSONField(default=list, blank=True)
 
     def save(self, *args, **kwargs):
         if self.values and isinstance(self.values, dict):

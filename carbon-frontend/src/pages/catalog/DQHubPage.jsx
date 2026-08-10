@@ -213,6 +213,8 @@ export default function DQHubPage() {
   const [schemaChanges, setSchemaChanges] = useState([]);
   const [freshnessLoading, setFreshnessLoading] = useState(false);
   const [schemaDialog, setSchemaDialog] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const tableMap = useMemo(
     () => tables.reduce((acc, t) => ({ ...acc, [t.data_table]: t.title || t.name || `Table #${t.data_table}` }), {}),
@@ -328,14 +330,24 @@ export default function DQHubPage() {
     loadRules();
   };
 
-  const handleDeleteRule = async (rule) => {
-    if (!window.confirm(`Delete rule "${rule.name || 'DQ rule'}"?`)) return;
+  const handleDeleteRule = async (ruleId) => {
+    setDeleteLoading(true);
     try {
-      await deleteDQRule(token, rule.id);
-      notify({ message: 'Rule deleted', type: 'success' });
+      const result = await deleteDQRule(token, ruleId);
+      if (result && result.archived) {
+        notify({
+          message: `Rule archived. ${result.results_count || 0} historical results preserved.`,
+          type: 'info',
+        });
+      } else {
+        notify({ message: 'Rule deleted', type: 'success' });
+      }
+      setDeleteConfirm(null);
       loadRules();
     } catch (err) {
       notify({ message: err.message || 'Delete failed', type: 'error' });
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -428,7 +440,7 @@ export default function DQHubPage() {
           <Tooltip title="Execute"><IconButton size="small" onClick={() => handleExecuteRule(p.row)} disabled={executingIds.includes(p.row.id)}><PlayArrowIcon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="History"><IconButton size="small" onClick={() => openHistory(p.row)}><HistoryIcon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Edit"><IconButton size="small" onClick={() => handleOpenDialog(p.row)}><EditIcon fontSize="small" /></IconButton></Tooltip>
-          <Tooltip title="Delete"><IconButton size="small" color="error" onClick={() => handleDeleteRule(p.row)}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
+          <Tooltip title="Delete"><IconButton size="small" color="error" onClick={() => setDeleteConfirm(p.row)}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
         </Stack>
       ),
     },
@@ -495,8 +507,8 @@ export default function DQHubPage() {
     const status = metrics?.quality_status ? getQualityStatus(metrics.quality_status) : null;
 
     return (
-      <Box>
-        <Grid container spacing={2} sx={{ mb: 3 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <Grid container spacing={2} sx={{ mb: 2, flexShrink: 0 }}>
           <Grid item xs={6} md={3}>
             <MetricCard label="Overall Quality Score" value={metrics?.quality_status ?? '—'}
               suffix="%" status={status?.label} color={status?.color} />
@@ -512,22 +524,21 @@ export default function DQHubPage() {
           </Grid>
         </Grid>
 
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, flexShrink: 0 }}>
           <Typography variant="h6">Recent DQ Results</Typography>
           <Button startIcon={<RefreshIcon />} onClick={loadDashboard} size="small">Refresh</Button>
         </Box>
 
-        <Paper variant="outlined" sx={{ borderRadius: 2 }}>
+        <Paper variant="outlined" sx={{ borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <DataGrid
             rows={results}
             columns={resultColumns}
             getRowId={(row) => row.id || row.result_id || `${row.rule}-${row.executed_at}`}
-            autoHeight
             density="compact"
             disableRowSelectionOnClick
             initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
             pageSizeOptions={[10, 25, 50]}
-            sx={{ border: 'none' }}
+            sx={{ border: 'none', height: '100%' }}
           />
         </Paper>
       </Box>
@@ -536,8 +547,8 @@ export default function DQHubPage() {
 
   const renderRules = () => {
     return (
-      <Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, flexShrink: 0 }}>
           <Typography variant="h6">DQ Rules</Typography>
           <Stack direction="row" spacing={1}>
             {selectedRuleIds.length > 0 && (
@@ -555,14 +566,13 @@ export default function DQHubPage() {
           </Stack>
         </Box>
 
-        {rulesError && <Alert severity="error" sx={{ mb: 2 }}>{rulesError}</Alert>}
+        {rulesError && <Alert severity="error" sx={{ mb: 1, flexShrink: 0 }}>{rulesError}</Alert>}
 
-        <Paper variant="outlined" sx={{ borderRadius: 2 }}>
+        <Paper variant="outlined" sx={{ borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <DataGrid
             rows={rules}
             columns={ruleColumns}
             getRowId={(row) => row.id}
-            autoHeight
             density="compact"
             loading={rulesLoading}
             checkboxSelection
@@ -570,7 +580,7 @@ export default function DQHubPage() {
             disableRowSelectionOnClick
             initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
             pageSizeOptions={[10, 25, 50]}
-            sx={{ border: 'none' }}
+            sx={{ border: 'none', height: '100%' }}
           />
         </Paper>
       </Box>
@@ -578,76 +588,72 @@ export default function DQHubPage() {
   };
 
   const renderProfiles = () => (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, flexShrink: 0 }}>
         <Typography variant="h6">Table Profiles</Typography>
         <Button startIcon={<RefreshIcon />} size="small" onClick={loadProfiles}>Refresh</Button>
       </Box>
-      <Paper variant="outlined" sx={{ borderRadius: 2 }}>
+      <Paper variant="outlined" sx={{ borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <DataGrid
           rows={profiles}
           columns={profileColumns}
           getRowId={(row) => row.id}
-          autoHeight
           density="compact"
           loading={profilesLoading}
           disableRowSelectionOnClick
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
           pageSizeOptions={[10, 25, 50]}
-          sx={{ border: 'none' }}
+          sx={{ border: 'none', height: '100%' }}
         />
       </Paper>
     </Box>
   );
 
   const renderFreshnessSchema = () => (
-    <Box>
+    <Box sx={{ overflow: 'auto', height: '100%' }}>
       {freshnessLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
       ) : (
         <>
-          <Typography variant="h6" sx={{ mb: 2 }}>Freshness Checks</Typography>
+          <Typography variant="h6" sx={{ mb: 2, flexShrink: 0 }}>Freshness Checks</Typography>
           <Paper variant="outlined" sx={{ borderRadius: 2, mb: 4 }}>
             <DataGrid
               rows={freshness}
               columns={freshnessColumns}
               getRowId={(row) => row.id}
-              autoHeight
               density="compact"
               disableRowSelectionOnClick
               initialState={{ pagination: { paginationModel: { pageSize: 15 } } }}
               pageSizeOptions={[10, 15, 25]}
-              sx={{ border: 'none' }}
+              sx={{ border: 'none', minHeight: 300 }}
             />
           </Paper>
 
-          <Typography variant="h6" sx={{ mb: 2 }}>Schema Changes</Typography>
+          <Typography variant="h6" sx={{ mb: 2, flexShrink: 0 }}>Schema Changes</Typography>
           <Paper variant="outlined" sx={{ borderRadius: 2, mb: 4 }}>
             <DataGrid
               rows={schemaChanges}
               columns={schemaChangeColumns}
               getRowId={(row) => row.id}
-              autoHeight
               density="compact"
               disableRowSelectionOnClick
               initialState={{ pagination: { paginationModel: { pageSize: 15 } } }}
               pageSizeOptions={[10, 15, 25]}
-              sx={{ border: 'none' }}
+              sx={{ border: 'none', minHeight: 300 }}
             />
           </Paper>
 
-          <Typography variant="h6" sx={{ mb: 2 }}>Schema Snapshots</Typography>
+          <Typography variant="h6" sx={{ mb: 2, flexShrink: 0 }}>Schema Snapshots</Typography>
           <Paper variant="outlined" sx={{ borderRadius: 2 }}>
             <DataGrid
               rows={schemaSnapshots}
               columns={snapshotColumns}
               getRowId={(row) => row.id}
-              autoHeight
               density="compact"
               disableRowSelectionOnClick
               initialState={{ pagination: { paginationModel: { pageSize: 15 } } }}
               pageSizeOptions={[10, 15, 25]}
-              sx={{ border: 'none' }}
+              sx={{ border: 'none', minHeight: 300 }}
             />
           </Paper>
         </>
@@ -658,21 +664,23 @@ export default function DQHubPage() {
   // ─── Main Render ─────────────────────────────────────────────────────────
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1400, mx: 'auto' }}>
-      <Typography variant="h4" fontWeight={700} sx={{ mb: 3 }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Typography variant="h4" fontWeight={700} sx={{ mb: 2, flexShrink: 0 }}>
         Data Quality Hub
       </Typography>
 
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
         {TABS.map((t, i) => (
           <Tab key={i} icon={t.icon} label={t.label} iconPosition="start" />
         ))}
       </Tabs>
 
-      {tab === 0 && renderDashboard()}
-      {tab === 1 && renderRules()}
-      {tab === 2 && renderProfiles()}
-      {tab === 3 && renderFreshnessSchema()}
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {tab === 0 && renderDashboard()}
+        {tab === 1 && renderRules()}
+        {tab === 2 && renderProfiles()}
+        {tab === 3 && renderFreshnessSchema()}
+      </Box>
 
       {/* Rule Dialog */}
       <DQRuleDialog
@@ -699,6 +707,28 @@ export default function DQHubPage() {
         onClose={() => setSchemaDialog(null)}
         snapshot={schemaDialog}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
+        <DialogTitle>Delete Rule?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            This will delete or archive the rule "{deleteConfirm?.name || 'DQ rule'}".
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirm(null)} disabled={deleteLoading}>Cancel</Button>
+          <Button
+            onClick={() => handleDeleteRule(deleteConfirm?.id)}
+            variant="contained"
+            color="error"
+            disabled={deleteLoading}
+          >
+            {deleteLoading ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

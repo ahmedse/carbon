@@ -33,15 +33,11 @@ export default function DomainEditTab({ entityData }) {
     setError(null);
 
     try {
-      const response = await apiFetch(`catalog/domains/${entityData.id}/`, {
+      await apiFetch(`catalog/domains/${entityData.id}/`, {
         method: 'PUT',
         token,
         body: formData,
       }); // update domain
-
-      if (!response.ok) {
-        throw new Error(`Failed to save: ${response.status}`);
-      }
 
       notify({ message: 'Domain updated successfully', type: 'success' });
     } catch (err) {

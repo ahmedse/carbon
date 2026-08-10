@@ -1105,4 +1105,84 @@ class RuleFieldAssignmentViewSet(viewsets.ModelViewSet):
         return qs.filter(data_table__module__org_unit_id__in=org_units)
 
 
+# ── Gate Check Endpoint ──────────────────────────────────────────────────
+
+class GateCheckView(APIView):
+    """POST /dq/gate/check/ — Stateless DQ gate check against raw rows.
+
+    Evaluates all gate-eligible, on_write enabled rules for a table
+    against the provided rows. No persistence. Returns verdicts.
+    """
+    permission_classes = [IsAuthenticated, ReadAnyWriteGlobalAdmin]
+
+    @swagger_auto_schema(
+        operation_description='Evaluate DQ gate rules against raw row data.',
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['data_table', 'rows'],
+            properties={
+                'data_table': openapi.Schema(
+                    type=openapi.TYPE_INTEGER,
+                    description='DataTable ID to load gate rules for',
+                ),
+                'rows': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(type=openapi.TYPE_OBJECT),
+                    description='List of raw row value dicts to evaluate',
+                ),
+                'mode': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    enum=['write', 'import'],
+                    default='write',
+                    description='Gate mode: "write" or "import"',
+                ),
+            },
+        ),
+        responses={
+            200: openapi.Response(description='Gate verdicts with summary and per-row details'),
+            400: 'Invalid request (missing data_table, invalid rows, etc.)',
+            404: 'DataTable not found',
+        },
+    )
+    def post(self, request):
+        from dq.gate import check_rows
+        from dataschema.models import DataTable
+
+        table_id = request.data.get('data_table')
+        rows = request.data.get('rows')
+        mode = request.data.get('mode', 'write')
+
+        # ── Input validation ──────────────────────────────────────────
+        if not table_id:
+            return Response(
+                {'error': 'data_table is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(rows, list) or len(rows) == 0:
+            return Response(
+                {'error': 'rows must be a non-empty list of objects'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if mode not in ('write', 'import'):
+            return Response(
+                {'error': 'mode must be "write" or "import"'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── Resolve table ─────────────────────────────────────────────
+        try:
+            table = DataTable.objects.get(id=table_id)
+        except DataTable.DoesNotExist:
+            return Response(
+                {'error': f'DataTable {table_id} not found'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        _check_table_access(request.user, table)
+
+        # ── Run gate ──────────────────────────────────────────────────
+        result = check_rows(table, rows, mode=mode)
+        return Response(result)
+
+
 

@@ -16,6 +16,8 @@ export function EditorArea() {
         flexDirection: 'column',
         overflow: 'hidden',
         bgcolor: 'background.default',
+        minWidth: 0,
+        minHeight: 0,
       }}
     >
       {/* Breadcrumbs navigation */}
@@ -25,7 +27,11 @@ export function EditorArea() {
       <Box
         sx={{
           flex: 1,
+          minWidth: 0,
+          minHeight: 0,
           overflow: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         <Outlet />

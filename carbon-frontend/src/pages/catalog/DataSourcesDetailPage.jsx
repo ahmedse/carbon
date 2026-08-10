@@ -66,7 +66,7 @@ export default function DataSourcesDetailPage() {
     setError(null);
     try {
       const data = await fetchDataSources(token);
-      setSources(data || []);
+      setSources(Array.isArray(data) ? data : data?.results || []);
     } catch (err) {
       const msg = err.message || 'Failed to load data sources';
       setError(msg);

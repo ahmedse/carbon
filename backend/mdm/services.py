@@ -46,7 +46,13 @@ class ReferenceSetService:
         """
         # reference_set is a required serializer field for create; inject it so
         # clients calling add_value don't have to repeat the set id in the body.
-        data = dict(value_data or {})
+        # Use QueryDict.dict() for form/multipart payloads: plain dict(QueryDict)
+        # yields lists ({'code': ['X']}) because QueryDict stores multi-values,
+        # which the serializer rejects. Plain dicts pass through unchanged.
+        if hasattr(value_data, 'dict'):
+            data = value_data.dict()
+        else:
+            data = dict(value_data or {})
         data.setdefault('reference_set', ref_set.id)
         serializer = ReferenceValueSerializer(data=data)
         if serializer.is_valid():

@@ -47,12 +47,12 @@ export function Shell() {
 
   const [drawerWidth, setDrawerWidth] = useState(() => {
     const stored = Number(localStorage.getItem('carbon-drawer-width'));
-    return Number.isFinite(stored) && stored > 0 ? stored : 250;
+    return Number.isFinite(stored) && stored > 0 ? stored : 220;
   });
 
   const [copilotPaneSize, setCopilotPaneSize] = useState(() => {
     const stored = Number(localStorage.getItem('carbon-copilot-pane-size'));
-    return Number.isFinite(stored) && stored >= 300 ? stored : 400;
+    return Number.isFinite(stored) && stored >= 280 ? stored : 360;
   });
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -257,7 +257,7 @@ export function Shell() {
         </Drawer>
 
         {/* Resizable Main + Copilot Panes */}
-        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
           <Allotment
             key={copilotVisible ? '2panes' : '1pane'}
             onChange={(sizes) => {
@@ -273,13 +273,13 @@ export function Shell() {
             }}
           >
             {/* Main Editor Area */}
-            <Allotment.Pane>
+            <Allotment.Pane minSize={320} preferredSize={1}>
               <EditorArea />
             </Allotment.Pane>
 
             {/* Right Copilot Pane — Pulse AI */}
             {copilotVisible && (
-              <Allotment.Pane minSize={300} preferredSize={copilotPaneSize} maxSize={600}>
+              <Allotment.Pane minSize={280} preferredSize={copilotPaneSize} maxSize={520}>
                 <ErrorBoundary>
                   <PulsePane />
                 </ErrorBoundary>

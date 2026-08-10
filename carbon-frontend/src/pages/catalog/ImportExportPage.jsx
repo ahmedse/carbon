@@ -92,6 +92,8 @@ export default function ImportExportPage() {
   const [editingProject, setEditingProject] = useState(null);
   const [formData, setFormData] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const formats = [
     { value: 'csv', label: 'CSV' },
@@ -175,14 +177,20 @@ export default function ImportExportPage() {
   };
 
   const handleDelete = async (type, id) => {
-    if (!window.confirm('Are you sure?')) return;
+    setDeleteLoading(true);
     try {
       if (type === 'export') {
-        await deleteExportProject(token, id);
+        const result = await deleteExportProject(token, id);
+        if (result && result.archived) {
+          setError(null);
+        }
       }
+      setDeleteConfirm(null);
       await loadData();
     } catch (err) {
       setError(err.message || 'Failed to delete');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -288,7 +296,7 @@ export default function ImportExportPage() {
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Delete">
-                        <IconButton size="small" color="error" onClick={() => handleDelete('export', project.id)}>
+                        <IconButton size="small" color="error" onClick={() => setDeleteConfirm({ type: 'export', id: project.id, name: project.name })}>
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
@@ -510,6 +518,28 @@ export default function ImportExportPage() {
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
           <Button onClick={handleSave} variant="contained">Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
+        <DialogTitle>Delete Export Project?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete "{deleteConfirm?.name || 'this project'}"?
+            {deleteConfirm?.name && ' If export jobs exist, the project will be archived instead.'}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirm(null)} disabled={deleteLoading}>Cancel</Button>
+          <Button
+            onClick={() => handleDelete(deleteConfirm?.type, deleteConfirm?.id)}
+            variant="contained"
+            color="error"
+            disabled={deleteLoading}
+          >
+            {deleteLoading ? 'Deleting...' : 'Delete'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

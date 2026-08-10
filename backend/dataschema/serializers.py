@@ -57,6 +57,8 @@ class DataTableSerializer(serializers.ModelSerializer):
         ]
 
 class DataRowSerializer(serializers.ModelSerializer):
+    dq_flags = serializers.JSONField(read_only=True)
+
     def validate_values(self, values):
         if not isinstance(values, dict):
             raise serializers.ValidationError("Values must be a JSON object.")
@@ -82,17 +84,68 @@ class DataRowSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {e['field']: e['message'] for e in errors}
                 )
+
+            # ── Level 2: DQ Gate ─────────────────────────────────────
+            from dq.gate import check_rows
+            gate_result = check_rows(data_table, [values])
+            self._gate_result = gate_result  # store for create/update
+
+            if gate_result['summary']['blocked'] > 0:
+                blocked_failures = [
+                    f for rv in gate_result['row_verdicts']
+                    if rv['verdict'] == 'block'
+                    for f in rv['failures']
+                ]
+                raise serializers.ValidationError(
+                    {f['field']: f['message'] for f in blocked_failures}
+                )
+
         return data
+
+    def create(self, validated_data):
+        instance = super().create(validated_data)
+        self._persist_gate_warnings(instance)
+        return instance
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        self._persist_gate_warnings(instance)
+        return instance
+
+    def _persist_gate_warnings(self, instance):
+        """Append warn/info-level gate failures to instance.dq_flags."""
+        gate_result = getattr(self, '_gate_result', None)
+        if not gate_result:
+            return
+
+        from django.utils import timezone
+        new_flags = []
+        for rv in gate_result.get('row_verdicts', []):
+            for f in rv.get('failures', []):
+                if f['severity'] in ('warn', 'info'):
+                    new_flags.append({
+                        'rule_id': f['rule_id'],
+                        'rule_name': f['rule_name'],
+                        'severity': f['severity'],
+                        'message': f['message'],
+                        'at': timezone.now().isoformat(),
+                    })
+
+        if new_flags:
+            current = list(instance.dq_flags) if instance.dq_flags else []
+            current.extend(new_flags)
+            instance.dq_flags = current
+            instance.save(update_fields=['dq_flags'])
 
     class Meta:
         model = DataRow
         fields = [
-            'id', 'data_table', 'values',
+            'id', 'data_table', 'values', 'dq_flags',
             'created_at', 'created_by', 'updated_at', 'updated_by',
             'is_archived', 'version'
         ]
         read_only_fields = [
-            'id', 'created_at', 'created_by', 'updated_at', 'updated_by', 'version'
+            'id', 'created_at', 'created_by', 'updated_at', 'updated_by', 'version', 'dq_flags'
         ]
 
 class TableRelationSerializer(serializers.ModelSerializer):

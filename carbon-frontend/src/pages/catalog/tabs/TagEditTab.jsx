@@ -32,15 +32,11 @@ export default function TagEditTab({ entityData }) {
     setError(null);
 
     try {
-      const response = await apiFetch(`catalog/tags/${entityData.id}/`, {
+      await apiFetch(`catalog/tags/${entityData.id}/`, {
         method: 'PUT',
         token,
         body: formData,
       }); // update tag
-
-      if (!response.ok) {
-        throw new Error(`Failed to save: ${response.status}`);
-      }
 
       notify({ message: 'Tag updated successfully', type: 'success' });
     } catch (err) {

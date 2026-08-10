@@ -18,6 +18,8 @@ from drf_yasg.utils import swagger_auto_schema
 from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger
 from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units, user_is_global_admin
 from accounts.constants import ADMINS_GROUP
+from core.feedback import AppFeedback
+from catalog.audit_utils import emit_governance_event
 from core.models import Module
 from accounts.permissions import AdminOrSuperuserOnly, ReadAnyWriteAdmin
 from dataschema.models import DataRow, DataTable
@@ -278,6 +280,42 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
 
         return Response(report_data)
 
+    def destroy(self, request, *args, **kwargs):
+        period = self.get_object()
+        can_delete_statuses = ('draft', 'closed')
+        if period.status not in can_delete_statuses:
+            raise AppFeedback(
+                code="period_not_deletable",
+                title=f"Cannot delete a '{period.status}' reporting period",
+                detail=f"'{period.name}' is in '{period.status}' status.",
+                reasons=[f"Only periods in 'draft' or 'closed' status can be deleted."],
+                remediation=["Close the period first, then retry deletion."],
+                context={"period_id": period.id, "status": period.status},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        calc_count = period.calculations.count()
+        if calc_count > 0:
+            force = request.query_params.get("force", "").lower() == "true"
+            if not (force and request.user.is_superuser):
+                raise AppFeedback(
+                    code="period_has_calculations",
+                    title="Cannot delete: calculations exist",
+                    detail=f"'{period.name}' has {calc_count} emission calculation(s).",
+                    reasons=["Deleting the period would lose verified emission data."],
+                    remediation=["Use ?force=true as a superuser if you understand the consequences."],
+                    context={"period_id": period.id, "calculation_count": calc_count},
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+        # Soft-delete: set status to closed
+        period.status = 'closed'
+        period.save(update_fields=['status', 'updated_at'])
+        emit_governance_event(
+            entity_type='ReportingPeriod', entity_id=period.id,
+            action='delete', before={'status': 'draft'}, after={'status': 'closed'},
+            user=request.user,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class EmissionFactorViewSet(viewsets.ModelViewSet):
     """
@@ -337,6 +375,32 @@ class EmissionFactorViewSet(viewsets.ModelViewSet):
             for choice in EmissionFactor.CATEGORY_CHOICES
         ])
 
+    def destroy(self, request, *args, **kwargs):
+        factor = self.get_object()
+        ref_rules = factor.calculation_rules.select_related('data_table').values_list('name', 'data_table__name')[:10]
+        ref_count = factor.calculation_rules.count()
+        if ref_count > 0:
+            rule_names = ", ".join(f"'{r[0]}' (table: {r[1]})" for r in ref_rules)
+            if ref_count > 10:
+                rule_names += f" ... and {ref_count - 10} more"
+            raise AppFeedback(
+                code="factor_in_use",
+                title="Cannot delete emission factor",
+                detail=f"'{factor.name}' is referenced by {ref_count} calculation rule(s): {rule_names}.",
+                reasons=["Emission factors with active calculation rules cannot be removed."],
+                remediation=["Deactivate or reassign the calculation rules first."],
+                context={"factor_id": factor.id, "referencing_rules_count": ref_count},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        factor.is_active = False
+        factor.save(update_fields=['is_active', 'updated_at'])
+        emit_governance_event(
+            entity_type='EmissionFactor', entity_id=factor.id,
+            action='delete', before={'is_active': True}, after={'is_active': False},
+            user=request.user,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class GWPViewSet(viewsets.ModelViewSet):
     """ViewSet for Global Warming Potentials (CRUD)."""
@@ -344,6 +408,18 @@ class GWPViewSet(viewsets.ModelViewSet):
     serializer_class = GWPSerializer
     permission_classes = [AdminOrSuperuserOnly]
     required_capability = 'carbon:manage_gwp'
+
+    def destroy(self, request, *args, **kwargs):
+        gwp = self.get_object()
+        emit_governance_event(
+            entity_type='GWP', entity_id=gwp.id,
+            action='delete',
+            before={'gas_name': gwp.gas_name, 'gas_formula': gwp.gas_formula},
+            after={'archived': True},
+            user=request.user,
+        )
+        gwp.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CalculationWritePermission(BasePermission):
@@ -509,6 +585,18 @@ class CalculationViewSet(viewsets.ModelViewSet):
             )
         return Response(result)
 
+    def destroy(self, request, *args, **kwargs):
+        calc = self.get_object()
+        emit_governance_event(
+            entity_type='Calculation', entity_id=calc.id,
+            action='delete',
+            before={'data_row_id': calc.data_row_id, 'co2e_kg': str(calc.co2e_kg), 'scope': calc.scope},
+            after={'archived': True},
+            user=request.user,
+        )
+        calc.delete()  # Calculations are recalculatable — hard delete OK with audit
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class CalculationSummaryAPIView(APIView):
     """
@@ -641,6 +729,29 @@ class CalculationRuleViewSet(viewsets.ModelViewSet):
             'errors': errors,
             'message': f'Created {created} calculations, skipped {skipped}, {errors} errors'
         })
+
+    def destroy(self, request, *args, **kwargs):
+        rule = self.get_object()
+        audit_count = rule.calculationaudit_set.count()
+        if audit_count > 0:
+            rule.is_active = False
+            rule.save(update_fields=['is_active', 'updated_at'])
+            emit_governance_event(
+                entity_type='CalculationRule', entity_id=rule.id,
+                action='archive', before={'is_active': True}, after={'is_active': False, 'audit_count': audit_count},
+                user=request.user,
+            )
+            return Response({
+                'archived': True,
+                'audit_count': audit_count,
+                'detail': f'Rule archived. {audit_count} audit records preserved.',
+            }, status=status.HTTP_200_OK)
+        emit_governance_event(
+            entity_type='CalculationRule', entity_id=rule.id,
+            action='delete', before={'name': rule.name}, after={'deleted': True},
+            user=request.user,
+        )
+        return super().destroy(request, *args, **kwargs)
 
 
 class DashboardAPIView(APIView):
@@ -1136,6 +1247,20 @@ class SBTiTargetViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Target not found'}, status=404)
         return Response(data)
 
+    def destroy(self, request, *args, **kwargs):
+        target = self.get_object()
+        # SBTi targets don't have an is_active field;
+        # they are organizational commitments — hard delete with audit trail
+        emit_governance_event(
+            entity_type='SBTiTarget', entity_id=target.id,
+            action='delete',
+            before={'name': target.name, 'base_year': target.base_year, 'target_year': target.target_year},
+            after={'deleted': True},
+            user=request.user,
+        )
+        target.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class ConsoleAPIView(APIView):
     """
@@ -1252,6 +1377,27 @@ class OrganizationalBoundaryViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+    def destroy(self, request, *args, **kwargs):
+        boundary = self.get_object()
+        ref_periods = boundary.reporting_periods.count()
+        if ref_periods > 0:
+            raise AppFeedback(
+                code="boundary_in_use",
+                title="Cannot delete organizational boundary",
+                detail=f"'{boundary.name}' is referenced by {ref_periods} reporting period(s).",
+                reasons=["Organizational boundaries linked to reporting periods cannot be removed."],
+                remediation=["Reassign those periods to a different boundary first."],
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        boundary.is_active = False
+        boundary.save(update_fields=['is_active'])
+        emit_governance_event(
+            entity_type='OrganizationalBoundary', entity_id=boundary.id,
+            action='delete', before={'is_active': True}, after={'is_active': False},
+            user=request.user,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class BaseYearViewSet(viewsets.ModelViewSet):
     """ViewSet for GHG Protocol base years."""
@@ -1284,6 +1430,25 @@ class BaseYearViewSet(viewsets.ModelViewSet):
             RecalculationTriggerSerializer(trigger).data,
             status=status.HTTP_201_CREATED,
         )
+
+    def destroy(self, request, *args, **kwargs):
+        base_year = self.get_object()
+        trigger_count = base_year.recalculation_triggers.count()
+        if trigger_count > 0:
+            raise AppFeedback(
+                code="base_year_in_use",
+                title="Cannot delete base year",
+                detail=f"'{base_year}' has {trigger_count} recalculation trigger(s).",
+                reasons=["Base years with recalculation history are immutable."],
+                remediation=[],
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        emit_governance_event(
+            entity_type='BaseYear', entity_id=base_year.id,
+            action='delete', before={'year': base_year.year}, after={'deleted': True},
+            user=request.user,
+        )
+        return super().destroy(request, *args, **kwargs)
 
 
 class RecalculationTriggerViewSet(viewsets.ModelViewSet):

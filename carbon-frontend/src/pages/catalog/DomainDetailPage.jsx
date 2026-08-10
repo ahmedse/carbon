@@ -39,13 +39,7 @@ export default function DomainDetailPage() {
 
       try {
         setLoading(true);
-        const response = await apiFetch(`catalog/domains/${domainId}/`, { method: 'GET', token }); // fetch domain
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch domain: ${response.status}`);
-        }
-
-        const data = await response.json();
+        const data = await apiFetch(`catalog/domains/${domainId}/`, { method: 'GET', token }); // fetch domain
         setDomain(data);
       } catch (err) {
         const message = err.message || 'Failed to load domain';

@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -15,10 +16,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
   IconButton,
-  InputLabel,
-  MenuItem,
   Paper,
   Select,
   Tab,
@@ -79,6 +77,8 @@ export default function MetadataManagementPage() {
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState({});
   const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -189,8 +189,7 @@ export default function MetadataManagementPage() {
 
   const handleDelete = async (item) => {
     const itemType = tabIndex === 0 ? 'domain' : tabIndex === 1 ? 'term' : 'tag';
-    if (!window.confirm(`Delete ${itemType} "${item.name}"?`)) return;
-
+    setDeleteLoading(true);
     try {
       if (tabIndex === 0) {
         await deleteDataDomain(token, item.id);
@@ -200,9 +199,19 @@ export default function MetadataManagementPage() {
         await deleteTag(token, item.id);
       }
       notify({ message: `${itemType.charAt(0).toUpperCase() + itemType.slice(1)} deleted`, type: 'success' });
+      setDeleteConfirm(null);
       await loadData();
     } catch (err) {
-      notify({ message: err.message || 'Delete failed', type: 'error' });
+      if (err.status === 405 && err.data && err.data.detail) {
+        notify({
+          message: err.data.detail,
+          type: 'warning',
+        });
+      } else {
+        notify({ message: err.message || 'Delete failed', type: 'error' });
+      }
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -242,7 +251,7 @@ export default function MetadataManagementPage() {
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Delete">
-                      <IconButton size="small" color="error" onClick={() => handleDelete(domain)}>
+                      <IconButton size="small" color="error" onClick={() => setDeleteConfirm(domain)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -300,7 +309,7 @@ export default function MetadataManagementPage() {
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Delete">
-                      <IconButton size="small" color="error" onClick={() => handleDelete(term)}>
+                      <IconButton size="small" color="error" onClick={() => setDeleteConfirm(term)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -359,7 +368,7 @@ export default function MetadataManagementPage() {
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Delete">
-                      <IconButton size="small" color="error" onClick={() => handleDelete(tag)}>
+                      <IconButton size="small" color="error" onClick={() => setDeleteConfirm(tag)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -412,21 +421,14 @@ export default function MetadataManagementPage() {
                 multiline
                 rows={3}
               />
-              <FormControl fullWidth margin="normal">
-                <InputLabel>Domain</InputLabel>
-                <Select
-                  value={formData.domain || ''}
-                  label="Domain"
-                  onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
-                >
-                  <MenuItem value="">None</MenuItem>
-                  {domains.map((d) => (
-                    <MenuItem key={d.id} value={d.id}>
-                      {d.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <Autocomplete
+                value={domains.find((d) => d.id === (formData.domain || null)) || null}
+                options={domains}
+                getOptionLabel={(d) => d.name}
+                isOptionEqualToValue={(opt, val) => opt.id === val.id}
+                onChange={(e, val) => setFormData({ ...formData, domain: val?.id || '' })}
+                renderInput={(params) => <TextField {...params} label="Domain" margin="normal" />}
+              />
             </>
           )}
           {tabIndex === 2 && (
@@ -497,6 +499,28 @@ export default function MetadataManagementPage() {
       {tabIndex === 2 && renderTagsTab()}
 
       {renderDialog()}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
+        <DialogTitle>Delete Item?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete "{deleteConfirm?.name || deleteConfirm?.term || 'item'}"?
+            This cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirm(null)} disabled={deleteLoading}>Cancel</Button>
+          <Button
+            onClick={() => handleDelete(deleteConfirm)}
+            variant="contained"
+            color="error"
+            disabled={deleteLoading}
+          >
+            {deleteLoading ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

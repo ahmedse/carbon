@@ -111,7 +111,11 @@ export default function EmissionFactorsPage() {
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
-      setError(err.message);
+      if (err.feedback && err.feedback.code === 'factor_in_use') {
+        setError(err.feedback.detail || err.message);
+      } else {
+        setError(err.message);
+      }
     }
   };
 

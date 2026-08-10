@@ -78,6 +78,22 @@ class BulkImportService:
                 })
                 continue  # skip serializer entirely for invalid rows
 
+            # ── Level 2: DQ Gate (import mode) ────────────────────────
+            from dq.gate import check_rows
+            gate_result = check_rows(data_table, [row_data], mode='import')
+            row_verdict = gate_result['row_verdicts'][0] if gate_result['row_verdicts'] else {'verdict': 'pass', 'failures': []}
+
+            if row_verdict['verdict'] == 'block':
+                results['dq_blocked'] += 1
+                results['failed'] += 1
+                rule_names = ', '.join(f['rule_name'] for f in row_verdict['failures'])
+                results['errors'].append({
+                    'row': idx + 2,
+                    'data': row_data,
+                    'error': f'DQ gate blocked: {rule_names}',
+                })
+                continue
+
             try:
                 # Validate and create row
                 serializer = DataRowSerializer(data={
@@ -85,7 +101,28 @@ class BulkImportService:
                     'values': row_data
                 })
                 serializer.is_valid(raise_exception=True)
-                serializer.save(created_by=created_by)
+                instance = serializer.save(created_by=created_by)
+
+                # Persist warn/info flags from gate
+                if row_verdict['verdict'] != 'pass' and row_verdict['failures']:
+                    from django.utils import timezone
+                    new_flags = []
+                    for f in row_verdict['failures']:
+                        if f['severity'] in ('warn', 'info'):
+                            new_flags.append({
+                                'rule_id': f['rule_id'],
+                                'rule_name': f['rule_name'],
+                                'severity': f['severity'],
+                                'message': f['message'],
+                                'at': timezone.now().isoformat(),
+                            })
+                    if new_flags:
+                        current = list(instance.dq_flags) if instance.dq_flags else []
+                        current.extend(new_flags)
+                        instance.dq_flags = current
+                        instance.save(update_fields=['dq_flags'])
+                        results['dq_flagged'] += 1
+
                 results['created'] += 1
             except Exception as e:
                 results['failed'] += 1

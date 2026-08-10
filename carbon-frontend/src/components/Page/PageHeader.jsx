@@ -4,28 +4,28 @@ import { Box, Typography, Chip } from '@mui/material';
 
 function PageHeader({ icon: Icon = null, title, subtitle, description, badge, actions }) {
   return (
-    <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 1, mb: 1.5 }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
-          {Icon && <Icon sx={{ fontSize: '1.25rem', color: 'primary.main', mt: 0.25 }} />}
+    <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 0.5, mb: 1 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 0.75 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, minWidth: 0 }}>
+          {Icon && <Icon sx={{ fontSize: '1rem', color: 'primary.main', mt: 0.125 }} />}
           <Box sx={{ minWidth: 0 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <Typography sx={{ fontSize: '1rem', fontWeight: 600 }}>{title}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>{title}</Typography>
               {badge && (
-                <Chip label={badge.label} size="small" variant="outlined" color={badge.color} sx={{ height: 20, fontSize: '0.625rem' }} />
+                <Chip label={badge.label} size="small" variant="outlined" color={badge.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
               )}
             </Box>
             {subtitle && (
-              <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>{subtitle}</Typography>
+              <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}>{subtitle}</Typography>
             )}
             {description && (
-              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.5, lineHeight: 1.5, maxWidth: 720 }}>
+              <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', mt: 0.25, lineHeight: 1.4, maxWidth: 680 }}>
                 {description}
               </Typography>
             )}
           </Box>
         </Box>
-        {actions && <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>{actions}</Box>}
+        {actions && <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0 }}>{actions}</Box>}
       </Box>
     </Box>
   );

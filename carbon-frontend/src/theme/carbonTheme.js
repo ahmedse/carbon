@@ -95,69 +95,71 @@ const createCarbonTheme = (mode = 'light') => {
 
     typography: {
       fontFamily: '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      fontSize: 12,
+      fontSize: 10,
+      htmlFontSize: 14,
       h1: {
-        fontSize: '1.95rem',
+        fontSize: '1.4rem',
         fontWeight: 700,
         letterSpacing: '-0.02em',
         color: colors.text.primary,
       },
       h2: {
-        fontSize: '1.75rem',
+        fontSize: '1.25rem',
         fontWeight: 700,
         letterSpacing: '-0.01em',
         color: colors.text.primary,
       },
       h3: {
-        fontSize: '1.5rem',
+        fontSize: '1.1rem',
         fontWeight: 600,
         letterSpacing: '-0.01em',
         color: colors.text.primary,
       },
       h4: {
-        fontSize: '1.25rem',
+        fontSize: '0.95rem',
         fontWeight: 600,
         color: colors.text.primary,
       },
       h5: {
-        fontSize: '1.25rem',
+        fontSize: '0.875rem',
         fontWeight: 600,
         color: colors.text.primary,
       },
       h6: {
-        fontSize: '1rem',
+        fontSize: '0.8125rem',
         fontWeight: 600,
         color: colors.text.primary,
       },
       subtitle1: {
-        fontSize: '0.875rem',
+        fontSize: '0.75rem',
         fontWeight: 500,
         letterSpacing: '0.01em',
         color: colors.text.secondary,
       },
       subtitle2: {
-        fontSize: '0.8125rem',
+        fontSize: '0.6875rem',
         fontWeight: 500,
         letterSpacing: '0.01em',
         color: colors.text.secondary,
       },
       body1: {
-        fontSize: '0.875rem',
-        lineHeight: 1.5,
+        fontSize: '0.75rem',
+        lineHeight: 1.35,
         color: colors.text.primary,
       },
       body2: {
-        fontSize: '0.8125rem',
-        lineHeight: 1.5,
+        fontSize: '0.6875rem',
+        lineHeight: 1.35,
         color: colors.text.secondary,
       },
       button: {
         textTransform: 'none',
-        fontWeight: 600,
-        letterSpacing: '0.02em',
+        fontWeight: 500,
+        letterSpacing: '0.01em',
+        fontSize: '0.6875rem',
       },
       caption: {
-        fontSize: '0.6875rem',
+        fontSize: '0.625rem',
         color: colors.text.secondary,
       },
     },
@@ -208,9 +210,9 @@ const createCarbonTheme = (mode = 'light') => {
             height: '100%',
           },
           body: {
-            fontSize: 13,
-            lineHeight: 1.45,
-            letterSpacing: '-0.011em',
+            fontSize: 11,
+            lineHeight: 1.4,
+            letterSpacing: '-0.008em',
             WebkitFontSmoothing: 'antialiased',
             MozOsxFontSmoothing: 'grayscale',
             scrollbarColor: `${mode === 'light' ? '#d4d4d8' : '#3f3f46'} transparent`,
@@ -235,13 +237,13 @@ const createCarbonTheme = (mode = 'light') => {
       MuiButton: {
         styleOverrides: {
           root: {
-            borderRadius: 4,
-            padding: '4px 12px',
-            fontSize: '0.8125rem',
+            borderRadius: 3,
+            padding: '3px 8px',
+            fontSize: '0.6875rem',
             fontWeight: 500,
             textTransform: 'none',
             boxShadow: 'none',
-            minHeight: '28px',
+            minHeight: '24px',
             transition: 'all 150ms ease',
             '&:hover': {
               boxShadow: '0 2px 4px rgba(0, 0, 0, 0.08)',
@@ -265,13 +267,13 @@ const createCarbonTheme = (mode = 'light') => {
             },
           },
           sizeLarge: {
-            padding: '6px 16px',
-            fontSize: '0.875rem',
-            minHeight: '32px',
+            padding: '6px 14px',
+            fontSize: '0.8125rem',
+            minHeight: '30px',
           },
           sizeSmall: {
-            padding: '2px 8px',
-            fontSize: '0.75rem',
+            padding: '2px 6px',
+            fontSize: '0.7rem',
             minHeight: '24px',
           },
         },
@@ -355,10 +357,10 @@ const createCarbonTheme = (mode = 'light') => {
       MuiChip: {
         styleOverrides: {
           root: {
-            borderRadius: 4,
+            borderRadius: 3,
             fontWeight: 500,
-            fontSize: '0.75rem',
-            height: '20px',
+            fontSize: '0.65rem',
+            height: '18px',
           },
           colorSuccess: {
             backgroundColor: mode === 'light' ? '#e7f9f3' : 'rgba(16, 185, 129, 0.15)',
@@ -394,10 +396,10 @@ const createCarbonTheme = (mode = 'light') => {
               backgroundColor: colors.background.dark,
               color: colors.text.primary,
               fontWeight: 600,
-              fontSize: '0.6875rem',
+              fontSize: '0.625rem',
               textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              padding: '8px 12px',
+              letterSpacing: '0.05em',
+              padding: '6px 8px',
               borderBottom: `2px solid ${colors.divider}`,
             },
           },
@@ -406,8 +408,8 @@ const createCarbonTheme = (mode = 'light') => {
       MuiTableCell: {
         styleOverrides: {
           root: {
-            padding: '6px 10px',
-            fontSize: '0.75rem',
+            padding: '4px 8px',
+            fontSize: '0.6875rem',
             borderBottom: `1px solid ${colors.divider}`,
           },
         },
@@ -562,7 +564,7 @@ const createCarbonTheme = (mode = 'light') => {
         styleOverrides: {
           root: {
             border: 'none',
-            fontSize: '0.75rem',
+            fontSize: '0.65rem',
             '& .MuiDataGrid-columnHeaders': {
               backgroundColor: colors.background.dark,
               borderBottom: `2px solid ${colors.divider}`,

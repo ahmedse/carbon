@@ -9,7 +9,10 @@ import {
   FormControlLabel,
   Button,
   Typography,
+  Chip,
+  Tooltip,
 } from "@mui/material";
+import WarningIcon from "@mui/icons-material/Warning";
 import FileCellRenderer from "./FileCellRenderer";
 import { DatePicker } from "@mui/x-date-pickers";
 import dayjs from "dayjs";
@@ -281,9 +284,27 @@ export default function DataRowFormDrawer({
     setSubmitting(false);
   };
 
+  const dqFlags = initial?.dq_flags;
+  const showDqWarning = Array.isArray(dqFlags) && dqFlags.length > 0;
+
   return (
     <Box width="100%">
       <Box display="flex" flexDirection="column" gap={2} p={1}>
+        {showDqWarning && (
+          <Tooltip
+            title={dqFlags.map((f) => `${f.rule_name}: ${f.message}`).join('\n')}
+            arrow
+          >
+            <Chip
+              icon={<WarningIcon />}
+              label={`${dqFlags.length} DQ warning(s)`}
+              color="warning"
+              size="small"
+              variant="outlined"
+              sx={{ mb: 1, alignSelf: 'flex-start' }}
+            />
+          </Tooltip>
+        )}
         {(fields || []).map((field) => {
           if (!field.is_active) return null;
 

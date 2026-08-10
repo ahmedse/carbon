@@ -341,7 +341,7 @@ export default function TableManagerPage() {
   }
 
   return (
-    <Box p={3}>
+    <Box p={3} sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Typography variant="h4" gutterBottom>
         Data Schema Manager{" "}
         <span style={{ fontWeight: 400, fontSize: 18, color: "#888" }}>
@@ -381,21 +381,22 @@ export default function TableManagerPage() {
           New Table
         </Button>
       </Box>
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <DataGrid
-        autoHeight
         rows={filteredTables}
         columns={columns}
         pageSize={10}
-        rowsPerPageOptions={[10, 20, 50]}
-        disableSelectionOnClick
+        pageSizeOptions={[10, 20, 50]}
+        disableRowSelectionOnClick
         sx={{
           bgcolor: "#fff",
           borderRadius: 2,
           boxShadow: 1,
-          mb: 4
+          flex: 1,
         }}
         getRowId={row => row.id}
       />
+      </Box>
       <TableFormDrawer
         open={openTableDrawer}
         onClose={handleCloseTableDrawer}

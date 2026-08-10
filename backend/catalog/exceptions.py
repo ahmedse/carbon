@@ -5,6 +5,16 @@ from rest_framework.views import exception_handler
 
 
 def data_trust_exception_handler(exc, context):
+    # AppFeedback carries structured feedback — pass through as-is
+    from core.feedback import AppFeedback
+    if isinstance(exc, AppFeedback):
+        response = Response(exc.feedback, status=exc.status_code)
+        request = context.get('request')
+        correlation_id = getattr(request, 'correlation_id', None) if request else None
+        if correlation_id:
+            response.data['correlation_id'] = correlation_id
+        return response
+
     response = exception_handler(exc, context)
     request = context.get('request')
     correlation_id = getattr(request, 'correlation_id', None) if request else None

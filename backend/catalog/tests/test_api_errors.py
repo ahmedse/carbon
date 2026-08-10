@@ -12,12 +12,13 @@ User = get_user_model()
 
 
 class APIErrorHandlingTests(APITestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username='api-user', password='pass123')
-        self.admin = User.objects.create_user(username='api-admin', password='pass123')
-        self.admin.is_superuser = True
-        self.admin.is_staff = True
-        self.admin.save()
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='api-user', password='pass123')
+        cls.admin = User.objects.create_user(username='api-admin', password='pass123')
+        cls.admin.is_superuser = True
+        cls.admin.is_staff = True
+        cls.admin.save()
 
     def test_invalid_transition_returns_field_details(self):
         ref_set = ReferenceSet.objects.create(name='Status Set', slug='status-set', steward=self.admin)
@@ -74,5 +75,5 @@ class APIErrorHandlingTests(APITestCase):
 
         response = self.client.delete(f'/{api_prefix}/dq/rules/{rule.id}/')
 
-        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
-        self.assertIn('locked', response.data['detail'])
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['archived'])

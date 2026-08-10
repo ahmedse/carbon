@@ -529,7 +529,6 @@ export default function VerificationPage() {
           <DataGrid
             rows={records}
             columns={columns}
-            autoHeight
             pageSizeOptions={[25, 50, 100]}
             initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
             disableRowSelectionOnClick
@@ -538,7 +537,7 @@ export default function VerificationPage() {
               border: '1px solid',
               borderColor: 'divider',
               borderRadius: 2,
-              minHeight: 350,
+              height: '100%',
               bgcolor: 'background.paper',
               '& .MuiDataGrid-cell': { outline: 'none' },
             }}

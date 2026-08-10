@@ -37,13 +37,7 @@ export default function TagDetailPage() {
 
       try {
         setLoading(true);
-        const response = await apiFetch(`catalog/tags/${tagId}/`, { method: 'GET', token }); // fetch tag
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch tag: ${response.status}`);
-        }
-
-        const data = await response.json();
+        const data = await apiFetch(`catalog/tags/${tagId}/`, { method: 'GET', token }); // fetch tag
         setTag(data);
       } catch (err) {
         const message = err.message || 'Failed to load tag';

@@ -99,31 +99,33 @@ export default function FilteredDataGrid({
       </Paper>
 
       {countLabel && (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           {countLabel}
         </Typography>
       )}
 
-      <StandardDataGrid
-        rows={rows}
-        columns={columns}
-        loading={loading}
-        pageSize={pageSize}
-        rowsPerPageOptions={rowsPerPageOptions}
-        hideFooterSelectedRowCount
-        toolbar
-      />
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <StandardDataGrid
+          rows={rows}
+          columns={columns}
+          loading={loading}
+          pageSize={pageSize}
+          rowsPerPageOptions={rowsPerPageOptions}
+          hideFooterSelectedRowCount
+          toolbar
+        />
 
-      {rows.length === 0 && !loading && (
-        <Paper sx={{ p: 4, mt: 2, textAlign: 'center' }}>
-          <Typography color="text.secondary" gutterBottom>
-            {emptyMessage}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {hasFilters ? emptySubtext : 'No data is available yet.'}
-          </Typography>
-        </Paper>
-      )}
+        {rows.length === 0 && !loading && (
+          <Paper sx={{ p: 4, mt: 2, textAlign: 'center' }}>
+            <Typography color="text.secondary" gutterBottom>
+              {emptyMessage}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {hasFilters ? emptySubtext : 'No data is available yet.'}
+            </Typography>
+          </Paper>
+        )}
+      </Box>
     </PageContainer>
   );
 }

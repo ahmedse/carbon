@@ -132,18 +132,12 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
         tags: formData.tags,
       };
 
-      const response = await apiFetch(`catalog/assets/${entityData.id}/`, {
+      const updatedAsset = await apiFetch(`catalog/assets/${entityData.id}/`, {
         method: 'PATCH',
         token,
         body: payload,
       }); // update asset
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || errData.message || `Failed to save: ${response.status}`);
-      }
-
-      const updatedAsset = await response.json();
       setFormData({
         title: updatedAsset.title || '',
         description: updatedAsset.description || '',

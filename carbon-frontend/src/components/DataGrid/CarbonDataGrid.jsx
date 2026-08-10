@@ -52,7 +52,6 @@ function CarbonDataGrid({
         rowHeight={24}
         headerHeight={42}
         onRowClick={onRowClick}
-        autoHeight={!height}
         disableSelectionOnClick
         components={components}
         sx={{

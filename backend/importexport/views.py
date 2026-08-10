@@ -13,6 +13,8 @@ from .serializers import ExportProjectSerializer, ImportJobSerializer, ExportJob
 from .services import ImportService, ExportService
 from accounts.permissions import ReadAnyWriteGlobalAdmin
 from catalog.permissions import AdminOrSuperuserOnly
+from core.feedback import AppFeedback
+from catalog.audit_utils import emit_governance_event
 
 
 class ExportProjectViewSet(viewsets.ModelViewSet):
@@ -38,6 +40,29 @@ class ExportProjectViewSet(viewsets.ModelViewSet):
             ExportJobSerializer(job).data,
             status=status.HTTP_201_CREATED
         )
+
+    def destroy(self, request, *args, **kwargs):
+        project = self.get_object()
+        job_count = project.jobs.count()
+        if job_count > 0:
+            project.is_active = False
+            project.save(update_fields=['is_active', 'updated_at'])
+            emit_governance_event(
+                entity_type='ExportProject', entity_id=project.id,
+                action='archive', before={'is_active': True}, after={'is_active': False},
+                user=request.user,
+            )
+            return Response({
+                'archived': True,
+                'job_count': job_count,
+                'detail': f'Export project archived. {job_count} export jobs preserved.',
+            }, status=status.HTTP_200_OK)
+        emit_governance_event(
+            entity_type='ExportProject', entity_id=project.id,
+            action='delete', before={'name': project.name}, after={'deleted': True},
+            user=request.user,
+        )
+        return super().destroy(request, *args, **kwargs)
 
 
 class ImportJobViewSet(viewsets.ModelViewSet):
@@ -82,6 +107,12 @@ class ImportJobViewSet(viewsets.ModelViewSet):
             ImportJobSerializer(job).data,
             status=status.HTTP_201_CREATED
         )
+
+    def destroy(self, request, *args, **kwargs):
+        return Response({
+            'detail': 'Import job records are part of the audit trail and cannot be deleted.',
+            'resource': 'ImportJob',
+        }, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):

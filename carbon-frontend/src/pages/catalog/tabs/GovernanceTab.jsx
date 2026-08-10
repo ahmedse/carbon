@@ -147,29 +147,32 @@ export default function GovernanceTab({ tableId }) {
               </Select>
             </FormControl>
 
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Domain</InputLabel>
-              <Select value={form.domain} label="Domain" onChange={(e) => set('domain', e.target.value)}>
-                <MenuItem value="">None</MenuItem>
-                {domains.map((d) => (<MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>))}
-              </Select>
-            </FormControl>
+            <Autocomplete
+              value={domains.find((d) => d.id === form.domain) || null}
+              options={domains}
+              getOptionLabel={(d) => d.name}
+              isOptionEqualToValue={(opt, val) => opt.id === val.id}
+              onChange={(e, val) => set('domain', val?.id || '')}
+              renderInput={(params) => <TextField {...params} label="Domain" margin="normal" />}
+            />
 
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Owner</InputLabel>
-              <Select value={form.owner} label="Owner" onChange={(e) => set('owner', e.target.value)}>
-                <MenuItem value="">None</MenuItem>
-                {users.map((u) => (<MenuItem key={u.id} value={u.id}>{userLabel(u)}</MenuItem>))}
-              </Select>
-            </FormControl>
+            <Autocomplete
+              value={users.find((u) => u.id === form.owner) || null}
+              options={users}
+              getOptionLabel={userLabel}
+              isOptionEqualToValue={(opt, val) => opt.id === val.id}
+              onChange={(e, val) => set('owner', val?.id || '')}
+              renderInput={(params) => <TextField {...params} label="Owner" margin="normal" />}
+            />
 
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Steward</InputLabel>
-              <Select value={form.steward} label="Steward" onChange={(e) => set('steward', e.target.value)}>
-                <MenuItem value="">None</MenuItem>
-                {users.map((u) => (<MenuItem key={u.id} value={u.id}>{userLabel(u)}</MenuItem>))}
-              </Select>
-            </FormControl>
+            <Autocomplete
+              value={users.find((u) => u.id === form.steward) || null}
+              options={users}
+              getOptionLabel={userLabel}
+              isOptionEqualToValue={(opt, val) => opt.id === val.id}
+              onChange={(e, val) => set('steward', val?.id || '')}
+              renderInput={(params) => <TextField {...params} label="Steward" margin="normal" />}
+            />
 
             <Autocomplete
               multiple

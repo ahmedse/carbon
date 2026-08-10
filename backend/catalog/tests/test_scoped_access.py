@@ -17,37 +17,39 @@ from emissions.models import Calculation, EmissionFactor, ReportingPeriod
 class AssetProfileScopedAccessTest(TestCase):
     """Test that AssetProfileViewSet enforces org-unit scoping."""
     
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         """Set up test data with two org units and users."""
         # Create users
-        self.admin_user = User.objects.create_user(
+        cls.admin_user = User.objects.create_user(
             username='admin', password='admin123', is_staff=True, is_superuser=True
         )
-        self.owner1 = User.objects.create_user(username='owner1', password='pass123')
-        self.owner2 = User.objects.create_user(username='owner2', password='pass123')
-        self.outsider = User.objects.create_user(username='outsider', password='pass123')
+        cls.owner1 = User.objects.create_user(username='owner1', password='pass123')
+        cls.owner2 = User.objects.create_user(username='owner2', password='pass123')
+        cls.outsider = User.objects.create_user(username='outsider', password='pass123')
         
         # Create org units
-        self.org_unit1 = OrgUnit.objects.create(name='Unit 1', slug='unit-1')
-        self.org_unit2 = OrgUnit.objects.create(name='Unit 2', slug='unit-2')
+        cls.org_unit1 = OrgUnit.objects.create(name='Unit 1', slug='unit-1')
+        cls.org_unit2 = OrgUnit.objects.create(name='Unit 2', slug='unit-2')
         
         # Create modules
-        self.module1 = Module.objects.create(org_unit=self.org_unit1, name='Module 1', scope=1)
-        self.module2 = Module.objects.create(org_unit=self.org_unit2, name='Module 2', scope=1)
+        cls.module1 = Module.objects.create(org_unit=cls.org_unit1, name='Module 1', scope=1)
+        cls.module2 = Module.objects.create(org_unit=cls.org_unit2, name='Module 2', scope=1)
         
         # Create data tables
-        self.table1 = DataTable.objects.create(module=self.module1, name='Table 1')
-        self.table2 = DataTable.objects.create(module=self.module2, name='Table 2')
+        cls.table1 = DataTable.objects.create(module=cls.module1, name='Table 1')
+        cls.table2 = DataTable.objects.create(module=cls.module2, name='Table 2')
         
         # Create asset profiles
-        self.asset1 = AssetProfile.objects.create(data_table=self.table1, description='Asset 1')
-        self.asset2 = AssetProfile.objects.create(data_table=self.table2, description='Asset 2')
+        cls.asset1 = AssetProfile.objects.create(data_table=cls.table1, description='Asset 1')
+        cls.asset2 = AssetProfile.objects.create(data_table=cls.table2, description='Asset 2')
         
         # Assign scoped roles
-        self.dataowner_group = Group.objects.get_or_create(name='dataowners_group')[0]
-        ScopedRole.objects.create(user=self.owner1, org_unit=self.org_unit1, group=self.dataowner_group, is_active=True)
-        ScopedRole.objects.create(user=self.owner2, org_unit=self.org_unit2, group=self.dataowner_group, is_active=True)
-        
+        cls.dataowner_group = Group.objects.get_or_create(name='dataowners_group')[0]
+        ScopedRole.objects.create(user=cls.owner1, org_unit=cls.org_unit1, group=cls.dataowner_group, is_active=True)
+        ScopedRole.objects.create(user=cls.owner2, org_unit=cls.org_unit2, group=cls.dataowner_group, is_active=True)
+    
+    def setUp(self):
         self.client = APIClient()
     
     def test_superuser_sees_all_assets(self):

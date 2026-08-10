@@ -72,7 +72,8 @@ class DataSourceAPITests(TestCase):
         self._auth(self.admin)
         resp = self.client.delete(f'{self.list_url}{source.id}/')
         assert resp.status_code == status.HTTP_204_NO_CONTENT
-        assert DataSource.objects.filter(id=source.id).count() == 0
+        source.refresh_from_db()
+        assert source.status == 'inactive'
 
     def test_create_minimal_source(self):
         """Only name and source_type required."""
@@ -197,7 +198,8 @@ class ConsumingConnectionAPITests(TestCase):
         self._auth(self.admin)
         resp = self.client.delete(f'{self.list_url}{conn.id}/')
         assert resp.status_code == status.HTTP_204_NO_CONTENT
-        assert ConsumingConnection.objects.filter(id=conn.id).count() == 0
+        conn.refresh_from_db()
+        assert conn.is_active is False
 
     # ── API key lifecycle ─────────────────────────────────────
 
