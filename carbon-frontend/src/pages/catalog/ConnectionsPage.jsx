@@ -3,6 +3,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { useNotification } from '../../components/NotificationProvider';
+import SystemDialog from '../../components/SystemDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import {
   fetchDataSources,
   createDataSource,
@@ -20,10 +23,6 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import {
   Box,
   Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
   Table,
   TableBody,
@@ -83,6 +82,10 @@ export default function ConnectionsPage() {
   const [dialogType, setDialogType] = useState(''); // 'datasource' or 'consuming'
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState({});
+  const [deleteTarget, setDeleteTarget] = useState(null); // { type, id, name }
+  const [rotateTarget, setRotateTarget] = useState(null);
+  const [newKey, setNewKey] = useState(null);
+  const { notify } = useNotification();
 
   const sourceTypes = [
     { value: 'excel', label: 'Excel' },
@@ -178,14 +181,17 @@ export default function ConnectionsPage() {
     }
   };
 
-  const handleDelete = async (type, id) => {
-    if (!window.confirm('Are you sure?')) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const { type, id } = deleteTarget;
+    setDeleteTarget(null);
     try {
       if (type === 'datasource') {
         await deleteDataSource(token, id);
       } else {
         await deleteConsumingConnection(token, id);
       }
+      notify({ message: 'Deleted', type: 'success' });
       await loadData();
     } catch (err) {
       setError(err.message || 'Failed to delete');
@@ -196,17 +202,20 @@ export default function ConnectionsPage() {
     try {
       await testDataSource(token, id);
       setError(null);
-      alert('Connection test successful!');
+      notify({ message: 'Connection test successful', type: 'success' });
     } catch (err) {
       setError(err.message || 'Connection test failed');
     }
   };
 
-  const handleRotateKey = async (id) => {
-    if (!window.confirm('Generate new API key? Current key will be invalidated.')) return;
+  const confirmRotateKey = async () => {
+    if (!rotateTarget) return;
+    const id = rotateTarget;
+    setRotateTarget(null);
     try {
       const result = await rotateConsumingConnectionKey(token, id);
-      alert(`New API Key (copy now, not shown again):\n\n${result.api_key}`);
+      setNewKey(result.api_key);
+      notify({ message: 'New API key generated', type: 'success' });
       await loadData();
     } catch (err) {
       setError(err.message || 'Failed to rotate key');
@@ -271,7 +280,7 @@ export default function ConnectionsPage() {
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Delete">
-                      <IconButton size="small" color="error" onClick={() => handleDelete('datasource', source.id)}>
+                      <IconButton size="small" color="error" onClick={() => setDeleteTarget({ type: 'datasource', id: source.id, name: source.name })}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -314,7 +323,7 @@ export default function ConnectionsPage() {
                   </TableCell>
                   <TableCell align="right">
                     <Tooltip title="Rotate Key">
-                      <Button size="small" onClick={() => handleRotateKey(conn.id)}>
+                      <Button size="small" onClick={() => setRotateTarget(conn.id)}>
                         Rotate
                       </Button>
                     </Tooltip>
@@ -324,7 +333,7 @@ export default function ConnectionsPage() {
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Delete">
-                      <IconButton size="small" color="error" onClick={() => handleDelete('consuming', conn.id)}>
+                      <IconButton size="small" color="error" onClick={() => setDeleteTarget({ type: 'consuming', id: conn.id, name: conn.name })}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -336,14 +345,27 @@ export default function ConnectionsPage() {
         </TableContainer>
       </TabPanel>
 
-      {/* Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {editingItem ? 'Edit Connection' : 'New Connection'}
-        </DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
+      {/* Create/Edit dialog (SystemDialog — design system primitive) */}
+      <SystemDialog
+        open={openDialog}
+        title={editingItem ? 'Edit Connection' : 'New Connection'}
+        onClose={handleCloseDialog}
+        onCancel={handleCloseDialog}
+        cancelLabel="Cancel"
+        width={480}
+        height={420}
+        minWidth={400}
+        minHeight={340}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+        actions={
+          <Button onClick={handleSave} variant="contained" size="small">Save</Button>
+        }
+      >
+        <Box px={2} py={1}>
           <TextField
             label="Name"
+            size="small"
             fullWidth
             value={formData.name || ''}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -352,14 +374,16 @@ export default function ConnectionsPage() {
           />
           <TextField
             label="Slug"
+            size="small"
             fullWidth
             value={formData.slug || ''}
             onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
             margin="normal"
           />
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth margin="normal" size="small">
             <InputLabel>{dialogType === 'datasource' ? 'Source Type' : 'System Type'}</InputLabel>
             <Select
+              size="small"
               value={dialogType === 'datasource' ? (formData.source_type || 'api') : (formData.system_type || 'custom')}
               onChange={(e) => setFormData({ 
                 ...formData, 
@@ -374,6 +398,7 @@ export default function ConnectionsPage() {
           </FormControl>
           <TextField
             label="Description"
+            size="small"
             fullWidth
             multiline
             rows={2}
@@ -381,12 +406,68 @@ export default function ConnectionsPage() {
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             margin="normal"
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained">Save</Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </SystemDialog>
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete connection?"
+        message={`Delete "${deleteTarget?.name || 'this connection'}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Rotate key confirmation */}
+      <ConfirmDialog
+        open={!!rotateTarget}
+        title="Generate new API key?"
+        message="The current key will be invalidated immediately. Existing integrations using it will stop working until updated."
+        confirmLabel="Rotate Key"
+        destructive
+        onConfirm={confirmRotateKey}
+        onCancel={() => setRotateTarget(null)}
+      />
+
+      {/* New API key (copy before closing) */}
+      <SystemDialog
+        open={!!newKey}
+        title="New API Key"
+        onClose={() => setNewKey(null)}
+        onCancel={() => setNewKey(null)}
+        cancelLabel="Close"
+        showCancel={false}
+        width={520}
+        height={220}
+        minWidth={420}
+        minHeight={180}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+        actions={
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => { navigator.clipboard?.writeText(newKey || ''); notify({ message: 'API key copied', type: 'success' }); }}
+          >
+            Copy Key
+          </Button>
+        }
+      >
+        <Box px={2} py={1}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Copy this key now — it will not be shown again.
+          </Typography>
+          <TextField
+            fullWidth
+            size="small"
+            value={newKey || ''}
+            InputProps={{ readOnly: true }}
+            inputProps={{ 'aria-label': 'New API key' }}
+          />
+        </Box>
+      </SystemDialog>
     </Box>
   );
 }

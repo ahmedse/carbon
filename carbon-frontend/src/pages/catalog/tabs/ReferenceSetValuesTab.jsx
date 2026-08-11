@@ -3,9 +3,10 @@
 
 import React, { useState } from 'react';
 import { 
-  Box, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions,
+  Box, Button, TextField,
   IconButton, Tooltip, Chip, Typography, Alert
 } from '@mui/material';
+import SystemDialog from '../../../components/SystemDialog';
 import { DataGrid } from '@mui/x-data-grid';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import { useAuth } from '../../../auth/AuthContext';
@@ -275,16 +276,31 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
         />
       </Box>
 
-      {/* Create/Edit Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {editingValue ? 'Edit Reference Value' : 'Create Reference Value'}
-        </DialogTitle>
-        <DialogContent>
+      {/* Create/Edit dialog (SystemDialog — design system primitive) */}
+      <SystemDialog
+        open={openDialog}
+        title={editingValue ? 'Edit Reference Value' : 'Create Reference Value'}
+        onClose={handleCloseDialog}
+        onCancel={handleCloseDialog}
+        cancelLabel="Cancel"
+        width={520}
+        height={560}
+        minWidth={440}
+        minHeight={440}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+        actions={
+          <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        }
+      >
+        <Box px={2} py={1}>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
           <TextField
             fullWidth
+            size="small"
             label="Code"
             name="code"
             value={formData.code}
@@ -297,6 +313,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
 
           <TextField
             fullWidth
+            size="small"
             label="Label"
             name="label"
             value={formData.label}
@@ -309,6 +326,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
 
           <TextField
             fullWidth
+            size="small"
             label="Description"
             name="description"
             value={formData.description}
@@ -322,6 +340,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
 
           <TextField
             fullWidth
+            size="small"
             label="Sort Order"
             name="sort_order"
             type="number"
@@ -351,14 +370,8 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
             Leave dates blank for values that are always valid
           </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </SystemDialog>
 
       {/* Confirm delete dialog */}
       <ConfirmDialog

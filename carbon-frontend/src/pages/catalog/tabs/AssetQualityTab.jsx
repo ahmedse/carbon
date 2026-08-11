@@ -16,7 +16,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { useNavigate } from 'react-router-dom';
 import LaunchIcon from '@mui/icons-material/Launch';
-import { getTableDQMetrics, getFieldDQMetrics, getDQResults, listDQRules, runTableValidation } from '../../../api/dq';
+import { getTableDQMetrics, getFieldDQMetrics, getDQResults, listDQRules } from '../../../api/dq';
 import DQRulesList from '../../../components/dq/DQRulesList';
 
 const STATUS_COLOR = {
@@ -38,7 +38,6 @@ export default function AssetQualityTab({ entityData }) {
   const [rules, setRules] = useState([]);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
   const [error, setError] = useState(null);
 
   const loadQualityData = useCallback(async () => {
@@ -76,20 +75,6 @@ export default function AssetQualityTab({ entityData }) {
     loadQualityData();
   }, [entityData, token, loadQualityData]);
 
-  const handleRunValidation = async () => {
-    if (!entityData?.data_table) return;
-    setRunning(true);
-    try {
-      await runTableValidation(token, entityData.data_table);
-      notify({ message: 'Table validation triggered', type: 'success' });
-      await loadQualityData();
-    } catch (err) {
-      notify({ message: err.message || 'Failed to run validation', type: 'error' });
-    } finally {
-      setRunning(false);
-    }
-  };
-
   const score = metrics?.quality_score ?? entityData?.quality_score ?? 0;
   const status = metrics?.quality_status ?? entityData?.quality_status ?? 'unknown';
   const lastRun = metrics?.last_run || entityData?.updated_at || null;
@@ -125,22 +110,11 @@ export default function AssetQualityTab({ entityData }) {
               </Typography>
               {entityData?.data_table && (
                 <Button
-                  variant="contained"
-                  fullWidth
-                  sx={{ mt: 3 }}
-                  onClick={handleRunValidation}
-                  disabled={running}
-                >
-                  {running ? 'Running validation…' : 'Run Table Validation'}
-                </Button>
-              )}
-              {entityData?.data_table && (
-                <Button
                   variant="outlined"
                   fullWidth
                   startIcon={<LaunchIcon />}
-                  sx={{ mt: 1 }}
-                  onClick={() => navigate(`/dq/rules?table=${entityData.data_table}`)}
+                  sx={{ mt: 3 }}
+                  onClick={() => navigate(`/dq?table=${entityData.data_table}`)}
                 >
                   Manage in DQ Workspace
                 </Button>

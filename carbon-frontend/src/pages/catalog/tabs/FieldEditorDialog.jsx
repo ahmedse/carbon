@@ -2,10 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   FormControl,
   IconButton,
   InputLabel,
@@ -18,6 +14,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import SystemDialog from '../../../components/SystemDialog';
 
 const FIELD_TYPES = ['string', 'text', 'number', 'date', 'boolean', 'select', 'multiselect', 'file', 'reference'];
 
@@ -120,10 +117,25 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>{field ? 'Edit Field' : 'Add Field'}</DialogTitle>
-      <DialogContent dividers>
-        <Stack spacing={2} sx={{ pt: 1 }}>
+    <SystemDialog
+      open={open}
+      title={field ? 'Edit Field' : 'Add Field'}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel="Cancel"
+      width={640}
+      height={560}
+      minWidth={520}
+      minHeight={420}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+      actions={
+        <Button variant="contained" size="small" onClick={handleSubmit}>
+          Save Field
+        </Button>
+      }
+    >
+      <Stack spacing={2} sx={{ pt: 1 }}>
           <TextField
             label="Name"
             value={formData.name}
@@ -216,13 +228,6 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
             </Box>
           )}
         </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={handleSubmit}>
-          Save Field
-        </Button>
-      </DialogActions>
-    </Dialog>
+    </SystemDialog>
   );
 }

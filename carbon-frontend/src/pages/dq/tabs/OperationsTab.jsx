@@ -6,10 +6,6 @@ import {
   Box,
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Paper,
   Stack,
   Typography,
@@ -24,6 +20,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 import { updateDQRule, deleteDQRule, createDQRule } from '../../../api/dq';
 
 function OperationsTab({ rule, onChanged, onRun }) {
@@ -203,36 +200,34 @@ function OperationsTab({ rule, onChanged, onRun }) {
         </Paper>
       </Stack>
 
-      <Dialog open={confirmDelete} onClose={() => setConfirmDelete(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Delete rule?</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ fontSize: '0.875rem' }}>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete rule?"
+        message={
+          <>
             This permanently removes <strong>{rule?.name}</strong>. This cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
-          <Button variant="contained" color="error" startIcon={<DeleteForever />} onClick={handleDelete}>
-            Delete permanently
-          </Button>
-        </DialogActions>
-      </Dialog>
+          </>
+        }
+        confirmLabel="Delete permanently"
+        destructive
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
 
-      <Dialog open={confirmArchive} onClose={() => setConfirmArchive(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Archive rule?</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ fontSize: '0.875rem' }}>
-            Archives <strong>{rule?.name}</strong> — it keeps its {rule?.results_count} result(s) but is
-            deactivated and hidden from the active rules list. You can unarchive later.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmArchive(false)}>Cancel</Button>
-          <Button variant="contained" color="error" startIcon={<Archive />} onClick={handleArchive}>
-            Archive
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={confirmArchive}
+        title="Archive rule?"
+        message={
+          <>
+            Archives <strong>{rule?.name}</strong> — it keeps its {rule?.results_count} result(s) but
+            is deactivated and hidden from the active rules list. You can unarchive later.
+          </>
+        }
+        confirmLabel="Archive"
+        destructive
+        onConfirm={handleArchive}
+        onCancel={() => setConfirmArchive(false)}
+      />
     </Box>
   );
 }

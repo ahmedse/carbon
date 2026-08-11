@@ -5,6 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
+import SystemDialog from '../../components/SystemDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import {
   Autocomplete,
   Box,
@@ -12,10 +14,6 @@ import {
   Card,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   IconButton,
   Paper,
   Select,
@@ -78,7 +76,6 @@ export default function MetadataManagementPage() {
   const [formData, setFormData] = useState({});
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -189,7 +186,6 @@ export default function MetadataManagementPage() {
 
   const handleDelete = async (item) => {
     const itemType = tabIndex === 0 ? 'domain' : tabIndex === 1 ? 'term' : 'tag';
-    setDeleteLoading(true);
     try {
       if (tabIndex === 0) {
         await deleteDataDomain(token, item.id);
@@ -210,8 +206,6 @@ export default function MetadataManagementPage() {
       } else {
         notify({ message: err.message || 'Delete failed', type: 'error' });
       }
-    } finally {
-      setDeleteLoading(false);
     }
   };
 
@@ -388,11 +382,28 @@ export default function MetadataManagementPage() {
     const title = `${isEdit ? 'Edit' : 'New'} ${titles[tabIndex]}`;
 
     return (
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{title}</DialogTitle>
-        <DialogContent dividers>
+      <SystemDialog
+        open={dialogOpen}
+        title={title}
+        onClose={() => setDialogOpen(false)}
+        onCancel={() => setDialogOpen(false)}
+        cancelLabel="Cancel"
+        width={480}
+        height={400}
+        minWidth={400}
+        minHeight={320}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+        actions={
+          <Button variant="contained" size="small" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        }
+      >
+        <Box px={2} py={1}>
           <TextField
             fullWidth
+            size="small"
             label="Name"
             value={formData.name || ''}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -402,6 +413,7 @@ export default function MetadataManagementPage() {
           {tabIndex === 0 && (
             <TextField
               fullWidth
+              size="small"
               label="Description"
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -414,6 +426,7 @@ export default function MetadataManagementPage() {
             <>
               <TextField
                 fullWidth
+                size="small"
                 label="Definition"
                 value={formData.definition || ''}
                 onChange={(e) => setFormData({ ...formData, definition: e.target.value })}
@@ -427,13 +440,14 @@ export default function MetadataManagementPage() {
                 getOptionLabel={(d) => d.name}
                 isOptionEqualToValue={(opt, val) => opt.id === val.id}
                 onChange={(e, val) => setFormData({ ...formData, domain: val?.id || '' })}
-                renderInput={(params) => <TextField {...params} label="Domain" margin="normal" />}
+                renderInput={(params) => <TextField {...params} label="Domain" size="small" margin="normal" />}
               />
             </>
           )}
           {tabIndex === 2 && (
             <TextField
               fullWidth
+              size="small"
               label="Color"
               type="color"
               value={formData.color || '#2563eb'}
@@ -441,14 +455,8 @@ export default function MetadataManagementPage() {
               margin="normal"
             />
           )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </SystemDialog>
     );
   };
 
@@ -500,27 +508,16 @@ export default function MetadataManagementPage() {
 
       {renderDialog()}
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Delete Item?</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete "{deleteConfirm?.name || deleteConfirm?.term || 'item'}"?
-            This cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)} disabled={deleteLoading}>Cancel</Button>
-          <Button
-            onClick={() => handleDelete(deleteConfirm)}
-            variant="contained"
-            color="error"
-            disabled={deleteLoading}
-          >
-            {deleteLoading ? 'Deleting...' : 'Delete'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Delete confirmation (ConfirmDialog — no window.confirm) */}
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete item?"
+        message={`Delete "${deleteConfirm?.name || deleteConfirm?.term || 'item'}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => handleDelete(deleteConfirm)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </Box>
   );
 }

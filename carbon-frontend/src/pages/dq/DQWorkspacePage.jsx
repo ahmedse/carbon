@@ -6,10 +6,6 @@ import {
   Box,
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Grid,
   IconButton,
   Paper,
@@ -31,6 +27,7 @@ import {
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
+import SystemDialog from '../../components/SystemDialog';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import StatCard from '../../components/Cards/StatCard';
 import CarbonDataGrid from '../../components/DataGrid/CarbonDataGrid';
@@ -449,29 +446,38 @@ function SuggestionsTab() {
         </Stack>
       )}
 
-      <Dialog open={!!rejectTarget} onClose={() => setRejectTarget(null)} fullWidth maxWidth="sm">
-        <DialogTitle>Reject suggestion</DialogTitle>
-        <DialogContent>
+      <SystemDialog
+        open={!!rejectTarget}
+        title="Reject suggestion"
+        onClose={() => setRejectTarget(null)}
+        onCancel={() => setRejectTarget(null)}
+        cancelLabel="Cancel"
+        width={480}
+        height={280}
+        minWidth={400}
+        minHeight={220}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+        actions={
+          <Button variant="contained" color="error" size="small" onClick={handleReject} disabled={busyId}>
+            Reject suggestion
+          </Button>
+        }
+      >
+        <Box px={2} py={1}>
           <TextField
             autoFocus
             fullWidth
             multiline
             minRows={3}
+            size="small"
             label="Reason (optional)"
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
             sx={{ mt: 1 }}
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setRejectTarget(null)} disabled={busyId}>
-            Cancel
-          </Button>
-          <Button variant="contained" color="error" onClick={handleReject} disabled={busyId}>
-            Reject suggestion
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </SystemDialog>
     </Box>
   );
 }
@@ -483,9 +489,20 @@ function SchemaDialog({ open, onClose, snapshot }) {
   const cols = snapshot.column_schema || {};
   const entries = Object.entries(cols);
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>Schema Snapshot — {snapshot.table_name || snapshot.data_table}</DialogTitle>
-      <DialogContent>
+    <SystemDialog
+      open={open}
+      title={`Schema Snapshot — ${snapshot.table_name || snapshot.data_table}`}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel="Close"
+      width={760}
+      height={520}
+      minWidth={560}
+      minHeight={380}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
         <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', mb: 1 }}>
           Snapshot at: {snapshot.snapshot_at ? new Date(snapshot.snapshot_at).toLocaleString() : '—'}
           &nbsp;| Rows: {snapshot.row_count ?? '—'} &nbsp;| Columns: {entries.length}
@@ -504,11 +521,8 @@ function SchemaDialog({ open, onClose, snapshot }) {
           }))}
           emptyText="No column schema data."
         />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
-    </Dialog>
+      </Box>
+    </SystemDialog>
   );
 }
 

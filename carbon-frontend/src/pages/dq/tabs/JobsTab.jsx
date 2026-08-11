@@ -273,19 +273,19 @@ function JobsTab({ jobs, loading, reload }) {
         field: 'created_at',
         headerName: 'Created',
         width: 150,
-        valueGetter: ({ row }) => formatTimestamp(row.created_at),
+        valueGetter: (_value, row) => formatTimestamp(row.created_at),
       },
       {
         field: 'duration',
         headerName: 'Duration',
         width: 90,
-        valueGetter: ({ row }) => formatDuration(row.created_at, row.updated_at),
+        valueGetter: (_value, row) => formatDuration(row.created_at, row.updated_at),
       },
       {
         field: 'created_by_name',
         headerName: 'By',
         width: 110,
-        valueGetter: ({ row }) => row.created_by_name || 'system',
+        valueGetter: (_value, row) => row.created_by_name || 'system',
       },
     ],
     []

@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
+import SystemDialog from '../../components/SystemDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import { API_ROUTES } from '../../config';
 import {
   Alert,
@@ -10,10 +12,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   FormControl,
   IconButton,
   InputLabel,
@@ -59,6 +57,7 @@ export default function ExportsDetailPage() {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [runningId, setRunningId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -127,10 +126,11 @@ export default function ExportsDetailPage() {
     }
   };
 
-  const handleDelete = async (project) => {
-    if (!window.confirm(`Delete export project "${project.name}"?`)) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteTarget(null);
     try {
-      await deleteExportProject(token, project.id);
+      await deleteExportProject(token, deleteTarget.id);
       notify({ message: 'Export project deleted', type: 'success' });
       loadData();
     } catch (err) {
@@ -205,7 +205,7 @@ export default function ExportsDetailPage() {
                   <IconButton size="small" onClick={() => openEdit(project)}>
                     <EditIcon fontSize="small" />
                   </IconButton>
-                  <IconButton size="small" onClick={() => handleDelete(project)}>
+                  <IconButton size="small" onClick={() => setDeleteTarget(project)}>
                     <DeleteIcon fontSize="small" />
                   </IconButton>
                 </TableCell>
@@ -321,17 +321,34 @@ export default function ExportsDetailPage() {
         storageKey="carbonExportsDetail"
         entityData={{ projects, jobs }}
       />
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editingProject ? 'Edit Export Project' : 'New Export Project'}</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
+      <SystemDialog
+        open={openDialog}
+        title={editingProject ? 'Edit Export Project' : 'New Export Project'}
+        onClose={() => setOpenDialog(false)}
+        onCancel={() => setOpenDialog(false)}
+        cancelLabel="Cancel"
+        width={480}
+        height={440}
+        minWidth={400}
+        minHeight={360}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+        actions={
+          <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        }
+      >
+        <Box px={2} py={1}>
           <TextField
             fullWidth
+            size="small"
             label="Name"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             margin="normal"
           />
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth margin="normal" size="small">
             <InputLabel>Format</InputLabel>
             <Select
               value={formData.format}
@@ -341,7 +358,7 @@ export default function ExportsDetailPage() {
               {FORMATS.map((f) => <MenuItem key={f} value={f}>{f}</MenuItem>)}
             </Select>
           </FormControl>
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth margin="normal" size="small">
             <InputLabel>Schedule</InputLabel>
             <Select
               value={formData.schedule}
@@ -353,6 +370,7 @@ export default function ExportsDetailPage() {
           </FormControl>
           <TextField
             fullWidth
+            size="small"
             label="Description"
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -360,14 +378,18 @@ export default function ExportsDetailPage() {
             multiline
             rows={3}
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </SystemDialog>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete export project?"
+        message={`Delete export project "${deleteTarget?.name || 'this project'}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </>
   );
 }

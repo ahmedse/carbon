@@ -24,6 +24,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 import {
   createDataSchemaField,
   deleteDataSchemaField,
@@ -43,6 +44,7 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
   const { notify } = useNotification();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingField, setEditingField] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { kind: 'field' | 'table', item }
   const [working, setWorking] = useState(false);
 
   const effectiveIsAdmin = Boolean(
@@ -84,17 +86,28 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
     }
   };
 
-  const handleDeleteField = async (field) => {
-    if (!window.confirm(`Delete field "${field.label || field.name}"?`)) return;
+  const handleDeleteField = (field) => setDeleteTarget({ kind: 'field', item: field });
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     setWorking(true);
     try {
-      await deleteDataSchemaField(token, field.id, context?.project_id || null, table?.module || table?.module_id || null);
-      notify({ message: 'Field deleted', type: 'success' });
+      if (deleteTarget.kind === 'field') {
+        const field = deleteTarget.item;
+        await deleteDataSchemaField(token, field.id, context?.project_id || null, table?.module || table?.module_id || null);
+        notify({ message: 'Field deleted', type: 'success' });
+      } else {
+        await deleteDataSchemaTable(token, tableId, context?.project_id || null, table?.module || table?.module_id || null);
+        notify({ message: 'Table deleted', type: 'success' });
+        navigate('/catalog/products');
+        return;
+      }
       if (onChanged) await onChanged();
     } catch (err) {
-      notify({ message: err.message || 'Failed to delete field', type: 'error' });
+      notify({ message: err.message || 'Failed to delete', type: 'error' });
     } finally {
       setWorking(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -121,19 +134,7 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
     }
   };
 
-  const handleDeleteTable = async () => {
-    if (!window.confirm(`Delete table "${table?.title || 'this table'}"?`)) return;
-    setWorking(true);
-    try {
-      await deleteDataSchemaTable(token, tableId, context?.project_id || null, table?.module || table?.module_id || null);
-      notify({ message: 'Table deleted', type: 'success' });
-      navigate('/catalog/products');
-    } catch (err) {
-      notify({ message: err.message || 'Failed to delete table', type: 'error' });
-    } finally {
-      setWorking(false);
-    }
-  };
+  const handleDeleteTable = () => setDeleteTarget({ kind: 'table', item: null });
 
   return (
     <DetailTabContent>
@@ -241,6 +242,20 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
         onSave={handleSaveField}
         field={editingField}
         tableId={tableId}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={deleteTarget?.kind === 'table' ? 'Delete table?' : 'Delete field?'}
+        message={
+          deleteTarget?.kind === 'table'
+            ? `Delete table "${table?.title || 'this table'}"? This action cannot be undone.`
+            : `Delete field "${deleteTarget?.item?.label || deleteTarget?.item?.name}"? This action cannot be undone.`
+        }
+        confirmLabel="Delete"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
       />
     </DetailTabContent>
   );

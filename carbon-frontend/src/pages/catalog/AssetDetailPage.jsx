@@ -130,6 +130,7 @@ export default function AssetDetailPage() {
       headerComponent={headerComponent}
       mainTabs={[
         { label: 'Overview', component: AssetOverviewTab },
+        { label: 'Quality', component: AssetQualityTab },
         { label: 'Edit', component: AssetEditTab },
       ]}
       metricsTabs={[

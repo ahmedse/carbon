@@ -5,10 +5,6 @@ import {
   Box,
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   IconButton,
   MenuItem,
   Stack,
@@ -16,6 +12,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import SystemDialog from '../../../components/SystemDialog';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 import { Add, DeleteOutline, PlayArrow, Visibility, Tune } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
@@ -76,6 +74,7 @@ function RulesTab({ onJobCreated, tableFilter }) {
   const [tables, setTables] = useState([]);
   const [actionBusyId, setActionBusyId] = useState(null);
   const [filteredTableName, setFilteredTableName] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -224,12 +223,13 @@ function RulesTab({ onJobCreated, tableFilter }) {
     }
   };
 
-  const handleDelete = async (rule) => {
-    if (!window.confirm(`Delete rule "${rule.name}"? It will be archived if results exist.`)) return;
-    setActionBusyId(`delete-${rule.id}`);
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setActionBusyId(`delete-${deleteTarget.id}`);
     try {
-      await deleteDQRule(token, rule.id);
-      notify({ message: `Rule "${rule.name}" deleted`, type: 'success' });
+      await deleteDQRule(token, deleteTarget.id);
+      notify({ message: `Rule "${deleteTarget.name}" deleted`, type: 'success' });
+      setDeleteTarget(null);
       load();
     } catch (err) {
       notifyFromError(err, 'Could not delete rule');
@@ -260,7 +260,8 @@ function RulesTab({ onJobCreated, tableFilter }) {
         field: 'rule_type',
         headerName: 'Type',
         width: 150,
-        valueGetter: ({ row }) => RULE_TYPE_LABELS[row.rule_type] || row.rule_type,
+        // DataGrid v8: valueGetter receives positional (value, row) — v7 ({ row }) object signature was removed
+        valueGetter: (_value, row) => RULE_TYPE_LABELS[row.rule_type] || row.rule_type,
       },
       {
         field: 'dimension',
@@ -287,7 +288,7 @@ function RulesTab({ onJobCreated, tableFilter }) {
         field: 'level',
         headerName: 'Level',
         width: 130,
-        valueGetter: ({ row }) => RULE_LEVEL_LABELS[row.rule_level] || row.rule_level,
+        valueGetter: (_value, row) => RULE_LEVEL_LABELS[row.rule_level] || row.rule_level,
       },
       {
         field: 'tables',
@@ -327,7 +328,7 @@ function RulesTab({ onJobCreated, tableFilter }) {
         field: 'version',
         headerName: 'Ver',
         width: 70,
-        valueGetter: ({ row }) => row.version,
+        valueGetter: (_value, row) => row.version,
       },
       {
         field: 'actions',
@@ -383,7 +384,7 @@ function RulesTab({ onJobCreated, tableFilter }) {
                   disabled={actionBusyId === `delete-${row.id}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDelete(row);
+                    setDeleteTarget(row);
                   }}
                 >
                   <DeleteOutline fontSize="small" />
@@ -541,9 +542,25 @@ function RulesTab({ onJobCreated, tableFilter }) {
       />
 
       {/* New rule — JSON-first authoring (no rule-builder form) */}
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} fullWidth maxWidth="lg">
-        <DialogTitle>New DQ Rule</DialogTitle>
-        <DialogContent dividers>
+      <SystemDialog
+        open={createOpen}
+        title="New DQ Rule"
+        onClose={() => setCreateOpen(false)}
+        onCancel={() => setCreateOpen(false)}
+        cancelLabel="Cancel"
+        width={820}
+        height={620}
+        minWidth={640}
+        minHeight={480}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+        actions={
+          <Button variant="contained" size="small" onClick={handleCreate} disabled={saving}>
+            {saving ? 'Creating…' : 'Create Rule'}
+          </Button>
+        }
+      >
+        <Box px={2} py={1}>
           <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary', mb: 1.5 }}>
             Author the rule definition as schema v1 JSON. Tables are matched by name to assets in
             your scope; fields are resolved against the live schema.
@@ -555,16 +572,23 @@ function RulesTab({ onJobCreated, tableFilter }) {
             tables={tables}
             disabled={saving}
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateOpen(false)} disabled={saving}>
-            Cancel
-          </Button>
-          <Button variant="contained" onClick={handleCreate} disabled={saving}>
-            {saving ? 'Creating…' : 'Create Rule'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </SystemDialog>
+
+      {/* Delete confirmation (ConfirmDialog — no window.confirm) */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete rule?"
+        message={
+          deleteTarget
+            ? `Delete "${deleteTarget.name}"? It will be archived if results exist.`
+            : ''
+        }
+        confirmLabel="Delete"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </Box>
   );
 }

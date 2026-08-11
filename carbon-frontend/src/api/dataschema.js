@@ -15,6 +15,15 @@ export function fetchDataSchemaTables(token, project_id, module_id) {
 }
 
 /**
+ * Fetch a single data table by id (detail endpoint — returns flat object).
+ * @param {string} token
+ * @param {string|number} id
+ */
+export function fetchDataSchemaTable(token, id) {
+  return apiFetch(`${API_ROUTES.tables}${id}/`, { token });
+}
+
+/**
  * Create a new data table.
  */
 export function createDataSchemaTable(token, data, project_id, module_id) {

@@ -1,6 +1,6 @@
 // src/pages/catalog/SchemaDetailPage.jsx
 // Schema Detail: Full view of a single table with fields, metadata, relations
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { isGlobalAdmin } from '../../authz';
 import { useAuth } from '../../auth/AuthContext';
@@ -11,10 +11,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Paper,
   Table,
   TableBody,
@@ -24,11 +20,11 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import SystemDialog from '../../components/SystemDialog';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
-import HomeIcon from '@mui/icons-material/Home';
 import StorageIcon from '@mui/icons-material/Storage';
-import { fetchDataSchemaTables, fetchDataSchemaFields, updateDataSchemaTable } from '../../api/dataschema';
+import { fetchDataSchemaTable, fetchDataSchemaFields, updateDataSchemaTable } from '../../api/dataschema';
 import { fetchTableRelations } from '../../api/catalog';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
@@ -36,7 +32,6 @@ import DQRulesTab from './tabs/DQRulesTab';
 import GovernanceTab from './tabs/GovernanceTab';
 import AuditHistoryTab from './tabs/AuditHistoryTab';
 import SchemaStructureTab from './tabs/SchemaStructureTab';
-import SchemaQualityMetrics from './tabs/SchemaQualityMetrics';
 
 export default function SchemaDetailPage() {
   useDocumentTitle("Table Schema");
@@ -56,29 +51,27 @@ export default function SchemaDetailPage() {
 
   const isAdmin = isGlobalAdmin(user, availablePerspectives, isGlobalAdminFlag);
 
-  useEffect(() => {
-    loadSchemaDetail();
-  }, [tableId, token]);
-
-  const loadSchemaDetail = async () => {
+  const loadSchemaDetail = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [tableData, fieldsData, relationsData] = await Promise.all([
-        fetchDataSchemaTables(token, null, null).then((tables) => tables.find((item) => item.id === parseInt(tableId, 10))),
+        // Direct detail endpoint — avoids list+find on the paginated tables list
+        fetchDataSchemaTable(token, tableId),
         fetchDataSchemaFields(token, tableId, null, null),
         fetchTableRelations(token, { from_table: tableId }).catch(() => []),
       ]);
 
-      if (!tableData) {
+      if (!tableData || tableData?.detail) {
         setError('Table not found');
         notify({ message: 'Table not found', type: 'error' });
         return;
       }
 
       setTable(tableData);
-      setFields(fieldsData || []);
-      setRelations(relationsData || []);
+      // CB-09: list endpoints are paginated ({results:[...]}) — always unwrap
+      setFields(Array.isArray(fieldsData) ? fieldsData : (fieldsData?.results || []));
+      setRelations(Array.isArray(relationsData) ? relationsData : (relationsData?.results || []));
     } catch (err) {
       const msg = err.message || 'Failed to load schema detail';
       setError(msg);
@@ -86,7 +79,11 @@ export default function SchemaDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, tableId, notify]);
+
+  useEffect(() => {
+    loadSchemaDetail();
+  }, [loadSchemaDetail]);
 
   const handleEditMetadataClick = () => {
     setEditFormData({
@@ -151,29 +148,6 @@ export default function SchemaDetailPage() {
     </Box>
   );
 
-  const SchemaSummaryMetrics = ({ entityData }) => (
-    <Box sx={{ p: 2 }}>
-      <Box sx={{ display: 'grid', gap: 1.5 }}>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Fields</Typography>
-          <Typography variant="h6">{entityData?.fields?.length || 0}</Typography>
-        </Paper>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Incoming Relations</Typography>
-          <Typography variant="h6">{(entityData?.relations || []).filter((relation) => relation.to_table === parseInt(tableId, 10)).length}</Typography>
-        </Paper>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Outgoing Relations</Typography>
-          <Typography variant="h6">{(entityData?.relations || []).filter((relation) => relation.from_table === parseInt(tableId, 10)).length}</Typography>
-        </Paper>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Last Modified</Typography>
-          <Typography variant="h6">{table?.updated_at ? new Date(table.updated_at).toLocaleDateString() : 'N/A'}</Typography>
-        </Paper>
-      </Box>
-    </Box>
-  );
-
   const headerComponent = (
     <DetailHeader
       title={table?.title || 'Table'}
@@ -223,10 +197,6 @@ export default function SchemaDetailPage() {
           { label: 'Governance', component: () => <GovernanceTab tableId={tableId} /> },
           { label: 'Audit History', component: () => <AuditHistoryTab tableId={tableId} /> },
         ]}
-        metricsTabs={[
-          { label: 'Summary', component: SchemaSummaryMetrics },
-          { label: 'Quality', component: () => <SchemaQualityMetrics tableId={tableId} /> },
-        ]}
         loading={loading}
         error={error}
         onClose={handleClose}
@@ -234,11 +204,28 @@ export default function SchemaDetailPage() {
         entityData={detailData}
       />
 
-      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit Table Metadata</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
+      <SystemDialog
+        open={editDialogOpen}
+        title="Edit Table Metadata"
+        onClose={() => setEditDialogOpen(false)}
+        onCancel={() => setEditDialogOpen(false)}
+        cancelLabel="Cancel"
+        width={480}
+        height={360}
+        minWidth={400}
+        minHeight={300}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+        actions={
+          <Button onClick={handleSaveMetadata} variant="contained" size="small" disabled={saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        }
+      >
+        <Box px={2} py={1}>
           <TextField
             fullWidth
+            size="small"
             label="Title"
             value={editFormData.title}
             onChange={(event) => setEditFormData((current) => ({ ...current, title: event.target.value }))}
@@ -247,6 +234,7 @@ export default function SchemaDetailPage() {
           />
           <TextField
             fullWidth
+            size="small"
             label="Description"
             value={editFormData.description}
             onChange={(event) => setEditFormData((current) => ({ ...current, description: event.target.value }))}
@@ -255,14 +243,8 @@ export default function SchemaDetailPage() {
             multiline
             rows={4}
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleSaveMetadata} variant="contained" disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </SystemDialog>
     </>
   );
 }

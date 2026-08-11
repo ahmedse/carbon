@@ -3,6 +3,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { useNotification } from '../../components/NotificationProvider';
+import SystemDialog from '../../components/SystemDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import {
   fetchExportProjects,
   createExportProject,
@@ -22,10 +25,6 @@ import PageHeader from '../../components/Page/PageHeader';
 import {
   Box,
   Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
   Table,
   TableBody,
@@ -77,6 +76,7 @@ function TabPanel(props) {
 export default function ImportExportPage() {
   useDocumentTitle("Import / Export");
   const { token } = useAuth();
+  const { notify } = useNotification();
   const [tabValue, setTabValue] = useState(0);
   
   const [exportProjects, setExportProjects] = useState([]);
@@ -93,7 +93,6 @@ export default function ImportExportPage() {
   const [formData, setFormData] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const formats = [
     { value: 'csv', label: 'CSV' },
@@ -177,30 +176,32 @@ export default function ImportExportPage() {
   };
 
   const handleDelete = async (type, id) => {
-    setDeleteLoading(true);
     try {
       if (type === 'export') {
         const result = await deleteExportProject(token, id);
         if (result && result.archived) {
+          notify({ message: 'Export project archived (jobs exist)', type: 'info' });
           setError(null);
+        } else {
+          notify({ message: 'Export project deleted', type: 'success' });
         }
       }
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
       setError(err.message || 'Failed to delete');
-    } finally {
-      setDeleteLoading(false);
+      notify({ message: err.message || 'Failed to delete', type: 'error' });
     }
   };
 
   const handleRunExport = async (id) => {
     try {
       await runExportProject(token, id);
-      alert('Export started. Check Export Jobs tab for status.');
+      notify({ message: 'Export started — check the Export Jobs tab', type: 'success' });
       await loadData();
     } catch (err) {
       setError(err.message || 'Failed to run export');
+      notify({ message: err.message || 'Failed to run export', type: 'error' });
     }
   };
 
@@ -227,11 +228,12 @@ export default function ImportExportPage() {
         file: selectedFile,
         format: formData.format || 'csv',
       });
-      alert('Import job created. Check Import Jobs tab for status.');
+      notify({ message: 'Import job created — check the Import Jobs tab', type: 'success' });
       await loadData();
       handleCloseDialog();
     } catch (err) {
       setError(err.message || 'Failed to upload file');
+      notify({ message: err.message || 'Failed to upload file', type: 'error' });
     }
   };
 
@@ -455,21 +457,34 @@ export default function ImportExportPage() {
         )}
       </TabPanel>
 
-      {/* Dialog for Creating Export Project */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {editingProject ? 'Edit Export Project' : 'New Export Project'}
-        </DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
+      {/* Create/Edit export project dialog (SystemDialog — design system primitive) */}
+      <SystemDialog
+        open={openDialog}
+        title={editingProject ? 'Edit Export Project' : 'New Export Project'}
+        onClose={handleCloseDialog}
+        onCancel={handleCloseDialog}
+        cancelLabel="Cancel"
+        width={480}
+        height={480}
+        minWidth={400}
+        minHeight={400}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+        actions={
+          <Button onClick={handleSave} variant="contained" size="small">Save</Button>
+        }
+      >
+        <Box px={2} py={1}>
           <TextField
             label="Name"
+            size="small"
             fullWidth
             value={formData.name || ''}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             margin="normal"
             autoFocus
           />
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth margin="normal" size="small">
             <InputLabel>Data Table</InputLabel>
             <Select
               value={formData.data_table || ''}
@@ -481,7 +496,7 @@ export default function ImportExportPage() {
               ))}
             </Select>
           </FormControl>
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth margin="normal" size="small">
             <InputLabel>Format</InputLabel>
             <Select
               value={formData.format || 'csv'}
@@ -493,7 +508,7 @@ export default function ImportExportPage() {
               ))}
             </Select>
           </FormControl>
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth margin="normal" size="small">
             <InputLabel>Schedule</InputLabel>
             <Select
               value={formData.schedule || 'manual'}
@@ -507,6 +522,7 @@ export default function ImportExportPage() {
           </FormControl>
           <TextField
             label="Description"
+            size="small"
             fullWidth
             multiline
             rows={2}
@@ -514,34 +530,19 @@ export default function ImportExportPage() {
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             margin="normal"
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained">Save</Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </SystemDialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Delete Export Project?</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete "{deleteConfirm?.name || 'this project'}"?
-            {deleteConfirm?.name && ' If export jobs exist, the project will be archived instead.'}
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)} disabled={deleteLoading}>Cancel</Button>
-          <Button
-            onClick={() => handleDelete(deleteConfirm?.type, deleteConfirm?.id)}
-            variant="contained"
-            color="error"
-            disabled={deleteLoading}
-          >
-            {deleteLoading ? 'Deleting...' : 'Delete'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Delete confirmation (ConfirmDialog — no window.confirm) */}
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete export project?"
+        message={`Delete "${deleteConfirm?.name || 'this project'}"? ${deleteConfirm?.name ? 'If export jobs exist, the project will be archived instead.' : 'This action cannot be undone.'}`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => handleDelete(deleteConfirm?.type, deleteConfirm?.id)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </Box>
   );
 }

@@ -3,16 +3,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
+import SystemDialog from '../../components/SystemDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import {
   Alert,
   Box,
   Button,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   FormControl,
   IconButton,
   InputLabel,
@@ -56,6 +54,7 @@ export default function DataSourcesDetailPage() {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     loadSources();
@@ -119,10 +118,11 @@ export default function DataSourcesDetailPage() {
     }
   };
 
-  const handleDelete = async (source) => {
-    if (!window.confirm(`Delete data source "${source.name}"?`)) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteTarget(null);
     try {
-      await deleteDataSource(token, source.id);
+      await deleteDataSource(token, deleteTarget.id);
       notify({ message: 'Data source deleted', type: 'success' });
       loadSources();
     } catch (err) {
@@ -216,7 +216,7 @@ export default function DataSourcesDetailPage() {
                     <IconButton size="small" onClick={() => openEdit(source)}>
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => handleDelete(source)}>
+                    <IconButton size="small" onClick={() => setDeleteTarget(source)}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>
@@ -252,17 +252,34 @@ export default function DataSourcesDetailPage() {
         entityData={{ sources }}
       />
 
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editingSource ? 'Edit Data Source' : 'New Data Source'}</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
+      <SystemDialog
+        open={openDialog}
+        title={editingSource ? 'Edit Data Source' : 'New Data Source'}
+        onClose={() => setOpenDialog(false)}
+        onCancel={() => setOpenDialog(false)}
+        cancelLabel="Cancel"
+        width={480}
+        height={420}
+        minWidth={400}
+        minHeight={340}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+        actions={
+          <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        }
+      >
+        <Box px={2} py={1}>
           <TextField
             fullWidth
+            size="small"
             label="Name"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             margin="normal"
           />
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth margin="normal" size="small">
             <InputLabel>Source Type</InputLabel>
             <Select
               value={formData.source_type}
@@ -276,6 +293,7 @@ export default function DataSourcesDetailPage() {
           </FormControl>
           <TextField
             fullWidth
+            size="small"
             label="Description"
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -283,14 +301,18 @@ export default function DataSourcesDetailPage() {
             multiline
             rows={3}
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </SystemDialog>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete data source?"
+        message={`Delete data source "${deleteTarget?.name || 'this source'}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </>
   );
 }

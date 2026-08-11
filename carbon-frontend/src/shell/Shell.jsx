@@ -343,13 +343,15 @@ export function Shell() {
         onToggleCopilot={toggleCopilot}
       />
 
-      {/* Command Palette */}
-      <Suspense fallback={<DialogLoadingSkeleton />}>
-        <CommandPalette
-          open={commandPaletteOpen}
-          onClose={() => setCommandPaletteOpen(false)}
-        />
-      </Suspense>
+      {/* Command Palette — isolated ErrorBoundary so a lazy-load failure doesn't crash the shell */}
+      <ErrorBoundary>
+        <Suspense fallback={<DialogLoadingSkeleton />}>
+          <CommandPalette
+            open={commandPaletteOpen}
+            onClose={() => setCommandPaletteOpen(false)}
+          />
+        </Suspense>
+      </ErrorBoundary>
     </Box>
   );
 }

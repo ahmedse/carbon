@@ -16,15 +16,13 @@ import {
 } from '../../api/catalog';
 import { fetchUsers } from '../../api/users';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import SystemDialog from '../../components/SystemDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 import {
   Autocomplete,
   Box,
   Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
   Paper,
   IconButton,
@@ -122,7 +120,7 @@ export default function AssetsPage() {
   const [domains, setDomains] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [_deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   // Create dialog state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -215,7 +213,9 @@ export default function AssetsPage() {
   }, [assets, searchText, filterDomain, filterClassification, filterQuality, filterAssetType]);
 
   // Handle delete
-  const _handleDelete = async (id) => {
+  const confirmDelete = async () => {
+    if (deleteConfirm == null) return;
+    const id = deleteConfirm;
     setDeleteConfirm(null);
     try {
       await deleteAssetProfile(token, id);
@@ -495,13 +495,36 @@ export default function AssetsPage() {
         emptySubtext={hasActiveFilters ? 'Try adjusting your filters' : 'Assets are auto-created for all tables and fields'}
       />
 
-      {/* Create Asset Dialog */}
-      <Dialog open={createDialogOpen} onClose={handleCloseCreate} maxWidth="sm" fullWidth>
-        <DialogTitle>New Asset Profile</DialogTitle>
-        <DialogContent>
+      {/* Create Asset Dialog (SystemDialog — design system primitive) */}
+      <SystemDialog
+        open={createDialogOpen}
+        title="New Asset Profile"
+        onClose={handleCloseCreate}
+        onCancel={handleCloseCreate}
+        cancelLabel="Cancel"
+        width={560}
+        height={640}
+        minWidth={480}
+        minHeight={440}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+        actions={
+          <Button
+            onClick={handleCreateSave}
+            variant="contained"
+            size="small"
+            disabled={createSaving}
+            startIcon={createSaving ? <CircularProgress size={16} /> : null}
+          >
+            {createSaving ? 'Creating…' : 'Create'}
+          </Button>
+        }
+      >
+        <Box px={2} py={1}>
           {createError && <Alert severity="error" sx={{ mb: 2 }}>{createError}</Alert>}
           <TextField
             fullWidth
+            size="small"
             label="Description"
             margin="normal"
             required
@@ -579,14 +602,18 @@ export default function AssetsPage() {
               ))
             }
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseCreate} disabled={createSaving}>Cancel</Button>
-          <Button onClick={handleCreateSave} variant="contained" disabled={createSaving} startIcon={createSaving ? <CircularProgress size={16} /> : null}>
-            {createSaving ? 'Creating…' : 'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </SystemDialog>
+
+      <ConfirmDialog
+        open={deleteConfirm != null}
+        title="Delete asset?"
+        message={`Delete asset "${filteredAssets.find((a) => a.id === deleteConfirm)?.title || 'this asset'}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </Box>
   );
 }
