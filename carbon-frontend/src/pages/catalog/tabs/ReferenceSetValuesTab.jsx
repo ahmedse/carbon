@@ -113,7 +113,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
 
     try {
       const payload = {
-        reference_set: entityData.id,
+        ...(editingValue ? {} : { reference_set: entityData.id }),
         code: formData.code,
         label: formData.label,
         description: formData.description,

@@ -7,7 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { 
-  fetchReferenceSets,
+  fetchReferenceSet,
   fetchReferenceValues,
   fetchDataDomains,
 } from '../../api/catalog';
@@ -57,21 +57,13 @@ export default function ReferenceSetDetailPage() {
       setError(null);
 
       // Fetch reference set and related data in parallel
-      const [setsData, valuesData, domainsData, usersData] = 
+      const [foundSet, valuesData, domainsData, usersData] = 
         await Promise.all([
-          fetchReferenceSets(token),
+          fetchReferenceSet(token, setId),
           fetchReferenceValues(token, setId).catch(() => []),
           fetchDataDomains(token).catch(() => []),
           fetchUsers(token).catch(() => []),
         ]);
-
-      // Find the specific reference set
-      const allSets = Array.isArray(setsData) ? setsData : setsData.results || [];
-      const foundSet = allSets.find(s => s.id === parseInt(setId));
-      
-      if (!foundSet) {
-        throw new Error('Reference set not found');
-      }
 
       setRefSet(foundSet);
       setValues(Array.isArray(valuesData) ? valuesData : valuesData.results || []);

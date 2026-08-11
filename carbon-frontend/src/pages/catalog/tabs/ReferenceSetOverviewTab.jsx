@@ -38,16 +38,16 @@ export default function ReferenceSetOverviewTab({ entityData }) {
           label={LIFECYCLE_LABELS[lifecycleState] || lifecycleState}
           size="small"
           color={LIFECYCLE_COLORS[lifecycleState] || 'default'}
-          variant={lifecycleState === 'active' ? 'filled' : 'outlined'}
+          variant="filled"
         />
       ),
     },
     {
-      label: 'Status',
+      label: 'List visibility',
       value: entityData.is_active ? (
-        <Chip label="Active" color="success" size="small" />
+        <Chip label="Enabled" color="success" size="small" variant="filled" />
       ) : (
-        <Chip label="Inactive" color="default" size="small" variant="outlined" />
+        <Chip label="Disabled" color="default" size="small" variant="outlined" />
       ),
     },
     { label: 'Version', value: entityData.version || '1' },

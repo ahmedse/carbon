@@ -13,12 +13,13 @@ export async function fetchEmissionFactors({ category, scope, search, active = t
   if (scope) params.append("scope", scope);
   if (search) params.append("search", search);
   if (active !== undefined) params.append("active", active);
-  
-  const endpoint = params.toString()
-    ? `${API_ROUTES.emissionsFactors}?${params.toString()}`
-    : API_ROUTES.emissionsFactors;
-  
-  return apiFetch(endpoint, { token });
+  params.append("page_size", 1000); // fetch all — admin-only list, no infinite scroll needed
+
+  const endpoint = `${API_ROUTES.emissionsFactors}?${params.toString()}`;
+
+  const data = await apiFetch(endpoint, { token });
+  // Backend returns paginated envelope {count, results, ...} — unwrap it
+  return Array.isArray(data) ? data : (data?.results ?? []);
 }
 
 /**

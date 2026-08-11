@@ -61,7 +61,7 @@ export default function PlatformConfigPage() {
     try {
       const data = await apiFetch(ENDPOINTS[idx]);
       setters[idx](data);
-    } catch (e) {
+    } catch {
       // ignore — user may not have perms
     }
   }, []);

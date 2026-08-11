@@ -1,51 +1,12 @@
 import React, { createContext, useState, useContext, useEffect, useRef } from "react";
 import { API_BASE_URL, API_ROUTES } from "../config";
 import { fetchModules } from "../api/modules";
-import { apiFetch } from "../api/api"; // <-- Add this import
+import { apiFetch, refreshAccessToken } from "../api/api"; // <-- Add this import
 
 // --- Helpers for token management ---
-// SimpleJWT rotates refresh tokens and blacklists the old one. Two concurrent
-// refresh calls (10-min interval + tab-focus refresh) race: the first rotates,
-// the second is rejected with 401 on the now-blacklisted token and would force
-// a spurious logout. Share one in-flight promise so all callers await the SAME
-// refresh. (Multiple browser tabs still race — see storage-event note below.)
-let refreshInFlight = null;
-
-async function refreshAccessToken() {
-  if (refreshInFlight) return refreshInFlight;
-  refreshInFlight = (async () => {
-    const refresh = localStorage.getItem("refresh");
-    if (!refresh) throw new Error("No refresh token");
-    const res = await fetch(`${API_BASE_URL}${API_ROUTES.tokenRefresh}`, { // internal token refresh
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh }),
-    });
-    if (!res.ok) throw new Error("Session expired or invalid refresh token");
-    const data = await res.json();
-    if (!data.access) throw new Error("No access token in refresh response");
-    localStorage.setItem("access", data.access);
-    // If backend rotates refresh tokens, persist the new refresh token too.
-    if (data.refresh) {
-      localStorage.setItem("refresh", data.refresh);
-      try {
-        const storedUser = JSON.parse(localStorage.getItem("user"));
-        if (storedUser && typeof storedUser === "object") {
-          localStorage.setItem(
-            "user",
-            JSON.stringify({ ...storedUser, refresh: data.refresh })
-          );
-        }
-      } catch {
-        // Ignore storage sync errors.
-      }
-    }
-    return data.access;
-  })().finally(() => {
-    refreshInFlight = null;
-  });
-  return refreshInFlight;
-}
+// refreshAccessToken is imported from api.js (single source of truth)
+// to prevent duplicate refresh race conditions between AuthContext timer
+// and api.js 401 retry handler. Both share one refreshInFlight lock.
 
 // --- Auth Context ---
 const AuthContext = createContext();

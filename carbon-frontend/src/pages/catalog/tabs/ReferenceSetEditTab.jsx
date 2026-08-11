@@ -100,7 +100,7 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
         is_active: formData.is_active,
       };
 
-      const updatedRefSet = await apiFetch(`catalog/reference-sets/${entityData.id}/`, {
+      const updatedRefSet = await apiFetch(`mdm/reference-sets/${entityData.id}/`, {
         method: 'PATCH',
         token,
         body: payload,
@@ -203,30 +203,14 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
           <FormHelperText>User responsible for maintaining this reference set</FormHelperText>
         </FormControl>
 
-        <FormControlLabel
-          control={
-            <Switch
-              checked={formData.is_active}
-              onChange={handleSwitchChange}
-              name="is_active"
-              color="primary"
-            />
-          }
-          label="Active"
-          sx={{ mt: 2 }}
-        />
-        <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4, mt: -1 }}>
-          Inactive reference sets are hidden from selection lists
-        </Typography>
-
         {/* Lifecycle */}
-        <Typography variant="subtitle2" sx={{ mb: 1, mt: 3, fontWeight: 600 }}>Lifecycle</Typography>
+        <Typography variant="subtitle2" sx={{ mb: 1, mt: 2, fontWeight: 600 }}>Lifecycle</Typography>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
           <Chip
             label={LIFECYCLE_LABELS[lifecycleState] || lifecycleState}
             size="small"
             color={LIFECYCLE_COLORS[lifecycleState] || 'default'}
-            variant={lifecycleState === 'active' ? 'filled' : 'outlined'}
+            variant="filled"
           />
           {validTransitions.length === 0 ? (
             <Typography variant="caption" color="text.secondary">
@@ -259,7 +243,23 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
         {transitionError && (
           <Alert severity="error" sx={{ mb: 1, mt: 1 }}>{transitionError}</Alert>
         )}
-        <Typography variant="caption" color="text.secondary">
+        <FormControlLabel
+          control={
+            <Switch
+              checked={formData.is_active}
+              onChange={handleSwitchChange}
+              name="is_active"
+              color="primary"
+              size="small"
+            />
+          }
+          label="Enabled in lists"
+          sx={{ mt: 2 }}
+        />
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4, mt: -0.5 }}>
+          When disabled, this reference set is hidden from selection lists
+        </Typography>
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2 }}>
           Lifecycle: Draft → Active → Deprecated → Archived (deprecated may return to active)
         </Typography>
 

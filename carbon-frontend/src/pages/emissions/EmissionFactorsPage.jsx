@@ -1,63 +1,83 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
-  Card,
-  CardContent,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Drawer,
-  Alert,
   Chip,
   TextField,
   MenuItem,
-  CircularProgress,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Stack,
   IconButton,
 } from '@mui/material';
-import useDocumentTitle from '../../hooks/useDocumentTitle';
-
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+
+import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
-import { fetchEmissionFactors, fetchFactorCategories, createEmissionFactor, updateEmissionFactor, deleteEmissionFactor } from '../../api/emissions-extended';
+import { can } from '../../authz';
+import { useNotification } from '../../components/NotificationProvider';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import SystemDialog from '../../components/SystemDialog';
+import {
+  fetchEmissionFactors,
+  fetchFactorCategories,
+  createEmissionFactor,
+  updateEmissionFactor,
+  deleteEmissionFactor,
+} from '../../api/emissions-extended';
 
 const ScopeChip = ({ scope }) => {
+  const scopeColors = { 1: 'error', 2: 'warning', 3: 'info' };
   const scopeLabels = { 1: 'Scope 1', 2: 'Scope 2', 3: 'Scope 3' };
-  const scopeColors = { 1: '#ff6b6b', 2: '#4dabf7', 3: '#69db7c' };
   return (
     <Chip
       label={scopeLabels[scope] || `Scope ${scope}`}
+      color={scopeColors[scope] || 'default'}
       size="small"
-      sx={{ backgroundColor: 'text.disabled', color: 'background.default' }}
+      variant="filled"
     />
   );
 };
 
+// Numeric display — max 5 decimals (backend gate rounds to 5), trailing zeros stripped
+function fmtNum(v) {
+  if (v == null || v === '') return '—';
+  const n = Number(v);
+  if (Number.isNaN(n)) return v;
+  return n.toLocaleString(undefined, { maximumFractionDigits: 5 });
+}
+
+function fmtDate(v) {
+  if (!v) return '—';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 export default function EmissionFactorsPage() {
   useDocumentTitle("Emission Factors");
-  const { user, token } = useAuth();
+  const { user, token, availablePerspectives, isGlobalAdminFlag, userCapabilities, context } = useAuth();
+  const { notify, notifyFromError } = useNotification();
+
   const [factors, setFactors] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [currentFactor, setCurrentFactor] = useState(null);
-  const [filters, setFilters] = useState({ category: '', scope: '', search: '' });
+  const [searchText, setSearchText] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterScope, setFilterScope] = useState('');
 
-  const isAdmin = user?.is_staff || user?.is_superuser;
+  // Can this user manage emission factors? Same gate as AdminRoute for this route.
+  const isAdmin = can(user, 'manage', 'carbon', {
+    perspectives: availablePerspectives,
+    isGlobalAdminFlag,
+    capabilities: userCapabilities,
+    modules: context?.modules || [],
+  });
 
   useEffect(() => {
     loadData();
@@ -66,15 +86,18 @@ export default function EmissionFactorsPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      setError(null);
       const [factorsData, categoriesData] = await Promise.all([
         fetchEmissionFactors({}, token),
         fetchFactorCategories(token),
       ]);
-      setFactors(factorsData);
-      setCategories(categoriesData);
+      // Defensive: always ensure arrays (CB-09 pattern)
+      setFactors(Array.isArray(factorsData) ? factorsData : []);
+      setCategories(Array.isArray(categoriesData) ? categoriesData : []);
     } catch (err) {
-      setError(err.message);
+      notifyFromError(err, 'Failed to load emission factors');
+      // Reset to empty arrays so .filter() calls don't break
+      setFactors([]);
+      setCategories([]);
     } finally {
       setLoading(false);
     }
@@ -94,149 +117,177 @@ export default function EmissionFactorsPage() {
     try {
       if (currentFactor) {
         await updateEmissionFactor(currentFactor.id, formData, token);
+        notify({ message: 'Factor updated', type: 'success' });
       } else {
         await createEmissionFactor(formData, token);
+        notify({ message: 'Factor created', type: 'success' });
       }
       setDrawerOpen(false);
       setCurrentFactor(null);
       await loadData();
     } catch (err) {
-      setError(err.message);
+      notifyFromError(err, 'Failed to save factor');
     }
   };
 
   const handleDelete = async (factorId) => {
     try {
       await deleteEmissionFactor(factorId, token);
+      notify({ message: 'Factor deleted', type: 'success' });
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
-      if (err.feedback && err.feedback.code === 'factor_in_use') {
-        setError(err.feedback.detail || err.message);
-      } else {
-        setError(err.message);
-      }
+      notifyFromError(err, 'Failed to delete factor');
     }
   };
 
-  const filteredFactors = factors.filter(factor => {
-    if (filters.category && factor.category !== filters.category) return false;
-    if (filters.scope && factor.scope !== parseInt(filters.scope)) return false;
-    if (filters.search && !factor.name.toLowerCase().includes(filters.search.toLowerCase())) return false;
-    return true;
-  });
+  const filteredFactors = useMemo(() => {
+    let filtered = factors;
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+    if (searchText.trim()) {
+      const query = searchText.toLowerCase();
+      filtered = filtered.filter(
+        (f) =>
+          (f.name && f.name.toLowerCase().includes(query)) ||
+          (f.code && f.code.toLowerCase().includes(query))
+      );
+    }
+
+    if (filterCategory) {
+      filtered = filtered.filter((f) => f.category === filterCategory);
+    }
+
+    if (filterScope) {
+      filtered = filtered.filter((f) => f.scope === parseInt(filterScope));
+    }
+
+    return filtered;
+  }, [factors, searchText, filterCategory, filterScope]);
+
+  const handleClearFilters = () => {
+    setSearchText('');
+    setFilterCategory('');
+    setFilterScope('');
+  };
+
+  const columns = [
+    { field: 'name', headerName: 'Name', flex: 1, minWidth: 200 },
+    { field: 'code', headerName: 'Code', width: 150 },
+    { field: 'category', headerName: 'Category', width: 180 },
+    {
+      field: 'scope',
+      headerName: 'Scope',
+      width: 110,
+      renderCell: (params) => <ScopeChip scope={params.value} />,
+    },
+    {
+      field: 'factor_value',
+      headerName: 'Value',
+      width: 120,
+      align: 'right',
+      headerAlign: 'right',
+      valueFormatter: (value) => fmtNum(value),
+    },
+    {
+      field: 'activity_unit',
+      headerName: 'Unit',
+      width: 90,
+    },
+    {
+      field: 'is_active',
+      headerName: 'Active',
+      width: 80,
+      renderCell: (params) => (
+        <Chip
+          label={params.value ? 'Yes' : 'No'}
+          color={params.value ? 'success' : 'default'}
+          size="small"
+          variant={params.value ? 'filled' : 'outlined'}
+        />
+      ),
+    },
+    {
+      field: 'updated_at',
+      headerName: 'Last Modified',
+      width: 170,
+      sortable: true,
+      valueFormatter: (value) => fmtDate(value),
+    },
+    ...(isAdmin
+      ? [
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 100,
+            sortable: false,
+            renderCell: (params) => (
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton size="small" onClick={() => handleEdit(params.row)}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => setDeleteConfirm(params.row.id)}
+                  sx={{ color: 'error.main' }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ),
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-          Emission Factors
-        </Typography>
-        {isAdmin && (
-          <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
-            Add Factor
-          </Button>
-        )}
-      </Stack>
+    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <FilteredDataGrid
+        title="Emission Factors"
+        subtitle={`${filteredFactors.length} of ${factors.length} factors`}
+        description="Manage emission conversion factors for carbon accounting — browse, create, edit, and deactivate factors used in emissions calculations."
+        actions={
+          isAdmin ? (
+            <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreate}>
+              Add Factor
+            </Button>
+          ) : null
+        }
+        rows={filteredFactors}
+        loading={loading}
+        columns={columns}
+        countLabel={`${filteredFactors.length} of ${factors.length} factors`}
+        searchValue={searchText}
+        onSearchChange={setSearchText}
+        filterDefs={[
+          {
+            key: 'category',
+            label: 'Category',
+            emptyLabel: 'All Categories',
+            options: categories,
+          },
+          {
+            key: 'scope',
+            label: 'Scope',
+            emptyLabel: 'All Scopes',
+            options: [
+              { value: '1', label: 'Scope 1' },
+              { value: '2', label: 'Scope 2' },
+              { value: '3', label: 'Scope 3' },
+            ],
+          },
+        ]}
+        filterValues={{ category: filterCategory, scope: filterScope }}
+        onFilterChange={(key, value) => {
+          if (key === 'category') setFilterCategory(value);
+          if (key === 'scope') setFilterScope(value);
+        }}
+        onClearFilters={handleClearFilters}
+        emptyMessage="No factors found"
+        emptySubtext="Try adjusting your filters"
+      />
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      {/* Filters */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-          <TextField
-            label="Search"
-            size="small"
-            sx={{ flex: 1 }}
-            value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-          />
-          <TextField
-            label="Category"
-            select
-            size="small"
-            sx={{ flex: 1 }}
-            value={filters.category}
-            onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-          >
-            <MenuItem value="">All Categories</MenuItem>
-            {categories.map(cat => (
-              <MenuItem key={cat} value={cat}>{cat}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            label="Scope"
-            select
-            size="small"
-            sx={{ flex: 1 }}
-            value={filters.scope}
-            onChange={(e) => setFilters({ ...filters, scope: e.target.value })}
-          >
-            <MenuItem value="">All Scopes</MenuItem>
-            <MenuItem value="1">Scope 1</MenuItem>
-            <MenuItem value="2">Scope 2</MenuItem>
-            <MenuItem value="3">Scope 3</MenuItem>
-          </TextField>
-        </Stack>
-      </Paper>
-
-      {/* Table */}
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead sx={{ backgroundColor: 'background.dark' }}>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Code</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Category</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Scope</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 'bold' }}>Factor Value</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Active</TableCell>
-              {isAdmin && <TableCell align="center" sx={{ fontWeight: 'bold' }}>Actions</TableCell>}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filteredFactors.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={isAdmin ? 7 : 6} align="center" sx={{ py: 3, color: 'text.disabled' }}>
-                  No emission factors found
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredFactors.map(factor => (
-                <TableRow key={factor.id}>
-                  <TableCell>{factor.name}</TableCell>
-                  <TableCell>{factor.code}</TableCell>
-                  <TableCell>{factor.category}</TableCell>
-                  <TableCell><ScopeChip scope={factor.scope} /></TableCell>
-                  <TableCell align="right">{factor.factor_value}</TableCell>
-                  <TableCell>{factor.is_active ? '✓' : '✗'}</TableCell>
-                  {isAdmin && (
-                    <TableCell align="center">
-                      <IconButton size="small" onClick={() => handleEdit(factor)}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => setDeleteConfirm(factor.id)} sx={{ color: 'error.main' }}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* Create/Edit Drawer */}
-      <FactorDrawer
+      {/* Create/Edit Dialog (modal — design system primitive) */}
+      <FactorDialog
         open={drawerOpen}
         factor={currentFactor}
         categories={categories}
@@ -245,35 +296,49 @@ export default function EmissionFactorsPage() {
       />
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Delete Factor?</DialogTitle>
-        <DialogContent>
-          <Typography>This action cannot be undone.</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-          <Button onClick={() => handleDelete(deleteConfirm)} variant="contained" color="error">
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete Factor?"
+        message="This action cannot be undone. Calculations using this factor may be affected."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => handleDelete(deleteConfirm)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </Box>
   );
 }
 
-function FactorDrawer({ open, factor, categories, onSave, onClose }) {
+function FactorDialog({ open, factor, categories, onSave, onClose }) {
   const [form, setForm] = useState({
     name: '',
     code: '',
     category: '',
     scope: 1,
     factor_value: '',
+    activity_unit: '',
+    source: '',
+    valid_from: '',
+    valid_to: '',
+    tags: '',
     is_active: true,
   });
 
   useEffect(() => {
     if (factor) {
-      setForm(factor);
+      setForm({
+        name: factor.name || '',
+        code: factor.code || '',
+        category: factor.category || '',
+        scope: factor.scope || 1,
+        factor_value: factor.factor_value || '',
+        activity_unit: factor.activity_unit || '',
+        source: factor.source || '',
+        valid_from: factor.valid_from || '',
+        valid_to: factor.valid_to || '',
+        tags: Array.isArray(factor.tags) ? factor.tags.join(', ') : '',
+        is_active: factor.is_active ?? true,
+      });
     } else {
       setForm({
         name: '',
@@ -281,6 +346,11 @@ function FactorDrawer({ open, factor, categories, onSave, onClose }) {
         category: '',
         scope: 1,
         factor_value: '',
+        activity_unit: '',
+        source: '',
+        valid_from: '',
+        valid_to: '',
+        tags: '',
         is_active: true,
       });
     }
@@ -288,22 +358,41 @@ function FactorDrawer({ open, factor, categories, onSave, onClose }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm(prev => ({
+    setForm((prev) => ({
       ...prev,
-      [name]: name === 'is_active' ? e.target.checked : value,
+      [name]: value,
     }));
   };
 
   const handleSubmit = () => {
-    onSave(form);
+    const payload = {
+      ...form,
+      // Convert comma-separated tag string to array for the backend
+      tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+    };
+    onSave(payload);
   };
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 400, p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 3 }}>
-          {factor ? 'Edit Factor' : 'Create Factor'}
-        </Typography>
+    <SystemDialog
+      open={open}
+      title={factor ? 'Edit Factor' : 'Create Factor'}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel="Cancel"
+      actions={
+        <Button variant="contained" size="small" onClick={handleSubmit}>
+          Save
+        </Button>
+      }
+      width={560}
+      height={680}
+      minWidth={420}
+      minHeight={400}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
         <Stack spacing={2}>
           <TextField
             label="Name"
@@ -311,6 +400,7 @@ function FactorDrawer({ open, factor, categories, onSave, onClose }) {
             value={form.name}
             onChange={handleChange}
             fullWidth
+            size="small"
           />
           <TextField
             label="Code"
@@ -318,6 +408,7 @@ function FactorDrawer({ open, factor, categories, onSave, onClose }) {
             value={form.code}
             onChange={handleChange}
             fullWidth
+            size="small"
           />
           <TextField
             label="Category"
@@ -326,9 +417,12 @@ function FactorDrawer({ open, factor, categories, onSave, onClose }) {
             value={form.category}
             onChange={handleChange}
             fullWidth
+            size="small"
           >
-            {categories.map(cat => (
-              <MenuItem key={cat} value={cat}>{cat}</MenuItem>
+            {categories.map((cat) => (
+              <MenuItem key={cat.value} value={cat.value}>
+                {cat.label}
+              </MenuItem>
             ))}
           </TextField>
           <TextField
@@ -338,10 +432,11 @@ function FactorDrawer({ open, factor, categories, onSave, onClose }) {
             value={form.scope}
             onChange={handleChange}
             fullWidth
+            size="small"
           >
-            <MenuItem value={1}>Scope 1</MenuItem>
-            <MenuItem value={2}>Scope 2</MenuItem>
-            <MenuItem value={3}>Scope 3</MenuItem>
+            <MenuItem value={1}>Scope 1 - Direct</MenuItem>
+            <MenuItem value={2}>Scope 2 - Indirect (Energy)</MenuItem>
+            <MenuItem value={3}>Scope 3 - Value Chain</MenuItem>
           </TextField>
           <TextField
             label="Factor Value"
@@ -350,17 +445,60 @@ function FactorDrawer({ open, factor, categories, onSave, onClose }) {
             value={form.factor_value}
             onChange={handleChange}
             fullWidth
+            size="small"
+            inputProps={{ step: '0.0001' }}
+          />
+          <TextField
+            label="Activity Unit"
+            name="activity_unit"
+            value={form.activity_unit}
+            onChange={handleChange}
+            fullWidth
+            size="small"
+            placeholder="e.g., kWh, liter, km"
+          />
+          <TextField
+            label="Source *"
+            name="source"
+            value={form.source}
+            onChange={handleChange}
+            fullWidth
+            size="small"
+            placeholder="e.g., EPA eGRID 2024"
           />
           <Stack direction="row" spacing={2}>
-            <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
-              Cancel
-            </Button>
-            <Button variant="contained" onClick={handleSubmit} sx={{ flex: 1 }}>
-              Save
-            </Button>
+            <TextField
+              label="Valid From *"
+              name="valid_from"
+              type="date"
+              value={form.valid_from}
+              onChange={handleChange}
+              fullWidth
+              size="small"
+              InputLabelProps={{ shrink: true }}
+            />
+            <TextField
+              label="Valid To"
+              name="valid_to"
+              type="date"
+              value={form.valid_to}
+              onChange={handleChange}
+              fullWidth
+              size="small"
+              InputLabelProps={{ shrink: true }}
+            />
           </Stack>
+          <TextField
+            label="Tags"
+            name="tags"
+            value={form.tags}
+            onChange={handleChange}
+            fullWidth
+            size="small"
+            placeholder="comma-separated, e.g., electricity, grid, kwh"
+          />
         </Stack>
       </Box>
-    </Drawer>
+    </SystemDialog>
   );
 }

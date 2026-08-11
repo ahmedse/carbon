@@ -39,10 +39,14 @@ function sanitizeUrl(url) {
 // blacklisted token and would force a spurious logout. Share one in-flight
 // promise so all callers await the SAME refresh.
 let refreshInFlight = null;
+let lastRefreshTimestamp = 0;
 
 /** Refreshes the access token using refresh token in localStorage. */
-async function refreshAccessToken() {
+export async function refreshAccessToken() {
+  // If a refresh is already in-flight, return the same promise
+  // so all callers get the SAME new token (prevents rotation race).
   if (refreshInFlight) return refreshInFlight;
+
   refreshInFlight = (async () => {
     const refresh = localStorage.getItem("refresh");
     if (!refresh) throw new Error("No refresh token");
@@ -51,16 +55,27 @@ async function refreshAccessToken() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh }),
     });
-    if (!res.ok) throw new Error("Session expired");
+    if (!res.ok) {
+      // Refresh token is dead — redirect immediately so visibility-handler retries can't loop
+      lastRefreshTimestamp = 0;
+      globalLogout();
+      throw new Error("Session expired");
+    }
     const data = await res.json();
     if (!data.access) throw new Error("No new access token");
     localStorage.setItem("access", data.access);
     if (data.refresh) localStorage.setItem("refresh", data.refresh);
+    lastRefreshTimestamp = Date.now();
     return data.access;
   })().finally(() => {
     refreshInFlight = null;
   });
   return refreshInFlight;
+}
+
+/** Returns timestamp of last successful refresh (for 401 retry dedup logic). */
+export function getLastRefreshTimestamp() {
+  return lastRefreshTimestamp;
 }
 
 /** Returns the currently valid access token, refreshing if expired. */
@@ -138,12 +153,20 @@ export async function authFetch(
     response = await fetch(url, fetchOptions); // internal api helper
     clearTimeout(timeout);
 
-    if (response.status === 401 && accessToken) {
-      // Try refreshing once
-      accessToken = await refreshAccessToken();
-      headers.Authorization = `Bearer ${accessToken}`;
-      response = await fetch(url, { ...fetchOptions, headers }); // retry after refresh
-      clearTimeout(timeout);
+    // If 401 and we haven't just refreshed (within 2s), try refresh once
+    const timeSinceLastRefresh = Date.now() - getLastRefreshTimestamp();
+    const justRefreshed = timeSinceLastRefresh < 2000;
+
+    if (response.status === 401 && accessToken && !justRefreshed) {
+      try {
+        accessToken = await refreshAccessToken();
+        headers.Authorization = `Bearer ${accessToken}`;
+        response = await fetch(url, { ...fetchOptions, headers }); // retry after refresh
+        clearTimeout(timeout);
+      } catch (_refreshError) {
+        globalLogout();
+        throw new Error("Session expired");
+      }
     }
 
     return response;
@@ -259,11 +282,17 @@ export async function apiFetch(
     const isJson = response.headers.get("content-type")?.includes("application/json");
     responseData = isJson ? await response.json() : await response.text();
 
-    // Handle token errors: try refresh exactly once
+    // Handle token errors: try refresh exactly once.
+    // If a refresh happened recently (within 2s), skip the retry — we just
+    // refreshed, so a 401 now means the problem is NOT the token.
+    const timeSinceLastRefresh = Date.now() - getLastRefreshTimestamp();
+    const justRefreshed = timeSinceLastRefresh < 2000; // 2-second window
+
     if (
       !response.ok &&
       response.status === 401 &&
-      accessToken // don't retry if no token at all
+      accessToken &&
+      !justRefreshed
     ) {
       try {
         accessToken = await refreshAccessToken();

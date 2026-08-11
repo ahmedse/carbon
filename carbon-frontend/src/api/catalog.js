@@ -252,9 +252,7 @@ export function fetchReferenceSetValues(token, setId) {
  * Fetch all reference values (optionally filtered by set).
  */
 export function fetchReferenceValues(token, setId = null) {
-  // Soft-deleted values (is_active=False) are hidden from all list views —
-  // same contract as reference sets, which are hidden once archived.
-  const params = new URLSearchParams({ active: '1' });
+  const params = new URLSearchParams();
   if (setId) params.set('reference_set', setId);
   const url = `${API_ROUTES.referenceValues}?${params.toString()}`;
   return apiFetch(url, { token });

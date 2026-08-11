@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
@@ -62,6 +63,7 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import {
   LIFECYCLE_COLORS,
   LIFECYCLE_LABELS,
+  LIFECYCLE_STATES,
 } from '../../constants/referenceSetLifecycle';
 
 const ORG_TYPES = [
@@ -111,6 +113,7 @@ export default function MDMPage() {
   const [searchRefSets, setSearchRefSets] = useState('');
   const [filterDomain, setFilterDomain] = useState('');
   const [filterSteward, setFilterSteward] = useState('');
+  const [filterLifecycle, setFilterLifecycle] = useState('');
 
   // Org Units state
   const [orgUnits, setOrgUnits] = useState([]);
@@ -329,6 +332,7 @@ export default function MDMPage() {
     setSearchRefSets('');
     setFilterDomain('');
     setFilterSteward('');
+    setFilterLifecycle('');
   };
 
   const handleClearOrgUnitsFilters = () => {
@@ -358,8 +362,12 @@ export default function MDMPage() {
       filtered = filtered.filter((s) => s.steward === filterSteward);
     }
 
+    if (filterLifecycle) {
+      filtered = filtered.filter((s) => s.lifecycle_state === filterLifecycle);
+    }
+
     return filtered;
-  }, [refSets, searchRefSets, filterDomain, filterSteward]);
+  }, [refSets, searchRefSets, filterDomain, filterSteward, filterLifecycle]);
 
   // Filtered Org Units
   const filteredOrgUnits = useMemo(() => {
@@ -426,12 +434,14 @@ export default function MDMPage() {
       field: 'lifecycle_state',
       headerName: 'Lifecycle',
       width: 120,
+      type: 'singleSelect',
+      valueOptions: ['draft', 'active', 'deprecated', 'archived'],
       renderCell: (params) => (
         <Chip
           label={LIFECYCLE_LABELS[params.value] || params.value || '—'}
           size="small"
           color={LIFECYCLE_COLORS[params.value] || 'default'}
-          variant={params.value === 'active' ? 'filled' : 'outlined'}
+          variant="filled"
         />
       ),
     },
@@ -450,6 +460,16 @@ export default function MDMPage() {
             onClick={() => navigate(`/catalog/mdm/reference-sets/${params.row.id}`)}
           />
         </Tooltip>
+      ),
+    },
+    {
+      field: 'updated_at',
+      headerName: 'Modified',
+      width: 130,
+      renderCell: (params) => (
+        <Typography variant="body2" color="text.secondary">
+          {params.value ? dayjs(params.value).format('MMM D, YYYY') : '—'}
+        </Typography>
       ),
     },
     {
@@ -525,6 +545,16 @@ export default function MDMPage() {
       headerName: 'Children',
       width: 100,
       renderCell: (params) => <Chip label={params.value || 0} size="small" />,
+    },
+    {
+      field: 'updated_at',
+      headerName: 'Modified',
+      width: 130,
+      renderCell: (params) => (
+        <Typography variant="body2" color="text.secondary">
+          {params.value ? dayjs(params.value).format('MMM D, YYYY') : '—'}
+        </Typography>
+      ),
     },
     {
       field: 'actions',
@@ -639,13 +669,30 @@ export default function MDMPage() {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid size={{ xs: 12, md: 2 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Lifecycle</InputLabel>
+                <Select
+                  value={filterLifecycle}
+                  onChange={(e) => setFilterLifecycle(e.target.value)}
+                  label="Lifecycle"
+                >
+                  <MenuItem value="">All</MenuItem>
+                  {(LIFECYCLE_STATES || []).map((state) => (
+                    <MenuItem key={state.value} value={state.value}>
+                      {state.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, md: 1.5 }}>
               <Button
                 fullWidth
                 size="small"
                 startIcon={<ClearIcon />}
                 onClick={handleClearRefSetsFilters}
-                disabled={!searchRefSets && !filterDomain && !filterSteward}
+                disabled={!searchRefSets && !filterDomain && !filterSteward && !filterLifecycle}
               >
                 Clear
               </Button>

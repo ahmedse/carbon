@@ -27,7 +27,7 @@ export default function ConfirmDialog({
       title={title}
       onClose={onCancel}
       onCancel={onCancel}
-      showCancel
+      showCancel={false}
       cancelLabel={cancelLabel}
       width={440}
       height={260}
