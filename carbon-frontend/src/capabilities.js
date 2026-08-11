@@ -62,6 +62,10 @@ export const IMPORTEXPORT_MANAGE = 'importexport:manage';
 export const DATASCHEMA_VIEW   = 'dataschema:view';
 export const DATASCHEMA_MANAGE = 'dataschema:manage';
 
+// ── Evidence ───────────────────────────────────────────────────────
+export const EVIDENCE_VIEW   = 'evidence:view';
+export const EVIDENCE_MANAGE = 'evidence:manage';
+
 // ── Manifest role → capability mapping ─────────────────────────────
 // Maps manifest role keys (carbon:data_owner) to capability keys.
 // Used by filterMenuItems and canAccessRoute for backward compatibility.
@@ -165,6 +169,7 @@ export const CAPABILITY_INHERITANCE = {
   [CONNECTIONS_MANAGE]: [CONNECTIONS_VIEW],
   [IMPORTEXPORT_MANAGE]: [IMPORTEXPORT_VIEW],
   [DATASCHEMA_MANAGE]: [DATASCHEMA_VIEW],
+  [EVIDENCE_MANAGE]: [EVIDENCE_VIEW],
 };
 
 

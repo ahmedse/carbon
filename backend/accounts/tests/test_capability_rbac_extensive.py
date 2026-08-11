@@ -1302,6 +1302,82 @@ class TestEdgeCases:
 # ═══════════════════════════════════════════════════════════════════════
 
 @pytest.mark.django_db
+class TestScopedRoleViewSetOptionA:
+    """A2 (TASK-CBAC-A2, Option A — centralize): role-assignment management
+    is GLOBAL-ADMIN ONLY.
+
+    Org-scoped stewards (admins_group scoped to an org unit) get 403 on the
+    access-control endpoints: DD-1 resolves their scoped wildcard role to
+    view-only capabilities, so platform:manage_access is absent. Global
+    admins and superusers are unaffected.
+    """
+
+    def _auth(self, api_client, user, get_token_for_user):
+        token = get_token_for_user(user)
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    def test_org_scoped_steward_denied_list(self, api_client, create_user, create_scoped_role, get_token_for_user):
+        """Org-scoped admins_group steward → 403 on GET /access-control/."""
+        from mdm.models import OrgUnit
+        org = OrgUnit.objects.create(name="Steward Org", slug="steward-org")
+        u = create_user("steward-list")
+        create_scoped_role(u, "admins_group", org_unit=org)
+        self._auth(api_client, u, get_token_for_user)
+        resp = api_client.get(reverse("access-control-list"))
+        assert resp.status_code == 403
+
+    def test_org_scoped_steward_denied_create(self, api_client, create_user, create_scoped_role, get_token_for_user):
+        """Org-scoped admins_group steward → 403 on POST /access-control/."""
+        from mdm.models import OrgUnit
+        org = OrgUnit.objects.create(name="Steward Org 2", slug="steward-org-2")
+        u = create_user("steward-create")
+        create_scoped_role(u, "admins_group", org_unit=org)
+        self._auth(api_client, u, get_token_for_user)
+        target = create_user("target-user")
+        group = Group.objects.get_or_create(name="dataowners_group")[0]
+        resp = api_client.post(reverse("access-control-list"), {
+            "user": target.id,
+            "group": group.id,
+            "org_unit": org.id,
+            "is_active": True,
+        }, format="json")
+        assert resp.status_code == 403
+
+    def test_global_admin_allowed_list(self, api_client, create_user, create_scoped_role, get_token_for_user):
+        """Global admins_group → 200 on GET /access-control/."""
+        u = create_user("global-admin-list")
+        create_scoped_role(u, "admins_group")  # org_unit=None → global
+        self._auth(api_client, u, get_token_for_user)
+        resp = api_client.get(reverse("access-control-list"))
+        assert resp.status_code == 200
+
+    def test_global_admin_allowed_create(self, api_client, create_user, create_scoped_role, get_token_for_user):
+        """Global admins_group → 201 on POST /access-control/."""
+        u = create_user("global-admin-create")
+        create_scoped_role(u, "admins_group")  # org_unit=None → global
+        self._auth(api_client, u, get_token_for_user)
+        target = create_user("target-user-2")
+        group = Group.objects.get_or_create(name="dataowners_group")[0]
+        resp = api_client.post(reverse("access-control-list"), {
+            "user": target.id,
+            "group": group.id,
+            "is_active": True,
+        }, format="json")
+        assert resp.status_code == 201
+
+    def test_superuser_allowed_list(self, api_client, create_user, get_token_for_user):
+        """Superuser → 200 on GET /access-control/."""
+        u = create_user("a2-super", is_superuser=True)
+        self._auth(api_client, u, get_token_for_user)
+        resp = api_client.get(reverse("access-control-list"))
+        assert resp.status_code == 200
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SECTION 8: PARAMETRIZED CROSS-ROLE ACCESS MATRIX
+# ═══════════════════════════════════════════════════════════════════════
+
+@pytest.mark.django_db
 class TestCrossRoleAccessMatrix:
     """Parametrized tests covering every role × every key capability."""
 

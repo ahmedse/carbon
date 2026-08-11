@@ -1,16 +1,18 @@
 """
 Tests for Phase 3 — AI-suggested DQ rules via Pulse (dq.suggest).
 
+POST /dq/suggest/ is now a THIN ALIAS over the suggest job (Phase 4):
+it creates a DQJob and returns 201 + job (X-Deprecated: true).
 Covers:
  - Missing param → 400
  - Table not found → 404
  - Auto-profile when no profile exists
- - Pulse unavailable → graceful degradation (200 with pulse_unavailable)
- - Pulse returns suggestions
- - Pulse returns empty suggestions
+ - Pulse unavailable/timeout → job failed honestly (fail-visible)
+ - Pulse returns suggestions → pending DQSuggestion rows persisted
+ - Pulse returns empty suggestions → done, zero rows
  - Payload matches PULSE_CONTRACT_SPEC.md §3.2
  - Field stats in payload (min/max/mean/stddev)
- - Connection error → graceful degradation
+ - Connection error → job failed honestly
 """
 from unittest.mock import patch
 
@@ -21,7 +23,7 @@ from rest_framework.test import APIClient
 from core.models import Module
 from dataschema.models import DataTable, DataField, DataRow
 from mdm.models import OrgUnit, ReferenceSet, ReferenceValue
-from dq.models import TableProfile, FieldProfile
+from dq.models import TableProfile, FieldProfile, DQSuggestion, DQJob
 
 User = get_user_model()
 
@@ -116,11 +118,11 @@ class SuggestTableNotFoundTests(SuggestBaseTestCase):
 # ---------------------------------------------------------------------------
 
 class SuggestNeedsProfileTests(SuggestBaseTestCase):
-    """If no TableProfile exists, one is created before calling Pulse."""
+    """Thin alias: if no TableProfile exists, one is created; job runs async."""
 
     @patch('pulse_gateway.requests.post')
     def test_suggest_needs_profile(self, mock_post):
-        """Table has data but no profile → auto-profile then suggest."""
+        """Table has data but no profile → auto-profile then suggest job."""
         # Add some data so profiling succeeds
         DataRow.objects.create(data_table=self.table, values={
             'email': 'a@b.com', 'score': 50,
@@ -141,15 +143,21 @@ class SuggestNeedsProfileTests(SuggestBaseTestCase):
             'data_table_id': self.table.id,
         }, format='json')
 
-        self.assertEqual(resp.status_code, 200)
+        # Thin alias: 201 + a job object, marked deprecated
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp['X-Deprecated'], 'true')
         data = resp.json()
-        self.assertEqual(data['status'], 'completed')
-        self.assertIn('suggestions', data)
+        self.assertEqual(data['job_type'], 'suggest')
+        self.assertEqual(data['status'], 'done')
 
-        # A profile should now exist
+        # A profile should now exist (auto-profiled before the job ran)
         self.assertTrue(
             TableProfile.objects.filter(data_table=self.table).exists()
         )
+        self.assertEqual(
+            DQJob.objects.filter(
+                job_type='suggest', data_table=self.table).count(), 1)
+        self.assertFalse(DQSuggestion.objects.filter(data_table=self.table).exists())
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +165,7 @@ class SuggestNeedsProfileTests(SuggestBaseTestCase):
 # ---------------------------------------------------------------------------
 
 class SuggestPulseUnavailableTests(SuggestBaseTestCase):
-    """Pulse timeout → 200 OK with pulse_unavailable status."""
+    """Pulse timeout → job fails honestly (fail-visible, never fabricated)."""
 
     @patch('pulse_gateway.requests.post')
     def test_suggest_pulse_unavailable(self, mock_post):
@@ -172,11 +180,17 @@ class SuggestPulseUnavailableTests(SuggestBaseTestCase):
             'data_table_id': self.table.id,
         }, format='json')
 
-        self.assertEqual(resp.status_code, 200)
+        # Fail-visible: Pulse unreachable → job failed, no suggestion rows.
+        self.assertEqual(resp.status_code, 201)
         data = resp.json()
-        self.assertEqual(data['status'], 'pulse_unavailable')
-        self.assertEqual(data['suggestions'], [])
-        self.assertIn('message', data)
+        self.assertEqual(data['status'], 'failed')
+        self.assertIn('timed out', data['error'])
+        self.assertFalse(DQSuggestion.objects.filter(data_table=self.table).exists())
+
+        job = DQJob.objects.filter(
+            job_type='suggest', data_table=self.table).first()
+        self.assertIsNotNone(job)
+        self.assertEqual(job.status, 'failed')
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +198,7 @@ class SuggestPulseUnavailableTests(SuggestBaseTestCase):
 # ---------------------------------------------------------------------------
 
 class SuggestReturnsSuggestionsTests(SuggestBaseTestCase):
-    """Pulse returns 2 suggestions → response includes them."""
+    """Pulse returns 2 suggestions → persisted as pending DQSuggestion rows."""
 
     @patch('pulse_gateway.requests.post')
     def test_suggest_pulse_returns_suggestions(self, mock_post):
@@ -218,15 +232,23 @@ class SuggestReturnsSuggestionsTests(SuggestBaseTestCase):
             'data_table_id': self.table.id,
         }, format='json')
 
-        self.assertEqual(resp.status_code, 200)
+        # Thin alias: 201 + job; suggestions persisted as pending rows.
+        self.assertEqual(resp.status_code, 201)
         data = resp.json()
-        self.assertEqual(data['status'], 'completed')
-        self.assertEqual(len(data['suggestions']), 2)
-        self.assertEqual(
-            data['suggestions'][0]['prompt'],
-            'Score must be between 0 and 100',
-        )
-        self.assertEqual(data['suggestions'][0]['confidence'], 0.95)
+        self.assertEqual(data['job_type'], 'suggest')
+        self.assertEqual(data['status'], 'done')
+        self.assertEqual(data['result']['suggestions_stored'], 2)
+        self.assertEqual(data['result']['suggestions_invalid'], 0)
+
+        rows = DQSuggestion.objects.filter(data_table=self.table)
+        self.assertEqual(rows.count(), 2)
+        self.assertTrue(all(s.status == 'pending' for s in rows))
+        score_sug = rows.get(rationale='Field ranges from 0 to 100.')
+        self.assertEqual(score_sug.confidence, 0.95)
+        self.assertEqual(score_sug.payload['type'], 'nl_check')
+        self.assertEqual(score_sug.created_by, self.user)
+        self.assertIsNotNone(score_sug.job)
+        self.assertFalse(rows.filter(payload__isnull=True).exists())
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +256,7 @@ class SuggestReturnsSuggestionsTests(SuggestBaseTestCase):
 # ---------------------------------------------------------------------------
 
 class SuggestEmptySuggestionsTests(SuggestBaseTestCase):
-    """Pulse returns [] → response has empty list."""
+    """Pulse returns [] → job done with zero suggestion rows persisted."""
 
     @patch('pulse_gateway.requests.post')
     def test_suggest_pulse_empty_suggestions(self, mock_post):
@@ -255,10 +277,12 @@ class SuggestEmptySuggestionsTests(SuggestBaseTestCase):
             'data_table_id': self.table.id,
         }, format='json')
 
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 201)
         data = resp.json()
-        self.assertEqual(data['status'], 'completed')
-        self.assertEqual(data['suggestions'], [])
+        self.assertEqual(data['status'], 'done')
+        # empty suggestion list → nothing stored, no counter added
+        self.assertEqual(data['result'], {'suggestions': []})
+        self.assertFalse(DQSuggestion.objects.filter(data_table=self.table).exists())
 
 
 # ---------------------------------------------------------------------------
@@ -329,8 +353,9 @@ class SuggestFieldStatsTests(SuggestBaseTestCase):
         self._create_profile()
 
         from dq.services import suggest_rules_for_table
-        # Patch the gateway call that's _inside_ suggest_rules_for_table
-        with patch('pulse_gateway.PulseGateway.suggest_dq_rules') as mock_suggest:
+        # Patch the AI provider call that's _inside_ suggest_rules_for_table
+        # (AI Wave A: suggest now routes via ai.intelligence.CarbonIntelligence).
+        with patch('ai.intelligence.CarbonIntelligence.submit_dq_suggest') as mock_suggest:
             mock_suggest.return_value = {
                 'task_id': 't-stats',
                 'status': 'completed',
@@ -338,7 +363,7 @@ class SuggestFieldStatsTests(SuggestBaseTestCase):
             }
             suggest_rules_for_table(self.table.id)
 
-            # Check the table_profile passed to Pulse
+            # Check the table_profile passed to the provider
             call_args = mock_suggest.call_args[0]
             table_payload = call_args[0]
             self.assertEqual(table_payload['name'], 'suggest_table')
@@ -362,7 +387,7 @@ class SuggestFieldStatsTests(SuggestBaseTestCase):
 # ---------------------------------------------------------------------------
 
 class SuggestConnectionErrorTests(SuggestBaseTestCase):
-    """ConnectionError → 200 OK with pulse_unavailable status."""
+    """ConnectionError → job fails honestly (fail-visible, no fabricated data)."""
 
     @patch('pulse_gateway.requests.post')
     def test_suggest_pulse_connection_error(self, mock_post):
@@ -377,7 +402,8 @@ class SuggestConnectionErrorTests(SuggestBaseTestCase):
             'data_table_id': self.table.id,
         }, format='json')
 
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 201)
         data = resp.json()
-        self.assertEqual(data['status'], 'pulse_unavailable')
-        self.assertEqual(data['suggestions'], [])
+        self.assertEqual(data['status'], 'failed')
+        self.assertIn('unreachable', data['error'])
+        self.assertFalse(DQSuggestion.objects.filter(data_table=self.table).exists())

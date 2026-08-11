@@ -307,9 +307,17 @@ class ScopedRoleViewSet(viewsets.ModelViewSet):
     """
     CRUD for scoped role assignments.
 
-    - Superusers / global admins: full access.
-    - Org-scoped stewards (admins_group on an org unit): may list/create/delete role
-      assignments ONLY within their own org subtree, and NEVER global roles.
+    MA decision (TASK-CBAC-A2, Option A — centralize): role-assignment
+    management is GLOBAL-ADMIN ONLY. Access requires the platform:manage_access
+    capability (granted to admin/admins_group GLOBAL roles). DD-1 resolves
+    org-scoped wildcard roles to view-only capabilities, so org-scoped
+    stewards CANNOT manage assignments — by design.
+
+    The subtree filter and _assert_within_subtree guards below are INERT
+    under AdminOrSuperuserOnly (only global admins pass) and are kept as
+    defense-in-depth: if permission_classes is ever relaxed, stewards would
+    still be confined to their own org subtree and could never target
+    global roles.
     """
     queryset = ScopedRole.objects.all()
     permission_classes = [AdminOrSuperuserOnly]
@@ -321,6 +329,8 @@ class ScopedRoleViewSet(viewsets.ModelViewSet):
         return ScopedRoleSerializer
 
     def get_queryset(self):
+        # INERT under AdminOrSuperuserOnly — kept as defense-in-depth
+        # (see class docstring; only global admins reach this code path).
         if getattr(self, 'swagger_fake_view', False):
             return ScopedRole.objects.none()
         user = self.request.user
@@ -333,8 +343,13 @@ class ScopedRoleViewSet(viewsets.ModelViewSet):
         )
 
     def _assert_within_subtree(self, org_unit, module):
-        """Anti-escalation guard: a steward may only target an org unit inside their subtree,
-        never a global role (org_unit=None AND module=None) and never a foreign subtree."""
+        """Anti-escalation guard: INERT under AdminOrSuperuserOnly (Option A).
+
+        Kept as defense-in-depth: a steward (if ever admitted by a relaxed
+        permission_classes) may only target an org unit inside their subtree,
+        never a global role (org_unit=None AND module=None) and never a
+        foreign subtree.
+        """
         user = self.request.user
         if user_is_global_admin(user):
             return

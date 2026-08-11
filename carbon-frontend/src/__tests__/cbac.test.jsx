@@ -87,6 +87,8 @@ describe('Capability Constants', () => {
     expect(caps.IMPORTEXPORT_MANAGE).toBe('importexport:manage');
     expect(caps.DATASCHEMA_VIEW).toBe('dataschema:view');
     expect(caps.DATASCHEMA_MANAGE).toBe('dataschema:manage');
+    expect(caps.EVIDENCE_VIEW).toBe('evidence:view');
+    expect(caps.EVIDENCE_MANAGE).toBe('evidence:manage');
   });
 
   it('has consistent naming: MANAGE implies VIEW in same domain', () => {
@@ -239,6 +241,7 @@ describe('CAPABILITY_INHERITANCE', () => {
     expect(ci[caps.CONNECTIONS_MANAGE]).toContain(caps.CONNECTIONS_VIEW);
     expect(ci[caps.IMPORTEXPORT_MANAGE]).toContain(caps.IMPORTEXPORT_VIEW);
     expect(ci[caps.DATASCHEMA_MANAGE]).toContain(caps.DATASCHEMA_VIEW);
+    expect(ci[caps.EVIDENCE_MANAGE]).toContain(caps.EVIDENCE_VIEW);
   });
 });
 

@@ -6,7 +6,7 @@ import { resolve } from 'path';
 // Load .env manually so import.meta.env.VITE_* works in tests
 function loadEnv() {
   try {
-    const envPath = resolve(__dirname, '.env');
+    const envPath = resolve(import.meta.dirname, '.env');
     const content = readFileSync(envPath, 'utf-8');
     const vars = {};
     for (const line of content.split('\n')) {
@@ -36,6 +36,8 @@ export default defineConfig({
       '**/dist/**',
       '**/e2e/**',
       '**/test-results/**',
+      // Playwright E2E specs (tests/*.spec.cjs) — not vitest units
+      '**/tests/**',
     ],
     testTimeout: 15000,
     env: {

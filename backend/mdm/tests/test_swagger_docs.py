@@ -32,7 +32,8 @@ class SwaggerDocumentationTests(APITestCase):
         self.assertIn('/mdm/bind-field/', paths)
 
         # --- DQ custom actions ---
-        self.assertIn('/dq/rules/{id}/execute/', paths)
+        # Phase 5 removed the synchronous execute action; run now creates a job.
+        self.assertIn('/dq/rules/{id}/run/', paths)
         self.assertIn('/dq/rules/{id}/history/', paths)
         self.assertIn('/dq/results/{id}/failures/', paths)
 
@@ -69,7 +70,7 @@ class SwaggerDocumentationTests(APITestCase):
             ('/mdm/org-units/{id}/tree/', 'get'),
             ('/mdm/org-units/tree/', 'get'),
             ('/mdm/org-units/{id}/ancestors/', 'get'),
-            ('/dq/rules/{id}/execute/', 'post'),
+            ('/dq/rules/{id}/run/', 'post'),
             ('/dq/profile/', 'post'),
             ('/dq/run/', 'post'),
             ('/dq/metrics/', 'get'),

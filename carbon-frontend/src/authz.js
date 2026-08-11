@@ -31,6 +31,7 @@ import {
   CONNECTIONS_VIEW, CONNECTIONS_MANAGE,
   IMPORTEXPORT_VIEW, IMPORTEXPORT_MANAGE,
   DATASCHEMA_VIEW, DATASCHEMA_MANAGE,
+  EVIDENCE_VIEW, EVIDENCE_MANAGE,
   // Utility
   expandCapabilities, hasCap, hasAnyCap, hasAllCaps,
   initCapabilities, getCapableApps,
@@ -52,6 +53,7 @@ const APP_VIEW_CAP = {
   connections: CONNECTIONS_VIEW,
   importexport: IMPORTEXPORT_VIEW,
   dataschema:  DATASCHEMA_VIEW,
+  evidence:    EVIDENCE_VIEW,
 };
 
 // Which capability is needed to manage an app's admin area
@@ -63,6 +65,7 @@ const APP_ADMIN_CAP = {
   connections: CONNECTIONS_MANAGE,
   importexport: IMPORTEXPORT_MANAGE,
   dataschema:  DATASCHEMA_MANAGE,
+  evidence:    EVIDENCE_MANAGE,
 };
 
 // Route → action → capability (auto-resolved from ROUTE_CAPABILITIES + known patterns)
