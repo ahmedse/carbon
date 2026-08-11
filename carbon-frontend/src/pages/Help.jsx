@@ -154,13 +154,13 @@ export default function Help() {
         <Typography variant="h5" mt={4} mb={2} fontWeight={700}>
           Typical Workflow: Step by Step
         </Typography>
-        <Stepper orientation="vertical" activeStep={-1} sx={{ bgcolor: "#f9fbe7", borderRadius: 2, p: 2, mb: 4 }}>
+        <Stepper orientation="vertical" activeStep={-1} sx={{ bgcolor: 'background.dark', borderRadius: 2, p: 2, mb: 4 }}>
           {steps.map((step, idx) => (
             <Step key={step.label} completed>
               <StepLabel
                 icon={
                   <Tooltip title={step.label}>
-                    <Avatar sx={{ bgcolor: idx === 0 ? "#1976d2" : idx === 1 ? "#0288d1" : idx === 2 ? "#43a047" : idx === 3 ? "#fbc02d" : "#8e24aa" }}>
+                    <Avatar sx={{ bgcolor: idx === 0 ? 'primary.dark' : idx === 1 ? 'info.dark' : idx === 2 ? 'success.main' : idx === 3 ? 'warning.main' : 'secondary.main' }}>
                       {step.icon}
                     </Avatar>
                   </Tooltip>
@@ -179,7 +179,7 @@ export default function Help() {
         {/* User Story */}
         <Divider sx={{ my: 3 }} />
         <Typography variant="h5" fontWeight={700} mb={1}>User Story: A Day in the Carbon Platform</Typography>
-        <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, mb: 4, bgcolor: "#fff8e1" }}>
+        <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, mb: 4, bgcolor: 'background.dark' }}>
           <Typography variant="body1" mb={1}>
             <b>Meet Omar, a sustainability officer:</b>
           </Typography>

@@ -72,8 +72,8 @@ export default function ExportsDetailPage() {
         fetchExportProjects(token),
         fetchExportJobs(token)
       ]);
-      setProjects(projectsData || []);
-      setJobs(jobsData || []);
+      setProjects(Array.isArray(projectsData) ? projectsData : (projectsData?.results || []));
+      setJobs(Array.isArray(jobsData) ? jobsData : (jobsData?.results || []));
     } catch (err) {
       const msg = err.message || 'Failed to load exports';
       setError(msg);

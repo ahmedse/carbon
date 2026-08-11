@@ -273,7 +273,7 @@ export default function LogViewerPage() {
                   <TableRow>
                     <TableCell colSpan={5} sx={{ p: 0, borderBottom: expandedRow === idx ? undefined : "none" }}>
                       <Collapse in={expandedRow === idx}>
-                        <Box sx={{ p: 2, bgcolor: "#f8fafc" }}>
+                        <Box sx={{ p: 2, bgcolor: 'background.dark' }}>
                           <Box sx={{ display: "flex", gap: 4, flexWrap: "wrap", mb: 1 }}>
                             <Box>
                               <Typography variant="caption" color="text.secondary">Path</Typography>

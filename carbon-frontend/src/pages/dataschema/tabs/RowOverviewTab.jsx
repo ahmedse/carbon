@@ -117,13 +117,13 @@ export default function RowOverviewTab({ rowData, _tableInfo, _moduleInfo, calcu
             <Stack spacing={1.5}>
               {metadata.created_at && (
                 <Box>
-                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: '#666', mb: 0.3 }}>Created</Typography>
+                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: 'text.secondary', mb: 0.3 }}>Created</Typography>
                   <Typography variant="body2">{new Date(metadata.created_at).toLocaleString()}</Typography>
                 </Box>
               )}
               {metadata.updated_at && (
                 <Box>
-                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: '#666', mb: 0.3 }}>Updated</Typography>
+                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: 'text.secondary', mb: 0.3 }}>Updated</Typography>
                   <Typography variant="body2">{new Date(metadata.updated_at).toLocaleString()}</Typography>
                 </Box>
               )}

@@ -9,7 +9,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { useAuth } from '../auth/AuthContext';
 
 export function StatusBar({
-  sidebarVisible,
+  sidebarMode,
   copilotVisible,
   onToggleSidebar,
   onToggleCopilot,
@@ -73,7 +73,7 @@ export function StatusBar({
         height: 22,
         minHeight: 22,
         bgcolor: 'primary.main',
-        color: '#fff',
+        color: 'primary.contrastText',
         display: 'flex',
         alignItems: 'center',
         px: 1.5,
@@ -174,16 +174,16 @@ export function StatusBar({
 
       {/* Toggle buttons */}
       <Box sx={{ display: 'flex', gap: 0.25 }}>
-        <Tooltip title={`${sidebarVisible ? 'Hide' : 'Show'} Sidebar (Ctrl+B)`} placement="top">
+        <Tooltip title={sidebarMode === 'pinned' ? 'Hide Sidebar (Ctrl+B)' : sidebarMode === 'peek' ? 'Pin Sidebar (Ctrl+Shift+B)' : 'Show Sidebar (Ctrl+B)'} placement="top">
           <IconButton
             size="small"
             onClick={onToggleSidebar}
-            aria-label={`${sidebarVisible ? 'Hide' : 'Show'} Sidebar`}
-            aria-pressed={sidebarVisible}
+            aria-label={sidebarMode === 'pinned' ? 'Hide Sidebar' : 'Show Sidebar'}
+            aria-pressed={sidebarMode !== 'hidden'}
             sx={{
               p: 0.25,
               color: 'inherit',
-              opacity: sidebarVisible ? 1 : 0.5,
+              opacity: sidebarMode !== 'hidden' ? 1 : 0.5,
               borderRadius: 0.5,
               '&:hover': {
                 opacity: 1,

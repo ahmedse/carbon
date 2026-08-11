@@ -121,7 +121,7 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
       flexWrap: "wrap",
     }}
   >
-    <CalendarMonth sx={{ color: "#6b7280" }} />
+    <CalendarMonth sx={{ color: 'text.secondary' }} />
     
     <FormControl size="small" sx={{ minWidth: 140 }}>
       <InputLabel>Quick Select</InputLabel>
@@ -129,7 +129,7 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
         value={quickSelect}
         label="Quick Select"
         onChange={(e) => onQuickSelectChange(e.target.value)}
-        sx={{ bgcolor: "#fff" }}
+        sx={{ bgcolor: 'background.default' }}
       >
         {QUICK_SELECT_OPTIONS.map((opt) => (
           <MenuItem key={opt.value} value={opt.value}>
@@ -179,7 +179,7 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
     </Tooltip>
     
     <Tooltip title="Export data">
-      <IconButton size="small" sx={{ color: "#6b7280" }}>
+      <IconButton size="small" sx={{ color: 'text.secondary' }}>
         <Download />
       </IconButton>
     </Tooltip>
@@ -703,7 +703,7 @@ export default function AnalyticsDashboard() {
       <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <Chip
           label={`Showing: ${startDate.format("MMM D, YYYY")} - ${endDate.format("MMM D, YYYY")}`}
-          sx={{ bgcolor: "#f3f4f6", color: "#374151", fontWeight: 500 }}
+          sx={{ bgcolor: 'background.dark', color: 'text.primary', fontWeight: 500 }}
         />
         
         <ToggleButtonGroup
@@ -788,7 +788,7 @@ export default function AnalyticsDashboard() {
       )}
 
       {/* Footer */}
-      <Box sx={{ mt: 4, pt: 3, borderTop: "1px solid #e5e7eb" }}>
+      <Box sx={{ mt: 4, pt: 3, borderTop: '1px solid', borderColor: 'divider' }}>
         <Typography variant="body2" color="#9ca3af" textAlign="center">
           Data refreshed: {dayjs().format("MMM D, YYYY h:mm A")} • 
           <Button size="small" startIcon={<Refresh fontSize="small" />} sx={{ ml: 1 }}>

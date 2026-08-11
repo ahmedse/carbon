@@ -50,6 +50,15 @@ function setStoredBoolean(key, value) {
   }
 }
 
+function getStoredString(key, defaultValue) {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored && ['hidden','peek','pinned'].includes(stored) ? stored : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
 export function useShellState() {
   const { availablePerspectives, user, context, userCapabilities } = useAuth();
   const { isAppEnabled } = useEnabledApps();
@@ -99,15 +108,16 @@ export function useShellState() {
   }, [availablePerspectives, user, context, isAppEnabled, userCapabilities]);
 
   const [activeStudio, setActiveStudio] = useState('home');
-  const [sidebarVisible, setSidebarVisible] = useState(() => getStoredBoolean('carbon-sidebar-visible', true));
+  const [sidebarMode, setSidebarModeRaw] = useState(() => getStoredString('carbon-sidebar-mode', 'pinned'));
   const [panelVisible, setPanelVisible] = useState(() => getStoredBoolean('carbon-panel-visible', false));
   const [copilotVisible, setCopilotVisible] = useState(() => getStoredBoolean('carbon-copilot-visible', false));
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
-  // Persist sidebar visibility
-  useEffect(() => {
-    setStoredBoolean('carbon-sidebar-visible', sidebarVisible);
-  }, [sidebarVisible]);
+  // Persist sidebar mode
+  const setSidebarMode = useCallback((mode) => {
+    setSidebarModeRaw(mode);
+    try { localStorage.setItem('carbon-sidebar-mode', mode); } catch { /* ignore */ }
+  }, []);
 
   // Persist panel visibility
   useEffect(() => {
@@ -123,9 +133,41 @@ export function useShellState() {
     setActiveStudio(studioId);
   }, []);
 
+  // Cycle: hidden → peek → pinned → hidden
   const toggleSidebar = useCallback(() => {
-    setSidebarVisible(prev => !prev);
+    setSidebarMode(prev => {
+      if (prev === 'hidden') return 'peek';
+      if (prev === 'peek') return 'pinned';
+      return 'hidden';
+    });
+  }, [setSidebarMode]);
+
+  // Open sidebar as peek (from studio click when hidden)
+  const openSidebarPeek = useCallback(() => {
+    setSidebarModeRaw(prev => {
+      if (prev === 'hidden') {
+        try { localStorage.setItem('carbon-sidebar-mode', 'peek'); } catch { /* ignore */ }
+        return 'peek';
+      }
+      return prev;
+    });
   }, []);
+
+  // Dismiss peek back to hidden
+  const dismissSidebarPeek = useCallback(() => {
+    setSidebarModeRaw(prev => {
+      if (prev === 'peek') {
+        try { localStorage.setItem('carbon-sidebar-mode', 'hidden'); } catch { /* ignore */ }
+        return 'hidden';
+      }
+      return prev;
+    });
+  }, []);
+
+  // Pin current peek → pinned
+  const pinSidebar = useCallback(() => {
+    setSidebarMode('pinned');
+  }, [setSidebarMode]);
 
   const togglePanel = useCallback(() => {
     setPanelVisible(prev => !prev);
@@ -139,8 +181,11 @@ export function useShellState() {
     studios,
     activeStudio,
     changeStudio,
-    sidebarVisible,
+    sidebarMode,
     toggleSidebar,
+    openSidebarPeek,
+    dismissSidebarPeek,
+    pinSidebar,
     panelVisible,
     togglePanel,
     copilotVisible,

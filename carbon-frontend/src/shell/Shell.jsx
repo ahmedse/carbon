@@ -2,8 +2,9 @@
 // Root IDE shell layout with activity bar, resizable sidebar, editor area, and copilot pane
 
 import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { Box, Drawer } from '@mui/material';
+import { Box, Drawer, IconButton, Tooltip, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import { Allotment } from 'allotment';
 import 'allotment/dist/style.css';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -47,7 +48,7 @@ export function Shell() {
 
   const [drawerWidth, setDrawerWidth] = useState(() => {
     const stored = Number(localStorage.getItem('carbon-drawer-width'));
-    return Number.isFinite(stored) && stored > 0 ? stored : 220;
+    return Number.isFinite(stored) && stored > 0 ? stored : 200;
   });
 
   const [copilotPaneSize, setCopilotPaneSize] = useState(() => {
@@ -67,8 +68,11 @@ export function Shell() {
     studios,
     activeStudio,
     changeStudio,
-    sidebarVisible,
+    sidebarMode,
     toggleSidebar,
+    openSidebarPeek,
+    dismissSidebarPeek,
+    pinSidebar,
     copilotVisible,
     toggleCopilot,
   } = useShellState();
@@ -91,8 +95,20 @@ export function Shell() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Ctrl+B or Cmd+B - Toggle Sidebar
-      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+      // Escape — dismiss peek sidebar
+      if (e.key === 'Escape' && sidebarMode === 'peek') {
+        e.preventDefault();
+        dismissSidebarPeek();
+      }
+      // Ctrl+B or Cmd+B - Cycle sidebar hidden→peek→pinned→hidden
+      else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'B') {
+        e.preventDefault();
+        // Ctrl+Shift+B: toggle peek ↔ pinned
+        if (sidebarMode === 'peek') pinSidebar();
+        else if (sidebarMode === 'pinned') dismissSidebarPeek(); // pinned→hidden; then openSidebarPeek set peek
+        else toggleSidebar();
+      }
+      else if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
         e.preventDefault();
         toggleSidebar();
       }
@@ -110,15 +126,16 @@ export function Shell() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleSidebar, toggleCopilot]);
+  }, [toggleSidebar, toggleCopilot, sidebarMode, dismissSidebarPeek, pinSidebar]);
 
   const handleSidebarNavigate = (item) => {
     navigate(item.path);
   };
 
-  // Click on studio icon → auto-navigate to studio's default path
+  // Click on studio icon → auto-navigate to studio's default path, open sidebar peek if hidden
   const handleStudioChange = (studioId) => {
     changeStudio(studioId);
+    openSidebarPeek();
     const path = STUDIO_PATHS[studioId];
     if (path) navigate(path);
   };
@@ -147,8 +164,8 @@ export function Shell() {
           onStudioChange={handleStudioChange}
         />
 
-        {/* Collapsed-sidebar reopen handle */}
-        {!sidebarVisible && (
+        {/* Collapsed-sidebar reopen handle — shown only when hidden */}
+        {sidebarMode === 'hidden' && (
           <Box
             role="button"
             tabIndex={0}
@@ -191,70 +208,99 @@ export function Shell() {
           </Box>
         )}
 
-        {/* Left Drawer Sidebar */}
-        <Drawer
-          anchor="left"
-          open={sidebarVisible}
-          onClose={toggleSidebar}
-          variant="persistent"
-          sx={{
-            display: sidebarVisible ? 'block' : 'none',
-            width: drawerWidthClamped,
-            flexShrink: 0,
-            '& .MuiDrawer-paper': {
-              width: drawerWidthClamped,
-              boxSizing: 'border-box',
-              position: 'relative',
-              height: '100%',
-              borderRight: '1px solid',
-              borderColor: 'divider',
-              overflow: 'hidden',
-              bgcolor: 'background.paper',
-            },
-          }}
-        >
-          {/* Resize handle */}
-          <Box
+        {/* Left Drawer Sidebar — hidden: not rendered, peek: overlay, pinned: persistent */}
+        {sidebarMode !== 'hidden' && (
+          <Drawer
+            anchor="left"
+            open
+            onClose={dismissSidebarPeek}
+            variant={sidebarMode === 'peek' ? 'temporary' : 'persistent'}
             sx={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              bottom: 0,
-              width: 6,
-              cursor: 'col-resize',
-              zIndex: 2,
-              bgcolor: 'transparent',
-              '&:hover': {
-                bgcolor: 'action.hover',
+              width: sidebarMode === 'pinned' ? drawerWidthClamped : undefined,
+              flexShrink: sidebarMode === 'pinned' ? 0 : undefined,
+              '& .MuiDrawer-paper': {
+                width: drawerWidthClamped,
+                boxSizing: 'border-box',
+                position: 'relative',
+                height: '100%',
+                borderRight: '1px solid',
+                borderColor: 'divider',
+                overflow: 'hidden',
+                bgcolor: 'background.paper',
               },
             }}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
+          >
+            {/* Pin/Unpin + Collapse header bar (peek mode) */}
+            {sidebarMode === 'peek' && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  px: 1,
+                  py: 0.25,
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'action.hover',
+                }}
+              >
+                <Typography variant="caption" sx={{ fontSize: '0.6rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+                  Peek
+                </Typography>
+                <Tooltip title="Pin sidebar (Ctrl+Shift+B)">
+                  <IconButton size="small" onClick={pinSidebar} sx={{ p: 0.25 }}>
+                    <PushPinOutlinedIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            )}
 
-              const startX = e.clientX;
-              const startWidth = drawerWidthClamped;
+            {/* Resize handle — only in pinned mode */}
+            {sidebarMode === 'pinned' && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  right: 0,
+                  bottom: 0,
+                  width: 6,
+                  cursor: 'col-resize',
+                  zIndex: 2,
+                  bgcolor: 'transparent',
+                  '&:hover': {
+                    bgcolor: 'action.hover',
+                  },
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
 
-              const onMove = (moveEvent) => {
-                const delta = moveEvent.clientX - startX;
-                setDrawerWidth(startWidth + delta);
-              };
+                  const startX = e.clientX;
+                  const startWidth = drawerWidthClamped;
 
-              const onUp = () => {
-                window.removeEventListener('mousemove', onMove);
-                window.removeEventListener('mouseup', onUp);
-              };
+                  const onMove = (moveEvent) => {
+                    const delta = moveEvent.clientX - startX;
+                    setDrawerWidth(startWidth + delta);
+                  };
 
-              window.addEventListener('mousemove', onMove);
-              window.addEventListener('mouseup', onUp);
-            }}
-          />
-          <ShellSidebar
-            activeStudio={activeStudio}
-            onNavigate={handleSidebarNavigate}
-            onCollapse={toggleSidebar}
-          />
-        </Drawer>
+                  const onUp = () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                  };
+
+                  window.addEventListener('mousemove', onMove);
+                  window.addEventListener('mouseup', onUp);
+                }}
+              />
+            )}
+
+            <ShellSidebar
+              activeStudio={activeStudio}
+              onNavigate={handleSidebarNavigate}
+              onCollapse={toggleSidebar}
+            />
+          </Drawer>
+        )}
 
         {/* Resizable Main + Copilot Panes */}
         <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
@@ -291,7 +337,7 @@ export function Shell() {
 
       {/* Status Bar with integrated Footer */}
       <StatusBar
-        sidebarVisible={sidebarVisible}
+        sidebarMode={sidebarMode}
         copilotVisible={copilotVisible}
         onToggleSidebar={toggleSidebar}
         onToggleCopilot={toggleCopilot}

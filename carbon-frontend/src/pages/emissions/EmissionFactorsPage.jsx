@@ -40,7 +40,7 @@ const ScopeChip = ({ scope }) => {
     <Chip
       label={scopeLabels[scope] || `Scope ${scope}`}
       size="small"
-      sx={{ backgroundColor: scopeColors[scope] || '#ccc', color: '#fff' }}
+      sx={{ backgroundColor: 'text.disabled', color: 'background.default' }}
     />
   );
 };
@@ -191,7 +191,7 @@ export default function EmissionFactorsPage() {
       {/* Table */}
       <TableContainer component={Paper}>
         <Table>
-          <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+          <TableHead sx={{ backgroundColor: 'background.dark' }}>
             <TableRow>
               <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Code</TableCell>
@@ -205,7 +205,7 @@ export default function EmissionFactorsPage() {
           <TableBody>
             {filteredFactors.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isAdmin ? 7 : 6} align="center" sx={{ py: 3, color: '#999' }}>
+                <TableCell colSpan={isAdmin ? 7 : 6} align="center" sx={{ py: 3, color: 'text.disabled' }}>
                   No emission factors found
                 </TableCell>
               </TableRow>

@@ -40,10 +40,13 @@ export default function CatalogHome() {
     setLoading(true);
     setError(null);
     try {
-      const [domains, tables] = await Promise.all([
+      const [domainsRaw, tablesRaw] = await Promise.all([
         fetchDataDomains(token),
         fetchDataSchemaTables(token, null, null),
       ]);
+
+      const domains = Array.isArray(domainsRaw) ? domainsRaw : (domainsRaw?.results || []);
+      const tables = Array.isArray(tablesRaw) ? tablesRaw : (tablesRaw?.results || []);
 
       const tablesWithMetadata = tables.filter(t => t.asset_profile?.description).length;
       const qualityScore = tables.length > 0 ? Math.round((tablesWithMetadata / tables.length) * 100) : 0;

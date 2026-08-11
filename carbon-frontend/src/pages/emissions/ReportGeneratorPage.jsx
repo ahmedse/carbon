@@ -234,7 +234,7 @@ export default function ReportGeneratorPage() {
                 Report Preview
               </Typography>
 
-              <Box sx={{ mb: 2, p: 2, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+              <Box sx={{ mb: 2, p: 2, bgcolor: 'background.dark', borderRadius: 1 }}>
                 <Typography variant="body2">
                   <strong>Total Emissions:</strong> {reportData.total_co2e_tonnes?.toFixed(2) || 0} tonnes CO₂e
                 </Typography>
@@ -244,7 +244,7 @@ export default function ReportGeneratorPage() {
               {reportData.scope_breakdown && (
                 <TableContainer component={Paper} sx={{ mb: 2 }}>
                   <Table size="small">
-                    <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+                    <TableHead sx={{ bgcolor: 'background.dark' }}>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 'bold' }}>Scope</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>CO₂e (tonnes)</TableCell>

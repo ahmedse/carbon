@@ -297,7 +297,7 @@ export default function DataOwnerAssetsPage() {
       {/* Results */}
       {filteredAssets.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <InfoIcon sx={{ fontSize: 48, color: '#ccc', mb: 2 }} />
+          <InfoIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
           <Typography variant="h6" color="text.secondary">
             No assets found
           </Typography>

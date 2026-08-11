@@ -569,13 +569,27 @@ const createCarbonTheme = (mode = 'light') => {
               backgroundColor: colors.background.dark,
               borderBottom: `2px solid ${colors.divider}`,
             },
+            '& .MuiDataGrid-columnHeader': {
+              padding: '0 8px',
+            },
+            '& .MuiDataGrid-columnHeaderTitle': {
+              fontSize: '0.625rem',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            },
             '& .MuiDataGrid-cell': {
               borderBottom: `1px solid ${colors.divider}`,
+              padding: '2px 8px',
             },
             '& .MuiDataGrid-row:hover': {
               backgroundColor: mode === 'light' ? 'rgba(37, 99, 235, 0.04)' : 'rgba(255, 255, 255, 0.03)',
             },
           },
+        },
+        defaultProps: {
+          rowHeight: 28,
+          columnHeaderHeight: 28,
         },
       },
       MuiTabs: {
@@ -596,6 +610,40 @@ const createCarbonTheme = (mode = 'light') => {
             fontWeight: 500,
             minHeight: 36,
             padding: '6px 12px',
+          },
+        },
+      },
+      MuiCardContent: {
+        styleOverrides: {
+          root: {
+            padding: '10px 12px',
+            '&:last-child': { paddingBottom: '10px' },
+          },
+        },
+      },
+      MuiFormControl: {
+        defaultProps: { margin: 'dense', size: 'small' },
+      },
+      MuiFormLabel: {
+        styleOverrides: {
+          root: {
+            fontSize: '0.6875rem',
+          },
+        },
+      },
+      MuiInputBase: {
+        styleOverrides: {
+          root: {
+            fontSize: '0.75rem',
+          },
+        },
+      },
+      MuiMenuItem: {
+        styleOverrides: {
+          root: {
+            fontSize: '0.75rem',
+            minHeight: 32,
+            padding: '4px 8px',
           },
         },
       },

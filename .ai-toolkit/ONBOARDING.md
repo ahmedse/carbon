@@ -12,6 +12,8 @@ verified, non-duplicated work.
 2. Read, in order:
    - `project.config.md` — this project's paths, commands, HARD RULES
    - `shared/base-rules.md` — universal rules (esp. §0 "do the right thing", ops script, verify)
+   - `shared/design-patterns.md` — how we compose objects (14/23 GoF adopted)
+   - `shared/compact-ui.md` — MUI density spec (fonts, spacing, sidebar, component overrides)
    - `roles/<your-role>.md` — your exact constraints + verification gate
 3. Consult before building: `registry/` (what exists — run `scripts/scan.sh`), `troubleshooting/playbook.md` (known bugs).
 4. Confirm: "Ready as <role> for <project>." Then start the task.

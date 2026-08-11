@@ -4,23 +4,10 @@
 
 // API Base URL - read from environment variable
 // Fallback is for development only - should always be set in .env
-const rawApiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/carbon-api/";
-const appBase = import.meta.env.VITE_BASE || "/";
-
-function normalizeApiBase(baseUrl, appPrefix) {
-  try {
-    const url = new URL(baseUrl);
-    const pathname = url.pathname;
-    if (appPrefix && appPrefix !== "/" && !pathname.startsWith(appPrefix)) {
-      url.pathname = `${appPrefix.replace(/\/$/,"")}${pathname}`;
-    }
-    return url.toString();
-  } catch (err) {
-    return baseUrl;
-  }
-}
-
-export const API_BASE_URL = normalizeApiBase(rawApiBase, appBase);
+// NOTE: This is the FULL backend URL including any path prefix.
+// The backend .env DJANGO_API_PREFIX must match this path.
+// Example: if backend serves at /carbon-api/, set VITE_API_BASE_URL=http://localhost:8009/carbon-api/
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/carbon-api/";
 
 // API timeout (milliseconds)
 export const API_TIMEOUT = parseInt(import.meta.env.VITE_API_TIMEOUT || "30000", 10);

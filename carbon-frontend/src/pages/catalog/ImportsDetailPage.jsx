@@ -62,8 +62,8 @@ export default function ImportsDetailPage() {
         fetchImportJobs(token),
         fetchDataSchemaTables(token, null, null)
       ]);
-      setJobs(jobsData || []);
-      setTables(tablesData || []);
+      setJobs(Array.isArray(jobsData) ? jobsData : (jobsData?.results || []));
+      setTables(Array.isArray(tablesData) ? tablesData : (tablesData?.results || []));
     } catch (err) {
       const msg = err.message || 'Failed to load imports';
       setError(msg);

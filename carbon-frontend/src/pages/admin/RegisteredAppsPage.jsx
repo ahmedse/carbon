@@ -55,7 +55,7 @@ export default function RegisteredAppsPage() {
       <Grid container spacing={3}>
         {apps.map((app) => (
           <Grid size={{ xs: 12, md: 6, lg: 4 }} key={app.app_id}>
-            <Card sx={{ borderTop: `4px solid ${app.is_enabled ? '#2e7d32' : '#9e9e9e'}` }}>
+            <Card sx={{ borderTop: 4, borderColor: app.is_enabled ? 'success.dark' : 'text.disabled' }}>
               <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                   <Typography variant='h6'>{app.name}</Typography>

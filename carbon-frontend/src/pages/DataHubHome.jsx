@@ -14,9 +14,9 @@ const SCOPE_COLORS = {
 };
 
 const SCOPE_ICONS = {
-  1: <NatureRounded sx={{ fontSize: 16, color: '#2e7d32' }} />,
-  2: <BoltRounded sx={{ fontSize: 16, color: '#1565c0' }} />,
-  3: <LocalShippingRounded sx={{ fontSize: 16, color: '#e65100' }} />,
+  1: <NatureRounded sx={{ fontSize: 16, color: 'success.dark' }} />,
+  2: <BoltRounded sx={{ fontSize: 16, color: 'primary.dark' }} />,
+  3: <LocalShippingRounded sx={{ fontSize: 16, color: 'warning.dark' }} />,
 };
 
 export default function DataHubHome() {

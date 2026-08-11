@@ -9,9 +9,9 @@ import { NatureRounded, BoltRounded, LocalShippingRounded } from "@mui/icons-mat
 import useDocumentTitle from '../hooks/useDocumentTitle';
 
 const scopeIcons = {
-  1: <NatureRounded sx={{ color: "#43a047" }} />,
-  2: <BoltRounded sx={{ color: "#1e88e5" }} />,
-  3: <LocalShippingRounded sx={{ color: "#ff7043" }} />,
+  1: <NatureRounded sx={{ color: 'success.main' }} />,
+  2: <BoltRounded sx={{ color: 'primary.light' }} />,
+  3: <LocalShippingRounded sx={{ color: 'warning.main' }} />,
 };
 const scopeLabels = {
   1: "Scope 1",

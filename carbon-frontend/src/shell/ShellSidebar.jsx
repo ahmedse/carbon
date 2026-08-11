@@ -3,7 +3,7 @@
 
 import React, { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Box, List, ListItemButton, ListItemIcon, ListItemText, Typography, IconButton, Tooltip, Divider } from '@mui/material';
+import { Box, List, Typography, IconButton, Tooltip } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import HomeIcon from '@mui/icons-material/Home';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -305,39 +305,41 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
         overflow: 'hidden',
       }}
     >
-      {/* Header */}
+      {/* Compact title bar with collapse button — VS Code style */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          px: 1,
-          py: 0.75,
+          height: 28,
+          minHeight: 28,
+          px: 0.75,
           borderBottom: '1px solid',
           borderColor: 'divider',
           flexShrink: 0,
         }}
       >
         <Typography
+          noWrap
           sx={{
-            fontSize: '0.6875rem',
+            fontSize: '0.6rem',
             fontWeight: 600,
-            color: 'text.primary',
             textTransform: 'uppercase',
-            letterSpacing: '0.05em',
+            letterSpacing: '0.04em',
+            color: 'text.secondary',
           }}
         >
           {title}
         </Typography>
-        <Tooltip title="Hide Sidebar (Ctrl+B)" placement="right">
+        <Tooltip title="Collapse sidebar (Ctrl+B)" placement="bottom">
           <IconButton
             size="small"
             onClick={onCollapse}
+            aria-label="Collapse sidebar"
             sx={{
-              width: 20,
-              height: 20,
-              color: 'text.secondary',
-              '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
+              p: 0.25,
+              opacity: 0.4,
+              '&:hover': { opacity: 1, bgcolor: 'action.hover' },
             }}
           >
             <ChevronLeftIcon sx={{ fontSize: 14 }} />
@@ -345,56 +347,14 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
         </Tooltip>
       </Box>
 
-      {/* Context header — only in Carbon studio */}
-      {activeStudio === 'carbon' && (userOrgUnit || moduleSummary) && (
-        <Box
-          sx={{
-            px: 1,
-            py: 0.5,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            flexShrink: 0,
-            bgcolor: (t) =>
-              t.palette.mode === 'light' ? 'rgba(14,165,233,0.04)' : 'rgba(56,189,248,0.06)',
-          }}
-        >
-          {userOrgUnit && (
-            <Box display="flex" alignItems="center" gap={0.5} mb={0.125}>
-              <LocationOnIcon sx={{ fontSize: 10, color: 'primary.main' }} aria-hidden="true" />
-              <Typography
-                variant="caption"
-                sx={{
-                  color: 'text.primary',
-                  fontWeight: 500,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: 160,
-                }}
-                title={userOrgUnit}
-              >
-                {userOrgUnit}
-              </Typography>
-            </Box>
-          )}
-          {moduleSummary && (
-            <Typography
-              variant="caption"
-              sx={{ color: 'text.secondary', display: 'block', fontSize: '0.625rem' }}
-            >
-              {moduleSummary}
-            </Typography>
-          )}
-        </Box>
-      )}
-
       {/* Navigation items */}
       <List
+        disablePadding
         sx={{
           flex: 1,
           overflow: 'auto',
-          py: 0.25,
-          px: 0.5,
+          py: 0.5,
+          px: 0.75,
         }}
       >
         {items.length === 0 ? (
@@ -406,92 +366,139 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
         ) : (
           (() => {
             const rendered = [];
-            let lastWasDivider = false;
-            
-            items.forEach((item, index) => {
-              // Skip rendering if no type or path for the item
-              if (!item.type && !item.path) {
-                return;
-              }
+            let lastWasGroup = false;
 
-              // Handle divider
+            items.forEach((item, index) => {
+              if (!item.type && !item.path) return;
+
+              // Divider → subtle gap (skip rendering, just add spacing)
               if (item.type === 'divider') {
-                // Skip consecutive dividers
-                if (!lastWasDivider && rendered.length > 0) {
+                if (rendered.length > 0 && !lastWasGroup) {
                   rendered.push(
-                    <Divider key={`divider-${index}`} sx={{ my: 0.25 }} />
+                    <Box key={`spacer-${index}`} sx={{ height: 6 }} />
                   );
-                  lastWasDivider = true;
                 }
                 return;
               }
 
-              // Handle group header
+              // Group header → ultra-compact label
               if (item.type === 'group') {
                 rendered.push(
                   <Typography
                     key={`group-${item.label}`}
-                    variant="caption"
                     sx={{
-                      px: 1,
-                      py: 0.5,
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      fontSize: '0.6rem',
-                      color: 'text.secondary',
-                      letterSpacing: '0.05em',
+                      fontSize: '0.575rem',
+                      fontWeight: 500,
+                      color: 'text.disabled',
+                      letterSpacing: '0.04em',
+                      px: 0.75,
+                      pt: 0.75,
+                      pb: 0.25,
                       display: 'block',
-                      mt: 0.5,
                     }}
                   >
                     {item.label}
                   </Typography>
                 );
-                lastWasDivider = false;
+                lastWasGroup = true;
                 return;
               }
 
-              // Handle regular navigation items
+              // Regular navigation items
               const Icon = item.icon;
               const itemPath = item.path ? item.path.replace(/\/+$|^\/+/, '') : '';
               const isActive = itemPath && (normalizedLocation === itemPath || normalizedLocation.startsWith(`${itemPath}/`));
+
               rendered.push(
-                <ListItemButton
+                <Box
                   key={item.path}
                   onClick={() => onNavigate(item)}
-                  selected={isActive}
                   sx={{
-                    borderRadius: 0.75,
-                    mb: 0.25,
-                    py: 0.5,
-                    px: 1,
-                    minHeight: 'unset',
-                    bgcolor: isActive ? 'action.selected' : 'transparent',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.75,
+                    height: 28,
+                    px: 0.75,
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    color: isActive ? 'primary.main' : 'text.secondary',
+                    transition: 'all 0.12s ease',
                     '&:hover': {
                       bgcolor: 'action.hover',
+                      color: isActive ? 'primary.main' : 'text.primary',
                     },
+                    // Left-bar active indicator (VS Code / Linear style)
+                    ...(isActive && {
+                      bgcolor: (t) => t.palette.mode === 'light' ? 'rgba(14,165,233,0.07)' : 'rgba(56,189,248,0.1)',
+                      '&::before': {
+                        content: '""',
+                        position: 'absolute',
+                        left: 0,
+                        top: 6,
+                        bottom: 6,
+                        width: 2.5,
+                        borderRadius: '0 3px 3px 0',
+                        bgcolor: 'primary.main',
+                      },
+                    }),
                   }}
+                  title={item.label}
                 >
-                  <ListItemIcon sx={{ minWidth: 28 }}>
-                    <Icon sx={{ fontSize: 16, color: isActive ? 'primary.main' : 'text.secondary' }} />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={item.label}
-                    primaryTypographyProps={{
-                      fontSize: '0.6875rem',
-                      fontWeight: isActive ? 600 : 500,
-                      color: isActive ? 'text.primary' : 'text.secondary',
+                  <Icon sx={{ fontSize: 14, flexShrink: 0, opacity: isActive ? 1 : 0.6 }} />
+                  <Typography
+                    noWrap
+                    sx={{
+                      fontSize: '0.65rem',
+                      fontWeight: isActive ? 600 : 400,
+                      lineHeight: 1,
                     }}
-                  />
-                </ListItemButton>
+                  >
+                    {item.label}
+                  </Typography>
+                </Box>
               );
-              lastWasDivider = false;
+              lastWasGroup = false;
             });
-            
+
             return rendered;
           })()
         )}
       </List>
+
+      {/* Bottom context strip — org unit pill (org-scoped users only) */}
+      {activeStudio === 'carbon' && userOrgUnit && !(user?.is_superuser || isGlobalAdminFlag) && (
+        <Box
+          sx={{
+            flexShrink: 0,
+            px: 0.75,
+            py: 0.5,
+            borderTop: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              px: 0.75,
+              py: 0.375,
+              borderRadius: '5px',
+              bgcolor: (t) => t.palette.mode === 'light' ? 'rgba(14,165,233,0.05)' : 'rgba(56,189,248,0.08)',
+            }}
+          >
+            <LocationOnIcon sx={{ fontSize: 10, color: 'primary.main', flexShrink: 0 }} />
+            <Typography
+              noWrap
+              sx={{ fontSize: '0.575rem', fontWeight: 500, color: 'text.secondary', lineHeight: 1 }}
+              title={userOrgUnit}
+            >
+              {userOrgUnit}
+            </Typography>
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }
