@@ -1,7 +1,7 @@
 from .models import Module, Feedback, Notification
 from .serializers import ModuleSerializer, FeedbackSerializer, NotificationSerializer
 from .feedback import AppFeedback
-from accounts.permissions import HasScopedRole
+from accounts.permissions import AdminOrSuperuserOnly
 from accounts.rbac_utils import get_visible_module_ids
 from rest_framework import mixins, viewsets, status
 from rest_framework.decorators import action
@@ -13,13 +13,13 @@ from django.utils import timezone
 class ModuleViewSet(viewsets.ModelViewSet):
     queryset = Module.objects.all()
     serializer_class = ModuleSerializer
-    required_role = ("admin", "admins_group")
+    required_capability = 'platform:manage_apps'
 
     def get_permissions(self):
         from rest_framework.permissions import IsAuthenticated
         if self.request.method in ("GET", "HEAD", "OPTIONS"):
             return [IsAuthenticated()]
-        return [HasScopedRole()]
+        return [AdminOrSuperuserOnly()]
 
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):

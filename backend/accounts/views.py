@@ -14,7 +14,7 @@ from .serializers import (
     ScopedRoleSerializer, ScopedRoleCreateSerializer,
     RoleAssignmentAuditLogSerializer, PlatformAppConfigSerializer
 )
-from .permissions import HasScopedRole, CanManageScopedRoles
+from .permissions import AdminOrSuperuserOnly
 from .rbac_utils import user_is_global_admin, get_steward_org_unit_ids
 from .services import RoleResolutionService, AppManifestService
 from .constants import PROTECTED_GROUPS
@@ -229,8 +229,8 @@ class UserViewSet(viewsets.ModelViewSet):
     """
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [HasScopedRole]
-    required_role = "admin"  # Only users with 'admin' ScopedRole can manage users
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'platform:manage_users'
 
 class GroupViewSet(viewsets.ModelViewSet):
     """
@@ -241,8 +241,8 @@ class GroupViewSet(viewsets.ModelViewSet):
     """
     queryset = Group.objects.all().order_by('name')
     serializer_class = GroupSerializer
-    permission_classes = [HasScopedRole]
-    required_role = "admin"
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'platform:manage_groups'
 
     def destroy(self, request, *args, **kwargs):
         group = self.get_object()
@@ -312,7 +312,8 @@ class ScopedRoleViewSet(viewsets.ModelViewSet):
       assignments ONLY within their own org subtree, and NEVER global roles.
     """
     queryset = ScopedRole.objects.all()
-    permission_classes = [CanManageScopedRoles]
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'platform:manage_access'
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
@@ -399,8 +400,8 @@ class RoleAssignmentAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = RoleAssignmentAuditLog.objects.all().order_by('-timestamp')
     serializer_class = RoleAssignmentAuditLogSerializer
-    permission_classes = [HasScopedRole]
-    required_role = "audit"  # Only users with 'audit' ScopedRole can view audit logs
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'platform:view_audit'
 
 
 @api_view(['POST'])

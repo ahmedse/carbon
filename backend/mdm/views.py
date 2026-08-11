@@ -16,10 +16,10 @@ from .models import ReferenceSet, ReferenceValue, OrgUnit
 from .serializers import ReferenceSetSerializer, ReferenceValueSerializer, OrgUnitSerializer
 from .services import ReferenceSetService, OrgUnitService
 from .permissions import CanManageReferenceValues
-from accounts.permissions import ReadAnyWriteGlobalAdmin
+from accounts.permissions import ReadAnyWriteAdmin
 from accounts.rbac_utils import user_has_global_role
 from accounts.constants import ADMINS_GROUP
-from catalog.permissions import AdminOrSuperuserOnly
+from accounts.capabilities import has_capability, MDM_MANAGE
 from accounts.models import ScopedRole
 
 
@@ -39,6 +39,10 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
     """
     serializer_class = ReferenceSetSerializer
     permission_classes = [IsAuthenticated]
+    # CBAC: declared for DoD visibility; the actual write gate is the
+    # steward/owner check in _can_write_set (layer-2), which ORs the
+    # mdm:manage capability (layer-1) with the owner check.
+    required_write_capability = 'mdm:manage'
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'created_at']
@@ -78,11 +82,13 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
         return qs.filter(is_active=True)
 
     def _can_write_set(self, obj):
-        """True if the request user may edit obj (steward, staff, or global admin)."""
+        """True if the request user may edit obj (steward, staff, global admin, or mdm:manage holder)."""
         user = self.request.user
         if user.is_superuser or user.is_staff:
             return True
         if user_has_global_role(user, [ADMINS_GROUP]):
+            return True
+        if has_capability(user, MDM_MANAGE.key):
             return True
         return obj.steward_id == user.id
 
@@ -269,7 +275,10 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
 class ReferenceValueViewSet(viewsets.ModelViewSet):
     serializer_class = ReferenceValueSerializer
     # Stewards of the owning set may CRUD their values; admins/staff may too.
+    # CBAC: the owner/steward check in CanManageReferenceValues ORs the
+    # mdm:manage capability (see mdm/permissions.py).
     permission_classes = [CanManageReferenceValues]
+    required_write_capability = 'mdm:manage'
 
     @swagger_auto_schema(
         operation_description='Create multiple reference values atomically for bulk import workflows.',
@@ -380,7 +389,8 @@ class BindFieldView(APIView):
       {"data_fields": [1,2,3], "reference_set": 5}
       {"data_fields": [1,2], "reference_set": null, "force": true}
     """
-    permission_classes = [ReadAnyWriteGlobalAdmin]
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'mdm:manage'
 
     @swagger_auto_schema(
         operation_description='Bind or unbind one or many data fields to a reference set.',
@@ -442,7 +452,8 @@ class BindFieldView(APIView):
 class FieldOptionsView(APIView):
     """GET /mdm/field-options/?data_field=<id> -> ACTIVE values of the set bound
     to this field (empty list if the field is not bound). Read: any authenticated user."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'mdm:view'
 
     def get(self, request):
         field_id = request.query_params.get('data_field')
@@ -478,7 +489,8 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
     - GET    /mdm/org-units/{id}/ancestors/ Get ancestors (path to root)
     """
     serializer_class = OrgUnitSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'platform:manage_org_units'
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'code', 'description']
     ordering_fields = ['name', 'created_at']

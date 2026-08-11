@@ -21,7 +21,7 @@ from .serializers import (
     FreshnessCheckSerializer, SchemaSnapshotSerializer, SchemaChangeSerializer,
     RuleTagSerializer, RuleFieldAssignmentSerializer,
 )
-from accounts.permissions import ReadAnyWriteGlobalAdmin, ReadScopedWriteAdmin, AdminOrSuperuserOnly
+from accounts.permissions import ReadAnyWriteAdmin, AdminOrSuperuserOnly
 from accounts.rbac_utils import get_allowed_org_unit_ids, user_has_global_role, get_allowed_module_ids
 from accounts.models import ScopedRole
 from .services import profile_table, run_dq, run_single_rule, bulk_profile
@@ -68,7 +68,8 @@ def _check_rule_access(user, rule):
 
 class FieldProfileViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = FieldProfileSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['data_field__name']
     ordering_fields = ['profiled_at', 'completeness_pct']
@@ -99,7 +100,8 @@ class FieldProfileViewSet(viewsets.ReadOnlyModelViewSet):
 
 class TableProfileViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TableProfileSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['data_table__name']
     ordering_fields = ['profiled_at', 'completeness_pct']
@@ -131,7 +133,8 @@ class TableProfileViewSet(viewsets.ReadOnlyModelViewSet):
 
 class DQRuleViewSet(viewsets.ModelViewSet):
     serializer_class = DQRuleSerializer
-    permission_classes = [IsAuthenticated, ReadAnyWriteGlobalAdmin]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:manage_rules'
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description', 'rule_type']
     ordering_fields = ['created_at', 'name', 'severity', 'rule_level']
@@ -342,7 +345,8 @@ class DQRuleViewSet(viewsets.ModelViewSet):
 
 class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DQResultSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['run_at', 'score', 'passed']
     ordering = ['-run_at']
@@ -437,6 +441,7 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
 class ProfileTriggerView(APIView):
     """POST /dq/profile/ — Profile a single table."""
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'dq:manage_rules'
 
     @swagger_auto_schema(
         operation_description=(
@@ -591,6 +596,7 @@ class ProfileTriggerView(APIView):
 class BulkProfileView(APIView):
     """POST /dq/profile/bulk/ — Profile multiple tables."""
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'dq:manage_rules'
 
     @swagger_auto_schema(
         operation_description=(
@@ -636,6 +642,7 @@ class BulkProfileView(APIView):
 class DQRunView(APIView):
     """POST /dq/run/ — Run a single rule (rule_id) or all rules for a table (data_table_id)."""
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'dq:manage_rules'
 
     @swagger_auto_schema(
         operation_description=(
@@ -697,7 +704,8 @@ class DQRunView(APIView):
 
 class DQMetricsView(APIView):
     """GET /carbon-api/dq/metrics/ - Org-scoped DQ summary"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
 
     @swagger_auto_schema(
         operation_description=(
@@ -779,7 +787,8 @@ class DQMetricsView(APIView):
 
 class TableDQMetricsView(APIView):
     """GET /carbon-api/dq/metrics/table/{tableId}/ - Table-level DQ metrics"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
 
     @swagger_auto_schema(
         operation_description=(
@@ -841,7 +850,8 @@ class TableDQMetricsView(APIView):
 
 class FieldDQMetricsView(APIView):
     """GET /carbon-api/dq/metrics/field/{fieldId}/ - Field-level DQ metrics"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
 
     @swagger_auto_schema(
         operation_description=(
@@ -879,6 +889,7 @@ class FieldDQMetricsView(APIView):
 class RunDQValidationView(APIView):
     """POST /carbon-api/dq/run-validation/ - Trigger DQ check for table (legacy alias)."""
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'dq:manage_rules'
 
     @swagger_auto_schema(
         operation_description=(
@@ -922,6 +933,7 @@ class RunDQValidationView(APIView):
 class DQSuggestView(APIView):
     """POST /carbon-api/dq/suggest/ — Get AI-suggested DQ rules for a table."""
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'dq:manage_rules'
 
     @swagger_auto_schema(
         operation_description=(
@@ -992,7 +1004,8 @@ class DQSuggestView(APIView):
 
 class FreshnessCheckViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = FreshnessCheckSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['checked_at', 'is_fresh']
     ordering = ['-checked_at']
@@ -1019,7 +1032,8 @@ class FreshnessCheckViewSet(viewsets.ReadOnlyModelViewSet):
 
 class SchemaSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = SchemaSnapshotSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['snapshot_at', 'row_count']
     ordering = ['-snapshot_at']
@@ -1044,7 +1058,8 @@ class SchemaSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
 
 class SchemaChangeViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = SchemaChangeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['detected_at', 'change_type']
     ordering = ['-detected_at']
@@ -1075,7 +1090,8 @@ class RuleTagViewSet(viewsets.ModelViewSet):
     """Full CRUD for rule categorization tags."""
     queryset = RuleTag.objects.all()
     serializer_class = RuleTagSerializer
-    permission_classes = [IsAuthenticated, ReadAnyWriteGlobalAdmin]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:manage_rules'
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name']
     ordering_fields = ['name']
@@ -1089,7 +1105,8 @@ class RuleFieldAssignmentViewSet(viewsets.ModelViewSet):
     """
     queryset = RuleFieldAssignment.objects.select_related('data_table__module', 'data_field')
     serializer_class = RuleFieldAssignmentSerializer
-    permission_classes = [IsAuthenticated, ReadAnyWriteGlobalAdmin]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:manage_rules'
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['rule__name', 'data_field__name', 'data_table__name']
     ordering_fields = ['data_table__name', 'data_field__name']
@@ -1113,7 +1130,8 @@ class GateCheckView(APIView):
     Evaluates all gate-eligible, on_write enabled rules for a table
     against the provided rows. No persistence. Returns verdicts.
     """
-    permission_classes = [IsAuthenticated, ReadAnyWriteGlobalAdmin]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:manage_rules'
 
     @swagger_auto_schema(
         operation_description='Evaluate DQ gate rules against raw row data.',

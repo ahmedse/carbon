@@ -10,6 +10,7 @@ from dq.serializers import DQProfileConfigSerializer
 class DQProfileConfigView(APIView):
     """Singleton — GET returns the config, PUT updates it."""
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'platform:admin'
 
     def get(self, request):
         config, _ = DQProfileConfig.objects.get_or_create()

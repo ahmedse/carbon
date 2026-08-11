@@ -18,6 +18,10 @@ class EvidenceViewSet(viewsets.ModelViewSet):
     
     serializer_class = EvidenceSerializer
     permission_classes = [IsAuthenticated, IsEvidenceOwnerOrAdmin]
+    # CBAC: declared for DoD visibility; the actual write gate is the
+    # owner/module check in IsEvidenceOwnerOrAdmin (layer-2), which ORs
+    # the evidence:manage capability (layer-1) with the owner check.
+    required_write_capability = 'evidence:manage'
     filterset_fields = ['data_row', 'is_deleted', 'uploaded_by']
     search_fields = ['original_filename']
     ordering = ['-uploaded_at']

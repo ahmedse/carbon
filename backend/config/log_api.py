@@ -24,6 +24,7 @@ class LogViewerAPIView(APIView):
         page_size (int): Entries per page (default 50, max 500)
     """
     permission_classes = [IsAuthenticated, AdminOrSuperuserOnly]
+    required_capability = 'platform:view_audit'
 
     def get(self, request):
         log_dir = os.path.join(

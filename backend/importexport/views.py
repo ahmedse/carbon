@@ -11,8 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import ExportProject, ImportJob, ExportJob
 from .serializers import ExportProjectSerializer, ImportJobSerializer, ExportJobSerializer
 from .services import ImportService, ExportService
-from accounts.permissions import ReadAnyWriteGlobalAdmin
-from catalog.permissions import AdminOrSuperuserOnly
+from accounts.permissions import ReadAnyWriteAdmin, AdminOrSuperuserOnly
 from core.feedback import AppFeedback
 from catalog.audit_utils import emit_governance_event
 
@@ -26,6 +25,7 @@ class ExportProjectViewSet(viewsets.ModelViewSet):
     queryset = ExportProject.objects.select_related('data_table', 'owner').order_by('-updated_at')
     serializer_class = ExportProjectSerializer
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'importexport:manage'
 
     @action(detail=True, methods=['post'])
     def run(self, request, pk=None):
@@ -74,11 +74,12 @@ class ImportJobViewSet(viewsets.ModelViewSet):
     queryset = ImportJob.objects.select_related('data_table', 'source', 'user').order_by('-created_at')
     serializer_class = ImportJobSerializer
     permission_classes = [AdminOrSuperuserOnly]
+    required_capability = 'importexport:manage'
     parser_classes = (MultiPartParser, FormParser)
 
     def get_permissions(self):
         if self.action == 'create':
-            return [ReadAnyWriteGlobalAdmin()]
+            return [ReadAnyWriteAdmin()]
         return super().get_permissions()
 
     def create(self, request, *args, **kwargs):
@@ -140,7 +141,8 @@ class ExportJobViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = ExportJob.objects.select_related('data_table', 'export_project', 'user').order_by('-created_at')
     serializer_class = ExportJobSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'importexport:view'
 
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):

@@ -5,6 +5,7 @@ from accounts.models import ScopedRole
 from accounts.permissions import ReadAnyWriteAdmin  # canonical
 from accounts.rbac_utils import user_has_global_role
 from accounts.constants import ADMINS_GROUP
+from accounts.capabilities import has_capability, MDM_MANAGE
 
 __all__ = [
     'ReadAnyWriteAdmin', 'IsReferenceSetSteward', 'IsOrgUnitAdmin',
@@ -42,6 +43,10 @@ class CanManageReferenceValues(BasePermission):
             return True
         if _is_admin(user):
             return True
+        # CBAC layer-1: an mdm:manage capability holder (e.g. mdm_lead) may
+        # manage values platform-wide; the owner/steward check remains layer-2.
+        if has_capability(user, MDM_MANAGE.key):
+            return True
 
         # For writes we must resolve the owning set: from the payload for
         # create, or from the object for update/delete (checked in
@@ -63,6 +68,8 @@ class CanManageReferenceValues(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         if _is_admin(user):
+            return True
+        if has_capability(user, MDM_MANAGE.key):
             return True
         return obj.reference_set.steward_id == user.id
 

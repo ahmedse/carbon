@@ -1,6 +1,7 @@
 # File: backend/evidence/permissions.py
 from rest_framework import permissions
 from accounts.rbac_utils import get_allowed_module_ids, user_is_global_admin
+from accounts.capabilities import has_capability, EVIDENCE_MANAGE
 from dataschema.models import DataRow
 
 
@@ -9,6 +10,7 @@ class IsEvidenceOwnerOrAdmin(permissions.BasePermission):
     Permission to access evidence:
     - User can access evidence for rows in their assigned modules
     - Admins can access all evidence
+    - CBAC: evidence:manage capability holders can access all evidence (layer-1)
     """
     
     def has_permission(self, request, view):
@@ -21,6 +23,10 @@ class IsEvidenceOwnerOrAdmin(permissions.BasePermission):
         
         # Admins can access all evidence
         if user_is_global_admin(user):
+            return True
+        
+        # CBAC layer-1: evidence:manage holders can access all evidence
+        if has_capability(user, EVIDENCE_MANAGE.key):
             return True
         
         # Users can access evidence for rows in their assigned modules

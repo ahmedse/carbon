@@ -1,11 +1,12 @@
 # File: dataschema/views.py
 """
-ViewSets for dataschema with role-based, scoped RBAC.
+ViewSets for dataschema with CBAC + org-scoped access.
 Roles:
     - admin: Everything in the project (schema+data, all modules).
     - audit: Everything for data rows in all modules of the project (no schema).
     - dataowner: Everything for data rows, but ONLY in allowed modules (no schema).
-RBAC enforced via HasScopedRole from accounts app.
+Access: reads are org-scoped (module/org-unit subtree); writes are gated by the
+view's declared required_write_capability (see dataschema/permissions.py).
 """
 
 from rest_framework import viewsets, status
@@ -19,9 +20,9 @@ from .serializers import (
     DataFieldSerializer, DataRowSerializer,
     SchemaChangeLogSerializer, TableRelationSerializer
 )
-from accounts.permissions import HasScopedRole, ReadScopedWriteAdmin
 from accounts.rbac_utils import get_allowed_module_ids, user_has_global_role, get_visible_module_ids, VISIBILITY_ROLES
 from accounts.models import ScopedRole
+from .permissions import ScopedReadCapabilityWrite
 from core.models import Module
 from core.feedback import AppFeedback
 from .services import BulkImportService
@@ -47,10 +48,13 @@ def _log_schema_change(user, action, *, data_table=None, data_field=None,
 
 class ScopedViewSet(viewsets.ModelViewSet):
     """
-    Base ViewSet for RBAC: sets self.project and self.module for HasScopedRole.
-    Subclasses must set required_role or override get_required_role().
+    Base ViewSet for CBAC + org-scoping: sets self.project and self.module for
+    the read-scope resolution. Subclasses must set required_role or override
+    get_required_role(). Writes are gated by the declared
+    required_write_capability (ScopedReadCapabilityWrite).
     """
-    permission_classes = [IsAuthenticated, HasScopedRole]
+    permission_classes = [IsAuthenticated, ScopedReadCapabilityWrite]
+    required_write_capability = 'dataschema:view'
     required_role = None  # override or use get_required_role
 
     def get_permissions(self):
@@ -74,7 +78,8 @@ class DataTableViewSet(ScopedViewSet):
     """
     queryset = DataTable.objects.all()
     serializer_class = DataTableSerializer
-    permission_classes = [IsAuthenticated, ReadScopedWriteAdmin]
+    permission_classes = [IsAuthenticated, ScopedReadCapabilityWrite]
+    required_write_capability = 'dataschema:manage'
     required_role = ("admin", "admins_group", "dataowners_group", "auditors_group", "viewers_group", "analysts_group")
 
     def get_queryset(self):
@@ -190,7 +195,8 @@ class DataFieldViewSet(ScopedViewSet):
     """
     queryset = DataField.objects.all()
     serializer_class = DataFieldSerializer
-    permission_classes = [IsAuthenticated, ReadScopedWriteAdmin]
+    permission_classes = [IsAuthenticated, ScopedReadCapabilityWrite]
+    required_write_capability = 'dataschema:manage'
     required_role = ("admin", "admins_group", "auditors_group", "dataowners_group", "viewers_group", "analysts_group")
 
     def get_queryset(self):
@@ -276,6 +282,9 @@ class DataRowViewSet(ScopedViewSet):
     """
     queryset = DataRow.objects.all()
     serializer_class = DataRowSerializer
+    # CBAC DECISION (flagged to MA): data-row WRITES require carbon:enter_data;
+    # reads stay org-scoped via the base ScopedReadCapabilityWrite (dataschema:view).
+    required_write_capability = 'carbon:enter_data'
 
     def get_required_role(self):
         return ["admin", "admins_group", "auditors_group", "dataowners_group", "viewers_group", "analysts_group"]
@@ -630,7 +639,8 @@ class TableRelationViewSet(ScopedViewSet):
     """
     queryset = TableRelation.objects.select_related('from_table', 'from_field', 'to_table', 'to_field', 'created_by').order_by('-created_at')
     serializer_class = TableRelationSerializer
-    permission_classes = [IsAuthenticated, ReadScopedWriteAdmin]
+    permission_classes = [IsAuthenticated, ScopedReadCapabilityWrite]
+    required_write_capability = 'dataschema:manage'
     required_role = ("admin", "admins_group", "dataowners_group")
 
     def get_queryset(self):

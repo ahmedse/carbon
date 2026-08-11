@@ -55,6 +55,8 @@ from accounts.capabilities import (
     IMPORTEXPORT_MANAGE,
     DATASCHEMA_VIEW,
     DATASCHEMA_MANAGE,
+    EVIDENCE_VIEW,
+    EVIDENCE_MANAGE,
     PLATFORM_ADMIN,
     PLATFORM_MANAGE_USERS,
     PLATFORM_MANAGE_GROUPS,
@@ -414,6 +416,31 @@ class TestGroupCapabilityMappings:
                     continue
                 assert cap in ALL_CAPABILITIES, \
                     f"Group '{group_name}' references unknown capability '{cap}'"
+
+    # ── DD-2 (TASK-CBAC-TRUST-CORE-SWAP): data groups get trust-core view caps ──
+    @pytest.mark.parametrize("group_name", [
+        "dataowners_group", "analysts_group", "viewers_group", "auditors_group",
+    ])
+    def test_data_groups_have_trust_core_view_caps(self, group_name):
+        """Every data group can view all trust-core apps."""
+        caps = GROUP_CAPABILITIES[group_name]
+        for view_cap in (
+            CATALOG_VIEW, DQ_VIEW, MDM_VIEW,
+            CONNECTIONS_VIEW, IMPORTEXPORT_VIEW, DATASCHEMA_VIEW, EVIDENCE_VIEW,
+        ):
+            assert view_cap.key in caps, f"{group_name} missing {view_cap.key}"
+
+    # ── DD-3 (TASK-CBAC-TRUST-CORE-SWAP): evidence capabilities ──
+    def test_evidence_capabilities_exist(self):
+        """evidence:view + evidence:manage registered; manage implies view."""
+        assert EVIDENCE_VIEW.key in ALL_CAPABILITIES
+        assert EVIDENCE_MANAGE.key in ALL_CAPABILITIES
+        assert EVIDENCE_VIEW.key in IMPLIES[EVIDENCE_MANAGE.key]
+
+    def test_data_groups_do_not_get_evidence_manage(self):
+        """Only admin/wildcard groups manage evidence; data groups view-only."""
+        for group_name in ("dataowners_group", "analysts_group", "viewers_group", "auditors_group"):
+            assert EVIDENCE_MANAGE.key not in GROUP_CAPABILITIES[group_name]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1123,6 +1150,71 @@ class TestEdgeCases:
         ScopedRole.objects.create(user=u, group=group, org_unit=org, is_active=True)
         caps = get_user_capabilities(u)
         assert CARBON_MANAGE_EMISSION_FACTORS.key in caps
+
+    # ── DD-1 (TASK-CBAC-TRUST-CORE-SWAP): org-scoped wildcard → read-only ──
+    def test_org_scoped_admins_group_is_read_only(self):
+        """Org-scoped admins_group resolves to view-only caps — never a global writer."""
+        from mdm.models import OrgUnit
+        u = User.objects.create_user(username="orgadmin", password="test")
+        u.save()
+        org = OrgUnit.objects.create(name="Scoped Org", slug="scoped-org")
+        group, _ = Group.objects.get_or_create(name="admins_group")
+        ScopedRole.objects.create(user=u, group=group, org_unit=org, is_active=True)
+        caps = get_user_capabilities(u)
+        # Read-only view caps present
+        assert CATALOG_VIEW.key in caps
+        assert DQ_VIEW.key in caps
+        assert MDM_VIEW.key in caps
+        assert EVIDENCE_VIEW.key in caps
+        # NO write/manage/admin capabilities
+        assert "*" not in caps
+        assert PLATFORM_MANAGE_USERS.key not in caps
+        assert PLATFORM_MANAGE_ACCESS.key not in caps
+        assert CARBON_ENTER_DATA.key not in caps
+        assert CARBON_MANAGE_EMISSION_FACTORS.key not in caps
+        assert DQ_MANAGE_RULES.key not in caps
+        assert MDM_MANAGE.key not in caps
+        assert EVIDENCE_MANAGE.key not in caps
+
+    def test_org_scoped_admins_group_keeps_view_caps(self):
+        """Org-scoped admins_group still resolves view_* caps for scoped reads."""
+        from mdm.models import OrgUnit
+        u = User.objects.create_user(username="orgadmin2", password="test")
+        u.save()
+        org = OrgUnit.objects.create(name="Scoped Org 2", slug="scoped-org-2")
+        group, _ = Group.objects.get_or_create(name="admins_group")
+        ScopedRole.objects.create(user=u, group=group, org_unit=org, is_active=True)
+        caps = get_user_capabilities(u)
+        assert CARBON_VIEW_CONSOLE.key in caps
+        assert PLATFORM_VIEW_AUDIT.key in caps
+        assert CATALOG_VIEW_GOVERNANCE.key in caps
+
+    def test_global_admins_group_is_full_wildcard(self):
+        """Global (org=None) admins_group still resolves to ALL capabilities."""
+        u = User.objects.create_user(username="globaladmin", password="test")
+        u.save()
+        group, _ = Group.objects.get_or_create(name="admins_group")
+        ScopedRole.objects.create(user=u, group=group, is_active=True)  # org_unit=None
+        caps = get_user_capabilities(u)
+        assert "*" in caps or len(caps) == len(ALL_CAPABILITIES), \
+            "Global admin must resolve to full capability set"
+        assert PLATFORM_MANAGE_USERS.key in caps
+        assert EVIDENCE_MANAGE.key in caps
+        assert has_capability(u, PLATFORM_MANAGE_USERS.key)
+        assert has_capability(u, EVIDENCE_MANAGE.key)
+
+    def test_org_scoped_data_owner_keeps_data_caps(self):
+        """Org-scoped dataowners_group keeps its declared data caps (DD-2 unaffected by DD-1)."""
+        from mdm.models import OrgUnit
+        u = User.objects.create_user(username="orgdowner", password="test")
+        u.save()
+        org = OrgUnit.objects.create(name="Scoped Org 3", slug="scoped-org-3")
+        group, _ = Group.objects.get_or_create(name="dataowners_group")
+        ScopedRole.objects.create(user=u, group=group, org_unit=org, is_active=True)
+        caps = get_user_capabilities(u)
+        assert CARBON_ENTER_DATA.key in caps
+        assert CATALOG_VIEW.key in caps
+        assert DQ_VIEW.key in caps
 
     def test_module_scoped_role_still_gives_caps(self):
         """ScopedRole with module set should still grant capabilities."""

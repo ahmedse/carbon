@@ -399,6 +399,26 @@ DATASCHEMA_MANAGE = Capability(
     category="admin",
 )
 
+# ── Evidence capabilities ──────────────────────────────────────────
+
+EVIDENCE_VIEW = Capability(
+    key="evidence:view",
+    domain="evidence",
+    action="view",
+    label="View Evidence",
+    description="View evidence attachments and their metadata",
+    category="data",
+)
+
+EVIDENCE_MANAGE = Capability(
+    key="evidence:manage",
+    domain="evidence",
+    action="manage",
+    label="Manage Evidence",
+    description="Upload, update, and delete evidence attachments",
+    category="data",
+)
+
 
 # ═══════════════════════════════════════════════════════════════════
 # ALL CAPABILITIES — master registry
@@ -451,6 +471,9 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     # Dataschema
     DATASCHEMA_VIEW.key: DATASCHEMA_VIEW,
     DATASCHEMA_MANAGE.key: DATASCHEMA_MANAGE,
+    # Evidence
+    EVIDENCE_VIEW.key: EVIDENCE_VIEW,
+    EVIDENCE_MANAGE.key: EVIDENCE_MANAGE,
 }
 
 
@@ -514,6 +537,9 @@ IMPLIES: Dict[str, Set[str]] = {
 
     # ── Dataschema admin → view ──
     DATASCHEMA_MANAGE.key: {DATASCHEMA_VIEW.key},
+
+    # ── Evidence admin → view ──
+    EVIDENCE_MANAGE.key: {EVIDENCE_VIEW.key},
 }
 
 
@@ -570,6 +596,14 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         CARBON_VIEW_VERIFICATION.key,
         CARBON_VIEW_CONSOLE.key,
         CARBON_VIEW_DASHBOARD.key,
+        # Trust-core view capabilities (DD-2)
+        CATALOG_VIEW.key,
+        DQ_VIEW.key,
+        MDM_VIEW.key,
+        CONNECTIONS_VIEW.key,
+        IMPORTEXPORT_VIEW.key,
+        DATASCHEMA_VIEW.key,
+        EVIDENCE_VIEW.key,
     },
 
     # ── Analysts (cross-org read + reporting) ──
@@ -582,6 +616,14 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         CARBON_VIEW_CONSOLE.key,
         CARBON_VIEW_DASHBOARD.key,
         CARBON_VIEW_MY_DATA.key,
+        # Trust-core view capabilities (DD-2)
+        CATALOG_VIEW.key,
+        DQ_VIEW.key,
+        MDM_VIEW.key,
+        CONNECTIONS_VIEW.key,
+        IMPORTEXPORT_VIEW.key,
+        DATASCHEMA_VIEW.key,
+        EVIDENCE_VIEW.key,
     },
 
     # ── Viewers (org-scoped read-only) ──
@@ -590,6 +632,14 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         CARBON_VIEW_CONSOLE.key,
         CARBON_VIEW_DASHBOARD.key,
         CARBON_VIEW_MY_DATA.key,
+        # Trust-core view capabilities (DD-2)
+        CATALOG_VIEW.key,
+        DQ_VIEW.key,
+        MDM_VIEW.key,
+        CONNECTIONS_VIEW.key,
+        IMPORTEXPORT_VIEW.key,
+        DATASCHEMA_VIEW.key,
+        EVIDENCE_VIEW.key,
     },
 
     # ── Auditors (org-scoped read + audit) ──
@@ -600,6 +650,14 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         CARBON_VIEW_DASHBOARD.key,
         CARBON_VIEW_MY_DATA.key,
         CATALOG_VIEW_GOVERNANCE.key,
+        # Trust-core view capabilities (DD-2)
+        CATALOG_VIEW.key,
+        DQ_VIEW.key,
+        MDM_VIEW.key,
+        CONNECTIONS_VIEW.key,
+        IMPORTEXPORT_VIEW.key,
+        DATASCHEMA_VIEW.key,
+        EVIDENCE_VIEW.key,
     },
 }
 
@@ -646,20 +704,37 @@ def get_user_capabilities(user) -> FrozenSet[str]:
         return caps
 
     from accounts.models import ScopedRole
-    group_names = set(
-        ScopedRole.objects.filter(user=user, is_active=True)
-        .values_list("group__name", flat=True)
-        .distinct()
-    )
+
+    # DD-1 (TASK-CBAC-TRUST-CORE-SWAP): scope-aware wildcard resolution.
+    # Global ScopedRoles (org_unit=None AND module=None) carry their full
+    # group capabilities. Org- or module-scoped roles grant READ-ONLY view
+    # capabilities only — a wildcard ("*") group scoped to an org unit must
+    # NOT turn the member into a platform-wide writer.
+    roles = ScopedRole.objects.filter(user=user, is_active=True)
+    global_roles = roles.filter(org_unit__isnull=True, module__isnull=True)
+    scoped_roles = roles.exclude(org_unit__isnull=True, module__isnull=True)
 
     caps: Set[str] = set()
-    for group_name in group_names:
+    for group_name in global_roles.values_list("group__name", flat=True).distinct():
         group_caps = GROUP_CAPABILITIES.get(group_name, set())
         if "*" in group_caps:
-            # Wildcard group — grant ALL defined capabilities
+            # Global wildcard group — grant ALL defined capabilities
             caps = set(ALL_CAPABILITIES.keys())
             break
         caps.update(group_caps)
+
+    # Org/module-scoped roles: wildcard groups resolve to the READ-ONLY
+    # view capabilities (action == "view" or action startswith "view_").
+    if "*" not in caps:
+        for group_name in scoped_roles.values_list("group__name", flat=True).distinct():
+            group_caps = GROUP_CAPABILITIES.get(group_name, set())
+            if "*" in group_caps:
+                caps.update(
+                    cap.key for cap in ALL_CAPABILITIES.values()
+                    if cap.action == "view" or cap.action.startswith("view_")
+                )
+                continue
+            caps.update(group_caps)
 
     # Expand inheritance
     expanded = _expand_capabilities(caps)

@@ -15,6 +15,7 @@ from accounts.serializers import (
 class _ConfigMixin:
     """Shared GET/PUT for singleton config models."""
     permission_classes = [IsAuthenticated, AdminOrSuperuserOnly]
+    required_capability = 'platform:manage_apps'
 
     def get(self, request):
         obj, _ = self.model.objects.get_or_create()
