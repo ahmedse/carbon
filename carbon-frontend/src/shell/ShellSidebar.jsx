@@ -88,8 +88,7 @@ function getSidebarItems(studioId) {
         { type: 'group', label: 'Governance' },
         { label: 'Metadata', path: '/catalog/metadata', icon: EditIcon },
         { label: 'Asset Profiles', path: '/catalog/assets', icon: AssignmentIcon },
-        { label: 'DQ Dashboard', path: '/catalog/dq-dashboard', icon: RuleIcon },
-        { label: 'DQ Rules', path: '/catalog/dq-rules', icon: HistoryIcon },
+        { label: 'DQ Workspace', path: '/dq', icon: RuleIcon },
         { label: 'Governance Policies', path: '/catalog/policies', icon: RuleIcon },
         { label: 'Governance Audit', path: '/catalog/governance', icon: VerifiedUserIcon },
         { type: 'divider' },
@@ -268,8 +267,8 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
     return pruned;
   }, [items]);
 
-  // Compute org unit and scope summary for carbon context header
-  const { userOrgUnit, moduleSummary } = useMemo(() => {
+  // Compute org unit for carbon context header
+  const { userOrgUnit } = useMemo(() => {
     if (activeStudio !== 'carbon') return {};
     const modules = context?.modules || [];
     const orgName = modules.find(m => m.org_unit_name)?.org_unit_name || null;

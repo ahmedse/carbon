@@ -1,4 +1,4 @@
-# core/tests/test_core_rbac.py
+# core/tests/test_core_cbac.py
 
 import pytest
 from django.urls import reverse

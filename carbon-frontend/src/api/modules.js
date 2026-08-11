@@ -42,3 +42,33 @@ export function updateModule(token, id, data) {
 export function deleteModule(token, id) {
   return apiFetch(`${API_ROUTES.modules}${id}/`, { method: "DELETE", token });
 }
+
+/**
+ * Fetch a single Data Product (Module) by id.
+ * @param {string} token
+ * @param {string|number} id
+ * @returns {Promise<any>}
+ */
+export function fetchModule(token, id) {
+  return apiFetch(`${API_ROUTES.modules}${id}/`, { token });
+}
+
+/**
+ * Fetch aggregate DQ summary for a Data Product's tables.
+ * @param {string} token
+ * @param {string|number} id
+ * @returns {Promise<{total:number, passing:number, warning:number, failing:number, unknown:number, avg_score:number|null}>}
+ */
+export function fetchModuleQualitySummary(token, id) {
+  return apiFetch(`${API_ROUTES.modules}${id}/quality_summary/`, { token });
+}
+
+/**
+ * Fetch governance audit trail for a Data Product and its tables.
+ * @param {string} token
+ * @param {string|number} id
+ * @returns {Promise<Array>}
+ */
+export function fetchModuleAuditTrail(token, id) {
+  return apiFetch(`${API_ROUTES.modules}${id}/audit_trail/`, { token });
+}

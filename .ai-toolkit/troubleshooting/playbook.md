@@ -189,3 +189,66 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice: when triaging "failed to fetch dynamically imported module", verify in order — (1) file exists + lints clean, (2) `curl -s -o /dev/null -w "%{http_code}" <module URL>` returns 200 with valid JS, (3) navigate to the route in a fresh tab. Only if the module 404s/500s persistently is it a real code bug.
 - Regression guard: N/A (environmental) — checked live: `/carbon/admin/apps` renders all 7 registered apps after refresh.
 - First seen: 2026-08-09
+
+### PB-17 — OrgUnit write path not RBAC-scoped: scoped data owner can CREATE org units (QA-F3)
+- Symptom: scoped user `alamein.transport` (visible orgs = only Transportation) POSTs `/carbon-api/mdm/org-units/` with `parent: 1` (AAST, admin territory) → **HTTP 201 created**. PATCH/DELETE out-of-scope returned 404 (safe) — only CREATE leaked. Docstring on `OrgUnitViewSet` claims "Only admin can write".
+- Layer: backend / security (RBAC)
+- Root cause: `OrgUnitViewSet` (`backend/mdm/views.py`) declared `permission_classes = [IsAuthenticated]` and had **no write-time admin/scope check** — `perform_create` accepted the client-supplied `parent` FK unchecked. Read scoping worked (`get_queryset` → `get_visible_org_units`), but write authorization was entirely absent.
+- Fix: switched `OrgUnitViewSet.permission_classes` to the existing `ReadAnyWriteGlobalAdmin` (`accounts/permissions.py`, already used by `BindFieldView` in the same file) — any authenticated user reads; only superusers or holders of a GLOBAL `admins_group` role (org_unit=None) write. Org-scoped admins become read-only (matches the documented "Only admin can write" contract).
+- Design question (for Master): if org-scoped admins should someday write within their own subtree, that needs a new scoped-write permission class — deliberately NOT invented here (reuse over invent; minimal fix).
+- Regression guard: `backend/mdm/tests/test_org_units.py::OrgUnitRbacScopingTestCase::test_scoped_user_cannot_create_org_unit` (out-of-scope parent → 403) + `test_scoped_user_cannot_write_in_own_subtree` (in-scope PATCH → 403). Red: 201/200 before fix; green: 403 after. Live: curl as `alamein.transport` → HTTP 403; admin POST → 201.
+- First seen: 2026-08-11 (QA-F3, TASK-RESULTS-QA-BUGQUEUE-2026-08-11)
+
+### PB-18 — verify.sh tests never runs tests: empty-string label `ValueError: Empty module name` (QA-F1)
+- Symptom: `./.ai-toolkit/scripts/verify.sh tests` → `✗ backend tests` + traceback `ValueError: Empty module name` (Django `import_module('')`). Tests NEVER ran through the gate; `manage.py test ""` reproduces it, `manage.py test` (no args) runs the full suite OK.
+- Layer: tooling (verify.sh)
+- Root cause: `verify.sh` line `"$PY" manage.py test "${TEST_ARGS:-}"` — with `TEST_ARGS` unset the quoted expansion still passes an **empty-string argument**, which Django's test runner rejects at discovery.
+- Fix: guarded the invocation — `if [ -n "${TEST_ARGS:-}" ]; then "$PY" manage.py test $TEST_ARGS; else "$PY" manage.py test; fi` (exit code captured in `rc`, same log-to-/tmp/vt.log + pass/fail structure).
+- Regression guard: `verify.sh tests` now prints `✓ backend tests (Ran 274 test)`; negative: `TEST_ARGS=mdm.tests.does_not_exist verify.sh tests` → `✗` + `GATE FAILED` + exit 1.
+- First seen: 2026-08-11 (QA-F1)
+
+### PB-19 — verify.sh is a FALSE GREEN: subshell `fail()` never propagates (QA-F2)
+- Symptom: `verify.sh tests` printed `✗ backend tests` AND THEN `GATE PASSED` (exit 0). Every prior gate green was untrustworthy — backend/frontend/tests failures were silently masked.
+- Layer: tooling (verify.sh)
+- Root cause: `verify_backend`, `verify_tests`, `verify_frontend` each ran their checks inside `( cd ... )` **subshells**; the `fail()` helper set `FAIL=1` inside the subshell, which never reaches the parent shell — the final `if [ "$FAIL" -eq 0 ]` always saw 0 → always "GATE PASSED".
+- Fix: hoisted the `cd` OUT of the subshells (function does `cd "$BACKEND_DIR"`, runs checks, then `cd "$ROOT"`), so `fail()` sets the parent's `FAIL` directly. Same output format, no rewrite.
+- Regression guard: negative self-test — `TEST_ARGS=mdm.tests.does_not_exist verify.sh tests` → `✗` + `GATE FAILED — fix before reporting done` + exit 1 (before: `GATE PASSED` exit 0). Also: `verify.sh full` now honestly reports `GATE FAILED` when pre-existing debt (MUI v5 Grid in DQHubPage.jsx, raw fetch in password pages, 4 print calls) is present.
+- First seen: 2026-08-11 (QA-F2)
+
+### PB-20 — Stale dev credentials: alamein.* users' passwords drifted from documented `Alamein_2026` (QA-F4)
+- Symptom: QA plan `plans/TASK-QA-ALAMEIN-VALIDATION.md` + `alamein-campus/README.md` + `ALAMEIN_TEST_JOURNEY.md` document `alamein.transport` / `Alamein_2026`; live `POST /carbon-api/token/` → 401 "No active account found" for BOTH documented passwords (`Alamein_2026`, `Transport_123`). `transport.officer` / `Transport_123` (from `seed_aastmt_org.py`) — user doesn't exist in dev DB (seed never run).
+- Layer: data / docs (dev environment)
+- Root cause: dev users were (re)seeded at some point with different passwords than the plans document; plans were never re-verified against the live DB.
+- Fix: reset all 5 existing `alamein.*` users to the documented dev password via shell (`u.set_password('Alamein_2026')`), verified with `u.check_password` AND live `POST /carbon-api/token/` → HTTP 200. Docs now match reality (no doc edit needed). Dev-only credential, matches project convention of documented dev passwords in seed scripts.
+- Regression guard: N/A (docs/data) — verified live: `alamein.transport` / `Alamein_2026` → HTTP 200 tokens.
+- First seen: 2026-08-11 (QA-F4)
+
+### PB-21 — Duplicate `TableProfile` rows break profile jobs: Django `update_or_create` raises `MultipleObjectsReturned` (DQ-CORE-P3)
+- Symptom: POST `/carbon-api/dq/jobs/` `{job_type: 'profile', data_table_id: 2}` → 201 but job `status: failed`, `error: "get() returned more than one TableProfile -- it returned 3!"`. Only the profile (and suggest) job types hit it — `run_dq`'s sync profile path never did because it tolerates/creates rows differently.
+- Layer: backend data integrity (dq)
+- Root cause: legacy runs (pre-`update_or_create` era) left 3 `TableProfile` rows for the same table. `TableProfile.objects.update_or_create(data_table=...)` internally calls `get()` on the lookup and raises `MultipleObjectsReturned` when duplicates exist, so the profile job failed every time on that table.
+- Fix: in `profile_table` (`dq/services.py`), delete stale duplicates BEFORE `update_or_create` — `stale_ids = filter(data_table=table).order_by('-profiled_at').values_list('id', flat=True)[1:]` → delete → then `update_or_create`. `_get_or_create_table_profile` already used `.first()` so it was unaffected.
+- Regression guard: `dq/tests/test_phase3_jobs.py::test_profile_job_survives_duplicate_table_profiles` (creates 2 extra rows, runs the profile job, asserts `status == 'done'` and count collapses to 1). Live-verified: the failing POST now returns `status: done, progress: 100` with a full field-profile result on the same table.
+- First seen: 2026-08-11 (TASK-DQ-CORE-P3-JOBS live API smoke)
+
+### PB-22 — Silent auto-pass on Pulse outage reverses to fail-visible; skipped results fire spurious `dq_violation` alerts (DQ-CORE-P4-PULSE)
+- Symptom A (old, removed): Pulse down during a DQ run → rule silently reported as PASSED (`passed=True`, score 100) — scores painted a false green. Symptom B (bug this phase): after introducing `status='skipped_unavailable'` / `passed=None`, the `DQResult` post_save receiver `notify_dq_violation` (`dq/signals.py`) used `if instance.passed: return` — a skipped result (`passed=None`) is falsy, so it did NOT return and FIRED a spurious `dq_violation` alert for every skipped row.
+- Layer: backend behavioral contract (dq) + notification signals
+- Root cause: Phase 3's nl_check degradation path treated "Pulse unreachable" as a pass (`passed=True`) instead of "unknown". The signal guard `if instance.passed:` conflated `None` (unknown/skipped) with `False` (real failure).
+- Fix: **fail-visible, not fail-open** (design decision #1, per TASK-DQ-CORE-P4-PULSE):
+  1. `DQResult.passed` is now nullable; `status` = `passed|failed|skipped_unavailable`; data migration `dq.0015` backfills existing rows (`passed=True→'passed'`, `False→'failed'`, `null→'skipped_unavailable'`).
+  2. Pulse unavailable → `DQResult(status='skipped_unavailable', passed=None, score=0)`; skipped rules excluded from the score denominator (`GET /dq/metrics/` gains `skipped_rules`; all-skipped → `overall_score: 0.0`, `status: 'unknown'`).
+  3. Engine `anomaly_detect` rules → `SKIPPED_UNAVAILABLE` sentinel (never fabricate a verdict); `run_dq` skips `nl_check`/`anomaly_detect` (job-only).
+  4. Suggest/anomaly jobs: Pulse unreachable → job `failed` with honest `error`; invalid suggestions quarantined to `job.result.invalid`; never fabricated rows.
+  5. Signal guard: `if instance.passed is not False: return` — only real failures (`passed=False`) fire `dq_violation`.
+- Regression guard: `dq/tests/test_phase4_pulse.py` — `P4FailVisibleTests` (skipped excluded from score, skipped result status, no spurious violation on `passed=None`, `volume_anomaly_pct` actually read) + updated `dq/tests/test_nl_check.py` (6 degradation tests now assert `passed is None`, `checked=0`, `score=0`). Live-verified: nl_check job with Pulse down → `DQResult(status='skipped_unavailable', passed=None)`; suggest/anomaly jobs with Pulse down → `status: failed` + honest error, zero fabricated rows.
+- First seen: 2026-08-11 (TASK-DQ-CORE-P4-PULSE — behavior reversal)
+
+### PB-23 — Frontend worker hand-rolls raw MUI `Table` markup where `PanelTable`/`CarbonDataGrid` exist in the registry (RULE 2 violation)
+- Symptom: DQ workspace pages (P5) rendered schema dumps and failure rows with raw `TableContainer`/`Table`/`TableHead`/`TableRow`/`TableCell` markup instead of the standard `PanelTable`; the page layout was hand-rolled `Box`+`Stack`+`Grid` instead of `PageContainer`/`PageHeader`. User (Master Architect) challenge: "why don't you use the standard UI and grid components in the system?!".
+- Layer: frontend (design-system compliance)
+- Root cause: the P5 dispatch prompt told the worker WHAT to build but did not embed the frontend-worker activation protocol (read `shared/design-system.md` + `shared/api-contract.md` + consult `registry/components.md` before writing). Worker skipped RULE 2 (Reuse Before Create — "never create CustomTable"). `registry/components.md` already indexed `PanelTable`, `CarbonDataGrid`, `PageContainer`, `PageHeader`, `StatCard`.
+- Fix: swapped both raw tables → `PanelTable` (schema dialog in `DQWorkspacePage.jsx`, failures drawer in `ResultsTab.jsx`), preserving monospace/truncation styling via `columns[].render` callbacks (PanelTable itself untouched). Grep gate: `grep -rn "TableContainer|<Table" src/pages/dq/` → zero (only `PanelTable.jsx` itself may contain raw markup).
+- Best practice note: EVERY worker dispatch MUST embed the role's activation protocol (read config → base-rules → design-system → api-contract → scan.sh + registry grep → task files → confirm "Ready as <Role>"). Registry-first is how multi-agent frontends avoid duplication. QA layer 1 should grep for raw `Table`/`Grid item xs=`/hex colors as a design-system conformance check.
+- Regression guard: `grep -rn "<Table\|TableContainer\|Grid item\|#\h*[0-9a-fA-F]{3,6}" carbon-frontend/src/ --include="*.jsx"` (design-system conformance); `npm run lint` (0 errors) + `npm run build`.
+- First seen: 2026-08-11 (TASK-DQ-CORE-P5-FRONTEND component audit)

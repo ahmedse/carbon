@@ -28,6 +28,9 @@ DIMENSION_CODES = {d[0] for d in DIMENSIONS}
 RULE_TYPES = [
     'not_null', 'unique', 'allowed_values', 'range', 'regex',
     'reference_integrity', 'threshold', 'nl_check',
+    # Phase 4 (TASK-DQ-CORE-P4-PULSE): business-level rule that declares the
+    # anomaly prompts fed to the anomaly.detect job payload. No field params.
+    'anomaly_detect',
 ]
 
 RULE_LEVELS = {'field', 'business'}
@@ -122,9 +125,9 @@ def validate_definition(d: Dict[str, Any]) -> List[Dict[str, str]]:
     enforcement = d.get('enforcement', {})
     if isinstance(enforcement, dict):
         on_write = enforcement.get('on_write')
-        if on_write is True and rule_type == 'nl_check':
+        if on_write is True and rule_type in ('nl_check', 'anomaly_detect'):
             errors.append({'field': 'enforcement.on_write', 'code': 'invalid_value',
-                            'message': 'enforcement.on_write cannot be true for nl_check rules'})
+                            'message': f'enforcement.on_write cannot be true for {rule_type} rules'})
     # enforcement is optional; missing or non-dict is silently accepted.
 
     return errors
@@ -217,5 +220,11 @@ def _validate_params(rule_type: str, params: Any) -> List[Dict[str, str]]:
         if not prompt or not isinstance(prompt, str) or not prompt.strip():
             errors.append({'field': 'params.prompt', 'code': 'required',
                             'message': 'nl_check requires a non-empty prompt string'})
+
+    elif rule_type == 'anomaly_detect':
+        # Business-level (Phase 4): the prompt is declarative context for the
+        # anomaly.detect payload; stats-first detection means no field params
+        # to validate. Silently accept anything (like not_null/unique).
+        pass
 
     return errors

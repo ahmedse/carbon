@@ -2,6 +2,33 @@
 from rest_framework import serializers
 from .models import TableProfile, FieldProfile, DQRule, DQResult, DQProfileConfig
 from .models import FreshnessCheck, SchemaSnapshot, SchemaChange, RuleTag, RuleFieldAssignment
+from .models import DQJob, DQSuggestion, DQAnomaly
+
+
+class DQJobSerializer(serializers.ModelSerializer):
+    """Serializer for Phase 3 DQ jobs.
+
+    Write: job_type (validated by the view), rule/data_table/payload.
+    Read: full lifecycle view — status, result, progress, error, pulse_task_id.
+    """
+    rule_name = serializers.CharField(source='rule.name', read_only=True, allow_null=True)
+    table_name = serializers.CharField(source='data_table.name', read_only=True, allow_null=True)
+    created_by_name = serializers.CharField(
+        source='created_by.get_full_name', read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = DQJob
+        fields = [
+            'id', 'job_type', 'status', 'rule', 'rule_name',
+            'data_table', 'table_name', 'payload', 'result',
+            'pulse_task_id', 'progress', 'error',
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'status', 'result', 'pulse_task_id', 'progress', 'error',
+            'created_by', 'created_at', 'updated_at',
+        ]
 
 
 class TableProfileSerializer(serializers.ModelSerializer):
@@ -162,17 +189,65 @@ class DQRuleSerializer(serializers.ModelSerializer):
 
 
 class DQResultSerializer(serializers.ModelSerializer):
-    """Serializer for data quality rule execution results."""
+    """Serializer for data quality rule execution results.
+
+    Phase 4: `status` is one of passed|failed|skipped_unavailable. When
+    status == 'skipped_unavailable', `passed` is null (the rule could not be
+    evaluated — Pulse unavailable, fail-visible).
+    """
     rule_name = serializers.CharField(source='rule.name', read_only=True)
     rule_type = serializers.CharField(source='rule.rule_type', read_only=True)
 
     class Meta:
         model = DQResult
         fields = [
-            'id', 'rule', 'rule_name', 'rule_type', 'run_at', 'passed', 
+            'id', 'rule', 'rule_name', 'rule_type', 'run_at', 'status', 'passed',
             'checked_count', 'failed_count', 'sample_failures', 'score'
         ]
         read_only_fields = ['id', 'run_at']
+
+
+class DQSuggestionSerializer(serializers.ModelSerializer):
+    """Phase 4: persisted Pulse rule suggestions awaiting review.
+
+    payload holds the complete v1 rule definition — on accept it becomes a
+    DQRule unchanged. Nothing auto-creates rules; a human reviews first.
+    """
+    table_name = serializers.CharField(source='data_table.name', read_only=True)
+    created_by_name = serializers.CharField(
+        source='created_by.get_full_name', read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = DQSuggestion
+        fields = [
+            'id', 'data_table', 'table_name', 'payload', 'rationale',
+            'confidence', 'status', 'reject_reason', 'job',
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'data_table', 'table_name', 'payload', 'rationale',
+            'confidence', 'status', 'reject_reason', 'job',
+            'created_by', 'created_at', 'updated_at',
+        ]
+
+
+class DQAnomalySerializer(serializers.ModelSerializer):
+    """Phase 4: anomalies returned by Pulse anomaly.detect (stats-first).
+
+    expected_range = {'low': ..., 'high': ...}; score is the deviation
+    magnitude (e.g. z-score); explanation is LLM-written only.
+    """
+    table_name = serializers.CharField(source='data_table.name', read_only=True)
+
+    class Meta:
+        model = DQAnomaly
+        fields = [
+            'id', 'data_table', 'table_name', 'metric', 'group_key',
+            'expected_range', 'observed', 'score', 'explanation',
+            'severity', 'job', 'detected_at',
+        ]
+        read_only_fields = ['id', 'detected_at']
 
 
 class DQSuggestResponseSerializer(serializers.Serializer):

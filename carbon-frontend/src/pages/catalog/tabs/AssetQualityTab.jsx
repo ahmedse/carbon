@@ -14,6 +14,8 @@ import {
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
+import { useNavigate } from 'react-router-dom';
+import LaunchIcon from '@mui/icons-material/Launch';
 import { getTableDQMetrics, getFieldDQMetrics, getDQResults, listDQRules, runTableValidation } from '../../../api/dq';
 import DQRulesList from '../../../components/dq/DQRulesList';
 
@@ -31,6 +33,7 @@ function getStatusColor(status) {
 export default function AssetQualityTab({ entityData }) {
   const { token } = useAuth();
   const { notify } = useNotification();
+  const navigate = useNavigate();
   const [metrics, setMetrics] = useState(null);
   const [rules, setRules] = useState([]);
   const [results, setResults] = useState([]);
@@ -129,6 +132,17 @@ export default function AssetQualityTab({ entityData }) {
                   disabled={running}
                 >
                   {running ? 'Running validation…' : 'Run Table Validation'}
+                </Button>
+              )}
+              {entityData?.data_table && (
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  startIcon={<LaunchIcon />}
+                  sx={{ mt: 1 }}
+                  onClick={() => navigate(`/dq/rules?table=${entityData.data_table}`)}
+                >
+                  Manage in DQ Workspace
                 </Button>
               )}
             </CardContent>

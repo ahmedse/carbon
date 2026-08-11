@@ -94,39 +94,45 @@ class NLCheckRequiresPromptTests(NLBaseTestCase):
 # ── Test 3: pulse_unavailable → graceful ──
 
 class NLCheckPulseUnavailableTests(NLBaseTestCase):
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_pulse_unreachable_degradation(self, mock_post):
         from requests import ConnectionError as ReqConnError
         mock_post.side_effect = ReqConnError('Connection refused')
         rule = self._make_rule()
         rows = self._make_rows([{'email': 'good@example.com'}, {'email': 'bad'}])
         from dq.services import _evaluate_rule
+        # Phase 4 fail-visible (TASK-DQ-CORE-P4-PULSE, design decision #1):
+        # Pulse unreachable is NO LONGER a silent auto-pass. Result is
+        # SKIPPED_UNAVAILABLE — passed=None, score 0, checked 0.
         passed, checked, failed, failures, score = _evaluate_rule(rule, rows, field=self.email_field)
-        self.assertTrue(passed)
-        self.assertEqual(score, 100)
+        self.assertIsNone(passed)
+        self.assertEqual(checked, 0)
+        self.assertEqual(score, 0)
 
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_pulse_timeout_degradation(self, mock_post):
         from requests import Timeout
         mock_post.side_effect = Timeout('Request timed out')
         rule = self._make_rule()
         rows = self._make_rows([{'email': 'good@example.com'}, {'email': 'bad'}])
         from dq.services import _evaluate_rule
+        # Phase 4 fail-visible: timeout -> skipped (passed=None), score 0.
         passed, checked, failed, failures, score = _evaluate_rule(rule, rows, field=self.email_field)
-        self.assertTrue(passed)
-        self.assertEqual(score, 100)
+        self.assertIsNone(passed)
+        self.assertEqual(checked, 0)
+        self.assertEqual(score, 0)
 
 
 # ── Test 4: pulse pass ──
 
 class NLCheckPulsePassTests(NLBaseTestCase):
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_pulse_pass(self, mock_post):
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
             'task_id': 'test-task-id', 'status': 'completed',
             'result': {'results': [{'rule_id': '1', 'status': 'pass',
-                'failing_rows': [], 'explanation': 'All emails are valid.', 'confidence': 0.97}]}}
+                'details': [{'passed': True}, {'passed': True}], 'confidence': 0.97}]}}
         rule = self._make_rule()
         rows = self._make_rows([{'email': 'a@b.com'}, {'email': 'c@d.com'}])
         from dq.services import _evaluate_rule
@@ -139,13 +145,18 @@ class NLCheckPulsePassTests(NLBaseTestCase):
 # ── Test 5: pulse fail ──
 
 class NLCheckPulseFailTests(NLBaseTestCase):
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_pulse_fail(self, mock_post):
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
             'task_id': 'test-task-id', 'status': 'completed',
             'result': {'results': [{'rule_id': '1', 'status': 'fail',
-                'failing_rows': [0, 2], 'explanation': 'Rows 0 and 2 have invalid emails.', 'confidence': 0.93}]}}
+                'details': [
+                    {'passed': False, 'explanation': 'Row 0 has invalid email.'},
+                    {'passed': True},
+                    {'passed': False, 'explanation': 'Row 2 has invalid email.'},
+                    {'passed': True},
+                ], 'confidence': 0.93}]}}
         rule = self._make_rule()
         rows = self._make_rows([
             {'email': 'bad'}, {'email': 'good@example.com'},
@@ -161,34 +172,40 @@ class NLCheckPulseFailTests(NLBaseTestCase):
 # ── Test 6: pulse error status ──
 
 class NLCheckPulseErrorTests(NLBaseTestCase):
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_pulse_error(self, mock_post):
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
             'task_id': 'test-task-id', 'status': 'completed',
             'result': {'results': [{'rule_id': '1', 'status': 'error',
-                'failing_rows': None, 'explanation': 'Insufficient data.', 'confidence': None}]}}
+                'details': [], 'confidence': None}]}}
         rule = self._make_rule()
         rows = self._make_rows([{'email': 'x@y.com'}])
         from dq.services import _evaluate_rule
+        # Phase 4 fail-visible: a Pulse 'error' verdict is skipped, not auto-passed.
         passed, checked, failed, failures, score = _evaluate_rule(rule, rows, field=self.email_field)
-        self.assertTrue(passed)
+        self.assertIsNone(passed)
+        self.assertEqual(checked, 0)
+        self.assertEqual(score, 0)
 
 
 # ── Test 7: malformed response ──
 
 class NLCheckPulseMalformedTests(NLBaseTestCase):
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_pulse_malformed_no_results(self, mock_post):
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {'task_id': 'test-task-id', 'status': 'completed', 'result': {}}
         rule = self._make_rule()
         rows = self._make_rows([{'email': 'a@b.com'}])
         from dq.services import _evaluate_rule
+        # Phase 4 fail-visible: completed-but-malformed (no results) is skipped.
         passed, checked, failed, failures, score = _evaluate_rule(rule, rows, field=self.email_field)
-        self.assertTrue(passed)
+        self.assertIsNone(passed)
+        self.assertEqual(checked, 0)
+        self.assertEqual(score, 0)
 
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_pulse_wrong_status_field(self, mock_post):
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
@@ -197,70 +214,71 @@ class NLCheckPulseMalformedTests(NLBaseTestCase):
         rule = self._make_rule()
         rows = self._make_rows([{'email': 'a@b.com'}])
         from dq.services import _evaluate_rule
+        # Phase 4 fail-visible: a task-level 'failed' status is skipped, not passed.
         passed, checked, failed, failures, score = _evaluate_rule(rule, rows, field=self.email_field)
-        self.assertTrue(passed)
+        self.assertIsNone(passed)
+        self.assertEqual(checked, 0)
+        self.assertEqual(score, 0)
 
 
 # ── Test 8: partial result ──
 
 class NLCheckPulsePartialTests(NLBaseTestCase):
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_pulse_partial(self, mock_post):
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
             'task_id': 'test-task-id', 'status': 'partial',
             'result': {'results': [{'rule_id': '1', 'status': 'pass',
-                'failing_rows': [], 'explanation': 'OK.', 'confidence': 0.9}]},
+                'details': [{'passed': True}], 'confidence': 0.9}]},
             'error': {'code': 'partial_failure', 'message': 'Some rules failed'}}
         rule = self._make_rule()
         rows = self._make_rows([{'email': 'a@b.com'}])
         from dq.services import _evaluate_rule
+        # Phase 4 fail-visible: a 'partial' task status carries error context
+        # and is skipped, not auto-passed.
         passed, checked, failed, failures, score = _evaluate_rule(rule, rows, field=self.email_field)
-        self.assertTrue(passed)
+        self.assertIsNone(passed)
+        self.assertEqual(checked, 0)
+        self.assertEqual(score, 0)
 
 
-# ── Test 9: payload construction ──
-
-class NLCheckPayloadTests(TestCase):
-    def test_payload_construction(self):
-        from pulse_gateway import PulseGateway
-        g = PulseGateway()
-        rules = [{'id': 'r-1', 'prompt': 'Check emails', 'fields': ['email'], 'severity': 'warn'}]
-        rows = [{'email': 'a@b.com'}]
-        context = {'table_name': 'test', 'row_count_hint': 1}
-        payload = g._build_dq_validate_payload('t-1', rules, rows, context)
-        self.assertIn('auth', payload)
-        self.assertIn('task', payload)
-        self.assertEqual(payload['auth']['instance_id'], 'carbon')
-        task = payload['task']
-        self.assertEqual(task['id'], 't-1')
-        self.assertEqual(task['type'], 'dq.validate')
-        task_payload = task['payload']
-        self.assertIn('rules', task_payload)
-        self.assertIn('rows', task_payload)
-        self.assertIn('context', task_payload)
-        self.assertEqual(task_payload['rules'][0]['prompt'], 'Check emails')
-        self.assertEqual(task_payload['rows'][0]['email'], 'a@b.com')
-
-
-# ── Test 10: via run_dq (end-to-end) ──
+# ── Test 9: via run_dq (job-only since TASK-DQ-CORE-P3-JOBS) ──
 
 class NLCheckViaRunDQTests(NLBaseTestCase):
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_nl_check_via_run_dq(self, mock_post):
+        """nl_check rules are job-only: run_dq skips them, no DQResult is written.
+
+        Phase 3 (TASK-DQ-CORE-P3-JOBS, deliverable 5) moved nl_check out of
+        run_dq — nothing AI runs synchronously in a request. They execute only
+        via the `nl_check` DQJob type.
+        """
         rule = self._make_rule()
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
             'task_id': 'e2e-task', 'status': 'completed',
             'result': {'results': [{'rule_id': str(rule.id), 'status': 'fail',
-                'failing_rows': [1], 'explanation': 'Row 1 has bad email.', 'confidence': 0.91}]}}
+                'details': [
+                    {'passed': True},
+                    {'passed': False, 'explanation': 'Row 1 has bad email.'},
+                    {'passed': True},
+                ], 'confidence': 0.91}]}}
         self._make_rows([
             {'email': 'good@example.com'}, {'email': 'bad-email'}, {'email': 'also-good@test.com'}])
         from dq.services import run_dq
         result = run_dq(self.table.id, user=self.user)
         self.assertIn('table', result)
-        self.assertGreaterEqual(result['rules_run'], 1)
+        # nl_check rule excluded from the run — no DQResult rows for it
+        self.assertEqual(result['rules_run'], 0)
+        self.assertFalse(DQResult.objects.filter(rule=rule).exists())
+
+        # The nl_check job path still works end-to-end (submit + poll).
+        from dq.jobs import create_job, execute, refresh
+        job = create_job('nl_check', rule=rule, table=self.table,
+                         payload={'prompt': 'Check emails'}, user=self.user)
+        execute(job)
+        job.refresh_from_db()
+        self.assertEqual(job.status, 'done')
+        self.assertEqual(job.result['results'][0]['status'], 'fail')
         self.assertTrue(DQResult.objects.filter(rule=rule).exists())
-        dq_result = DQResult.objects.get(rule=rule)
-        self.assertFalse(dq_result.passed)
-        self.assertEqual(dq_result.failed_count, 1)

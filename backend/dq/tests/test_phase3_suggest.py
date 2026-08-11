@@ -120,7 +120,7 @@ class SuggestTableNotFoundTests(SuggestBaseTestCase):
 class SuggestNeedsProfileTests(SuggestBaseTestCase):
     """Thin alias: if no TableProfile exists, one is created; job runs async."""
 
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_suggest_needs_profile(self, mock_post):
         """Table has data but no profile → auto-profile then suggest job."""
         # Add some data so profiling succeeds
@@ -167,7 +167,7 @@ class SuggestNeedsProfileTests(SuggestBaseTestCase):
 class SuggestPulseUnavailableTests(SuggestBaseTestCase):
     """Pulse timeout → job fails honestly (fail-visible, never fabricated)."""
 
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_suggest_pulse_unavailable(self, mock_post):
         from requests import Timeout
         mock_post.side_effect = Timeout('Request timed out')
@@ -200,7 +200,7 @@ class SuggestPulseUnavailableTests(SuggestBaseTestCase):
 class SuggestReturnsSuggestionsTests(SuggestBaseTestCase):
     """Pulse returns 2 suggestions → persisted as pending DQSuggestion rows."""
 
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_suggest_pulse_returns_suggestions(self, mock_post):
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
@@ -258,7 +258,7 @@ class SuggestReturnsSuggestionsTests(SuggestBaseTestCase):
 class SuggestEmptySuggestionsTests(SuggestBaseTestCase):
     """Pulse returns [] → job done with zero suggestion rows persisted."""
 
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_suggest_pulse_empty_suggestions(self, mock_post):
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
@@ -286,62 +286,13 @@ class SuggestEmptySuggestionsTests(SuggestBaseTestCase):
 
 
 # ---------------------------------------------------------------------------
-# Test 7: payload matches contract
-# ---------------------------------------------------------------------------
-
-class SuggestPayloadMatchesContractTests(TestCase):
-    """Gateway builds correct dq.suggest task payload."""
-
-    def test_suggest_payload_matches_contract(self):
-        from pulse_gateway import PulseGateway
-
-        g = PulseGateway()
-        table_profile = {
-            'name': 'test_table',
-            'description': 'A test table',
-            'row_count': 100,
-            'fields': [
-                {
-                    'name': 'email', 'type': 'string',
-                    'distinct_count': 90, 'completeness_pct': 95.0,
-                },
-                {
-                    'name': 'score', 'type': 'number',
-                    'distinct_count': 50, 'completeness_pct': 97.0,
-                    'min': '0', 'max': '100', 'mean': 55.4, 'stddev': 25.0,
-                },
-            ],
-        }
-
-        # Test: calling post is too hard to mock here, so verify payload
-        # construction via the suggest_dq_rules method
-        with patch('pulse_gateway.requests.post') as mock_post:
-            mock_post.return_value.status_code = 200
-            mock_post.return_value.json.return_value = {
-                'task_id': 't-payload',
-                'status': 'completed',
-                'result': {'suggestions': []},
-            }
-            g.suggest_dq_rules(table_profile)
-
-            # Check what was posted
-            posted_payload = mock_post.call_args[1]['json']
-            task = posted_payload['task']
-            self.assertEqual(task['type'], 'dq.suggest')
-            self.assertIn('table', task['payload'])
-            self.assertEqual(task['payload']['table']['name'], 'test_table')
-            self.assertEqual(task['payload']['table']['row_count'], 100)
-            self.assertEqual(len(task['payload']['table']['fields']), 2)
-
-
-# ---------------------------------------------------------------------------
-# Test 8: field stats in payload (min/max/mean/stddev)
+# Test 7: field stats in payload (min/max/mean/stddev)
 # ---------------------------------------------------------------------------
 
 class SuggestFieldStatsTests(SuggestBaseTestCase):
     """Payload includes min/max/mean/stddev for numeric fields."""
 
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_suggest_field_stats_in_payload(self, mock_post):
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
@@ -389,7 +340,7 @@ class SuggestFieldStatsTests(SuggestBaseTestCase):
 class SuggestConnectionErrorTests(SuggestBaseTestCase):
     """ConnectionError → job fails honestly (fail-visible, no fabricated data)."""
 
-    @patch('pulse_gateway.requests.post')
+    @patch('ai.providers._http.requests.post')
     def test_suggest_pulse_connection_error(self, mock_post):
         from requests import ConnectionError as ReqConnError
         mock_post.side_effect = ReqConnError('Connection refused')

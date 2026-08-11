@@ -31,7 +31,7 @@ const KNOWN_PATHS = [
   { label: "Admin — Access Control", path: "/admin/access", keywords: "admin access control roles" },
   { label: "Admin — Audit Log", path: "/admin/audit", keywords: "admin audit log" },
   { label: "Reporting", path: "/carbon/reporting/generate", keywords: "reporting reports generate" },
-  { label: "DQ Dashboard", path: "/catalog/dq-dashboard", keywords: "data quality dq dashboard" },
+  { label: "DQ Workspace", path: "/dq", keywords: "data quality dq workspace rules jobs" },
   { label: "Emission Factors", path: "/carbon/admin/factors", keywords: "emission factors admin" },
 ];
 

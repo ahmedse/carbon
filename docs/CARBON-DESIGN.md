@@ -1,6 +1,6 @@
-# Carbon Domain — Design & Architecture v2.0
+# Carbon Domain — Design & Architecture v3.0
 
-> Updated: 2026-07-26 | Master: GitHub Copilot + DeepSeek V4 Pro
+> Updated: 2026-08-11 | Master: GitHub Copilot + DeepSeek V4 Pro
 
 ---
 
@@ -40,7 +40,60 @@ Carbon sits on top of these platform primitives:
 
 ---
 
-## 4. Scope Taxonomy
+## 4. AI Intelligence Layer (Planned — Phase 2)
+
+Carbon's AI capability is a **platform intelligence service**, not a siloed chatbot. It lives in `backend/ai/` and provides a single swappable interface that every Carbon subsystem consumes.
+
+### 4.1 Architecture
+
+```
+backend/ai/
+├── protocol.py          # AIProvider ABC + typed dataclasses (the swappable contract)
+├── providers/
+│   └── pulse.py         # PulseProvider — default backend, implements AIProvider via POST /tasks
+├── intelligence.py      # CarbonIntelligence — scope resolution, domain context, caching
+├── views.py             # DRF endpoints: /api/v1/ai/chat/, /dq/validate/, /anomaly/detect/, etc.
+├── cache.py             # TTL cache for AI responses
+└── signals.py           # Audit logging + cost tracking
+```
+
+### 4.2 Key Components
+
+| Component | Role |
+|-----------|------|
+| **`AIProvider` (ABC)** | Swappable protocol — 9 methods. Any AI backend implements this. |
+| **`PulseProvider`** | Default implementation — maps AIProvider methods to `POST /tasks` |
+| **`CarbonIntelligence`** | Service layer — resolves user scope, injects GHG domain vocabulary, delegates to provider, caches results, logs audit |
+
+### 4.3 Design Principles
+
+1. **Protocol-first.** `ai/protocol.py` imports nothing from Django, Pulse, or any provider. Pure ABCs and dataclasses.
+2. **Provider-agnostic.** Carbon never imports `PulseProvider`. Swap backends via `settings.AI_PROVIDER_CLASS`.
+3. **Scope is mandatory.** Every AI call carries a `Scope(org_unit_ids, module_ids, read_only)` from Carbon's RBAC.
+4. **Fail-visible, never fail-open.** AI unavailable → `status: "provider_unavailable"`, scores reflect the gap.
+5. **Chat through API, analytics through DB.** Coworker chat goes through Carbon's REST API (RBAC, soft-delete). DQ profiling uses direct DB with injected scope filters.
+6. **Suggestions are data.** Persisted, reviewed, accepted/rejected. Nothing auto-creates or auto-applies.
+
+### 4.4 API Surface — `/api/v1/ai/`
+
+| Endpoint | Method | Consumer | Auth |
+|----------|--------|----------|------|
+| `/chat/` | POST | Coworker UI | `HasAiAccess` |
+| `/chat/history/` | GET | Coworker UI | `HasAiAccess` |
+| `/dq/validate/` | POST | DQ Engine | `HasAiAccess` |
+| `/dq/suggest/` | POST | DQ Rules UI | `HasAiAccess` |
+| `/anomaly/detect/` | POST | DQ Jobs | `HasAiAccess` |
+| `/anomaly/explain/` | POST | DQ UI | `HasAiAccess` |
+| `/report/draft/` | POST | Report UI | `HasAiAccess` |
+| `/schema/analyze/` | POST | Schema UI | `HasAiAccess` |
+| `/fix/suggest/` | POST | DQ UI | `HasAiAccess` |
+| `/status/` | GET | Any | `IsAuthenticated` |
+
+See `plans/CARBON-PHASE2-AI-INTELLIGENCE.md` for the full phased implementation plan.
+
+---
+
+## 5. Scope Taxonomy
 
 Three distinct "scope" concepts — never conflate:
 
@@ -48,11 +101,12 @@ Three distinct "scope" concepts — never conflate:
 |---|---|---|
 | **GHG Scope** | Emission taxonomy (Scope 1/2/3) | `EmissionFactor.scope`, `Calculation.scope` |
 | **Access Scope** | OrgUnit subtree RBAC | `get_visible_org_unit_ids(user)` |
+| **AI Scope** | Per-call RBAC boundary injected into AI provider | `Scope(org_unit_ids, module_ids, read_only)` |
 | **Module.scope** | Advisory only | `Module.scope` — deprecated in favor of factor-level scope |
 
 ---
 
-## 5. UI/UX System — FINALIZED 2026-07-26
+## 6. UI/UX System — FINALIZED 2026-07-26
 
 ### Decisions
 

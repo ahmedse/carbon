@@ -464,3 +464,24 @@ API_PREFIX = API_PREFIX
 # Pulse AI/RAG integration (DQ Level 2)
 PULSE_URL = os.environ.get('PULSE_URL', 'http://127.0.0.1:9100/instances/carbon')
 PULSE_API_KEY = os.environ.get('PULSE_API_KEY', '')
+
+# ── AI Provider (Phase 2 — swappable intelligence backends) ─────────────
+# Swap AI backends by changing AI_PROVIDER_CLASS. Everything else in Carbon
+# remains unchanged. The provider class MUST implement ai.protocol.AIProvider.
+AI_PROVIDER_CLASS = os.environ.get(
+    "AI_PROVIDER_CLASS",
+    "ai.providers.pulse.PulseProvider"
+)
+AI_PROVIDER_URL = os.environ.get(
+    "AI_PROVIDER_URL",
+    PULSE_URL  # Default: same as current Pulse URL
+)
+AI_PROVIDER_API_KEY = os.environ.get(
+    "AI_PROVIDER_API_KEY",
+    PULSE_API_KEY  # Default: same as current Pulse key
+)
+
+# ── AI Intelligence ─────────────────────────────────────────────────────
+AI_CACHE_TTL_SECONDS = int(os.environ.get("AI_CACHE_TTL_SECONDS", 300))
+AI_MAX_CHAT_HISTORY = int(os.environ.get("AI_MAX_CHAT_HISTORY", 50))
+AI_RATE_LIMIT_PER_MINUTE = int(os.environ.get("AI_RATE_LIMIT_PER_MINUTE", 30))

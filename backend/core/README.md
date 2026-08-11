@@ -1,11 +1,11 @@
 # core
 
-This Django app contains the core domain models and APIs for Projects, Cycles, and Modules.
+This Django app contains core domain models and APIs for Modules (data products), Feedback, and Notifications.
 
 ## Main Components
 
-- **models.py**: Defines Project, Cycle, and Module models.
-- **views.py**: API endpoints for managing projects (RBAC protected).
+- **models.py**: Defines Module, Feedback, and Notification models.
+- **views.py**: API endpoints for modules (CBAC-protected).
 - **serializers.py**: DRF serializers for all models.
 - **admin.py**: Admin site integration for all models.
 - **urls.py**: API routing for all endpoints.
@@ -13,13 +13,16 @@ This Django app contains the core domain models and APIs for Projects, Cycles, a
 
 ## API Overview
 
-- `projects/`: CRUD for projects (RBAC-protected)
-- (Extend with cycles and modules if needed in future)
+- `modules/`: CRUD for data products (CBAC-protected) + `quality_summary/` and `audit_trail/` @actions
+- `notifications/`: User-scoped notifications with `mark_read`/`mark_all_read` actions
+- `feedback/`: Public feedback submission
 
-## RBAC
+## Access Control
 
-Project endpoints are protected by the `HasRBACPermission` class.  
-Users must have the `view_project` permission in the appropriate context.
+Module endpoints use Capability-Based Access Control (CBAC):
+- GET/HEAD/OPTIONS: `IsAuthenticated` (any authenticated user)
+- POST/PUT/PATCH/DELETE: `AdminOrSuperuserOnly`
+- Module visibility is scoped via `get_visible_module_ids()` from `accounts.rbac_utils`
 
 ## Testing
 

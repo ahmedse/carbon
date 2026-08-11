@@ -5,9 +5,10 @@ from .views import (
     FieldProfileViewSet, TableProfileViewSet, DQRuleViewSet, DQResultViewSet,
     ProfileTriggerView, BulkProfileView, DQRunView,
     DQMetricsView, TableDQMetricsView, FieldDQMetricsView, RunDQValidationView,
-    DQSuggestView, GateCheckView,
+    DQSuggestView, GateCheckView, DQJobViewSet,
     FreshnessCheckViewSet, SchemaSnapshotViewSet, SchemaChangeViewSet,
     RuleTagViewSet, RuleFieldAssignmentViewSet,
+    DQSuggestionViewSet, DQAnomalyViewSet,
 )
 from .config_views import DQProfileConfigView
 
@@ -21,6 +22,9 @@ router.register(r'schema-snapshots', SchemaSnapshotViewSet, basename='schemasnap
 router.register(r'schema-changes', SchemaChangeViewSet, basename='schemachange')
 router.register(r'tags', RuleTagViewSet, basename='ruletag')
 router.register(r'rule-assignments', RuleFieldAssignmentViewSet, basename='rulefieldassignment')
+router.register(r'jobs', DQJobViewSet, basename='dqjob')
+router.register(r'suggestions', DQSuggestionViewSet, basename='dqsuggestion')
+router.register(r'anomalies', DQAnomalyViewSet, basename='dqanomaly')
 
 urlpatterns = [
     path('profile/', ProfileTriggerView.as_view(), name='dq-profile'),

@@ -54,7 +54,8 @@ const DataProductDetailPage = React.lazy(() => import("./pages/catalog/DataProdu
 const DomainDetailPage = React.lazy(() => import("./pages/catalog/DomainDetailPage"));
 const TagDetailPage = React.lazy(() => import("./pages/catalog/TagDetailPage"));
 const AssetDetailPage = React.lazy(() => import("./pages/catalog/AssetDetailPage"));
-const DQHubPage = React.lazy(() => import("./pages/catalog/DQHubPage"));
+const DQWorkspacePage = React.lazy(() => import("./pages/dq/DQWorkspacePage"));
+const RuleDetailPage = React.lazy(() => import("./pages/dq/RuleDetailPage"));
 const ReferenceSetDetailPage = React.lazy(() => import("./pages/catalog/ReferenceSetDetailPage"));
 const GovernancePage = React.lazy(() => import("./pages/catalog/GovernancePage"));
 const DataSourcesDetailPage = React.lazy(() => import("./pages/catalog/DataSourcesDetailPage"));
@@ -174,7 +175,7 @@ export default function App() {
                 <Route path="/dashboards/executive" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/dashboards/analytics" element={<Navigate to="/carbon/analytics" replace />} />
                 <Route path="/dashboards/targets" element={<Navigate to="/carbon/admin/targets" replace />} />
-                <Route path="/dashboards/data-quality" element={<Navigate to="/catalog/dq" replace />} />
+                <Route path="/dashboards/data-quality" element={<Navigate to="/dq" replace />} />
                 <Route path="/dashboards/reporting" element={<Navigate to="/carbon/reporting/generate" replace />} />
                 
                 {/* Legacy Dashboard — removed P10a (blank content, dead page) */}
@@ -323,9 +324,9 @@ export default function App() {
                   <Route path="/catalog/domains/:domainId" element={<DomainDetailPage />} />
                   <Route path="/catalog/assets" element={<AssetsPage />} />
                   <Route path="/catalog/assets/:assetId" element={<AssetDetailPage />} />
-                  <Route path="/catalog/dq" element={<DQHubPage />} />
-                  <Route path="/catalog/dq-dashboard" element={<Navigate to="/catalog/dq" replace />} />
-                  <Route path="/catalog/dq-rules" element={<Navigate to="/catalog/dq" replace />} />
+                  <Route path="/catalog/dq" element={<Navigate to="/dq" replace />} />
+                  <Route path="/catalog/dq-dashboard" element={<Navigate to="/dq" replace />} />
+                  <Route path="/catalog/dq-rules" element={<Navigate to="/dq" replace />} />
                   <Route path="/catalog/mdm" element={<MDMPage />} />
                   <Route path="/catalog/mdm/reference-sets/:setId" element={<ReferenceSetDetailPage />} />
                   <Route path="/catalog/connections" element={<ConnectionsPage />} />
@@ -338,6 +339,10 @@ export default function App() {
                   <Route path="/catalog/exports" element={<ExportsDetailPage />} />
                   <Route path="/catalog/imports" element={<ImportsDetailPage />} />
                 </Route>
+
+                {/* DQ Workspace — outside CatalogRoute: DQ has its own capability gates (dq:view / dq:manage_rules) */}
+                <Route path="/dq" element={<DQWorkspacePage />} />
+                <Route path="/dq/rules/:id" element={<RuleDetailPage />} />
 
                 <Route path="*" element={<NotFound />} />
               </Route>

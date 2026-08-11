@@ -16,10 +16,12 @@ logger = logging.getLogger(__name__)
 
 from .models import TableProfile, FieldProfile, DQRule, DQResult
 from .models import FreshnessCheck, SchemaSnapshot, SchemaChange, RuleTag, RuleFieldAssignment
+from .models import DQJob, DQSuggestion, DQAnomaly
 from .serializers import (
     TableProfileSerializer, FieldProfileSerializer, DQRuleSerializer, DQResultSerializer,
     FreshnessCheckSerializer, SchemaSnapshotSerializer, SchemaChangeSerializer,
-    RuleTagSerializer, RuleFieldAssignmentSerializer,
+    RuleTagSerializer, RuleFieldAssignmentSerializer, DQJobSerializer,
+    DQSuggestionSerializer, DQAnomalySerializer,
 )
 from accounts.permissions import ReadAnyWriteAdmin, AdminOrSuperuserOnly
 from accounts.rbac_utils import get_allowed_org_unit_ids, user_has_global_role, get_allowed_module_ids
@@ -201,16 +203,45 @@ class DQRuleViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
     @swagger_auto_schema(
-        operation_description='Execute a single data quality rule and return the resulting DQ result.',
-        responses={201: 'DQ result created', 400: 'Invalid request', 404: 'Rule not found'},
+        operation_description=(
+            'Create and run a DQ job for this rule. '
+            'rule_run for deterministic rules, nl_check for NL rules (job-only).'
+        ),
+        responses={
+            201: 'Job created (deterministic jobs return terminal status)',
+            400: 'Invalid request',
+            404: 'Rule not found',
+        },
     )
-    @action(detail=True, methods=['post'])
-    def execute(self, request, pk=None):
-        """POST /dq/rules/{id}/execute/ — Execute this rule."""
+    @action(detail=True, methods=['post'], url_path='run')
+    def run(self, request, pk=None):
+        """POST /dq/rules/{id}/run/ — Sugar: create + run a job for this rule.
+
+        Deterministic rules → rule_run job (executed inline).
+        nl_check rules → nl_check job (submitted to Pulse, polled on GET).
+        The legacy synchronous `execute` action was removed in Phase 5;
+        the UI now always goes through jobs.
+        """
+        from .jobs import create_job, execute
+        from .serializers import DQJobSerializer
+
         rule = self.get_object()
         _check_rule_access(request.user, rule)
-        result_list = run_single_rule(rule.id, user=request.user)
-        return Response(result_list, status=status.HTTP_200_OK)
+
+        job_type = 'nl_check' if rule.rule_type == 'nl_check' else 'rule_run'
+        table_ids = rule.field_assignments.values_list('data_table_id', flat=True).distinct()
+        table = None
+        if table_ids:
+            table = DataTable.objects.filter(id=table_ids[0]).first()
+
+        payload = {'rule_id': rule.id}
+        if job_type == 'nl_check':
+            from .jobs import _prompt_for_rule
+            payload['prompt'] = request.data.get('prompt') or _prompt_for_rule(rule)
+
+        job = create_job(job_type, rule=rule, table=table, payload=payload, user=request.user)
+        execute(job)
+        return Response(DQJobSerializer(job).data, status=status.HTTP_201_CREATED)
 
     @swagger_auto_schema(
         operation_description='Return the recent execution history for a data quality rule.',
@@ -224,7 +255,12 @@ class DQRuleViewSet(viewsets.ModelViewSet):
         runs_qs = rule.results.order_by('-run_at')[:10]
         runs = list(runs_qs)
         run_data = [
-            {'run_at': r.run_at.isoformat(), 'passed': r.passed, 'score': r.score}
+            {
+                'run_at': r.run_at.isoformat(),
+                'passed': r.passed,
+                'status': r.status,
+                'score': r.score,
+            }
             for r in runs
         ]
         trend = 'stable'
@@ -753,7 +789,13 @@ class DQMetricsView(APIView):
         latest_results = results.order_by('rule_id', '-run_at').distinct('rule_id')
         passing_rules = latest_results.filter(passed=True).count()
         failing_rules = latest_results.filter(passed=False).count()
-        overall_score = round(passing_rules / total_rules * 100, 1) if total_rules > 0 else 0.0
+        # Phase 4 (fail-visible): rules whose latest result is
+        # skipped_unavailable are counted separately and EXCLUDED from the
+        # pass-rate denominator — a Pulse outage must show the gap, not an
+        # inflated score.
+        skipped_rules = latest_results.filter(status='skipped_unavailable').count()
+        scored_rules = passing_rules + failing_rules
+        overall_score = round(passing_rules / scored_rules * 100, 1) if scored_rules > 0 else 0.0
         
         # Per-dimension scores: group rules by dimension, average latest DQResult.score
         scores_by_dimension = {}
@@ -780,6 +822,7 @@ class DQMetricsView(APIView):
             'total_rules': total_rules,
             'passing_rules': passing_rules,
             'failing_rules': failing_rules,
+            'skipped_rules': skipped_rules,
             'overall_score': overall_score,
             'scores_by_dimension': scores_by_dimension,
         })
@@ -826,9 +869,12 @@ class TableDQMetricsView(APIView):
             for rule_id in rule_ids:
                 latest = DQResult.objects.filter(rule_id=rule_id).order_by('-run_at').first()
                 if latest:
-                    if not latest.passed:
+                    # Phase 4: skipped_unavailable (passed=None) is neither a
+                    # pass nor a fail — excluded from failing count and score.
+                    if latest.status == 'failed':
                         failing_rules += 1
-                    latest_scores.append(latest.score)
+                    if latest.passed is not None:
+                        latest_scores.append(latest.score)
 
         overall_score = (
             round(sum(latest_scores) / len(latest_scores))
@@ -931,15 +977,24 @@ class RunDQValidationView(APIView):
 # ---------------------------------------------------------------------------
 
 class DQSuggestView(APIView):
-    """POST /carbon-api/dq/suggest/ — Get AI-suggested DQ rules for a table."""
+    """POST /carbon-api/dq/suggest/ — Get AI-suggested DQ rules for a table.
+
+    DEPRECATED (Phase 4, TASK-DQ-CORE-P4-PULSE deliverable 2): keep this
+    endpoint as a THIN ALIAS creating a `suggest` DQJob (via POST /dq/jobs/
+    semantics — create_job + execute). It no longer answers synchronously;
+    clients read suggestions from the job result / GET /dq/suggestions/ after
+    the job completes. Every response carries `X-Deprecated: true`. Prefer
+    POST /dq/jobs/ {job_type: 'suggest', data_table_id} directly.
+    """
     permission_classes = [AdminOrSuperuserOnly]
     required_capability = 'dq:manage_rules'
 
     @swagger_auto_schema(
         operation_description=(
-            'Ask Pulse AI to suggest NL-based DQ rules for a table, '
-            'using its current profile (field statistics, distributions). '
-            'Returns a list of suggestions with prompts, rationale, severity, and confidence.'
+            'DEPRECATED thin alias for creating a suggest DQJob. '
+            'Creates and submits a `suggest` job to Pulse; suggestions are '
+            'persisted as DQSuggestion rows when the job completes. '
+            'Prefer POST /dq/jobs/ {job_type: "suggest", data_table_id}.'
         ),
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -952,12 +1007,15 @@ class DQSuggestView(APIView):
             required=['data_table_id'],
         ),
         responses={
-            200: openapi.Response(description='Suggestions with prompts and rationale'),
+            201: openapi.Response(description='Suggest DQJob created (thin alias)'),
             400: 'data_table_id is required',
             404: 'Table not found',
         },
     )
     def post(self, request):
+        from .jobs import create_job, execute
+        from .serializers import DQJobSerializer
+
         table_id = request.data.get('data_table_id')
         if not table_id:
             return Response(
@@ -975,29 +1033,15 @@ class DQSuggestView(APIView):
 
         _check_table_access(request.user, table)
 
-        from dq.services import suggest_rules_for_table
+        job = create_job('suggest', table=table, user=request.user)
+        execute(job)
 
-        try:
-            result = suggest_rules_for_table(table_id)
-        except Exception as exc:
-            logger.error('Suggest failed for table %s: %s', table_id, exc)
-            return Response(
-                {'error': 'Suggest failed', 'detail': str(exc)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-        if result['status'] == 'pulse_unavailable':
-            return Response(
-                {
-                    'table_id': table_id,
-                    'status': 'pulse_unavailable',
-                    'suggestions': [],
-                    'message': 'Pulse AI is currently unavailable. Please try again later.',
-                },
-                status=status.HTTP_200_OK,  # 200 not 503 — soft failure
-            )
-
-        return Response(result)
+        response = Response(
+            DQJobSerializer(job).data,
+            status=status.HTTP_201_CREATED,
+        )
+        response['X-Deprecated'] = 'true'
+        return response
 
 
 # ── Phase 1.8: Freshness & Schema Monitoring ViewSets ─────────────────────
@@ -1201,6 +1245,313 @@ class GateCheckView(APIView):
         # ── Run gate ──────────────────────────────────────────────────
         result = check_rows(table, rows, mode=mode)
         return Response(result)
+
+
+# ── DQ Jobs (Phase 3) ───────────────────────────────────────────────────
+
+class DQJobViewSet(viewsets.ModelViewSet):
+    """Explicit, user-started DQ jobs with a followable lifecycle.
+
+    POST   /dq/jobs/            {job_type, rule_id?, data_table_id?, payload?}
+                                → creates + executes (deterministic) or
+                                  submits (Pulse); returns the job.
+    GET    /dq/jobs/            filters: status, job_type, rule, table
+    GET    /dq/jobs/{id}/       refreshes Pulse jobs first, returns job
+    POST   /dq/jobs/{id}/cancel/  queued/running → canceled
+    """
+    serializer_class = DQJobSerializer
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:manage_rules'
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['job_type', 'status', 'rule__name', 'data_table__name']
+    ordering_fields = ['created_at', 'updated_at', 'status']
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return DQJob.objects.none()
+        qs = DQJob.objects.select_related('rule', 'data_table', 'created_by')
+        user = self.request.user
+        if user.is_superuser or user.is_staff:
+            pass
+        else:
+            org_units = _get_user_org_units(user)
+            if not org_units:
+                return DQJob.objects.none()
+            qs = qs.filter(
+                Q(rule__field_assignments__data_table__module__org_unit_id__in=org_units)
+                | Q(data_table__module__org_unit_id__in=org_units)
+            ).distinct()
+        p = self.request.query_params
+        if p.get('status'):
+            qs = qs.filter(status=p['status'])
+        if p.get('job_type'):
+            qs = qs.filter(job_type=p['job_type'])
+        if p.get('rule'):
+            qs = qs.filter(rule_id=p['rule'])
+        if p.get('table'):
+            qs = qs.filter(data_table_id=p['table'])
+        return qs.order_by('-created_at')
+
+    def create(self, request, *args, **kwargs):
+        """POST /dq/jobs/ — create + execute (deterministic) or submit (Pulse)."""
+        from .jobs import create_job, execute
+
+        job_type = request.data.get('job_type')
+        if job_type not in dict(DQJob._meta.get_field('job_type').choices):
+            return Response(
+                {'error': f'job_type must be one of {[c[0] for c in DQJob._meta.get_field("job_type").choices]}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        rule_id = request.data.get('rule_id')
+        table_id = request.data.get('data_table_id')
+        payload = request.data.get('payload') or {}
+
+        rule = None
+        table = None
+        if rule_id:
+            rule = DQRule.objects.filter(id=rule_id).first()
+            if not rule:
+                return Response({'error': f'Rule {rule_id} not found'}, status=status.HTTP_404_NOT_FOUND)
+            _check_rule_access(request.user, rule)
+        if table_id:
+            table = DataTable.objects.filter(id=table_id).first()
+            if not table:
+                return Response({'error': f'DataTable {table_id} not found'}, status=status.HTTP_404_NOT_FOUND)
+            _check_table_access(request.user, table)
+
+        # rule_run/nl_check jobs require a rule; profile/freshness/schema a table
+        if job_type in ('rule_run', 'nl_check') and rule is None:
+            return Response(
+                {'error': f'{job_type} job requires rule_id'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if job_type in ('profile', 'freshness', 'schema', 'anomaly', 'suggest') and table is None:
+            return Response(
+                {'error': f'{job_type} job requires data_table_id'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        job = create_job(job_type, rule=rule, table=table, payload=payload, user=request.user)
+        execute(job)
+        return Response(
+            DQJobSerializer(job).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def retrieve(self, request, *args, **kwargs):
+        """GET /dq/jobs/{id}/ — refresh Pulse jobs first, then serialize."""
+        from .jobs import refresh
+
+        job = self.get_object()
+        refresh(job)
+        return Response(DQJobSerializer(job).data)
+
+    @swagger_auto_schema(
+        operation_description='Cancel a queued/running job (best-effort; Pulse is not notified).',
+        responses={200: 'Job canceled', 400: 'Job not cancelable'},
+    )
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """POST /dq/jobs/{id}/cancel/ — queued/running → canceled."""
+        from .jobs import cancel
+
+        job = self.get_object()
+        if job.status not in ('queued', 'running'):
+            return Response(
+                {'error': f'Job is {job.status} — only queued/running jobs can be canceled'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        cancel(job)
+        return Response(DQJobSerializer(job).data)
+
+
+# ── Phase 4: DQSuggestion + DQAnomaly ViewSets ──────────────────────────
+
+class DQSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
+    """Phase 4: persisted Pulse rule suggestions awaiting human review.
+
+    GET  /dq/suggestions/            filters: status, data_table
+    GET  /dq/suggestions/{id}/       detail
+    POST /dq/suggestions/{id}/accept/   validate + promote to a real DQRule
+    POST /dq/suggestions/{id}/reject/   {reason?} → rejected
+
+    Nothing auto-creates rules (design decision #3): accept() is the only
+    promotion path and it validates the payload with rule_schema first.
+    """
+    serializer_class = DQSuggestionSerializer
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['rationale', 'payload']
+    ordering_fields = ['created_at', 'confidence']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return DQSuggestion.objects.none()
+        qs = DQSuggestion.objects.select_related('data_table', 'job', 'created_by')
+        user = self.request.user
+        if not (user.is_superuser or user.is_staff):
+            org_units = _get_user_org_units(user)
+            if not org_units:
+                return DQSuggestion.objects.none()
+            qs = qs.filter(data_table__module__org_unit_id__in=org_units)
+        p = self.request.query_params
+        if p.get('status'):
+            qs = qs.filter(status=p['status'])
+        if p.get('data_table'):
+            qs = qs.filter(data_table_id=p['data_table'])
+        return qs.distinct()
+
+    @swagger_auto_schema(
+        operation_description=(
+            'Accept a suggestion: validate its payload definition with '
+            'rule_schema, create the DQRule + field assignments, mark accepted. '
+            'Returns the created rule.'
+        ),
+        responses={201: 'Rule created from suggestion', 400: 'Invalid payload', 404: 'Not found'},
+    )
+    @action(detail=True, methods=['post'])
+    def accept(self, request, pk=None):
+        """POST /dq/suggestions/{id}/accept/ — promote suggestion to a DQRule.
+
+        The payload IS the v1 definition stored at suggestion time; it is
+        re-validated here (defense in depth) and DQRule.save() validates again
+        on write. Bindings resolve to the suggestion's data_table and optional
+        field slug; assignments are created via direct ORM create (bypassing
+        the pre-existing rule-assignments POST IntegrityError — out of scope).
+        """
+        from .rule_schema import validate_definition
+
+        suggestion = self.get_object()
+        if suggestion.status != 'pending':
+            return Response(
+                {'error': f'Suggestion is {suggestion.status} — only pending suggestions can be accepted'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        _check_table_access(request.user, suggestion.data_table)
+
+        definition = suggestion.payload or {}
+        errors = validate_definition(definition)
+        if errors:
+            suggestion.status = 'rejected'
+            suggestion.reject_reason = (
+                'Auto-rejected on accept: invalid definition — '
+                + '; '.join(e.get('message', '') for e in errors)
+            )
+            suggestion.save(update_fields=['status', 'reject_reason', 'updated_at'])
+            return Response(
+                {'error': 'Suggestion payload failed validation', 'errors': errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            rule = DQRule.objects.create(
+                definition=definition,
+                description=definition.get('description', suggestion.rationale),
+                created_by=request.user,
+            )
+        except Exception as exc:  # DQRule.save() raises ValidationError on bad defs
+            return Response(
+                {'error': 'Could not create rule from suggestion', 'detail': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Resolve bindings: always bind to the suggestion's table; bind to the
+        # named field when it exists on that table (else table-level rule).
+        data_field = None
+        bindings = definition.get('bindings') or []
+        for b in bindings:
+            fname = b.get('field')
+            if fname:
+                data_field = suggestion.data_table.fields.filter(name=fname).first()
+                if data_field:
+                    break
+        try:
+            RuleFieldAssignment.objects.create(
+                rule=rule,
+                data_table=suggestion.data_table,
+                data_field=data_field,
+            )
+        except Exception as exc:
+            return Response(
+                {'error': 'Rule created but assignment failed', 'detail': str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        suggestion.status = 'accepted'
+        suggestion.save(update_fields=['status', 'updated_at'])
+
+        from .serializers import DQRuleSerializer
+        return Response(DQRuleSerializer(rule).data, status=status.HTTP_201_CREATED)
+
+    @swagger_auto_schema(
+        operation_description='Reject a suggestion, optionally with a reason.',
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'reason': openapi.Schema(type=openapi.TYPE_STRING, description='Why it was rejected'),
+            },
+        ),
+        responses={200: 'Suggestion rejected', 400: 'Not pending', 404: 'Not found'},
+    )
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """POST /dq/suggestions/{id}/reject/ — mark rejected (reason optional)."""
+        suggestion = self.get_object()
+        if suggestion.status != 'pending':
+            return Response(
+                {'error': f'Suggestion is {suggestion.status} — only pending suggestions can be rejected'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        suggestion.status = 'rejected'
+        suggestion.reject_reason = request.data.get('reason', '') or ''
+        suggestion.save(update_fields=['status', 'reject_reason', 'updated_at'])
+        return Response(DQSuggestionSerializer(suggestion).data)
+
+
+class DQAnomalyViewSet(viewsets.ReadOnlyModelViewSet):
+    """Phase 4: anomalies detected by Pulse anomaly.detect (stats-first).
+
+    GET /dq/anomalies/   filters: data_table, severity, date (YYYY-MM-DD),
+                         from/to (ISO datetimes)
+    """
+    serializer_class = DQAnomalySerializer
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['metric', 'explanation']
+    ordering_fields = ['detected_at', 'score', 'severity']
+    ordering = ['-detected_at']
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return DQAnomaly.objects.none()
+        qs = DQAnomaly.objects.select_related('data_table', 'job')
+        user = self.request.user
+        if not (user.is_superuser or user.is_staff):
+            org_units = _get_user_org_units(user)
+            if not org_units:
+                return DQAnomaly.objects.none()
+            qs = qs.filter(data_table__module__org_unit_id__in=org_units)
+        p = self.request.query_params
+        if p.get('data_table'):
+            qs = qs.filter(data_table_id=p['data_table'])
+        if p.get('severity'):
+            qs = qs.filter(severity=p['severity'])
+        if p.get('date'):
+            try:
+                day = timezone.datetime.strptime(p['date'], '%Y-%m-%d').date()
+            except ValueError:
+                day = None
+            if day:
+                qs = qs.filter(detected_at__date=day)
+        if p.get('from'):
+            qs = qs.filter(detected_at__gte=p['from'])
+        if p.get('to'):
+            qs = qs.filter(detected_at__lte=p['to'])
+        return qs.distinct()
 
 
 

@@ -12,9 +12,13 @@ def notify_dq_violation(sender, instance, created, **kwargs):
     """When a DQ result is created and the rule failed, fire a notification."""
     if not created:
         return  # Only trigger on new results
-    
-    if instance.passed:
-        return  # No violation — no notification needed
+
+    # Phase 4 (fail-visible, TASK-DQ-CORE-P4-PULSE): only a real failure
+    # (passed=False) is a violation. passed=True is a pass; passed=None
+    # (status=skipped_unavailable — Pulse down) is NOT a violation and must
+    # not fire a spurious dq_violation alert.
+    if instance.passed is not False:
+        return
     
     try:
         from accounts.models import notify_event

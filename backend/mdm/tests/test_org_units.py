@@ -320,3 +320,31 @@ class OrgUnitRbacScopingTestCase(TestCase):
         response = self.client.get('/carbon-api/mdm/org-units/tree/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])
+
+    # ── QA-F3: write path must be global-admin-only (F-07 contract) ──
+
+    def test_scoped_user_cannot_create_org_unit(self):
+        """QA-F3 repro: a scoped data owner must get 403 when POSTing an
+        org unit ('Only admin can write' contract), even with an
+        out-of-scope parent (AAST). Was HTTP 201 before the fix."""
+        self.client.force_authenticate(self.data_owner)
+        payload = {
+            'name': 'QA-Test-Org',
+            'parent': self.aast.id,  # AAST = admin territory, out of scope
+            'org_type': 'campus',
+        }
+        response = self.client.post('/carbon-api/mdm/org-units/', payload)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(OrgUnit.objects.filter(name='QA-Test-Org').exists())
+
+    def test_scoped_user_cannot_write_in_own_subtree(self):
+        """QA-F3: the admin-only write gate also covers in-scope targets —
+        a data owner cannot PATCH their own org unit (global-admin only)."""
+        self.client.force_authenticate(self.data_owner)
+        response = self.client.patch(
+            f'/carbon-api/mdm/org-units/{self.transport.id}/',
+            {'description': 'hacked'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.transport.refresh_from_db()
+        self.assertNotEqual(self.transport.description, 'hacked')

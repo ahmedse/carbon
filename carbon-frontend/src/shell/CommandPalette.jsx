@@ -59,11 +59,11 @@ const COMMANDS = [
   },
   {
     id: 'dashboard-quality',
-    label: 'Data Quality',
-    description: 'Monitor data quality metrics',
-    path: '/dashboards/data-quality',
+    label: 'DQ Workspace',
+    description: 'Data quality rules, jobs, suggestions and monitoring',
+    path: '/dq',
     icon: CheckCircleIcon,
-    keywords: ['quality', 'validation', 'data', 'accuracy', 'completeness'],
+    keywords: ['quality', 'validation', 'data', 'accuracy', 'completeness', 'dq', 'workspace', 'rules'],
   },
   {
     id: 'dashboard-reporting',

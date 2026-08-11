@@ -362,15 +362,15 @@ const ROUTE_CONFIG = {
     icon: VerifiedUserIcon,
     parent: '/catalog/governance',
   },
-  '/catalog/dq-dashboard': {
-    label: 'DQ Dashboard',
-    icon: DashboardIcon,
-    parent: '/catalog',
-  },
-  '/catalog/dq-rules': {
-    label: 'DQ Rules',
+  '/dq': {
+    label: 'DQ Workspace',
     icon: RuleIcon,
-    parent: '/catalog',
+    parent: null,
+  },
+  '/dq/rules/:id': {
+    label: 'Rule Detail',
+    icon: RuleIcon,
+    parent: '/dq',
   },
   '/catalog/assets/:assetId': {
     label: 'Asset Detail',

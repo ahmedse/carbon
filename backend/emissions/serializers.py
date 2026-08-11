@@ -75,7 +75,21 @@ class EmissionFactorSerializer(serializers.ModelSerializer):
     """Serializer for emission factors."""
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     scope_display = serializers.CharField(source='get_scope_display', read_only=True)
-    
+
+    # Numeric gate — all factor values rounded to 5 decimal places on output
+    # (and validated to max 5 decimals on input). Data max precision is 5,
+    # so this loses nothing while trimming noise like 0.3500000000.
+    factor_value = serializers.DecimalField(max_digits=20, decimal_places=5)
+    co2_factor = serializers.DecimalField(
+        max_digits=20, decimal_places=5, allow_null=True, required=False
+    )
+    ch4_factor = serializers.DecimalField(
+        max_digits=20, decimal_places=5, allow_null=True, required=False
+    )
+    n2o_factor = serializers.DecimalField(
+        max_digits=20, decimal_places=5, allow_null=True, required=False
+    )
+
     class Meta:
         model = EmissionFactor
         fields = [
@@ -92,7 +106,8 @@ class EmissionFactorSerializer(serializers.ModelSerializer):
 
 class EmissionFactorSummarySerializer(serializers.ModelSerializer):
     """Minimal serializer for emission factor dropdowns."""
-    
+    factor_value = serializers.DecimalField(max_digits=20, decimal_places=5)
+
     class Meta:
         model = EmissionFactor
         fields = ['id', 'name', 'code', 'category', 'scope', 'factor_value', 'activity_unit']

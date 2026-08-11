@@ -9,13 +9,14 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import LaunchIcon from '@mui/icons-material/Launch';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import {
-  listDQRules, createDQRule, updateDQRule, deleteDQRule, runTableValidation,
+  listDQRules, deleteDQRule, runTableValidation,
 } from '../../../api/dq';
-import DQRuleDialog from './DQRuleDialog';
 
 const SEVERITY_COLOR = { error: 'error', warn: 'warning', info: 'info' };
 
@@ -28,12 +29,11 @@ function unwrap(data) {
 export default function DQRulesTab({ tableId, fields = [] }) {
   const { token } = useAuth();
   const { notify } = useNotification();
+  const navigate = useNavigate();
 
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingRule, setEditingRule] = useState(null);
   const [running, setRunning] = useState(false);
 
   const fieldLabel = useCallback(
@@ -57,8 +57,10 @@ export default function DQRulesTab({ tableId, fields = [] }) {
 
   useEffect(() => { loadRules(); }, [loadRules]);
 
-  const handleCreate = () => { setEditingRule(null); setDialogOpen(true); };
-  const handleEdit = (rule) => { setEditingRule(rule); setDialogOpen(true); };
+  // Manage actions deep-link into the DQ Workspace (/dq) — JSON-first authoring lives there.
+  const handleCreate = () => navigate(`/dq/rules?table=${tableId}`);
+  const handleEdit = (rule) => navigate(`/dq/rules/${rule.id}`);
+  const handleOpenWorkspace = () => navigate('/dq#rules');
 
   const handleDelete = async (rule) => {
     if (!window.confirm(`Delete rule "${rule.name || rule.rule_type}"?`)) return;
@@ -85,18 +87,6 @@ export default function DQRulesTab({ tableId, fields = [] }) {
     }
   };
 
-  const handleSave = async (payload) => {
-    if (editingRule) {
-      await updateDQRule(token, editingRule.id, payload);
-      notify({ message: 'Rule updated', type: 'success' });
-    } else {
-      await createDQRule(token, payload);
-      notify({ message: 'Rule created', type: 'success' });
-    }
-    setDialogOpen(false);
-    loadRules();
-  };
-
   if (loading) {
     return (
       <DetailTabContent>
@@ -110,6 +100,13 @@ export default function DQRulesTab({ tableId, fields = [] }) {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6">Data Quality Rules</Typography>
         <Stack direction="row" spacing={1}>
+          <Button
+            variant="outlined"
+            startIcon={<LaunchIcon />}
+            onClick={handleOpenWorkspace}
+          >
+            Open DQ Workspace
+          </Button>
           <Button
             variant="outlined"
             startIcon={running ? <CircularProgress size={16} /> : <PlayArrowIcon />}
@@ -169,7 +166,7 @@ export default function DQRulesTab({ tableId, fields = [] }) {
                   </TableCell>
                   <TableCell align="right">{rule.results_count ?? 0}</TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Edit">
+                    <Tooltip title="Manage in DQ Workspace">
                       <IconButton size="small" onClick={() => handleEdit(rule)}>
                         <EditIcon fontSize="small" />
                       </IconButton>
@@ -186,15 +183,6 @@ export default function DQRulesTab({ tableId, fields = [] }) {
           </Table>
         </Box>
       )}
-
-      <DQRuleDialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onSave={handleSave}
-        rule={editingRule}
-        tableId={tableId}
-        fields={fields}
-      />
     </DetailTabContent>
   );
 }

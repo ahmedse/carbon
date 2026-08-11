@@ -3,9 +3,11 @@ import logging
 import time
 from statistics import mean
 from django.db.models import Q
-from dataschema.models import DataTable, DataRow
+from django.utils import timezone
+from dataschema.models import DataTable, DataRow, DataField
 from catalog.models import AssetProfile, GovernanceEvent
 from .models import TableProfile, FieldProfile, DQRule, DQResult
+from .models import FreshnessCheck, DQProfileConfig, SchemaSnapshot, SchemaChange
 from core.utils import retry_on_db_error
 
 logger = logging.getLogger(__name__)
@@ -168,8 +170,16 @@ def profile_table(table_id):
             )
     
     table_completeness = round(mean(completeness_all), 2) if completeness_all else 0.0
-    # Deduplicate: update existing TableProfile or create new one.
+    # Deduplicate stale profiles (legacy runs created duplicates), then update
+    # or create the single latest row. update_or_create() calls get() internally
+    # and raises MultipleObjectsReturned if duplicates exist.
     from django.utils import timezone
+    stale_ids = list(
+        TableProfile.objects.filter(data_table=table)
+        .order_by('-profiled_at').values_list('id', flat=True)[1:]
+    )
+    if stale_ids:
+        TableProfile.objects.filter(id__in=stale_ids).delete()
     tp, _created = TableProfile.objects.update_or_create(
         data_table=table,
         defaults={
@@ -278,39 +288,35 @@ def _evaluate_nl_check(rule, rows, field=None):
     return engine_nl_check(rule_def, rows, field=field)
 
 
-def suggest_rules_for_table(table_id: int) -> dict:
-    """Build a table profile payload and send it to Pulse for rule suggestions.
+def _get_or_create_table_profile(table_id: int):
+    """Ensure a TableProfile exists for the table.
 
-    If no current TableProfile exists, run profile_table() first.
-
-    Returns:
-        {
-            'table_id': int,
-            'status': 'completed' | 'pulse_unavailable',
-            'suggestions': [ {prompt, rationale, suggested_severity, confidence} ],
-            'error': None | {...}
-        }
+    Returns (table, tp, error_dict). error_dict is None on success.
+    Shared by the sync suggest endpoint and the suggest DQJob.
     """
-    from pulse_gateway import PulseGateway
-
     table = DataTable.objects.get(id=table_id)
-
-    # Get or create profile
     tp = TableProfile.objects.filter(data_table=table).order_by('-profiled_at').first()
     if not tp:
         logger.info(f'No profile for table {table_id} — profiling now')
         profile_table(table_id)
         tp = TableProfile.objects.filter(data_table=table).order_by('-profiled_at').first()
         if not tp:
-            return {
-                'table_id': table_id,
-                'status': 'pulse_unavailable',
-                'suggestions': [],
-                'error': {
-                    'code': 'no_profile',
-                    'message': 'Could not profile table — table may have no rows',
-                },
+            return table, None, {
+                'code': 'no_profile',
+                'message': 'Could not profile table — table may have no rows',
             }
+    return table, tp, None
+
+
+def build_suggest_payload(table_id: int):
+    """Build the dq.suggest table-profile payload for a table.
+
+    Returns (table_payload, error_dict). Shared by suggest_rules_for_table()
+    (sync endpoint) and the suggest DQJob (async submit via CarbonIntelligence).
+    """
+    table, tp, err = _get_or_create_table_profile(table_id)
+    if err:
+        return None, err
 
     # Build field summaries from FieldProfile records
     field_profiles = FieldProfile.objects.filter(
@@ -351,9 +357,35 @@ def suggest_rules_for_table(table_id: int) -> dict:
         'row_count': tp.row_count,
         'fields': fields_payload,
     }
+    return table_payload, None
 
-    gateway = PulseGateway()
-    response = gateway.suggest_dq_rules(table_payload)
+
+def suggest_rules_for_table(table_id: int) -> dict:
+    """Build a table profile payload and send it to Pulse for rule suggestions.
+
+    If no current TableProfile exists, run profile_table() first.
+
+    Returns:
+        {
+            'table_id': int,
+            'status': 'completed' | 'pulse_unavailable',
+            'suggestions': [ {prompt, rationale, suggested_severity, confidence} ],
+            'error': None | {...}
+        }
+    """
+    from ai.intelligence import CarbonIntelligence
+
+    table_payload, err = build_suggest_payload(table_id)
+    if err:
+        return {
+            'table_id': table_id,
+            'status': 'pulse_unavailable',
+            'suggestions': [],
+            'error': err,
+        }
+
+    intelligence = CarbonIntelligence()
+    response = intelligence.submit_dq_suggest(table_payload)
 
     if response.get('status') == 'pulse_unavailable':
         return {
@@ -372,8 +404,119 @@ def suggest_rules_for_table(table_id: int) -> dict:
     }
 
 
+# ── Phase 4: anomaly detection (TASK-DQ-CORE-P4-PULSE, deliverable 3) ──────
+
+MIN_ANOMALY_PROFILES = 6
+"""Fewer profile snapshots than this → anomaly job completes with
+result.state = 'insufficient_history' (Carbon-side guard, not a Pulse call)."""
+
+
+def _prompt_from_rule(rule) -> str:
+    """Extract the declarative prompt from an anomaly_detect rule."""
+    d = rule.definition or {}
+    if isinstance(d, dict):
+        params = d.get('params')
+        if isinstance(params, dict) and params.get('prompt'):
+            return str(params['prompt'])
+    if isinstance(rule.params, dict) and rule.params.get('prompt'):
+        return str(rule.params['prompt'])
+    return rule.description or rule.name or ''
+
+
+def build_anomaly_payload(table_id: int):
+    """Build the anomaly.detect payload for a table (Phase 4).
+
+    Combines TableProfile/FieldProfile history with
+    DQProfileConfig.volume_anomaly_pct (wired NOW — it was previously inert)
+    and the anomaly_detect rules bound to the table.
+
+    Returns (payload, error_dict). error_dict.code == 'insufficient_history'
+    when fewer than MIN_ANOMALY_PROFILES profile snapshots exist — the anomaly
+    job then completes with result.state='insufficient_history' (fail-visible:
+    nothing is fabricated, Pulse is not even called).
+    """
+    config = DQProfileConfig.objects.first()
+    volume_pct = config.volume_anomaly_pct if config else 25
+
+    table = DataTable.objects.get(id=table_id)
+    profiles = list(TableProfile.objects.filter(data_table=table).order_by('profiled_at'))
+    if len(profiles) < MIN_ANOMALY_PROFILES:
+        return None, {
+            'code': 'insufficient_history',
+            'message': (
+                f'Need at least {MIN_ANOMALY_PROFILES} profile snapshots; '
+                f'found {len(profiles)} — run profile jobs over time before '
+                'requesting anomaly detection'
+            ),
+        }
+
+    history = []
+    for p in profiles:
+        history.append({
+            'at': p.profiled_at.isoformat(),
+            'row_count': p.row_count,
+            'completeness_pct': p.completeness_pct,
+            'null_counts': p.null_counts or {},
+            'mean_values': p.mean_values or {},
+            'min_values': p.min_values or {},
+            'max_values': p.max_values or {},
+            'distinct_counts': p.distinct_counts or {},
+        })
+
+    field_history = {}
+    field_names = table.fields.filter(is_archived=False).values_list('name', flat=True)
+    for fname in field_names:
+        fps = list(FieldProfile.objects.filter(
+            data_field__name=fname, data_field__data_table=table
+        ).order_by('profiled_at'))
+        field_history[fname] = [
+            {
+                'at': fp.profiled_at.isoformat(),
+                'row_count': fp.row_count,
+                'null_count': fp.null_count,
+                'null_pct': round(fp.null_count / fp.row_count * 100, 2) if fp.row_count else 0.0,
+                'distinct_count': fp.distinct_count,
+                'mean_value': fp.mean_value,
+                'min_value': fp.min_value,
+                'max_value': fp.max_value,
+            }
+            for fp in fps
+        ]
+
+    anomaly_rules = list(DQRule.objects.filter(
+        rule_type='anomaly_detect', is_active=True,
+        field_assignments__data_table=table,
+    ).distinct())
+
+    payload = {
+        'table': {
+            'name': table.name,
+            'description': table.title or table.name,
+        },
+        'sensitivity': volume_pct,
+        'volume_anomaly_pct': volume_pct,
+        'history': history,
+        'fields': field_history,
+        'rules': [
+            {
+                'name': r.name,
+                'prompt': _prompt_from_rule(r),
+                'severity': r.severity,
+            }
+            for r in anomaly_rules
+        ],
+    }
+    return payload, None
+
+
 def _compute_quality(table):
-    """Compute quality_status and quality_score from latest DQResult for each active rule."""
+    """Compute quality_status and quality_score from latest DQResult for each active rule.
+
+    Phase 4 (fail-visible): results with passed=None (status=
+    skipped_unavailable — Pulse down) are EXCLUDED from the denominator so
+    scores honestly show the gap instead of silently auto-passing. If every
+    latest result is skipped, quality is 'unknown'.
+    """
     field_ids = list(table.fields.values_list('id', flat=True))
     rules = list(DQRule.objects.filter(
         Q(field_assignments__data_table_id=table.id) |
@@ -386,8 +529,11 @@ def _compute_quality(table):
     results_with_data = [r for r in results if r is not None]
     if not results_with_data:
         return 'unknown', None
-    passed_count = sum(1 for r in results_with_data if r.passed)
-    total = len(results_with_data)
+    verdicts = [r for r in results_with_data if r.passed is not None]
+    if not verdicts:
+        return 'unknown', None  # all skipped — no verdict available
+    passed_count = sum(1 for r in verdicts if r.passed)
+    total = len(verdicts)
     score = round(passed_count / total * 100)
     if score >= 90:
         status = 'passing'
@@ -412,9 +558,14 @@ def _rollup_to_catalog(table, rules, results, user=None):
             if result:
                 by_field.setdefault(assn.data_field_id, []).append(result)
     for fid, field_results in by_field.items():
-        passed_count = sum(1 for r in field_results if r.passed)
-        total = len(field_results)
-        field_score = round(passed_count / total * 100) if total else 100
+        # Phase 4 (fail-visible): skip fields whose results are all
+        # skipped_unavailable — no verdict to roll up.
+        verdicts = [r for r in field_results if r.passed is not None]
+        if not verdicts:
+            continue
+        passed_count = sum(1 for r in verdicts if r.passed)
+        total = len(verdicts)
+        field_score = round(passed_count / total * 100)
         field_status = 'passing' if field_score >= 90 else 'warning' if field_score >= 70 else 'failing'
         ap, _ = AssetProfile.objects.get_or_create(data_field_id=fid)
         old_status = ap.quality_status
@@ -482,15 +633,29 @@ def run_dq(table_id, user=None):
 
     results = []
     for rule in rules:
+        # Phase 3 (TASK-DQ-CORE-P3-JOBS, deliverable 5): nl_check rules are
+        # job-only — nothing AI runs synchronously in a request. They execute
+        # via the `nl_check` DQJob type only.
+        # Phase 4 (TASK-DQ-CORE-P4-PULSE): anomaly_detect rules are also not
+        # row-evaluated — they feed the anomaly.detect job payload only.
+        if rule.rule_type in ('nl_check', 'anomaly_detect'):
+            logger.info(
+                'Skipping %s rule %s (id=%s) in run_dq — job-only',
+                rule.rule_type, rule.name, rule.id,
+            )
+            continue
         assignments = rule.field_assignments.all()
         for assn in assignments:
             rule_start = time.time()
             field = assn.data_field  # may be None for table-level
             try:
                 passed, checked, failed, sample, score = _evaluate_rule(rule, rows, field=field)
+                # Phase 4 (fail-visible): passed=None → Pulse could not evaluate.
+                status = 'skipped_unavailable' if passed is None else ('passed' if passed else 'failed')
                 results.append(DQResult.objects.create(
                     rule=rule,
                     data_field=field,
+                    status=status,
                     passed=passed, checked_count=checked,
                     failed_count=failed, sample_failures=sample, score=score,
                 ))
@@ -544,6 +709,7 @@ def run_dq(table_id, user=None):
             'rule_name': r.rule.name,
             'type': r.rule.rule_type,
             'passed': r.passed,
+            'status': r.status,
             'failed': r.failed_count,
             'score': r.score,
         } for r in results],
@@ -569,8 +735,10 @@ def run_single_rule(rule_id, user=None):
             continue
         rows = _rows(table, chunk=True)
         passed, checked, failed, sample, score = _evaluate_rule(rule, rows, field=field)
+        # Phase 4 (fail-visible): passed=None → Pulse could not evaluate.
+        status = 'skipped_unavailable' if passed is None else ('passed' if passed else 'failed')
         result = DQResult.objects.create(
-            rule=rule, data_field=field, passed=passed,
+            rule=rule, data_field=field, status=status, passed=passed,
             checked_count=checked, failed_count=failed,
             sample_failures=sample, score=score,
         )
@@ -581,6 +749,7 @@ def run_single_rule(rule_id, user=None):
             'data_field_name': field.name if field else None,
             'table_id': table.id,
             'passed': result.passed,
+            'status': result.status,
             'checked_count': result.checked_count,
             'failed_count': result.failed_count,
             'score': result.score,
@@ -630,3 +799,196 @@ def bulk_profile(table_ids, user=None):
     )
     
     return {'total': len(table_ids), 'success': success, 'failed': failed, 'results': results}
+
+
+# ── Phase 3: shared callables for freshness / schema jobs ──────────────────
+# Extracted from the management commands (check_freshness, schema_snapshot) so
+# the DQJob runner and the commands call the SAME code path.
+
+def check_freshness(table_id=None, notify=False) -> dict:
+    """Check data freshness for tables and create FreshnessCheck records.
+
+    Args:
+        table_id: optional — check a single table; None checks all active tables.
+        notify: fire notifications for stale tables.
+
+    Returns summary dict: {total, stale, results: [{table_id, table_name,
+    is_fresh, age_hours}]}.
+    """
+    config = DQProfileConfig.objects.first()
+    default_threshold = config.freshness_threshold_hours if config else 24
+
+    qs = DataTable.objects.filter(is_archived=False)
+    if table_id:
+        qs = qs.filter(id=table_id)
+
+    total = qs.count()
+    stale_count = 0
+    results = []
+    for table in qs.iterator():
+        # Find newest DataRow
+        newest = DataRow.objects.filter(
+            data_table=table, is_archived=False
+        ).order_by('-created_at').first()
+
+        last_ts = newest.created_at if newest else None
+        now = timezone.now()
+
+        if last_ts:
+            age_hours = (now - last_ts).total_seconds() / 3600
+            is_fresh = age_hours <= default_threshold
+        else:
+            age_hours = None
+            is_fresh = True  # Empty table is not "stale"
+
+        FreshnessCheck.objects.create(
+            data_table=table,
+            expected_max_age_hours=default_threshold,
+            last_data_timestamp=last_ts,
+            is_fresh=is_fresh,
+        )
+
+        if not is_fresh:
+            stale_count += 1
+        results.append({
+            'table_id': table.id,
+            'table_name': table.name,
+            'is_fresh': is_fresh,
+            'age_hours': age_hours,
+        })
+
+        if notify and not is_fresh:
+            try:
+                from accounts.models import notify_event
+                notify_event(
+                    event_type='freshness_violation',
+                    title=f'Stale data: {table.name}',
+                    body=f'Table "{table.name}" has not been updated in {age_hours:.1f} hours '
+                         f'(threshold: {default_threshold}h).',
+                    severity='warning',
+                    link=f'/dataschema/tables/{table.id}/',
+                )
+            except Exception:
+                logger.exception('Failed to send freshness notification')
+
+    return {'total': total, 'stale': stale_count, 'results': results}
+
+
+def snapshot_schema(table_id=None, notify=False) -> dict:
+    """Snapshot current table schemas and detect changes from previous snapshot.
+
+    Args:
+        table_id: optional — snapshot a single table; None snapshots all active.
+        notify: fire notifications for schema changes.
+
+    Returns summary dict: {total, changes_detected, results: [{table_id,
+    table_name, columns, initial, added, dropped, modified, changes}]}.
+    """
+    qs = DataTable.objects.filter(is_archived=False)
+    if table_id:
+        qs = qs.filter(id=table_id)
+
+    total = qs.count()
+    changes_detected = 0
+    results = []
+    for table in qs.iterator():
+        fields = DataField.objects.filter(data_table=table, is_active=True, is_archived=False)
+        current_schema = {}
+        for f in fields:
+            current_schema[f.name] = {
+                'type': f.type,
+                'is_nullable': True,  # DataField has no is_nullable; default to True
+                'position': f.id,  # proxy for order
+            }
+
+        row_count = table.rows.filter(is_archived=False).count()
+
+        new_snapshot = SchemaSnapshot.objects.create(
+            data_table=table,
+            column_schema=current_schema,
+            row_count=row_count,
+        )
+
+        # Compare with previous snapshot
+        prev = SchemaSnapshot.objects.filter(
+            data_table=table
+        ).exclude(id=new_snapshot.id).order_by('-snapshot_at').first()
+
+        added = dropped = modified = 0
+        changes = []
+        if prev and prev.column_schema:
+            prev_cols = set(prev.column_schema.keys()) if isinstance(prev.column_schema, dict) else set()
+            curr_cols = set(current_schema.keys())
+
+            for col in sorted(curr_cols - prev_cols):
+                SchemaChange.objects.create(
+                    data_table=table,
+                    snapshot_from=prev,
+                    snapshot_to=new_snapshot,
+                    change_type='added',
+                    field_name=col,
+                    old_definition=None,
+                    new_definition=current_schema.get(col),
+                )
+                added += 1
+                changes_detected += 1
+                changes.append({'change_type': 'added', 'field_name': col})
+
+            for col in sorted(prev_cols - curr_cols):
+                SchemaChange.objects.create(
+                    data_table=table,
+                    snapshot_from=prev,
+                    snapshot_to=new_snapshot,
+                    change_type='dropped',
+                    field_name=col,
+                    old_definition=prev.column_schema.get(col),
+                    new_definition=None,
+                )
+                dropped += 1
+                changes_detected += 1
+                changes.append({'change_type': 'dropped', 'field_name': col})
+
+            for col in sorted(curr_cols & prev_cols):
+                if prev.column_schema.get(col) != current_schema.get(col):
+                    SchemaChange.objects.create(
+                        data_table=table,
+                        snapshot_from=prev,
+                        snapshot_to=new_snapshot,
+                        change_type='modified',
+                        field_name=col,
+                        old_definition=prev.column_schema.get(col),
+                        new_definition=current_schema.get(col),
+                    )
+                    modified += 1
+                    changes_detected += 1
+                    changes.append({'change_type': 'modified', 'field_name': col})
+
+            if notify and (added or dropped or modified):
+                try:
+                    from accounts.models import notify_event
+                    notify_event(
+                        event_type='schema_change',
+                        title=f'Schema change: {table.name}',
+                        body=f'Table "{table.name}" schema changed: '
+                             f'{added} added, {dropped} dropped, {modified} modified columns.',
+                        severity='info',
+                        link=f'/dataschema/tables/{table.id}/',
+                    )
+                except Exception:
+                    logger.exception('Failed to send schema change notification')
+        else:
+            logger.info('Initial schema snapshot for table %s (%d columns)',
+                        table.name, len(current_schema))
+
+        results.append({
+            'table_id': table.id,
+            'table_name': table.name,
+            'columns': len(current_schema),
+            'initial': not (prev and prev.column_schema),
+            'added': added,
+            'dropped': dropped,
+            'modified': modified,
+            'changes': changes,
+        })
+
+    return {'total': total, 'changes_detected': changes_detected, 'results': results}

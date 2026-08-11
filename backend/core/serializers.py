@@ -14,10 +14,20 @@ class FeedbackSerializer(serializers.ModelSerializer):
 
 class ModuleSerializer(serializers.ModelSerializer):
     org_unit_name = serializers.CharField(source='org_unit.name', read_only=True, default=None)
+    table_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Module
-        fields = ['id', 'name', 'description', 'scope', 'org_unit', 'org_unit_name', 'is_locked']
+        fields = [
+            'id', 'name', 'description', 'scope', 'org_unit', 'org_unit_name',
+            'is_locked', 'table_count', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_table_count(self, obj):
+        if hasattr(obj, 'data_tables'):
+            return obj.data_tables.count()
+        return 0
 
 
 class NotificationSerializer(serializers.ModelSerializer):

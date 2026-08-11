@@ -1,78 +1,95 @@
 // src/pages/catalog/DataProductDetailPage.jsx
-// Catalog Studio: a single Data Product (Module) and its tables.
+// Data Product Detail: BaseDetailPage shell with Overview / Tables / DQ / Edit /
+// Audit tabs + metrics panel. Module fetched directly via API (not context — A3 fix).
+// AI-toolkit compliant: can() manage gate (CB-13), ConfirmDialog (no window.confirm),
+// CB-09 defensive arrays, theme tokens only, shared ProductForm (A7 fix).
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
-import {
-  Box, Typography, TextField, Button, Card, CardContent, CardHeader, Grid,
-  CircularProgress, Alert, Chip, Paper, IconButton, Tooltip,
-  Dialog, DialogTitle, DialogContent, DialogActions,
-} from '@mui/material';
+import { can } from '../../authz';
+import { Box } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 import Inventory2Icon from '@mui/icons-material/Inventory2';
-import TableChartIcon from '@mui/icons-material/TableChart';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
-import MenuItem from '@mui/material/MenuItem';
-import {
-  fetchDataSchemaTables, createDataSchemaTable, updateDataSchemaTable, deleteDataSchemaTable,
-} from '../../api/dataschema';
-import { fetchAssetProfiles } from '../../api/catalog';
-import { updateModule, deleteModule } from '../../api/modules';
-import { fetchOrgUnits } from '../../api/orgUnits';
-import { isGlobalAdmin } from '../../authz';
-import { DATA_PRODUCTS, DATA_PRODUCT } from '../../constants/terminology';
-import PageContainer from '../../components/layout/PageContainer';
-import PageHeader from '../../components/Page/PageHeader';
+import BaseDetailPage from '../../components/detail/BaseDetailPage';
+import DetailHeader from '../../components/detail/DetailHeader';
 
-const QUALITY_COLOR = { passing: 'success', warning: 'warning', failing: 'error', unknown: 'default' };
-const SCOPE_LABEL = { 1: 'Scope 1', 2: 'Scope 2', 3: 'Scope 3' };
-const SCOPE_OPTIONS = [1, 2, 3];
+import { fetchModule, fetchModuleQualitySummary, fetchModuleAuditTrail } from '../../api/modules';
+import { fetchDataSchemaTables } from '../../api/dataschema';
+import { fetchAssetProfiles } from '../../api/catalog';
+import { fetchOrgUnits } from '../../api/orgUnits';
+
+import DataProductOverviewTab from './tabs/DataProductOverviewTab';
+import DataProductTablesTab from './tabs/DataProductTablesTab';
+import DataProductDQTab from './tabs/DataProductDQTab';
+import DataProductEditTab from './tabs/DataProductEditTab';
+import DataProductAuditTab from './tabs/DataProductAuditTab';
+import DataProductMetricsPanel from './tabs/DataProductMetricsPanel';
+
+function unwrap(data) {
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.results)) return data.results;
+  return [];
+}
 
 export default function DataProductDetailPage() {
   useDocumentTitle("Data Product Detail");
   const { moduleId } = useParams();
   const navigate = useNavigate();
-  const { token, user, context, selectProject, availablePerspectives, isGlobalAdminFlag } = useAuth();
-  const { notify, notifyFromError } = useNotification();
+  const { token, user, context, availablePerspectives, isGlobalAdminFlag, userCapabilities } = useAuth();
+  const { notify } = useNotification();
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [product, setProduct] = useState(null);
   const [tables, setTables] = useState([]);
   const [assets, setAssets] = useState({});
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingTable, setEditingTable] = useState(null);
-  const [formData, setFormData] = useState({ title: '', description: '' });
-  const [submitting, setSubmitting] = useState(false);
   const [orgUnits, setOrgUnits] = useState([]);
-  const [productDialogOpen, setProductDialogOpen] = useState(false);
-  const [productForm, setProductForm] = useState({ name: '', description: '', scope: 1, org_unit: '' });
-  const [productSubmitting, setProductSubmitting] = useState(false);
+  const [qualitySummary, setQualitySummary] = useState(null);
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const module = (context?.modules || []).find((m) => String(m.id) === String(moduleId));
+  const modules = context?.modules || [];
 
-  const isAdmin = isGlobalAdmin(user, availablePerspectives, isGlobalAdminFlag);
+  // manage gate → CATALOG_MANAGE_PRODUCTS (CB-13 — not access_route for admin actions)
+  const isAdmin = can(user, 'manage', 'catalog', {
+    perspectives: availablePerspectives,
+    isGlobalAdminFlag,
+    capabilities: userCapabilities,
+    modules,
+  });
 
   const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    if (!moduleId || moduleId === 'new') {
+      setLoading(false);
+      return;
+    }
     try {
-      const [tablesData, assetsData, orgUnitsData] = await Promise.all([
-        fetchDataSchemaTables(token, null, moduleId),
-        fetchAssetProfiles(token).catch(() => []),
-        fetchOrgUnits(token).catch(() => []),
-      ]);
-      setTables(Array.isArray(tablesData) ? tablesData : tablesData?.results || []);
-      setOrgUnits(Array.isArray(orgUnitsData) ? orgUnitsData : orgUnitsData?.results || []);
-      const map = {};
-      (Array.isArray(assetsData) ? assetsData : assetsData?.results || []).forEach((a) => {
-        if (a.data_table != null && !a.data_field) map[a.data_table] = a;
+      setLoading(true);
+      setError(null);
+
+      // Module itself is authoritative (A3 — not (context?.modules||[]).find)
+      const [moduleData, tablesData, assetsData, orgUnitsData, qualityData, auditData] =
+        await Promise.all([
+          fetchModule(token, moduleId),
+          fetchDataSchemaTables(token, null, moduleId).catch(() => []),
+          fetchAssetProfiles(token).catch(() => []),
+          fetchOrgUnits(token).catch(() => []),
+          fetchModuleQualitySummary(token, moduleId).catch(() => null),
+          fetchModuleAuditTrail(token, moduleId).catch(() => []),
+        ]);
+
+      setProduct(moduleData);
+      setTables(unwrap(tablesData));
+      setOrgUnits(unwrap(orgUnitsData));
+      setQualitySummary(qualityData || null);
+
+      const assetMap = {};
+      unwrap(assetsData).forEach((a) => {
+        if (a.data_table != null && !a.data_field) assetMap[a.data_table] = a;
       });
-      setAssets(map);
+      setAssets(assetMap);
+      setAuditEvents(unwrap(auditData));
     } catch (err) {
       const msg = err.message || 'Failed to load data product';
       setError(msg);
@@ -84,234 +101,65 @@ export default function DataProductDetailPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const openCreate = () => { setEditingTable(null); setFormData({ title: '', description: '' }); setDialogOpen(true); };
-  const openEdit = (t) => { setEditingTable(t); setFormData({ title: t.title || '', description: t.description || '' }); setDialogOpen(true); };
-  const closeDialog = () => { setDialogOpen(false); setEditingTable(null); };
+  const handleDataChanged = useCallback(async () => {
+    await loadData();
+  }, [loadData]);
 
-  const openProductEdit = () => {
-    setProductForm({
-      name: module?.name || '',
-      description: module?.description || '',
-      scope: module?.scope || 1,
-      org_unit: module?.org_unit ?? '',
-    });
-    setProductDialogOpen(true);
-  };
-  const closeProductDialog = () => { if (!productSubmitting) setProductDialogOpen(false); };
-
-  const handleProductSave = async () => {
-    if (!productForm.name.trim()) { notify({ message: 'Name is required', type: 'error' }); return; }
-    setProductSubmitting(true);
-    try {
-      await updateModule(token, moduleId, {
-        name: productForm.name.trim(),
-        description: productForm.description.trim(),
-        scope: Number(productForm.scope),
-        org_unit: productForm.org_unit === '' ? null : Number(productForm.org_unit),
-      });
-      notify({ message: `${DATA_PRODUCT} updated`, type: 'success' });
-      setProductDialogOpen(false);
-      await selectProject();
-    } catch (err) {
-      notify({ message: err.message || 'Save failed', type: 'error' });
-    } finally {
-      setProductSubmitting(false);
-    }
-  };
-
-  const handleProductDelete = async () => {
-    const count = tables.length;
-    const warn = count > 0
-      ? `"${module?.name}" has ${count} table${count !== 1 ? 's' : ''}. Deleting it may remove associated data. Continue?`
-      : `Delete ${DATA_PRODUCT} "${module?.name}"?`;
-    if (!window.confirm(warn)) return;
-    try {
-      await deleteModule(token, moduleId);
-      notify({ message: `${DATA_PRODUCT} deleted`, type: 'success' });
-      await selectProject();
-      navigate('/catalog/products');
-    } catch (err) {
-      notifyFromError(err, 'Delete failed');
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!formData.title.trim()) { notify({ message: 'Title is required', type: 'error' }); return; }
-    setSubmitting(true);
-    try {
-      const payload = { title: formData.title.trim(), description: formData.description.trim(), module: Number(moduleId) };
-      if (editingTable) {
-        await updateDataSchemaTable(token, editingTable.id, payload, null, Number(moduleId));
-        notify({ message: 'Table updated', type: 'success' });
-        closeDialog();
-        await loadData();
-      } else {
-        const created = await createDataSchemaTable(token, payload, null, Number(moduleId));
-        notify({ message: 'Table created', type: 'success' });
-        closeDialog();
-        if (created?.id) { navigate(`/catalog/tables/${created.id}`); return; }
-        await loadData();
-      }
-    } catch (err) {
-      notify({ message: err.message || 'Save failed', type: 'error' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (t) => {
-    if (!window.confirm(`Delete table "${t.title}"?`)) return;
-    try {
-      await deleteDataSchemaTable(token, t.id, null, Number(moduleId));
-      notify({ message: 'Table deleted', type: 'success' });
-      await loadData();
-    } catch (err) {
-      notify({ message: err.message || 'Delete failed', type: 'error' });
-    }
-  };
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (!module) {
+  if (!product && !loading && moduleId !== 'new') {
     return (
       <Box sx={{ p: 3 }}>
-        <Alert severity="error">Data product not found.</Alert>
+        <DetailHeader
+          title="Data Product Not Found"
+          onClose={() => navigate(-1)}
+        />
       </Box>
     );
   }
 
+  const headerComponent = product ? (
+    <DetailHeader
+      title={product.name || 'Data Product'}
+      description={product.description || product.org_unit_name || ''}
+      icon={Inventory2Icon}
+      onClose={() => navigate(-1)}
+    />
+  ) : (
+    <DetailHeader
+      title="Loading..."
+      icon={Inventory2Icon}
+      onClose={() => navigate(-1)}
+    />
+  );
+
   return (
-    <PageContainer>
-      <PageHeader
-        icon={Inventory2Icon}
-        title={module.name}
-        subtitle={`${module.description || 'Data product'}${module.org_unit_name ? ` · ${module.org_unit_name}` : ''}`}
-        actions={isAdmin && (
-          <>
-            <Button variant="outlined" startIcon={<EditIcon />} onClick={openProductEdit}>Edit</Button>
-            <Button variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={handleProductDelete}>Delete</Button>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>New Table</Button>
-          </>
-        )}
-      />
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      {tables.length === 0 ? (
-        <Alert severity="info">No tables in this data product yet.</Alert>
-      ) : (
-        <Grid container spacing={2}>
-          {tables.map((t) => {
-            const q = assets[t.id]?.quality_status || 'unknown';
-            return (
-              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={t.id}>
-                <Card
-                  sx={{ height: '100%', display: 'flex', flexDirection: 'column',
-                    border: '1px solid', borderColor: 'divider', cursor: 'pointer' }}
-                  onClick={() => navigate(`/catalog/tables/${t.id}`)}
-                >
-                  <CardHeader
-                    avatar={<TableChartIcon color="primary" />}
-                    title={t.title}
-                    titleTypographyProps={{ variant: 'subtitle1', fontWeight: 600 }}
-                    action={
-                      <Tooltip title="Open table">
-                        <IconButton size="small" color="primary"
-                          onClick={(e) => { e.stopPropagation(); navigate(`/catalog/tables/${t.id}`); }}>
-                          <VisibilityIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    }
-                  />
-                  <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {t.description || 'No description'}
-                    </Typography>
-                    <Box sx={{ mt: 'auto', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                      <Chip label={q} size="small" color={QUALITY_COLOR[q] || 'default'} variant="outlined" />
-                      {isAdmin && (
-                        <Box sx={{ ml: 'auto', display: 'flex', gap: 0.5 }}>
-                          <Tooltip title="Edit metadata">
-                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEdit(t); }}>
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete">
-                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDelete(t); }}>
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      )}
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            );
-          })}
-        </Grid>
-      )}
-
-      <Dialog open={dialogOpen} onClose={closeDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>{editingTable ? 'Edit Table' : 'New Table'}</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          <TextField fullWidth label="Title" margin="normal" value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
-          <TextField fullWidth label="Description" margin="normal" multiline rows={3} value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeDialog}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained" disabled={submitting}>
-            {submitting ? 'Saving…' : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={productDialogOpen} onClose={closeProductDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit {DATA_PRODUCT}</DialogTitle>
-        <DialogContent>
-          <TextField
-            fullWidth label="Name" margin="normal" value={productForm.name}
-            onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} autoFocus required
-          />
-          <TextField
-            fullWidth label="Description" margin="normal" multiline rows={2} value={productForm.description}
-            onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-          />
-          <TextField
-            select fullWidth label="Scope" margin="normal" value={productForm.scope}
-            onChange={(e) => setProductForm({ ...productForm, scope: e.target.value })}
-            helperText="Default GHG scope for this product's activity data"
-          >
-            {SCOPE_OPTIONS.map((s) => (
-              <MenuItem key={s} value={s}>{SCOPE_LABEL[s]}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select fullWidth label="Org Unit" margin="normal" value={productForm.org_unit}
-            onChange={(e) => setProductForm({ ...productForm, org_unit: e.target.value })}
-            helperText="Owning organizational unit (governs access)"
-          >
-            <MenuItem value="">— None —</MenuItem>
-            {orgUnits.map((ou) => (
-              <MenuItem key={ou.id} value={ou.id}>{ou.name}</MenuItem>
-            ))}
-          </TextField>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeProductDialog} disabled={productSubmitting}>Cancel</Button>
-          <Button onClick={handleProductSave} variant="contained" disabled={productSubmitting}>
-            {productSubmitting ? 'Saving…' : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </PageContainer>
+    <BaseDetailPage
+      headerComponent={headerComponent}
+      mainTabs={[
+        { label: 'Overview', component: DataProductOverviewTab },
+        { label: 'Tables', component: DataProductTablesTab },
+        { label: 'DQ', component: DataProductDQTab },
+        ...(isAdmin
+          ? [{ label: 'Edit', component: DataProductEditTab }]
+          : []),
+        { label: 'Audit', component: DataProductAuditTab },
+      ]}
+      metricsTabs={[
+        { label: 'Metrics', component: DataProductMetricsPanel },
+      ]}
+      loading={loading}
+      error={error}
+      onClose={() => navigate(-1)}
+      storageKey="carbonDataProductDetail"
+      entityData={product}
+      additionalProps={{
+        tables,
+        assets,
+        orgUnits,
+        qualitySummary,
+        auditEvents,
+        isAdmin,
+        onDataChanged: handleDataChanged,
+      }}
+    />
   );
 }

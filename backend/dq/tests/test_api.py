@@ -237,24 +237,25 @@ class ResultFailuresTests(APIBaseTestCase):
         self.assertIn(r.status_code, [403, 404])
 
 
-# ── POST /dq/rules/{id}/execute/ ──
+# ── POST /dq/rules/{id}/run/ (jobs-based; replaces the removed sync execute action) ──
 
-class RuleExecuteActionTests(APIBaseTestCase):
-    def test_admin_can_execute_rule(self):
+class RuleRunActionTests(APIBaseTestCase):
+    def test_admin_can_run_rule(self):
         self.client.force_authenticate(self.admin)
-        r = self.client.post(f'{BASE}/rules/{self.rule.id}/execute/')
+        r = self.client.post(f'{BASE}/rules/{self.rule.id}/run/')
         self.assertIn(r.status_code, [200, 201])
+        self.assertEqual(r.data.get('job_type'), 'rule_run')
 
-    def test_execute_returns_result_fields(self):
+    def test_run_returns_job_fields(self):
         self.client.force_authenticate(self.admin)
-        r = self.client.post(f'{BASE}/rules/{self.rule.id}/execute/')
-        self.assertIsInstance(r.data, list)
-        self.assertTrue(len(r.data) > 0)
-        self.assertIn('passed', r.data[0])
+        r = self.client.post(f'{BASE}/rules/{self.rule.id}/run/')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED)
+        self.assertIn('status', r.data)
+        self.assertIn('pulse_task_id', r.data)
 
-    def test_outsider_cannot_execute_rule(self):
+    def test_outsider_cannot_run_rule(self):
         self.client.force_authenticate(self.outsider)
-        r = self.client.post(f'{BASE}/rules/{self.rule.id}/execute/')
+        r = self.client.post(f'{BASE}/rules/{self.rule.id}/run/')
         self.assertIn(r.status_code, [403, 404])
 
 

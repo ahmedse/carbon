@@ -12,6 +12,7 @@ RULE_TYPES = [
     ('allowed_values', 'Allowed Values'), ('range', 'Range'), ('regex', 'Regex'),
     ('reference_integrity', 'Reference Integrity'), ('threshold', 'Threshold'),
     ('nl_check', 'NL Check'),
+    ('anomaly_detect', 'Anomaly Detect'),  # Phase 4 — feeds anomaly.detect payloads
 ]
 SEVERITY_CHOICES = [('info', 'Info'), ('warn', 'Warn'), ('error', 'Error')]
 RULE_LEVELS = [
@@ -28,6 +29,25 @@ DIMENSIONS = [
     ('uniqueness', 'Uniqueness'),
     ('integrity', 'Integrity'),
     ('reasonability', 'Reasonability'),
+]
+
+# Phase 3 — Jobs: everything beyond the write-time gate is an explicit,
+# user-started job with a followable lifecycle (see TASK-DQ-CORE-P3-JOBS).
+JOB_TYPES = [
+    ('rule_run', 'Rule Run'),
+    ('profile', 'Profile'),
+    ('freshness', 'Freshness'),
+    ('schema', 'Schema'),
+    ('nl_check', 'NL Check'),
+    ('suggest', 'Suggest'),
+    ('anomaly', 'Anomaly'),  # Phase 4 — Pulse anomaly.detect job
+]
+JOB_STATUSES = [
+    ('queued', 'Queued'),
+    ('running', 'Running'),
+    ('done', 'Done'),
+    ('failed', 'Failed'),
+    ('canceled', 'Canceled'),
 ]
 
 
@@ -195,13 +215,34 @@ class FieldProfile(models.Model):
 
 
 class DQResult(models.Model):
-    """Results of executing a DQ rule against a specific field/table."""
+    """Results of executing a DQ rule against a specific field/table.
+
+    Phase 4 (fail-visible, design decision #1): `passed` is nullable and
+    `status` distinguishes a real failure from a rule that could not be
+    evaluated because Pulse was unavailable (`skipped_unavailable`). Skipped
+    results are excluded from score denominators so scores honestly show the
+    gap instead of silently auto-passing.
+    """
+    RESULT_STATUSES = [
+        ('passed', 'Passed'),
+        ('failed', 'Failed'),
+        ('skipped_unavailable', 'Skipped — Pulse Unavailable'),
+    ]
+
     rule = models.ForeignKey(DQRule, on_delete=models.CASCADE, related_name='results')
     data_field = models.ForeignKey(
         DataField, null=True, blank=True, on_delete=models.SET_NULL, related_name='dq_results'
     )
     run_at = models.DateTimeField(auto_now_add=True)
-    passed = models.BooleanField(default=True)
+    status = models.CharField(
+        max_length=20, choices=RESULT_STATUSES, default='passed',
+        help_text='passed|failed|skipped_unavailable (fail-visible, Phase 4)',
+    )
+    passed = models.BooleanField(
+        null=True, blank=True, default=None,
+        help_text='True/False verdict; null when the rule could not be evaluated '
+                  '(status=skipped_unavailable — Pulse down, Phase 4 fail-visible)',
+    )
     checked_count = models.PositiveIntegerField(default=0)
     failed_count = models.PositiveIntegerField(default=0)
     sample_failures = models.JSONField(default=list, blank=True)
@@ -305,3 +346,142 @@ class SchemaChange(models.Model):
 
     def __str__(self):
         return f'{self.data_table.name}: {self.get_change_type_display()} {self.field_name} @ {self.detected_at:%Y-%m-%d %H:%M}'
+
+
+# ── Phase 3: DQ Jobs ───────────────────────────────────────────────────────
+
+class DQJob(models.Model):
+    """An explicit, user-started DQ job with a followable lifecycle.
+
+    Deterministic jobs (rule_run, profile, freshness, schema) execute inline
+    during POST /dq/jobs/ (no Celery/Redis/daemon — design decision #1).
+    Pulse jobs (nl_check, suggest) are submitted to Pulse; `refresh()` polls
+    the task from GET /dq/jobs/{id}/ until a terminal state.
+
+    Every completed job still writes normal DQResult rows, so history, trends
+    and catalog rollups keep working unchanged.
+    """
+    job_type = models.CharField(max_length=20, choices=JOB_TYPES)
+    status = models.CharField(max_length=10, choices=JOB_STATUSES, default='queued')
+    rule = models.ForeignKey(
+        DQRule, null=True, blank=True, on_delete=models.SET_NULL, related_name='jobs'
+    )
+    data_table = models.ForeignKey(
+        DataTable, null=True, blank=True, on_delete=models.SET_NULL, related_name='dq_jobs'
+    )
+    payload = models.JSONField(default=dict, blank=True,
+        help_text='Job inputs (e.g. prompt, unavailable_streak for Pulse jobs)')
+    result = models.JSONField(default=dict, blank=True,
+        help_text='Job summary (counts for rule runs, profile summary, Pulse result)')
+    pulse_task_id = models.CharField(max_length=64, blank=True, default='',
+        help_text='Pulse task id for nl_check/suggest jobs (polled via GET /tasks/{id})')
+    progress = models.PositiveSmallIntegerField(default=0, help_text='0–100')
+    error = models.TextField(blank=True, default='')
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='dq_jobs'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', 'job_type']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.job_type} #{self.pk} — {self.status}'
+
+
+# ── Phase 4: Pulse plugins — suggestions & anomaly detection ──────────────
+# (TASK-DQ-CORE-P4-PULSE — suggestions are data: pending → accepted/rejected;
+# anomalies are stored facts from the anomaly.detect task; both are Carbon-side
+# only — no Pulse-side code ships in this repo.)
+
+class DQSuggestion(models.Model):
+    """An AI-suggested DQ rule (from a completed dq.suggest Pulse task).
+
+    Suggestions are DATA, not actions: they land as `pending` rows, are
+    reviewed by humans, and only become real DQRules when explicitly accepted.
+    Nothing auto-creates rules.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected'),
+    ]
+
+    data_table = models.ForeignKey(
+        DataTable, on_delete=models.CASCADE, related_name='dq_suggestions'
+    )
+    payload = models.JSONField(
+        help_text='Complete v1 rule definition (rule_schema) — becomes the DQRule on accept'
+    )
+    rationale = models.TextField(blank=True, default='',
+        help_text='Why Pulse suggested this rule (Pulse-written explanation)')
+    confidence = models.FloatField(null=True, blank=True,
+        help_text='Pulse confidence in the suggestion (0–1)')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    reject_reason = models.TextField(blank=True, default='')
+    job = models.ForeignKey(
+        DQJob, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='suggestions', help_text='dq.suggest job that produced this suggestion'
+    )
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_dq_suggestions'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', '-created_at']),
+            models.Index(fields=['data_table', '-created_at']),
+        ]
+
+    def __str__(self):
+        name = ''
+        if isinstance(self.payload, dict):
+            name = self.payload.get('name', '')
+        return f'{name or self.data_table.name} suggestion #{self.pk} — {self.status}'
+
+
+class DQAnomaly(models.Model):
+    """A detected anomaly from the anomaly.detect Pulse task (Phase 4).
+
+    Pulse is statistical-first (z-score/IQR/seasonal baseline) and returns
+    expected/observed/score/explanation; LLMs only write `explanation`.
+    """
+    data_table = models.ForeignKey(
+        DataTable, on_delete=models.CASCADE, related_name='dq_anomalies'
+    )
+    metric = models.CharField(max_length=255,
+        help_text='e.g. row_count, null_pct:<field>, sum(kwh)')
+    group_key = models.JSONField(null=True, blank=True,
+        help_text='e.g. {"building": "alamein"} — when the anomaly is scoped to a group')
+    expected_range = models.JSONField(default=dict, blank=True,
+        help_text='{"low": ..., "high": ...} expected baseline from Pulse')
+    observed = models.FloatField(help_text='Observed value that triggered the anomaly')
+    score = models.FloatField(default=0.0,
+        help_text='Deviation magnitude (e.g. z-score / std-devs from baseline)')
+    explanation = models.TextField(blank=True, default='',
+        help_text='Pulse-written human explanation (LLM writes this only)')
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='warn')
+    job = models.ForeignKey(
+        DQJob, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='anomalies', help_text='anomaly job that produced this anomaly'
+    )
+    detected_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-detected_at']
+        indexes = [
+            models.Index(fields=['data_table', '-detected_at']),
+            models.Index(fields=['severity', '-detected_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.data_table.name}: {self.metric} {self.observed} @ {self.detected_at:%Y-%m-%d %H:%M}'

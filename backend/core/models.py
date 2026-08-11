@@ -21,6 +21,8 @@ class Module(models.Model):
         default=False,
         help_text="When locked, prevents accidental deletion or modification (admin override available)"
     )
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True)
 
     class Meta:
         verbose_name = "Module"

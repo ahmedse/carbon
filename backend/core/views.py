@@ -3,10 +3,13 @@ from .serializers import ModuleSerializer, FeedbackSerializer, NotificationSeria
 from .feedback import AppFeedback
 from accounts.permissions import AdminOrSuperuserOnly
 from accounts.rbac_utils import get_visible_module_ids
+from catalog.models import AssetProfile, GovernanceEvent
+from catalog.serializers import GovernanceEventSerializer
 from rest_framework import mixins, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+from django.db.models import Avg, Count, Q
 from django.utils import timezone
 
 
@@ -87,6 +90,35 @@ class ModuleViewSet(viewsets.ModelViewSet):
                 )
 
         return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['get'])
+    def quality_summary(self, request, pk=None):
+        """Aggregate DQ stats for all tables in this module."""
+        module = self.get_object()
+        tables = module.data_tables.all()
+        assets = AssetProfile.objects.filter(
+            data_table__in=tables, data_field__isnull=True,
+        )
+        summary = {
+            'total': assets.count(),
+            'passing': assets.filter(quality_status='passing').count(),
+            'warning': assets.filter(quality_status='warning').count(),
+            'failing': assets.filter(quality_status='failing').count(),
+            'unknown': assets.filter(quality_status='unknown').count(),
+            'avg_score': assets.aggregate(avg=Avg('quality_score'))['avg'],
+        }
+        return Response(summary)
+
+    @action(detail=True, methods=['get'])
+    def audit_trail(self, request, pk=None):
+        """Governance events for this module and its tables."""
+        module = self.get_object()
+        table_ids = list(module.data_tables.values_list('id', flat=True))
+        events = GovernanceEvent.objects.filter(
+            Q(entity_type='module', entity_id=module.id) |
+            Q(entity_type='datatable', entity_id__in=table_ids)
+        ).order_by('-timestamp')[:100]
+        return Response(GovernanceEventSerializer(events, many=True).data)
 
 class FeedbackViewSet(mixins.CreateModelMixin,
                       mixins.ListModelMixin,

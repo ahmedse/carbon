@@ -9,7 +9,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { can } from '../../authz';
 import {
-  Box, Button, Chip, Stack, TextField, MenuItem, IconButton, Tooltip, Alert,
+  Box, Button, Chip, Stack, IconButton, Tooltip, Alert,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
@@ -21,73 +21,21 @@ import { fetchDataSchemaTables } from '../../api/dataschema';
 import { fetchAssetProfiles } from '../../api/catalog';
 import { createModule, updateModule, deleteModule } from '../../api/modules';
 import { fetchOrgUnits } from '../../api/orgUnits';
-import { DATA_PRODUCTS, DATA_PRODUCT } from '../../constants/terminology';
+import { DATA_PRODUCTS, DATA_PRODUCT, SCOPE_LABEL, SCOPE_OPTIONS } from '../../constants/terminology';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import SystemDialog from '../../components/SystemDialog';
+import ProductForm from '../../components/dataproducts/ProductForm';
 
-const SCOPE_LABEL = { 1: 'Scope 1', 2: 'Scope 2', 3: 'Scope 3' };
-const SCOPE_OPTIONS = [1, 2, 3];
 const EMPTY_FORM = { name: '', description: '', scope: 1, org_unit: '' };
 
-// ── ProductDialog ──────────────────────────────────────────────────────
-// Create/Edit form on SystemDialog (CB-14 — modal, not Drawer)
-
-function ProductDialog({ open, editing, form, onChange, orgUnits, submitting, onSave, onClose }) {
-  return (
-    <SystemDialog
-      open={open}
-      title={editing ? `Edit ${DATA_PRODUCT}` : `New ${DATA_PRODUCT}`}
-      onClose={onClose}
-      onCancel={onClose}
-      cancelLabel="Cancel"
-      actions={
-        <Button variant="contained" size="small" onClick={onSave} disabled={submitting}>
-          {submitting ? 'Saving…' : 'Save'}
-        </Button>
-      }
-      width={520}
-      height={560}
-      minWidth={420}
-      minHeight={460}
-      maxWidth="calc(100vw - 32px)"
-      maxHeight="calc(100vh - 32px)"
-    >
-      <Box px={2} py={1}>
-        <Stack spacing={2}>
-          <TextField
-            fullWidth label="Name" size="small" autoFocus required
-            value={form.name}
-            onChange={(e) => onChange({ ...form, name: e.target.value })}
-          />
-          <TextField
-            fullWidth label="Description" size="small" multiline rows={2}
-            value={form.description}
-            onChange={(e) => onChange({ ...form, description: e.target.value })}
-          />
-          <TextField
-            select fullWidth label="Scope" size="small" value={form.scope}
-            onChange={(e) => onChange({ ...form, scope: e.target.value })}
-            helperText="Default GHG scope for this product's activity data"
-          >
-            {SCOPE_OPTIONS.map((s) => (
-              <MenuItem key={s} value={s}>{SCOPE_LABEL[s]}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select fullWidth label="Org Unit" size="small" value={form.org_unit}
-            onChange={(e) => onChange({ ...form, org_unit: e.target.value })}
-            helperText="Owning organizational unit (governs access)"
-          >
-            <MenuItem value="">— None —</MenuItem>
-            {orgUnits.map((ou) => (
-              <MenuItem key={ou.id} value={ou.id}>{ou.name}</MenuItem>
-            ))}
-          </TextField>
-        </Stack>
-      </Box>
-    </SystemDialog>
-  );
+// ISO → compact date+time, '—' for missing/invalid (codebase convention)
+function formatModified(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function DataProductsPage() {
@@ -102,6 +50,7 @@ export default function DataProductsPage() {
   const [assets, setAssets] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [filterScope, setFilterScope] = useState('');
+  const [filterOrgUnit, setFilterOrgUnit] = useState('');
   const [orgUnits, setOrgUnits] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -188,7 +137,7 @@ export default function DataProductsPage() {
     }
   };
 
-  // Group tables + quality by module id.
+  // Group tables + quality + last-modified by module id.
   const statsByModule = useMemo(() => {
     const assetByTable = {};
     assets.forEach((a) => { if (a.data_table != null && !a.data_field) assetByTable[a.data_table] = a; });
@@ -196,16 +145,20 @@ export default function DataProductsPage() {
     tables.forEach((t) => {
       const mid = t.module ?? t.module_id;
       if (mid == null) return;
-      if (!map[mid]) map[mid] = { count: 0, failing: 0, warning: 0 };
+      if (!map[mid]) map[mid] = { count: 0, failing: 0, warning: 0, updated: null };
       map[mid].count += 1;
       const q = assetByTable[t.id]?.quality_status;
       if (q === 'failing') map[mid].failing += 1;
       else if (q === 'warning') map[mid].warning += 1;
+      const ts = t.updated_at ? Date.parse(t.updated_at) : NaN;
+      if (!Number.isNaN(ts) && (map[mid].updated == null || ts > map[mid].updated)) {
+        map[mid].updated = ts;
+      }
     });
     return map;
   }, [tables, assets]);
 
-  const hasFilters = Boolean(searchText || filterScope);
+  const hasFilters = Boolean(searchText || filterScope || filterOrgUnit);
 
   const filtered = useMemo(() => {
     let f = modules;
@@ -218,10 +171,13 @@ export default function DataProductsPage() {
     if (filterScope) {
       f = f.filter((m) => String(m.scope) === filterScope);
     }
+    if (filterOrgUnit) {
+      f = f.filter((m) => String(m.org_unit ?? '') === filterOrgUnit);
+    }
     return f;
-  }, [modules, searchText, filterScope]);
+  }, [modules, searchText, filterScope, filterOrgUnit]);
 
-  const handleClearFilters = () => { setSearchText(''); setFilterScope(''); };
+  const handleClearFilters = () => { setSearchText(''); setFilterScope(''); setFilterOrgUnit(''); };
 
   const columns = useMemo(() => [
     {
@@ -285,6 +241,13 @@ export default function DataProductsPage() {
           </Stack>
         );
       },
+    },
+    {
+      field: 'modified',
+      headerName: 'Modified',
+      width: 170,
+      valueGetter: (value, row) => statsByModule[row.id]?.updated || null,
+      valueFormatter: (value) => formatModified(value),
     },
     ...(canManage
       ? [
@@ -354,9 +317,18 @@ export default function DataProductsPage() {
             emptyLabel: 'All Scopes',
             options: SCOPE_OPTIONS.map((s) => ({ value: String(s), label: SCOPE_LABEL[s] })),
           },
+          {
+            key: 'org_unit',
+            label: 'Org Unit',
+            emptyLabel: 'All Org Units',
+            options: orgUnits.map((ou) => ({ value: String(ou.id), label: ou.name })),
+          },
         ]}
-        filterValues={{ scope: filterScope }}
-        onFilterChange={(key, value) => { if (key === 'scope') setFilterScope(value); }}
+        filterValues={{ scope: filterScope, org_unit: filterOrgUnit }}
+        onFilterChange={(key, value) => {
+          if (key === 'scope') setFilterScope(value);
+          else if (key === 'org_unit') setFilterOrgUnit(value);
+        }}
         onClearFilters={handleClearFilters}
         pageSize={25}
         rowsPerPageOptions={[25, 50, 100]}
@@ -365,16 +337,31 @@ export default function DataProductsPage() {
       />
 
       {/* Create/Edit Dialog (modal — design system primitive) */}
-      <ProductDialog
+      <SystemDialog
         open={dialogOpen}
-        editing={editing}
-        form={form}
-        onChange={setForm}
-        orgUnits={orgUnits}
-        submitting={submitting}
-        onSave={handleSubmit}
+        title={editing ? `Edit ${DATA_PRODUCT}` : `New ${DATA_PRODUCT}`}
         onClose={closeDialog}
-      />
+        onCancel={closeDialog}
+        cancelLabel="Cancel"
+        actions={
+          <Button variant="contained" size="small" onClick={handleSubmit} disabled={submitting}>
+            {submitting ? 'Saving…' : 'Save'}
+          </Button>
+        }
+        width={520}
+        height={560}
+        minWidth={420}
+        minHeight={460}
+        maxWidth="calc(100vw - 32px)"
+        maxHeight="calc(100vh - 32px)"
+      >
+        <ProductForm
+          form={form}
+          onChange={setForm}
+          orgUnits={orgUnits}
+          readOnly={false}
+        />
+      </SystemDialog>
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
