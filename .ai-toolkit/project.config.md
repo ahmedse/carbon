@@ -101,7 +101,7 @@ ARCH_AI_DOMAIN_OPS=Per-app ABCs in ai/domain/{app}.py — anomaly.detect, anomal
 ARCH_AI_GUARDS=ScopeGuard, AccessGuard, DataIsolationGuard, MutationGuard, AuditTrail — run BEFORE every AI call
 ARCH_AI_PROVIDER=AI engine is IN-HAND (backend/ai/engine/) — NO provider swappability. backend/ai/providers/pulse.py is the single adapter seam (implementation detail, not a strategy guarantee).
 # AI provider specifics:
-ARCH_AI_ENGINE=backend/ai/engine/ — vendored Pulse stateless engine (agent/, llm/, cognition/, core/). In-hand, in-process; long inference runs via async jobs on Redis.
+ARCH_AI_ENGINE=backend/ai/engine/ — vendored Pulse engine (agent/, llm/, cognition/, core/, memory/, knowledge/, knowledge_graph/, ingestion/, proactive/, archetypes/, skills/). Engine is STATEFUL in source (SQLAlchemy); statelessness is achieved in Phase 2 by swapping core/database.py to a Django Store seam. In-hand, in-process; long inference runs via async jobs on Redis.
 ARCH_AI_CONTRACT=Task envelope (id, type, payload, scope) — internal async job contract carried over Redis (was HTTP POST /tasks). Carbon generates task ID (UUID v4, idempotent). Engine returns {task_id, status, result, error}. Status: pending|working|completed|failed|partial. Carbon owns durable state; the engine is stateless.
 ARCH_AI_TASK_1=dq.validate (sync, 10s) — NL DQ rule validation. Carbon sends rules+rows → AI provider returns {results: [{rule_id, status, failing_rows, explanation, confidence}]}
 ARCH_AI_TASK_2=classification.infer (sync, 5s) — Auto-classify DataField metadata → glossary terms, PII detection, data type suggestions

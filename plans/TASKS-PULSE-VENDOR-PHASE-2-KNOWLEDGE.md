@@ -10,12 +10,17 @@
 
 ## Objective
 
-Migrate Pulse's durable-state modules into Carbon as **internal Python packages inside
-the ONE `backend/ai/` Django app** (per ADR-0008 — modular monolith, NO new Django apps).
-They become Carbon's System of Intelligence: Carbon Postgres, CBAC-partitioned by
-`app_identifier`. This is NOT a copy-paste — persistence is re-modeled on Django ORM
-(drop SQLAlchemy/pgvector sessions), and every query is scoped by `app_identifier` + org
-subtree.
+Two things, in one phase:
+1. **Swap the persistence seam.** Replace `engine/core/database.py` (SQLAlchemy session
+   factory) with a `Store` interface. Provide two implementations: in-memory (per-task
+   working memory — the "stateless" contract) and Django ORM (durable, CBAC-partitioned).
+   Re-model `engine/core/models.py` (~30 tables) as Django models in `backend/ai/models/`
+   (one migration namespace, per ADR-0008 — NO new Django apps).
+2. **Wire the engine in-process.** Point `backend/ai/providers/pulse.py` at the in-hand
+   engine; retire the HTTP path; remove `AI_PROVIDER_CLASS` runtime swapping.
+
+This is what actually makes the engine **stateless + Carbon-owned** (ADR-0007/0009).
+Every durable query is scoped by `app_identifier` + org subtree.
 
 ## Modules to migrate (from `/home/ahmed/clearturn/pulse`)
 
@@ -43,11 +48,13 @@ All as packages under `backend/ai/` — models into `backend/ai/models/`, one mi
 - **Single facade:** all Carbon code calls `CarbonIntelligence` — never engine internals.
 - **Injected deps:** config/DB/cache via a bootstrap, so the layer stays relocatable.
 
-## Pre-work (Master will finalize this spec)
+## Pre-work (Master will finalize this spec after Phase 1 lands)
 
-- [ ] Read each Pulse module's model layer to enumerate exact Django models + fields.
+- [ ] Enumerate the exact Django models + fields from the vendored `engine/core/models.py`.
+- [ ] Design the `Store` interface surface (the methods `engine/core/database.py` exposes).
 - [ ] Decide JSONB vs dedicated tables vs a Postgres-native vector option for v1.
 - [ ] Confirm CBAC partitioning strategy per module (RULE_20).
+- [ ] Confirm the in-process adapter contract in `providers/pulse.py`.
 
 ## Guiding hard rules (already binding)
 

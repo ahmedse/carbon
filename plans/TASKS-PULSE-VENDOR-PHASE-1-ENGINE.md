@@ -5,8 +5,14 @@
 **Domain:** backend
 **Primary context:** `.ai-toolkit/decisions/0007-pulse-inhand-stateless-engine.md`, `docs/AI_INTELLIGENCE_ARCHITECTURE.md`, `.ai-toolkit/shared/ai-contract.md`
 
-Vendor Pulse's stateless reasoning engine into Carbon as an in-hand package.
-Source: `/home/ahmed/clearturn/pulse`. Destination: `backend/ai/engine/`.
+Vendor the FULL Pulse engine in-hand as an **INERT** package (no DB wiring, no migrations,
+no runtime execution). Source: `/home/ahmed/clearturn/pulse`. Destination: `backend/ai/engine/`.
+
+> **SCOPE CORRECTION (ADR-0009):** Pulse's engine is a **stateful SQLAlchemy monolith** —
+> `agent/reasoning.py`, `tools.py`, `guardrails.py`, `llm/router.py`, `llm/prompts.py`,
+> `cognition/turn/runner.py` all write to the DB via `get_session_factory()`. There is no
+> "clean stateless subset" that is also a usable engine. So this phase vendors the WHOLE
+> engine verbatim (inert); Phase 2 swaps the persistence seam to Django. **Do NOT cherry-pick.**
 
 FILES TO READ FIRST:
 - `backend/ai/providers/pulse.py` — current HTTP adapter (the seam that changes)
@@ -19,47 +25,41 @@ FILES TO READ FIRST:
 
 TASKS:
 
-1. VENDOR THE STATELESS ENGINE CORE
-   - CREATE `backend/ai/engine/` package with subpackages: `agent/`, `llm/`, `cognition/turn/`, `core/`
-   - COPY from `/home/ahmed/clearturn/pulse` ONLY the stateless reasoning meat:
-     - `agent/` — reasoning.py, guardrails.py, tools.py, executor.py, workers.py, budget.py, registry.py, api_discipline.py, mcp_client.py
-     - `llm/` — provider.py, embeddings.py, router.py, prompts.py, playbook.py, prompt_optimizer.py, prompt_synthesizer.py, eval.py
-     - `cognition/turn/` — six-witness pipeline: runner.py, witnesses.py, retrieve.py, draft.py, critic.py, execute.py, salience.py, ledger.py
-     - `cognition/` — state.py, trajectory.py, synthesis.py
-     - `core/` — config.py, models.py, security.py, encryption.py, exceptions.py, clock.py
-   - Rewrite ALL intra-package imports to the new package root (`from core.config` → `engine.core.config`; `llm.prompts` → `engine.llm.prompts`; etc.)
-   - Verify: `cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python -c "import ai.engine"` → no ImportError
+1. VENDOR THE FULL ENGINE IN-HAND (INERT)
+   - CREATE `backend/ai/engine/` package with subpackages: `agent/`, `llm/`, `cognition/` (incl. `turn/`, `plan/`), `core/`, `memory/`, `knowledge/`, `knowledge_graph/`, `ingestion/`, `proactive/`, `archetypes/`, `skills/`
+   - COPY the FULL source tree from `/home/ahmed/clearturn/pulse` for those directories, VERBATIM. Do NOT cherry-pick by file (see ADR-0009).
+   - EXCLUDE ONLY the HTTP/UI/entrypoint layer (NOT the engine): `main.py`, `api/`, `studio/`, `widget/`, `evals/`
+   - Rewrite ALL intra-package import roots to the new package root (`from core.config` → `engine.core.config`; `from llm.prompts` → `engine.llm.prompts`; `from core.database` → `engine.core.database`; etc.)
+   - DO NOT wire to Django. DO NOT create migrations. DO NOT import from Django. The package is INERT (vendored in-hand, not yet executed).
 
-2. EXCLUDE PERSISTENCE + SYSTEM-OF-INTELLIGENCE (do NOT vendor)
-   - DO NOT copy: `core/database.py`, `main.py`, `api/`, `memory/`, `knowledge/`, `knowledge_graph/`, `ingestion/`, `proactive/`, `archetypes/`, `skills/`, `studio/`, `widget/`, `evals/`, `cognition/loop.py`, `cognition/consolidation.py`, `cognition/distillation.py`, `cognition/monitors.py`, `cognition/learned_triggers.py`
-   - These are Phase 2 (migrated as Carbon Django apps, CBAC-partitioned). The engine stays stateless.
-
-3. ADD ENGINE DEPENDENCIES
-   - MODIFY `backend/requirements.txt`: add `openai`, `tenacity` (and `apscheduler` ONLY if a vendored module imports it — check first)
+2. ADD ENGINE DEPENDENCIES (for clean import only — not execution)
+   - MODIFY `backend/requirements.txt`: add `sqlalchemy`, `pydantic`, `pydantic-settings`, `openai`, `tenacity`, `cryptography`, `httpx`, `PyYAML`, `Jinja2`, `apscheduler`
+   - Note: `sqlalchemy` is TEMPORARY — Phase 2 replaces `core/database.py` with a Django store and removes it.
    - Verify: `/home/ahmed/aast/carbon/.venv/bin/python -m pip install -r requirements.txt` → no error (report if new pins conflict)
 
-4. REPLACE HTTP ADAPTER WITH IN-PROCESS ENGINE SEAM
-   - MODIFY `backend/ai/providers/pulse.py`: call the vendored engine in-process (no HTTP, no requests to :9100)
-   - MODIFY `backend/ai/providers/_http.py`: retire the live HTTP path (inert shim or remove references)
-   - MODIFY `backend/config/settings.py`: remove `AI_PROVIDER_CLASS` runtime swapping (single hardcoded engine seam)
-   - Do NOT change `backend/ai/protocol.py` ABC signatures (contract is stable)
+3. VERIFY INERT VENDOR (no behavior change)
+   - The engine must import cleanly but must NOT be imported by Django or used at runtime yet.
+   - Carbon's existing AI path (HTTP via `providers/pulse.py`) is UNCHANGED in this phase.
+   - Verify: `cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python -c "import ai.engine"` → no ImportError (imports without opening a DB connection)
 
 DO NOT TOUCH:
+- `backend/ai/providers/pulse.py` and `backend/ai/providers/_http.py` (HTTP adapter swap = Phase 2)
+- `backend/config/settings.py` (no AI_PROVIDER_CLASS removal in this phase)
+- `backend/ai/models.py`, `backend/ai/migrations/` (no Django models yet — Phase 2)
 - `carbon-frontend/**`
-- `backend/ai/memory|knowledge|knowledge_graph|ingestion|proactive|archetypes` (do not create — Phase 2)
 - `docs/AI_INTELLIGENCE_ARCHITECTURE.md`
 - `.ai-toolkit/decisions/0007-pulse-inhand-stateless-engine.md`
 - `backend/core/`, `backend/catalog/`, `backend/mdm/`, `backend/dq/`, `backend/emissions/` (engine vendor only)
 
 GATES (run ALL in order before reporting done):
-  cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python -c "import ai.engine" → clean
+  cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python -c "import ai.engine" → clean (no DB connection opened)
   cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python manage.py check → system checks pass
-  cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests -q → backend AI test suite passes
+  cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests -q → backend AI test suite passes (existing HTTP path still green)
   cd /home/ahmed/aast/carbon && bash ./.ai-toolkit/scripts/verify.sh backend → backend gate passes
 
 HARD RULES (project-specific):
-- Pulse engine is STATELESS — no memory, no learning, no graphs, no DB of its own.
-- No separate AI database. Durable state = Carbon Postgres; transient = Redis.
+- Phase 1 vendor is INERT: no Django wiring, no migrations, no runtime execution, no second DB.
+- No separate AI database (RULE_6). Durable state → Carbon Postgres (Phase 2); transient → Redis.
 - Do not add pgvector or an LLM gateway as a separate service (RULE_6).
 - Backend-only phase: do not touch frontend files.
 - Follow `.ai-toolkit/shared/ai-contract.md` (scope is MANDATORY).
