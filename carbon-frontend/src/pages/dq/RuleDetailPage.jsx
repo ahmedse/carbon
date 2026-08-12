@@ -6,7 +6,7 @@ import { Alert, Box, Chip, CircularProgress, Paper, Typography } from '@mui/mate
 import RuleIcon from '@mui/icons-material/Rule';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
-import { useAITaskTransfer } from '../../shell/AITaskTransferContext';
+import { useAITaskTransfer } from '../../shell/useAITaskTransfer';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';

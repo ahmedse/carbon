@@ -24,7 +24,7 @@ import {
 } from '@mui/material';
 import { PlayArrow, CheckCircle, Cancel, RemoveCircle, SmartToy } from '@mui/icons-material';
 import { RULE_TYPE_LABELS } from '../constants';
-import { useAITaskTransfer } from '../../../shell/AITaskTransferContext';
+import { useAITaskTransfer } from '../../../shell/useAITaskTransfer';
 
 // ── Client-side evaluator (mirrors backend dq/engine.py evaluate) ──────────
 

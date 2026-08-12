@@ -97,3 +97,60 @@
 - **`create_job` validates job_type** (raises `ValueError`); the API rejects unknown types with 400 before the runner is reached. The runner's never-raise guarantee applies to `execute()` (tested).
 - No frontend changes (Phase 5), no suggestion persistence (Phase 4), no anomaly type, no scheduler — per explicit exclusions.
 - The `rule-assignments` POST endpoint has a **pre-existing** `IntegrityError` on create (unrelated to jobs; reproduced with both field and table-level payloads). Phase 3 smoke created the assignment via ORM to exercise the job path; flagged here for a future fix, out of scope for this task.
+
+---
+
+## Revalidation — 2026-08-12
+
+Current backend state revalidated cleanly without further code changes.
+
+### Dedicated P3 suite
+
+Command:
+```bash
+cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest dq/tests/test_phase3_jobs.py -q
+```
+
+Output:
+```text
+.........................                                                [100%]
+25 passed in 3.76s
+```
+
+### Full DQ backend suite
+
+Command:
+```bash
+cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest dq/tests -q
+```
+
+Output:
+```text
+........................................................................ [ 87%]
+...............................                                          [100%]
+247 passed in 12.19s
+```
+
+### Backend baseline
+
+Command:
+```bash
+cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python manage.py check
+```
+
+Output:
+```text
+System check identified no issues (0 silenced).
+```
+
+### Migration drift check
+
+Command:
+```bash
+cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+```
+
+Output:
+```text
+No changes detected
+```

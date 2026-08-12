@@ -38,27 +38,6 @@ export function getDQResults(filters = {}, token) {
 }
 
 /**
- * Trigger on-demand DQ validation for a table
- */
-export function runDQValidation(tableId, token) {
-  return apiFetch('dq/run-validation/', { method: 'POST', token, body: { data_table: tableId } });
-}
-
-/**
- * Fetch all DQ rules (optionally filtered)
- */
-export function getDQRules(filters = {}, token) {
-  const queryParams = new URLSearchParams();
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      queryParams.append(key, value);
-    }
-  });
-  const qs = queryParams.toString();
-  return apiFetch(`dq/rules/${qs ? `?${qs}` : ''}`, { token });
-}
-
-/**
  * Fetch table profiles
  */
 export function getTableProfiles(filters = {}, token) {
@@ -224,21 +203,6 @@ export function listDQAnomalies(token, filters = {}) {
   Object.entries(filters).forEach(([k, v]) => { if (v != null && v !== '') params.set(k, v); });
   const qs = params.toString();
   return apiFetch(`dq/anomalies/${qs ? `?${qs}` : ''}`, { token });
-}
-
-/**
- * Run ALL active DQ rules for a table against real rows (the real engine).
- * Writes DQResults and rolls up quality_status/score to the catalog asset.
- * Server-enforced admin-only (is_superuser | is_staff).
- * @param {string} token
- * @param {number|string} tableId
- */
-export function runTableValidation(token, tableId) {
-  return apiFetch('dq/run-validation/', {
-    method: 'POST',
-    token,
-    body: { data_table: tableId },
-  });
 }
 
 /**

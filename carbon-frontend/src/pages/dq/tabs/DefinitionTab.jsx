@@ -13,8 +13,9 @@ import {
 import { Save, SmartToy } from '@mui/icons-material';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
-import { useAITaskTransfer } from '../../../shell/AITaskTransferContext';
-import RuleJsonEditor, { validateDefinitionClient, normalizeServerErrors } from '../../../components/dq/RuleJsonEditor';
+import { useAITaskTransfer } from '../../../shell/useAITaskTransfer';
+import RuleJsonEditor from '../../../components/dq/RuleJsonEditor';
+import { validateDefinitionClient, normalizeServerErrors } from '../../../components/dq/ruleJsonValidation';
 import { updateDQRule, listDQTags } from '../../../api/dq';
 import { fetchAssetProfiles } from '../../../api/catalog';
 import { resolveBindings } from '../bindings';

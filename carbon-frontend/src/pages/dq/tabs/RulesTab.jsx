@@ -19,14 +19,15 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
-import RuleJsonEditor, {
+import RuleJsonEditor from '../../../components/dq/RuleJsonEditor';
+import {
   RULE_TYPES,
   RULE_LEVELS,
   DIMENSION_CODES,
   SEVERITY_VALUES,
   validateDefinitionClient,
   normalizeServerErrors,
-} from '../../../components/dq/RuleJsonEditor';
+} from '../../../components/dq/ruleJsonValidation';
 import {
   listDQRules,
   createDQRule,

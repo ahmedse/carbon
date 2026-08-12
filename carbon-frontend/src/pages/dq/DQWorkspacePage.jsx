@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import {
   AutoAwesome,
+  BugReport,
   CheckCircle,
   Dashboard,
   ErrorOutline,
@@ -29,7 +30,7 @@ import {
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
-import { useAITaskTransfer } from '../../shell/AITaskTransferContext';
+import { useAITaskTransfer } from '../../shell/useAITaskTransfer';
 import SystemDialog from '../../components/SystemDialog';
 import PageContainer from '../../components/layout/PageContainer';
 import DetailHeader from '../../components/detail/DetailHeader';
@@ -44,6 +45,7 @@ import {
   listDQSuggestions,
   acceptDQSuggestion,
   rejectDQSuggestion,
+  listDQAnomalies,
   getTableProfiles,
   getFreshnessChecks,
   getSchemaSnapshots,
@@ -562,52 +564,88 @@ function SchemaDialog({ open, onClose, snapshot }) {
 function MonitoringTab() {
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
+  const { transferTask } = useAITaskTransfer();
   const [profiles, setProfiles] = useState([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
+  const [profilesError, setProfilesError] = useState('');
   const [freshness, setFreshness] = useState([]);
   const [schemaSnapshots, setSchemaSnapshots] = useState([]);
   const [schemaChanges, setSchemaChanges] = useState([]);
+  const [anomalies, setAnomalies] = useState([]);
   const [freshnessLoading, setFreshnessLoading] = useState(false);
+  const [monitoringError, setMonitoringError] = useState('');
+  const [anomalyBusyTableId, setAnomalyBusyTableId] = useState(null);
   const [schemaDialog, setSchemaDialog] = useState(null);
 
-  useEffect(() => {
-    let active = true;
+  const loadProfiles = useCallback(async () => {
     setProfilesLoading(true);
-    getTableProfiles({}, token)
-      .then((payload) => {
-        if (active) setProfiles(unwrap(payload));
-      })
-      .catch((err) => notifyFromError(err, 'Failed to load profiles'))
-      .finally(() => {
-        if (active) setProfilesLoading(false);
-      });
-    return () => {
-      active = false;
-    };
+    setProfilesError('');
+    try {
+      const payload = await getTableProfiles({}, token);
+      setProfiles(unwrap(payload));
+    } catch (err) {
+      setProfilesError(err?.message || 'Failed to load profiles');
+      notifyFromError(err, 'Failed to load profiles');
+    } finally {
+      setProfilesLoading(false);
+    }
+  }, [token, notifyFromError]);
+
+  const loadMonitoring = useCallback(async () => {
+    setFreshnessLoading(true);
+    setMonitoringError('');
+    try {
+      const [f, ss, sc, a] = await Promise.all([
+        getFreshnessChecks({}, token),
+        getSchemaSnapshots({}, token),
+        getSchemaChanges({}, token),
+        listDQAnomalies(token, { ordering: '-detected_at', limit: 100 }),
+      ]);
+      setFreshness(unwrap(f));
+      setSchemaSnapshots(unwrap(ss));
+      setSchemaChanges(unwrap(sc));
+      setAnomalies(unwrap(a));
+    } catch (err) {
+      setMonitoringError(err?.message || 'Failed to load monitoring data');
+      notifyFromError(err, 'Failed to load freshness/schema/anomaly data');
+    } finally {
+      setFreshnessLoading(false);
+    }
   }, [token, notifyFromError]);
 
   useEffect(() => {
-    let active = true;
-    setFreshnessLoading(true);
-    Promise.all([
-      getFreshnessChecks({}, token),
-      getSchemaSnapshots({}, token),
-      getSchemaChanges({}, token),
-    ])
-      .then(([f, ss, sc]) => {
-        if (!active) return;
-        setFreshness(unwrap(f));
-        setSchemaSnapshots(unwrap(ss));
-        setSchemaChanges(unwrap(sc));
-      })
-      .catch((err) => notifyFromError(err, 'Failed to load freshness/schema data'))
-      .finally(() => {
-        if (active) setFreshnessLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [token, notifyFromError]);
+    loadProfiles();
+  }, [loadProfiles]);
+
+  useEffect(() => {
+    loadMonitoring();
+  }, [loadMonitoring]);
+
+  const handleAnalyzeAnomaliesWithAI = useCallback(
+    async (row) => {
+      const tableId = row?.data_table || row?.table_id || row?.id;
+      if (!tableId) return;
+      setAnomalyBusyTableId(tableId);
+      try {
+        await transferTask(
+          'anomaly',
+          {
+            table_id: tableId,
+            table_name: row?.table_name || `Table #${tableId}`,
+            profile_count_hint: row?.profile_count,
+            prompt: `Analyze anomaly risk and recent profile drift for ${row?.table_name || `Table #${tableId}`}.`,
+          },
+          {
+            title: `Anomaly Scan: ${row?.table_name || `Table #${tableId}`}`,
+            source_page: 'dq-workspace-monitoring',
+          },
+        );
+      } finally {
+        setAnomalyBusyTableId(null);
+      }
+    },
+    [transferTask],
+  );
 
   const profileColumns = useMemo(
     () => [
@@ -643,8 +681,28 @@ function MonitoringTab() {
         width: 170,
         renderCell: ({ row }) => (row.profiled_at ? new Date(row.profiled_at).toLocaleString() : '—'),
       },
+      {
+        field: 'actions',
+        headerName: '',
+        sortable: false,
+        width: 170,
+        renderCell: ({ row }) => {
+          const tableId = row?.data_table || row?.table_id || row?.id;
+          return (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<BugReport />}
+              disabled={!tableId || anomalyBusyTableId === tableId}
+              onClick={() => handleAnalyzeAnomaliesWithAI(row)}
+            >
+              Analyze with AI
+            </Button>
+          );
+        },
+      },
     ],
-    []
+    [handleAnalyzeAnomaliesWithAI, anomalyBusyTableId]
   );
 
   const freshnessColumns = useMemo(
@@ -757,6 +815,26 @@ function MonitoringTab() {
 
   return (
     <Box>
+      <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mb: 1 }}>
+        <Button size="small" variant="outlined" onClick={loadProfiles}>
+          Refresh Profiles
+        </Button>
+        <Button size="small" variant="outlined" onClick={loadMonitoring}>
+          Refresh Monitoring
+        </Button>
+      </Stack>
+
+      {profilesError ? (
+        <Alert severity="error" sx={{ mb: 1.5 }}>
+          {profilesError}
+        </Alert>
+      ) : null}
+      {monitoringError ? (
+        <Alert severity="error" sx={{ mb: 1.5 }}>
+          {monitoringError}
+        </Alert>
+      ) : null}
+
       <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Table Profiles</Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>
         <CarbonDataGrid
@@ -787,6 +865,56 @@ function MonitoringTab() {
           loading={freshnessLoading}
           getRowId={(row) => row.id}
           emptyMessage="No schema snapshots yet"
+        />
+      </Paper>
+
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Anomalies</Typography>
+      <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>
+        <CarbonDataGrid
+          columns={[
+            {
+              field: 'table_name',
+              headerName: 'Table',
+              flex: 1.1,
+              minWidth: 160,
+              renderCell: ({ row }) => <Typography sx={{ fontWeight: 600 }}>{row.table_name || '—'}</Typography>,
+            },
+            { field: 'metric', headerName: 'Metric', width: 180 },
+            {
+              field: 'severity',
+              headerName: 'Severity',
+              width: 110,
+              renderCell: ({ row }) => (
+                <Chip
+                  size="small"
+                  color={row.severity === 'error' ? 'error' : row.severity === 'warn' ? 'warning' : 'info'}
+                  label={row.severity || 'info'}
+                />
+              ),
+            },
+            {
+              field: 'score',
+              headerName: 'Score',
+              width: 90,
+              renderCell: ({ row }) => (row.score != null ? Number(row.score).toFixed(2) : '—'),
+            },
+            {
+              field: 'observed',
+              headerName: 'Observed',
+              width: 100,
+              renderCell: ({ row }) => (row.observed != null ? Number(row.observed).toFixed(2) : '—'),
+            },
+            {
+              field: 'detected_at',
+              headerName: 'Detected At',
+              width: 170,
+              renderCell: ({ row }) => (row.detected_at ? new Date(row.detected_at).toLocaleString() : '—'),
+            },
+          ]}
+          rows={anomalies}
+          loading={freshnessLoading}
+          getRowId={(row) => row.id}
+          emptyMessage="No anomalies recorded"
         />
       </Paper>
 
@@ -893,9 +1021,11 @@ export default function DQWorkspacePage() {
   const [metrics, setMetrics] = useState(null);
   const [results, setResults] = useState([]);
   const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewError, setOverviewError] = useState('');
 
   const loadOverview = useCallback(async () => {
     setOverviewLoading(true);
+    setOverviewError('');
     try {
       const [m, r] = await Promise.all([
         getOrgDQMetrics(token),
@@ -904,6 +1034,7 @@ export default function DQWorkspacePage() {
       setMetrics(m || null);
       setResults(unwrap(r));
     } catch (err) {
+      setOverviewError(err?.message || 'Could not load overview');
       notifyFromError(err, 'Could not load overview');
     } finally {
       setOverviewLoading(false);
@@ -998,15 +1129,24 @@ export default function DQWorkspacePage() {
       <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'background.paper', p: 1.5 }}>
 
       {tab === 0 ? (
-        <OverviewTab
-          metrics={metrics}
-          results={results}
-          loading={overviewLoading}
-          runningJobs={runningJobs}
-          onGoJobs={() => goToTab(2)}
-          onRefresh={loadOverview}
-          onAskAI={handleAskAIHealth}
-        />
+        overviewError ? (
+          <Alert severity="error" sx={{ mb: 1 }}>
+            {overviewError}
+            <Button size="small" variant="outlined" sx={{ ml: 1 }} onClick={loadOverview}>
+              Retry
+            </Button>
+          </Alert>
+        ) : (
+          <OverviewTab
+            metrics={metrics}
+            results={results}
+            loading={overviewLoading}
+            runningJobs={runningJobs}
+            onGoJobs={() => goToTab(2)}
+            onRefresh={loadOverview}
+            onAskAI={handleAskAIHealth}
+          />
+        )
       ) : null}
       {mountedTabs.has(1) ? (
         <Box sx={{ display: tab === 1 ? 'block' : 'none' }}>
