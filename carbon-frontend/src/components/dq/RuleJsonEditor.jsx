@@ -33,9 +33,12 @@ import {
 } from '@mui/material';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import Editor from '@monaco-editor/react';
 import { useAuth } from '../../auth/AuthContext';
+import { useThemeMode } from '../../theme/ThemeContext';
 import { useNotification } from '../NotificationProvider';
 import { createDQJob, getDQJob, listDQSuggestions } from '../../api/dq';
+import dqRuleSchema from './dqRuleSchema.json';
 
 // ── rule_schema v1 (backend/dq/rule_schema.py) mirror — client checks only ──
 
@@ -83,15 +86,18 @@ export function validateDefinitionClient(d) {
   if (typeof d.active !== 'boolean') {
     errors.push({ field: 'active', code: 'invalid_type', message: 'active must be a boolean' });
   }
+  // ADR-0006: bindings are optional — rules are standalone; bindings applied at data product level
   const bindings = d.bindings;
-  if (!Array.isArray(bindings) || bindings.length === 0) {
-    errors.push({ field: 'bindings', code: 'required', message: 'bindings must be a non-empty list of {table, field} objects' });
-  } else {
-    bindings.forEach((b, i) => {
-      if (!b || typeof b !== 'object' || !b.table || typeof b.table !== 'string') {
-        errors.push({ field: `bindings[${i}].table`, code: 'required', message: 'binding table is required and must be a string' });
-      }
-    });
+  if (bindings != null) {
+    if (!Array.isArray(bindings)) {
+      errors.push({ field: 'bindings', code: 'invalid_type', message: 'bindings must be a list of {table, field} objects' });
+    } else {
+      bindings.forEach((b, i) => {
+        if (!b || typeof b !== 'object' || !b.table || typeof b.table !== 'string') {
+          errors.push({ field: `bindings[${i}].table`, code: 'required', message: 'binding table is required and must be a string' });
+        }
+      });
+    }
   }
   if (d.params !== undefined && (typeof d.params !== 'object' || d.params === null || Array.isArray(d.params))) {
     errors.push({ field: 'params', code: 'invalid_type', message: 'params must be a JSON object' });
@@ -131,9 +137,7 @@ export const EMPTY_DEFINITION_TEMPLATE = `{
   "type": "not_null",
   "severity": "warn",
   "active": true,
-  "bindings": [
-    { "table": "TABLE_NAME", "field": "FIELD_NAME" }
-  ],
+  "bindings": [],
   "params": {},
   "enforcement": { "on_write": true },
   "description": ""
@@ -151,7 +155,10 @@ export default function RuleJsonEditor({
   minRows = 16,
 }) {
   const { token } = useAuth();
+  const { mode: themeMode } = useThemeMode();
   const { notify } = useNotification();
+
+  const editorHeight = Math.max(200, (minRows || 16) * 22);
 
   const [clientErrors, setClientErrors] = useState([]);
   const [aiDraftOpen, setAiDraftOpen] = useState(false);
@@ -313,24 +320,63 @@ export default function RuleJsonEditor({
         )}
       </Stack>
 
-      <TextField
-        fullWidth
-        multiline
-        minRows={minRows}
-        maxRows={30}
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setClientErrors([]);
-        }}
-        disabled={disabled}
-        spellCheck={false}
-        inputProps={{
-          style: { fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace", fontSize: 13 },
-        }}
-        placeholder='Paste a rule definition or use "Draft with AI".'
-        sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
-      />
+      <Box sx={{ position: 'relative', border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+        <Chip
+          label="Schema v1"
+          size="small"
+          color="primary"
+          variant="filled"
+          sx={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            zIndex: 1,
+            fontFamily: 'monospace',
+            fontSize: '0.65rem',
+            opacity: 0.75,
+          }}
+        />
+        <Editor
+          height={`${editorHeight}px`}
+          defaultLanguage="json"
+          theme={themeMode === 'dark' ? 'vs-dark' : 'vs'}
+          value={value}
+          onChange={(newValue) => {
+            onChange(newValue || '');
+            setClientErrors([]);
+          }}
+          beforeMount={(monaco) => {
+            monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+              validate: true,
+              allowComments: false,
+              schemas: [{
+                uri: dqRuleSchema.$id,
+                fileMatch: ['*'],
+                schema: dqRuleSchema,
+              }],
+            });
+          }}
+          loading={
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: `${editorHeight}px` }}>
+              <CircularProgress size={24} />
+            </Box>
+          }
+          options={{
+            minimap: { enabled: false },
+            lineNumbers: 'on',
+            folding: true,
+            fontSize: 13,
+            tabSize: 2,
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            readOnly: disabled,
+            wordWrap: 'on',
+            renderWhitespace: 'selection',
+            bracketPairColorization: { enabled: true },
+            guides: { indentation: true },
+          }}
+        />
+      </Box>
 
       {allErrors.length > 0 && (
         <Alert severity="warning" sx={{ mt: 1 }} variant="outlined">

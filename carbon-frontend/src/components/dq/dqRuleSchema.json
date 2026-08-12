@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "carbon://dq-rule-v1.json",
+  "title": "DQ Rule Definition v1",
+  "description": "Schema v1 for Data Quality rule definitions authored in the DQ Workspace.",
+  "type": "object",
+  "required": ["schema_version", "name", "level", "dimension", "type", "severity", "active"],
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "description": "Schema version — must be 1 for v1 rules"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable rule name (e.g. 'Monthly electricity must not be null')"
+    },
+    "description": {
+      "type": "string",
+      "description": "What this rule checks, why it exists, and any context for reviewers"
+    },
+    "level": {
+      "enum": ["field", "business"],
+      "description": "Rule level: 'field' = schema-bound deterministic check; 'business' = governance policy requiring domain knowledge"
+    },
+    "dimension": {
+      "enum": ["completeness", "validity", "accuracy", "consistency", "timeliness", "uniqueness", "integrity", "reasonability"],
+      "description": "DAMA DMBOK2 data quality dimension this rule targets"
+    },
+    "type": {
+      "enum": ["not_null", "unique", "allowed_values", "range", "regex", "reference_integrity", "threshold", "nl_check", "anomaly_detect"],
+      "description": "Rule type — deterministic engine types: not_null, unique, allowed_values, range, regex, reference_integrity, threshold; AI-powered: nl_check, anomaly_detect"
+    },
+    "severity": {
+      "enum": ["info", "warn", "error"],
+      "description": "Severity level: 'info' = advisory, 'warn' = requires attention, 'error' = blocking"
+    },
+    "active": {
+      "type": "boolean",
+      "description": "Whether this rule is active and will be evaluated during DQ runs"
+    },
+    "bindings": {
+      "type": "array",
+      "description": "Optional table/field bindings (rules are standalone — bindings applied at data product level, per ADR-0006)",
+      "items": {
+        "type": "object",
+        "required": ["table"],
+        "properties": {
+          "table": { "type": "string", "description": "Table name (required)" },
+          "field": { "type": "string", "description": "Field name (optional — omit for table-level rules)" }
+        }
+      }
+    },
+    "params": {
+      "type": "object",
+      "description": "Rule-type-specific parameters. See DQ Workspace documentation for per-type params."
+    },
+    "enforcement": {
+      "type": "object",
+      "description": "Enforcement settings controlling when this rule is evaluated",
+      "properties": {
+        "on_write": {
+          "type": "boolean",
+          "description": "If true, evaluate this rule on every data write (not supported for nl_check/anomaly_detect)"
+        }
+      }
+    }
+  }
+}

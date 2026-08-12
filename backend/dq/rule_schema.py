@@ -101,20 +101,21 @@ def validate_definition(d: Dict[str, Any]) -> List[Dict[str, str]]:
         errors.append({'field': 'active', 'code': 'invalid_type',
                         'message': 'active must be a boolean'})
 
-    # ── bindings ──────────────────────────────────────────────────────
+    # ── bindings (optional — ADR-0006: rules are standalone; bindings applied separately) ──
     bindings = d.get('bindings')
-    if not isinstance(bindings, list) or len(bindings) == 0:
-        errors.append({'field': 'bindings', 'code': 'required',
-                        'message': 'bindings must be a non-empty list of {table, field} objects'})
-    else:
-        for i, b in enumerate(bindings):
-            if not isinstance(b, dict):
-                errors.append({'field': f'bindings[{i}]', 'code': 'invalid_type',
-                                'message': 'each binding must be an object with table and optional field'})
-                continue
-            if not b.get('table') or not isinstance(b['table'], str):
-                errors.append({'field': f'bindings[{i}].table', 'code': 'required',
-                                'message': 'binding table is required and must be a string'})
+    if bindings is not None:
+        if not isinstance(bindings, list):
+            errors.append({'field': 'bindings', 'code': 'invalid_type',
+                            'message': 'bindings must be a list of {table, field} objects'})
+        else:
+            for i, b in enumerate(bindings):
+                if not isinstance(b, dict):
+                    errors.append({'field': f'bindings[{i}]', 'code': 'invalid_type',
+                                    'message': 'each binding must be an object with table and optional field'})
+                    continue
+                if not b.get('table') or not isinstance(b['table'], str):
+                    errors.append({'field': f'bindings[{i}].table', 'code': 'required',
+                                    'message': 'binding table is required and must be a string'})
 
     # ── params (per-type validation) ──────────────────────────────────
     params = d.get('params', {})
