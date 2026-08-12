@@ -21,6 +21,8 @@ from backend.ai.protocol import (
     AnomalyDetectResponse,
     AnomalyExplainRequest,
     AnomalyExplainResponse,
+    ChatRequest,
+    ChatResponse,
     DetectedAnomaly,
     DqRuleInput,
     DqRuleResult,
@@ -55,6 +57,7 @@ logger = logging.getLogger("carbon.ai.pulse_provider")
 
 T_DQ_VALIDATE = "dq.validate"
 T_DQ_SUGGEST = "dq.suggest"
+T_CHAT = "chat"
 T_NL_QUERY = "carbon.query.nl"
 T_NL_EXPLAIN = "carbon.query.explain"
 T_ANOMALY_DETECT = "carbon.anomaly.detect"
@@ -118,7 +121,7 @@ class PulseProvider(AIProvider):
     # ── 1. dq.validate ────────────────────────────────────────────────
 
     def validate_dq(self, request: DqValidateRequest) -> DqValidateResponse:
-        payload = {
+        payload: dict[str, Any] = {
             "rules": [
                 {
                     "id": r.id,
@@ -131,6 +134,12 @@ class PulseProvider(AIProvider):
             "rows": request.rows,
             "context": request.context,
         }
+        # Include conversation history for multi-turn context (§10)
+        if request.conversation is not None:
+            payload["conversation_history"] = {
+                "conversation_id": request.conversation.conversation_id,
+                "messages": request.conversation.messages,
+            }
         data = post_task(self._url, self._key, T_DQ_VALIDATE, payload, timeout=30)
 
         if data.get("status") == "completed":
@@ -166,6 +175,11 @@ class PulseProvider(AIProvider):
                 "row_count": table.row_count,
             },
         }
+        if request.conversation is not None:
+            payload["conversation_history"] = {
+                "conversation_id": request.conversation.conversation_id,
+                "messages": request.conversation.messages,
+            }
         data = post_task(self._url, self._key, T_DQ_SUGGEST, payload, timeout=90)
 
         if data.get("status") == "completed":
@@ -201,6 +215,11 @@ class PulseProvider(AIProvider):
         }
         if request.tables:
             payload["tables"] = request.tables
+        if request.conversation is not None:
+            payload["conversation_history"] = {
+                "conversation_id": request.conversation.conversation_id,
+                "messages": request.conversation.messages,
+            }
         if request.domain_vocabulary:
             payload["domain_vocabulary"] = request.domain_vocabulary
 
@@ -257,6 +276,11 @@ class PulseProvider(AIProvider):
             "sensitivity": request.sensitivity,
             "volume_threshold_pct": request.volume_threshold_pct,
         }
+        if request.conversation is not None:
+            payload["conversation_history"] = {
+                "conversation_id": request.conversation.conversation_id,
+                "messages": request.conversation.messages,
+            }
         data = post_task(self._url, self._key, T_ANOMALY_DETECT, payload, timeout=120)
 
         if data.get("status") == "completed":
@@ -435,6 +459,39 @@ class PulseProvider(AIProvider):
             )
 
         return FixSuggestResponse(
+            status=_map_status(data.get("status")),
+            error=data.get("error"),
+        )
+
+    # ── 10. chat (multi-turn workspace) ───────────────────────────────
+
+    def chat(self, request: ChatRequest) -> ChatResponse:
+        """Send a chat message with full conversation history.
+
+        AI CONTRACT §10: Conversations are multi-turn; Carbon sends
+        full history on every request. Provider is stateless.
+        """
+        payload: dict[str, Any] = {
+            "message": request.message,
+        }
+        if request.conversation is not None:
+            payload["conversation_history"] = {
+                "conversation_id": request.conversation.conversation_id,
+                "messages": request.conversation.messages,
+            }
+
+        data = post_task(self._url, self._key, T_CHAT, payload, timeout=15)
+
+        if data.get("status") == "completed":
+            result = data.get("result") or {}
+            return ChatResponse(
+                status="completed",
+                content=result.get("content"),
+                follow_up_questions=result.get("follow_up_questions", []),
+                execution_ms=result.get("execution_ms", 0),
+            )
+
+        return ChatResponse(
             status=_map_status(data.get("status")),
             error=data.get("error"),
         )

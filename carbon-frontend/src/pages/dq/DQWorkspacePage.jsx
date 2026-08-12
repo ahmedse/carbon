@@ -29,6 +29,7 @@ import {
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
+import { useAITaskTransfer } from '../../shell/AITaskTransferContext';
 import SystemDialog from '../../components/SystemDialog';
 import PageContainer from '../../components/layout/PageContainer';
 import DetailHeader from '../../components/detail/DetailHeader';
@@ -82,8 +83,7 @@ function scoreColor(score) {
 
 // ─── Overview ────────────────────────────────────────────────────────────────
 
-function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefresh }) {
-  const navigate = useNavigate();
+function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefresh, onAskAI }) {
   const trendData = useMemo(() => {
     const sorted = [...results].sort((a, b) => new Date(a.run_at) - new Date(b.run_at));
     const buckets = new Map();
@@ -251,9 +251,14 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
           Recent failures & skipped
           {attentionResults.length ? ` (${attentionResults.length})` : ''}
         </Typography>
-        <Button size="small" variant="outlined" onClick={onRefresh}>
-          Refresh
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button size="small" variant="outlined" startIcon={<AutoAwesome />} onClick={onAskAI}>
+            Ask AI about DQ health
+          </Button>
+          <Button size="small" variant="outlined" onClick={onRefresh}>
+            Refresh
+          </Button>
+        </Stack>
       </Stack>
       <Paper variant="outlined" sx={{ borderRadius: 2 }}>
         <CarbonDataGrid
@@ -262,9 +267,7 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
           loading={loading}
           getRowId={(row) => row.id || `${row.rule}-${row.run_at}`}
           emptyMessage="No recent failures — all recent checks passed"
-          onRowClick={({ row }) => {
-            /* highlight only — user must deliberately click an action to navigate */
-          }}
+          onRowClick={() => undefined}
         />
       </Paper>
 
@@ -297,6 +300,7 @@ function SuggestionsTab() {
   const { token } = useAuth();
   const navigate = useNavigate();
   const { notify, notifyFromError } = useNotification();
+  const { transferTask } = useAITaskTransfer();
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -347,6 +351,21 @@ function SuggestionsTab() {
     } finally {
       setBusyId(null);
     }
+  };
+
+  const handleRefineWithAI = async (suggestion) => {
+    await transferTask(
+      'chat',
+      {
+        prompt: `Refine this DQ suggestion before applying it:\n${JSON.stringify(suggestion.payload || {}, null, 2)}`,
+        suggestion_id: suggestion.id,
+        table_name: suggestion.table_name,
+      },
+      {
+        title: `Refine suggestion #${suggestion.id}`,
+        source_page: 'dq-workspace-suggestions',
+      },
+    );
   };
 
   return (
@@ -442,6 +461,14 @@ function SuggestionsTab() {
                     }}
                   >
                     Reject
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<AutoAwesome />}
+                    onClick={() => handleRefineWithAI(s)}
+                  >
+                    Refine with AI
                   </Button>
                 </Stack>
               </Stack>
@@ -785,6 +812,7 @@ export default function DQWorkspacePage() {
   useDocumentTitle('DQ Workspace');
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
+  const { transferTask } = useAITaskTransfer();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -902,6 +930,50 @@ export default function DQWorkspacePage() {
     setMountedTabs((prev) => new Set([...prev, tab]));
   }, [tab]);
 
+  const handleAskAIHealth = useCallback(async () => {
+    await transferTask(
+      'nl_query',
+      {
+        prompt: 'Summarize DQ health, recent failures, and highest-risk dimensions.',
+        row_count: results.length,
+        columns: ['status', 'rule_type', 'score', 'failed_count', 'run_at'],
+      },
+      {
+        title: 'DQ Health Summary',
+        source_page: 'dq-workspace-overview',
+      },
+    );
+  }, [transferTask, results.length]);
+
+  const handleSuggestRulesAI = useCallback(async () => {
+    await transferTask(
+      'dq_suggest',
+      {
+        table_id: tableFilter || null,
+        table_name: tableFilter ? `Table #${tableFilter}` : null,
+      },
+      {
+        title: tableFilter ? `Suggest Rules: Table #${tableFilter}` : 'Suggest Rules',
+        source_page: 'dq-workspace-rules',
+      },
+    );
+  }, [transferTask, tableFilter]);
+
+  const handleAnalyzeFailuresAI = useCallback(async () => {
+    await transferTask(
+      'nl_query',
+      {
+        prompt: 'Analyze recent DQ job failures and suggest likely root causes.',
+        row_count: runningJobs.length,
+        columns: ['job_type', 'status', 'error_message', 'created_at'],
+      },
+      {
+        title: 'Analyze DQ Failures',
+        source_page: 'dq-workspace-jobs',
+      },
+    );
+  }, [transferTask, runningJobs.length]);
+
   return (
     <PageContainer>
       <DetailHeader
@@ -933,15 +1005,36 @@ export default function DQWorkspacePage() {
           runningJobs={runningJobs}
           onGoJobs={() => goToTab(2)}
           onRefresh={loadOverview}
+          onAskAI={handleAskAIHealth}
         />
       ) : null}
       {mountedTabs.has(1) ? (
         <Box sx={{ display: tab === 1 ? 'block' : 'none' }}>
+          <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<AutoAwesome />}
+              onClick={handleSuggestRulesAI}
+            >
+              Suggest rules with AI
+            </Button>
+          </Stack>
           <RulesTab onJobCreated={handleJobCreated} tableFilter={tableFilter} />
         </Box>
       ) : null}
       {mountedTabs.has(2) ? (
         <Box sx={{ display: tab === 2 ? 'block' : 'none' }}>
+          <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<AutoAwesome />}
+              onClick={handleAnalyzeFailuresAI}
+            >
+              Analyze failures with AI
+            </Button>
+          </Stack>
           <JobsTab jobs={jobs} loading={jobsLoading} reload={reloadJobs} />
         </Box>
       ) : null}

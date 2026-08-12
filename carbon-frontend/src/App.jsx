@@ -343,6 +343,7 @@ export default function App() {
                 {/* DQ Workspace — outside CatalogRoute: DQ has its own capability gates (dq:view / dq:manage_rules) */}
                 <Route path="/dq" element={<DQWorkspacePage />} />
                 <Route path="/dq/rules/:id" element={<RuleDetailPage />} />
+                <Route path="/dq/rules/:id/results" element={<RuleDetailPage />} />
 
                 <Route path="*" element={<NotFound />} />
               </Route>

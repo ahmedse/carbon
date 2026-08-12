@@ -68,6 +68,9 @@ class _DummyProvider(AIProvider):
     def suggest_fix(self, request):
         raise NotImplementedError
 
+    def chat(self, request):
+        raise NotImplementedError
+
 
 def _dummy_rule(**overrides):
     """Build a mock DQRule for testing."""

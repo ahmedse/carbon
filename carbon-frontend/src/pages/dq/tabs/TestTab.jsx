@@ -22,8 +22,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { PlayArrow, CheckCircle, Cancel, RemoveCircle } from '@mui/icons-material';
+import { PlayArrow, CheckCircle, Cancel, RemoveCircle, SmartToy } from '@mui/icons-material';
 import { RULE_TYPE_LABELS } from '../constants';
+import { useAITaskTransfer } from '../../../shell/AITaskTransferContext';
 
 // ── Client-side evaluator (mirrors backend dq/engine.py evaluate) ──────────
 
@@ -258,15 +259,35 @@ function defaultSampleForRule(definition) {
 export default function TestTab({ rule }) {
   const definition = useMemo(() => rule?.definition || {}, [rule?.definition]);
   const ruleType = definition.type || rule?.rule_type || '';
+  const { transferTask } = useAITaskTransfer();
 
   const [sampleText, setSampleText] = useState(() =>
     JSON.stringify(defaultSampleForRule(definition), null, 2)
   );
   const [results, setResults] = useState(null);
   const [parseError, setParseError] = useState(null);
+  const [transferring, setTransferring] = useState(false);
 
   const isUnsupported = UNSUPPORTED_TYPES.includes(ruleType);
   const ruleTypeLabel = RULE_TYPE_LABELS[ruleType] || ruleType;
+
+  const handleTransferToAI = async () => {
+    setTransferring(true);
+    const bindings = rule?.field_assignments || [];
+    const tableName = bindings.length > 0 ? bindings[0].table_name : undefined;
+    const fields = bindings.map((b) => b.field_name).filter(Boolean);
+    await transferTask('dq_validate', {
+      rule_id: rule.id,
+      rule_name: rule.name,
+      table_name: tableName,
+      fields,
+      prompt: `Test rule "${rule.name}" against data`,
+    }, {
+      title: `DQ Test: ${rule.name}`,
+      source_page: 'dq-rule-test',
+    });
+    setTransferring(false);
+  };
 
   const handleTest = useCallback(() => {
     setParseError(null);
@@ -346,16 +367,27 @@ export default function TestTab({ rule }) {
               {parseError}
             </Alert>
           ) : null}
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<PlayArrow />}
-            onClick={handleTest}
-            disabled={isUnsupported}
-            sx={{ mt: 1.5 }}
-          >
-            Test
-          </Button>
+          <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<PlayArrow />}
+              onClick={handleTest}
+              disabled={isUnsupported}
+            >
+              Test
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              color="secondary"
+              startIcon={<SmartToy />}
+              onClick={handleTransferToAI}
+              disabled={transferring}
+            >
+              {transferring ? 'Transferring…' : 'Check with AI'}
+            </Button>
+          </Stack>
         </Paper>
 
         {/* Results */}

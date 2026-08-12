@@ -15,7 +15,8 @@ import { EditorArea } from './EditorArea';
 import { StatusBar } from './StatusBar';
 import HeaderEnhanced from '../components/HeaderEnhanced';
 import ErrorBoundary from './ErrorBoundary';
-import PulsePane from './PulsePane';
+import { AIWorkspace } from './AIWorkspace';
+import { AITaskTransferProvider } from './AITaskTransferContext';
 import { LoadingSpinner, DialogLoadingSkeleton } from './LoadingFallback';
 
 // Lazy load heavy components for code splitting
@@ -309,36 +310,38 @@ export function Shell() {
         )}
 
         {/* Resizable Main + Copilot Panes */}
-        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
-          <Allotment
-            key={copilotVisible ? '2panes' : '1pane'}
-            onChange={(sizes) => {
-              if (copilotVisible && sizes.length >= 2) {
-                const w = sizes[sizes.length - 1];
-                setCopilotPaneSize(w);
-                try {
-                  localStorage.setItem('carbon-copilot-pane-size', String(w));
-                } catch {
-                  /* ignore */
+        <AITaskTransferProvider onRequestOpen={toggleCopilot}>
+          <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
+            <Allotment
+              key={copilotVisible ? '2panes' : '1pane'}
+              onChange={(sizes) => {
+                if (copilotVisible && sizes.length >= 2) {
+                  const w = sizes[sizes.length - 1];
+                  setCopilotPaneSize(w);
+                  try {
+                    localStorage.setItem('carbon-copilot-pane-size', String(w));
+                  } catch {
+                    /* ignore */
+                  }
                 }
-              }
-            }}
-          >
-            {/* Main Editor Area */}
-            <Allotment.Pane minSize={320} preferredSize={1}>
-              <EditorArea />
-            </Allotment.Pane>
-
-            {/* Right Copilot Pane — Pulse AI */}
-            {copilotVisible && (
-              <Allotment.Pane minSize={280} preferredSize={copilotPaneSize} maxSize={520}>
-                <ErrorBoundary>
-                  <PulsePane />
-                </ErrorBoundary>
+              }}
+            >
+              {/* Main Editor Area */}
+              <Allotment.Pane minSize={320} preferredSize={1}>
+                <EditorArea />
               </Allotment.Pane>
-            )}
-          </Allotment>
-        </Box>
+
+              {/* Right Copilot Pane — AI Workspace */}
+              {copilotVisible && (
+                <Allotment.Pane minSize={280} preferredSize={copilotPaneSize} maxSize={520}>
+                  <ErrorBoundary>
+                    <AIWorkspace onClose={toggleCopilot} />
+                  </ErrorBoundary>
+                </Allotment.Pane>
+              )}
+            </Allotment>
+          </Box>
+        </AITaskTransferProvider>
       </Box>
 
       {/* Status Bar with integrated Footer */}

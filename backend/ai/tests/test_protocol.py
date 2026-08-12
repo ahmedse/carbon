@@ -9,6 +9,7 @@ import dataclasses
 import typing
 
 from backend.ai.protocol import (
+    ConversationContext,
     Scope, ProviderStatus,
     DqRuleInput, DqRuleResult, DqValidateRequest, DqValidateResponse,
     TableProfile, DqSuggestRequest, DqSuggestResponse, DqSuggestion,
@@ -90,12 +91,17 @@ def test_dq_suggest_roundtrip():
             name="emissions", description="Carbon emissions data",
             row_count=5000, columns=[{"name": "co2e_kg", "type": "float"}],
         ),
+        conversation=ConversationContext(
+            conversation_id="conv-1",
+            messages=[{"role": "user", "content": "suggest rules"}],
+        ),
     )
     d = dataclasses.asdict(request)
     reconstructed = DqSuggestRequest(**d)
     # Nested TableProfile becomes dict after asdict → **
     assert reconstructed.table["name"] == "emissions"
     assert reconstructed.table["row_count"] == 5000
+    assert reconstructed.conversation["conversation_id"] == "conv-1"
 
 
 # ── Test 5: NL Query round-trip ────────────────────────────────────────
@@ -106,11 +112,16 @@ def test_nl_query_roundtrip():
     request = NlQueryRequest(
         question="Show total emissions by month",
         tables=["emissions"],
+        conversation=ConversationContext(
+            conversation_id="conv-2",
+            messages=[{"role": "user", "content": "show totals"}],
+        ),
         domain_vocabulary={"emissions": "Carbon emission records"},
     )
     r = _assert_roundtrip(request, NlQueryRequest)
     assert r.question == "Show total emissions by month"
     assert r.domain_vocabulary["emissions"] == "Carbon emission records"
+    assert r.conversation["conversation_id"] == "conv-2"
 
 
 # ── Test 6: NL Explain round-trip ──────────────────────────────────────
@@ -138,11 +149,16 @@ def test_anomaly_detect_roundtrip():
         profile_history=[{"avg_co2e": 250.0}, {"avg_co2e": 260.0}],
         sensitivity=2.5,
         volume_threshold_pct=25.0,
+        conversation=ConversationContext(
+            conversation_id="conv-3",
+            messages=[{"role": "assistant", "content": "prior anomaly"}],
+        ),
     )
     r = _assert_roundtrip(request, AnomalyDetectRequest)
     assert r.table_name == "emissions"
     assert r.sensitivity == 2.5
     assert r.volume_threshold_pct == 25.0
+    assert r.conversation["conversation_id"] == "conv-3"
 
 
 # ── Test 8: Anomaly Explain round-trip ─────────────────────────────────

@@ -1,9 +1,9 @@
 // carbon-frontend/src/pages/dq/tabs/StatsTab.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Alert, Box, Chip, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
 import Grid from '@mui/material/Grid';
-import { TrendingDown, TrendingUp, TrendingFlat } from '@mui/icons-material';
+import { TrendingDown, TrendingUp, TrendingFlat, AutoAwesome } from '@mui/icons-material';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -48,7 +48,7 @@ function trendChip(trend) {
   return <Chip size="small" color="info" icon={<TrendingFlat />} label="Stable" />;
 }
 
-function StatsTab({ rule }) {
+function StatsTab({ rule, onAnalyzeAI }) {
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
   const [history, setHistory] = useState(null);
@@ -151,6 +151,15 @@ function StatsTab({ rule }) {
         <Typography sx={{ color: 'text.secondary' }}>
           {runs.length} recorded run{runs.length === 1 ? '' : 's'}
         </Typography>
+        <Box sx={{ flexGrow: 1 }} />
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<AutoAwesome />}
+          onClick={onAnalyzeAI}
+        >
+          Analyze trend with AI
+        </Button>
       </Stack>
 
       <Grid container spacing={2} sx={{ mb: 2 }}>
@@ -220,6 +229,7 @@ function StatsTab({ rule }) {
 
 StatsTab.propTypes = {
   rule: PropTypes.object,
+  onAnalyzeAI: PropTypes.func,
 };
 
 export default StatsTab;

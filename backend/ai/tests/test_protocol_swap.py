@@ -8,6 +8,7 @@ providers (Pulse, Azure, Claude, local LLM) with zero code changes.
 
 from backend.ai.protocol import (
     AIProvider, Scope, ProviderStatus,
+    ChatResponse,
     DqRuleInput, DqValidateRequest, DqValidateResponse, DqRuleResult,
     DqSuggestRequest, DqSuggestResponse, DqSuggestion, TableProfile,
     NlQueryRequest, NlQueryResponse,
@@ -193,6 +194,13 @@ class MockProvider(AIProvider):
                     suggested_action_type="rule_adjustment",
                 ),
             ],
+        )
+
+    def chat(self, request):
+        return ChatResponse(
+            status="completed",
+            content=f"Mock response to: {request.message}",
+            follow_up_questions=["Would you like more details?"],
         )
 
 

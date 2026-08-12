@@ -6,6 +6,7 @@ import { Alert, Box, Chip, CircularProgress, Paper, Typography } from '@mui/mate
 import RuleIcon from '@mui/icons-material/Rule';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
+import { useAITaskTransfer } from '../../shell/AITaskTransferContext';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
@@ -24,6 +25,7 @@ export default function RuleDetailPage() {
   const { id } = useParams();
   const { token } = useAuth();
   const { notify } = useNotification();
+  const { transferTask } = useAITaskTransfer();
   const navigate = useNavigate();
 
   const [rule, setRule] = useState(null);
@@ -126,6 +128,36 @@ export default function RuleDetailPage() {
     />
   );
 
+  const handleAnalyzeTrendWithAI = async () => {
+    await transferTask(
+      'nl_query',
+      {
+        rule_id: rule.id,
+        rule_name: rule.name,
+        prompt: `Analyze trend and reliability for rule "${rule.name}" over recent runs.`,
+      },
+      {
+        title: `Trend Analysis: ${rule.name}`,
+        source_page: 'dq-rule-stats',
+      },
+    );
+  };
+
+  const handleExplainFailuresWithAI = async () => {
+    await transferTask(
+      'nl_query',
+      {
+        rule_id: rule.id,
+        rule_name: rule.name,
+        prompt: `Explain recurring failure patterns for rule "${rule.name}" and suggest improvements.`,
+      },
+      {
+        title: `Failure Analysis: ${rule.name}`,
+        source_page: 'dq-rule-results',
+      },
+    );
+  };
+
   return (
     <BaseDetailPage
       headerComponent={headerComponent}
@@ -135,8 +167,8 @@ export default function RuleDetailPage() {
         { label: 'Test', component: () => <TestTab rule={rule} /> },
         { label: 'Lifecycle', component: () => <OperationsTab rule={rule} onChanged={loadRule} /> },
         { label: 'Usage & Data Products', component: () => <UsageTab rule={rule} /> },
-        { label: 'Stats', component: () => <StatsTab rule={rule} /> },
-        { label: 'Execution Log', component: () => <ResultsTab rule={rule} /> },
+        { label: 'Stats', component: () => <StatsTab rule={rule} onAnalyzeAI={handleAnalyzeTrendWithAI} /> },
+        { label: 'Execution Log', component: () => <ResultsTab rule={rule} onExplainAI={handleExplainFailuresWithAI} /> },
       ]}
       metricsTabs={[{ label: 'Summary', component: RuleSummaryMetrics }]}
       loading={false}

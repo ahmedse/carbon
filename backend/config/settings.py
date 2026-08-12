@@ -134,6 +134,7 @@ APP_REGISTRY = [
 # Application definition
 INSTALLED_APPS = [
     'accounts',
+    'ai',
     'core',
     'dataschema',
     'emissions',

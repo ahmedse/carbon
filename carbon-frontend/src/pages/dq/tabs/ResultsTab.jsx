@@ -10,7 +10,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { Close, InfoOutlined } from '@mui/icons-material';
+import { AutoAwesome, Close, InfoOutlined } from '@mui/icons-material';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
@@ -126,7 +126,7 @@ function FailuresDrawer({ result, onClose }) {
   );
 }
 
-function ResultsTab({ rule }) {
+function ResultsTab({ rule, onExplainAI }) {
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
   const [rows, setRows] = useState([]);
@@ -220,6 +220,16 @@ function ResultsTab({ rule }) {
 
   return (
     <Box sx={{ p: 3 }}>
+      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<AutoAwesome />}
+          onClick={onExplainAI}
+        >
+          Explain failures with AI
+        </Button>
+      </Stack>
       <Paper variant="outlined" sx={{ borderRadius: 2 }}>
         <CarbonDataGrid
           columns={columns}
@@ -237,6 +247,7 @@ function ResultsTab({ rule }) {
 
 ResultsTab.propTypes = {
   rule: PropTypes.object,
+  onExplainAI: PropTypes.func,
 };
 
 export default ResultsTab;

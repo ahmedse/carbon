@@ -59,6 +59,21 @@ class ProviderStatus:
     latency_ms: int = 0
 
 
+# ── Conversation Context (§10 multi-turn) ──────────────────────────────
+
+@dataclass
+class ConversationContext:
+    """Multi-turn conversation history carried to every AI call.
+
+    AI CONTRACT §10: Provider receives full conversation history
+    in every request. Carbon owns conversation state; provider is stateless.
+    """
+
+    conversation_id: str
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    # Each message: {"role": "user"|"assistant"|"system", "content": "...", "timestamp": "..."}
+
+
 # ── 1. DQ Validate ──────────────────────────────────────────────────────
 
 @dataclass
@@ -75,6 +90,7 @@ class DqValidateRequest:
     rows: list[dict[str, Any]]
     context: dict[str, Any] = field(default_factory=dict)
     scope: Scope | None = None
+    conversation: ConversationContext | None = None
 
 
 @dataclass
@@ -108,6 +124,7 @@ class TableProfile:
 class DqSuggestRequest:
     table: TableProfile
     scope: Scope | None = None
+    conversation: ConversationContext | None = None
 
 
 @dataclass
@@ -135,6 +152,7 @@ class NlQueryRequest:
     tables: list[str] | None = None
     max_rows: int = 100
     scope: Scope | None = None
+    conversation: ConversationContext | None = None
     domain_vocabulary: dict[str, str] | None = None
 
 
@@ -178,6 +196,7 @@ class AnomalyDetectRequest:
     sensitivity: float = 2.0
     volume_threshold_pct: float = 30.0
     scope: Scope | None = None
+    conversation: ConversationContext | None = None
 
 
 @dataclass
@@ -314,6 +333,28 @@ class FixSuggestResponse:
     execution_ms: int = 0
 
 
+# ── 10. Chat (multi-turn workspace) ─────────────────────────────────────
+
+@dataclass
+class ChatRequest:
+    """Generic chat message sent to AI provider.
+
+    AI CONTRACT §10: Carries full conversation history for multi-turn context.
+    """
+    message: str
+    conversation: ConversationContext | None = None
+    scope: Scope | None = None
+
+
+@dataclass
+class ChatResponse:
+    status: str  # "completed" | "provider_unavailable" | "failed"
+    content: str | None = None
+    follow_up_questions: list[str] = field(default_factory=list)
+    error: dict[str, str] | None = None
+    execution_ms: int = 0
+
+
 # ── AIProvider ABC ──────────────────────────────────────────────────────
 
 class AIProvider(ABC):
@@ -367,4 +408,8 @@ class AIProvider(ABC):
 
     @abstractmethod
     def suggest_fix(self, request: FixSuggestRequest) -> FixSuggestResponse:
+        ...
+
+    @abstractmethod
+    def chat(self, request: ChatRequest) -> ChatResponse:
         ...

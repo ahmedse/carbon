@@ -10,9 +10,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { Save } from '@mui/icons-material';
+import { Save, SmartToy } from '@mui/icons-material';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
+import { useAITaskTransfer } from '../../../shell/AITaskTransferContext';
 import RuleJsonEditor, { validateDefinitionClient, normalizeServerErrors } from '../../../components/dq/RuleJsonEditor';
 import { updateDQRule, listDQTags } from '../../../api/dq';
 import { fetchAssetProfiles } from '../../../api/catalog';
@@ -21,6 +22,7 @@ import { resolveBindings } from '../bindings';
 function DefinitionTab({ rule, onChanged }) {
   const { token } = useAuth();
   const { notify } = useNotification();
+  const { transferTask } = useAITaskTransfer();
 
   const [definitionText, setDefinitionText] = useState('');
   const [name, setName] = useState('');
@@ -30,6 +32,7 @@ function DefinitionTab({ rule, onChanged }) {
   const [tables, setTables] = useState([]);
   const [serverErrors, setServerErrors] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [transferring, setTransferring] = useState(false);
 
   // Sync local state when the rule changes (e.g. after save → new version).
   useEffect(() => {
@@ -82,6 +85,24 @@ function DefinitionTab({ rule, onChanged }) {
     );
   }, []);
 
+  const handleTransferToAI = async () => {
+    setTransferring(true);
+    const bindings = rule?.field_assignments || [];
+    const tableName = bindings.length > 0 ? bindings[0].table_name : undefined;
+    const fields = bindings.map((b) => b.field_name).filter(Boolean);
+    await transferTask('dq_validate', {
+      rule_id: rule.id,
+      rule_name: rule.name,
+      table_name: tableName,
+      fields,
+      prompt: `Validate rule "${rule.name}" (type: ${rule.rule_type})`,
+    }, {
+      title: `DQ: ${rule.name}`,
+      source_page: 'dq-rule-definition',
+    });
+    setTransferring(false);
+  };
+
   const handleSave = async () => {
     let parsed;
     try {
@@ -130,6 +151,16 @@ function DefinitionTab({ rule, onChanged }) {
         />
         {rule?.archived ? <Chip size="small" variant="outlined" color="default" label="Archived" /> : null}
         <Box sx={{ flexGrow: 1 }} />
+        <Button
+          variant="outlined"
+          size="small"
+          color="secondary"
+          startIcon={<SmartToy />}
+          onClick={handleTransferToAI}
+          disabled={transferring || rule?.archived}
+        >
+          {transferring ? 'Transferring…' : 'Validate with AI'}
+        </Button>
         <Button
           variant="contained"
           size="small"

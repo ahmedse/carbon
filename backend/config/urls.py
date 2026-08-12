@@ -72,6 +72,7 @@ urlpatterns = [
     path(f'{api_prefix}/connections/', include('connections.urls')),
     path(f'{api_prefix}/importexport/', include('importexport.urls')),
     path(f'{api_prefix}/dq/', include('dq.urls')),
+    path(f'{api_prefix}/ai/workspace/', include('ai.workspace_urls')),
     path(f'{api_prefix}/', include('evidence.urls')),
 ]
 
