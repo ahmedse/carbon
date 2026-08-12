@@ -41,7 +41,7 @@ OBSERVABILITY
   Logs                /admin/ai/logs       engine + inference logs
 ```
 
-16 panels, 5 groups. Distinct from the existing generic `/admin/audit` + `/admin/logs`
+17 panels, 5 groups. Distinct from the existing generic `/admin/audit` + `/admin/logs`
 (platform RBAC/system logs) — these are Pulse-specific data (LLM call log, AI audit events).
 
 ## 3. Panel → backend mapping

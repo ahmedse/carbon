@@ -32,6 +32,20 @@ import GridViewIcon from '@mui/icons-material/GridView';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import TrackChangesIcon from '@mui/icons-material/TrackChanges';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ChatIcon from '@mui/icons-material/Chat';
+import ForumIcon from '@mui/icons-material/Forum';
+import PsychologyIcon from '@mui/icons-material/Psychology';
+import MemoryIcon from '@mui/icons-material/Memory';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import HubIcon from '@mui/icons-material/Hub';
+import HandymanIcon from '@mui/icons-material/Handyman';
+import ExtensionIcon from '@mui/icons-material/Extension';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import FeedbackIcon from '@mui/icons-material/Feedback';
+import LoopIcon from '@mui/icons-material/Loop';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
 import { can } from '../authz';
@@ -113,6 +127,29 @@ function getSidebarItems(studioId) {
         { label: 'Access Control', path: '/admin/access', icon: SecurityIcon, role: 'admin' },
         { label: 'Audit Log', path: '/admin/audit', icon: HistoryIcon, role: 'admin' },
         { label: 'System Logs', path: '/admin/logs', icon: ArticleIcon, role: 'admin' },
+        { type: 'divider' },
+        { type: 'group', label: 'Pulse' },
+        { label: 'Overview', path: '/admin/ai', icon: AutoAwesomeIcon, role: 'admin' },
+        { label: 'AI Workspace', path: '/admin/ai/workspace', icon: ChatIcon, role: 'admin' },
+        { label: 'Conversations', path: '/admin/ai/conversations', icon: ForumIcon, role: 'admin' },
+        { type: 'group', label: 'Intelligence Core' },
+        { label: 'Knowledge Base', path: '/admin/ai/knowledge', icon: PsychologyIcon, role: 'admin' },
+        { label: 'Memory', path: '/admin/ai/memory', icon: MemoryIcon, role: 'admin' },
+        { label: 'Knowledge Graph', path: '/admin/ai/graph', icon: AccountTreeIcon, role: 'admin' },
+        { type: 'group', label: 'Agents & Tooling' },
+        { label: 'Agents', path: '/admin/ai/agents', icon: SmartToyIcon, role: 'admin' },
+        { label: 'MCP Servers', path: '/admin/ai/mcp', icon: HubIcon, role: 'admin' },
+        { label: 'Tools', path: '/admin/ai/tools', icon: HandymanIcon, role: 'admin' },
+        { label: 'Skills Catalog', path: '/admin/ai/skills', icon: ExtensionIcon, role: 'admin' },
+        { label: 'Archetypes', path: '/admin/ai/archetypes', icon: AutoFixHighIcon, role: 'admin' },
+        { label: 'Prompts & Playbook', path: '/admin/ai/prompts', icon: MenuBookIcon, role: 'admin' },
+        { type: 'group', label: 'Feedback & Learning' },
+        { label: 'Feedback Review', path: '/admin/ai/feedback', icon: FeedbackIcon, role: 'admin' },
+        { label: 'Learning Jobs', path: '/admin/ai/learning', icon: LoopIcon, role: 'admin' },
+        { type: 'group', label: 'Observability' },
+        { label: 'Monitoring', path: '/admin/ai/monitoring', icon: MonitorHeartIcon, role: 'admin' },
+        { label: 'Audit Trail', path: '/admin/ai/audit', icon: HistoryIcon, role: 'admin' },
+        { label: 'Logs', path: '/admin/ai/logs', icon: ArticleIcon, role: 'admin' },
         { type: 'divider' },
         { type: 'group', label: 'App Management' },
         { label: 'Registered Apps', path: '/admin/apps', icon: AppsIcon, role: 'admin' },

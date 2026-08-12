@@ -77,6 +77,10 @@ const VerificationPage = React.lazy(() => import("./pages/carbon/VerificationPag
 const AuditLogPage = React.lazy(() => import("./pages/admin/AuditLogPage"));
 const LogViewerPage = React.lazy(() => import("./pages/admin/LogViewerPage"));
 const PlatformConfigPage = React.lazy(() => import("./pages/admin/PlatformConfigPage"));
+const PulseOverviewPage = React.lazy(() => import("./pages/admin/ai/PulseOverviewPage"));
+const AIWorkspacePage = React.lazy(() => import("./pages/admin/ai/AIWorkspacePage"));
+const AIConversationsPage = React.lazy(() => import("./pages/admin/ai/AIConversationsPage"));
+const PulseModulePlaceholder = React.lazy(() => import("./pages/admin/ai/PulseModulePlaceholder"));
 const AnalyticsDashboard = React.lazy(() => import("./pages/dashboards/AnalyticsDashboard"));
 
 import PlatformHome from "./pages/PlatformHome";
@@ -290,6 +294,23 @@ export default function App() {
                 <Route path="/admin/audit" element={<AdminRoute><AuditLogPage /></AdminRoute>} />
                 <Route path="/admin/logs" element={<AdminRoute><LogViewerPage /></AdminRoute>} />
                 <Route path="/admin/config" element={<AdminRoute><PlatformConfigPage /></AdminRoute>} />
+                <Route path="/admin/ai" element={<AdminRoute><PulseOverviewPage /></AdminRoute>} />
+                <Route path="/admin/ai/workspace" element={<AdminRoute><AIWorkspacePage /></AdminRoute>} />
+                <Route path="/admin/ai/conversations" element={<AdminRoute><AIConversationsPage /></AdminRoute>} />
+                <Route path="/admin/ai/knowledge" element={<AdminRoute><PulseModulePlaceholder module="Knowledge Base" /></AdminRoute>} />
+                <Route path="/admin/ai/memory" element={<AdminRoute><PulseModulePlaceholder module="Memory" /></AdminRoute>} />
+                <Route path="/admin/ai/graph" element={<AdminRoute><PulseModulePlaceholder module="Knowledge Graph" /></AdminRoute>} />
+                <Route path="/admin/ai/agents" element={<AdminRoute><PulseModulePlaceholder module="Agents" /></AdminRoute>} />
+                <Route path="/admin/ai/mcp" element={<AdminRoute><PulseModulePlaceholder module="MCP Servers" /></AdminRoute>} />
+                <Route path="/admin/ai/tools" element={<AdminRoute><PulseModulePlaceholder module="Tools" /></AdminRoute>} />
+                <Route path="/admin/ai/skills" element={<AdminRoute><PulseModulePlaceholder module="Skills Catalog" /></AdminRoute>} />
+                <Route path="/admin/ai/archetypes" element={<AdminRoute><PulseModulePlaceholder module="Archetypes" /></AdminRoute>} />
+                <Route path="/admin/ai/prompts" element={<AdminRoute><PulseModulePlaceholder module="Prompts & Playbook" /></AdminRoute>} />
+                <Route path="/admin/ai/feedback" element={<AdminRoute><PulseModulePlaceholder module="Feedback Review" /></AdminRoute>} />
+                <Route path="/admin/ai/learning" element={<AdminRoute><PulseModulePlaceholder module="Learning Jobs" /></AdminRoute>} />
+                <Route path="/admin/ai/monitoring" element={<AdminRoute><PulseModulePlaceholder module="Monitoring" /></AdminRoute>} />
+                <Route path="/admin/ai/audit" element={<AdminRoute><PulseModulePlaceholder module="AI Audit Trail" /></AdminRoute>} />
+                <Route path="/admin/ai/logs" element={<AdminRoute><PulseModulePlaceholder module="AI Logs" /></AdminRoute>} />
                 <Route path="/admin/policies" element={<Navigate to="/catalog/policies" replace />} />
                 <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
                  <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />
