@@ -7,9 +7,7 @@
 //   transferTask('dq_validate', { rule_id: 42 }, { title: 'DQ Check: emissions_fuel' });
 
 import React, {
-  createContext,
   useCallback,
-  useContext,
   useMemo,
   useRef,
   useState,
@@ -17,8 +15,8 @@ import React, {
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import { createConversation } from '../api/aiWorkspace';
-
-const AITaskTransferContext = createContext(null);
+import { normalizeAppIdentifier } from './aiTaskTransferUtils';
+import { AITaskTransferContext } from './aiTaskTransferContext';
 
 /**
  * Provider that wraps the entire Shell so both the editor (DQ pages)
@@ -91,10 +89,11 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
                 : 'Chat');
 
       try {
+        const appIdentifier = normalizeAppIdentifier(normalizedPayload, metadata);
         const conv = await createConversation(token, {
           conversation_type: type,
           title,
-          app_identifier: metadata.source_page || 'dq',
+          app_identifier: appIdentifier,
           task_payload: { type, ...normalizedPayload },
         });
         setPendingTransferId(conv.id);
@@ -122,16 +121,3 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
     </AITaskTransferContext.Provider>
   );
 }
-
-/**
- * Hook to access the task transfer function and pending transfer state.
- */
-export function useAITaskTransfer() {
-  const ctx = useContext(AITaskTransferContext);
-  if (!ctx) {
-    return { transferTask: () => {}, pendingTransferId: null, clearPendingTransfer: () => {} };
-  }
-  return ctx;
-}
-
-export default AITaskTransferContext;

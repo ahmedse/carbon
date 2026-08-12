@@ -18,9 +18,8 @@ vi.mock('../auth/AuthContext', () => ({
 }));
 
 // ── Mock ThemeContext ─────────────────────────────────────────────────
-vi.mock('../theme/ThemeContext', () => ({
+vi.mock('../theme/useThemeMode', () => ({
   useThemeMode: vi.fn(() => ({ mode: 'light', toggle: vi.fn() })),
-  ThemeModeProvider: ({ children }) => children,
 }));
 
 // ── Shell smoke ──────────────────────────────────────────────────────

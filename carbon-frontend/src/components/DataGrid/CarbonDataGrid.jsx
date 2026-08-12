@@ -29,6 +29,7 @@ function CarbonDataGrid({
   showColumnToggle,
 }) {
   const theme = useTheme();
+  const usesAutoHeight = !height || height === 'auto';
   const stripedBg = theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50];
   const stripedAlt = theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[100];
 
@@ -38,10 +39,17 @@ function CarbonDataGrid({
   };
 
   return (
-    <Box sx={{ width: '100%', height: height || 'auto' }}>
+    <Box
+      sx={{
+        width: '100%',
+        height: usesAutoHeight ? 'auto' : height,
+        minHeight: usesAutoHeight ? theme.spacing(40) : undefined,
+      }}
+    >
       <DataGrid
         rows={rows}
         columns={columns}
+        autoHeight={usesAutoHeight}
         loading={loading}
         getRowId={getRowId}
         checkboxSelection={checkboxSelection}

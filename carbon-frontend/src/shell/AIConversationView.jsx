@@ -18,6 +18,17 @@ import AIOfflineBanner from './AIOfflineBanner';
 
 const POLL_INTERVAL_MS = 2000;
 
+function normalizeConversationShape(payload) {
+  const candidate = payload?.conversation || payload;
+  if (!candidate || typeof candidate !== 'object') {
+    return null;
+  }
+  return {
+    ...candidate,
+    messages: Array.isArray(candidate.messages) ? candidate.messages : [],
+  };
+}
+
 function AIConversationView({ conversationId }) {
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
@@ -35,7 +46,7 @@ function AIConversationView({ conversationId }) {
     if (!conversationId) return;
     try {
       const data = await getConversation(token, conversationId);
-      setConversation(data);
+      setConversation(normalizeConversationShape(data));
     } catch (err) {
       notifyFromError(err, 'Could not load conversation');
     } finally {
@@ -62,8 +73,9 @@ function AIConversationView({ conversationId }) {
     pollRef.current = setInterval(async () => {
       try {
         const data = await getConversation(token, conversationId);
-        setConversation(data);
-        if (data.status !== 'working') {
+        const canonical = normalizeConversationShape(data);
+        setConversation(canonical);
+        if (canonical?.status !== 'working') {
           setSending(false);
         }
       } catch {
@@ -102,8 +114,9 @@ function AIConversationView({ conversationId }) {
       setProviderOffline(false);
       try {
         const data = await apiSendMessage(token, conversationId, content);
-        setConversation(data);
-        if (data.status !== 'working') {
+        const canonical = normalizeConversationShape(data);
+        setConversation(canonical);
+        if (canonical?.status !== 'working') {
           setSending(false);
         }
       } catch (err) {

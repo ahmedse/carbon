@@ -19,7 +19,7 @@ import AIConversationTabs from './AIConversationTabs';
 import AIConversationView from './AIConversationView';
 import AIEmptyState from './AIEmptyState';
 import AIOfflineBanner from './AIOfflineBanner';
-import { useAITaskTransfer } from './AITaskTransferContext';
+import { useAITaskTransfer } from './useAITaskTransfer';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
 

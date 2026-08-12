@@ -22,7 +22,7 @@ import {
   DarkMode,
   LightMode
 } from "@mui/icons-material";
-import { useThemeMode } from "../theme/ThemeContext";
+import { useThemeMode } from "../theme/useThemeMode";
 
 const PERSPECTIVE_LABELS = {
   data_entry: 'Data Entry',

@@ -2,10 +2,8 @@
 // Theme provider for the Carbon Data Trust Platform.
 // Design language adopted from Gigacast (zinc/blue palette). Light + dark modes.
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import createCarbonTheme from "./carbonTheme";
-
-const ThemeModeContext = createContext();
+import React, { useState, useEffect } from "react";
+import { ThemeModeContext } from './themeModeContext';
 
 export function ThemeModeProvider({ children }) {
   const [mode, setMode] = useState(() => {
@@ -30,13 +28,3 @@ export function ThemeModeProvider({ children }) {
     </ThemeModeContext.Provider>
   );
 }
-
-export function useThemeMode() {
-  const context = useContext(ThemeModeContext);
-  if (!context) {
-    return { mode: 'light', toggle: () => {} };
-  }
-  return context;
-}
-
-export const getTheme = (mode) => createCarbonTheme(mode === "dark" ? "dark" : "light");

@@ -140,3 +140,81 @@ GRID_EXIT:1
 - Frontend lint still reports 66 pre-existing warnings across unrelated files (0 errors).
 - Build still reports pre-existing large chunk warnings (`mui` bundle), unchanged by this task.
 - Existing git workspace contains unrelated modified backend/docs files from prior phases; these were not changed as part of this frontend scope.
+
+---
+
+## 2026-08-12 Prompt 3 Addendum — DQ Workspace UX Robustness
+
+### Additional Files Changed
+| Action | File | What |
+|---|---|---|
+| MODIFY | carbon-frontend/src/pages/dq/DQWorkspacePage.jsx | Added anomaly monitoring grid + per-table AI anomaly handoff; added explicit error/retry states and refresh controls for overview/monitoring data loaders |
+
+### Additional UX Behaviors Validated
+- Monitoring tab now surfaces stored DQ anomalies as first-class rows (table, metric, severity, score, observed, detected).
+- Each profile row now supports an explicit AI handoff: "Analyze with AI" creates an `anomaly` conversation with table context.
+- Monitoring sections now have robust state coverage: loading + empty + explicit error alerts + manual refresh actions.
+- Overview tab now provides an explicit error panel with retry action if metrics/results loading fails.
+
+### Prompt 3 Verification Output
+
+#### Lint
+Command:
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend && npm run lint
+```
+Output (summary):
+```text
+> carbon-frontend@0.0.0 lint
+> eslint .
+...
+✖ 66 problems (0 errors, 66 warnings)
+```
+
+#### Build
+Command:
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend && npm run build
+```
+Output (summary):
+```text
+> carbon-frontend@0.0.0 build
+> vite build
+...
+(!) Some chunks are larger than 500 kB after minification.
+✓ built in 15.81s
+```
+
+#### Tests
+Command:
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend && npm test
+```
+Output:
+```text
+> carbon-frontend@0.0.0 test
+> vitest run
+
+ RUN  v4.1.10 /home/ahmed/aast/carbon/carbon-frontend
+
+ Test Files  6 passed (6)
+    Tests  321 passed (321)
+  Start at  16:30:23
+  Duration  6.28s (transform 1.75s, setup 861ms, import 3.90s, tests 5.16s, environment 7.89s)
+```
+
+#### Verify Gate
+Command:
+```bash
+cd /home/ahmed/aast/carbon && bash ./.ai-toolkit/scripts/verify.sh frontend
+```
+Output:
+```text
+Verification gate: frontend
+════════════════════════════════════════
+── Frontend ────────────────────────────
+✓ lint
+✓ build
+════════════════════════════════════════
+GATE PASSED
+```
