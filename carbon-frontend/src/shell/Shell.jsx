@@ -28,6 +28,7 @@ const STUDIO_PATHS = {
   carbon:  '/carbon/dashboard',   // app studio: default to carbon dashboard
   catalog: '/catalog/domains',
   admin:   '/admin/users',
+  'ai-admin': '/admin/ai',
   settings:'/settings',
   help:    '/help',
 };
@@ -43,6 +44,8 @@ function studioFromPath(pathname) {
   if (pathname.startsWith('/modules')) return 'catalog';
   // Scopes belong to Carbon app
   if (pathname.startsWith('/scopes')) return 'carbon';
+  // AI admin (Pulse console) — checked before generic /admin
+  if (pathname.startsWith('/admin/ai')) return 'ai-admin';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/settings')) return 'settings';
   if (pathname.startsWith('/help') || pathname.startsWith('/feedback')) return 'help';

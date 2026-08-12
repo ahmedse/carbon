@@ -7,6 +7,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import Co2Icon from '@mui/icons-material/Co2';
 import CatalogIcon from '@mui/icons-material/LibraryBooks';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import PsychologyIcon from '@mui/icons-material/Psychology';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HelpIcon from '@mui/icons-material/Help';
 import { APP_REGISTRY } from '../apps/registry';
@@ -22,6 +23,7 @@ const PLATFORM_STUDIOS = [
   // ── App studios injected here at runtime ──
   { id: 'catalog',  label: 'Catalog Studio', icon: CatalogIcon,            path: '/catalog/domains' },
   { id: 'admin',    label: 'Platform Admin', icon: AdminPanelSettingsIcon, path: '/admin/users'     },
+  { id: 'ai-admin', label: 'AI Admin',       icon: PsychologyIcon,          path: '/admin/ai'         },
   { id: 'settings', label: 'Settings',        icon: SettingsIcon,           path: '/settings',  bottom: true },
   { id: 'help',     label: 'Help',            icon: HelpIcon,               path: '/help',      bottom: true },
 ];
@@ -85,6 +87,11 @@ export function useShellState() {
     const filtered = combined.filter((s) => {
       // Hide admin studio if not admin
       if (s.id === 'admin') {
+        return isGlobalAdmin(user, availablePerspectives);
+      }
+      
+      // Hide AI admin studio if not admin
+      if (s.id === 'ai-admin') {
         return isGlobalAdmin(user, availablePerspectives);
       }
       

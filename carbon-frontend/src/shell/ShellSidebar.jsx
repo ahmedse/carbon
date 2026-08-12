@@ -128,7 +128,16 @@ function getSidebarItems(studioId) {
         { label: 'Audit Log', path: '/admin/audit', icon: HistoryIcon, role: 'admin' },
         { label: 'System Logs', path: '/admin/logs', icon: ArticleIcon, role: 'admin' },
         { type: 'divider' },
-        { type: 'group', label: 'Pulse' },
+        { type: 'group', label: 'App Management' },
+        { label: 'Registered Apps', path: '/admin/apps', icon: AppsIcon, role: 'admin' },
+        { label: 'Role Registry', path: '/admin/role-matrix', icon: GridViewIcon, role: 'admin' },
+        { type: 'divider' },
+        { type: 'group', label: 'System Settings' },
+        { label: 'Platform Config', path: '/admin/config', icon: SettingsIcon, role: 'admin' },
+      ];
+
+    case 'ai-admin':
+      return [
         { label: 'Overview', path: '/admin/ai', icon: AutoAwesomeIcon, role: 'admin' },
         { label: 'AI Workspace', path: '/admin/ai/workspace', icon: ChatIcon, role: 'admin' },
         { label: 'Conversations', path: '/admin/ai/conversations', icon: ForumIcon, role: 'admin' },
@@ -150,13 +159,6 @@ function getSidebarItems(studioId) {
         { label: 'Monitoring', path: '/admin/ai/monitoring', icon: MonitorHeartIcon, role: 'admin' },
         { label: 'Audit Trail', path: '/admin/ai/audit', icon: HistoryIcon, role: 'admin' },
         { label: 'Logs', path: '/admin/ai/logs', icon: ArticleIcon, role: 'admin' },
-        { type: 'divider' },
-        { type: 'group', label: 'App Management' },
-        { label: 'Registered Apps', path: '/admin/apps', icon: AppsIcon, role: 'admin' },
-        { label: 'Role Registry', path: '/admin/role-matrix', icon: GridViewIcon, role: 'admin' },
-        { type: 'divider' },
-        { type: 'group', label: 'System Settings' },
-        { label: 'Platform Config', path: '/admin/config', icon: SettingsIcon, role: 'admin' },
       ];
     
     case 'settings':
@@ -191,6 +193,7 @@ function getStudioTitle(studioId) {
     home:    'Dashboard',
     catalog: 'Catalog Studio',
     admin:   'Platform Admin',
+    'ai-admin': 'AI Admin',
     settings:'Settings',
     help:    'Help & Support',
   };
@@ -259,8 +262,8 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
   let items = getSidebarItems(activeStudio);
   const title = getStudioTitle(activeStudio);
 
-  // If in admin studio, gate with can() — only platform admins see it
-  if (activeStudio === 'admin' && !can(user, 'access_route', '/admin/users', authCtx)) {
+  // If in admin studios, gate with can() — only platform admins see them
+  if ((activeStudio === 'admin' || activeStudio === 'ai-admin') && !can(user, 'access_route', '/admin/users', authCtx)) {
     items = []; // Hide all admin items for non-admin users
   }
 
