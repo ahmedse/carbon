@@ -1,0 +1,15 @@
+# Test Lab Archetype
+name: test-lab
+display_name: "Test Lab"
+version: 0.1.0
+description: >
+  AI copilot for QA and test engineering teams — test suites, flaky test
+  detection, coverage analysis, and regression tracking. Attach to JUnit,
+  pytest, Cypress, Playwright, or any test framework.
+tags: [qa, testing, quality, coverage, regression, flaky-tests]
+icon: "flask"
+schema_version: "1.0"
+requires:
+  pulse_version: ">=0.3.0"
+  auth_mode: host_delegated
+  storage_mode: standalone

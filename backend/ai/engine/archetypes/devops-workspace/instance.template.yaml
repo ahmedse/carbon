@@ -1,0 +1,418 @@
+# {{ display_name }} — Instance Configuration
+# Generated from archetype: {{ archetype_name }} v{{ archetype_version }}
+# Created: {{ created_at }}
+
+name: {{ instance_name }}
+display_name: {{ display_name }}
+description: {{ description }}
+archetype: {{ archetype_name }}
+standalone: false
+
+domain: devops
+timezone: {{ timezone }}
+languages: {{ languages }}
+
+auth:
+  mode: host_delegated
+
+# Persona / domain framing
+persona:
+  domain_tagline: a DevOps and infrastructure operations platform
+  audience: platform engineers and SRE teams
+  domain_noun: infrastructure operations
+  off_topic_redirect: >-
+    I'm focused on your infrastructure and operations — pipelines, deployments,
+    incidents, and service health. Is there something in that area I can help with?
+  forbidden_sql_tables: auth_user, django_session, accounts_user
+  forbidden_terms: db_password, api_secret, private_key, connection_string
+  data_units: "ms, s, %, rps, MB, GB, errors/s, req/s, pods, nodes"
+  example_questions: |-
+      'Which service has the highest error rate this week?'
+      'Show me the deployment history for auth-service'
+      What's our DORA metrics trend this quarter?
+      'Which pipelines failed in the last 24 hours?'
+      'Show me the current infrastructure health overview'
+# Navigation routes
+navigation_routes:
+  - path: /
+    label: Dashboard
+    description: Operations overview dashboard
+  - path: /services
+    label: Services
+    description: Service catalog and health
+  - path: /pipelines
+    label: Pipelines
+    description: CI/CD pipeline status
+  - path: /deployments
+    label: Deployments
+    description: Deployment history and rollbacks
+  - path: /incidents
+    label: Incidents
+    description: Incident timeline and postmortems
+  - path: /alerts
+    label: Alerts
+    description: Active alerts and alert history
+  - path: /metrics
+    label: Metrics
+    description: DORA metrics and SLI/SLO dashboards
+  - path: /infrastructure
+    label: Infrastructure
+    description: Cluster, nodes, and resource utilization
+  - path: /settings
+    label: Settings
+    description: Instance configuration
+
+# Tool configuration
+tools:
+  open_entity:
+    entity_types:
+      - type: service
+        label: Service
+        description: A running application or microservice
+        id_source: list_services
+      - type: deployment
+        label: Deployment
+        description: A deployment or release of a service
+        id_source: list_deployments
+      - type: pipeline
+        label: Pipeline
+        description: A CI/CD pipeline with runs and stages
+        id_source: list_pipelines
+      - type: incident
+        label: Incident
+        description: A reported or detected operational incident
+        id_source: list_incidents
+      - type: alert
+        label: Alert
+        description: A monitoring alert triggered by a threshold
+        id_source: list_alerts
+      - type: infrastructure_node
+        label: Infrastructure Node
+        description: A compute node, pod, or container
+        id_source: list_infrastructure
+
+  entity_routes:
+    service:
+      base: /services/{entity_id}
+    deployment:
+      base: /deployments/{entity_id}
+    pipeline:
+      base: /pipelines/{entity_id}
+      subpages:
+        runs:
+          label: Runs
+          route_suffix: /runs
+        logs:
+          label: Logs
+          route_suffix: /logs
+        config:
+          label: Configuration
+          route_suffix: /config
+    incident:
+      base: /incidents/{entity_id}
+      subpages:
+        timeline:
+          label: Timeline
+          route_suffix: /timeline
+        postmortem:
+          label: Postmortem
+          route_suffix: /postmortem
+    alert:
+      base: /alerts/{entity_id}
+    infrastructure_node:
+      base: /infrastructure/{entity_id}
+
+  param_resolution:
+    service_id:
+      list_endpoint: list_services
+      id_field: id
+      display_field: name
+    deployment_id:
+      list_endpoint: list_deployments
+      id_field: id
+      display_field: version
+    pipeline_id:
+      list_endpoint: list_pipelines
+      id_field: id
+      display_field: name
+
+  slug_resolution:
+    - detail_endpoint: get_service_detail
+      list_endpoint: list_services
+      match_fields: [name, display_name]
+    - detail_endpoint: get_deployment_detail
+      list_endpoint: list_deployments
+      match_fields: [version, tag]
+    - detail_endpoint: get_pipeline_detail
+      list_endpoint: list_pipelines
+      match_fields: [name, slug]
+    - detail_endpoint: get_incident_detail
+      list_endpoint: list_incidents
+      match_fields: [title, incident_id]
+    - detail_endpoint: get_alert_detail
+      list_endpoint: list_alerts
+      match_fields: [name, alert_id]
+
+  api_resolver:
+    entity_id_fields:
+      service: {api: list_services, id_field: id, display_field: name}
+      deployment: {api: list_deployments, id_field: id, display_field: version}
+      pipeline: {api: list_pipelines, id_field: id, display_field: name}
+      incident: {api: list_incidents, id_field: id, display_field: title}
+      alert: {api: list_alerts, id_field: id, display_field: name}
+      infrastructure_node: {api: list_infrastructure, id_field: id, display_field: hostname}
+
+  review_rules:
+    forbidden_terms: db_password, api_secret, private_key
+    forbidden_phrases:
+      - As an AI
+      - It's worth noting
+      - I should mention
+      - Please note that
+      - Let me know if you need
+      - Would you like me to elaborate
+    domain_metrics:
+      - deployment_frequency
+      - lead_time_for_changes
+      - mttr
+      - change_failure_rate
+      - error_budget
+
+guardrail:
+  redacted_tools: []
+
+domain_topics:
+  - CI/CD pipeline management and optimization
+  - deployment strategies and release engineering
+  - infrastructure monitoring and observability
+  - incident management and postmortem analysis
+  - DORA metrics and engineering effectiveness
+  - SLO/SLI definition and error budget tracking
+  - service health and reliability engineering
+  - capacity planning and auto-scaling
+  - configuration management and infrastructure as code
+  - security and compliance in the delivery pipeline
+
+host:
+  db_url: ${DEVOPS_DB_URL}
+  db_schema: ${DEVOPS_DB_SCHEMA}
+  api_url: ${DEVOPS_API_URL}
+  api_token: ${DEVOPS_API_TOKEN}
+  frontend_url: ${DEVOPS_FRONTEND_URL}
+  user_me_path: /api/me/
+
+api_catalog:
+  - name: list_services
+    method: GET
+    path: /api/services/
+    description: List all services with health status and owner
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_service_detail
+    method: GET
+    path: /api/services/{id}/
+    description: Get service details including dependencies, SLOs, and recent deployments
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_deployments
+    method: GET
+    path: /api/deployments/
+    description: List deployments with version, status, and timestamp
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_deployment_detail
+    method: GET
+    path: /api/deployments/{id}/
+    description: Get deployment details including diff, approver, and rollback info
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_pipelines
+    method: GET
+    path: /api/pipelines/
+    description: List CI/CD pipelines with last run status and duration
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_pipeline_detail
+    method: GET
+    path: /api/pipelines/{id}/
+    description: Get pipeline details including stages, recent runs, and configuration
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_pipeline_runs
+    method: GET
+    path: /api/pipelines/{id}/runs/
+    description: List runs for a specific pipeline with status and duration
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_incidents
+    method: GET
+    path: /api/incidents/
+    description: List incidents with severity, status, and affected services
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_incident_detail
+    method: GET
+    path: /api/incidents/{id}/
+    description: Get incident details including timeline, postmortem, and action items
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_alerts
+    method: GET
+    path: /api/alerts/
+    description: List monitoring alerts with severity, status, and source
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_alert_detail
+    method: GET
+    path: /api/alerts/{id}/
+    description: Get alert details including threshold, current value, and history
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_infrastructure
+    method: GET
+    path: /api/infrastructure/
+    description: List infrastructure nodes, pods, or containers with health
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_dora_metrics
+    method: GET
+    path: /api/metrics/dora/
+    description: Get DORA metrics summary
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_service_slos
+    method: GET
+    path: /api/services/{id}/slos/
+    description: Get SLO/SLI status and error budget for a service
+    requires_auth: true
+    requires_confirmation: false
+
+cognition:
+  monitors:
+    - name: deployment_frequency
+      display: Deployment Frequency
+      query_sql: >
+        SELECT service_name, COUNT(*) as deployments
+        FROM deployments
+        WHERE deployed_at > NOW() - INTERVAL '7 days'
+        GROUP BY service_name
+      warning_threshold: 1
+      critical_threshold: 0
+      value_column: deployments
+    - name: lead_time_for_changes
+      display: Lead Time for Changes
+      query_sql: >
+        SELECT service_name,
+          AVG(EXTRACT(EPOCH FROM (deployed_at - committed_at)) / 3600) as avg_hours
+        FROM deployments
+        WHERE deployed_at > NOW() - INTERVAL '30 days'
+        GROUP BY service_name
+      warning_threshold: 24.0
+      critical_threshold: 72.0
+      value_column: avg_hours
+    - name: mttr
+      display: Mean Time to Recovery
+      query_sql: >
+        SELECT service_name,
+          AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 60) as avg_minutes
+        FROM incidents
+        WHERE resolved_at IS NOT NULL
+          AND created_at > NOW() - INTERVAL '30 days'
+        GROUP BY service_name
+      warning_threshold: 60.0
+      critical_threshold: 240.0
+      value_column: avg_minutes
+    - name: change_failure_rate
+      display: Change Failure Rate
+      query_sql: >
+        SELECT
+          COUNT(*) as total_deployments,
+          SUM(CASE WHEN caused_incident THEN 1 ELSE 0 END) as failed_deployments,
+          ROUND(100.0 * SUM(CASE WHEN caused_incident THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) as failure_pct
+        FROM deployments
+        WHERE deployed_at > NOW() - INTERVAL '30 days'
+      warning_threshold: 15.0
+      critical_threshold: 30.0
+      value_column: failure_pct
+    - name: error_budget_burn
+      display: Error Budget Burn Rate
+      query_sql: >
+        SELECT service_name,
+          error_budget_total,
+          error_budget_remaining,
+          ROUND(100.0 * (error_budget_total - error_budget_remaining) / NULLIF(error_budget_total, 0), 1) as burn_pct
+        FROM service_slos
+        WHERE period_start <= NOW() AND period_end >= NOW()
+      warning_threshold: 50.0
+      critical_threshold: 80.0
+      value_column: burn_pct
+    - name: pipeline_health
+      display: Pipeline Health
+      query_sql: >
+        SELECT pipeline_name,
+          COUNT(*) as total_runs,
+          SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+          ROUND(100.0 * SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) as success_rate
+        FROM pipeline_runs
+        WHERE started_at > NOW() - INTERVAL '24 hours'
+        GROUP BY pipeline_name
+      warning_threshold: 90.0
+      critical_threshold: 75.0
+      value_column: success_rate
+    - name: service_health
+      display: Service Health
+      query_sql: >
+        SELECT name,
+          error_rate,
+          avg_latency_ms,
+          p99_latency_ms
+        FROM service_health_snapshot
+        WHERE snapshot_at > NOW() - INTERVAL '5 minutes'
+      warning_threshold: 1.0
+      critical_threshold: 5.0
+      value_column: error_rate
+
+  snapshots:
+    metrics:
+      - name: dora_metrics
+        query_sql: >
+          SELECT metric_name, current_value, target, status
+          FROM dora_metrics_current
+      - name: service_health_snapshot
+        query_sql: >
+          SELECT name, status, error_rate, request_rate, p99_latency_ms
+          FROM service_health_snapshot
+          WHERE snapshot_at > NOW() - INTERVAL '1 minute'
+      - name: incident_summary
+        query_sql: >
+          SELECT severity, status, COUNT(*) as count
+          FROM incidents
+          WHERE created_at > NOW() - INTERVAL '7 days'
+          GROUP BY severity, status
+
+business_rules:
+  - 'DORA metrics are: deployment frequency, lead time for changes, MTTR, change failure rate.'
+  - 'Elite performers: deploy on demand, lead time < 1 hour, MTTR < 1 hour, change failure rate < 5%.'
+  - 'Incidents have severity levels: SEV1 (critical), SEV2 (major), SEV3 (minor), SEV4 (cosmetic).'
+  - 'Every SEV1/SEV2 incident must have a postmortem within 5 business days.'
+  - 'Error budget = 1 - SLO target. Burn rate > 1 means budget exhausted before window ends.'
+  - 'Deployments are immutable and versioned. Rollbacks count as new deployments.'
+  - 'Pipeline stages: build -> test -> security_scan -> deploy_staging -> deploy_production.'
+  - 'Never fabricate incident details, deployment versions, or metric values.'
+  - 'Always cite timestamps, version tags, and run IDs when referencing deployments or incidents.'
+
+glossary:
+  DORA: 'DevOps Research and Assessment — four key metrics for software delivery performance'
+  Deployment_Frequency: 'How often code is deployed to production (daily, weekly, etc.)'
+  Lead_Time_for_Changes: 'Time from code commit to code successfully running in production'
+  MTTR: 'Mean Time to Recovery — average time to restore service after an incident'
+  Change_Failure_Rate: 'Percentage of deployments that cause a service degradation or incident'
+  SLO: 'Service Level Objective — target reliability level (e.g., 99.9% uptime)'
+  SLI: 'Service Level Indicator — measured metric (e.g., request latency, error rate)'
+  Error_Budget: '1 - SLO target — the acceptable amount of unreliability per window'
+  SEV1: 'Critical incident — complete service outage, requires immediate response'
+  SEV2: 'Major incident — significant degradation, response within 30 minutes'
+  Postmortem: 'Blameless analysis of an incident including timeline, root cause, and action items'
+  Pipeline: 'Automated CI/CD workflow that builds, tests, and deploys code'
+  Canary_Deploy: 'Gradual rollout to a subset of users before full deployment'
+  Rollback: 'Reverting to a previous deployment version due to issues'

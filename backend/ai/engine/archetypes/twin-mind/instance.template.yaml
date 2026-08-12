@@ -1,0 +1,217 @@
+# {{ display_name }} — Instance Configuration
+# Generated from archetype: {{ archetype_name }} v{{ archetype_version }}
+# Created: {{ created_at }}
+
+name: {{ instance_name }}
+display_name: {{ display_name }}
+description: {{ description }}
+archetype: {{ archetype_name }}
+standalone: true
+
+domain: personal
+timezone: {{ timezone }}
+languages: {{ languages }}
+
+auth:
+  mode: local
+
+# ── Persona / domain framing ──
+persona:
+  domain_tagline: {{ persona_tagline }}
+  audience: {{ persona_audience }}
+  domain_noun: personal life
+  off_topic_redirect: >-
+    I'm your personal second brain — I'm best at helping with your life, goals,
+    journal, and knowledge. Is there something in that area I can help with?
+  forbidden_sql_tables: ""
+  forbidden_terms: ""
+  data_units: ""
+  example_questions: |-
+      What's on my schedule for today?
+      Summarize my journal entries from this week
+      What goals am I making progress on?
+# ── Navigation routes ──
+navigation_routes:
+  - path: /
+    label: Home
+    description: Main dashboard with daily brief
+  - path: /journal
+    label: Journal
+    description: Browse and search journal entries
+  - path: /goals
+    label: Goals
+    description: Active and completed goals
+  - path: /timeline
+    label: Timeline
+    description: Chronological view of all events
+  - path: /knowledge
+    label: Knowledge
+    description: Personal knowledge graph
+  - path: /search
+    label: Search
+    description: Full-text search across all content
+  - path: /settings
+    label: Settings
+    description: Instance configuration and integrations
+
+# ── Tool configuration ──
+tools:
+  open_entity:
+    entity_types:
+      - type: journal_entry
+        label: Journal Entry
+        description: A dated personal journal entry with title and body
+      - type: goal
+        label: Goal
+        description: A tracked personal or professional goal with progress
+      - type: timeline_event
+        label: Timeline Event
+        description: A dated event on the personal timeline
+      - type: knowledge_fact
+        label: Knowledge Fact
+        description: A fact or insight in the personal knowledge graph
+      - type: task
+        label: Task
+        description: A to-do or action item with status and due date
+      - type: contact
+        label: Contact
+        description: A saved person or organization contact
+
+  # ── Entity route builder ──
+  entity_routes:
+    journal_entry:
+      base: /journal/{entity_id}
+    goal:
+      base: /goals/{entity_id}
+    timeline_event:
+      base: /timeline/{entity_id}
+    knowledge_fact:
+      base: /knowledge/{entity_id}
+    task:
+      base: /tasks/{entity_id}
+    contact:
+      base: /contacts/{entity_id}
+
+  # ── Param auto-resolution ──
+  param_resolution: {}
+
+  # ── Slug resolution ──
+  slug_resolution: []
+
+  # ── API resolver ──
+  api_resolver:
+    entity_id_fields: {}
+
+  # ── Review rules ──
+  review_rules:
+    forbidden_terms: ""
+    forbidden_phrases:
+      - As an AI
+      - It's worth noting
+      - I should mention
+      - Please note that
+      - Let me know if you need
+      - Would you like me to elaborate
+    domain_metrics: []
+
+# ── Guardrail ──
+guardrail:
+  redacted_tools: []
+
+# ── Domain topics ──
+domain_topics:
+  - daily planning and scheduling
+  - goal tracking and progress review
+  - journaling and personal reflection
+  - knowledge management and fact extraction
+  - task prioritization and to-do management
+  - timeline and life event tracking
+  - habit formation and tracking
+  - personal document search and summarization
+  - contact and relationship management
+
+# ── Host ──
+host:
+  db_url: ${PULSE_DB_URL}
+  db_schema: pulse
+  api_url: ""
+  frontend_url: ""
+  user_me_path: ""
+
+# ── API Catalog ──
+api_catalog: []
+
+# ── Cognition ──
+cognition:
+  monitors:
+    - name: db_connectivity
+      display: Database Connectivity
+      query_sql: "SELECT 1 as connected"
+      warning_threshold: 1
+      critical_threshold: 0
+      value_column: connected
+
+    - name: journal_entry_count
+      display: Journal Entry Count
+      query_sql: >
+        SELECT COUNT(*) as entry_count
+        FROM pulse_memory
+        WHERE memory_type = 'journal_entry'
+        AND created_at > NOW() - INTERVAL '7 days'
+      warning_threshold: 1
+      critical_threshold: 0
+      value_column: entry_count
+
+    - name: storage_usage
+      display: Storage Usage
+      query_sql: >
+        SELECT pg_database_size(current_database()) / 1024 / 1024 as size_mb
+      warning_threshold: 500
+      critical_threshold: 1000
+      value_column: size_mb
+
+  snapshots:
+    metrics:
+      - name: daily_active_entities
+        query_sql: >
+          SELECT memory_type, COUNT(*) as count
+          FROM pulse_memory
+          WHERE created_at > NOW() - INTERVAL '24 hours'
+          GROUP BY memory_type
+
+      - name: goal_completion
+        query_sql: >
+          SELECT status, COUNT(*) as count
+          FROM pulse_memory
+          WHERE memory_type = 'goal'
+          GROUP BY status
+
+      - name: weekly_journal_activity
+        query_sql: >
+          SELECT DATE(created_at) as day, COUNT(*) as entries
+          FROM pulse_memory
+          WHERE memory_type = 'journal_entry'
+            AND created_at > NOW() - INTERVAL '7 days'
+          GROUP BY DATE(created_at)
+          ORDER BY day
+
+# ── Business rules ──
+business_rules:
+  - "Privacy first — all user data stays local to this instance."
+  - "Goal alignment — suggestions must reference active goals when possible."
+  - "Journal respect — summarize journal entries only when explicitly asked."
+  - "Knowledge gating — always confirm before writing facts."
+  - "Timeline integrity — events must have at minimum a date and description."
+  - "No fabrications — never invent dates, details, or facts."
+  - "Life domains are: health, work, finance, relationships, learning, and personal growth."
+
+# ── Glossary ──
+glossary:
+  Journal_Entry: "A dated personal reflection with title and body text. Raw and private."
+  Goal: "A tracked objective with status (active, paused, completed), target date, and progress notes."
+  Timeline_Event: "A dated life event with description, category, and optional tags."
+  Knowledge_Fact: "An atomic fact or insight in the personal knowledge graph, linked to sources."
+  Task: "An actionable to-do item with status (todo, in_progress, done), due date, and priority."
+  Contact: "A saved person or organization with name, email, phone, and relationship notes."
+  Life_Domain: "A category of life: health, work, finance, relationships, learning, personal_growth."
+  Daily_Brief: "A morning summary of today's schedule, active goals, and recent journal highlights."

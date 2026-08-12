@@ -1,0 +1,51 @@
+# devops-workspace domain connectors
+# Integrations for DevOps/SRE toolchains.
+
+connectors:
+  - name: github_actions
+    display: "GitHub Actions"
+    description: "CI/CD pipeline runs and workflow status from GitHub"
+    status: planned
+    auth: token
+    scopes:
+      - repo
+      - workflow
+
+  - name: datadog
+    display: "Datadog"
+    description: "Infrastructure monitoring, APM traces, and log aggregation"
+    status: planned
+    auth: api_key
+
+  - name: pagerduty
+    display: "PagerDuty"
+    description: "Incident management, on-call scheduling, and alert routing"
+    status: planned
+    auth: oauth2
+    scopes:
+      - incidents.read
+      - schedules.read
+
+  - name: grafana
+    display: "Grafana"
+    description: "Metrics dashboards, alerting rules, and data sources"
+    status: planned
+    auth: api_key
+
+  - name: kubernetes
+    display: "Kubernetes"
+    description: "Container orchestration — pods, deployments, services, and nodes"
+    status: planned
+    auth: kubeconfig
+
+  - name: jenkins
+    display: "Jenkins"
+    description: "Build jobs, pipeline stages, and artifact management"
+    status: planned
+    auth: api_token
+
+  - name: terraform_cloud
+    display: "Terraform Cloud"
+    description: "Infrastructure as Code — workspace state, runs, and policy checks"
+    status: planned
+    auth: api_token

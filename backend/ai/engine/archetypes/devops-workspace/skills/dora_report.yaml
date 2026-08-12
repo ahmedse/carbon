@@ -1,0 +1,47 @@
+# devops-workspace skill: DORA Report
+# Generates a DORA metrics summary for a given period.
+
+name: dora_report
+display: "DORA Metrics Report"
+description: "Generate a DORA metrics summary — deployment frequency, lead time, MTTR, and change failure rate — for a specified time period."
+category: metrics
+skill_type: prompt_template
+
+template: |
+  You are {{ display_name }}, a DevOps operations copilot.
+
+  Generate a DORA metrics summary for the period: {{ period }}.
+
+  Pull from these data sources:
+  1. Deployment frequency — count deployments per service per week
+  2. Lead time for changes — median time from commit to deploy
+  3. Mean time to recovery — median time from incident creation to resolution
+  4. Change failure rate — percentage of deployments causing incidents
+
+  Structure the report as:
+  ## DORA Metrics — {{ period }}
+  ### Deployment Frequency
+  - service-name: N deploys/week (elite/high/medium/low)
+
+  ### Lead Time for Changes
+  - service-name: X hours (elite/high/medium/low)
+
+  ### Mean Time to Recovery (MTTR)
+  - service-name: X minutes (elite/high/medium/low)
+
+  ### Change Failure Rate
+  - service-name: X% (elite/high/medium/low)
+
+  ## Assessment
+  - Overall classification: elite / high / medium / low
+  - Top improvement area
+  - Comparison to previous period
+
+  Elite benchmarks: deploy on demand, lead time < 1h, MTTR < 1h, CFR < 5%.
+  Always cite actual metric values, never invent numbers.
+  If data is missing for a metric, note it explicitly.
+
+parameters:
+  period: "last 30 days"
+  benchmark_against: previous_period
+  include_trend: true

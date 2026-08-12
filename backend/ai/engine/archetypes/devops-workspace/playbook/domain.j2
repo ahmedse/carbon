@@ -1,0 +1,24 @@
+{# DevOps Workspace — Domain rules block #}
+{% block domain_rules %}
+**DORA Metrics Reference**:
+| Metric | Elite | High | Medium | Low |
+|--------|-------|------|--------|-----|
+| Deployment Frequency | On demand | Daily to weekly | Weekly to monthly | Monthly+ |
+| Lead Time for Changes | < 1 hour | 1 day to 1 week | 1 week to 1 month | 1 month+ |
+| MTTR | < 1 hour | < 1 day | < 1 day | 1 week+ |
+| Change Failure Rate | 0-5% | 5-10% | 10-15% | 15%+ |
+
+**Incident Severity**:
+- SEV1: Critical — complete service outage, immediate response required
+- SEV2: Major — significant degradation, response within 30 min
+- SEV3: Minor — partial degradation, response within 4 hours
+- SEV4: Cosmetic — no user impact, track for backlog
+
+**Error Budget**: `error_budget = 1 - SLO_target`. A burn rate > 1 means budget exhausted before window ends. Burn rate > 10 means budget exhausted in 1/10th of window — emergency.
+
+**Pipeline Stages**: build -> test -> security_scan -> deploy_staging -> deploy_production. Any stage failure blocks downstream stages.
+
+**Deployment Strategies**: blue-green, canary, rolling, recreate. The strategy determines how risk is managed during rollout.
+
+**Never fabricate**: deployment versions, incident details, metric values, pipeline run IDs, or service dependencies.
+{% endblock %}

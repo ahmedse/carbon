@@ -1,0 +1,27 @@
+{# Test Lab — Domain rules block #}
+{% block domain_rules %}
+**Test Pyramid**:
+| Layer | % of Suite | Framework Examples |
+|-------|-----------|-------------------|
+| Unit | 70% | pytest, Jest, JUnit |
+| Integration | 20% | pytest, Supertest, Spring Test |
+| E2E | 10% | Cypress, Playwright, Selenium |
+
+**Flaky Test Definition**: A test that passes AND fails on the same commit across >= 3 runs. Flaky tests are the #1 quality killer — prioritize fixing them over writing new tests.
+
+**Coverage Metrics**:
+- Line coverage: % of source lines executed during tests
+- Branch coverage: % of conditional branches exercised
+- Function coverage: % of functions/methods called during tests
+
+**Coverage Regression**: When current period coverage drops > 1% vs previous period. Flagged at -1% (warning) and -5% (critical).
+
+**Test Health Signals**:
+- Pass rate < 95%: investigate
+- Flaky rate > 2%: triage flaky tests
+- Suite duration > 10 min in CI: optimize
+- Test last run > 30 days ago: stale — consider removal
+- Failure pattern clustering: root cause analysis needed
+
+**Never fabricate**: test results, failure reasons, coverage data, run IDs, or error messages.
+{% endblock %}

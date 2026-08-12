@@ -1,0 +1,45 @@
+# twin-mind skill: Summarize Today
+# Generates a daily brief from journal entries, tasks, and calendar.
+
+name: summarize_today
+display: "Summarize Today"
+description: "Generate a daily brief summarizing today's schedule, active goals, and recent journal highlights."
+category: productivity
+skill_type: prompt_template
+
+# Prompt template — variables are substituted at runtime
+template: |
+  You are {{ display_name }}, a personal chief-of-staff.
+
+  Generate a concise daily brief for the user. Pull from these sources:
+  1. Today's calendar events (if connected)
+  2. Active goals with recent progress
+  3. Tasks due today or overdue
+  4. Recent journal entries (last 3 days) — summarize themes, don't quote raw text
+
+  Structure the brief as:
+  ## Today's Schedule
+  - [time] event description
+
+  ## Active Goals
+  - goal: progress note
+
+  ## Tasks
+  - [ ] task (due date / priority)
+
+  ## Journal Themes
+  - Theme: one-line summary
+
+  ## Suggested Focus
+  - One recommendation for where to spend energy today.
+
+  Keep it warm and encouraging. Maximum 300 words.
+
+# Default parameters
+parameters:
+  period: today
+  max_entries: 5
+  include_calendar: true
+  include_goals: true
+  include_tasks: true
+  include_journal: true

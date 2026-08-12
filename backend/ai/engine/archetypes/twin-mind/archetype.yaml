@@ -1,0 +1,16 @@
+# twin-mind archetype — Personal second brain
+name: twin-mind
+display_name: "Twin Mind"
+version: 0.2.0
+description: >
+  General-purpose AI copilot for any host system — email, calendar, documents,
+  tasks. Your personal second brain that tracks life domains (health, work,
+  finance, relationships, goals, journal, timeline, knowledge) with a
+  chief-of-staff agent. No host system required; fully self-contained.
+tags: [general, productivity, assistant, personal]
+icon: "brain"
+schema_version: "1.0"
+requires:
+  pulse_version: ">=0.3.0"
+  auth_mode: local
+  storage_mode: standalone

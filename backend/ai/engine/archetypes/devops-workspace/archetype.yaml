@@ -1,0 +1,15 @@
+# DevOps Workspace Archetype
+name: devops-workspace
+display_name: "DevOps Workspace"
+version: 0.1.0
+description: >
+  AI copilot for DevOps and SRE teams — CI/CD pipelines, infrastructure
+  monitoring, incident response, and DORA metrics. Attach to Jenkins,
+  GitHub Actions, Datadog, PagerDuty, or any DevOps toolchain.
+tags: [devops, sre, infrastructure, cicd, monitoring, incidents]
+icon: "server"
+schema_version: "1.0"
+requires:
+  pulse_version: ">=0.3.0"
+  auth_mode: host_delegated
+  storage_mode: standalone

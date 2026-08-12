@@ -1,0 +1,405 @@
+# {{ display_name }} — Instance Configuration
+# Generated from archetype: {{ archetype_name }} v{{ archetype_version }}
+# Created: {{ created_at }}
+
+name: {{ instance_name }}
+display_name: {{ display_name }}
+description: {{ description }}
+archetype: {{ archetype_name }}
+standalone: false
+
+domain: quality_assurance
+timezone: {{ timezone }}
+languages: {{ languages }}
+
+auth:
+  mode: host_delegated
+
+# Persona / domain framing
+persona:
+  domain_tagline: a test infrastructure and quality engineering platform
+  audience: QA engineers and test managers
+  domain_noun: test infrastructure
+  off_topic_redirect: >-
+    I'm focused on your test infrastructure — suites, runs, failures, coverage,
+    and flaky tests. Is there something in that area I can help with?
+  forbidden_sql_tables: auth_user, django_session, accounts_user
+  forbidden_terms: test_db_password, test_api_key, internal_endpoint, raw_credential
+  data_units: "%, ms, tests, assertions, lines, suites, cases, runs"
+  example_questions: |-
+      'Which tests have been flaky in the last sprint?'
+      'Show me coverage by module'
+      What's the most common failure pattern this week?
+      'Which test suites take the longest to run?'
+      'Show me the regression trend for the last 5 runs'
+# Navigation routes
+navigation_routes:
+  - path: /
+    label: Dashboard
+    description: Test health overview dashboard
+  - path: /suites
+    label: Test Suites
+    description: All test suites with pass/fail/flaky status
+  - path: /runs
+    label: Test Runs
+    description: Recent and historical test run results
+  - path: /failures
+    label: Failures
+    description: Test failure analysis and patterns
+  - path: /coverage
+    label: Coverage
+    description: Code coverage by module and file
+  - path: /flaky
+    label: Flaky Tests
+    description: Flaky test detection and history
+  - path: /performance
+    label: Performance
+    description: Test execution duration and trends
+  - path: /settings
+    label: Settings
+    description: Instance configuration
+
+# Tool configuration
+tools:
+  open_entity:
+    entity_types:
+      - type: test_suite
+        label: Test Suite
+        description: A collection of test cases organized by module or feature
+        id_source: list_test_suites
+      - type: test_case
+        label: Test Case
+        description: An individual test with assertions and metadata
+        id_source: list_test_cases
+      - type: test_run
+        label: Test Run
+        description: An execution of one or more test suites with results
+        id_source: list_test_runs
+      - type: test_failure
+        label: Test Failure
+        description: A failed test case with error details and stack trace
+        id_source: list_test_failures
+      - type: coverage_report
+        label: Coverage Report
+        description: Code coverage analysis by module, file, and line
+        id_source: list_coverage_reports
+
+  entity_routes:
+    test_suite:
+      base: /suites/{entity_id}
+      subpages:
+        cases:
+          label: Test Cases
+          route_suffix: /cases
+        runs:
+          label: Runs
+          route_suffix: /runs
+        coverage:
+          label: Coverage
+          route_suffix: /coverage
+    test_case:
+      base: /cases/{entity_id}
+    test_run:
+      base: /runs/{entity_id}
+      subpages:
+        failures:
+          label: Failures
+          route_suffix: /failures
+        timing:
+          label: Timing
+          route_suffix: /timing
+    test_failure:
+      base: /failures/{entity_id}
+    coverage_report:
+      base: /coverage/{entity_id}
+
+  param_resolution:
+    suite_id:
+      list_endpoint: list_test_suites
+      id_field: id
+      display_field: name
+    case_id:
+      list_endpoint: list_test_cases
+      id_field: id
+      display_field: name
+    run_id:
+      list_endpoint: list_test_runs
+      id_field: id
+      display_field: run_label
+
+  slug_resolution:
+    - detail_endpoint: get_test_suite
+      list_endpoint: list_test_suites
+      match_fields: [name, slug]
+    - detail_endpoint: get_test_case
+      list_endpoint: list_test_cases
+      match_fields: [name, full_name]
+    - detail_endpoint: get_test_run
+      list_endpoint: list_test_runs
+      match_fields: [run_label, run_id]
+    - detail_endpoint: get_coverage_report
+      list_endpoint: list_coverage_reports
+      match_fields: [module_name, path]
+
+  api_resolver:
+    entity_id_fields:
+      test_suite: {api: list_test_suites, id_field: id, display_field: name}
+      test_case: {api: list_test_cases, id_field: id, display_field: name}
+      test_run: {api: list_test_runs, id_field: id, display_field: run_label}
+      test_failure: {api: list_test_failures, id_field: id, display_field: test_name}
+      coverage_report: {api: list_coverage_reports, id_field: id, display_field: module_name}
+
+  review_rules:
+    forbidden_terms: test_db_password, test_api_key
+    forbidden_phrases:
+      - As an AI
+      - It's worth noting
+      - I should mention
+      - Please note that
+      - Let me know if you need
+      - Would you like me to elaborate
+    domain_metrics:
+      - pass_rate
+      - coverage_pct
+      - flaky_rate
+      - avg_duration_ms
+      - failure_rate
+
+guardrail:
+  redacted_tools: []
+
+domain_topics:
+  - test suite management and organization
+  - flaky test detection and remediation
+  - code coverage analysis and gap identification
+  - test failure pattern analysis and root cause
+  - regression test selection and prioritization
+  - test execution performance and optimization
+  - continuous testing in CI/CD pipelines
+  - test data and environment management
+  - quality metrics and reporting
+  - shift-left testing and test pyramid strategy
+
+host:
+  db_url: \${TEST_LAB_DB_URL}
+  db_schema: \${TEST_LAB_DB_SCHEMA}
+  api_url: \${TEST_LAB_API_URL}
+  api_token: \${TEST_LAB_API_TOKEN}
+  frontend_url: \${TEST_LAB_FRONTEND_URL}
+  user_me_path: /api/me/
+
+api_catalog:
+  - name: list_test_suites
+    method: GET
+    path: /api/suites/
+    description: List all test suites with pass rate, flaky count, and last run
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_test_suite
+    method: GET
+    path: /api/suites/{id}/
+    description: Get suite details — cases, coverage, recent runs
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_test_cases
+    method: GET
+    path: /api/cases/
+    description: List test cases with status, last result, and flaky flag
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_test_case
+    method: GET
+    path: /api/cases/{id}/
+    description: Get test case details — code location, assertions, history
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_test_runs
+    method: GET
+    path: /api/runs/
+    description: List test runs with pass/fail/skip counts and duration
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_test_run
+    method: GET
+    path: /api/runs/{id}/
+    description: Get run details — all test results, timing, and environment info
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_test_failures
+    method: GET
+    path: /api/failures/
+    description: List test failures with error message, stack trace, and run context
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_test_failure
+    method: GET
+    path: /api/failures/{id}/
+    description: Get failure details — full stack trace, screenshot, and logs
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_coverage_reports
+    method: GET
+    path: /api/coverage/
+    description: List coverage reports by module with line, branch, and function coverage
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_coverage_report
+    method: GET
+    path: /api/coverage/{id}/
+    description: Get detailed coverage report — per-file breakdown with uncovered lines
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_flaky_tests
+    method: GET
+    path: /api/flaky/
+    description: List flaky tests — tests with alternating pass/fail in recent runs
+    requires_auth: true
+    requires_confirmation: false
+  - name: get_quality_metrics
+    method: GET
+    path: /api/metrics/quality/
+    description: Get aggregate quality metrics — pass rate, flaky rate, coverage trend
+    requires_auth: true
+    requires_confirmation: false
+
+cognition:
+  monitors:
+    - name: flaky_test_detection
+      display: Flaky Test Detection
+      query_sql: >
+        SELECT t.name, t.suite_name,
+          COUNT(DISTINCT r.id) as recent_runs,
+          SUM(CASE WHEN tr.status = 'passed' THEN 1 ELSE 0 END) as passes,
+          SUM(CASE WHEN tr.status = 'failed' THEN 1 ELSE 0 END) as failures
+        FROM test_results tr
+        JOIN test_cases t ON t.id = tr.case_id
+        JOIN test_runs r ON r.id = tr.run_id
+        WHERE r.created_at > NOW() - INTERVAL '7 days'
+        GROUP BY t.id, t.name, t.suite_name
+        HAVING SUM(CASE WHEN tr.status = 'passed' THEN 1 ELSE 0 END) > 0
+          AND SUM(CASE WHEN tr.status = 'failed' THEN 1 ELSE 0 END) > 0
+      warning_threshold: 0
+      critical_threshold: 5
+      value_column: flaky_count
+    - name: coverage_regression
+      display: Coverage Regression
+      query_sql: >
+        SELECT module_name,
+          current_line_coverage,
+          previous_line_coverage,
+          ROUND(current_line_coverage - previous_line_coverage, 1) as change_pct
+        FROM coverage_comparison
+        WHERE comparison_period = 'last_7_days_vs_previous_7_days'
+          AND (current_line_coverage - previous_line_coverage) < 0
+      warning_threshold: -1.0
+      critical_threshold: -5.0
+      value_column: change_pct
+    - name: slowest_tests
+      display: Slowest Tests
+      query_sql: >
+        SELECT t.name, t.suite_name,
+          AVG(tr.duration_ms) as avg_duration_ms,
+          MAX(tr.duration_ms) as max_duration_ms
+        FROM test_results tr
+        JOIN test_cases t ON t.id = tr.case_id
+        WHERE tr.created_at > NOW() - INTERVAL '7 days'
+        GROUP BY t.id, t.name, t.suite_name
+        ORDER BY AVG(tr.duration_ms) DESC
+        LIMIT 10
+      max_age_hours: 168
+      limit: 10
+    - name: failure_rate_trend
+      display: Failure Rate Trend
+      query_sql: >
+        SELECT DATE(created_at) as run_date,
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+          ROUND(100.0 * SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) as failure_pct
+        FROM test_results
+        WHERE created_at > NOW() - INTERVAL '7 days'
+        GROUP BY DATE(created_at)
+        ORDER BY run_date
+      warning_threshold: 5.0
+      critical_threshold: 15.0
+      value_column: failure_pct
+    - name: suite_duration_trend
+      display: Suite Duration Trend
+      query_sql: >
+        SELECT suite_name,
+          AVG(duration_sec) as avg_duration_sec,
+          MAX(duration_sec) as max_duration_sec
+        FROM test_runs
+        WHERE created_at > NOW() - INTERVAL '7 days'
+        GROUP BY suite_name
+        ORDER BY AVG(duration_sec) DESC
+      warning_threshold: 600
+      critical_threshold: 1800
+      value_column: avg_duration_sec
+    - name: stale_tests
+      display: Stale Tests
+      query_sql: >
+        SELECT t.name, t.suite_name,
+          MAX(tr.created_at) as last_run
+        FROM test_cases t
+        LEFT JOIN test_results tr ON tr.case_id = t.id
+        WHERE t.is_active = true
+        GROUP BY t.id, t.name, t.suite_name
+        HAVING MAX(tr.created_at) IS NULL
+          OR MAX(tr.created_at) < NOW() - INTERVAL '30 days'
+      warning_threshold: 1
+      critical_threshold: 10
+      value_column: stale_count
+
+  snapshots:
+    metrics:
+      - name: suite_health
+        query_sql: >
+          SELECT s.name,
+            COUNT(DISTINCT c.id) as total_cases,
+            SUM(CASE WHEN c.is_flaky THEN 1 ELSE 0 END) as flaky_count,
+            s.pass_rate,
+            s.coverage_pct,
+            s.avg_duration_ms
+          FROM test_suites s
+          LEFT JOIN test_cases c ON c.suite_id = s.id
+          GROUP BY s.id, s.name, s.pass_rate, s.coverage_pct, s.avg_duration_ms
+      - name: coverage_summary
+        query_sql: >
+          SELECT module_name,
+            line_coverage_pct,
+            branch_coverage_pct,
+            function_coverage_pct,
+            uncovered_lines
+          FROM coverage_current
+      - name: flaky_summary
+        query_sql: >
+          SELECT suite_name, COUNT(*) as flaky_count
+          FROM test_cases
+          WHERE is_flaky = true
+          GROUP BY suite_name
+          ORDER BY flaky_count DESC
+
+business_rules:
+  - 'A flaky test passes and fails on the same commit across different runs.'
+  - 'Flaky detection requires at least 3 runs in the lookback window.'
+  - 'Coverage is measured as line, branch, and function coverage.'
+  - 'Coverage regression = current period coverage < previous period by > 1%.'
+  - 'Never fabricate test results, failure reasons, or coverage data.'
+  - 'Always cite run IDs, timestamps, and suite names when referencing results.'
+  - 'Test pyramid: unit (70%) > integration (20%) > e2e (10%).'
+  - 'A test suite should complete within 10 minutes in CI — flag if longer.'
+  - 'Flaky tests are the #1 quality killer — prioritize fixing them over new tests.'
+
+glossary:
+  Test_Suite: 'A collection of related test cases organized by module or feature'
+  Test_Case: 'An individual test with assertions, setup, and teardown'
+  Test_Run: 'A single execution of one or more test suites with environment context'
+  Test_Failure: 'A test case that did not pass — includes error, stack trace, and artifacts'
+  Flaky_Test: 'A test that alternates between pass and fail on the same code'
+  Coverage: 'Percentage of code lines, branches, or functions exercised by tests'
+  Regression: 'A previously passing test that now fails due to a code change'
+  Pass_Rate: 'Percentage of test cases that pass in a given run or period'
+  Flaky_Rate: 'Percentage of test cases flagged as flaky'
+  Coverage_Gap: 'Code that is not exercised by any test — a risk area'
+  Test_Pyramid: 'Unit tests (base, most) -> integration (middle) -> e2e (top, fewest)'
+  Shift_Left: 'Moving testing earlier in the development cycle to catch issues sooner'

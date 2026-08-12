@@ -1,0 +1,68 @@
+# test-lab domain connectors
+# Integrations for test frameworks and quality tools.
+
+connectors:
+  - name: pytest
+    display: "pytest"
+    description: "Python test framework — results in JUnit XML format"
+    status: planned
+    auth: file_import
+    formats: [junit_xml, json]
+
+  - name: jest
+    display: "Jest"
+    description: "JavaScript test framework with snapshot testing and coverage"
+    status: planned
+    auth: file_import
+    formats: [junit_xml, json, lcov]
+
+  - name: cypress
+    display: "Cypress"
+    description: "End-to-end browser testing with videos and screenshots"
+    status: planned
+    auth: file_import
+    formats: [junit_xml, mochawesome_json]
+
+  - name: playwright
+    display: "Playwright"
+    description: "Cross-browser end-to-end testing with trace viewer"
+    status: planned
+    auth: file_import
+    formats: [junit_xml, json]
+
+  - name: junit
+    display: "JUnit"
+    description: "Java/JVM test framework — results in JUnit XML"
+    status: planned
+    auth: file_import
+    formats: [junit_xml]
+
+  - name: rspec
+    display: "RSpec"
+    description: "Ruby BDD test framework"
+    status: planned
+    auth: file_import
+    formats: [junit_xml, json]
+
+  - name: testng
+    display: "TestNG"
+    description: "Java testing framework with parallel execution and data providers"
+    status: planned
+    auth: file_import
+    formats: [junit_xml, json]
+
+  - name: sonarqube
+    display: "SonarQube"
+    description: "Static code analysis, coverage, and quality gates"
+    status: planned
+    auth: api_token
+    scopes:
+      - project_analysis:read
+
+  - name: codecov
+    display: "Codecov"
+    description: "Code coverage reporting and PR status checks"
+    status: planned
+    auth: api_token
+    scopes:
+      - read

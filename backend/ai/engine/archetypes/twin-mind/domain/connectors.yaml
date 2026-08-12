@@ -1,0 +1,52 @@
+# twin-mind domain connectors
+# Integrations for external services. Each connector defines how Pulse
+# reads/writes external data sources.
+
+connectors:
+  - name: gmail
+    display: "Gmail"
+    description: "Read and search email from Gmail inbox"
+    status: planned
+    auth: oauth2
+    scopes:
+      - https://www.googleapis.com/auth/gmail.readonly
+
+  - name: google_calendar
+    display: "Google Calendar"
+    description: "Read and create calendar events"
+    status: planned
+    auth: oauth2
+    scopes:
+      - https://www.googleapis.com/auth/calendar.events
+      - https://www.googleapis.com/auth/calendar.readonly
+
+  - name: notion
+    display: "Notion"
+    description: "Read and search Notion workspaces and databases"
+    status: planned
+    auth: api_key
+
+  - name: slack
+    display: "Slack"
+    description: "Read messages and channels from Slack workspaces"
+    status: planned
+    auth: oauth2
+    scopes:
+      - channels:history
+      - channels:read
+      - users:read
+
+  - name: todoist
+    display: "Todoist"
+    description: "Read and manage tasks from Todoist"
+    status: planned
+    auth: oauth2
+    scopes:
+      - data:read
+      - task:add
+
+  - name: health_kit
+    display: "Apple Health"
+    description: "Read health and fitness data via HealthKit export"
+    status: planned
+    auth: file_import

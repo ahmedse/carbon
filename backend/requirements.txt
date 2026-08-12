@@ -41,3 +41,18 @@ redis==5.0.1                          # Memory cache / message broker
 
 # Reporting
 xlsxwriter==3.2.2                     # Excel export for GHG reports (E3-1)
+
+# ── Vendored Pulse Engine (backend/ai/engine) — INERT, import-only (ADR-0009) ──
+sqlalchemy[asyncio]>=2.0.36,<2.1    # Engine ORM (Phase 1 inert; Phase 2 swaps to Django Store)
+pydantic>=2.7.0,<3                  # Schema models (core/config.py, models)
+pydantic-settings==2.6.0            # Engine Settings (core/config.py)
+openai==2.30.0                      # LLM provider client (llm/provider.py)
+tenacity>=8.0                       # Retry/resilience (llm/router.py, agent)
+cryptography==44.0.0                # Host token encryption (core/encryption.py)
+httpx>=0.27.0,<1.0                  # Async HTTP client (agent/api_discipline.py)
+PyYAML>=6.0.2                       # Archetype/instance config parsing (ingestion, core)
+Jinja2==3.1.6                       # Archetype template rendering (core/archetypes.py)
+apscheduler==3.10.4                 # Proactive/cognition background loops
+mcp>=1.0                            # MCP tool client (agent/mcp_client.py)
+RestrictedPython>=8.0               # Code-snippet skill sandbox (skills/sandbox.py)
+PyJWT>=2.9.0                        # JWT auth (agent/tools.py)
