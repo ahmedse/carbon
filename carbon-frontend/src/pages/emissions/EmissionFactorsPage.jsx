@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -79,11 +79,7 @@ export default function EmissionFactorsPage() {
     modules: context?.modules || [],
   });
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [factorsData, categoriesData] = await Promise.all([
@@ -101,7 +97,11 @@ export default function EmissionFactorsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, notifyFromError]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleCreate = () => {
     setCurrentFactor(null);

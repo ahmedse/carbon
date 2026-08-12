@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -48,18 +48,18 @@ export default function ReportGeneratorPage() {
     output_format: 'json',
   });
 
-  useEffect(() => {
-    loadPeriods();
-  }, []);
-
-  const loadPeriods = async () => {
+  const loadPeriods = useCallback(async () => {
     try {
       const res = await fetchReportingPeriods(token);
       setPeriods(Array.isArray(res) ? res : res.results || []);
     } catch (err) {
       setError(err.message);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    loadPeriods();
+  }, [loadPeriods]);
 
   const handleStateChange = (key, value) => {
     setState(prev => ({

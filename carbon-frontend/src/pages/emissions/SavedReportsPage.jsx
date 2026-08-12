@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -118,11 +118,7 @@ export default function SavedReportsPage() {
   const [expandedId, setExpandedId] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
-  useEffect(() => {
-    loadConfigs();
-  }, []);
-
-  const loadConfigs = async () => {
+  const loadConfigs = useCallback(async () => {
     try {
       setLoading(true);
       const data = await fetchReportConfigs(token);
@@ -132,7 +128,11 @@ export default function SavedReportsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    loadConfigs();
+  }, [loadConfigs]);
 
   const handleRun = async (configId) => {
     try {

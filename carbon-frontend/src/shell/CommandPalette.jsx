@@ -2,7 +2,7 @@
 // Ctrl+K command palette for quick navigation and actions
 // VSCode-inspired fuzzy search interface
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Dialog,
   Box,
@@ -200,6 +200,11 @@ export default function CommandPalette({ open, onClose }) {
 
   const filteredCommands = useMemo(() => searchCommands(query), [query]);
 
+  const handleCommandSelect = useCallback((command) => {
+    navigate(command.path);
+    onClose();
+  }, [navigate, onClose]);
+
   // Reset state when dialog opens
   useEffect(() => {
     if (open) {
@@ -232,7 +237,7 @@ export default function CommandPalette({ open, onClose }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, filteredCommands, selectedIndex]);
+  }, [open, filteredCommands, selectedIndex, handleCommandSelect]);
 
   // Auto-scroll to selected item
   useEffect(() => {
@@ -243,11 +248,6 @@ export default function CommandPalette({ open, onClose }) {
       }
     }
   }, [selectedIndex]);
-
-  const handleCommandSelect = (command) => {
-    navigate(command.path);
-    onClose();
-  };
 
   const handleQueryChange = (e) => {
     setQuery(e.target.value);
