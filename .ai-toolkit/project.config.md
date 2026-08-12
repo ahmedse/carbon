@@ -113,6 +113,8 @@ ARCH_AI_DISCOVERY=No HTTP agent-card (engine is in-hand). Engine capabilities va
 ARCH_AI_PACKAGE=Modular monolith: ONE Django app (backend/ai/). All Pulse modules are internal Python packages (engine/, knowledge/, memory/, graph/, ingestion/, proactive/, archetypes/, learning/, feedback/). One backend/ai/models/ + one migrations/ namespace. NO new Django apps.
 ARCH_AI_EXTENSIBILITY=New AI capability = register a tool/workflow, NOT a new app. Tool registry: engine/agent/registry.py + tools.py. MCP: engine/agent/mcp_client.py (MCP servers = discovered remote tools). Generic workflows: six-witness pipeline + learning loops as declarative specs. Plugins: ToolPlugin/WorkflowPlugin ABC, self-register at startup.
 ARCH_AI_PORTABILITY=Portable contract: one facade (CarbonIntelligence), one stable contract (AIProvider ABC + task envelope), zero upward imports (layer imports NOTHING from catalog/mdm/dq/emissions/accounts/core; domain apps plug IN via ai/domain/{app}.py), injected deps (config/DB/cache via bootstrap). Migrate = copy package + adapt bootstrap.
+ARCH_AI_CONSOLE=docs/PULSE_CONSOLE_DESIGN.md — the admin "Pulse" section: 16 panels across 5 groups (Overview/Workspace/Conversations + Intelligence Core + Agents & Tooling + Feedback & Learning + Observability). Frontend Phase A builds full menu + live Overview/Workspace/Conversations + shared placeholder for gated panels.
+ARCH_AI_OPS_API=backend/ai/ops_api.py + ops_urls.py (Phase 2b) — read-only DRF viewsets for every Phase 2 model under /carbon-api/ai/pulse/ (health, tasks, knowledge, memory, graph, agents, mcp, tools, skills, archetypes, prompts, feedback, learning, monitoring, audit, logs). CBAC-scoped, read-only (RULE_21).
 # RBAC:
 ARCH_RBAC=ScopedRole (user, group, org_unit, module) — org-subtree-scoped visibility + admin
 ARCH_ADMIN_GROUP=admins_group
@@ -154,6 +156,8 @@ AI_INTELLIGENCE=backend/ai/intelligence.py
 AI_GUARDS=backend/ai/guards.py
 AI_DOMAIN_PROTOCOL=backend/ai/domain_protocol.py
 AI_PULSE_PROVIDER=backend/ai/providers/pulse.py
+AI_OPS_API=backend/ai/ops_api.py
+AI_CONSOLE_DESIGN=docs/PULSE_CONSOLE_DESIGN.md
 AI_HTTP_TRANSPORT=backend/ai/providers/_http.py
 AI_CONTRACT=.ai-toolkit/shared/ai-contract.md
 AI_ADR=.ai-toolkit/decisions/0004-ai-multi-app-architecture.md
