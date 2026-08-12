@@ -9,7 +9,7 @@
 PROJECT_NAME=Carbon
 PROJECT_TYPE=Data Trust Platform (Django + React) — metadata-driven data governance, carbon accounting first app
 WORKSPACE_ROOT=/home/ahmed/aast/carbon
-DESCRIPTION=Carbon is evolving into a lighter, Ataccama-inspired Data Trust Platform that hosts domain apps on trusted data. Core: Catalog, MDM (reference data), Data Quality profiling+rules, metadata-driven schema engine (dataschema). First hosted app: Carbon emissions accounting (GHG Protocol). RBAC via ScopedRole (org-unit-scoped). Pulse = external AI/RAG system (not in-repo).
+DESCRIPTION=Carbon is evolving into a lighter, Ataccama-inspired Data Trust Platform that hosts domain apps on trusted data. Core: Catalog, MDM (reference data), Data Quality profiling+rules, metadata-driven schema engine (dataschema). First hosted app: Carbon emissions accounting (GHG Protocol). RBAC via ScopedRole (org-unit-scoped). Pulse = in-hand stateless reasoning engine (vendored under backend/ai/engine/); Carbon owns all AI knowledge/memory/learning/feedback.
 
 ## OPS SCRIPT (Universal — how to run/stop/inspect services)
 OPS_SCRIPT=./manage.sh
@@ -93,23 +93,26 @@ ARCH_SUPERSEDED=ai_copilot (AI Heart owns AI/RAG now)
 # FULL CONTRACT: .ai-toolkit/shared/ai-contract.md — THE binding AI contract
 # FULL ADR: .ai-toolkit/decisions/0004-ai-multi-app-architecture.md
 # FULL AI SPEC: docs/PULSE_CONTRACT_SPEC.md
-ARCH_AI_HEART=backend/ai/ — THE canonical AI interface. All AI ops flow through here.
+ARCH_AI_NAME=Pulse — unified name for the ENTIRE in-hand AI/intelligence layer (engine + orchestrator + knowledge + guards).
+ARCH_AI_HEART=backend/ai/ — THE canonical AI interface (Pulse Orchestrator, formerly "AI Heart"). All AI ops flow through here.
 ARCH_AI_LAYERS=3 layers: Platform AI (ai/protocol.py) → Domain AI (ai/domain/{app}.py) → Security Guards (ai/guards.py)
 ARCH_AI_PLATFORM_OPS=dq.validate, dq.suggest, query.nl, query.explain, schema.analyze, fix.suggest — work on ANY table, ANY app
 ARCH_AI_DOMAIN_OPS=Per-app ABCs in ai/domain/{app}.py — anomaly.detect, anomaly.explain, report.draft (emissions)
 ARCH_AI_GUARDS=ScopeGuard, AccessGuard, DataIsolationGuard, MutationGuard, AuditTrail — run BEFORE every AI call
-ARCH_AI_PROVIDER=AI provider (external) — swappable via AI_PROVIDER_CLASS. Change one setting → entire AI backend swaps.
+ARCH_AI_PROVIDER=AI engine is IN-HAND (backend/ai/engine/) — NO provider swappability. backend/ai/providers/pulse.py is the single adapter seam (implementation detail, not a strategy guarantee).
 # AI provider specifics:
-ARCH_AI_HOST=http://127.0.0.1:9100
-ARCH_AI_ENDPOINT=/instances/carbon
-ARCH_AI_CONTRACT=Task envelope (id, type, payload, scope) via POST /tasks + GET /tasks/{id}. Carbon generates task ID (UUID v4, idempotent). AI provider returns {task_id, status, result, error}. Status: pending|working|completed|failed|partial. Carbon NEVER imports AI provider SDKs; AI provider NEVER calls Carbon.
+ARCH_AI_ENGINE=backend/ai/engine/ — vendored Pulse stateless engine (agent/, llm/, cognition/, core/). In-hand, in-process; long inference runs via async jobs on Redis.
+ARCH_AI_CONTRACT=Task envelope (id, type, payload, scope) — internal async job contract carried over Redis (was HTTP POST /tasks). Carbon generates task ID (UUID v4, idempotent). Engine returns {task_id, status, result, error}. Status: pending|working|completed|failed|partial. Carbon owns durable state; the engine is stateless.
 ARCH_AI_TASK_1=dq.validate (sync, 10s) — NL DQ rule validation. Carbon sends rules+rows → AI provider returns {results: [{rule_id, status, failing_rows, explanation, confidence}]}
 ARCH_AI_TASK_2=classification.infer (sync, 5s) — Auto-classify DataField metadata → glossary terms, PII detection, data type suggestions
 ARCH_AI_TASK_3=query.answer (stream, 15s) — NL question → structured answer with data payload
 ARCH_AI_TASK_4=dq.suggest (async, 60s) — Propose DQ rules from table profile statistics
 ARCH_AI_TASK_5=anomaly.detect (async, 120s) — Scan DQ profile snapshots for anomalous patterns
 ARCH_AI_TASK_6=report.draft (async, 60s) — Dashboard data → narrative GHG report draft
-ARCH_AI_DISCOVERY=Agent Card at GET /instances/carbon/agent-card — Carbon reads on startup to validate supported task types
+ARCH_AI_DISCOVERY=No HTTP agent-card (engine is in-hand). Engine capabilities validated at import/startup.
+ARCH_AI_PACKAGE=Modular monolith: ONE Django app (backend/ai/). All Pulse modules are internal Python packages (engine/, knowledge/, memory/, graph/, ingestion/, proactive/, archetypes/, learning/, feedback/). One backend/ai/models/ + one migrations/ namespace. NO new Django apps.
+ARCH_AI_EXTENSIBILITY=New AI capability = register a tool/workflow, NOT a new app. Tool registry: engine/agent/registry.py + tools.py. MCP: engine/agent/mcp_client.py (MCP servers = discovered remote tools). Generic workflows: six-witness pipeline + learning loops as declarative specs. Plugins: ToolPlugin/WorkflowPlugin ABC, self-register at startup.
+ARCH_AI_PORTABILITY=Portable contract: one facade (CarbonIntelligence), one stable contract (AIProvider ABC + task envelope), zero upward imports (layer imports NOTHING from catalog/mdm/dq/emissions/accounts/core; domain apps plug IN via ai/domain/{app}.py), injected deps (config/DB/cache via bootstrap). Migrate = copy package + adapt bootstrap.
 # RBAC:
 ARCH_RBAC=ScopedRole (user, group, org_unit, module) — org-subtree-scoped visibility + admin
 ARCH_ADMIN_GROUP=admins_group
@@ -122,8 +125,8 @@ RULE_2=Project model is FULLY removed (replaced by OrgUnit in mdm). Do NOT reint
 RULE_3=Core apps (accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport) MUST NOT import from emissions. Emissions may import core.
 RULE_4=API prefix is /carbon-api/ (config/urls.py). All backend routes are under this prefix.
 RULE_5=Frontend base path is /carbon/. Vite base + router basename must use this.
-RULE_6=Do NOT add pgvector, LLM gateway, or AI copilot features in-repo. Pulse is the external AI system. Carbon sends structured data via POST to Pulse; Pulse returns structured results. Carbon owns the trigger, Pulse owns the reasoning.
-RULE_13=Pulse integration uses TASK ENVELOPE contract (docs/PULSE_CONTRACT_SPEC.md). Carbon NEVER imports Pulse SDKs or depends on Pulse being online. Single endpoint POST /instances/carbon/tasks with {auth, task:{id,type,payload}} → {task_id,status,result}. Graceful degradation: timeout 10s sync, 60s async; fall back to deterministic path on failure.
+RULE_6=Pulse is IN-HAND, vendored under backend/ai/engine/ (stateless engine only — agent/llm/cognition/core). Pulse holds NO memory, does NO learning, stores NO graphs. All durable AI state (conversations, knowledge, memory, feedback, graphs) is Carbon-owned via Django apps in backend/ai/. NO separate AI database: durable state → Carbon Postgres; transient/queue state → Redis.
+RULE_13=Pulse engine is called in-process (in-hand), NOT over HTTP and NOT dependent on being online. The task envelope (docs/PULSE_CONTRACT_SPEC.md) remains the internal async job contract carried over Redis, not a network boundary. Graceful degradation: timeout 10s sync, 60s async; fall back to deterministic path on failure.
 RULE_14=DQ Level 2 (nl_check rules) are evaluated by Pulse. Carbon sends row data + natural language rule → Pulse returns {passed, explanation, failed_rows}. DQ executor Phase A (deterministic: unique/threshold/reference_integrity) runs locally; Phase B (nl_check) calls Pulse.
 RULE_7=UI labels: "Data Product" = Module (in code). "Table" = DataTable. NEVER use "Schema" as a label for a table.
 RULE_8=Design tokens only — NO hardcoded hex colors, raw px spacing, or inline font sizes. Theme controls all.
