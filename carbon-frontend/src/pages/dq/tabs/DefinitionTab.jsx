@@ -141,7 +141,7 @@ function DefinitionTab({ rule, onChanged }) {
         </Button>
       </Stack>
 
-      <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
+      <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
         Name & Description
       </Typography>
       <Stack spacing={1.5} sx={{ mb: 2 }}>
@@ -156,12 +156,12 @@ function DefinitionTab({ rule, onChanged }) {
         />
       </Stack>
 
-      <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
+      <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
         Tags
       </Typography>
       <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mb: 2 }}>
         {tags.length === 0 ? (
-          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>No tags configured.</Typography>
+          <Typography sx={{ color: 'text.secondary' }}>No tags configured.</Typography>
         ) : (
           tags.map((tag) => (
             <Chip
@@ -176,12 +176,12 @@ function DefinitionTab({ rule, onChanged }) {
         )}
       </Stack>
 
-      <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
+      <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
         Bindings (from definition)
       </Typography>
       <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mb: 2 }}>
         {bindings.length === 0 ? (
-          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+          <Typography sx={{ color: 'text.secondary' }}>
             No table bindings — add them to definition.bindings.
           </Typography>
         ) : (
@@ -202,7 +202,7 @@ function DefinitionTab({ rule, onChanged }) {
         </Alert>
       ) : null}
 
-      <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
+      <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
         Schema v1 JSON Definition
       </Typography>
       <RuleJsonEditor

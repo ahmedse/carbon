@@ -124,7 +124,7 @@ function UsageTab({ rule }) {
               label={`${row.quality_status}${row.quality_score != null ? ` · ${row.quality_score}` : ''}`}
             />
           ) : (
-            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Not assessed</Typography>
+            <Typography sx={{ color: 'text.secondary' }}>Not assessed</Typography>
           ),
       },
     ],
@@ -133,7 +133,7 @@ function UsageTab({ rule }) {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>
         Bound Tables & Fields
         <Chip
           size="small"
@@ -144,7 +144,7 @@ function UsageTab({ rule }) {
       </Typography>
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 3 }}>
         {bindings.length === 0 ? (
-          <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>
+          <Typography sx={{ color: 'text.secondary' }}>
             This rule has no table bindings.
           </Typography>
         ) : (
@@ -162,7 +162,7 @@ function UsageTab({ rule }) {
         )}
       </Paper>
 
-      <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>
         Used by {relatedAssets.length} catalog asset{relatedAssets.length === 1 ? '' : 's'}
       </Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>
@@ -175,7 +175,7 @@ function UsageTab({ rule }) {
         />
       </Paper>
 
-      <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>Field Coverage</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Field Coverage</Typography>
       {coverageNotes.length === 0 ? (
         <Alert severity="info">
           No field-level bindings — coverage notes apply to field-bound rules only.
@@ -183,7 +183,7 @@ function UsageTab({ rule }) {
       ) : (
         <Stack spacing={1}>
           {coverageNotes.map((note) => (
-            <Alert key={note.key} severity={note.kind} sx={{ fontSize: '0.8125rem' }}>
+            <Alert key={note.key} severity={note.kind}>
               {note.text}
             </Alert>
           ))}

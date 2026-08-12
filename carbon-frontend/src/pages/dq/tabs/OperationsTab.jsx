@@ -14,7 +14,6 @@ import {
   Archive,
   ContentCopy,
   DeleteForever,
-  PlayArrow,
   PowerSettingsNew,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -23,7 +22,7 @@ import { useNotification } from '../../../components/NotificationProvider';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { updateDQRule, deleteDQRule, createDQRule } from '../../../api/dq';
 
-function OperationsTab({ rule, onChanged, onRun }) {
+function OperationsTab({ rule, onChanged }) {
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const navigate = useNavigate();
@@ -105,25 +104,7 @@ function OperationsTab({ rule, onChanged, onRun }) {
 
       <Stack spacing={1.5}>
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-          <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>Run</Typography>
-          <Stack direction="row" spacing={1} flexWrap="wrap">
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<PlayArrow />}
-              disabled={busy === 'run' || rule?.archived || !rule?.is_active}
-              onClick={() => onRun?.(rule)}
-            >
-              Run now
-            </Button>
-            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', alignSelf: 'center' }}>
-              Creates a followable job — track it on the Jobs tab of the workspace.
-            </Typography>
-          </Stack>
-        </Paper>
-
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-          <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>State</Typography>
+          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>State</Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
             <Button
               variant="outlined"
@@ -143,7 +124,7 @@ function OperationsTab({ rule, onChanged, onRun }) {
         </Paper>
 
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-          <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>Versioning</Typography>
+          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Versioning</Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap">
             <Button
               variant="outlined"
@@ -154,14 +135,14 @@ function OperationsTab({ rule, onChanged, onRun }) {
             >
               Duplicate rule
             </Button>
-            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', alignSelf: 'center' }}>
+            <Typography sx={{ color: 'text.secondary', alignSelf: 'center' }}>
               Current version: {rule?.version ?? 1} — every definition save creates a new version.
             </Typography>
           </Stack>
         </Paper>
 
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-          <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>Delete</Typography>
+          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Delete</Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
             {hasResults ? (
               <>
@@ -175,7 +156,7 @@ function OperationsTab({ rule, onChanged, onRun }) {
                 >
                   Archive rule
                 </Button>
-                <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                <Typography sx={{ color: 'text.secondary' }}>
                   {rule?.results_count} result(s) exist — deleting archives instead of hard-deleting.
                 </Typography>
               </>
@@ -191,7 +172,7 @@ function OperationsTab({ rule, onChanged, onRun }) {
                 >
                   Delete rule
                 </Button>
-                <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                <Typography sx={{ color: 'text.secondary' }}>
                   No results exist — this permanently removes the rule.
                 </Typography>
               </>

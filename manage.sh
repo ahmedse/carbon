@@ -470,6 +470,8 @@ cmd_status() {
     printf "  %-18s" "Backend API:"
     if pid_running "$backend_pid" && port_in_use "$BACKEND_PORT"; then
         echo -e "${GREEN}RUNNING${NC} (PID: $backend_pid, Port: $BACKEND_PORT)"
+        echo -e "  $(printf '%-18s' '') ${CYAN}http://localhost:$BACKEND_PORT${DJANGO_API_PREFIX}${NC}"
+        echo -e "  $(printf '%-18s' '') ${CYAN}http://localhost:$BACKEND_PORT/swagger/${NC}"
     else
         echo -e "${RED}STOPPED${NC}"
     fi
@@ -480,6 +482,7 @@ cmd_status() {
     printf "  %-18s" "Frontend:"
     if pid_running "$frontend_pid" && port_in_use "$FRONTEND_PORT"; then
         echo -e "${GREEN}RUNNING${NC} (PID: $frontend_pid, Port: $FRONTEND_PORT)"
+        echo -e "  $(printf '%-18s' '') ${CYAN}http://localhost:$FRONTEND_PORT/carbon/${NC}"
     else
         echo -e "${RED}STOPPED${NC}"
     fi

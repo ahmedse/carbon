@@ -88,19 +88,28 @@ ARCH_CORE_APPS=accounts, core, catalog, mdm, dq, dataschema, connections, eviden
 # Hosted apps (may import core apps, never the reverse):
 ARCH_HOSTED_APPS=emissions
 # Superseded / out of active scope:
-ARCH_SUPERSEDED=ai_copilot (Pulse owns AI/RAG now)
-# Pulse AI Brain — Task-oriented contract (v2.0.0, inspired by Google A2A Protocol)
-# FULL SPEC: docs/PULSE_CONTRACT_SPEC.md — THIS IS THE AUTHORITATIVE DOCUMENT
-ARCH_PULSE_HOST=http://127.0.0.1:9100
-ARCH_PULSE_ENDPOINT=/instances/carbon
-ARCH_PULSE_CONTRACT=Task envelope (id, type, payload, meta) via POST /tasks + GET /tasks/{id}. Carbon generates task ID (UUID v4, idempotent). Pulse returns {task_id, status, result, error}. Status: pending|working|completed|failed|partial. Carbon NEVER imports Pulse SDKs; Pulse NEVER calls Carbon.
-ARCH_PULSE_TASK_1=dq.validate (sync, 10s) — NL DQ rule validation. Carbon sends rules+rows → Pulse returns {results: [{rule_id, status, failing_rows, explanation, confidence}]}
-ARCH_PULSE_TASK_2=classification.infer (sync, 5s) — Auto-classify DataField metadata → glossary terms, PII detection, data type suggestions
-ARCH_PULSE_TASK_3=query.answer (stream, 15s) — NL question → structured answer with data payload
-ARCH_PULSE_TASK_4=dq.suggest (async, 60s) — Propose DQ rules from table profile statistics
-ARCH_PULSE_TASK_5=anomaly.detect (async, 120s) — Scan DQ profile snapshots for anomalous patterns
-ARCH_PULSE_TASK_6=report.draft (async, 60s) — Dashboard data → narrative GHG report draft
-ARCH_PULSE_DISCOVERY=Agent Card at GET /instances/carbon/agent-card — Carbon reads on startup to validate supported task types
+ARCH_SUPERSEDED=ai_copilot (AI Heart owns AI/RAG now)
+# ── AI Heart Architecture ────────────────────────────────────────────
+# FULL CONTRACT: .ai-toolkit/shared/ai-contract.md — THE binding AI contract
+# FULL ADR: .ai-toolkit/decisions/0004-ai-multi-app-architecture.md
+# FULL AI SPEC: docs/PULSE_CONTRACT_SPEC.md
+ARCH_AI_HEART=backend/ai/ — THE canonical AI interface. All AI ops flow through here.
+ARCH_AI_LAYERS=3 layers: Platform AI (ai/protocol.py) → Domain AI (ai/domain/{app}.py) → Security Guards (ai/guards.py)
+ARCH_AI_PLATFORM_OPS=dq.validate, dq.suggest, query.nl, query.explain, schema.analyze, fix.suggest — work on ANY table, ANY app
+ARCH_AI_DOMAIN_OPS=Per-app ABCs in ai/domain/{app}.py — anomaly.detect, anomaly.explain, report.draft (emissions)
+ARCH_AI_GUARDS=ScopeGuard, AccessGuard, DataIsolationGuard, MutationGuard, AuditTrail — run BEFORE every AI call
+ARCH_AI_PROVIDER=AI provider (external) — swappable via AI_PROVIDER_CLASS. Change one setting → entire AI backend swaps.
+# AI provider specifics:
+ARCH_AI_HOST=http://127.0.0.1:9100
+ARCH_AI_ENDPOINT=/instances/carbon
+ARCH_AI_CONTRACT=Task envelope (id, type, payload, scope) via POST /tasks + GET /tasks/{id}. Carbon generates task ID (UUID v4, idempotent). AI provider returns {task_id, status, result, error}. Status: pending|working|completed|failed|partial. Carbon NEVER imports AI provider SDKs; AI provider NEVER calls Carbon.
+ARCH_AI_TASK_1=dq.validate (sync, 10s) — NL DQ rule validation. Carbon sends rules+rows → AI provider returns {results: [{rule_id, status, failing_rows, explanation, confidence}]}
+ARCH_AI_TASK_2=classification.infer (sync, 5s) — Auto-classify DataField metadata → glossary terms, PII detection, data type suggestions
+ARCH_AI_TASK_3=query.answer (stream, 15s) — NL question → structured answer with data payload
+ARCH_AI_TASK_4=dq.suggest (async, 60s) — Propose DQ rules from table profile statistics
+ARCH_AI_TASK_5=anomaly.detect (async, 120s) — Scan DQ profile snapshots for anomalous patterns
+ARCH_AI_TASK_6=report.draft (async, 60s) — Dashboard data → narrative GHG report draft
+ARCH_AI_DISCOVERY=Agent Card at GET /instances/carbon/agent-card — Carbon reads on startup to validate supported task types
 # RBAC:
 ARCH_RBAC=ScopedRole (user, group, org_unit, module) — org-subtree-scoped visibility + admin
 ARCH_ADMIN_GROUP=admins_group
@@ -122,6 +131,13 @@ RULE_9=ONE breadcrumb — shell/src/Breadcrumbs.jsx. NEVER render breadcrumbs in
 RULE_10=Use apiFetch (src/api/api.js) for ALL API calls — it handles JWT refresh. Never raw fetch().
 RULE_11=Every bug fix ships a regression test. Never fix the same bug twice — capture in playbook.
 RULE_12=Org-scoped RBAC: reference data (EmissionFactor, GWP, ReferenceSet) is GLOBAL. Activity data + calculations are org-scoped.
+RULE_15=Every new route path MUST be added to studioFromPath() in Shell.jsx. The function maps paths→sidebar studios. Missing entries cause the sidebar to switch to "Home" (only Platform Home link visible). See the comment block in Shell.jsx:38-52.
+RULE_16=Every full page MUST wrap its content in PageContainer (src/components/layout/PageContainer.jsx) or BaseDetailPage (src/components/detail/BaseDetailPage.jsx). NEVER render a raw <Box> as the page root. Tab sub-components rendered inside a detail page are exempt.
+RULE_17=Tab switching MUST use MUI <Tabs> + <Tab> with localStorage persistence (matching BaseDetailPage pattern). NEVER use ad-hoc <Button> rows for tab navigation.
+RULE_18=AI CONTRACT IS BINDING — Every AI operation MUST follow .ai-toolkit/shared/ai-contract.md. Scope is MANDATORY. NEVER call a provider directly — always through CarbonIntelligence. ai/protocol.py is the canonical contract; it imports NOTHING from Django, DRF, requests, or any provider.
+RULE_19=DOMAIN AI ISOLATION — Adding a new domain app's AI operations: create ai/domain/{app}.py with a DomainAIOperations ABC. NEVER add domain-specific methods to ai/protocol.py (platform ABC). Guards run automatically — domain developer does NOT write scope checks.
+RULE_20=NO DATA LEAKAGE — AI provider MUST NOT use data from App A when processing App B. Scope.org_unit_ids filters ALL queries. DataIsolationGuard sanitizes responses. Cache keys include app_identifier. No cross-app embeddings or knowledge graph sharing.
+RULE_21=NO AUTO-MUTATION — AI suggests, Carbon executes. NEVER auto-apply AI-suggested fixes. Fix suggestions ALWAYS have requires_confirmation=True. AI MUST NOT execute INSERT/UPDATE/DELETE/DROP. MutationGuard validates provider responses.
 
 ## KEY ARCHITECTURE FILES
 # Workers should read these files first when working in related areas.
@@ -130,6 +146,14 @@ BACKEND_SETTINGS=backend/config/settings.py
 BACKEND_URLS=backend/config/urls.py
 BACKEND_RBAC=backend/accounts/rbac_utils.py
 BACKEND_SCOPED_ROLE=backend/accounts/models.py
+AI_PROTOCOL=backend/ai/protocol.py
+AI_INTELLIGENCE=backend/ai/intelligence.py
+AI_GUARDS=backend/ai/guards.py
+AI_DOMAIN_PROTOCOL=backend/ai/domain_protocol.py
+AI_PULSE_PROVIDER=backend/ai/providers/pulse.py
+AI_HTTP_TRANSPORT=backend/ai/providers/_http.py
+AI_CONTRACT=.ai-toolkit/shared/ai-contract.md
+AI_ADR=.ai-toolkit/decisions/0004-ai-multi-app-architecture.md
 EMISSIONS_MODELS=backend/emissions/models.py
 EMISSIONS_VIEWS=backend/emissions/views.py
 EMISSIONS_SERVICES=backend/emissions/services.py

@@ -580,7 +580,8 @@ const createCarbonTheme = (mode = 'light') => {
             },
             '& .MuiDataGrid-cell': {
               borderBottom: `1px solid ${colors.divider}`,
-              padding: '2px 8px',
+              padding: '4px 8px',
+              lineHeight: '1.3',
             },
             '& .MuiDataGrid-row:hover': {
               backgroundColor: mode === 'light' ? 'rgba(37, 99, 235, 0.04)' : 'rgba(255, 255, 255, 0.03)',
@@ -588,8 +589,8 @@ const createCarbonTheme = (mode = 'light') => {
           },
         },
         defaultProps: {
-          rowHeight: 28,
-          columnHeaderHeight: 28,
+          rowHeight: 36,
+          columnHeaderHeight: 32,
         },
       },
       MuiTabs: {

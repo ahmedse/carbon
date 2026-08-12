@@ -21,12 +21,30 @@ from typing import Any
 
 @dataclass
 class Scope:
-    """User scope — injected into every AI call."""
+    """User scope — injected into every AI call.
+
+    AI CONTRACT §1: Every AI call MUST carry a Scope. No Scope, no call.
+    AI CONTRACT §3: app_identifier enforces data isolation between domain apps.
+    """
+
     org_unit_ids: list[str] = field(default_factory=list)  # ["*"] = all
-    module_ids: list[str] = field(default_factory=list)    # Specific modules user can access
-    is_read_only: bool = False       # True → provider must not suggest mutations
-    is_superuser: bool = False       # True → full access
-    user_identifier: str = ""        # For audit trail
+    module_ids: list[str] = field(default_factory=list)     # Specific modules user can access
+    is_read_only: bool = False        # True → provider must not suggest mutations
+    is_superuser: bool = False        # True → full access
+    user_identifier: str = ""         # For audit trail
+    app_identifier: str | None = None  # Domain app scope (e.g. "emissions", "water")
+                                       # None = platform-level call (e.g. health check)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize scope for audit trail logging (§7 of ai-contract.md)."""
+        return {
+            "org_unit_ids": self.org_unit_ids,
+            "module_ids": self.module_ids,
+            "is_read_only": self.is_read_only,
+            "is_superuser": self.is_superuser,
+            "user_identifier": self.user_identifier,
+            "app_identifier": self.app_identifier,
+        }
 
 
 # ── Provider Status ─────────────────────────────────────────────────────

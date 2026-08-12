@@ -36,6 +36,12 @@ function studioFromPath(pathname) {
   if (pathname.startsWith('/carbon')) return 'carbon';  // app studio — checked first
   if (pathname.startsWith('/emissions') || pathname.startsWith('/dataschema') || pathname.startsWith('/schema-admin')) return 'carbon';
   if (pathname.startsWith('/catalog')) return 'catalog';
+  // DQ Workspace lives under Catalog Studio in the sidebar (Governance section)
+  if (pathname.startsWith('/dq')) return 'catalog';
+  // Module landing is part of Catalog (Data Products)
+  if (pathname.startsWith('/modules')) return 'catalog';
+  // Scopes belong to Carbon app
+  if (pathname.startsWith('/scopes')) return 'carbon';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/settings')) return 'settings';
   if (pathname.startsWith('/help') || pathname.startsWith('/feedback')) return 'help';

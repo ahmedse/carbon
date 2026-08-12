@@ -63,13 +63,13 @@ function JobDetailDrawer({ job, onClose, onCancel }) {
       </Stack>
       <Stack spacing={1.5}>
         <Box>
-          <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+          <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
             Type
           </Typography>
-          <Typography sx={{ fontSize: '0.875rem' }}>{JOB_TYPE_LABELS[job.job_type] || job.job_type}</Typography>
+          <Typography>{JOB_TYPE_LABELS[job.job_type] || job.job_type}</Typography>
         </Box>
         <Box>
-          <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+          <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
             Status
           </Typography>
           <Chip
@@ -79,10 +79,10 @@ function JobDetailDrawer({ job, onClose, onCancel }) {
           />
         </Box>
         <Box>
-          <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+          <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
             Target
           </Typography>
-          <Typography sx={{ fontSize: '0.875rem' }}>
+          <Typography>
             {job.rule_name ? `Rule: ${job.rule_name} (${job.rule ?? '–'})` : ''}
             {job.rule_name && job.table_name ? ' · ' : ''}
             {job.table_name ? `Table: ${job.table_name} (${job.data_table ?? '–'})` : ''}
@@ -90,46 +90,45 @@ function JobDetailDrawer({ job, onClose, onCancel }) {
           </Typography>
         </Box>
         <Box>
-          <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+          <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
             Created
           </Typography>
-          <Typography sx={{ fontSize: '0.875rem' }}>
+          <Typography>
             {formatTimestamp(job.created_at)} by {job.created_by_name || 'system'}
           </Typography>
         </Box>
         <Box>
-          <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+          <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
             Duration
           </Typography>
-          <Typography sx={{ fontSize: '0.875rem' }}>
+          <Typography>
             {formatDuration(job.created_at, job.updated_at)}
           </Typography>
         </Box>
         {job.pulse_task_id ? (
           <Box>
-            <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+            <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
               Pulse Task
             </Typography>
-            <Typography sx={{ fontSize: '0.875rem', fontFamily: 'monospace' }}>{job.pulse_task_id}</Typography>
+            <Typography sx={{ fontFamily: 'monospace' }}>{job.pulse_task_id}</Typography>
           </Box>
         ) : null}
         {job.error ? (
           <Box>
-            <Typography sx={{ fontSize: '0.7rem', color: 'error.main', textTransform: 'uppercase' }}>
+            <Typography sx={{ color: 'error.main', textTransform: 'uppercase' }}>
               Error
             </Typography>
-            <Typography sx={{ fontSize: '0.8125rem', color: 'error.main' }}>{job.error}</Typography>
+            <Typography sx={{ color: 'error.main' }}>{job.error}</Typography>
           </Box>
         ) : null}
         {resultSummary ? (
           <Box>
-            <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+            <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
               Result
             </Typography>
             <Box
               component="pre"
               sx={{
-                fontSize: '0.75rem',
                 p: 1.5,
                 borderRadius: 1,
                 bgcolor: 'action.hover',
@@ -144,13 +143,12 @@ function JobDetailDrawer({ job, onClose, onCancel }) {
         ) : null}
         {job.payload ? (
           <Box>
-            <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+            <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
               Payload
             </Typography>
             <Box
               component="pre"
               sx={{
-                fontSize: '0.75rem',
                 p: 1.5,
                 borderRadius: 1,
                 bgcolor: 'action.hover',
@@ -232,9 +230,9 @@ function JobsTab({ jobs, loading, reload }) {
           const label = row.rule_name || row.table_name || '–';
           return (
             <Stack spacing={0.25}>
-              <Typography sx={{ fontSize: '0.8125rem' }}>{label}</Typography>
+              <Typography>{label}</Typography>
               {row.rule && row.table_name ? (
-                <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+                <Typography sx={{ color: 'text.secondary' }}>
                   rule #{row.rule} · table #{row.data_table}
                 </Typography>
               ) : null}
@@ -263,7 +261,7 @@ function JobsTab({ jobs, loading, reload }) {
             return <LinearProgress sx={{ width: '100%' }} />;
           }
           return (
-            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+            <Typography sx={{ color: 'text.secondary' }}>
               {row.status === 'done' ? '100%' : '–'}
             </Typography>
           );

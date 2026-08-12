@@ -6,7 +6,7 @@
 //   mirror checks. The backend has no dry-run endpoint, so server-side
 //   rule_schema errors (echoed verbatim from the submit response) are shown
 //   in the same error list.
-// - "Draft with Pulse": NL prompt → suggest job (POST /dq/jobs/) → poll until
+// - "Draft with AI": NL prompt → suggest job (POST /dq/jobs/) → poll until
 //   done → prefill the textarea from the first pending suggestion.
 //
 // Used by both the "New rule" dialog (DQWorkspacePage Rules tab) and the
@@ -154,9 +154,9 @@ export default function RuleJsonEditor({
   const { notify } = useNotification();
 
   const [clientErrors, setClientErrors] = useState([]);
-  const [pulseOpen, setPulseOpen] = useState(false);
-  const [pulseTable, setPulseTable] = useState('');
-  const [pulsePrompt, setPulsePrompt] = useState('');
+  const [aiDraftOpen, setAiDraftOpen] = useState(false);
+  const [aiTable, setAiTable] = useState('');
+  const [aiPrompt, setAiPrompt] = useState('');
   const [drafting, setDrafting] = useState(false);
   const pollRef = useRef(null);
 
@@ -165,6 +165,17 @@ export default function RuleJsonEditor({
     try {
       JSON.parse(value);
       return true;
+    } catch {
+      return false;
+    }
+  }, [value]);
+
+  // Detect when user chooses AI for a field-level rule — show guidance.
+  const aiFieldWarning = useMemo(() => {
+    if (!value || !value.trim()) return false;
+    try {
+      const d = JSON.parse(value);
+      return d.level === 'field' && (d.type === 'nl_check' || d.type === 'anomaly_detect');
     } catch {
       return false;
     }
@@ -198,8 +209,8 @@ export default function RuleJsonEditor({
     }
   };
 
-  const startPulseDraft = async () => {
-    if (!pulseTable || !pulsePrompt.trim()) {
+  const startAiDraft = async () => {
+    if (!aiTable || !aiPrompt.trim()) {
       notify({ message: 'Select a table and enter a prompt', type: 'warning' });
       return;
     }
@@ -208,15 +219,15 @@ export default function RuleJsonEditor({
     try {
       const job = await createDQJob(token, {
         job_type: 'suggest',
-        data_table_id: pulseTable,
-        payload: { prompt: pulsePrompt.trim() },
+        data_table_id: aiTable,
+        payload: { prompt: aiPrompt.trim() },
       });
       if (job?.status === 'done' && job?.result) {
         applyDraftFromJob(job);
         return;
       }
       if (job?.status === 'failed') {
-        notify({ message: `Pulse draft failed: ${job.error || 'unknown error'}`, type: 'error' });
+        notify({ message: `AI draft failed: ${job.error || 'unknown error'}`, type: 'error' });
         setDrafting(false);
         return;
       }
@@ -231,7 +242,7 @@ export default function RuleJsonEditor({
           } else if (['failed', 'canceled'].includes(current.status)) {
             stopPolling();
             setDrafting(false);
-            notify({ message: `Pulse draft ${current.status}: ${current.error || ''}`, type: 'error' });
+            notify({ message: `AI draft ${current.status}: ${current.error || ''}`, type: 'error' });
           }
         } catch {
           // transient poll failure — keep polling
@@ -239,7 +250,7 @@ export default function RuleJsonEditor({
       }, 4000);
     } catch (err) {
       setDrafting(false);
-      notify({ message: err.message || 'Could not start Pulse draft', type: 'error' });
+      notify({ message: err.message || 'Could not start AI draft', type: 'error' });
     }
   };
 
@@ -249,22 +260,22 @@ export default function RuleJsonEditor({
       const suggestions = Array.isArray(data) ? data : data?.results || [];
       const first = suggestions.find((s) => s.data_table === job.data_table) || suggestions[0];
       if (!first?.payload) {
-        notify({ message: 'Pulse finished but produced no suggestions', type: 'info' });
+        notify({ message: 'AI finished but produced no suggestions', type: 'info' });
         return;
       }
       onChange(JSON.stringify(first.payload, null, 2));
       onDraftApplied?.(first.payload);
-      notify({ message: 'Draft loaded from Pulse — review and save', type: 'success' });
-      setPulseOpen(false);
-      setPulsePrompt('');
+      notify({ message: 'Draft loaded from AI — review and save', type: 'success' });
+      setAiDraftOpen(false);
+      setAiPrompt('');
     } catch (err) {
-      notify({ message: err.message || 'Could not load Pulse draft', type: 'error' });
+      notify({ message: err.message || 'Could not load AI draft', type: 'error' });
     }
   };
 
-  const handleClosePulse = () => {
+  const handleCloseAiDraft = () => {
     stopPolling();
-    setPulseOpen(false);
+    setAiDraftOpen(false);
     setDrafting(false);
   };
 
@@ -286,10 +297,10 @@ export default function RuleJsonEditor({
           size="small"
           variant="outlined"
           startIcon={<AutoAwesomeIcon />}
-          onClick={() => setPulseOpen(true)}
+          onClick={() => setAiDraftOpen(true)}
           disabled={disabled || tables.length === 0}
         >
-          Draft with Pulse
+          Draft with AI
         </Button>
         <Chip
           size="small"
@@ -317,7 +328,7 @@ export default function RuleJsonEditor({
         inputProps={{
           style: { fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace", fontSize: 13 },
         }}
-        placeholder='Paste a rule definition or use "Draft with Pulse".'
+        placeholder='Paste a rule definition or use "Draft with AI".'
         sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
       />
 
@@ -338,12 +349,25 @@ export default function RuleJsonEditor({
         </Alert>
       )}
 
-      {/* Draft with Pulse dialog */}
-      <Dialog open={pulseOpen} onClose={handleClosePulse} fullWidth maxWidth="sm">
-        <DialogTitle>Draft a rule with Pulse</DialogTitle>
+      {aiFieldWarning && (
+        <Alert severity="info" sx={{ mt: 1 }} variant="outlined">
+          <Typography variant="body2">
+            <strong>AI NL Check at field level?</strong> For numeric bounds, null checks,
+            format patterns, or enumerated values, prefer{' '}
+            <strong>Range</strong>, <strong>Not Null</strong>, <strong>Regex</strong>, or{' '}
+            <strong>Allowed Values</strong>. AI is for semantic text validation — e.g.
+            &ldquo;description must describe a real incident&rdquo; or &ldquo;address must not
+            be a placeholder.&rdquo;
+          </Typography>
+        </Alert>
+      )}
+
+      {/* Draft with AI dialog */}
+      <Dialog open={aiDraftOpen} onClose={handleCloseAiDraft} fullWidth maxWidth="sm">
+        <DialogTitle>Draft a rule with AI</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            Describe the rule in plain language. Pulse analyzes the table and
+            Describe the rule in plain language. The AI analyzes the table and
             proposes a JSON definition for your approval — nothing is created
             until you save it.
           </Typography>
@@ -352,8 +376,8 @@ export default function RuleJsonEditor({
             fullWidth
             size="small"
             label="Data table"
-            value={pulseTable}
-            onChange={(e) => setPulseTable(e.target.value)}
+            value={aiTable}
+            onChange={(e) => setAiTable(e.target.value)}
             sx={{ mt: 2 }}
           >
             {tables.map((t) => (
@@ -368,24 +392,24 @@ export default function RuleJsonEditor({
             minRows={3}
             label="Prompt"
             placeholder='e.g. "meter readings must be positive and within 0–100000 kWh"'
-            value={pulsePrompt}
-            onChange={(e) => setPulsePrompt(e.target.value)}
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
             sx={{ mt: 2 }}
             disabled={drafting}
           />
           {drafting && (
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
               <CircularProgress size={16} />
-              <Typography variant="body2">Pulse is drafting… this can take a few seconds.</Typography>
+              <Typography variant="body2">AI is drafting… this can take a few seconds.</Typography>
             </Stack>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClosePulse} disabled={drafting}>Cancel</Button>
+          <Button onClick={handleCloseAiDraft} disabled={drafting}>Cancel</Button>
           <Button
             variant="contained"
-            onClick={startPulseDraft}
-            disabled={drafting || !pulseTable || !pulsePrompt.trim()}
+            onClick={startAiDraft}
+            disabled={drafting || !aiTable || !aiPrompt.trim()}
             startIcon={drafting ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
           >
             Generate draft

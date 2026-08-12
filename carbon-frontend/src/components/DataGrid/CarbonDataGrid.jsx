@@ -6,7 +6,7 @@ import { useTheme, Box, Typography, Paper } from '@mui/material';
 function NoRowsOverlay({ message }) {
   return (
     <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', borderColor: 'divider' }}>
-      <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{message}</Typography>
+      <Typography sx={{ color: 'text.secondary' }}>{message}</Typography>
     </Paper>
   );
 }
@@ -49,8 +49,6 @@ function CarbonDataGrid({
         pageSize={pageSize}
         rowsPerPageOptions={pageSizeOptions}
         density={density}
-        rowHeight={24}
-        headerHeight={42}
         onRowClick={onRowClick}
         disableSelectionOnClick
         components={components}
@@ -62,12 +60,6 @@ function CarbonDataGrid({
             zIndex: 1,
             backgroundColor: theme.palette.action.hover,
             color: theme.palette.text.secondary,
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-          },
-          '& .MuiDataGrid-cell': {
-            fontSize: '0.8125rem',
           },
           '& .MuiDataGrid-row:nth-of-type(odd)': {
             backgroundColor: stripedBg,

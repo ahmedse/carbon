@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import SystemDialog from '../../../components/SystemDialog';
 import ConfirmDialog from '../../../components/ConfirmDialog';
-import { Add, DeleteOutline, PlayArrow, Visibility, Tune } from '@mui/icons-material';
+import { Add, DeleteOutline, Visibility, Tune } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
@@ -32,7 +32,6 @@ import {
   createDQRule,
   updateDQRule,
   deleteDQRule,
-  runDQRule,
   listDQTags,
 } from '../../../api/dq';
 import { fetchAssetProfiles } from '../../../api/catalog';
@@ -57,7 +56,7 @@ const EMPTY_FILTERS = {
   include_archived: false,
 };
 
-function RulesTab({ onJobCreated, tableFilter }) {
+function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
   const { token } = useAuth();
   const navigate = useNavigate();
   const { notify, notifyFromError } = useNotification();
@@ -75,6 +74,7 @@ function RulesTab({ onJobCreated, tableFilter }) {
   const [actionBusyId, setActionBusyId] = useState(null);
   const [filteredTableName, setFilteredTableName] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [selectedRowId, setSelectedRowId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -194,19 +194,6 @@ function RulesTab({ onJobCreated, tableFilter }) {
     }
   };
 
-  const handleRun = async (rule) => {
-    setActionBusyId(`run-${rule.id}`);
-    try {
-      const job = await runDQRule(token, rule.id);
-      notify({ message: `"${rule.name}" queued — see Jobs tab`, type: 'success' });
-      onJobCreated?.(job);
-    } catch (err) {
-      notifyFromError(err, `Could not run "${rule.name}"`);
-    } finally {
-      setActionBusyId(null);
-    }
-  };
-
   const handleToggleActive = async (rule) => {
     setActionBusyId(`toggle-${rule.id}`);
     try {
@@ -247,9 +234,9 @@ function RulesTab({ onJobCreated, tableFilter }) {
         minWidth: 220,
         renderCell: ({ row }) => (
           <Stack spacing={0.25}>
-            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{row.name}</Typography>
+            <Typography sx={{ fontWeight: 600 }}>{row.name}</Typography>
             {row.description ? (
-              <Typography noWrap sx={{ fontSize: '0.7rem', color: 'text.secondary', maxWidth: 260 }}>
+              <Typography noWrap sx={{ color: 'text.secondary', maxWidth: 260 }}>
                 {row.description}
               </Typography>
             ) : null}
@@ -348,20 +335,6 @@ function RulesTab({ onJobCreated, tableFilter }) {
               >
                 <Visibility fontSize="small" />
               </IconButton>
-            </Tooltip>
-            <Tooltip title="Run now">
-              <span>
-                <IconButton
-                  size="small"
-                  disabled={actionBusyId === `run-${row.id}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRun(row);
-                  }}
-                >
-                  <PlayArrow fontSize="small" />
-                </IconButton>
-              </span>
             </Tooltip>
             <Tooltip title={row.is_active ? 'Deactivate' : 'Activate'}>
               <span>
@@ -538,7 +511,8 @@ function RulesTab({ onJobCreated, tableFilter }) {
         loading={loading}
         getRowId={(row) => row.id}
         emptyMessage="No rules match the current filters"
-        onRowClick={({ row }) => navigate(`/dq/rules/${row.id}`)}
+        onRowClick={({ row }) => setSelectedRowId(row.id === selectedRowId ? null : row.id)}
+        highlightRow={(row) => row.id === selectedRowId}
       />
 
       {/* New rule — JSON-first authoring (no rule-builder form) */}
@@ -561,7 +535,7 @@ function RulesTab({ onJobCreated, tableFilter }) {
         }
       >
         <Box px={2} py={1}>
-          <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary', mb: 1.5 }}>
+          <Typography sx={{ color: 'text.secondary', mb: 1.5 }}>
             Author the rule definition as schema v1 JSON. Tables are matched by name to assets in
             your scope; fields are resolved against the live schema.
           </Typography>

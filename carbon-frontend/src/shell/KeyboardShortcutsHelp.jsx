@@ -20,7 +20,7 @@ const SHORTCUTS = [
     items: [
       { keys: ['Ctrl', 'K'], description: 'Open Command Palette' },
       { keys: ['Ctrl', 'B'], description: 'Toggle Sidebar' },
-      { keys: ['Ctrl', '\\'], description: 'Toggle Pulse Copilot' },
+      { keys: ['Ctrl', '\\'], description: 'Toggle AI Copilot' },
       { keys: ['Esc'], description: 'Close dialogs/modals' },
     ],
   },

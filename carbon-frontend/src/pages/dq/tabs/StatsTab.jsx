@@ -146,9 +146,9 @@ function StatsTab({ rule }) {
   return (
     <Box sx={{ p: 3 }}>
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
-        <Typography sx={{ fontSize: '0.875rem', fontWeight: 700 }}>Trend</Typography>
+        <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700 }}>Trend</Typography>
         {history ? trendChip(history.trend) : <Chip size="small" label="—" />}
-        <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+        <Typography sx={{ color: 'text.secondary' }}>
           {runs.length} recorded run{runs.length === 1 ? '' : 's'}
         </Typography>
       </Stack>
@@ -156,12 +156,12 @@ function StatsTab({ rule }) {
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid size={{ xs: 12, md: 8 }}>
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1.5 }}>
+            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1.5 }}>
               Score & failed rows over runs
             </Typography>
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-                <Typography sx={{ color: 'text.secondary', fontSize: '0.8125rem' }}>Loading…</Typography>
+                <Typography sx={{ color: 'text.secondary' }}>Loading…</Typography>
               </Box>
             ) : chart.labels.length === 0 ? (
               <Alert severity="info">No runs yet — run this rule to see stats.</Alert>
@@ -174,21 +174,21 @@ function StatsTab({ rule }) {
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1.5 }}>Last run</Typography>
+            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1.5 }}>Last run</Typography>
             {!lastRun ? (
-              <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>No runs yet.</Typography>
+              <Typography sx={{ color: 'text.secondary' }}>No runs yet.</Typography>
             ) : (
               <Stack spacing={1}>
                 <Box>
-                  <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+                  <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
                     Run at
                   </Typography>
-                  <Typography sx={{ fontSize: '0.8125rem' }}>
+                  <Typography>
                     {lastRun.run_at ? new Date(lastRun.run_at).toLocaleString() : '—'}
                   </Typography>
                 </Box>
                 <Box>
-                  <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+                  <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
                     Status
                   </Typography>
                   <Chip
@@ -202,7 +202,7 @@ function StatsTab({ rule }) {
                   />
                 </Box>
                 <Box>
-                  <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+                  <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
                     Score
                   </Typography>
                   <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>

@@ -1,5 +1,5 @@
 // carbon-frontend/src/pages/dq/RuleDetailPage.jsx
-// Rule detail — Definition | Operations | Usage & Data Products | Stats | Results
+// Rule detail — Overview | Definition | Test | Lifecycle | Usage & Data Products | Stats | Execution Log
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Alert, Box, Chip, CircularProgress, Paper, Typography } from '@mui/material';
@@ -9,9 +9,11 @@ import { useNotification } from '../../components/NotificationProvider';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
-import { getDQRule, runDQRule } from '../../api/dq';
+import { getDQRule } from '../../api/dq';
 import { RULE_TYPE_LABELS, RULE_LEVEL_LABELS, DIMENSION_LABELS, SEVERITY_LABELS, SEVERITY_COLORS } from './constants';
+import OverviewTab from './tabs/OverviewTab';
 import DefinitionTab from './tabs/DefinitionTab';
+import TestTab from './tabs/TestTab';
 import OperationsTab from './tabs/OperationsTab';
 import UsageTab from './tabs/UsageTab';
 import StatsTab from './tabs/StatsTab';
@@ -21,7 +23,7 @@ export default function RuleDetailPage() {
   useDocumentTitle('Rule Detail');
   const { id } = useParams();
   const { token } = useAuth();
-  const { notify, notifyFromError } = useNotification();
+  const { notify } = useNotification();
   const navigate = useNavigate();
 
   const [rule, setRule] = useState(null);
@@ -48,19 +50,6 @@ export default function RuleDetailPage() {
   }, [loadRule]);
 
   const handleClose = () => navigate(-1);
-
-  const handleRun = async (target) => {
-    try {
-      const job = await runDQRule(token, target.id);
-      notify({
-        message: `"${target.name}" queued as job #${job.id} — tracking on the Jobs tab`,
-        type: 'success',
-      });
-      navigate('/dq#jobs');
-    } catch (err) {
-      notifyFromError(err, 'Could not run rule');
-    }
-  };
 
   if (loading) {
     return (
@@ -141,11 +130,13 @@ export default function RuleDetailPage() {
     <BaseDetailPage
       headerComponent={headerComponent}
       mainTabs={[
+        { label: 'Overview', component: () => <OverviewTab rule={rule} /> },
         { label: 'Definition', component: () => <DefinitionTab rule={rule} onChanged={loadRule} /> },
-        { label: 'Operations', component: () => <OperationsTab rule={rule} onChanged={loadRule} onRun={handleRun} /> },
+        { label: 'Test', component: () => <TestTab rule={rule} /> },
+        { label: 'Lifecycle', component: () => <OperationsTab rule={rule} onChanged={loadRule} /> },
         { label: 'Usage & Data Products', component: () => <UsageTab rule={rule} /> },
         { label: 'Stats', component: () => <StatsTab rule={rule} /> },
-        { label: 'Results', component: () => <ResultsTab rule={rule} /> },
+        { label: 'Execution Log', component: () => <ResultsTab rule={rule} /> },
       ]}
       metricsTabs={[{ label: 'Summary', component: RuleSummaryMetrics }]}
       loading={false}

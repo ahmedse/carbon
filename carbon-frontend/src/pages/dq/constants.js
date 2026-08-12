@@ -10,7 +10,7 @@ export const RULE_TYPE_LABELS = {
   regex: 'Regex',
   reference_integrity: 'Reference Integrity',
   threshold: 'Threshold',
-  nl_check: 'Pulse NL Check',
+  nl_check: 'AI NL Check',
   anomaly_detect: 'Anomaly Detection',
 };
 
@@ -41,8 +41,8 @@ export const JOB_TYPE_LABELS = {
   profile: 'Profiling',
   freshness: 'Freshness',
   schema: 'Schema Snapshot',
-  nl_check: 'Pulse NL Check',
-  suggest: 'Pulse Suggestion',
+  nl_check: 'AI NL Check',
+  suggest: 'AI Suggestion',
   anomaly: 'Anomaly Scan',
 };
 

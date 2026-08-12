@@ -78,14 +78,14 @@ function FailuresDrawer({ result, onClose }) {
 
       {isSkipped ? (
         <Box sx={{ mb: 2 }}>
-          <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>
+          <Typography sx={{ color: 'text.secondary' }}>
             Pulse could not evaluate this run (skipped_unavailable) — no failure rows were produced.
           </Typography>
         </Box>
       ) : null}
 
       {loading ? (
-        <Typography sx={{ color: 'text.secondary', fontSize: '0.8125rem' }}>Loading failures…</Typography>
+        <Typography sx={{ color: 'text.secondary' }}>Loading failures…</Typography>
       ) : (
         <PanelTable
           title="Failure Rows"
@@ -105,7 +105,7 @@ function FailuresDrawer({ result, onClose }) {
             {
               key: 'reason',
               header: 'Reason',
-              render: (reason) => <Box sx={{ fontSize: '0.75rem', maxWidth: 220 }}>{reason}</Box>,
+              render: (reason) => <Box sx={{ maxWidth: 220 }}>{reason}</Box>,
             },
           ]}
           rows={failureRows.map((f, i) => ({
@@ -182,11 +182,11 @@ function ResultsTab({ rule }) {
         type: 'number',
         renderCell: ({ row }) =>
           row.failed_count ? (
-            <Typography sx={{ fontSize: '0.8125rem', color: 'error.main', fontWeight: 600 }}>
+            <Typography sx={{ color: 'error.main', fontWeight: 600 }}>
               {row.failed_count}
             </Typography>
           ) : (
-            <Typography sx={{ fontSize: '0.8125rem' }}>{row.failed_count ?? '—'}</Typography>
+            <Typography>{row.failed_count ?? '—'}</Typography>
           ),
       },
       {

@@ -10,6 +10,8 @@ import {
   IconButton,
   Paper,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -28,6 +30,8 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import SystemDialog from '../../components/SystemDialog';
+import PageContainer from '../../components/layout/PageContainer';
+import DetailHeader from '../../components/detail/DetailHeader';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import StatCard from '../../components/Cards/StatCard';
 import CarbonDataGrid from '../../components/DataGrid/CarbonDataGrid';
@@ -111,8 +115,8 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
         minWidth: 200,
         renderCell: ({ row }) => (
           <Stack spacing={0.25}>
-            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{row.rule_name || '–'}</Typography>
-            <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+            <Typography sx={{ fontWeight: 600 }}>{row.rule_name || '–'}</Typography>
+            <Typography sx={{ color: 'text.secondary' }}>
               {RULE_TYPE_LABELS[row.rule_type] || row.rule_type}
             </Typography>
           </Stack>
@@ -149,11 +153,11 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
         type: 'number',
         renderCell: ({ row }) =>
           row.failed_count ? (
-            <Typography sx={{ fontSize: '0.8125rem', color: 'error.main', fontWeight: 600 }}>
+            <Typography sx={{ color: 'error.main', fontWeight: 600 }}>
               {row.failed_count}
             </Typography>
           ) : (
-            <Typography sx={{ fontSize: '0.8125rem' }}>{row.failed_count ?? '—'}</Typography>
+            <Typography>{row.failed_count ?? '—'}</Typography>
           ),
       },
       {
@@ -162,7 +166,7 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
         width: 90,
         renderCell: ({ row }) =>
           row.score != null ? (
-            <Typography sx={{ fontSize: '0.8125rem' }}>{Number(row.score).toFixed(1)}%</Typography>
+            <Typography>{Number(row.score).toFixed(1)}%</Typography>
           ) : (
             '—'
           ),
@@ -173,8 +177,8 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
 
   if (loading) {
     return (
-      <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
-        <Typography sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>Loading overview…</Typography>
+      <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
+        <Typography sx={{ color: 'text.secondary' }}>Loading overview…</Typography>
       </Paper>
     );
   }
@@ -184,7 +188,7 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
 
   return (
     <Box>
-      <Grid container spacing={2} sx={{ mb: 2 }}>
+      <Grid container spacing={1.5} sx={{ mb: 1.5 }}>
         <Grid size={{ xs: 6, md: 3 }}>
           <StatCard
             title="Overall Score"
@@ -217,14 +221,14 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
       </Grid>
 
       {Number(metrics_.skipped_rules) > 0 ? (
-        <Alert severity="warning" sx={{ mb: 2 }}>
+        <Alert severity="warning" sx={{ mb: 1.5 }}>
           Pulse could not evaluate {metrics_.skipped_rules} rule(s) — results are marked
           skipped_unavailable and excluded from the pass-rate statistics above.
         </Alert>
       ) : null}
 
       {runningJobs.length > 0 ? (
-        <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderRadius: 2 }}>
+        <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5, borderRadius: 2 }}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
             <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary' }}>
               Running jobs:
@@ -259,14 +263,14 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
           getRowId={(row) => row.id || `${row.rule}-${row.run_at}`}
           emptyMessage="No recent failures — all recent checks passed"
           onRowClick={({ row }) => {
-            if (row.rule) navigate(`/dq/rules/${row.rule}`);
+            /* highlight only — user must deliberately click an action to navigate */
           }}
         />
       </Paper>
 
       {dimensionEntries.length > 0 ? (
-        <Box sx={{ mt: 3 }}>
-          <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>
+        <Box sx={{ mt: 2 }}>
+          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>
             Scores by Dimension
           </Typography>
           <Grid container spacing={1.5}>
@@ -359,12 +363,12 @@ function SuggestionsTab() {
 
       {loading ? (
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-          <Typography sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>Loading suggestions…</Typography>
+          <Typography sx={{ color: 'text.secondary' }}>Loading suggestions…</Typography>
         </Paper>
       ) : suggestions.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
           <AutoAwesome sx={{ fontSize: 28, color: 'text.disabled', mb: 1 }} />
-          <Typography sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>
+          <Typography sx={{ color: 'text.secondary' }}>
             No pending suggestions. Run a Pulse suggestion job from the Rules tab to generate some.
           </Typography>
         </Paper>
@@ -384,13 +388,13 @@ function SuggestionsTab() {
                         color={s.confidence >= 0.7 ? 'success' : s.confidence >= 0.4 ? 'warning' : 'default'}
                       />
                     ) : null}
-                    <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+                    <Typography sx={{ color: 'text.secondary' }}>
                       by {s.created_by_name || 'Pulse'} ·{' '}
                       {s.created_at ? new Date(s.created_at).toLocaleString() : '—'}
                     </Typography>
                   </Stack>
                   {s.rationale ? (
-                    <Typography sx={{ fontSize: '0.8125rem', mt: 1, color: 'text.secondary' }}>
+                    <Typography sx={{ mt: 1, color: 'text.secondary' }}>
                       {s.rationale}
                     </Typography>
                   ) : null}
@@ -503,7 +507,7 @@ function SchemaDialog({ open, onClose, snapshot }) {
       maxHeight="calc(100vh - 32px)"
     >
       <Box px={2} py={1}>
-        <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', mb: 1 }}>
+        <Typography sx={{ color: 'text.secondary', mb: 1 }}>
           Snapshot at: {snapshot.snapshot_at ? new Date(snapshot.snapshot_at).toLocaleString() : '—'}
           &nbsp;| Rows: {snapshot.row_count ?? '—'} &nbsp;| Columns: {entries.length}
         </Typography>
@@ -586,7 +590,7 @@ function MonitoringTab() {
         flex: 1.5,
         minWidth: 200,
         renderCell: ({ row }) => (
-          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{row.table_name || '—'}</Typography>
+          <Typography sx={{ fontWeight: 600 }}>{row.table_name || '—'}</Typography>
         ),
       },
       { field: 'row_count', headerName: 'Row Count', width: 110, type: 'number' },
@@ -624,7 +628,7 @@ function MonitoringTab() {
         flex: 1.5,
         minWidth: 200,
         renderCell: ({ row }) => (
-          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{row.table_name || '—'}</Typography>
+          <Typography sx={{ fontWeight: 600 }}>{row.table_name || '—'}</Typography>
         ),
       },
       { field: 'expected_max_age_hours', headerName: 'Max Age (hrs)', width: 120, type: 'number' },
@@ -666,7 +670,7 @@ function MonitoringTab() {
         flex: 1.2,
         minWidth: 160,
         renderCell: ({ row }) => (
-          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{row.table_name || '—'}</Typography>
+          <Typography sx={{ fontWeight: 600 }}>{row.table_name || '—'}</Typography>
         ),
       },
       {
@@ -726,7 +730,7 @@ function MonitoringTab() {
 
   return (
     <Box>
-      <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>Table Profiles</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Table Profiles</Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>
         <CarbonDataGrid
           columns={profileColumns}
@@ -737,7 +741,7 @@ function MonitoringTab() {
         />
       </Paper>
 
-      <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>Freshness</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Freshness</Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>
         <CarbonDataGrid
           columns={freshnessColumns}
@@ -748,7 +752,7 @@ function MonitoringTab() {
         />
       </Paper>
 
-      <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>Schema Snapshots</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Schema Snapshots</Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>
         <CarbonDataGrid
           columns={snapshotColumns}
@@ -759,7 +763,7 @@ function MonitoringTab() {
         />
       </Paper>
 
-      <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, mb: 1 }}>Schema Changes</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Schema Changes</Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2 }}>
         <CarbonDataGrid
           columns={schemaChangeColumns}
@@ -781,6 +785,7 @@ export default function DQWorkspacePage() {
   useDocumentTitle('DQ Workspace');
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
+  const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const tableFilter = searchParams.get('table') || '';
@@ -793,21 +798,35 @@ export default function DQWorkspacePage() {
     return searchParams.get('table') ? TAB_IDS.indexOf('rules') : 0;
   }, [location.hash, searchParams]);
 
-  const [tab, setTab] = useState(tabIndexFromHash);
+  // Tab state: persisted in localStorage (standard pattern), with URL hash as secondary
+  const [tab, setTab] = useState(() => {
+    const stored = localStorage.getItem('carbonDqWorkspaceTab');
+    if (stored != null) {
+      const parsed = parseInt(stored, 10);
+      if (parsed >= 0 && parsed < TAB_IDS.length) return parsed;
+    }
+    return tabIndexFromHash;
+  });
 
   // Keep internal tab state in sync with the URL hash (#jobs, #rules, …)
   useEffect(() => {
     setTab(tabIndexFromHash);
   }, [tabIndexFromHash]);
 
-  const changeTab = (index) => {
+  const changeTab = useCallback((event, index) => {
     setTab(index);
+    localStorage.setItem('carbonDqWorkspaceTab', index);
     const id = TAB_IDS[index];
     const current = location.hash;
     if (current !== `#${id}`) {
       window.history.replaceState(null, '', `#${id}`);
     }
-  };
+  }, [location.hash]);
+
+  // Programmatic tab switch (not from the Tabs onChange event)
+  const goToTab = useCallback((index) => {
+    changeTab(null, index);
+  }, [changeTab]);
 
   // Shared jobs state + polling (Overview strip + Jobs tab)
   const [jobs, setJobs] = useState([]);
@@ -873,7 +892,7 @@ export default function DQWorkspacePage() {
   );
 
   const handleJobCreated = useCallback(() => {
-    changeTab(TAB_IDS.indexOf('jobs'));
+    goToTab(TAB_IDS.indexOf('jobs'));
     reloadJobs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadJobs, tab]);
@@ -884,21 +903,27 @@ export default function DQWorkspacePage() {
   }, [tab]);
 
   return (
-    <Box>
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-        {TAB_LABELS.map((t, index) => (
-          <Button
-            key={t.id}
-            size="small"
-            variant={tab === index ? 'contained' : 'outlined'}
-            startIcon={t.icon}
-            onClick={() => changeTab(index)}
-            sx={{ textTransform: 'none' }}
-          >
-            {t.label}
-          </Button>
-        ))}
-      </Stack>
+    <PageContainer>
+      <DetailHeader
+        title="DQ Workspace"
+        description="Rules, jobs, suggestions & schema monitoring"
+        icon={RuleIcon}
+        onClose={() => navigate(-1)}
+      />
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+        <Tabs
+          value={tab}
+          onChange={changeTab}
+          variant="scrollable"
+          scrollButtons="auto"
+        >
+          {TAB_LABELS.map((t) => (
+            <Tab key={t.id} label={t.label} icon={t.icon} iconPosition="start" />
+          ))}
+        </Tabs>
+      </Box>
+
+      <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'background.paper', p: 1.5 }}>
 
       {tab === 0 ? (
         <OverviewTab
@@ -906,7 +931,7 @@ export default function DQWorkspacePage() {
           results={results}
           loading={overviewLoading}
           runningJobs={runningJobs}
-          onGoJobs={() => changeTab(2)}
+          onGoJobs={() => goToTab(2)}
           onRefresh={loadOverview}
         />
       ) : null}
@@ -931,5 +956,6 @@ export default function DQWorkspacePage() {
         </Box>
       ) : null}
     </Box>
+    </PageContainer>
   );
 }
