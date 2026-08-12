@@ -94,10 +94,12 @@ class NLCheckRequiresPromptTests(NLBaseTestCase):
 # ── Test 3: pulse_unavailable → graceful ──
 
 class NLCheckPulseUnavailableTests(NLBaseTestCase):
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.providers.pulse.dispatch_task')
     def test_pulse_unreachable_degradation(self, mock_post):
-        from requests import ConnectionError as ReqConnError
-        mock_post.side_effect = ReqConnError('Connection refused')
+        mock_post.return_value = {
+            'status': 'pulse_unavailable',
+            'error': {'code': 'connection_error', 'message': 'Connection refused'},
+        }
         rule = self._make_rule()
         rows = self._make_rows([{'email': 'good@example.com'}, {'email': 'bad'}])
         from dq.services import _evaluate_rule
@@ -109,10 +111,12 @@ class NLCheckPulseUnavailableTests(NLBaseTestCase):
         self.assertEqual(checked, 0)
         self.assertEqual(score, 0)
 
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.providers.pulse.dispatch_task')
     def test_pulse_timeout_degradation(self, mock_post):
-        from requests import Timeout
-        mock_post.side_effect = Timeout('Request timed out')
+        mock_post.return_value = {
+            'status': 'pulse_unavailable',
+            'error': {'code': 'timeout', 'message': 'Request timed out'},
+        }
         rule = self._make_rule()
         rows = self._make_rows([{'email': 'good@example.com'}, {'email': 'bad'}])
         from dq.services import _evaluate_rule
@@ -126,10 +130,9 @@ class NLCheckPulseUnavailableTests(NLBaseTestCase):
 # ── Test 4: pulse pass ──
 
 class NLCheckPulsePassTests(NLBaseTestCase):
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.providers.pulse.dispatch_task')
     def test_pulse_pass(self, mock_post):
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {
+        mock_post.return_value = {
             'task_id': 'test-task-id', 'status': 'completed',
             'result': {'results': [{'rule_id': '1', 'status': 'pass',
                 'details': [{'passed': True}, {'passed': True}], 'confidence': 0.97}]}}
@@ -145,10 +148,9 @@ class NLCheckPulsePassTests(NLBaseTestCase):
 # ── Test 5: pulse fail ──
 
 class NLCheckPulseFailTests(NLBaseTestCase):
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.providers.pulse.dispatch_task')
     def test_pulse_fail(self, mock_post):
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {
+        mock_post.return_value = {
             'task_id': 'test-task-id', 'status': 'completed',
             'result': {'results': [{'rule_id': '1', 'status': 'fail',
                 'details': [
@@ -172,10 +174,9 @@ class NLCheckPulseFailTests(NLBaseTestCase):
 # ── Test 6: pulse error status ──
 
 class NLCheckPulseErrorTests(NLBaseTestCase):
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.providers.pulse.dispatch_task')
     def test_pulse_error(self, mock_post):
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {
+        mock_post.return_value = {
             'task_id': 'test-task-id', 'status': 'completed',
             'result': {'results': [{'rule_id': '1', 'status': 'error',
                 'details': [], 'confidence': None}]}}
@@ -192,10 +193,9 @@ class NLCheckPulseErrorTests(NLBaseTestCase):
 # ── Test 7: malformed response ──
 
 class NLCheckPulseMalformedTests(NLBaseTestCase):
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.providers.pulse.dispatch_task')
     def test_pulse_malformed_no_results(self, mock_post):
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {'task_id': 'test-task-id', 'status': 'completed', 'result': {}}
+        mock_post.return_value = {'task_id': 'test-task-id', 'status': 'completed', 'result': {}}
         rule = self._make_rule()
         rows = self._make_rows([{'email': 'a@b.com'}])
         from dq.services import _evaluate_rule
@@ -205,10 +205,9 @@ class NLCheckPulseMalformedTests(NLBaseTestCase):
         self.assertEqual(checked, 0)
         self.assertEqual(score, 0)
 
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.providers.pulse.dispatch_task')
     def test_pulse_wrong_status_field(self, mock_post):
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {
+        mock_post.return_value = {
             'task_id': 'test-task-id', 'status': 'failed',
             'error': {'code': 'model_error', 'message': 'LLM failed'}}
         rule = self._make_rule()
@@ -224,10 +223,9 @@ class NLCheckPulseMalformedTests(NLBaseTestCase):
 # ── Test 8: partial result ──
 
 class NLCheckPulsePartialTests(NLBaseTestCase):
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.providers.pulse.dispatch_task')
     def test_pulse_partial(self, mock_post):
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {
+        mock_post.return_value = {
             'task_id': 'test-task-id', 'status': 'partial',
             'result': {'results': [{'rule_id': '1', 'status': 'pass',
                 'details': [{'passed': True}], 'confidence': 0.9}]},
@@ -246,7 +244,7 @@ class NLCheckPulsePartialTests(NLBaseTestCase):
 # ── Test 9: via run_dq (job-only since TASK-DQ-CORE-P3-JOBS) ──
 
 class NLCheckViaRunDQTests(NLBaseTestCase):
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.intelligence.dispatch_task')
     def test_nl_check_via_run_dq(self, mock_post):
         """nl_check rules are job-only: run_dq skips them, no DQResult is written.
 
@@ -255,8 +253,7 @@ class NLCheckViaRunDQTests(NLBaseTestCase):
         via the `nl_check` DQJob type.
         """
         rule = self._make_rule()
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {
+        mock_post.return_value = {
             'task_id': 'e2e-task', 'status': 'completed',
             'result': {'results': [{'rule_id': str(rule.id), 'status': 'fail',
                 'details': [

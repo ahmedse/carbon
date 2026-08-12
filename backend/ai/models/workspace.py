@@ -1,16 +1,16 @@
-"""
-AI Workspace models — persistent conversations and messages.
+"""AI Workspace models — persistent conversations and messages.
 
 AI CONTRACT §10: Carbon owns conversation state; providers are stateless.
 Multi-turn conversations are persisted here and carried to every AI call
 as ConversationContext.
+
+These models predate Phase 2 and live alongside the 49 vendored engine tables.
 """
 
 import uuid
 
 from django.conf import settings
 from django.db import models
-from django.utils import timezone
 
 
 class AIConversation(models.Model):
@@ -76,6 +76,7 @@ class AIConversation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        app_label = "ai"
         ordering = ["-updated_at"]
         verbose_name = "AI Conversation"
         verbose_name_plural = "AI Conversations"
@@ -109,6 +110,7 @@ class AIMessage(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        app_label = "ai"
         ordering = ["created_at"]
         verbose_name = "AI Message"
         verbose_name_plural = "AI Messages"

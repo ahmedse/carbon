@@ -208,7 +208,7 @@ def _evaluate_nl_check(rule_def: Dict[str, Any], rows: List[Any],
     if not prompt or not rows:
         return True, 0, 0, [], 100
 
-    from ai.intelligence import _get_provider
+    from ai.providers.pulse import PulseProvider
     from ai.protocol import DqRuleInput, DqValidateRequest
 
     field_names = [field.name] if field else list(rows[0].values.keys()) if rows else []
@@ -234,7 +234,7 @@ def _evaluate_nl_check(rule_def: Dict[str, Any], rows: List[Any],
         },
     )
 
-    response = _get_provider().validate_dq(request)
+    response = PulseProvider().validate_dq(request)
 
     if response.status == 'provider_unavailable':
         logger.warning('Pulse unavailable for NL check rule %s', rule_name)

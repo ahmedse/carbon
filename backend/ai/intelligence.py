@@ -1,26 +1,24 @@
 """
 CarbonIntelligence — Single entry point for all AI calls in Carbon.
 
-Wave C. Wraps the configured AIProvider (from AI_PROVIDER_CLASS) and
-provides the bridge between Carbon ORM objects and the protocol's typed
-dataclasses. All Carbon code calls CarbonIntelligence — never a specific
-provider directly. Swap backends by changing AI_PROVIDER_CLASS in settings.
+Wave C. Bridges Carbon ORM objects and the protocol's typed dataclasses.
+All Carbon code calls CarbonIntelligence — never a specific provider
+directly. The engine is wired in-process (Phase 2); there is no runtime
+provider swap and no HTTP transport.
 
 Two modes:
   Sync  — calls AIProvider ABC methods, returns typed responses.
-  Async — submits tasks via post_task(), returns task_id dicts for the
-          DQ job system (nl_check, suggest, anomaly jobs poll via refresh()).
+  Async — dispatches tasks in-process via ai.engine_runtime, returns task_id
+          dicts for the DQ job system (nl_check, suggest, anomaly jobs).
 """
 
 from __future__ import annotations
 
-import importlib
 import logging
 import time
 from typing import Any
 
-from django.conf import settings
-
+from backend.ai.engine_runtime import dispatch_task, get_task
 from backend.ai.protocol import (
     AIProvider,
     AnomalyDetectRequest,
@@ -35,36 +33,9 @@ from backend.ai.protocol import (
     Scope,
     TableProfile,
 )
-from backend.ai.providers._http import get_modules as _http_get_modules
-from backend.ai.providers._http import post_task as _http_post_task
-from backend.ai.providers._http import get_task as _http_get_task
+from backend.ai.providers.pulse import PulseProvider
 
 logger = logging.getLogger("carbon.ai.intelligence")
-
-# ── Provider factory ──────────────────────────────────────────────────────
-
-
-def _get_provider() -> AIProvider:
-    """Instantiate the configured AIProvider class.
-
-    Reads AI_PROVIDER_CLASS from Django settings (default:
-    ``ai.providers.pulse.PulseProvider``).  The class MUST be a concrete
-    subclass of ``AIProvider``.
-    """
-    class_path: str = getattr(settings, "AI_PROVIDER_CLASS", "ai.providers.pulse.PulseProvider")
-
-    module_path, _, cls_name = class_path.rpartition(".")
-    if not module_path:
-        raise ImportError(f"Invalid AI_PROVIDER_CLASS: {class_path}")
-
-    module = importlib.import_module(module_path)
-    cls = getattr(module, cls_name)
-
-    if not issubclass(cls, AIProvider):
-        raise TypeError(f"{class_path} is not a subclass of AIProvider")
-
-    return cls()
-
 
 # ── Scope builder ─────────────────────────────────────────────────────────
 
@@ -122,7 +93,7 @@ class CarbonIntelligence:
         intelligence = CarbonIntelligence()
         result = intelligence.validate_dq_rule(rule, rows, user=request.user)
 
-    The provider is lazily instantiated from ``AI_PROVIDER_CLASS``.
+    The provider is the in-process PulseProvider (the vendored engine).
     """
 
     def __init__(self) -> None:
@@ -132,9 +103,9 @@ class CarbonIntelligence:
 
     @property
     def provider(self) -> AIProvider:
-        """Lazy-instantiate the configured AIProvider."""
+        """Lazy-instantiate the in-process PulseProvider."""
         if self._provider is None:
-            self._provider = _get_provider()
+            self._provider = PulseProvider()
         return self._provider
 
     # ── Health ─────────────────────────────────────────────────────────
@@ -204,9 +175,7 @@ class CarbonIntelligence:
             "rows": rows,
             "context": context or {},
         }
-        return _http_post_task(
-            base_url=settings.AI_PROVIDER_URL.rstrip("/"),
-            api_key=settings.AI_PROVIDER_API_KEY,
+        return dispatch_task(
             task_type="dq.validate",
             payload=payload,
             timeout=30,
@@ -216,9 +185,7 @@ class CarbonIntelligence:
 
     def submit_dq_suggest(self, table_payload: dict[str, Any]) -> dict[str, Any]:
         """Submit a dq.suggest task and return immediately."""
-        return _http_post_task(
-            base_url=settings.AI_PROVIDER_URL.rstrip("/"),
-            api_key=settings.AI_PROVIDER_API_KEY,
+        return dispatch_task(
             task_type="dq.suggest",
             payload={"table": table_payload},
             timeout=60,
@@ -228,9 +195,7 @@ class CarbonIntelligence:
 
     def submit_anomaly_detect(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Submit an anomaly.detect task and return immediately."""
-        return _http_post_task(
-            base_url=settings.AI_PROVIDER_URL.rstrip("/"),
-            api_key=settings.AI_PROVIDER_API_KEY,
+        return dispatch_task(
             task_type="anomaly.detect",
             payload={"profile": payload},
             timeout=120,
@@ -239,14 +204,11 @@ class CarbonIntelligence:
     # ── Task status polling ──────────────────────────────────────────────
 
     def get_task_status(self, task_id: str) -> dict[str, Any]:
-        """Poll Pulse for a task's current status.
+        """Retrieve an in-process task's current status.
 
-        GET {base_url}/tasks/{task_id}
-
-        Returns raw JSON or ``{status: pulse_unavailable, error: {...}}``.
+        Returns a raw dict or ``{status: pulse_unavailable, error: {...}}``.
         """
-        base_url = settings.AI_PROVIDER_URL.rstrip("/")
-        return _http_get_task(base_url, task_id, timeout=10)
+        return get_task(task_id, timeout=10)
 
     # ── Workspace: Conversation management ────────────────────────────
 

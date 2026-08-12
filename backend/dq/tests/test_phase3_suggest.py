@@ -120,7 +120,7 @@ class SuggestTableNotFoundTests(SuggestBaseTestCase):
 class SuggestNeedsProfileTests(SuggestBaseTestCase):
     """Thin alias: if no TableProfile exists, one is created; job runs async."""
 
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.intelligence.dispatch_task')
     def test_suggest_needs_profile(self, mock_post):
         """Table has data but no profile → auto-profile then suggest job."""
         # Add some data so profiling succeeds
@@ -128,8 +128,7 @@ class SuggestNeedsProfileTests(SuggestBaseTestCase):
             'email': 'a@b.com', 'score': 50,
         })
 
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {
+        mock_post.return_value = {
             'task_id': 't-1',
             'status': 'completed',
             'result': {
@@ -167,10 +166,12 @@ class SuggestNeedsProfileTests(SuggestBaseTestCase):
 class SuggestPulseUnavailableTests(SuggestBaseTestCase):
     """Pulse timeout → job fails honestly (fail-visible, never fabricated)."""
 
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.intelligence.dispatch_task')
     def test_suggest_pulse_unavailable(self, mock_post):
-        from requests import Timeout
-        mock_post.side_effect = Timeout('Request timed out')
+        mock_post.return_value = {
+            'status': 'pulse_unavailable',
+            'error': {'code': 'timeout', 'message': 'Request timed out'},
+        }
 
         self._create_profile()
 
@@ -200,10 +201,9 @@ class SuggestPulseUnavailableTests(SuggestBaseTestCase):
 class SuggestReturnsSuggestionsTests(SuggestBaseTestCase):
     """Pulse returns 2 suggestions → persisted as pending DQSuggestion rows."""
 
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.intelligence.dispatch_task')
     def test_suggest_pulse_returns_suggestions(self, mock_post):
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {
+        mock_post.return_value = {
             'task_id': 't-2',
             'status': 'completed',
             'result': {
@@ -258,10 +258,9 @@ class SuggestReturnsSuggestionsTests(SuggestBaseTestCase):
 class SuggestEmptySuggestionsTests(SuggestBaseTestCase):
     """Pulse returns [] → job done with zero suggestion rows persisted."""
 
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.intelligence.dispatch_task')
     def test_suggest_pulse_empty_suggestions(self, mock_post):
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {
+        mock_post.return_value = {
             'task_id': 't-3',
             'status': 'completed',
             'result': {
@@ -292,10 +291,9 @@ class SuggestEmptySuggestionsTests(SuggestBaseTestCase):
 class SuggestFieldStatsTests(SuggestBaseTestCase):
     """Payload includes min/max/mean/stddev for numeric fields."""
 
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.intelligence.dispatch_task')
     def test_suggest_field_stats_in_payload(self, mock_post):
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {
+        mock_post.return_value = {
             'task_id': 't-stats',
             'status': 'completed',
             'result': {'suggestions': []},
@@ -340,10 +338,12 @@ class SuggestFieldStatsTests(SuggestBaseTestCase):
 class SuggestConnectionErrorTests(SuggestBaseTestCase):
     """ConnectionError → job fails honestly (fail-visible, no fabricated data)."""
 
-    @patch('ai.providers._http.requests.post')
+    @patch('ai.intelligence.dispatch_task')
     def test_suggest_pulse_connection_error(self, mock_post):
-        from requests import ConnectionError as ReqConnError
-        mock_post.side_effect = ReqConnError('Connection refused')
+        mock_post.return_value = {
+            'status': 'pulse_unavailable',
+            'error': {'code': 'connection_error', 'message': 'Pulse unreachable: Connection refused'},
+        }
 
         self._create_profile()
 

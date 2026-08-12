@@ -1,19 +1,15 @@
 """
-PulseProvider — AIProvider that calls Pulse's POST /tasks endpoint.
+PulseProvider — the in-process AIProvider backed by the vendored engine.
 
-Wave B. Bridges Carbon's AIProvider ABC (ai/protocol.py) to Pulse's
-task API (POST /tasks). Each ABC method maps to a Pulse task type.
-
-Swap backends by changing AI_PROVIDER_CLASS in settings. PulseProvider
-is one implementation — any backend implementing AIProvider works.
+Wave B. Bridges Carbon's AIProvider ABC (ai/protocol.py) to the in-process
+engine runtime (ai/engine_runtime.py). Each ABC method maps to a task type.
+No HTTP transport — the engine is wired in-process (Phase 2).
 """
 
 from __future__ import annotations
 
 import logging
 from typing import Any
-
-from django.conf import settings
 
 from backend.ai.protocol import (
     AIProvider,
@@ -49,7 +45,7 @@ from backend.ai.protocol import (
     Scope,
     TableProfile,
 )
-from backend.ai.providers._http import get_modules, post_task
+from backend.ai.engine_runtime import dispatch_task, list_modules
 
 logger = logging.getLogger("carbon.ai.pulse_provider")
 
@@ -70,18 +66,15 @@ T_FIX_SUGGEST = "carbon.fix.suggest"
 # ── Provider ─────────────────────────────────────────────────────────────
 
 class PulseProvider(AIProvider):
-    """Calls Pulse's POST /tasks for every AI capability.
+    """Dispatches every AI capability to the in-process engine.
 
-    Constructor reads AI_PROVIDER_URL and AI_PROVIDER_API_KEY from Django
-    settings.  Every method is sync (the ABC is sync), using ``requests``
-    under the hood.  Graceful degradation on timeout / connection error /
-    HTTP 5xx returns the appropriate typed response with
-    ``status="provider_unavailable"``.
+    Every method is sync (the ABC is sync), dispatching to the in-process
+    engine runtime.  Graceful degradation on engine error returns the
+    appropriate typed response with ``status="provider_unavailable"``.
     """
 
     def __init__(self) -> None:
-        self._url = settings.AI_PROVIDER_URL.rstrip("/")
-        self._key = settings.AI_PROVIDER_API_KEY
+        self._instance_id = "carbon"
 
     # ── properties ────────────────────────────────────────────────────
 
@@ -96,8 +89,8 @@ class PulseProvider(AIProvider):
     # ── health ────────────────────────────────────────────────────────
 
     def health_check(self) -> ProviderStatus:
-        """Lightweight connectivity check via GET /tasks/modules (no-auth)."""
-        data = get_modules(self._url, timeout=10, instance_id="carbon")
+        """Report the in-process engine's advertised modules."""
+        data = list_modules(instance_id=self._instance_id)
         error = data.get("error")
 
         if error:
@@ -140,7 +133,7 @@ class PulseProvider(AIProvider):
                 "conversation_id": request.conversation.conversation_id,
                 "messages": request.conversation.messages,
             }
-        data = post_task(self._url, self._key, T_DQ_VALIDATE, payload, timeout=30)
+        data = dispatch_task(T_DQ_VALIDATE, payload, timeout=30)
 
         if data.get("status") == "completed":
             result = (data.get("result") or {})
@@ -180,7 +173,7 @@ class PulseProvider(AIProvider):
                 "conversation_id": request.conversation.conversation_id,
                 "messages": request.conversation.messages,
             }
-        data = post_task(self._url, self._key, T_DQ_SUGGEST, payload, timeout=90)
+        data = dispatch_task(T_DQ_SUGGEST, payload, timeout=90)
 
         if data.get("status") == "completed":
             result = (data.get("result") or {})
@@ -223,7 +216,7 @@ class PulseProvider(AIProvider):
         if request.domain_vocabulary:
             payload["domain_vocabulary"] = request.domain_vocabulary
 
-        data = post_task(self._url, self._key, T_NL_QUERY, payload, timeout=90)
+        data = dispatch_task(T_NL_QUERY, payload, timeout=90)
 
         if data.get("status") == "completed":
             result = data.get("result") or {}
@@ -250,7 +243,7 @@ class PulseProvider(AIProvider):
             "row_count": request.row_count,
             "sample_rows": request.sample_rows,
         }
-        data = post_task(self._url, self._key, T_NL_EXPLAIN, payload, timeout=60)
+        data = dispatch_task(T_NL_EXPLAIN, payload, timeout=60)
 
         if data.get("status") == "completed":
             result = data.get("result") or {}
@@ -281,7 +274,7 @@ class PulseProvider(AIProvider):
                 "conversation_id": request.conversation.conversation_id,
                 "messages": request.conversation.messages,
             }
-        data = post_task(self._url, self._key, T_ANOMALY_DETECT, payload, timeout=120)
+        data = dispatch_task(T_ANOMALY_DETECT, payload, timeout=120)
 
         if data.get("status") == "completed":
             result = data.get("result") or {}
@@ -320,7 +313,7 @@ class PulseProvider(AIProvider):
             "table_name": request.table_name,
             "anomaly": request.anomaly,
         }
-        data = post_task(self._url, self._key, T_ANOMALY_EXPLAIN, payload, timeout=60)
+        data = dispatch_task(T_ANOMALY_EXPLAIN, payload, timeout=60)
 
         if data.get("status") == "completed":
             result = data.get("result") or {}
@@ -345,7 +338,7 @@ class PulseProvider(AIProvider):
             "period_start": request.period_start,
             "period_end": request.period_end,
         }
-        data = post_task(self._url, self._key, T_REPORT_DRAFT, payload, timeout=180)
+        data = dispatch_task(T_REPORT_DRAFT, payload, timeout=180)
 
         if data.get("status") == "completed":
             result = data.get("result") or {}
@@ -396,7 +389,7 @@ class PulseProvider(AIProvider):
             ],
             "context": request.context,
         }
-        data = post_task(self._url, self._key, T_SCHEMA_ANALYZE, payload, timeout=60)
+        data = dispatch_task(T_SCHEMA_ANALYZE, payload, timeout=60)
 
         if data.get("status") == "completed":
             result = data.get("result") or {}
@@ -432,7 +425,7 @@ class PulseProvider(AIProvider):
         if request.profile is not None:
             payload["profile"] = request.profile
 
-        data = post_task(self._url, self._key, T_FIX_SUGGEST, payload, timeout=90)
+        data = dispatch_task(T_FIX_SUGGEST, payload, timeout=90)
 
         if data.get("status") == "completed":
             result = data.get("result") or {}
@@ -480,7 +473,7 @@ class PulseProvider(AIProvider):
                 "messages": request.conversation.messages,
             }
 
-        data = post_task(self._url, self._key, T_CHAT, payload, timeout=15)
+        data = dispatch_task(T_CHAT, payload, timeout=15)
 
         if data.get("status") == "completed":
             result = data.get("result") or {}

@@ -20,7 +20,6 @@ Tests:
 """
 from unittest.mock import patch
 
-import requests
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -115,9 +114,8 @@ class P4BaseTestCase(TestCase):
 class P4SuggestJobTests(P4BaseTestCase):
     def test_suggest_job_persists_pending_suggestions(self):
         """Submit (pending) → poll (completed) → pending DQSuggestion rows."""
-        with patch('ai.providers._http.requests.post') as mock_post:
-            mock_post.return_value.status_code = 202
-            mock_post.return_value.json.return_value = {
+        with patch('ai.intelligence.dispatch_task') as mock_post:
+            mock_post.return_value = {
                 'task_id': 't-sug-1', 'status': 'pending',
             }
             r = self.client.post(
@@ -132,9 +130,8 @@ class P4SuggestJobTests(P4BaseTestCase):
         # Pulse answers asynchronously with two suggestions:
         #  one with a full valid definition, one without (converted to a
         #  business nl_check definition from prompt).
-        with patch('ai.providers._http.requests.get') as mock_get:
-            mock_get.return_value.status_code = 200
-            mock_get.return_value.json.return_value = {
+        with patch('ai.intelligence.get_task') as mock_get:
+            mock_get.return_value = {
                 'task_id': 't-sug-1', 'status': 'completed',
                 'result': {
                     'suggestions': [
@@ -172,9 +169,8 @@ class P4SuggestJobTests(P4BaseTestCase):
 
     def test_suggest_job_quarantines_invalid_suggestions(self):
         """Invalid definitions → quarantined in job.result.invalid, no rows."""
-        with patch('ai.providers._http.requests.post') as mock_post:
-            mock_post.return_value.status_code = 200
-            mock_post.return_value.json.return_value = {
+        with patch('ai.intelligence.dispatch_task') as mock_post:
+            mock_post.return_value = {
                 'task_id': 't-sug-2', 'status': 'completed',
                 'result': {
                     'suggestions': [
@@ -199,8 +195,11 @@ class P4SuggestJobTests(P4BaseTestCase):
 
     def test_suggest_job_pulse_unavailable_fails(self):
         """Pulse unreachable → job failed, no suggestions fabricated."""
-        with patch('ai.providers._http.requests.post') as mock_post:
-            mock_post.side_effect = requests.exceptions.ConnectionError('connection refused')
+        with patch('ai.intelligence.dispatch_task') as mock_post:
+            mock_post.return_value = {
+                'status': 'pulse_unavailable',
+                'error': {'code': 'connection_error', 'message': 'Pulse unreachable: connection refused'},
+            }
             r = self.client.post(
                 f'{BASE}/jobs/',
                 {'job_type': 'suggest', 'data_table_id': self.table.id},
@@ -301,7 +300,7 @@ class P4AnomalyJobTests(P4BaseTestCase):
         """< MIN_ANOMALY_PROFILES profiles → done/insufficient_history,
         Pulse never called (fail-visible: nothing fabricated)."""
         _make_profiles(self.table, self.field, count=2)
-        with patch('ai.providers._http.requests.post') as mock_post:
+        with patch('ai.intelligence.dispatch_task') as mock_post:
             r = self.client.post(
                 f'{BASE}/jobs/',
                 {'job_type': 'anomaly', 'data_table_id': self.table.id},
@@ -324,10 +323,9 @@ class P4AnomalyJobTests(P4BaseTestCase):
              'observed': 0.3, 'expected_range': {'low': 0.0, 'high': 0.1},
              'score': 2.1, 'explanation': 'Null pct rose', 'severity': 'warn'},
         ]
-        with patch('ai.providers._http.requests.post') as mock_post, \
+        with patch('ai.intelligence.dispatch_task') as mock_post, \
              patch('accounts.models.notify_event') as mock_notify:
-            mock_post.return_value.status_code = 200
-            mock_post.return_value.json.return_value = {
+            mock_post.return_value = {
                 'task_id': 't-anom-1', 'status': 'completed',
                 'result': {'anomalies': anomalies},
             }
@@ -363,9 +361,8 @@ class P4AnomalyJobTests(P4BaseTestCase):
              'score': 3.0, 'explanation': 'Jump', 'severity': 'warn'},
             {'metric': 'sum(kwh)', 'expected_range': {'low': 1, 'high': 2}},
         ]
-        with patch('ai.providers._http.requests.post') as mock_post:
-            mock_post.return_value.status_code = 200
-            mock_post.return_value.json.return_value = {
+        with patch('ai.intelligence.dispatch_task') as mock_post:
+            mock_post.return_value = {
                 'task_id': 't-anom-2', 'status': 'completed',
                 'result': {'anomalies': anomalies},
             }
@@ -382,8 +379,11 @@ class P4AnomalyJobTests(P4BaseTestCase):
 
     def test_anomaly_job_pulse_unavailable_fails(self):
         _make_profiles(self.table, self.field, count=6)
-        with patch('ai.providers._http.requests.post') as mock_post:
-            mock_post.side_effect = requests.exceptions.ConnectionError('connection refused')
+        with patch('ai.intelligence.dispatch_task') as mock_post:
+            mock_post.return_value = {
+                'status': 'pulse_unavailable',
+                'error': {'code': 'connection_error', 'message': 'Pulse unreachable: connection refused'},
+            }
             r = self.client.post(
                 f'{BASE}/jobs/',
                 {'job_type': 'anomaly', 'data_table_id': self.table.id},
@@ -401,9 +401,8 @@ class P4AnomalyJobTests(P4BaseTestCase):
             {'metric': 'email_nulls', 'observed': 0.3,
              'expected_range': {'low': 0.0, 'high': 0.1}, 'severity': 'warn'},
         ]
-        with patch('ai.providers._http.requests.post') as mock_post:
-            mock_post.return_value.status_code = 200
-            mock_post.return_value.json.return_value = {
+        with patch('ai.intelligence.dispatch_task') as mock_post:
+            mock_post.return_value = {
                 'task_id': 't-anom-3', 'status': 'completed',
                 'result': {'anomalies': anomalies},
             }
@@ -478,8 +477,11 @@ class P4FailVisibleTests(P4BaseTestCase):
         job = jobs_module.create_job(
             'nl_check', rule=self.nl_rule,
             payload={'prompt': 'Email must contain @'}, user=self.admin)
-        with patch('ai.providers._http.requests.post') as mock_post:
-            mock_post.side_effect = Exception('connection refused')
+        with patch('ai.intelligence.dispatch_task') as mock_post:
+            mock_post.return_value = {
+                'status': 'pulse_unavailable',
+                'error': {'code': 'not_found', 'message': 'engine offline'},
+            }
             jobs_module.execute(job)
         job.refresh_from_db()
         self.assertEqual(job.status, 'failed')
@@ -547,9 +549,8 @@ class P4FailVisibleTests(P4BaseTestCase):
     def test_legacy_suggest_alias_creates_job(self):
         """POST /dq/suggest/ is a thin alias: creates+submits a suggest job,
         answers 201 with the job and X-Deprecated: true."""
-        with patch('ai.providers._http.requests.post') as mock_post:
-            mock_post.return_value.status_code = 200
-            mock_post.return_value.json.return_value = {
+        with patch('ai.intelligence.dispatch_task') as mock_post:
+            mock_post.return_value = {
                 'task_id': 't-legacy-1', 'status': 'completed',
                 'result': {'suggestions': [
                     {'prompt': 'Never null', 'rationale': 'Nulls are bad',

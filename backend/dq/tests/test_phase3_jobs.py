@@ -158,9 +158,8 @@ class DeterministicJobTests(JobsBaseTestCase):
 class PulseJobTests(JobsBaseTestCase):
     def test_nl_check_job_submit_then_poll_to_done(self):
         """submit → running + pulse_task_id; GET /jobs/{id} polls → done."""
-        with patch('ai.providers._http.requests.post') as mock_post:
-            mock_post.return_value.status_code = 200
-            mock_post.return_value.json.return_value = {
+        with patch('ai.intelligence.dispatch_task') as mock_post:
+            mock_post.return_value = {
                 'task_id': 't-111', 'status': 'pending',
             }
             r = self.client.post(
@@ -173,9 +172,8 @@ class PulseJobTests(JobsBaseTestCase):
         self.assertEqual(r.data['status'], 'running')
         self.assertEqual(r.data['pulse_task_id'], 't-111')
 
-        with patch('ai.providers._http.requests.get') as mock_get:
-            mock_get.return_value.status_code = 200
-            mock_get.return_value.json.return_value = {
+        with patch('ai.intelligence.get_task') as mock_get:
+            mock_get.return_value = {
                 'task_id': 't-111', 'status': 'completed',
                 'result': {'passed': True, 'checked': 5},
             }
@@ -193,9 +191,8 @@ class PulseJobTests(JobsBaseTestCase):
         job.status = 'running'
         job.save()
 
-        with patch('ai.providers._http.requests.get') as mock_get:
-            mock_get.return_value.status_code = 200
-            mock_get.return_value.json.return_value = {
+        with patch('ai.intelligence.get_task') as mock_get:
+            mock_get.return_value = {
                 'task_id': 't-222', 'status': 'working',
             }
             jobs_module.refresh(job)
@@ -210,9 +207,8 @@ class PulseJobTests(JobsBaseTestCase):
         job.status = 'running'
         job.save()
 
-        with patch('ai.providers._http.requests.get') as mock_get:
-            mock_get.return_value.status_code = 200
-            mock_get.return_value.json.return_value = {
+        with patch('ai.intelligence.get_task') as mock_get:
+            mock_get.return_value = {
                 'task_id': 't-333', 'status': 'failed',
                 'error': {'code': 'model_error', 'message': 'LLM broke'},
             }
@@ -229,8 +225,8 @@ class PulseJobTests(JobsBaseTestCase):
         job.status = 'running'
         job.save()
 
-        with patch('ai.providers._http.requests.get') as mock_get:
-            mock_get.side_effect = Exception('connection refused')
+        with patch('ai.intelligence.get_task') as mock_get:
+            mock_get.return_value = {'status': 'pulse_unavailable', 'error': {'code': 'not_found'}}
             # 19 polls: stays running, streak grows
             for _ in range(jobs_module.PULSE_UNAVAILABLE_LIMIT - 1):
                 jobs_module.refresh(job)
@@ -244,11 +240,9 @@ class PulseJobTests(JobsBaseTestCase):
         self.assertIn('20 consecutive', job.error)
 
     def test_suggest_job_submits(self):
-        with patch('ai.providers._http.requests.post') as mock_post:
-            mock_post.return_value.status_code = 202
-            mock_post.return_value.json.return_value = {
+        with patch('ai.intelligence.dispatch_task') as mock_post:
+            mock_post.return_value = {
                 'task_id': 't-555', 'status': 'pending',
-                'poll_url': '/instances/carbon/tasks/t-555',
             }
             r = self.client.post(
                 f'{BASE}/jobs/',
@@ -336,9 +330,8 @@ class JobsApiTests(JobsBaseTestCase):
         self.assertEqual(r.data['status'], 'done')
 
     def test_rules_run_creates_nl_check_job_for_nl_rule(self):
-        with patch('ai.providers._http.requests.post') as mock_post:
-            mock_post.return_value.status_code = 200
-            mock_post.return_value.json.return_value = {
+        with patch('ai.intelligence.dispatch_task') as mock_post:
+            mock_post.return_value = {
                 'task_id': 't-666', 'status': 'completed',
                 'result': {'passed': True},
             }

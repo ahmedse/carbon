@@ -6,8 +6,8 @@ Pure ABCs and dataclasses.
 
 Any AI backend (cloud-hosted, on-prem, local LLM) implements
 AIProvider. CarbonIntelligence (Wave C) delegates to AIProvider.
-Swap backends by changing AI_PROVIDER_CLASS in settings — zero
-code changes anywhere else.
+The in-process engine adapter (providers/pulse.py) is the single,
+contained seam — there is no runtime provider swapping (Phase 2).
 """
 
 from __future__ import annotations

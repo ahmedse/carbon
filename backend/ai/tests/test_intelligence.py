@@ -1,13 +1,11 @@
 """
 Tests for ai/intelligence.py — CarbonIntelligence orchestrator.
 
-Wave C. Tests the provider factory, scope builder, and the
+Wave C. Tests the in-process provider, scope builder, and the
 CarbonIntelligence class itself (sync + async submission).
 """
 
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from backend.ai.protocol import (
     AIProvider,
@@ -19,7 +17,6 @@ from backend.ai.protocol import (
 )
 from backend.ai.intelligence import (
     CarbonIntelligence,
-    _get_provider,
     build_scope,
 )
 
@@ -89,34 +86,6 @@ def _dummy_rule(**overrides):
     return mock
 
 
-# ── Factory tests ─────────────────────────────────────────────────────────
-
-
-class TestGetProvider:
-    def test_returns_pulse_provider_by_default(self):
-        provider = _get_provider()
-        assert isinstance(provider, AIProvider)
-        assert provider.provider_name == "pulse"
-
-    def test_honors_ai_provider_class_setting(self):
-        with patch(
-            "backend.ai.intelligence.settings",
-            AI_PROVIDER_CLASS="ai.tests.test_intelligence._DummyProvider",
-        ):
-            provider = _get_provider()
-            assert provider.provider_name == "dummy"
-
-    def test_raises_on_invalid_class(self):
-        with patch("backend.ai.intelligence.settings", AI_PROVIDER_CLASS="nonexistent.Module"):
-            with pytest.raises((ImportError, ModuleNotFoundError)):
-                _get_provider()
-
-    def test_raises_on_non_ai_provider(self):
-        with patch("backend.ai.intelligence.settings", AI_PROVIDER_CLASS="ai.tests.test_intelligence.TestGetProvider"):
-            with pytest.raises(TypeError, match="not a subclass of AIProvider"):
-                _get_provider()
-
-
 # ── Scope builder tests ───────────────────────────────────────────────────
 
 
@@ -182,8 +151,8 @@ class TestCarbonIntelligence:
 
 class TestSubmitDqValidate:
     def test_sends_correct_envelope(self):
-        with patch("backend.ai.intelligence._http_post_task") as mock_post:
-            mock_post.return_value = {
+        with patch("backend.ai.intelligence.dispatch_task") as mock_dispatch:
+            mock_dispatch.return_value = {
                 "status": "completed",
                 "task_id": "t-1",
                 "result": {"results": []},
@@ -195,8 +164,8 @@ class TestSubmitDqValidate:
                 context={"table_name": "tbl"},
             )
             assert response["status"] == "completed"
-            # Verify post_task was called with correct task type
-            call_args = mock_post.call_args
+            # Verify dispatch_task was called with correct task type
+            call_args = mock_dispatch.call_args
             assert call_args.kwargs["task_type"] == "dq.validate"
             payload = call_args.kwargs["payload"]
             assert payload["rules"][0]["id"] == "1"
@@ -204,8 +173,8 @@ class TestSubmitDqValidate:
             assert payload["context"]["table_name"] == "tbl"
 
     def test_returns_pulse_unavailable_on_error(self):
-        with patch("backend.ai.intelligence._http_post_task") as mock_post:
-            mock_post.return_value = {"status": "pulse_unavailable", "error": {"code": "timeout"}}
+        with patch("backend.ai.intelligence.dispatch_task") as mock_dispatch:
+            mock_dispatch.return_value = {"status": "pulse_unavailable", "error": {"code": "not_wired"}}
             ci = CarbonIntelligence()
             response = ci.submit_dq_validate(
                 rules=[{"id": "1", "prompt": "p", "fields": [], "severity": "error"}],
@@ -216,45 +185,41 @@ class TestSubmitDqValidate:
 
 class TestSubmitDqSuggest:
     def test_sends_correct_task_type(self):
-        with patch("backend.ai.intelligence._http_post_task") as mock_post:
-            mock_post.return_value = {"status": "completed"}
+        with patch("backend.ai.intelligence.dispatch_task") as mock_dispatch:
+            mock_dispatch.return_value = {"status": "completed"}
             ci = CarbonIntelligence()
             response = ci.submit_dq_suggest({"name": "t", "fields": []})
             assert response["status"] == "completed"
-            assert mock_post.call_args.kwargs["task_type"] == "dq.suggest"
-            payload = mock_post.call_args.kwargs["payload"]
+            assert mock_dispatch.call_args.kwargs["task_type"] == "dq.suggest"
+            payload = mock_dispatch.call_args.kwargs["payload"]
             assert payload["table"]["name"] == "t"
 
 
 class TestSubmitAnomalyDetect:
     def test_sends_correct_task_type(self):
-        with patch("backend.ai.intelligence._http_post_task") as mock_post:
-            mock_post.return_value = {"status": "completed"}
+        with patch("backend.ai.intelligence.dispatch_task") as mock_dispatch:
+            mock_dispatch.return_value = {"status": "completed"}
             ci = CarbonIntelligence()
             response = ci.submit_anomaly_detect({"history": []})
             assert response["status"] == "completed"
-            assert mock_post.call_args.kwargs["task_type"] == "anomaly.detect"
-            payload = mock_post.call_args.kwargs["payload"]
+            assert mock_dispatch.call_args.kwargs["task_type"] == "anomaly.detect"
+            payload = mock_dispatch.call_args.kwargs["payload"]
             assert payload["profile"]["history"] == []
 
 
 class TestGetTaskStatus:
-    def test_polls_correct_url(self):
-        with patch("requests.get") as mock_get:
-            mock_resp = MagicMock()
-            mock_resp.json.return_value = {"status": "completed", "result": {}}
-            mock_resp.ok = True
-            mock_get.return_value = mock_resp
+    def test_polls_correct_task(self):
+        with patch("backend.ai.intelligence.get_task") as mock_get_task:
+            mock_get_task.return_value = {"status": "completed", "result": {}}
 
             ci = CarbonIntelligence()
             result = ci.get_task_status("t-42")
             assert result["status"] == "completed"
-            mock_get.assert_called_once()
-            assert "t-42" in mock_get.call_args[0][0]
+            mock_get_task.assert_called_once_with("t-42", timeout=10)
 
-    def test_handles_connection_error(self):
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = Exception("boom")
+    def test_handles_unavailable(self):
+        with patch("backend.ai.intelligence.get_task") as mock_get_task:
+            mock_get_task.return_value = {"status": "pulse_unavailable", "error": {"code": "not_found"}}
 
             ci = CarbonIntelligence()
             result = ci.get_task_status("t-42")
