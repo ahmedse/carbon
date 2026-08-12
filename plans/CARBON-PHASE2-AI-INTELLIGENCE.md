@@ -1,9 +1,8 @@
 # Carbon Phase 2 — AI Intelligence Service
 
-**Date:** 2026-08-11  
-**Status:** Wave A 🔶 READY FOR WORKERS (`TASK-CARBON-AI-WAVE-A.md`) | Waves B–P ※ SPEC READY  
-**Depends on:** Phase 1 DQ Core (P0–P4 complete per `TASK-DQ-CORE-P4-PULSE.md`)  
-**Companion docs:** `docs/CARBON-DESIGN.md`, `docs/PULSE_CONTRACT_SPEC.md`, `plans/CARBON_DQ_CORE_PLAN.md`, `plans/TASK-CARBON-AI-WAVE-A.md`
+**Status:** Legacy planning doc, superseded by [docs/AI_WORKSPACE_ARCHITECTURE.md](../docs/AI_WORKSPACE_ARCHITECTURE.md) and [plans/CARBON_AI_WORKSPACE_PHASED_PLAN.md](CARBON_AI_WORKSPACE_PHASED_PLAN.md)
+
+This document is retained as history for the AI Heart / Pulse split and the earlier Carbon AI service rollout. Do not treat it as the canonical plan.
 
 ---
 

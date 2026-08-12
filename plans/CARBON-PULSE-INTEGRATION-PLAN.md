@@ -1,11 +1,8 @@
 # Carbon ↔ Pulse Integration Plan
 
-**Plan version:** 1.0.0  
-**Plan date:** 2026-08-12  
-**Author:** Master Architect  
-**Status:** Ready for worker assignment  
-**Contract reference:** `docs/PULSE_CONTRACT_SPEC.md` v3.0.0  
-**Roles:** backend-worker (Pulse fixes), backend-worker (Carbon alignment)
+**Status:** Legacy integration reference, superseded by [docs/AI_WORKSPACE_ARCHITECTURE.md](../docs/AI_WORKSPACE_ARCHITECTURE.md) and [plans/CARBON_AI_WORKSPACE_PHASED_PLAN.md](CARBON_AI_WORKSPACE_PHASED_PLAN.md)
+
+This plan is kept only as a technical reference for the Carbon ↔ Pulse contract. The canonical AI workspace architecture now lives in the architecture doc, and the execution roadmap lives in the phased plan.
 
 ---
 

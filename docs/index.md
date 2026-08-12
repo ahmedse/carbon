@@ -43,6 +43,7 @@ Enterprise carbon emissions management platform. Django 5.2 + DRF 3.16 backend, 
 
 ## Planning & Reference
 
+- [AI Workspace Architecture](./AI_WORKSPACE_ARCHITECTURE.md)
 - [Data Trust Phases](./PLAN_DATA_TRUST_PHASES.md)
 - [Technical Review 2026](./TECHNICAL_REVIEW_2026.md)
 - [Expert Review Summary](./EXPERT_REVIEW_SUMMARY.md)

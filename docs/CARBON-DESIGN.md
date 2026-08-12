@@ -89,7 +89,7 @@ backend/ai/
 | `/fix/suggest/` | POST | DQ UI | `HasAiAccess` |
 | `/status/` | GET | Any | `IsAuthenticated` |
 
-See `plans/CARBON-PHASE2-AI-INTELLIGENCE.md` for the full phased implementation plan.
+See [docs/AI_WORKSPACE_ARCHITECTURE.md](AI_WORKSPACE_ARCHITECTURE.md) for the architecture standard and [plans/CARBON_AI_WORKSPACE_PHASED_PLAN.md](../plans/CARBON_AI_WORKSPACE_PHASED_PLAN.md) for the phased implementation plan.
 
 ---
 

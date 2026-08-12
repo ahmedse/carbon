@@ -791,7 +791,7 @@ Carbon's AI integration lives in `backend/ai/` — a single Django app with:
 - **`ai/views.py`** — DRF endpoints at `/api/v1/ai/*`
 
 The `pulse_gateway.py` thin client is DEPRECATED and will be removed after full migration.
-See `plans/CARBON-PHASE2-AI-INTELLIGENCE.md` for the phased implementation plan.
+See [docs/AI_WORKSPACE_ARCHITECTURE.md](AI_WORKSPACE_ARCHITECTURE.md) for the architecture standard and [plans/CARBON_AI_WORKSPACE_PHASED_PLAN.md](../plans/CARBON_AI_WORKSPACE_PHASED_PLAN.md) for the current phased implementation plan.
 
 ---
 

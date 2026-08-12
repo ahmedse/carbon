@@ -1,6 +1,6 @@
 # TASK-CARBON-AI-WAVE-A — Protocol + MockProvider
 
-**Wave:** A of `CARBON-PHASE2-AI-INTELLIGENCE.md`  
+**Wave:** A of the legacy `CARBON-PHASE2-AI-INTELLIGENCE.md` plan, now superseded by [plans/CARBON_AI_WORKSPACE_PHASED_PLAN.md](CARBON_AI_WORKSPACE_PHASED_PLAN.md)  
 **Estimate:** ~2 days  
 **Depends on:** Nothing (greenfield — `backend/ai/` doesn't exist yet)  
 **Blocks:** Wave B (Pulse Provider)
@@ -13,7 +13,7 @@ You are building Phase 2 of Carbon's AI intelligence layer. Read these first:
 
 | Doc | Path | Why |
 |-----|------|-----|
-| **Plan** | `plans/CARBON-PHASE2-AI-INTELLIGENCE.md` | Full vision, all waves, all dataclass definitions in §8 |
+| **Plan** | `plans/CARBON_AI_WORKSPACE_PHASED_PLAN.md` | Current phased roadmap for AI Workspace |
 | **Contract spec** | `docs/PULSE_CONTRACT_SPEC.md` | The Pulse-Carbon contract (task types, response shapes) |
 | **Existing gateway** | `backend/pulse_gateway.py` | Current HTTP layer (you're NOT editing this — just read for context) |
 | **Settings** | `backend/config/settings.py` | Where `AI_PROVIDER_*` config goes (lines 460–466) |
