@@ -54,6 +54,34 @@ class ExecutionResult:
 
 # ── Engine ────────────────────────────────────────────────────────────────────
 
+def _default_host_db_url() -> str:
+    """Build a psycopg2 DSN from the Django default database.
+
+    The Carbon instance's host database *is* the Carbon PostgreSQL database, so
+    when ``HOST_DB_URL`` is unset and no ``Instance.host_db_url`` row exists,
+    fall back to ``settings.DATABASES["default"]``.  This keeps the read-only
+    execution engine functional without any hardcoded connection string.
+    """
+    try:
+        from django.conf import settings
+    except Exception:  # pragma: no cover - non-Django harness guard
+        return ""
+    try:
+        db = settings.DATABASES.get("default", {})
+        engine_name = db.get("ENGINE", "")
+        if "postgres" not in engine_name and "cockroach" not in engine_name:
+            return ""
+        user = db.get("USER", "") or ""
+        password = db.get("PASSWORD", "") or ""
+        host = db.get("HOST", "") or "localhost"
+        port = db.get("PORT", "") or "5432"
+        name = db.get("NAME", "") or ""
+        auth = f"{user}:{password}@" if user else ""
+        return f"postgresql://{auth}{host}:{port}/{name}"
+    except Exception:
+        return ""
+
+
 class ExecutionEngine:
     """Thin async wrapper around psycopg2 for read-only host-DB queries."""
 
@@ -67,17 +95,17 @@ class ExecutionEngine:
             try:
                 from ai.engine.core.database import get_session_factory
                 from ai.engine.core.models import Instance
-                from sqlalchemy import select as sa_select
+                from ai.store import first
                 _sf = get_session_factory()
                 async with _sf() as _s:
-                    _r = await _s.execute(
-                        sa_select(Instance.host_db_url).where(Instance.id == self.instance_id)
-                    )
-                    _url = _r.scalar_one_or_none()
-                    if _url:
-                        db_url = _url
+                    rows = await _s.select(Instance, {"id": self.instance_id})
+                    inst = first(rows)
+                    if inst is not None and getattr(inst, "host_db_url", None):
+                        db_url = inst.host_db_url
             except Exception:
                 pass
+        if not db_url:
+            db_url = _default_host_db_url()
         return db_url
 
     async def execute(self, sql: str) -> ExecutionResult:

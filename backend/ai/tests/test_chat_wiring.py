@@ -140,10 +140,10 @@ def test_dispatch_chat_is_fail_visible(django_store, single_pass):
 
 @pytest.mark.django_db
 def test_other_tasks_still_not_wired(django_store):
-    """The other 8 task types remain pulse_unavailable (not fabricated)."""
+    """The unwired dq.* task types remain pulse_unavailable (not fabricated)."""
     from ai.engine_runtime import dispatch_task
 
-    for task in ("dq.validate", "carbon.query.nl", "carbon.report.draft"):
+    for task in ("dq.validate", "dq.suggest"):
         data = dispatch_task(task, {"x": 1}, instance_id="carbon")
         assert data.get("status") == "pulse_unavailable", (task, data)
         assert data.get("error", {}).get("code") == "not_wired", (task, data)

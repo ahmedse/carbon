@@ -14,7 +14,10 @@ answer.
 
 from __future__ import annotations
 
+import json
 import logging
+import math
+import re
 import uuid
 from typing import Any
 
@@ -101,6 +104,655 @@ async def _run_chat(
         }
 
 
+# ── Shared helpers ────────────────────────────────────────────────────────────
+
+
+def _now_iso() -> str:
+    """Timezone-aware ISO-8601 timestamp."""
+    from django.utils.timezone import now
+
+    return now().isoformat()
+
+
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def _std(values: list[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    m = _mean(values)
+    var = sum((v - m) ** 2 for v in values) / (len(values) - 1)
+    return math.sqrt(var)
+
+
+async def _llm_text(
+    task: str,
+    instance_id: str,
+    conversation_id: str,
+    messages: list[dict[str, Any]],
+    *,
+    temperature: float = 0.3,
+) -> str | None:
+    """Return trimmed LLM reply content, or ``None`` if the LLM is unavailable.
+
+    LLM *unavailability* (no API key, provider error, empty reply) degrades to
+    a deterministic answer — never a fabricated one.  Anything that is *not* an
+    LLM failure propagates to ``dispatch_task``'s fail-visible handler.
+    """
+    from ai.engine.llm.router import route_chat
+
+    try:
+        resp = await route_chat(
+            task,
+            instance_id,
+            conversation_id,
+            messages,
+            temperature=temperature,
+        )
+    except Exception as exc:  # noqa: BLE001 - LLM outage → deterministic fallback
+        logger.warning("LLM unavailable for %s: %s", task, exc)
+        return None
+    content = (resp or {}).get("content")
+    return content.strip() if isinstance(content, str) and content.strip() else None
+
+
+def _extract_sql(text: str) -> str:
+    """Pull the first SQL block (or leading SELECT/WITH line) out of LLM text."""
+    if not text:
+        return ""
+    lowered = text.lower()
+    for marker in ("```sql", "```"):
+        idx = lowered.find(marker)
+        if idx != -1:
+            start = idx + len(marker)
+            end = lowered.find("```", start)
+            if end != -1:
+                return text[start:end].strip()
+    for line in text.splitlines():
+        s = line.strip()
+        if s.upper().startswith(("SELECT", "WITH")):
+            return s
+    return ""
+
+
+def _deterministic_sql(tables: list[str], max_rows: int) -> str:
+    table = (tables or [""])[0]
+    if not table:
+        return ""
+    return f"SELECT * FROM {table} LIMIT {max_rows}"
+
+
+def _nl_prompt(question: str, tables: list[str], max_rows: int) -> str:
+    table_list = ", ".join(tables) if tables else "(infer from question)"
+    return (
+        f"Write a single read-only SQL query to answer this question: {question}\n"
+        f"Relevant tables: {table_list}\n"
+        f"Limit results to {max_rows} rows. Return only the SQL inside a ```sql block."
+    )
+
+
+def _explain_prompt(
+    question: str, sql: str, row_count: int, sample_rows: list[Any]
+) -> str:
+    sample = json.dumps(sample_rows[:5], default=str)[:800] if sample_rows else "none"
+    return (
+        f"Explain this SQL query in plain language.\n"
+        f"Question: {question}\n"
+        f"SQL: {sql}\n"
+        f"Rows returned: {row_count}\n"
+        f"Sample rows: {sample}\n"
+        f"Explain what the query does, how to read the result, and any caveats."
+    )
+
+
+def _deterministic_explanation(
+    question: str, sql: str, row_count: int, sample_rows: list[Any]
+) -> dict[str, Any]:
+    caveats: list[str] = []
+    if sample_rows:
+        caveats.append("Rows shown are a sample, not the complete result set.")
+    if not sql:
+        return {
+            "explanation": (
+                "No SQL was provided to explain. Supply a query to receive a "
+                "step-by-step interpretation."
+            ),
+            "caveats": caveats or ["No SQL to analyze."],
+        }
+    explanation = (
+        f"This query returns {row_count or 'an unknown number of'} row(s) "
+        f"for the question: {question or '(no question provided)'}."
+    )
+    if row_count:
+        caveats.append(f"Results reflect {row_count} row(s); verify against the full dataset.")
+    return {"explanation": explanation, "caveats": caveats}
+
+
+def _analyze_schema_change(change: dict[str, Any]) -> dict[str, Any]:
+    raw = (change.get("change") or "").lower()
+    table_name = change.get("table_name") or "table"
+    field_name = change.get("field_name") or ""
+    if any(k in raw for k in ("drop", "remove", "delete")):
+        impact = (
+            f"Removing {field_name or 'an object'} from {table_name} may break "
+            "queries, reports, and downstream pipelines that reference it."
+        )
+        severity = "high"
+        action = (
+            "Audit all consumers before removal; stage a deprecation window and "
+            "a compatibility view where feasible."
+        )
+    elif "rename" in raw:
+        impact = (
+            f"Renaming {field_name or 'an object'} in {table_name} breaks "
+            "references unless aliases are preserved."
+        )
+        severity = "high"
+        action = "Introduce a compatibility alias and update referencing queries before cutover."
+    elif any(k in raw for k in ("type", "cast", "alter", "modify")):
+        impact = (
+            f"Changing the type of {field_name or 'a column'} in {table_name} "
+            "can truncate data or alter comparison semantics."
+        )
+        severity = "medium"
+        action = "Validate coercion on a copy of the data and update consumers of the changed type."
+    elif any(k in raw for k in ("add", "create", "new")):
+        impact = (
+            f"Adding {field_name or 'a column or table'} to {table_name} is "
+            "backward compatible but must be documented."
+        )
+        severity = "low"
+        action = "Update the data catalog and schema documentation."
+    else:
+        impact = (
+            f"Schema change '{change.get('change') or '(unknown)'}' on "
+            f"{table_name} needs review."
+        )
+        severity = "medium"
+        action = "Review the change against the data catalog and downstream consumers."
+    return {
+        "change": change.get("change") or "",
+        "impact": impact,
+        "severity": severity,
+        "suggested_action": action,
+    }
+
+
+def _deterministic_anomaly_explanation(
+    table_name: str, anomaly: dict[str, Any]
+) -> dict[str, Any]:
+    metric = anomaly.get("metric") or f"{table_name}.unknown"
+    z = anomaly.get("z_score")
+    z_text = f" ({z}σ)" if isinstance(z, (int, float)) else ""
+    explanation = (
+        f"Anomaly detected in metric '{metric}'{z_text}. Compare the observed "
+        "value against the historical range and trace recent data loads or "
+        "process changes that could explain the deviation."
+    )
+    return {
+        "explanation": explanation,
+        "investigation_steps": [
+            "Compare the affected period against previous periods.",
+            "Check source ingestion jobs for partial or duplicate loads.",
+            "Verify unit-of-measure and sensor/feed configuration.",
+        ],
+    }
+
+
+def _deterministic_report_summary(
+    report_type: str, period_start: str, period_end: str
+) -> str:
+    window = ""
+    if period_start and period_end:
+        window = f" for {period_start} through {period_end}"
+    elif period_start:
+        window = f" starting {period_start}"
+    return (
+        f"{report_type.replace('_', ' ').title()} report{window}. "
+        "Figures below should be verified against source systems before "
+        "external release."
+    )
+
+
+def _deterministic_fix_suggestions(
+    issue_type: str, table_name: str, affected_rows: int
+) -> list[dict[str, Any]]:
+    t = (issue_type or "").lower()
+    base = {
+        "estimated_affected_rows": affected_rows,
+    }
+    if any(k in t for k in ("null", "missing", "empty")):
+        return [
+            {
+                **base,
+                "description": (
+                    f"Fill or flag null/missing values in {table_name} using "
+                    "domain defaults or imputation."
+                ),
+                "confidence": 0.8,
+                "suggested_action_type": "impute",
+            },
+            {
+                **base,
+                "description": f"Exclude rows missing required fields from analysis.",
+                "confidence": 0.7,
+                "suggested_action_type": "filter",
+            },
+        ]
+    if any(k in t for k in ("duplicate", "dup")):
+        return [
+            {
+                **base,
+                "description": (
+                    f"Deduplicate {table_name} on its natural key, keeping the "
+                    "most recent row."
+                ),
+                "confidence": 0.85,
+                "suggested_action_type": "deduplicate",
+            }
+        ]
+    if any(k in t for k in ("outlier", "anomaly", "spike")):
+        return [
+            {
+                **base,
+                "description": (
+                    f"Review and quarantine outlier rows in {table_name} before "
+                    "aggregation."
+                ),
+                "confidence": 0.75,
+                "suggested_action_type": "review",
+            }
+        ]
+    if any(k in t for k in ("type", "format", "cast", "invalid")):
+        return [
+            {
+                **base,
+                "description": (
+                    f"Coerce invalid values in {table_name} to the declared type, "
+                    "logging rejected values."
+                ),
+                "confidence": 0.8,
+                "suggested_action_type": "coerce",
+            }
+        ]
+    return [
+        {
+            **base,
+            "description": (
+                f"Investigate {table_name} ({issue_type or 'unknown issue'}) and "
+                "apply a targeted corrective update."
+            ),
+            "confidence": 0.6,
+            "suggested_action_type": "investigate",
+        }
+    ]
+
+
+async def _write_query_feedback(
+    instance_id: str,
+    task_id: str,
+    question: str,
+    sql: str,
+    outcome: Any,
+) -> None:
+    from ai.engine.core.config import get_settings
+
+    if not get_settings().KG_FEEDBACK_ENABLED:
+        return
+
+    from ai.engine.core.database import get_session_factory
+    from ai.models.knowledge_graph import KgQueryFeedback
+
+    factory = get_session_factory(instance_id)
+    async with factory() as db:
+        db.add(
+            KgQueryFeedback(
+                instance_id=instance_id,
+                question=(question or "")[:500],
+                sql_final=(sql or "")[:2000],
+                succeeded=bool(outcome.success),
+                retry_count=0,
+                error_category=(outcome.error.category.value if outcome.error else ""),
+                duration_ms=int(outcome.duration_ms or 0),
+                row_count=int(outcome.row_count or 0),
+                shape="",
+            )
+        )
+        await db.commit()
+
+
+# ── Task handlers ─────────────────────────────────────────────────────────────
+
+
+async def _run_query_nl(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    from ai.engine.core.config import get_settings
+    from ai.engine.knowledge_graph.engine import ExecutionEngine
+
+    settings = get_settings()
+    question = payload.get("question") or ""
+    tables = [str(t) for t in (payload.get("tables") or [])]
+    max_rows = int(payload.get("max_rows") or settings.TASK_NL_QUERY_MAX_ROWS)
+
+    llm_text = await _llm_text(
+        task="query_nl",
+        instance_id=instance_id,
+        conversation_id=f"nl-{task_id}",
+        messages=[{"role": "user", "content": _nl_prompt(question, tables, max_rows)}],
+        temperature=0.1,
+    )
+    sql = _extract_sql(llm_text) if llm_text else ""
+    if not sql:
+        sql = _deterministic_sql(tables, max_rows)
+
+    if not sql:
+        # No tables supplied and LLM unavailable -> cannot generate SQL.
+        return {
+            "status": "pulse_unavailable",
+            "task_id": task_id,
+            "error": {
+                "code": "engine_error",
+                "message": (
+                    "Unable to generate SQL: no tables supplied and the LLM "
+                    "is unavailable."
+                ),
+            },
+        }
+
+    engine = ExecutionEngine(instance_id)
+    outcome = await engine.execute(sql)
+
+    await _write_query_feedback(instance_id, task_id, question, sql, outcome)
+
+    # Fail-visible: a failed execution (table_not_found, syntax, permission,
+    # timeout) must NOT be reported as a completed query with empty rows.
+    if not outcome.success:
+        err = outcome.error
+        return {
+            "status": "pulse_unavailable",
+            "task_id": task_id,
+            "error": {
+                "code": "engine_error",
+                "message": err.message if err else "SQL execution failed.",
+            },
+        }
+
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {
+            "sql": outcome.sql_executed or sql,
+            "rows": outcome.rows,
+            "row_count": outcome.row_count,
+            "execution_ms": outcome.duration_ms,
+            "recovery_applied": False,
+        },
+    }
+
+
+async def _run_query_explain(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    question = payload.get("question") or ""
+    sql = payload.get("sql") or ""
+    row_count = int(payload.get("row_count") or 0)
+    sample_rows = payload.get("sample_rows") or []
+
+    deterministic = _deterministic_explanation(question, sql, row_count, sample_rows)
+    llm_text = await _llm_text(
+        task="query_explain",
+        instance_id=instance_id,
+        conversation_id=f"explain-{task_id}",
+        messages=[
+            {
+                "role": "user",
+                "content": _explain_prompt(question, sql, row_count, sample_rows),
+            }
+        ],
+    )
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {
+            "explanation": llm_text or deterministic["explanation"],
+            "caveats": deterministic["caveats"],
+            "execution_ms": 0,
+        },
+    }
+
+
+async def _run_schema_analyze(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    schema_changes = payload.get("schema_changes") or []
+    analysis = [
+        _analyze_schema_change(c) for c in schema_changes if isinstance(c, dict)
+    ]
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {"analysis": analysis, "execution_ms": 0},
+    }
+
+
+async def _run_anomaly_detect(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    from ai.engine.core.config import get_settings
+
+    table_name = payload.get("table_name") or "table"
+    history = payload.get("profile_history") or []
+    sensitivity = float(payload.get("sensitivity") or 2.0)
+    volume_threshold_pct = float(payload.get("volume_threshold_pct") or 30.0)
+
+    history_snapshots = len(history)
+    anomalies: list[dict[str, Any]] = []
+
+    if history_snapshots >= 2:
+        baseline = history[:-1]
+        latest = history[-1]
+
+        # Volume anomaly on row_count.
+        past = [
+            float(s["row_count"])
+            for s in baseline
+            if isinstance(s.get("row_count"), (int, float))
+        ]
+        current = latest.get("row_count")
+        if past and isinstance(current, (int, float)):
+            mean = _mean(past)
+            std = _std(past)
+            z = (current - mean) / std if std > 0 else 0.0
+            pct = abs(current - mean) / mean * 100 if mean else 0.0
+            if (std > 0 and abs(z) >= sensitivity) or pct >= volume_threshold_pct:
+                anomalies.append(
+                    {
+                        "metric": f"{table_name}.row_count",
+                        "expected_range": {
+                            "low": round(mean - sensitivity * std, 2),
+                            "high": round(mean + sensitivity * std, 2),
+                        },
+                        "observed": float(current),
+                        "z_score": round(z, 2),
+                        "severity": "error" if abs(z) >= sensitivity + 1 else "warning",
+                        "explanation": (
+                            f"row_count is {z:.2f}σ "
+                            f"{'above' if z >= 0 else 'below'} the historical "
+                            f"mean of {mean:.0f}."
+                        ),
+                    }
+                )
+
+        # Completeness anomaly (drop is bad).
+        past_c = [
+            float(s["completeness_pct"])
+            for s in baseline
+            if isinstance(s.get("completeness_pct"), (int, float))
+        ]
+        current_c = latest.get("completeness_pct")
+        if past_c and isinstance(current_c, (int, float)):
+            mean_c = _mean(past_c)
+            std_c = _std(past_c)
+            z_c = (current_c - mean_c) / std_c if std_c > 0 else 0.0
+            if std_c > 0 and z_c <= -sensitivity:
+                anomalies.append(
+                    {
+                        "metric": f"{table_name}.completeness",
+                        "expected_range": {
+                            "low": round(mean_c - sensitivity * std_c, 2),
+                            "high": round(mean_c + sensitivity * std_c, 2),
+                        },
+                        "observed": float(current_c),
+                        "z_score": round(z_c, 2),
+                        "severity": "error" if z_c <= -(sensitivity + 1) else "warning",
+                        "explanation": (
+                            f"completeness dropped {abs(z_c):.2f}σ below the "
+                            f"historical mean of {mean_c:.1f}%."
+                        ),
+                    }
+                )
+
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {"anomalies": anomalies, "history_snapshots": history_snapshots},
+    }
+
+
+async def _run_anomaly_explain(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    table_name = payload.get("table_name") or "table"
+    anomaly = payload.get("anomaly") or {}
+    deterministic = _deterministic_anomaly_explanation(table_name, anomaly)
+    llm_text = await _llm_text(
+        task="anomaly_explain",
+        instance_id=instance_id,
+        conversation_id=f"anomaly-{task_id}",
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Explain the likely cause of this anomaly on {table_name}: "
+                    f"{json.dumps(anomaly, default=str)}."
+                ),
+            }
+        ],
+    )
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {
+            "explanation": llm_text or deterministic["explanation"],
+            "investigation_steps": deterministic["investigation_steps"],
+            "execution_ms": 0,
+        },
+    }
+
+
+async def _run_report_draft(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    report_type = payload.get("report_type") or "summary"
+    period_start = payload.get("period_start") or ""
+    period_end = payload.get("period_end") or ""
+
+    title = f"{report_type.replace('_', ' ').title()} Report"
+    summary = _deterministic_report_summary(report_type, period_start, period_end)
+    llm_text = await _llm_text(
+        task="report_draft",
+        instance_id=instance_id,
+        conversation_id=f"report-{task_id}",
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Draft a {report_type} report summary for "
+                    f"{period_start} → {period_end}."
+                ),
+            }
+        ],
+    )
+    if llm_text:
+        summary = llm_text
+
+    sections = [
+        {
+            "title": "Summary",
+            "narrative": summary,
+            "sql": None,
+            "data_table": None,
+            "caveats": [
+                "Generated without live data access; verify figures against "
+                "source systems before release."
+            ],
+        }
+    ]
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {
+            "title": title,
+            "summary": summary,
+            "report_type": report_type,
+            "period_start": period_start,
+            "period_end": period_end,
+            "generated_at": _now_iso(),
+            "sections": sections,
+        },
+    }
+
+
+async def _run_fix_suggest(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    issue_type = payload.get("issue_type") or ""
+    table_name = payload.get("table_name") or "table"
+    affected_rows = int(payload.get("affected_rows") or 0)
+
+    suggestions = _deterministic_fix_suggestions(issue_type, table_name, affected_rows)
+    llm_text = await _llm_text(
+        task="fix_suggest",
+        instance_id=instance_id,
+        conversation_id=f"fix-{task_id}",
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Suggest fixes for issue '{issue_type}' on table {table_name} "
+                    f"({affected_rows} affected rows)."
+                ),
+            }
+        ],
+    )
+    if llm_text:
+        suggestions[0]["description"] = llm_text
+
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {
+            "issue_type": issue_type,
+            "table_name": table_name,
+            "suggestions": suggestions,
+        },
+    }
+
+
+# Handler registry: task type → async handler.
+_TASK_HANDLERS: dict[str, Any] = {
+    "carbon.query.nl": _run_query_nl,
+    "carbon.query.explain": _run_query_explain,
+    "carbon.schema.analyze": _run_schema_analyze,
+    "carbon.anomaly.detect": _run_anomaly_detect,
+    "carbon.anomaly.explain": _run_anomaly_explain,
+    "carbon.report.draft": _run_report_draft,
+    "carbon.fix.suggest": _run_fix_suggest,
+}
+
+
 def list_modules(instance_id: str = "carbon") -> dict[str, Any]:
     """Return the modules the in-process engine advertises."""
     return {"modules": [{"type": m} for m in MODULES]}
@@ -149,8 +801,24 @@ def dispatch_task(
                 },
             }
 
-    # The remaining 8 task types are not yet wired (Phase 2b-2/2b-3).
-    # Report them as unavailable rather than fabricating a result.
+    # Phase 2b-2: the 7 KG/analytics task types are wired in-process.
+    handler = _TASK_HANDLERS.get(task_type)
+    if handler is not None:
+        task_id = _new_task_id()
+        try:
+            return _run_async(handler(instance_id, payload, task_id))
+        except Exception as exc:  # noqa: BLE001 - fail-visible contract
+            logger.exception("%s dispatch failed for instance=%s", task_type, instance_id)
+            return {
+                "status": "pulse_unavailable",
+                "task_id": task_id,
+                "error": {
+                    "code": "engine_error",
+                    "message": f"{task_type} failed: {exc}",
+                },
+            }
+
+    # ``dq.validate`` / ``dq.suggest`` remain unwired (Phase 2b-3).
     return {
         "status": "pulse_unavailable",
         "task_id": _new_task_id(),

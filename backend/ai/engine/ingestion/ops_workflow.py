@@ -29,8 +29,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
-
 from ai.engine.core.clock import utcnow
 from ai.engine.core.models import OpsRun, generate_uuid
 from ai.engine.ingestion.csv_loader import FieldSchema, LoadResult, load_csv

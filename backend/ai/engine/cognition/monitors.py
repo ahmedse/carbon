@@ -8,8 +8,7 @@ No hardcoded queries — if an instance has no cognition config, monitors are sk
 import asyncio
 import json
 import logging
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any
 
 from ai.engine.cognition.notifier import create_notification
 from ai.engine.core.models import Instance
@@ -18,13 +17,21 @@ logger = logging.getLogger("pulse.cognition.monitors")
 
 
 def _load_monitors_config(instance: Instance) -> list[dict]:
-    """Load all monitor configs from instance config JSON."""
+    """Load all monitor configs from instance config JSON.
+
+    Tolerates both the engine's JSON-string config and Django's JSONField
+    (which returns a dict directly).
+    """
     if not instance.config:
         return []
     try:
-        config = json.loads(instance.config)
-        return config.get("cognition", {}).get("monitors", [])
-    except (json.JSONDecodeError, AttributeError):
+        config = instance.config
+        if isinstance(config, str):
+            config = json.loads(config)
+        if not isinstance(config, dict):
+            return []
+        return config.get("cognition", {}).get("monitors", []) or []
+    except (json.JSONDecodeError, AttributeError, TypeError):
         return []
 
 
@@ -53,7 +60,7 @@ async def _execute_monitor_sql(instance: Instance, query_sql: str) -> list[dict]
     return rows
 
 
-async def check_model_health(db: AsyncSession, instance: Instance):
+async def check_model_health(db: Any, instance: Instance):
     """Check health scores against thresholds.
 
     Reads monitors with value_column + thresholds from instance config.
@@ -127,7 +134,7 @@ async def check_model_health(db: AsyncSession, instance: Instance):
     logger.debug("Health check complete for %s", instance.name)
 
 
-async def check_data_freshness(db: AsyncSession, instance: Instance):
+async def check_data_freshness(db: Any, instance: Instance):
     """Check that data sources have received recent data.
 
     Reads monitors with max_age_hours from instance config.
@@ -176,7 +183,7 @@ async def check_data_freshness(db: AsyncSession, instance: Instance):
             logger.debug("Freshness check for %s: %d stale", instance.name, len(stale))
 
 
-async def check_failed_jobs(db: AsyncSession, instance: Instance):
+async def check_failed_jobs(db: Any, instance: Instance):
     """Check for failed jobs/operations in the recent window.
 
     Reads monitors with look_back_hours from instance config.
@@ -219,26 +226,21 @@ async def check_failed_jobs(db: AsyncSession, instance: Instance):
     logger.debug("Error check complete for %s", instance.name)
 
 
-async def check_schema_drift(db: AsyncSession, instance: Instance):
+async def check_schema_drift(db: Any, instance: Instance):
     """Detect if the host database schema has changed since last introspection."""
     import psycopg2
 
-    from ai.engine.knowledge.store import KnowledgeStore
+    from ai.models import KnowledgeEntity
 
     known_tables = set()
     current_tables = set()
 
-    # Get known tables from knowledge store
-    store = KnowledgeStore(db)
-    from sqlalchemy import select
-    from ai.engine.core.models import KnowledgeEntity
-
-    stmt = select(KnowledgeEntity.name).where(
-        KnowledgeEntity.instance_id == instance.id,
-        KnowledgeEntity.entity_type == "table",
+    # Get known tables from the knowledge store session (native Store API).
+    rows = await db.select(
+        KnowledgeEntity,
+        {"instance_id": instance.id, "entity_type": "table"},
     )
-    result = await db.execute(stmt)
-    known_tables = {row[0] for row in result.fetchall()}
+    known_tables = {getattr(r, "name") for r in rows}
 
     if not known_tables:
         logger.debug(f"No known tables for {instance.name}, skipping drift check")

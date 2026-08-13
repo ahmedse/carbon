@@ -19,9 +19,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any, Optional
 
 from ai.engine.core.config import get_settings
 
@@ -183,7 +181,7 @@ class MultiStepPlanner:
         entity_names: list[str],
         instance_id: str,
         conversation_id: str,
-        db: AsyncSession,
+        db: Any,
     ) -> Optional[MultiStepPlan]:
         """
         Ask the LLM to decompose the question into a multi-step plan.
@@ -263,7 +261,7 @@ class MultiStepPlanner:
 # ── Persistence ───────────────────────────────────────────────────────────────
 
 async def _persist_plan(
-    db: AsyncSession,
+    db: Any,
     instance_id: str,
     conversation_id: str,
     utterance: str,
