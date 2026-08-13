@@ -3,7 +3,7 @@ JoinPathFinder — computes shortest join paths between ENTITY nodes.
 
 Traverses DEPENDS_ON (FK relationships) and RELATED_TO (inferred relationships)
 edges using BFS on the module-level in-memory adjacency list. Edge properties
-(join columns) are resolved from SQLite on demand.
+(join columns) are resolved from PostgreSQL on demand.
 
 Key design decisions:
 - BFS on _adjacency (sync, fast) to find the path structure.
@@ -19,9 +19,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import and_, or_, select
-
-from ai.engine.knowledge_graph.models import KnowledgeEdge, KnowledgeNode
+from ai.models.knowledge_graph import KnowledgeEdge, KnowledgeNode
+from ai.store import first
 
 if TYPE_CHECKING:
     from ai.engine.knowledge_graph.store import KnowledgeGraphStore
@@ -284,10 +283,8 @@ class JoinPathFinder:
         edge_ids = [entry[0] for entry in raw_path]
         edge_map: dict[str, KnowledgeEdge] = {}
         if edge_ids:
-            result = await self.store.db.execute(
-                select(KnowledgeEdge).where(KnowledgeEdge.id.in_(edge_ids))
-            )
-            for edge in result.scalars().all():
+            edges = await self.store.db.select(KnowledgeEdge, ("id__in", edge_ids))
+            for edge in edges:
                 edge_map[edge.id] = edge
 
         for edge_id, from_node_id, to_node_id, rel, direction in raw_path:
@@ -389,10 +386,8 @@ class JoinPathFinder:
         if not attr_ids:
             return None
 
-        result = await self.store.db.execute(
-            select(KnowledgeNode).where(KnowledgeNode.id.in_(attr_ids))
-        )
-        for attr in result.scalars().all():
+        attrs = await self.store.db.select(KnowledgeNode, ("id__in", attr_ids))
+        for attr in attrs:
             if not attr.properties:
                 continue
             try:
@@ -421,10 +416,8 @@ class JoinPathFinder:
         if not attr_ids:
             return None
 
-        result = await self.store.db.execute(
-            select(KnowledgeNode).where(KnowledgeNode.id.in_(attr_ids))
-        )
-        for attr in result.scalars().all():
+        attrs = await self.store.db.select(KnowledgeNode, ("id__in", attr_ids))
+        for attr in attrs:
             if not attr.properties:
                 continue
             try:
@@ -446,10 +439,7 @@ class JoinPathFinder:
             eid = _entity_id_by_name(name, instance_id)
             if not eid:
                 continue
-            result = await self.store.db.execute(
-                select(KnowledgeNode).where(KnowledgeNode.id == eid)
-            )
-            node = result.scalar_one_or_none()
+            node = first(await self.store.db.select(KnowledgeNode, ("id", eid)))
             if not node or not node.properties:
                 continue
             try:

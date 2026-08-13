@@ -21,10 +21,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import desc, func as sa_func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.engine.core.clock import utcnow
+from ai.store import first
 
 logger = logging.getLogger("pulse.knowledge_graph.feedback")
 
@@ -51,7 +49,7 @@ def quality_score_for(signal_type: str) -> float:
 # ── Signal detection ──────────────────────────────────────────────────────────
 
 async def detect_rephrase(
-    db: AsyncSession,
+    db,
     conversation_id: str,
     current_utterance: str,
     current_time: datetime,
@@ -64,21 +62,17 @@ async def detect_rephrase(
     with the current one, and it arrived within the window.
     """
     from ai.engine.core.config import get_settings
-    from ai.engine.core.models import Message
+    from ai.models.core import Message
 
     window_sec = get_settings().KG_FEEDBACK_REPHRASE_WINDOW_SEC
 
-    stmt = (
-        select(Message)
-        .where(
-            Message.conversation_id == conversation_id,
-            Message.role == "user",
-        )
-        .order_by(desc(Message.timestamp))
-        .limit(2)
+    user_messages = await db.select(
+        Message,
+        ("conversation_id", conversation_id),
+        ("role", "user"),
     )
-    result = await db.execute(stmt)
-    recent = result.scalars().all()
+    user_messages.sort(key=lambda m: m.timestamp or datetime.min, reverse=True)
+    recent = user_messages[:2]
 
     if len(recent) < 2:
         return False
@@ -97,7 +91,7 @@ async def detect_rephrase(
 
 
 async def detect_abandonment(
-    db: AsyncSession,
+    db,
     conversation_id: str,
 ) -> bool:
     """
@@ -105,15 +99,10 @@ async def detect_abandonment(
     True if the conversation has exactly 1 user message and 1 assistant
     message, and the assistant's message is the last one.
     """
-    from ai.engine.core.models import Message
+    from ai.models.core import Message
 
-    stmt = (
-        select(Message)
-        .where(Message.conversation_id == conversation_id)
-        .order_by(Message.timestamp)
-    )
-    result = await db.execute(stmt)
-    messages = result.scalars().all()
+    messages = await db.select(Message, ("conversation_id", conversation_id))
+    messages.sort(key=lambda m: m.timestamp or datetime.min)
 
     if len(messages) < 2 or len(messages) > 3:
         return False
@@ -147,7 +136,7 @@ def detect_contradiction(user_message: str) -> bool:
 # ── Record creation ───────────────────────────────────────────────────────────
 
 async def record_feedback(
-    db: AsyncSession,
+    db,
     *,
     instance_id: str,
     conversation_id: str,
@@ -165,7 +154,7 @@ async def record_feedback(
     Also creates a candidate golden pair if the signal is a correction
     with corrected_sql provided.
     """
-    from ai.engine.knowledge_graph.models import KgFeedbackRecord, KgGoldenPair
+    from ai.models.knowledge_graph import KgFeedbackRecord, KgGoldenPair
 
     score = quality_score_for(signal_type)
 
@@ -183,6 +172,8 @@ async def record_feedback(
         quality_score=score,
     )
     db.add(rec)
+    # Flush so rec.id is populated before the golden pair references it.
+    await db.flush()
 
     # Auto-create candidate golden pair from corrections
     if signal_type == "correction" and corrected_sql:
@@ -216,9 +207,6 @@ def _word_overlap(text_a: str, text_b: str) -> float:
     return len(words_a & words_b) / len(words_a | words_b)
 
 
-logger = logging.getLogger("pulse.knowledge_graph.feedback")
-
-
 class FeedbackLearner:
     """
     Processes approved review items and applies them to the appropriate
@@ -232,7 +220,7 @@ class FeedbackLearner:
 
     async def apply_synonym(
         self,
-        db: AsyncSession,
+        db,
         term: str,
         synonym: str,
         source_review_id: Optional[str] = None,
@@ -243,19 +231,19 @@ class FeedbackLearner:
         properties.synonyms list.
         Returns True if the node was found and updated.
         """
-        from ai.engine.knowledge_graph.models import KnowledgeNode
+        from ai.models.knowledge_graph import KnowledgeNode
 
-        stmt = (
-            select(KnowledgeNode)
-            .where(
-                KnowledgeNode.instance_id == self.instance_id,
-                KnowledgeNode.node_type == "ENTITY",
-                sa_func.lower(KnowledgeNode.name) == term.lower(),
-            )
-            .limit(1)
+        nodes = await db.select(
+            KnowledgeNode,
+            ("instance_id", self.instance_id),
+            ("node_type", "ENTITY"),
         )
-        result = await db.execute(stmt)
-        node = result.scalar_one_or_none()
+        node = None
+        term_lower = term.lower()
+        for candidate in nodes:
+            if (candidate.name or "").lower() == term_lower:
+                node = candidate
+                break
 
         if not node:
             logger.debug("apply_synonym: no ENTITY node for %r", term)
@@ -282,21 +270,22 @@ class FeedbackLearner:
 
     async def promote_golden_pair(
         self,
-        db: AsyncSession,
+        db,
         pair_id: str,
         reviewed_by: str = "system",
     ) -> bool:
         """
         Mark a KgGoldenPair as approved (making it available for few-shot).
         """
-        from ai.engine.knowledge_graph.models import KgGoldenPair
+        from ai.models.knowledge_graph import KgGoldenPair
 
-        stmt = select(KgGoldenPair).where(
-            KgGoldenPair.id == pair_id,
-            KgGoldenPair.instance_id == self.instance_id,
+        pair = first(
+            await db.select(
+                KgGoldenPair,
+                ("id", pair_id),
+                ("instance_id", self.instance_id),
+            )
         )
-        result = await db.execute(stmt)
-        pair = result.scalar_one_or_none()
         if not pair:
             return False
 
@@ -309,75 +298,65 @@ class FeedbackLearner:
 
     async def get_approved_pairs(
         self,
-        db: AsyncSession,
+        db,
         limit: int = 20,
     ) -> list[dict]:
         """
         Fetch the most recent approved golden pairs for prompt injection.
         """
-        from ai.engine.knowledge_graph.models import KgGoldenPair
+        from ai.models.knowledge_graph import KgGoldenPair
 
-        stmt = (
-            select(KgGoldenPair)
-            .where(
-                KgGoldenPair.instance_id == self.instance_id,
-                KgGoldenPair.review_status == "approved",
-            )
-            .order_by(KgGoldenPair.reviewed_at.desc())
-            .limit(limit)
+        pairs = await db.select(
+            KgGoldenPair,
+            ("instance_id", self.instance_id),
+            ("review_status", "approved"),
         )
-        result = await db.execute(stmt)
-        pairs = result.scalars().all()
+        pairs.sort(key=lambda p: p.reviewed_at or datetime.min, reverse=True)
         return [
             {"question": p.question, "sql": p.sql}
-            for p in pairs
+            for p in pairs[:limit]
         ]
 
     # ── Prompt tuning channel ─────────────────────────────────────────────────
 
     async def analyze_weak_spots(
         self,
-        db: AsyncSession,
+        db,
         lookback_days: int = 7,
-    ) -> list[dict]:
+) -> list[dict]:
         """
         Identify query classes with disproportionately high error rates.
-        Returns a list of {"error_category": ..., "avg_score": ..., "count": ...}
+        Returns a list of {"signal_type": ..., "avg_score": ..., "count": ...}
         sorted by avg_score ascending (weakest first).
         """
-        from ai.engine.knowledge_graph.models import KgFeedbackRecord
+        from ai.models.knowledge_graph import KgFeedbackRecord
 
         cutoff = utcnow() - timedelta(days=lookback_days)
 
-        stmt = (
-            select(
-                KgFeedbackRecord.signal_type,
-                sa_func.avg(KgFeedbackRecord.quality_score).label("avg_score"),
-                sa_func.count().label("count"),
-            )
-            .where(
-                KgFeedbackRecord.instance_id == self.instance_id,
-                KgFeedbackRecord.created_at >= cutoff,
-            )
-            .group_by(KgFeedbackRecord.signal_type)
-            .having(sa_func.count() >= 3)
-            .order_by(sa_func.avg(KgFeedbackRecord.quality_score))
+        records = await db.select(
+            KgFeedbackRecord,
+            ("instance_id", self.instance_id),
+            ("created_at__gte", cutoff),
         )
-        result = await db.execute(stmt)
-        return [
-            {
-                "signal_type": row.signal_type,
-                "avg_score": round(float(row.avg_score), 3),
-                "count": row.count,
-            }
-            for row in result
-        ]
+        grouped: dict[str, list[float]] = {}
+        for rec in records:
+            grouped.setdefault(rec.signal_type, []).append(rec.quality_score or 0.0)
 
-    # ── Aggregate quality scoring ─────────────────────────────────────────────
+        result = []
+        for signal_type, scores in grouped.items():
+            if len(scores) < 3:
+                continue
+            result.append({
+                "signal_type": signal_type,
+                "avg_score": round(sum(scores) / len(scores), 3),
+                "count": len(scores),
+            })
+        result.sort(key=lambda row: row["avg_score"])
+        return result
 
     async def compute_daily_quality(
         self,
-        db: AsyncSession,
+        db,
         date_str: str,
     ) -> float:
         """
@@ -386,33 +365,32 @@ class FeedbackLearner:
         Returns the score (0.0–1.0), or the neutral default if no data.
         """
         from ai.engine.core.config import get_settings
-        from ai.engine.knowledge_graph.models import KgFeedbackRecord, KgQualityScore
+        from ai.models.knowledge_graph import KgFeedbackRecord, KgQualityScore
 
         neutral = get_settings().KG_FEEDBACK_QUALITY_NEUTRAL
 
-        stmt = (
-            select(
-                sa_func.avg(KgFeedbackRecord.quality_score).label("avg"),
-                sa_func.count().label("n"),
-            )
-            .where(
-                KgFeedbackRecord.instance_id == self.instance_id,
-                sa_func.date(KgFeedbackRecord.created_at) == date_str,
-            )
-        )
-        result = await db.execute(stmt)
-        row = result.one_or_none()
+        day_start = datetime.strptime(date_str, "%Y-%m-%d")
+        day_end = day_start + timedelta(days=1)
 
-        avg_score = float(row.avg) if row and row.avg is not None else neutral
-        sample_count = row.n if row else 0
+        records = await db.select(
+            KgFeedbackRecord,
+            ("instance_id", self.instance_id),
+            ("created_at__gte", day_start),
+            ("created_at__lt", day_end),
+        )
+        scores = [rec.quality_score or 0.0 for rec in records]
+        avg_score = (sum(scores) / len(scores)) if scores else neutral
+        sample_count = len(scores)
 
         # Upsert quality score
-        existing_stmt = select(KgQualityScore).where(
-            KgQualityScore.instance_id == self.instance_id,
-            KgQualityScore.dimension == "overall",
-            KgQualityScore.date == date_str,
+        existing = first(
+            await db.select(
+                KgQualityScore,
+                ("instance_id", self.instance_id),
+                ("dimension", "overall"),
+                ("date", date_str),
+            )
         )
-        existing = (await db.execute(existing_stmt)).scalar_one_or_none()
         if existing:
             existing.score = avg_score
             existing.sample_count = sample_count
@@ -445,7 +423,7 @@ class ReviewQueue:
 
     async def add_item(
         self,
-        db: AsyncSession,
+        db,
         *,
         category: str,
         title: str,
@@ -457,24 +435,29 @@ class ReviewQueue:
         item with the same title + category.
         Returns the item ID.
         """
-        from ai.engine.knowledge_graph.models import KgReviewItem
+        from ai.models.knowledge_graph import KgReviewItem
 
         # Check for existing pending item with same title/category
-        stmt = select(KgReviewItem).where(
-            KgReviewItem.instance_id == self.instance_id,
-            KgReviewItem.category == category,
-            KgReviewItem.title == title,
-            KgReviewItem.status == "pending",
+        existing = first(
+            await db.select(
+                KgReviewItem,
+                ("instance_id", self.instance_id),
+                ("category", category),
+                ("title", title),
+                ("status", "pending"),
+            )
         )
-        result = await db.execute(stmt)
-        existing = result.scalar_one_or_none()
 
         if existing:
             existing.frequency += 1
-            # Append new evidence
-            try:
-                ev_list = json.loads(existing.evidence_json)
-            except (json.JSONDecodeError, TypeError):
+            # Append new evidence (JSONField round-trip: may be str or list)
+            ev_list = existing.evidence_json
+            if isinstance(ev_list, str):
+                try:
+                    ev_list = json.loads(ev_list)
+                except (json.JSONDecodeError, TypeError):
+                    ev_list = []
+            elif not isinstance(ev_list, list):
                 ev_list = []
             if evidence:
                 ev_list.extend(evidence)
@@ -498,41 +481,45 @@ class ReviewQueue:
 
     async def list_pending(
         self,
-        db: AsyncSession,
+        db,
         limit: int = 50,
     ) -> list[dict]:
         """
         List pending review items sorted by frequency (highest first).
         """
-        from ai.engine.knowledge_graph.models import KgReviewItem
+        from ai.models.knowledge_graph import KgReviewItem
 
-        stmt = (
-            select(KgReviewItem)
-            .where(
-                KgReviewItem.instance_id == self.instance_id,
-                KgReviewItem.status == "pending",
-            )
-            .order_by(KgReviewItem.frequency.desc(), KgReviewItem.created_at)
-            .limit(limit)
+        items = await db.select(
+            KgReviewItem,
+            ("instance_id", self.instance_id),
+            ("status", "pending"),
         )
-        result = await db.execute(stmt)
-        items = result.scalars().all()
-        return [
-            {
+        items.sort(key=lambda i: (i.frequency or 0, i.created_at or datetime.min), reverse=True)
+        items = items[:limit]
+        result = []
+        for i in items:
+            ev = i.evidence_json
+            if isinstance(ev, str):
+                try:
+                    ev = json.loads(ev)
+                except (json.JSONDecodeError, TypeError):
+                    ev = []
+            elif not isinstance(ev, list):
+                ev = []
+            result.append({
                 "id": i.id,
                 "category": i.category,
                 "title": i.title,
                 "description": i.description,
                 "frequency": i.frequency,
-                "evidence": json.loads(i.evidence_json) if i.evidence_json else [],
+                "evidence": ev,
                 "created_at": i.created_at.isoformat() if i.created_at else None,
-            }
-            for i in items
-        ]
+            })
+        return result
 
     async def resolve(
         self,
-        db: AsyncSession,
+        db,
         item_id: str,
         status: str,           # "approved" | "rejected"
         reviewed_by: str = "",
@@ -542,14 +529,15 @@ class ReviewQueue:
         Mark a review item as approved or rejected.
         Returns True if the item was found and updated.
         """
-        from ai.engine.knowledge_graph.models import KgReviewItem
+        from ai.models.knowledge_graph import KgReviewItem
 
-        stmt = select(KgReviewItem).where(
-            KgReviewItem.id == item_id,
-            KgReviewItem.instance_id == self.instance_id,
+        item = first(
+            await db.select(
+                KgReviewItem,
+                ("id", item_id),
+                ("instance_id", self.instance_id),
+            )
         )
-        result = await db.execute(stmt)
-        item = result.scalar_one_or_none()
         if not item:
             return False
 
@@ -563,16 +551,17 @@ class ReviewQueue:
         )
         return True
 
-    async def pending_count(self, db: AsyncSession) -> int:
+    async def pending_count(self, db) -> int:
         """Count pending review items for this instance."""
-        from ai.engine.knowledge_graph.models import KgReviewItem
+        from ai.models.knowledge_graph import KgReviewItem
 
-        stmt = select(sa_func.count()).where(
-            KgReviewItem.instance_id == self.instance_id,
-            KgReviewItem.status == "pending",
+        stats = await db.aggregate(
+            KgReviewItem,
+            {"n": ("Count", "id")},
+            ("instance_id", self.instance_id),
+            ("status", "pending"),
         )
-        result = await db.execute(stmt)
-        return result.scalar() or 0
+        return stats.get("n") or 0
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -589,7 +578,7 @@ class DriftDetector:
 
     async def check_drift(
         self,
-        db: AsyncSession,
+        db,
         dimension: str = "overall",
     ) -> dict:
         """
@@ -606,7 +595,7 @@ class DriftDetector:
             }
         """
         from ai.engine.core.config import get_settings
-        from ai.engine.knowledge_graph.models import KgQualityScore
+        from ai.models.knowledge_graph import KgQualityScore
 
         settings = get_settings()
         threshold = settings.KG_FEEDBACK_DRIFT_THRESHOLD
@@ -614,22 +603,15 @@ class DriftDetector:
 
         cutoff = (utcnow() - timedelta(days=window)).strftime("%Y-%m-%d")
 
-        stmt = (
-            select(
-                sa_func.avg(KgQualityScore.score).label("avg"),
-                sa_func.count().label("n"),
-            )
-            .where(
-                KgQualityScore.instance_id == self.instance_id,
-                KgQualityScore.dimension == dimension,
-                KgQualityScore.date >= cutoff,
-            )
+        rows = await db.select(
+            KgQualityScore,
+            ("instance_id", self.instance_id),
+            ("dimension", dimension),
+            ("date__gte", cutoff),
         )
-        result = await db.execute(stmt)
-        row = result.one_or_none()
-
-        rolling_avg = float(row.avg) if row and row.avg is not None else 1.0
-        sample_count = row.n if row else 0
+        scores = [r.score or 0.0 for r in rows]
+        rolling_avg = (sum(scores) / len(scores)) if scores else 1.0
+        sample_count = len(scores)
 
         drifting = rolling_avg < threshold and sample_count >= 3
 
@@ -650,7 +632,7 @@ class DriftDetector:
 
     async def get_quality_trend(
         self,
-        db: AsyncSession,
+        db,
         dimension: str = "overall",
         days: int = 30,
     ) -> list[dict]:
@@ -658,29 +640,22 @@ class DriftDetector:
         Return daily quality scores for the last *days* days.
         Used for the quality score trend chart.
         """
-        from ai.engine.knowledge_graph.models import KgQualityScore
+        from ai.models.knowledge_graph import KgQualityScore
 
         cutoff = (utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
 
-        stmt = (
-            select(
-                KgQualityScore.date,
-                KgQualityScore.score,
-                KgQualityScore.sample_count,
-            )
-            .where(
-                KgQualityScore.instance_id == self.instance_id,
-                KgQualityScore.dimension == dimension,
-                KgQualityScore.date >= cutoff,
-            )
-            .order_by(KgQualityScore.date)
+        rows = await db.select(
+            KgQualityScore,
+            ("instance_id", self.instance_id),
+            ("dimension", dimension),
+            ("date__gte", cutoff),
         )
-        result = await db.execute(stmt)
+        rows.sort(key=lambda r: r.date or "")
         return [
             {
                 "date": row.date,
                 "score": round(float(row.score), 3),
                 "sample_count": row.sample_count,
             }
-            for row in result
+            for row in rows
         ]

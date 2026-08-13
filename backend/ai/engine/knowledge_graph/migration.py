@@ -15,9 +15,9 @@ import logging
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import delete, or_, select
+from django.db.models import Q
 
-from ai.engine.knowledge_graph.models import KnowledgeEdge, KnowledgeNode
+from ai.models.knowledge_graph import KnowledgeEdge, KnowledgeNode
 from ai.engine.knowledge_graph.store import (
     KnowledgeGraphStore,
     _adj_add_edge,
@@ -33,46 +33,47 @@ logger = logging.getLogger("pulse.knowledge_graph.migration")
 
 async def _bulk_clear_instance(store: KnowledgeGraphStore, instance_id: str) -> None:
     """
-    Drop ALL nodes and edges for an instance in two bulk SQL statements.
+    Drop ALL nodes and edges for an instance.
     Also cleans the in-memory adjacency/cache. Much faster than delete_node() per node.
     """
     # Collect node IDs so we can purge in-memory structures
-    id_rows = await store.db.execute(
-        select(KnowledgeNode.id).where(KnowledgeNode.instance_id == instance_id)
-    )
-    node_ids = [r[0] for r in id_rows.fetchall()]
+    nodes = await store.db.select(KnowledgeNode, ("instance_id", instance_id))
+    node_ids = [n.id for n in nodes]
 
     if not node_ids:
         return
 
-    # Bulk delete edges (both directions) and nodes
-    await store.db.execute(
-        delete(KnowledgeEdge).where(
-            or_(
-                KnowledgeEdge.source_node_id.in_(node_ids),
-                KnowledgeEdge.target_node_id.in_(node_ids),
-            )
-        )
+    # Delete edges touching any of these nodes (both directions), then the nodes
+    edges = await store.db.select(
+        KnowledgeEdge,
+        Q(source_node_id__in=node_ids) | Q(target_node_id__in=node_ids),
     )
-    await store.db.execute(
-        delete(KnowledgeNode).where(KnowledgeNode.instance_id == instance_id)
-    )
+    for edge in edges:
+        await store.db.delete(edge)
+    for node in nodes:
+        await store.db.delete(node)
     await store.db.commit()
 
     # Purge vector store
-    try:
-        await store._vector.delete(
-            collection="knowledge_nodes",
-            ids=node_ids,
-            instance_id=instance_id,
-        )
-    except Exception:
-        pass
+    if store._vector is not None:
+        try:
+            await store._vector.delete(
+                collection="knowledge_nodes",
+                ids=node_ids,
+                instance_id=instance_id,
+            )
+        except Exception:
+            pass
 
-    # Purge in-memory structures
-    for nid in node_ids:
-        _node_cache.pop(nid, None)
-        _adjacency.pop(nid, None)
+    # Purge in-memory structures (nested per-instance dicts)
+    adj = _adjacency.get(instance_id)
+    if adj:
+        for nid in node_ids:
+            adj.pop(nid, None)
+    cache = _node_cache.get(instance_id)
+    if cache:
+        for nid in node_ids:
+            cache.pop(nid, None)
 
 
 async def migrate_knowledge_entities(
@@ -312,7 +313,7 @@ async def migrate_knowledge_entities(
     vector_ids, vector_docs, vector_metas = [], [], []
     for node in all_new_nodes:
         _cache_node(node)
-        _ensure_adj(node.id)
+        _ensure_adj(node.id, instance_id)
         vector_ids.append(node.id)
         vector_docs.append(f"{node.node_type} {node.name}: {node.description}")
         vector_metas.append({
@@ -326,17 +327,18 @@ async def migrate_knowledge_entities(
 
     # Vector store batch upsert (up to 500 at a time)
     batch_size = 500
-    for i in range(0, len(vector_ids), batch_size):
-        try:
-            await store._vector.upsert(
-                collection="knowledge_nodes",
-                ids=vector_ids[i:i + batch_size],
-                documents=vector_docs[i:i + batch_size],
-                metadatas=vector_metas[i:i + batch_size],
-                instance_id=instance_id,
-            )
-        except Exception as exc:
-            logger.warning(f"Vector store batch upsert failed (offset {i}): {exc}")
+    if store._vector is not None:
+        for i in range(0, len(vector_ids), batch_size):
+            try:
+                await store._vector.upsert(
+                    collection="knowledge_nodes",
+                    ids=vector_ids[i:i + batch_size],
+                    documents=vector_docs[i:i + batch_size],
+                    metadatas=vector_metas[i:i + batch_size],
+                    instance_id=instance_id,
+                )
+            except Exception as exc:
+                logger.warning(f"Vector store batch upsert failed (offset {i}): {exc}")
 
     logger.info(
         f"Migration complete for instance {instance_id}: "

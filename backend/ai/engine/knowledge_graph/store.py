@@ -2,8 +2,10 @@
 KnowledgeGraphStore — data access layer for the knowledge graph.
 
 Wraps three storage layers behind a single interface:
-  - SQLite via SQLAlchemy async (structure + metadata)
-  - ChromaDB sync (semantic search embeddings)
+  - PostgreSQL via the Django Store (``ai.store.Session``) for structure
+    and metadata (``ai.models.knowledge_graph``)
+  - Vector store (pgvector/ChromaDB) for semantic search — optional, and
+    degraded to ``None`` when unavailable
   - Module-level adjacency list (fast in-memory traversal)
 
 No other module should directly query knowledge_nodes / knowledge_edges tables
@@ -18,16 +20,15 @@ from typing import Optional
 from ai.engine.core.clock import utcnow
 from uuid import uuid4
 
-from sqlalchemy import and_, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from django.db.models import Q
 
 from ai.engine.knowledge_graph.models import (
     NODE_TYPES,
     RELATIONSHIP_TYPES,
     SOURCE_TYPES,
-    KnowledgeEdge,
-    KnowledgeNode,
 )
+from ai.models.knowledge_graph import KnowledgeEdge, KnowledgeNode
+from ai.store import first
 
 logger = logging.getLogger("pulse.knowledge_graph.store")
 
@@ -146,24 +147,33 @@ class KnowledgeGraphStore:
     """
     Unified interface for the Pulse knowledge graph.
 
-    One instance is created per request (receiving the request's AsyncSession),
+    One instance is created per request (receiving the request's Store session),
     but all instances share the module-level in-memory graph.
     """
 
     def __init__(
         self,
-        db_session: AsyncSession,
+        db_session,
         chroma_client=None,
     ):
         self.db = db_session
-        from ai.engine.knowledge.vector_store import get_vector_store
-        self._vector = get_vector_store(db_session)
+        # Phase 2b-3b: the vector store is optional. If the configured backend
+        # is unavailable (e.g. chromadb not installed), degrade to ``None`` and
+        # let semantic search return [] — fail-visible, never a fabricated hit.
+        self._vector = None
+        try:
+            from ai.engine.knowledge.vector_store import get_vector_store
+            self._vector = get_vector_store(db_session)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Vector store unavailable; semantic search degraded: %s", exc
+            )
 
     # ── Node operations ───────────────────────────────────────────────────────
 
     async def add_node(self, node_data: dict) -> KnowledgeNode:
         """
-        Validate, insert into SQLite, index in ChromaDB, update in-memory graph.
+        Validate, insert into PostgreSQL, index in ChromaDB, update in-memory graph.
         Returns the created KnowledgeNode.
         """
         node_type = node_data.get("node_type", "ENTITY")
@@ -233,16 +243,12 @@ class KnowledgeGraphStore:
 
         Returns the existing (updated) or new node.
         """
-        from sqlalchemy import update as sa_update
-
         # ── Step 1: Exact name match ────────────────────────────────────────
-        result = await self.db.execute(
-            select(KnowledgeNode).where(
-                KnowledgeNode.name == name,
-                KnowledgeNode.instance_id == instance_id,
+        existing = first(
+            await self.db.select(
+                KnowledgeNode, ("name", name), ("instance_id", instance_id)
             )
         )
-        existing = result.scalar_one_or_none()
         if existing is not None:
             logger.debug("upsert_node: exact match %s, updating", name)
             updates = {}
@@ -256,23 +262,22 @@ class KnowledgeGraphStore:
                 merged.update(properties)
                 updates["properties"] = json.dumps(merged)
             if labels:
-                existing_labels = existing.labels or []
+                # No dedicated ``labels`` column on the Django model — store
+                # merged labels inside the properties JSON blob instead.
+                existing_props = existing.properties
+                if isinstance(existing_props, str):
+                    existing_props = json.loads(existing_props) if existing_props else {}
+                merged = dict(existing_props)
+                existing_labels = merged.get("labels") or []
                 if isinstance(existing_labels, str):
                     existing_labels = json.loads(existing_labels) if existing_labels else []
-                merged_labels = list(set(existing_labels) | set(labels))
-                updates["labels"] = json.dumps(merged_labels)
+                merged["labels"] = json.dumps(list(set(existing_labels) | set(labels)))
+                updates["properties"] = json.dumps(merged)
             if updates:
-                await self.db.execute(
-                    sa_update(KnowledgeNode)
-                    .where(KnowledgeNode.id == existing.id)
-                    .values(**updates)
-                )
+                for key, value in updates.items():
+                    setattr(existing, key, value)
+                existing.updated_at = utcnow()
                 await self.db.commit()
-                # Refresh the object
-                result = await self.db.execute(
-                    select(KnowledgeNode).where(KnowledgeNode.id == existing.id)
-                )
-                existing = result.scalar_one()
 
                 # Sync BM25
                 try:
@@ -285,28 +290,31 @@ class KnowledgeGraphStore:
             return existing
 
         # ── Step 2: Near-match via vector ───────────────────────────────────
-        try:
-            results = await self._vector.query(
-                collection=self._collection_name(instance_id),
-                query_texts=[description or name],
-                n_results=3,
-                instance_id=instance_id,
-            )
-            if results.get("ids") and results["ids"][0]:
-                for i, nid in enumerate(results["ids"][0]):
-                    distance = results.get("distances", [[1.0]])[0][i]
-                    similarity = 1.0 - distance
-                    if similarity > 0.90:
-                        near = await self.db.get(KnowledgeNode, nid)
-                        if near:
-                            logger.info(
-                                "upsert_node: near-match '%s' (sim=%.3f) with "
-                                "existing '%s'. Creating new node; review advised.",
-                                name, similarity, near.name,
+        if self._vector is not None:
+            try:
+                results = await self._vector.query(
+                    collection="knowledge_nodes",
+                    query_texts=[description or name],
+                    n_results=3,
+                    instance_id=instance_id,
+                )
+                if results.get("ids") and results["ids"][0]:
+                    for i, nid in enumerate(results["ids"][0]):
+                        distance = results.get("distances", [[1.0]])[0][i]
+                        similarity = 1.0 - distance
+                        if similarity > 0.90:
+                            near = first(
+                                await self.db.select(KnowledgeNode, ("id", nid))
                             )
-                        break
-        except Exception as exc:
-            logger.debug("upsert_node near-match check skipped: %s", exc)
+                            if near:
+                                logger.info(
+                                    "upsert_node: near-match '%s' (sim=%.3f) with "
+                                    "existing '%s'. Creating new node; review advised.",
+                                    name, similarity, near.name,
+                                )
+                            break
+            except Exception as exc:
+                logger.debug("upsert_node near-match check skipped: %s", exc)
 
         # ── Step 3: Create new ──────────────────────────────────────────────
         logger.debug("upsert_node: no match for %s, creating new", name)
@@ -321,13 +329,11 @@ class KnowledgeGraphStore:
 
     async def update_node(self, node_id: str, updates: dict) -> Optional[KnowledgeNode]:
         """
-        Update specified fields in SQLite. Re-indexes in ChromaDB if description changed.
+        Update specified fields in PostgreSQL. Re-indexes in ChromaDB if description changed.
         Returns the updated node, or None if not found.
         """
-        result = await self.db.execute(
-            select(KnowledgeNode).where(KnowledgeNode.id == node_id)
-        )
-        node = result.scalar_one_or_none()
+        result = await self.db.select(KnowledgeNode, ("id", node_id))
+        node = first(result)
         if node is None:
             return None
 
@@ -373,12 +379,9 @@ class KnowledgeGraphStore:
 
     async def get_node(self, node_id: str) -> Optional[KnowledgeNode]:
         """
-        Retrieve by ID from SQLite. Updates access stats. Returns None if not found.
+        Retrieve by ID from PostgreSQL. Updates access stats. Returns None if not found.
         """
-        result = await self.db.execute(
-            select(KnowledgeNode).where(KnowledgeNode.id == node_id)
-        )
-        node = result.scalar_one_or_none()
+        node = first(await self.db.select(KnowledgeNode, ("id", node_id)))
         if node:
             node.last_accessed = utcnow()
             node.access_count = (node.access_count or 0) + 1
@@ -389,55 +392,45 @@ class KnowledgeGraphStore:
         self, node_type: str, instance_id: str = None
     ) -> list[KnowledgeNode]:
         """Return all nodes of a given type, optionally filtered to one instance."""
-        stmt = select(KnowledgeNode).where(KnowledgeNode.node_type == node_type)
+        filters: list = [("node_type", node_type)]
         if instance_id:
-            stmt = stmt.where(KnowledgeNode.instance_id == instance_id)
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+            filters.append(("instance_id", instance_id))
+        return await self.db.select(KnowledgeNode, *filters)
 
     async def get_nodes_by_module(self, module_id: str) -> list[KnowledgeNode]:
         """Return all nodes belonging to a specific module."""
-        result = await self.db.execute(
-            select(KnowledgeNode).where(KnowledgeNode.module_id == module_id)
-        )
-        return list(result.scalars().all())
+        return await self.db.select(KnowledgeNode, ("module_id", module_id))
 
     async def delete_node(self, node_id: str) -> bool:
         """
         Remove node from all three layers, including all connected edges.
         Returns True if the node existed (and was deleted).
         """
-        result = await self.db.execute(
-            select(KnowledgeNode).where(KnowledgeNode.id == node_id)
-        )
-        node = result.scalar_one_or_none()
+        node = first(await self.db.select(KnowledgeNode, ("id", node_id)))
         if node is None:
             return False
 
         # Remove all edges touching this node
-        edges_result = await self.db.execute(
-            select(KnowledgeEdge).where(
-                or_(
-                    KnowledgeEdge.source_node_id == node_id,
-                    KnowledgeEdge.target_node_id == node_id,
-                )
-            )
+        edges = await self.db.select(
+            KnowledgeEdge,
+            Q(source_node_id=node_id) | Q(target_node_id=node_id),
         )
-        for edge in edges_result.scalars().all():
+        for edge in edges:
             _adj_remove_edge(edge.id, edge.source_node_id, edge.target_node_id, edge.instance_id)
             await self.db.delete(edge)
 
         await self.db.delete(node)
         await self.db.commit()
 
-        try:
-            await self._vector.delete(
-                collection="knowledge_nodes",
-                ids=[node_id],
-                instance_id=node.instance_id,
-            )
-        except Exception:
-            pass
+        if self._vector is not None:
+            try:
+                await self._vector.delete(
+                    collection="knowledge_nodes",
+                    ids=[node_id],
+                    instance_id=node.instance_id,
+                )
+            except Exception:
+                pass
 
         _cache_for(node.instance_id).pop(node_id, None)
         _adj_for(node.instance_id).pop(node_id, None)
@@ -455,7 +448,7 @@ class KnowledgeGraphStore:
 
     async def add_edge(self, edge_data: dict) -> KnowledgeEdge:
         """
-        Validate, insert into SQLite, update in-memory graph.
+        Validate, insert into PostgreSQL, update in-memory graph.
         Raises ValueError if either node doesn't exist or type is invalid.
         """
         relationship = edge_data.get("relationship", "RELATED_TO")
@@ -474,10 +467,8 @@ class KnowledgeGraphStore:
             if not nid:
                 raise ValueError(f"Missing {key}")
             if nid not in cache:
-                check = await self.db.execute(
-                    select(KnowledgeNode).where(KnowledgeNode.id == nid)
-                )
-                if check.scalar_one_or_none() is None:
+                check = first(await self.db.select(KnowledgeNode, ("id", nid)))
+                if check is None:
                     raise ValueError(f"Node '{nid}' not found — cannot create edge")
 
         edge = KnowledgeEdge(
@@ -514,32 +505,23 @@ class KnowledgeGraphStore:
         When as_of is None, only returns currently-valid (non-expired) edges:
         valid_to IS NULL.
         """
-        stmt = select(KnowledgeEdge).where(
-            KnowledgeEdge.instance_id == instance_id
-        )
-
+        filters: list = [("instance_id", instance_id)]
         if source_node_id:
-            stmt = stmt.where(KnowledgeEdge.source_node_id == source_node_id)
+            filters.append(("source_node_id", source_node_id))
         if target_node_id:
-            stmt = stmt.where(KnowledgeEdge.target_node_id == target_node_id)
+            filters.append(("target_node_id", target_node_id))
         if relationship:
-            stmt = stmt.where(KnowledgeEdge.relationship == relationship)
+            filters.append(("relationship", relationship))
 
         if as_of is not None:
-            stmt = stmt.where(
-                and_(
-                    KnowledgeEdge.valid_from <= as_of,
-                    or_(
-                        KnowledgeEdge.valid_to.is_(None),
-                        KnowledgeEdge.valid_to > as_of,
-                    ),
-                )
+            filters.append(
+                Q(valid_from__lte=as_of)
+                & (Q(valid_to__isnull=True) | Q(valid_to__gt=as_of))
             )
         else:
-            stmt = stmt.where(KnowledgeEdge.valid_to.is_(None))
+            filters.append(("valid_to__isnull", True))
 
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+        return await self.db.select(KnowledgeEdge, *filters)
 
     async def update_edge(self, edge_id: str, updates: dict) -> Optional[KnowledgeEdge]:
         """
@@ -552,10 +534,7 @@ class KnowledgeGraphStore:
         the subject+predicate pair for the new version.
         """
         now = utcnow()
-        result = await self.db.execute(
-            select(KnowledgeEdge).where(KnowledgeEdge.id == edge_id)
-        )
-        edge = result.scalar_one_or_none()
+        edge = first(await self.db.select(KnowledgeEdge, ("id", edge_id)))
         if edge is None:
             return None
 
@@ -589,24 +568,18 @@ class KnowledgeGraphStore:
         self, instance_id: str, source_node_id: str, relationship: str
     ) -> list[KnowledgeEdge]:
         """Return all versions of a fact (subject+predicate), ordered by valid_from."""
-        stmt = (
-            select(KnowledgeEdge)
-            .where(
-                KnowledgeEdge.instance_id == instance_id,
-                KnowledgeEdge.source_node_id == source_node_id,
-                KnowledgeEdge.relationship == relationship,
-            )
-            .order_by(KnowledgeEdge.valid_from.asc())
+        rows = await self.db.select(
+            KnowledgeEdge,
+            ("instance_id", instance_id),
+            ("source_node_id", source_node_id),
+            ("relationship", relationship),
         )
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+        rows.sort(key=lambda e: e.valid_from or datetime.min)
+        return rows
 
     async def delete_edge(self, edge_id: str) -> bool:
-        """Remove edge from SQLite and in-memory graph. Returns True if it existed."""
-        result = await self.db.execute(
-            select(KnowledgeEdge).where(KnowledgeEdge.id == edge_id)
-        )
-        edge = result.scalar_one_or_none()
+        """Remove edge from PostgreSQL and in-memory graph. Returns True if it existed."""
+        edge = first(await self.db.select(KnowledgeEdge, ("id", edge_id)))
         if edge is None:
             return False
 
@@ -619,21 +592,19 @@ class KnowledgeGraphStore:
         self, node_id: str, relationship: str = None
     ) -> list[KnowledgeEdge]:
         """Get all outgoing edges from a node, optionally filtered by relationship type."""
-        stmt = select(KnowledgeEdge).where(KnowledgeEdge.source_node_id == node_id)
+        filters: list = [("source_node_id", node_id)]
         if relationship:
-            stmt = stmt.where(KnowledgeEdge.relationship == relationship)
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+            filters.append(("relationship", relationship))
+        return await self.db.select(KnowledgeEdge, *filters)
 
     async def get_edges_to(
         self, node_id: str, relationship: str = None
     ) -> list[KnowledgeEdge]:
         """Get all incoming edges to a node, optionally filtered by relationship type."""
-        stmt = select(KnowledgeEdge).where(KnowledgeEdge.target_node_id == node_id)
+        filters: list = [("target_node_id", node_id)]
         if relationship:
-            stmt = stmt.where(KnowledgeEdge.relationship == relationship)
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+            filters.append(("relationship", relationship))
+        return await self.db.select(KnowledgeEdge, *filters)
 
     # ── Graph traversal ───────────────────────────────────────────────────────
 
@@ -648,7 +619,7 @@ class KnowledgeGraphStore:
         BFS on the in-memory adjacency list. Returns a subgraph dict:
             {"nodes": [cache_dicts], "edges": [edge_dicts]}
 
-        Does NOT query SQLite — uses the in-memory adjacency list and node cache.
+        Does NOT query PostgreSQL — uses the in-memory adjacency list and node cache.
         Call load_graph() at startup to populate them.
         """
         adj = _adj_for(instance_id)
@@ -697,7 +668,7 @@ class KnowledgeGraphStore:
         node_types: list[str] = None,
     ) -> list[KnowledgeNode]:
         """
-        Vector similarity search → fetch full nodes from SQLite.
+        Vector similarity search → fetch full nodes from PostgreSQL.
         Routes through self._vector (pgvector or ChromaDB) — NOT self._collection.
         If node_types is provided, filters results to those types.
         """
@@ -712,6 +683,14 @@ class KnowledgeGraphStore:
 
         # Fetch more results when we need to post-filter (compensate for pruning)
         fetch_k = top_k * 3 if post_filter_types else top_k
+
+        if self._vector is None:
+            # Vector backend unavailable — fail-visible, never a fabricated hit.
+            logger.debug(
+                "semantic_search skipped for %s: vector store unavailable",
+                instance_id,
+            )
+            return []
 
         try:
             results = await self._vector.query(
@@ -733,10 +712,7 @@ class KnowledgeGraphStore:
 
         nodes: list[KnowledgeNode] = []
         for nid in results["ids"][0]:
-            result = await self.db.execute(
-                select(KnowledgeNode).where(KnowledgeNode.id == nid)
-            )
-            node = result.scalar_one_or_none()
+            node = first(await self.db.select(KnowledgeNode, ("id", nid)))
             if node:
                 # Apply $in post-filter when backend cannot express it
                 if post_filter_types and node.node_type.lower() not in post_filter_types:
@@ -758,24 +734,16 @@ class KnowledgeGraphStore:
         """
         nodes: list[KnowledgeNode] = []
         for nid in node_ids:
-            result = await self.db.execute(
-                select(KnowledgeNode).where(KnowledgeNode.id == nid)
-            )
-            node = result.scalar_one_or_none()
+            node = first(await self.db.select(KnowledgeNode, ("id", nid)))
             if node:
                 nodes.append(node)
 
         edges: list[KnowledgeEdge] = []
         if include_edges and len(node_ids) > 1:
-            result = await self.db.execute(
-                select(KnowledgeEdge).where(
-                    and_(
-                        KnowledgeEdge.source_node_id.in_(node_ids),
-                        KnowledgeEdge.target_node_id.in_(node_ids),
-                    )
-                )
+            edges = await self.db.select(
+                KnowledgeEdge,
+                Q(source_node_id__in=node_ids) & Q(target_node_id__in=node_ids),
             )
-            edges = list(result.scalars().all())
 
         return {"nodes": nodes, "edges": edges}
 
@@ -786,39 +754,23 @@ class KnowledgeGraphStore:
         Returns counts: nodes by type, edges by relationship, unverified, low-confidence.
         Used by Studio dashboard and health checks.
         """
-        from sqlalchemy import func as sqlfunc
+        filters: list = [("instance_id", instance_id)] if instance_id else []
 
-        stmt = select(KnowledgeNode.node_type, sqlfunc.count().label("cnt"))
-        if instance_id:
-            stmt = stmt.where(KnowledgeNode.instance_id == instance_id)
-        stmt = stmt.group_by(KnowledgeNode.node_type)
-        result = await self.db.execute(stmt)
-        nodes_by_type = {row.node_type: row.cnt for row in result}
+        nodes = await self.db.select(KnowledgeNode, *filters)
+        nodes_by_type: dict[str, int] = {}
+        unverified = 0
+        low_confidence = 0
+        for node in nodes:
+            nodes_by_type[node.node_type] = nodes_by_type.get(node.node_type, 0) + 1
+            if not node.verified:
+                unverified += 1
+            if (node.confidence or 0) < 0.5:
+                low_confidence += 1
 
-        stmt2 = select(KnowledgeEdge.relationship, sqlfunc.count().label("cnt"))
-        if instance_id:
-            stmt2 = stmt2.where(KnowledgeEdge.instance_id == instance_id)
-        stmt2 = stmt2.group_by(KnowledgeEdge.relationship)
-        result2 = await self.db.execute(stmt2)
-        edges_by_rel = {row.relationship: row.cnt for row in result2}
-
-        unv_stmt = (
-            select(sqlfunc.count())
-            .select_from(KnowledgeNode)
-            .where(KnowledgeNode.verified == False)  # noqa: E712
-        )
-        if instance_id:
-            unv_stmt = unv_stmt.where(KnowledgeNode.instance_id == instance_id)
-        unverified = (await self.db.execute(unv_stmt)).scalar() or 0
-
-        low_stmt = (
-            select(sqlfunc.count())
-            .select_from(KnowledgeNode)
-            .where(KnowledgeNode.confidence < 0.5)
-        )
-        if instance_id:
-            low_stmt = low_stmt.where(KnowledgeNode.instance_id == instance_id)
-        low_confidence = (await self.db.execute(low_stmt)).scalar() or 0
+        edges = await self.db.select(KnowledgeEdge, *filters)
+        edges_by_rel: dict[str, int] = {}
+        for edge in edges:
+            edges_by_rel[edge.relationship] = edges_by_rel.get(edge.relationship, 0) + 1
 
         return {
             "nodes_by_type": nodes_by_type,
@@ -837,23 +789,16 @@ class KnowledgeGraphStore:
 
     async def load_graph(self, instance_id: str = None) -> None:
         """
-        Read all nodes and edges from SQLite and populate the per-instance
+        Read all nodes and edges from PostgreSQL and populate the per-instance
         in-memory graph. Must be called once at startup (in main.py lifespan).
         """
-        node_stmt = select(KnowledgeNode)
-        if instance_id:
-            node_stmt = node_stmt.where(KnowledgeNode.instance_id == instance_id)
-        node_result = await self.db.execute(node_stmt)
-        nodes = node_result.scalars().all()
+        filters: list = [("instance_id", instance_id)] if instance_id else []
+        nodes = await self.db.select(KnowledgeNode, *filters)
         for node in nodes:
             _cache_node(node)
             _ensure_adj(node.id, node.instance_id)
 
-        edge_stmt = select(KnowledgeEdge)
-        if instance_id:
-            edge_stmt = edge_stmt.where(KnowledgeEdge.instance_id == instance_id)
-        edge_result = await self.db.execute(edge_stmt)
-        edges = edge_result.scalars().all()
+        edges = await self.db.select(KnowledgeEdge, *filters)
         for edge in edges:
             _adj_add_edge(edge)
 
@@ -869,11 +814,12 @@ class KnowledgeGraphStore:
         Routes through self._vector — NOT self._collection.
         Used as a repair / maintenance operation from Studio.
         """
-        stmt = select(KnowledgeNode)
-        if instance_id:
-            stmt = stmt.where(KnowledgeNode.instance_id == instance_id)
-        result = await self.db.execute(stmt)
-        nodes = result.scalars().all()
+        if self._vector is None:
+            logger.warning("rebuild_embeddings skipped: vector store unavailable")
+            return
+
+        filters: list = [("instance_id", instance_id)] if instance_id else []
+        nodes = await self.db.select(KnowledgeNode, *filters)
 
         for node in nodes:
             doc_text = f"{node.node_type} {node.name}: {node.description}"
@@ -951,14 +897,14 @@ class KnowledgeGraphStore:
 
         Returns a dict with keys: row_count_actual, profiled_at, column_profiles.
         """
-        result = await self.db.execute(
-            select(KnowledgeNode).where(
-                KnowledgeNode.instance_id == instance_id,
-                KnowledgeNode.node_type == "ENTITY",
-                KnowledgeNode.name == entity_name,
+        node = first(
+            await self.db.select(
+                KnowledgeNode,
+                ("instance_id", instance_id),
+                ("node_type", "ENTITY"),
+                ("name", entity_name),
             )
         )
-        node = result.scalar_one_or_none()
         if node is None or not node.properties:
             return None
 
@@ -1029,15 +975,11 @@ class KnowledgeGraphStore:
 
     async def get_entity(self, instance_id: str, name: str) -> Optional[dict]:
         """Drop-in replacement for KnowledgeStore.get_entity()."""
-        result = await self.db.execute(
-            select(KnowledgeNode).where(
-                and_(
-                    KnowledgeNode.instance_id == instance_id,
-                    KnowledgeNode.name == name,
-                )
+        node = first(
+            await self.db.select(
+                KnowledgeNode, ("instance_id", instance_id), ("name", name)
             )
         )
-        node = result.scalar_one_or_none()
         if node is None:
             return None
         return {
@@ -1055,7 +997,7 @@ class KnowledgeGraphStore:
 async def load_knowledge_graph() -> None:
     """
     Called from main.py lifespan. Opens its own session and populates
-    the module-level in-memory graph from SQLite.
+    the module-level in-memory graph from PostgreSQL.
     """
     from ai.engine.core.database import get_session_factory
 

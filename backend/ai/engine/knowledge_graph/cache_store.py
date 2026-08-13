@@ -1,7 +1,8 @@
 """
 Multi-layer query result cache — Stage 9.
 
-Three layers, all backed by the kg_cache_entries SQLite table:
+Three layers, all backed by the kg_cache_entries PostgreSQL table
+(via the Django Store):
 
   Layer 1 — query       : SHA-256(normalized SQL + instance + role) → SynthesizedAnswer
   Layer 2 — semantic    : SHA-256(normalized utterance + instance + role) → SynthesizedAnswer
@@ -21,10 +22,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from sqlalchemy import delete, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from ai.engine.knowledge_graph.models import KgCacheEntry
+from ai.models.knowledge_graph import KgCacheEntry
+from ai.store import first
 
 logger = logging.getLogger("pulse.knowledge_graph.cache_store")
 
@@ -159,7 +158,7 @@ class QueryCacheStore:
         self,
         sql: str,
         instance_id: str,
-        db: AsyncSession,
+        db,
         user_role: str = "",
         host_user_id: str = "",
     ) -> Optional[Any]:
@@ -178,7 +177,7 @@ class QueryCacheStore:
         sql: str,
         instance_id: str,
         synthesis,
-        db: AsyncSession,
+        db,
         user_role: str = "",
         utterance: str = "",
         host_user_id: str = "",
@@ -208,7 +207,7 @@ class QueryCacheStore:
         self,
         utterance: str,
         instance_id: str,
-        db: AsyncSession,
+        db,
         user_role: str = "",
         host_user_id: str = "",
     ) -> Optional[Any]:
@@ -227,7 +226,7 @@ class QueryCacheStore:
         utterance: str,
         instance_id: str,
         synthesis,
-        db: AsyncSession,
+        db,
         user_role: str = "",
         sql_executed: str = "",
         host_user_id: str = "",
@@ -257,7 +256,7 @@ class QueryCacheStore:
         self,
         sql: str,
         instance_id: str,
-        db: AsyncSession,
+        db,
     ) -> Optional[Any]:
         """Return a cached materialized aggregation result, or None on miss."""
         from ai.engine.core.config import get_settings
@@ -274,7 +273,7 @@ class QueryCacheStore:
         sql: str,
         instance_id: str,
         synthesis,
-        db: AsyncSession,
+        db,
         utterance: str = "",
     ) -> None:
         """Store a pre-computed rollup result in the materialized cache."""
@@ -298,26 +297,22 @@ class QueryCacheStore:
 
     # ── Statistics ────────────────────────────────────────────────────────────
 
-    async def get_stats(self, instance_id: str, db: AsyncSession) -> dict:
+    async def get_stats(self, instance_id: str, db) -> dict:
         """Return hit/count statistics per cache layer for *instance_id*."""
         try:
-            from sqlalchemy import func as sqlfunc
             now = datetime.now(timezone.utc).replace(tzinfo=None)
-            result = await db.execute(
-                select(
-                    KgCacheEntry.cache_layer,
-                    sqlfunc.count(KgCacheEntry.id).label("cnt"),
-                    sqlfunc.sum(KgCacheEntry.hit_count).label("hits"),
-                ).where(
-                    KgCacheEntry.instance_id == instance_id,
-                    KgCacheEntry.expires_at > now,
-                ).group_by(KgCacheEntry.cache_layer)
+            entries = await db.select(
+                KgCacheEntry,
+                ("instance_id", instance_id),
+                ("expires_at__gt", now),
             )
-            rows = result.all()
-            by_layer = {
-                r.cache_layer: {"count": r.cnt, "hits": r.hits or 0}
-                for r in rows
-            }
+            by_layer: dict[str, dict] = {}
+            for entry in entries:
+                layer = by_layer.setdefault(
+                    entry.cache_layer, {"count": 0, "hits": 0}
+                )
+                layer["count"] += 1
+                layer["hits"] += entry.hit_count or 0
             total_count = sum(v["count"] for v in by_layer.values())
             total_hits = sum(v["hits"] for v in by_layer.values())
             return {
@@ -336,28 +331,24 @@ class QueryCacheStore:
         self,
         cache_key: str,
         instance_id: str,
-        db: AsyncSession,
+        db,
     ) -> Optional[Any]:
         try:
             now = datetime.now(timezone.utc).replace(tzinfo=None)
-            result = await db.execute(
-                select(KgCacheEntry).where(
-                    KgCacheEntry.cache_key == cache_key,
-                    KgCacheEntry.instance_id == instance_id,
-                    KgCacheEntry.expires_at > now,
+            entry = first(
+                await db.select(
+                    KgCacheEntry,
+                    ("cache_key", cache_key),
+                    ("instance_id", instance_id),
+                    ("expires_at__gt", now),
                 )
             )
-            entry = result.scalar_one_or_none()
             if entry is None:
                 return None
 
             # Increment hit counter (best-effort; ignore failure)
             try:
-                await db.execute(
-                    update(KgCacheEntry)
-                    .where(KgCacheEntry.id == entry.id)
-                    .values(hit_count=KgCacheEntry.hit_count + 1)
-                )
+                entry.hit_count = (entry.hit_count or 0) + 1
                 await db.commit()
             except Exception:
                 pass
@@ -382,7 +373,7 @@ class QueryCacheStore:
         synthesis,
         table_tags: list[str],
         ttl: int,
-        db: AsyncSession,
+        db,
     ) -> None:
         try:
             now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -390,13 +381,13 @@ class QueryCacheStore:
             serialized = _serialize(synthesis)
             tags_json = json.dumps(table_tags)
 
-            result = await db.execute(
-                select(KgCacheEntry).where(
-                    KgCacheEntry.cache_key == cache_key,
-                    KgCacheEntry.instance_id == instance_id,
+            existing = first(
+                await db.select(
+                    KgCacheEntry,
+                    ("cache_key", cache_key),
+                    ("instance_id", instance_id),
                 )
             )
-            existing = result.scalar_one_or_none()
 
             if existing:
                 existing.result_json = serialized
@@ -424,7 +415,3 @@ class QueryCacheStore:
             )
         except Exception as exc:
             logger.warning("cache_store._set error: %s", exc)
-            try:
-                await db.rollback()
-            except Exception:
-                pass

@@ -19,13 +19,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from ai.engine.core.clock import utcnow
 from ai.engine.core.config import get_settings
 from ai.engine.knowledge_graph.engine import ExecutionEngine, ExecutionResult
 from ai.engine.knowledge_graph.multi_step_planner import MultiStepPlan, StepSpec
 from ai.engine.knowledge_graph.retry import QueryOutcome, QueryRetryLoop
+from ai.models.knowledge_graph import KgPlanStep, KgQueryPlan
+from ai.store import first
 
 logger = logging.getLogger("pulse.knowledge_graph.plan_executor")
 
@@ -75,7 +75,7 @@ class PlanExecutor:
         llm_client=None,
         model: str = "",
         instance_id: str = "",
-        db: AsyncSession = None,
+        db=None,
         knowledge_context: str = "",
     ):
         self.llm_client = llm_client  # kept for backward compat; new code uses route_chat
@@ -83,6 +83,7 @@ class PlanExecutor:
         self.instance_id = instance_id
         self.db = db
         self.knowledge_context = knowledge_context
+        self._current_plan_id: str = ""
 
     async def execute(
         self,
@@ -96,6 +97,7 @@ class PlanExecutor:
         settings = get_settings()
         t0 = time.perf_counter()
         total_llm = 0
+        self._current_plan_id = plan.db_plan_id or ""
 
         # Build step lookup by step_order
         steps_by_order: dict[int, StepSpec] = {s.step_order: s for s in plan.steps}
@@ -319,50 +321,43 @@ class PlanExecutor:
 
     async def _persist_step_result(self, spec: StepSpec, result: StepResult):
         """Update the KgPlanStep row with execution results."""
-        from ai.engine.knowledge_graph.models import KgPlanStep
-
         try:
-            stmt = (
-                update(KgPlanStep)
-                .where(
-                    KgPlanStep.plan_id == self.db.info.get("_current_plan_id", ""),
-                    KgPlanStep.step_order == spec.step_order,
-                )
-                .values(
-                    generated_sql=result.sql[:2000] if result.sql else None,
-                    result_json=json.dumps(result.rows[:20], default=str) if result.rows else None,
-                    status=result.status,
-                    error_message=result.error[:1000] if result.error else None,
-                    duration_ms=result.duration_ms,
+            step_row = first(
+                await self.db.select(
+                    KgPlanStep,
+                    ("plan_id", self._current_plan_id or ""),
+                    ("step_order", spec.step_order),
                 )
             )
-            await self.db.execute(stmt)
+            if step_row is None:
+                return
+            step_row.generated_sql = result.sql[:2000] if result.sql else None
+            step_row.result_json = (
+                json.dumps(result.rows[:20], default=str) if result.rows else None
+            )
+            step_row.status = result.status
+            step_row.error_message = result.error[:1000] if result.error else None
+            step_row.duration_ms = result.duration_ms
             await self.db.commit()
         except Exception as e:
             logger.debug("_persist_step_result failed: %s", e)
 
     async def _update_plan_status(self, plan_id: str, result: PlanExecutionResult):
         """Update the KgQueryPlan row with final status."""
-        from ai.engine.knowledge_graph.models import KgQueryPlan
-
         try:
             status = "completed" if result.succeeded else "failed"
             summary = json.dumps(
                 [{"step": r.step_order, "status": r.status, "rows": len(r.rows)} for r in result.step_results],
                 default=str,
             )
-            stmt = (
-                update(KgQueryPlan)
-                .where(KgQueryPlan.id == plan_id)
-                .values(
-                    status=status,
-                    result_summary=summary,
-                    total_duration_ms=result.total_duration_ms,
-                    total_llm_calls=result.total_llm_calls,
-                    completed_at=utcnow(),
-                )
-            )
-            await self.db.execute(stmt)
+            plan_row = first(await self.db.select(KgQueryPlan, ("id", plan_id)))
+            if plan_row is None:
+                return
+            plan_row.status = status
+            plan_row.result_summary = summary
+            plan_row.total_duration_ms = result.total_duration_ms
+            plan_row.total_llm_calls = result.total_llm_calls
+            plan_row.completed_at = utcnow()
             await self.db.commit()
         except Exception as e:
             logger.debug("_update_plan_status failed: %s", e)

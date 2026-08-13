@@ -12,10 +12,9 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
-
 from ai.engine.core.config import get_settings
-from ai.engine.knowledge_graph.models import KnowledgeNode
+from ai.models.knowledge_graph import KnowledgeNode
+from ai.store import first
 
 if TYPE_CHECKING:
     from ai.engine.knowledge_graph.store import KnowledgeGraphStore
@@ -341,12 +340,10 @@ async def assemble_context(
         if e["source"] in selected_set and e["target"] in selected_set
     ]
 
-    # ── Fetch full SQLite node objects ────────────────────────────────────────
+    # ── Fetch full node objects from PostgreSQL ───────────────────────────────
     full_nodes: dict[str, KnowledgeNode] = {}
     for nid in selected_node_ids:
-        stmt = select(KnowledgeNode).where(KnowledgeNode.id == nid)
-        result = await store.db.execute(stmt)
-        node_obj = result.scalar_one_or_none()
+        node_obj = first(await store.db.select(KnowledgeNode, ("id", nid)))
         if node_obj:
             full_nodes[nid] = node_obj
 

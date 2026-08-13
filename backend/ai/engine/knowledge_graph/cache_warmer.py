@@ -11,8 +11,6 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func as sqlfunc, select
-
 logger = logging.getLogger("pulse.knowledge_graph.cache_warmer")
 
 _INTER_QUERY_SLEEP = 0.15   # seconds between warm-up executions
@@ -42,7 +40,7 @@ class CacheWarmer:
         Mine and re-execute top-N queries.
 
         *db_factory* must be a zero-argument async context manager factory that
-        yields an AsyncSession (use ``get_session_factory()`` from core.database).
+        yields a Django Store session (use ``get_session_factory()`` from core.database).
 
         Returns the number of cache entries successfully written.
         """
@@ -97,27 +95,23 @@ class CacheWarmer:
         top_n: int,
     ) -> list[tuple[str, str]]:
         """Return ``(utterance, sql)`` pairs ordered by frequency (desc)."""
-        from ai.engine.knowledge_graph.models import KgQueryFeedback
+        from ai.models.knowledge_graph import KgQueryFeedback
 
         async with db_factory() as db:
-            result = await db.execute(
-                select(
-                    KgQueryFeedback.question,
-                    KgQueryFeedback.sql_final,
-                    sqlfunc.count(KgQueryFeedback.id).label("freq"),
-                ).where(
-                    KgQueryFeedback.instance_id == self.instance_id,
-                    KgQueryFeedback.succeeded == True,       # noqa: E712 — SQLAlchemy requires ==
-                    KgQueryFeedback.created_at >= cutoff,
-                    KgQueryFeedback.sql_final != "",
-                ).group_by(
-                    KgQueryFeedback.question,
-                    KgQueryFeedback.sql_final,
-                ).order_by(
-                    sqlfunc.count(KgQueryFeedback.id).desc()
-                ).limit(top_n)
+            rows = await db.select(
+                KgQueryFeedback,
+                ("instance_id", self.instance_id),
+                ("succeeded", True),
+                ("created_at__gte", cutoff),
             )
-            return [(row.question, row.sql_final) for row in result.all()]
+            freq: dict[tuple[str, str], int] = {}
+            for row in rows:
+                if not row.sql_final:
+                    continue
+                key = (row.question, row.sql_final)
+                freq[key] = freq.get(key, 0) + 1
+            ranked = sorted(freq.items(), key=lambda kv: kv[1], reverse=True)
+            return [question_sql for question_sql, _cnt in ranked[:top_n]]
 
     async def _warm_one(
         self,

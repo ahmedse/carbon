@@ -1,9 +1,10 @@
 """
 Session store — Stage 7.
 
-Async SQLite persistence for ConversationSession objects.
-Each conversation gets one row in `conversation_context_records`,
-with the full session serialised as a JSON blob.
+Async Django Store persistence for ConversationSession objects.
+Each conversation gets one row in `ai_kg_conversationcontextrecord`
+(ai.models.core.ConversationContextRecord), with the full session
+serialised as a JSON blob.
 
 Usage:
     store = ConversationSessionStore()
@@ -15,10 +16,8 @@ import json
 import logging
 from typing import Optional
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from ai.engine.core.models import ConversationContextRecord
+from ai.models.core import ConversationContextRecord
+from ai.store import first
 from ai.engine.knowledge_graph.conversation_context import ConversationSession
 
 logger = logging.getLogger("pulse.knowledge_graph.session_store")
@@ -26,7 +25,7 @@ logger = logging.getLogger("pulse.knowledge_graph.session_store")
 
 class ConversationSessionStore:
     """
-    Load and save ConversationSession objects from/to SQLite.
+    Load and save ConversationSession objects from/to PostgreSQL (Django Store).
     Stateless — one instance can serve all conversations concurrently.
     """
 
@@ -34,19 +33,19 @@ class ConversationSessionStore:
         self,
         conversation_id: str,
         instance_id: str,
-        db: AsyncSession,
+        db,
     ) -> Optional[ConversationSession]:
         """
         Load an existing ConversationSession for *conversation_id*.
         Returns None if no record exists (caller should create a fresh session).
         """
         try:
-            result = await db.execute(
-                select(ConversationContextRecord).where(
-                    ConversationContextRecord.conversation_id == conversation_id
+            record = first(
+                await db.select(
+                    ConversationContextRecord,
+                    ("conversation_id", conversation_id),
                 )
             )
-            record = result.scalar_one_or_none()
             if record is None:
                 return None
 
@@ -67,7 +66,7 @@ class ConversationSessionStore:
         self,
         session: ConversationSession,
         conversation_id: str,
-        db: AsyncSession,
+        db,
     ) -> None:
         """
         Upsert the ConversationSession for *conversation_id*.
@@ -76,12 +75,12 @@ class ConversationSessionStore:
         try:
             session_json = json.dumps(session.to_dict(), ensure_ascii=False)
 
-            result = await db.execute(
-                select(ConversationContextRecord).where(
-                    ConversationContextRecord.conversation_id == conversation_id
+            record = first(
+                await db.select(
+                    ConversationContextRecord,
+                    ("conversation_id", conversation_id),
                 )
             )
-            record = result.scalar_one_or_none()
 
             if record is None:
                 record = ConversationContextRecord(

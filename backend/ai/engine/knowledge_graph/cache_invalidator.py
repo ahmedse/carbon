@@ -13,10 +13,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from ai.engine.knowledge_graph.models import KgCacheEntry
+from ai.models.knowledge_graph import KgCacheEntry
 
 logger = logging.getLogger("pulse.knowledge_graph.cache_invalidator")
 
@@ -27,35 +24,29 @@ class CacheInvalidator:
         self,
         table_name: str,
         instance_id: str,
-        db: AsyncSession,
+        db,
     ) -> int:
         """
         Evict all cache entries that reference *table_name* in their table_tags.
         Returns the number of evicted entries.
         """
         try:
-            # Load tags in Python rather than relying on SQLite JSON functions
-            result = await db.execute(
-                select(KgCacheEntry.id, KgCacheEntry.table_tags).where(
-                    KgCacheEntry.instance_id == instance_id
-                )
-            )
-            rows = result.all()
+            entries = await db.select(KgCacheEntry, ("instance_id", instance_id))
 
             needle = table_name.lower()
             ids_to_delete: list[str] = []
-            for row_id, tags_json in rows:
+            for entry in entries:
                 try:
-                    tags: list[str] = json.loads(tags_json or "[]")
+                    tags: list[str] = json.loads(entry.table_tags or "[]")
                     if needle in [t.lower() for t in tags]:
-                        ids_to_delete.append(row_id)
+                        ids_to_delete.append(entry.id)
                 except Exception:
                     pass
 
+            for entry in entries:
+                if entry.id in ids_to_delete:
+                    await db.delete(entry)
             if ids_to_delete:
-                await db.execute(
-                    delete(KgCacheEntry).where(KgCacheEntry.id.in_(ids_to_delete))
-                )
                 await db.commit()
 
             logger.info(
@@ -65,16 +56,12 @@ class CacheInvalidator:
             return len(ids_to_delete)
         except Exception as exc:
             logger.warning("cache_invalidator.invalidate_table error: %s", exc)
-            try:
-                await db.rollback()
-            except Exception:
-                pass
             return 0
 
     async def invalidate_all(
         self,
         instance_id: str,
-        db: AsyncSession,
+        db,
         cache_layer: Optional[str] = None,
     ) -> int:
         """
@@ -83,19 +70,15 @@ class CacheInvalidator:
         Returns the number of evicted entries.
         """
         try:
-            stmt = select(KgCacheEntry.id).where(
-                KgCacheEntry.instance_id == instance_id
-            )
+            filters: list = [("instance_id", instance_id)]
             if cache_layer:
-                stmt = stmt.where(KgCacheEntry.cache_layer == cache_layer)
+                filters.append(("cache_layer", cache_layer))
+            entries = await db.select(KgCacheEntry, *filters)
+            ids = [e.id for e in entries]
 
-            result = await db.execute(stmt)
-            ids = [r[0] for r in result.all()]
-
+            for entry in entries:
+                await db.delete(entry)
             if ids:
-                await db.execute(
-                    delete(KgCacheEntry).where(KgCacheEntry.id.in_(ids))
-                )
                 await db.commit()
 
             logger.info(
@@ -105,13 +88,9 @@ class CacheInvalidator:
             return len(ids)
         except Exception as exc:
             logger.warning("cache_invalidator.invalidate_all error: %s", exc)
-            try:
-                await db.rollback()
-            except Exception:
-                pass
             return 0
 
-    async def evict_expired(self, db: AsyncSession) -> int:
+    async def evict_expired(self, db) -> int:
         """
         Delete all entries whose TTL has passed.
         Called periodically (e.g. from the cognition loop or on startup).
@@ -119,23 +98,16 @@ class CacheInvalidator:
         """
         try:
             now = datetime.now(timezone.utc).replace(tzinfo=None)
-            result = await db.execute(
-                select(KgCacheEntry.id).where(KgCacheEntry.expires_at <= now)
-            )
-            ids = [r[0] for r in result.all()]
+            entries = await db.select(KgCacheEntry, ("expires_at__lte", now))
+            ids = [e.id for e in entries]
 
+            for entry in entries:
+                await db.delete(entry)
             if ids:
-                await db.execute(
-                    delete(KgCacheEntry).where(KgCacheEntry.id.in_(ids))
-                )
                 await db.commit()
                 logger.info("cache_invalidator: evicted %d expired entries", len(ids))
 
             return len(ids)
         except Exception as exc:
             logger.warning("cache_invalidator.evict_expired error: %s", exc)
-            try:
-                await db.rollback()
-            except Exception:
-                pass
             return 0

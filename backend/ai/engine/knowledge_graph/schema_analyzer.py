@@ -600,7 +600,7 @@ async def run_schema_analysis(
     If force=False (default), checks whether ENTITY nodes already have an
     importance_score — if they do, skips the entire analysis (idempotent).
 
-    Pass an open AsyncSession as `session`, or leave None to open one.
+    Pass an open Django Store session as `session`, or leave None to open one.
     Returns combined summary dict from all three methods.
     """
     from ai.engine.knowledge_graph.store import KnowledgeGraphStore

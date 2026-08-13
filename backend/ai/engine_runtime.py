@@ -18,6 +18,7 @@ import json
 import logging
 import math
 import re
+import time
 import uuid
 from typing import Any
 
@@ -528,17 +529,165 @@ async def _run_query_explain(
     }
 
 
+def _iter_schema_tables(payload: dict[str, Any]) -> list[tuple[str, list[dict]]]:
+    """Yield (table_name, columns) pairs from ``schema`` / ``schema_changes``.
+
+    Tolerates list-of-dicts, dict-of-lists, and bare-name entries.
+    Returns [] when the payload carries no schema information (the
+    deterministic fallback path).
+    """
+    tables: list[tuple[str, list[dict]]] = []
+
+    schema = payload.get("schema")
+    if isinstance(schema, dict):
+        for tname, cols in schema.items():
+            if isinstance(cols, list):
+                tables.append(
+                    (str(tname), [c for c in cols if isinstance(c, dict)])
+                )
+    elif isinstance(schema, list):
+        for item in schema:
+            if isinstance(item, dict):
+                tname = item.get("table_name") or item.get("name") or ""
+                cols = item.get("columns") or item.get("fields") or []
+                if tname:
+                    tables.append(
+                        (str(tname), [c for c in cols if isinstance(c, dict)])
+                    )
+            elif isinstance(item, str):
+                tables.append((item, []))
+
+    for c in payload.get("schema_changes") or []:
+        if isinstance(c, dict) and c.get("table_name"):
+            tables.append((str(c["table_name"]), []))
+
+    # Dedupe by table name, keeping the first (richest) column list.
+    seen: set[str] = set()
+    unique: list[tuple[str, list[dict]]] = []
+    for tname, cols in tables:
+        if tname not in seen:
+            seen.add(tname)
+            unique.append((tname, cols))
+    return unique
+
+
+async def _bootstrap_schema_graph(
+    store: Any, instance_id: str, payload: dict[str, Any]
+) -> dict[str, int]:
+    """Upsert ENTITY/ATTRIBUTE nodes + HAS_ATTRIBUTE edges from the payload.
+
+    Idempotent (exact-name upsert).  Returns creation counts.  Never raises:
+    per-table failures are logged and skipped.
+    """
+    counts = {"entities": 0, "attributes": 0, "edges": 0}
+    tables = _iter_schema_tables(payload)
+    if not tables:
+        return counts
+
+    for tname, columns in tables:
+        try:
+            entity = await store.upsert_node(
+                name=tname,
+                instance_id=instance_id,
+                node_type="ENTITY",
+                properties={
+                    "schema_json": json.dumps(columns, default=str),
+                    "columns": columns,
+                },
+            )
+            counts["entities"] += 1
+        except Exception as exc:
+            logger.debug("schema bootstrap ENTITY %s failed: %s", tname, exc)
+            continue
+
+        for col in columns:
+            cname = col.get("column_name") or col.get("name") or ""
+            if not cname:
+                continue
+            props = dict(col)
+            if "column_name" not in props and "name" in props:
+                props["column_name"] = props.pop("name")
+            try:
+                attr = await store.upsert_node(
+                    name=f"{tname}.{cname}",
+                    instance_id=instance_id,
+                    node_type="ATTRIBUTE",
+                    properties=props,
+                )
+                counts["attributes"] += 1
+                try:
+                    await store.add_edge(
+                        {
+                            "instance_id": instance_id,
+                            "source_node_id": entity.id,
+                            "target_node_id": attr.id,
+                            "relationship": "HAS_ATTRIBUTE",
+                            "properties": {"schema": True},
+                            "confidence": 0.9,
+                            "source": "SCHEMA",
+                        }
+                    )
+                    counts["edges"] += 1
+                except ValueError:
+                    logger.debug(
+                        "HAS_ATTRIBUTE edge skipped (duplicate): %s → %s",
+                        tname, cname,
+                    )
+            except Exception as exc:
+                logger.debug("schema bootstrap ATTRIBUTE %s failed: %s", cname, exc)
+
+    return counts
+
+
 async def _run_schema_analyze(
     instance_id: str, payload: dict[str, Any], task_id: str
 ) -> dict[str, Any]:
+    """
+    Run the real KG schema-analysis pipeline (``run_schema_analysis``).
+
+    When the payload carries schema information (``schema`` /
+    ``schema_changes``), the KG is bootstrapped (ENTITY/ATTRIBUTE nodes +
+    HAS_ATTRIBUTE edges) and ``run_schema_analysis(force=True)`` runs.
+    Per-change deterministic analysis is always included (backward
+    compatible).  Any failure — or a payload with no schema — degrades
+    gracefully to the deterministic result only.
+    """
+    from ai.engine.core.database import get_session_factory
+    from ai.engine.knowledge_graph.schema_analyzer import run_schema_analysis
+    from ai.engine.knowledge_graph.store import KnowledgeGraphStore
+
+    t0 = time.perf_counter()
+
     schema_changes = payload.get("schema_changes") or []
     analysis = [
         _analyze_schema_change(c) for c in schema_changes if isinstance(c, dict)
     ]
+
+    kg_analysis: dict[str, Any] = {}
+    if _iter_schema_tables(payload):
+        try:
+            factory = get_session_factory(instance_id)
+            async with factory() as db:
+                store = KnowledgeGraphStore(db)
+                bootstrap = await _bootstrap_schema_graph(store, instance_id, payload)
+                kg_analysis = await run_schema_analysis(
+                    instance_id, force=True, session=db
+                )
+                kg_analysis["bootstrap"] = bootstrap
+        except Exception as exc:
+            logger.warning(
+                "schema.analyze KG analysis failed for %s: %s", instance_id, exc
+            )
+            kg_analysis = {"error": str(exc), "degraded": True}
+
     return {
         "status": "completed",
         "task_id": task_id,
-        "result": {"analysis": analysis, "execution_ms": 0},
+        "result": {
+            "analysis": analysis,
+            "kg_analysis": kg_analysis,
+            "execution_ms": int((time.perf_counter() - t0) * 1000),
+        },
     }
 
 
@@ -619,10 +768,69 @@ async def _run_anomaly_detect(
                     }
                 )
 
+    # Real KG path: live profile of the table when a host DB is configured.
+    # Best-effort — any failure degrades gracefully to the heuristic above.
+    real_profile: dict[str, Any] = {}
+    try:
+        if get_settings().HOST_DB_URL:
+            from ai.engine.knowledge_graph.data_profiler import DataProfiler
+
+            profile = await DataProfiler(
+                host_db_url=get_settings().HOST_DB_URL,
+                schema=get_settings().HOST_DB_SCHEMA,
+            ).profile_table(
+                table_name=table_name,
+                columns=payload.get("columns") or [],
+                sample_size=get_settings().KG_PROFILE_SAMPLE_SIZE,
+                max_cardinality=get_settings().KG_PROFILE_MAX_CARDINALITY,
+            )
+            real_profile = {
+                "table_name": profile.table_name,
+                "row_count": profile.row_count,
+                "columns": len(profile.columns),
+                "profiled_at": profile.profiled_at,
+            }
+            # If the live count deviates from the latest snapshot, flag it.
+            if history:
+                latest = history[-1]
+                live = profile.row_count
+                last_count = latest.get("row_count")
+                if isinstance(last_count, (int, float)) and isinstance(live, int):
+                    delta_pct = (
+                        abs(live - last_count) / last_count * 100
+                        if last_count
+                        else 0.0
+                    )
+                    if delta_pct >= volume_threshold_pct:
+                        anomalies.append(
+                            {
+                                "metric": f"{table_name}.row_count.live",
+                                "expected_range": {
+                                    "low": float(last_count),
+                                    "high": float(last_count),
+                                },
+                                "observed": float(live),
+                                "z_score": None,
+                                "severity": "warning",
+                                "explanation": (
+                                    f"Live row count {live} differs from the most "
+                                    f"recent snapshot by {delta_pct:.1f}%."
+                                ),
+                            }
+                        )
+    except Exception as exc:
+        logger.warning(
+            "anomaly.detect live profile failed for %s: %s", table_name, exc
+        )
+
     return {
         "status": "completed",
         "task_id": task_id,
-        "result": {"anomalies": anomalies, "history_snapshots": history_snapshots},
+        "result": {
+            "anomalies": anomalies,
+            "history_snapshots": history_snapshots,
+            "live_profile": real_profile,
+        },
     }
 
 
@@ -666,6 +874,38 @@ async def _run_report_draft(
 
     title = f"{report_type.replace('_', ' ').title()} Report"
     summary = _deterministic_report_summary(report_type, period_start, period_end)
+
+    # Real KG context: report only what the store actually holds — never
+    # invent figures.  Best-effort; failure degrades to no context.
+    kg_context: dict[str, Any] = {}
+    try:
+        from ai.engine.core.database import get_session_factory
+        from ai.models.knowledge_graph import KnowledgeEdge, KnowledgeNode
+
+        factory = get_session_factory(instance_id)
+        async with factory() as db:
+            entities = await db.select(
+                KnowledgeNode,
+                ("instance_id", instance_id),
+                ("node_type", "ENTITY"),
+            )
+            attributes = await db.select(
+                KnowledgeNode,
+                ("instance_id", instance_id),
+                ("node_type", "ATTRIBUTE"),
+            )
+            edges = await db.select(KnowledgeEdge, ("instance_id", instance_id))
+        kg_context = {
+            "entities": len(entities),
+            "attributes": len(attributes),
+            "edges": len(edges),
+        }
+    except Exception as exc:
+        logger.warning(
+            "report.draft KG context failed for %s: %s", instance_id, exc
+        )
+        kg_context = {"error": str(exc)}
+
     llm_text = await _llm_text(
         task="report_draft",
         instance_id=instance_id,
@@ -683,16 +923,22 @@ async def _run_report_draft(
     if llm_text:
         summary = llm_text
 
+    caveats = [
+        "Verify figures against source systems before release.",
+    ]
+    if kg_context.get("error") or not kg_context:
+        caveats.append(
+            "Knowledge-graph context unavailable; figures are not sourced "
+            "from the live graph."
+        )
+
     sections = [
         {
             "title": "Summary",
             "narrative": summary,
             "sql": None,
-            "data_table": None,
-            "caveats": [
-                "Generated without live data access; verify figures against "
-                "source systems before release."
-            ],
+            "data_table": kg_context or None,
+            "caveats": caveats,
         }
     ]
     return {
@@ -705,6 +951,7 @@ async def _run_report_draft(
             "period_start": period_start,
             "period_end": period_end,
             "generated_at": _now_iso(),
+            "kg_context": kg_context,
             "sections": sections,
         },
     }

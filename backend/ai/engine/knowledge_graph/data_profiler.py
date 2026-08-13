@@ -404,8 +404,7 @@ async def run_data_profiling(
     Returns a summary dict.
     """
     from ai.engine.core.config import get_settings
-    from ai.engine.knowledge_graph.models import KnowledgeEdge, KnowledgeNode
-    from sqlalchemy import select
+    from ai.models.knowledge_graph import KnowledgeEdge, KnowledgeNode
 
     settings = get_settings()
     if not settings.KG_DATA_PROFILING_ENABLED and not force:
@@ -479,13 +478,11 @@ async def run_data_profiling(
     # ── Validate inferred edges ───────────────────────────────────────────────
     pruned_count = 0
     try:
-        from ai.engine.knowledge_graph.models import KnowledgeEdge
-        edge_stmt = select(KnowledgeEdge).where(
-            KnowledgeEdge.instance_id == instance_id,
-            KnowledgeEdge.source == "INFERRED",
+        inferred_edges = await kg_store.db.select(
+            KnowledgeEdge,
+            ("instance_id", instance_id),
+            ("source", "INFERRED"),
         )
-        edge_result = await kg_store.db.execute(edge_stmt)
-        inferred_edges = list(edge_result.scalars().all())
 
         if inferred_edges:
             # Build relationship list for validation
