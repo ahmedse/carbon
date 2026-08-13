@@ -80,7 +80,20 @@ const PlatformConfigPage = React.lazy(() => import("./pages/admin/PlatformConfig
 const PulseOverviewPage = React.lazy(() => import("./pages/admin/ai/PulseOverviewPage"));
 const AIWorkspacePage = React.lazy(() => import("./pages/admin/ai/AIWorkspacePage"));
 const AIConversationsPage = React.lazy(() => import("./pages/admin/ai/AIConversationsPage"));
-const PulseModulePlaceholder = React.lazy(() => import("./pages/admin/ai/PulseModulePlaceholder"));
+const KnowledgeBasePanel = React.lazy(() => import("./pages/admin/ai/KnowledgeBasePanel"));
+const MemoryPanel = React.lazy(() => import("./pages/admin/ai/MemoryPanel"));
+const KnowledgeGraphPanel = React.lazy(() => import("./pages/admin/ai/KnowledgeGraphPanel"));
+const AgentsPanel = React.lazy(() => import("./pages/admin/ai/AgentsPanel"));
+const McpServersPanel = React.lazy(() => import("./pages/admin/ai/McpServersPanel"));
+const ToolsPanel = React.lazy(() => import("./pages/admin/ai/ToolsPanel"));
+const SkillsPanel = React.lazy(() => import("./pages/admin/ai/SkillsPanel"));
+const PulseArchetypesPanel = React.lazy(() => import("./pages/admin/ai/PulseArchetypesPanel"));
+const PromptsPanel = React.lazy(() => import("./pages/admin/ai/PromptsPanel"));
+const FeedbackPanel = React.lazy(() => import("./pages/admin/ai/FeedbackPanel"));
+const LearningJobsPanel = React.lazy(() => import("./pages/admin/ai/LearningJobsPanel"));
+const MonitoringPanel = React.lazy(() => import("./pages/admin/ai/MonitoringPanel"));
+const AuditPanel = React.lazy(() => import("./pages/admin/ai/AuditPanel"));
+const AILogsPanel = React.lazy(() => import("./pages/admin/ai/AILogsPanel"));
 const AnalyticsDashboard = React.lazy(() => import("./pages/dashboards/AnalyticsDashboard"));
 
 import PlatformHome from "./pages/PlatformHome";
@@ -297,20 +310,20 @@ export default function App() {
                 <Route path="/admin/ai" element={<AdminRoute><PulseOverviewPage /></AdminRoute>} />
                 <Route path="/admin/ai/workspace" element={<AdminRoute><AIWorkspacePage /></AdminRoute>} />
                 <Route path="/admin/ai/conversations" element={<AdminRoute><AIConversationsPage /></AdminRoute>} />
-                <Route path="/admin/ai/knowledge" element={<AdminRoute><PulseModulePlaceholder module="Knowledge Base" /></AdminRoute>} />
-                <Route path="/admin/ai/memory" element={<AdminRoute><PulseModulePlaceholder module="Memory" /></AdminRoute>} />
-                <Route path="/admin/ai/graph" element={<AdminRoute><PulseModulePlaceholder module="Knowledge Graph" /></AdminRoute>} />
-                <Route path="/admin/ai/agents" element={<AdminRoute><PulseModulePlaceholder module="Agents" /></AdminRoute>} />
-                <Route path="/admin/ai/mcp" element={<AdminRoute><PulseModulePlaceholder module="MCP Servers" /></AdminRoute>} />
-                <Route path="/admin/ai/tools" element={<AdminRoute><PulseModulePlaceholder module="Tools" /></AdminRoute>} />
-                <Route path="/admin/ai/skills" element={<AdminRoute><PulseModulePlaceholder module="Skills Catalog" /></AdminRoute>} />
-                <Route path="/admin/ai/archetypes" element={<AdminRoute><PulseModulePlaceholder module="Archetypes" /></AdminRoute>} />
-                <Route path="/admin/ai/prompts" element={<AdminRoute><PulseModulePlaceholder module="Prompts & Playbook" /></AdminRoute>} />
-                <Route path="/admin/ai/feedback" element={<AdminRoute><PulseModulePlaceholder module="Feedback Review" /></AdminRoute>} />
-                <Route path="/admin/ai/learning" element={<AdminRoute><PulseModulePlaceholder module="Learning Jobs" /></AdminRoute>} />
-                <Route path="/admin/ai/monitoring" element={<AdminRoute><PulseModulePlaceholder module="Monitoring" /></AdminRoute>} />
-                <Route path="/admin/ai/audit" element={<AdminRoute><PulseModulePlaceholder module="AI Audit Trail" /></AdminRoute>} />
-                <Route path="/admin/ai/logs" element={<AdminRoute><PulseModulePlaceholder module="AI Logs" /></AdminRoute>} />
+                <Route path="/admin/ai/knowledge" element={<AdminRoute><KnowledgeBasePanel /></AdminRoute>} />
+                <Route path="/admin/ai/memory" element={<AdminRoute><MemoryPanel /></AdminRoute>} />
+                <Route path="/admin/ai/graph" element={<AdminRoute><KnowledgeGraphPanel /></AdminRoute>} />
+                <Route path="/admin/ai/agents" element={<AdminRoute><AgentsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/mcp" element={<AdminRoute><McpServersPanel /></AdminRoute>} />
+                <Route path="/admin/ai/tools" element={<AdminRoute><ToolsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/skills" element={<AdminRoute><SkillsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/archetypes" element={<AdminRoute><PulseArchetypesPanel /></AdminRoute>} />
+                <Route path="/admin/ai/prompts" element={<AdminRoute><PromptsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/feedback" element={<AdminRoute><FeedbackPanel /></AdminRoute>} />
+                <Route path="/admin/ai/learning" element={<AdminRoute><LearningJobsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/monitoring" element={<AdminRoute><MonitoringPanel /></AdminRoute>} />
+                <Route path="/admin/ai/audit" element={<AdminRoute><AuditPanel /></AdminRoute>} />
+                <Route path="/admin/ai/logs" element={<AdminRoute><AILogsPanel /></AdminRoute>} />
                 <Route path="/admin/policies" element={<Navigate to="/catalog/policies" replace />} />
                 <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
                  <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />
