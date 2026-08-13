@@ -88,6 +88,8 @@ const McpServersPanel = React.lazy(() => import("./pages/admin/ai/McpServersPane
 const ToolsPanel = React.lazy(() => import("./pages/admin/ai/ToolsPanel"));
 const SkillsPanel = React.lazy(() => import("./pages/admin/ai/SkillsPanel"));
 const PulseArchetypesPanel = React.lazy(() => import("./pages/admin/ai/PulseArchetypesPanel"));
+const BudgetUsagePanel = React.lazy(() => import("./pages/admin/ai/BudgetUsagePanel"));
+const EngineSettingsPanel = React.lazy(() => import("./pages/admin/ai/EngineSettingsPanel"));
 const PromptsPanel = React.lazy(() => import("./pages/admin/ai/PromptsPanel"));
 const FeedbackPanel = React.lazy(() => import("./pages/admin/ai/FeedbackPanel"));
 const LearningJobsPanel = React.lazy(() => import("./pages/admin/ai/LearningJobsPanel"));
@@ -318,6 +320,8 @@ export default function App() {
                 <Route path="/admin/ai/tools" element={<AdminRoute><ToolsPanel /></AdminRoute>} />
                 <Route path="/admin/ai/skills" element={<AdminRoute><SkillsPanel /></AdminRoute>} />
                 <Route path="/admin/ai/archetypes" element={<AdminRoute><PulseArchetypesPanel /></AdminRoute>} />
+                <Route path="/admin/ai/budget-usage" element={<AdminRoute><BudgetUsagePanel /></AdminRoute>} />
+                <Route path="/admin/ai/engine-settings" element={<AdminRoute><EngineSettingsPanel /></AdminRoute>} />
                 <Route path="/admin/ai/prompts" element={<AdminRoute><PromptsPanel /></AdminRoute>} />
                 <Route path="/admin/ai/feedback" element={<AdminRoute><FeedbackPanel /></AdminRoute>} />
                 <Route path="/admin/ai/learning" element={<AdminRoute><LearningJobsPanel /></AdminRoute>} />

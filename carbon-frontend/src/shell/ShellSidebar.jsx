@@ -42,6 +42,8 @@ import HubIcon from '@mui/icons-material/Hub';
 import HandymanIcon from '@mui/icons-material/Handyman';
 import ExtensionIcon from '@mui/icons-material/Extension';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import TuneIcon from '@mui/icons-material/Tune';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import FeedbackIcon from '@mui/icons-material/Feedback';
 import LoopIcon from '@mui/icons-material/Loop';
@@ -145,6 +147,8 @@ function getSidebarItems(studioId) {
         { label: 'Knowledge Base', path: '/admin/ai/knowledge', icon: PsychologyIcon, role: 'admin' },
         { label: 'Memory', path: '/admin/ai/memory', icon: MemoryIcon, role: 'admin' },
         { label: 'Knowledge Graph', path: '/admin/ai/graph', icon: AccountTreeIcon, role: 'admin' },
+        { label: 'Budget & Usage', path: '/admin/ai/budget-usage', icon: AccountBalanceWalletIcon, role: 'admin' },
+        { label: 'Engine Settings', path: '/admin/ai/engine-settings', icon: TuneIcon, role: 'admin' },
         { type: 'group', label: 'Agents & Tooling' },
         { label: 'Agents', path: '/admin/ai/agents', icon: SmartToyIcon, role: 'admin' },
         { label: 'MCP Servers', path: '/admin/ai/mcp', icon: HubIcon, role: 'admin' },

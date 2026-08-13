@@ -32,3 +32,24 @@ export function getPulseData(token, key) {
 export function getPulseArchetypes(token) {
   return apiFetch(`${BASE}archetypes/`, { token });
 }
+
+/**
+ * Fetch LLM usage aggregates (budget, spend, tokens, per-model, 7-day).
+ * @param {string} token - JWT access token
+ * @returns {Promise<{budget_usd, spent_today_usd, tokens_today, calls_today,
+ *                    tokens_total, calls_total, cost_total, remaining_usd,
+ *                    budget_exceeded, by_model, by_day}>}
+ */
+export function getUsage(token) {
+  return apiFetch(`${BASE}usage/`, { token });
+}
+
+/**
+ * Fetch the effective engine config + capability inventory (redacted).
+ * @param {string} token - JWT access token
+ * @returns {Promise<{llm, limits, cache, rate_limit, routing, mcp_servers,
+ *                    tools_catalog, agents}>}
+ */
+export function getSettings(token) {
+  return apiFetch(`${BASE}settings/`, { token });
+}

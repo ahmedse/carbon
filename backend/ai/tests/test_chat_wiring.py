@@ -130,12 +130,17 @@ def test_dispatch_chat_returns_completed(django_store, single_pass, stub_llm):
 
 
 @pytest.mark.django_db
-def test_dispatch_chat_is_fail_visible(django_store, single_pass):
+def test_dispatch_chat_is_fail_visible(django_store, single_pass, monkeypatch):
     """An engine error (no LLM client / API key) yields pulse_unavailable."""
     from ai.engine_runtime import dispatch_task
 
-    # No stub here — get_llm_client builds an AsyncOpenAI with an empty key,
-    # and the real (unreachable) provider raises, which must NOT fabricate.
+    # Force the no-provider condition so this test is independent of whether a
+    # live LLM key is present in .env: an empty key/base_url makes the real
+    # (unreachable) provider raise, which must NOT fabricate a result.
+    monkeypatch.setenv("LLM_API_KEY", "")
+    monkeypatch.setenv("LLM_BASE_URL", "")
+    get_settings.cache_clear()
+
     payload = {
         "message": "hello",
         "conversation_history": {"conversation_id": "conv-test-456"},
