@@ -133,12 +133,16 @@ async def _llm_text(
     messages: list[dict[str, Any]],
     *,
     temperature: float = 0.3,
+    response_format: dict[str, Any] | None = None,
 ) -> str | None:
     """Return trimmed LLM reply content, or ``None`` if the LLM is unavailable.
 
     LLM *unavailability* (no API key, provider error, empty reply) degrades to
     a deterministic answer — never a fabricated one.  Anything that is *not* an
     LLM failure propagates to ``dispatch_task``'s fail-visible handler.
+
+    ``response_format`` (e.g. ``{"type": "json_object"}``) is forwarded to the
+    LLM router for structured-output tasks such as ``dq.validate``/``dq.suggest``.
     """
     from ai.engine.llm.router import route_chat
 
@@ -149,6 +153,7 @@ async def _llm_text(
             conversation_id,
             messages,
             temperature=temperature,
+            response_format=response_format,
         )
     except Exception as exc:  # noqa: BLE001 - LLM outage → deterministic fallback
         logger.warning("LLM unavailable for %s: %s", task, exc)
@@ -741,8 +746,233 @@ async def _run_fix_suggest(
     }
 
 
+# ── DQ handlers (Phase 2b-3a) ────────────────────────────────────────────────
+#
+# ``dq.validate`` / ``dq.suggest`` are LLM-only task types: arbitrary
+# natural-language DQ rules have no deterministic evaluator, so an LLM outage
+# returns ``pulse_unavailable`` (fail-visible) — never a fabricated verdict.
+# ``backend/dq/engine.py`` is the *caller* (via PulseProvider), not a
+# dependency: these handlers use the engine LLM only.
+
+
+def _dq_validate_prompt(
+    rule: dict[str, Any], rows: list[Any], context: dict[str, Any]
+) -> str:
+    """Build the evaluator message for one rule against all rows.
+
+    Requires a JSON object with one ``{index, passed, explanation}`` entry per
+    row; ``index`` must match the row's 0-based position in ``rows``.
+    """
+    ctx = context or {}
+    table_name = ctx.get("table_name") or "table"
+    row_count_hint = ctx.get("row_count_hint") or len(rows)
+    fields = ", ".join(str(f) for f in (rule.get("fields") or [])) or "(all columns)"
+    row_json = json.dumps(rows, default=str)
+    return (
+        "You are a data-quality rule evaluator. Evaluate the business rule "
+        "against EVERY data row and return a single JSON object:\n"
+        '{"results": [{"index": int, "passed": bool, "explanation": str}, ...]}\n'
+        "with exactly one entry per row. \"index\" must match the row's 0-based "
+        "position in the provided list; \"passed\" is true if the row satisfies "
+        "the rule, false otherwise; \"explanation\" is a short reason.\n"
+        f"Rule id: {rule.get('id') or '(none)'}\n"
+        f"Rule: {rule.get('prompt') or '(no prompt)'}\n"
+        f"Relevant fields: {fields}\n"
+        f"Severity: {rule.get('severity') or 'unknown'}\n"
+        f"Table: {table_name} (row count hint: {row_count_hint})\n"
+        f"Rows: {row_json}\n"
+        "Return only the JSON object, nothing else."
+    )
+
+
+def _dq_suggest_prompt(table: dict[str, Any]) -> str:
+    """Build the suggestion message for a table's metadata.
+
+    Requires a JSON object of proposed natural-language DQ business rules
+    (completeness, cross-field consistency, temporal plausibility,
+    range/outlier plausibility).
+    """
+    columns = table.get("columns") or []
+    col_json = json.dumps(columns, default=str)[:2000]
+    return (
+        "You are a data-quality analyst. Propose natural-language data-quality "
+        "business rules for the table below — consider completeness, "
+        "cross-field consistency, temporal plausibility, and range/outlier "
+        "plausibility — and return a single JSON object:\n"
+        '{"suggestions": [{"prompt": str, "rule_type": "nl_check", '
+        '"rationale": str, "suggested_severity": "info"|"warn"|"error", '
+        '"confidence": float}, ...]}\n'
+        f"Table name: {table.get('name') or '(unknown)'}\n"
+        f"Description: {table.get('description') or '(none)'}\n"
+        f"Columns: {col_json}\n"
+        f"Row count: {table.get('row_count') or 'unknown'}\n"
+        "Return only the JSON object, nothing else."
+    )
+
+
+def _coerce_confidence(value: Any) -> float:
+    """Coerce an LLM-provided confidence to a float clamped to [0.0, 1.0].
+
+    Missing/uncoercible values default to a neutral 0.5.
+    """
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        confidence = 0.5
+    return max(0.0, min(1.0, confidence))
+
+
+def _llm_unavailable(task_id: str, message: str) -> dict[str, Any]:
+    """Fail-visible result for an LLM outage (never fabricate a verdict)."""
+    return {
+        "status": "pulse_unavailable",
+        "task_id": task_id,
+        "error": {
+            "code": "llm_unavailable",
+            "message": message,
+        },
+    }
+
+
+async def _run_dq_validate(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    """Evaluate each DQ rule against all rows in ONE LLM call per rule.
+
+    Per-rule verdict JSON: ``{"results": [{"index", "passed", "explanation"}]}``.
+    An LLM outage → ``pulse_unavailable``/``llm_unavailable``; an unparseable
+    verdict degrades that rule to ``skipped_unavailable`` (never a fabricated
+    pass/fail).  ``details`` is positionally indexed by row.
+    """
+    rules = [r for r in (payload.get("rules") or []) if isinstance(r, dict)]
+    rows = payload.get("rows") or []
+    context = payload.get("context") or {}
+
+    if not rules or not rows:
+        # The consumer treats "no rules / no rows" as a local no-op.
+        return {
+            "status": "completed",
+            "task_id": task_id,
+            "result": {"results": []},
+        }
+
+    results: list[dict[str, Any]] = []
+    for rule in rules:
+        rule_id = str(rule.get("id") or "")
+        llm_text = await _llm_text(
+            task="eval",
+            instance_id=instance_id,
+            conversation_id=f"dq-validate-{task_id}",
+            messages=[
+                {"role": "user", "content": _dq_validate_prompt(rule, rows, context)}
+            ],
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        )
+        if not llm_text:
+            return _llm_unavailable(
+                task_id, f"LLM unavailable while evaluating rule {rule_id!r}."
+            )
+
+        try:
+            verdicts = json.loads(llm_text).get("results")
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            verdicts = None
+        if not isinstance(verdicts, list):
+            # Unparseable/empty verdict → fail-visible skip, never a pass.
+            results.append(
+                {"rule_id": rule_id, "status": "skipped_unavailable", "details": []}
+            )
+            continue
+
+        by_index: dict[int, dict[str, Any]] = {}
+        for verdict in verdicts:
+            if not isinstance(verdict, dict):
+                continue
+            try:
+                idx = int(verdict.get("index"))
+            except (TypeError, ValueError):
+                continue
+            by_index[idx] = verdict
+
+        details = [
+            {
+                "passed": bool(by_index.get(i, {}).get("passed", False)),
+                "explanation": str(by_index.get(i, {}).get("explanation") or ""),
+            }
+            for i in range(len(rows))
+        ]
+        status = "pass" if all(d["passed"] for d in details) else "fail"
+        results.append({"rule_id": rule_id, "status": status, "details": details})
+
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {"results": results},
+    }
+
+
+async def _run_dq_suggest(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    """Propose natural-language DQ rules for a table via the LLM.
+
+    Verdict JSON: ``{"suggestions": [{"prompt", "rule_type", "rationale",
+    "suggested_severity", "confidence"}]}``.  No deterministic fallback — an
+    LLM outage or unparseable verdict returns ``pulse_unavailable``.
+    """
+    table = payload.get("table") or {}
+    llm_text = await _llm_text(
+        task="cognition",
+        instance_id=instance_id,
+        conversation_id=f"dq-suggest-{task_id}",
+        messages=[{"role": "user", "content": _dq_suggest_prompt(table)}],
+        temperature=0.4,
+        response_format={"type": "json_object"},
+    )
+    if not llm_text:
+        return _llm_unavailable(
+            task_id, "LLM unavailable while suggesting data-quality rules."
+        )
+
+    try:
+        raw = json.loads(llm_text).get("suggestions")
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        raw = None
+    if not isinstance(raw, list):
+        # Unparseable payload — fabricating rules is worse than saying no.
+        return _llm_unavailable(
+            task_id, "LLM returned an unparseable suggestion payload."
+        )
+
+    suggestions: list[dict[str, Any]] = []
+    for suggestion in raw:
+        if not isinstance(suggestion, dict):
+            continue
+        severity = str(suggestion.get("suggested_severity") or "warn").lower()
+        if severity not in ("info", "warn", "error"):
+            severity = "warn"
+        suggestions.append(
+            {
+                "prompt": str(suggestion.get("prompt") or ""),
+                "rule_type": str(suggestion.get("rule_type") or "nl_check"),
+                "rationale": str(suggestion.get("rationale") or ""),
+                "suggested_severity": severity,
+                "confidence": _coerce_confidence(suggestion.get("confidence")),
+            }
+        )
+
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {"suggestions": suggestions},
+    }
+
+
 # Handler registry: task type → async handler.
 _TASK_HANDLERS: dict[str, Any] = {
+    "dq.validate": _run_dq_validate,
+    "dq.suggest": _run_dq_suggest,
     "carbon.query.nl": _run_query_nl,
     "carbon.query.explain": _run_query_explain,
     "carbon.schema.analyze": _run_schema_analyze,
@@ -801,35 +1031,27 @@ def dispatch_task(
                 },
             }
 
-    # Phase 2b-2: the 7 KG/analytics task types are wired in-process.
+    # Phase 2b-2/2b-3: the KG/analytics and DQ task types are wired
+    # in-process.  Every entry in MODULES is covered by ``chat`` above and
+    # ``_TASK_HANDLERS`` below, so no ``not_wired`` path remains — a missing
+    # handler is a programming error and surfaces fail-visible via
+    # ``engine_error``.
     handler = _TASK_HANDLERS.get(task_type)
-    if handler is not None:
-        task_id = _new_task_id()
-        try:
-            return _run_async(handler(instance_id, payload, task_id))
-        except Exception as exc:  # noqa: BLE001 - fail-visible contract
-            logger.exception("%s dispatch failed for instance=%s", task_type, instance_id)
-            return {
-                "status": "pulse_unavailable",
-                "task_id": task_id,
-                "error": {
-                    "code": "engine_error",
-                    "message": f"{task_type} failed: {exc}",
-                },
-            }
-
-    # ``dq.validate`` / ``dq.suggest`` remain unwired (Phase 2b-3).
-    return {
-        "status": "pulse_unavailable",
-        "task_id": _new_task_id(),
-        "error": {
-            "code": "not_wired",
-            "message": (
-                f"Task {task_type!r} is not yet wired to the in-process "
-                "engine (Phase 2b)."
-            ),
-        },
-    }
+    task_id = _new_task_id()
+    try:
+        if handler is None:
+            raise LookupError(f"no in-process handler for {task_type!r}")
+        return _run_async(handler(instance_id, payload, task_id))
+    except Exception as exc:  # noqa: BLE001 - fail-visible contract
+        logger.exception("%s dispatch failed for instance=%s", task_type, instance_id)
+        return {
+            "status": "pulse_unavailable",
+            "task_id": task_id,
+            "error": {
+                "code": "engine_error",
+                "message": f"{task_type} failed: {exc}",
+            },
+        }
 
 
 def get_task(task_id: str, *, timeout: int | None = None) -> dict[str, Any]:

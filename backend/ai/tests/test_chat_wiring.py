@@ -67,6 +67,14 @@ def django_store():
 
 
 @pytest.fixture
+def cfg():
+    """Clear the settings cache around each test."""
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture
 def single_pass(monkeypatch):
     """Disable fan-out / multi-step so the six-witness spine runs alone."""
     monkeypatch.setenv("AGENT_ORCHESTRATOR_ENABLED", "false")
@@ -139,11 +147,17 @@ def test_dispatch_chat_is_fail_visible(django_store, single_pass):
 
 
 @pytest.mark.django_db
-def test_other_tasks_still_not_wired(django_store):
-    """The unwired dq.* task types remain pulse_unavailable (not fabricated)."""
-    from ai.engine_runtime import dispatch_task
+def test_all_module_tasks_are_wired(django_store, single_pass, cfg, stub_llm):
+    """Every advertised task type resolves to a handler — no ``not_wired`` remains.
 
-    for task in ("dq.validate", "dq.suggest"):
-        data = dispatch_task(task, {"x": 1}, instance_id="carbon")
-        assert data.get("status") == "pulse_unavailable", (task, data)
-        assert data.get("error", {}).get("code") == "not_wired", (task, data)
+    Phase 2b-3a wires the final two DQ task types (``dq.validate`` /
+    ``dq.suggest``), completing the task-type matrix: every entry in
+    ``MODULES`` is covered by ``_TASK_HANDLERS`` ∪ ``chat``, so no task
+    returns ``not_wired``.
+    """
+    from ai.engine_runtime import MODULES, dispatch_task
+
+    for task_type in MODULES:
+        data = dispatch_task(task_type, {}, instance_id="carbon")
+        code = (data.get("error") or {}).get("code")
+        assert code != "not_wired", (task_type, data)
