@@ -39,6 +39,68 @@ def _new_task_id() -> str:
     return f"inproc-{uuid.uuid4().hex[:16]}"
 
 
+def _run_async(coro):
+    """Run an async coroutine from a sync context.
+
+    ``dispatch_task`` is sync (the AIProvider ABC is sync).  The vendored
+    engine is async, so we bridge with ``asyncio.run``.  If we are already
+    inside a running loop (rare — e.g. a caller awaiting a sync wrapper),
+    run the coroutine on a worker thread to avoid nesting loops.
+    """
+    import asyncio
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
+async def _run_chat(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    """Run a single chat turn through the six-witness pipeline.
+
+    This is the Phase 2b-1 proof path: the in-process engine's ``chat``
+    task calls ``TurnPipelineRunner.run`` directly (no HTTP), writing
+    durable ``TurnLedgerRow`` / ``LLMCallLog`` rows through the configured
+    ``ai.store`` backend (DjangoStore in production).
+    """
+    from ai.engine.cognition.turn.runner import TurnPipelineRunner
+    from ai.engine.core.database import get_session_factory
+
+    message = payload.get("message") or ""
+    conversation = payload.get("conversation_history") or {}
+    conversation_id = (
+        conversation.get("conversation_id")
+        or f"conv-{uuid.uuid4().hex[:12]}"
+    )
+    history_messages = conversation.get("messages") or []
+
+    factory = get_session_factory(instance_id)
+    async with factory() as db:
+        runner = TurnPipelineRunner(db=db)
+        response, ledger = await runner.run(
+            instance_id=instance_id,
+            conversation_id=conversation_id,
+            user_message=message,
+            conversation_history=history_messages,
+        )
+        return {
+            "status": "completed",
+            "task_id": task_id,
+            "result": {
+                "content": response.text,
+                "follow_up_questions": list(response.follow_ups or []),
+                "execution_ms": int(ledger.total_latency_ms or 0),
+            },
+        }
+
+
 def list_modules(instance_id: str = "carbon") -> dict[str, Any]:
     """Return the modules the in-process engine advertises."""
     return {"modules": [{"type": m} for m in MODULES]}
@@ -69,8 +131,26 @@ def dispatch_task(
             },
         }
 
-    # Phase 2b wires each task to a concrete engine capability.  Until then,
-    # report the task as unavailable rather than fabricating a result.
+    # Phase 2b-1: ``chat`` is wired end-to-end through the turn runner.
+    # Fail-visible: any error returns ``pulse_unavailable`` — never a fake
+    # answer.
+    if task_type == "chat":
+        task_id = _new_task_id()
+        try:
+            return _run_async(_run_chat(instance_id, payload, task_id))
+        except Exception as exc:  # noqa: BLE001 - fail-visible contract
+            logger.exception("chat dispatch failed for instance=%s", instance_id)
+            return {
+                "status": "pulse_unavailable",
+                "task_id": task_id,
+                "error": {
+                    "code": "engine_error",
+                    "message": f"chat failed: {exc}",
+                },
+            }
+
+    # The remaining 8 task types are not yet wired (Phase 2b-2/2b-3).
+    # Report them as unavailable rather than fabricating a result.
     return {
         "status": "pulse_unavailable",
         "task_id": _new_task_id(),

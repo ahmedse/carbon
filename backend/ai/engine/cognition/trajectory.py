@@ -9,10 +9,8 @@ import json
 import logging
 import re
 
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.engine.core.models import Trajectory, Run, RunStep, TurnLedgerRow
+from ai.store import first
 
 logger = logging.getLogger("pulse.cognition.trajectory")
 
@@ -57,7 +55,7 @@ def _summarize_tool_args(args: dict | None, max_len: int = 80) -> str | None:
         return None
 
 
-async def write_trajectory(run_id: str, db: AsyncSession) -> Trajectory | None:
+async def write_trajectory(run_id: str, db) -> Trajectory | None:
     """Read Run + RunStep + TurnLedgerRow rows and write one Trajectory row.
 
     Idempotent: if a trajectory row already exists for this run_id, skips.
@@ -65,35 +63,28 @@ async def write_trajectory(run_id: str, db: AsyncSession) -> Trajectory | None:
     Returns the Trajectory row or None if skipped/error.
     """
     # ── Idempotency check ──────────────────────────────────────────────────
-    existing = await db.execute(
-        select(Trajectory).where(Trajectory.run_id == run_id)
-    )
-    if existing.scalar_one_or_none() is not None:
+    existing = first(await db.select(Trajectory, {"run_id": run_id}))
+    if existing is not None:
         logger.debug("Trajectory already exists for run %s — skipping", run_id[:8])
         return None
 
     # ── Read Run row ───────────────────────────────────────────────────────
-    run_result = await db.execute(select(Run).where(Run.id == run_id))
-    run = run_result.scalar_one_or_none()
+    run = first(await db.select(Run, {"id": run_id}))
     if run is None:
         logger.warning("Trajectory: run %s not found — skipping", run_id[:8])
         return None
 
     # ── Read RunStep rows ──────────────────────────────────────────────────
-    steps_result = await db.execute(
-        select(RunStep)
-        .where(RunStep.run_id == run_id)
-        .order_by(RunStep.step_index)
+    steps = sorted(
+        await db.select(RunStep, {"run_id": run_id}),
+        key=lambda s: s.step_index,
     )
-    steps = steps_result.scalars().all()
 
     # ── Read TurnLedgerRow rows ────────────────────────────────────────────
-    ledger_result = await db.execute(
-        select(TurnLedgerRow)
-        .where(TurnLedgerRow.turn_id == run_id)
-        .order_by(TurnLedgerRow.stage_index)
+    ledger_rows = sorted(
+        await db.select(TurnLedgerRow, {"turn_id": run_id}),
+        key=lambda lr: lr.stage_index,
     )
-    ledger_rows = ledger_result.scalars().all()
 
     # ── Build tool_calls_json ──────────────────────────────────────────────
     tool_calls = []

@@ -18,10 +18,9 @@ import json
 import logging
 from dataclasses import dataclass
 
-from sqlalchemy import select, update
-
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Run
+from ai.store import first
 
 logger = logging.getLogger("pulse.agent.budget")
 
@@ -90,23 +89,13 @@ class BudgetTracker:
             logger.warning("BudgetTracker: no db_session — budget tracking is in-memory only")
             return
 
-        # Read current state from Run row
-        stmt = select(
-            Run.tokens_consumed,
-            Run.token_budget,
-            Run.budget_exceeded,
-            Run.fan_out_justification,
-            Run.worker_budgets_json,
-        ).where(Run.id == self._run_id)
-
         try:
-            result = await self._db.execute(stmt)
-            row = result.one_or_none()
+            run = first(await self._db.select(Run, {"id": self._run_id}))
         except Exception as exc:
             logger.warning("BudgetTracker: failed to load from DB — in-memory only: %s", exc)
             return
 
-        if row is None:
+        if run is None:
             # Run row doesn't exist yet — persist initial budget
             logger.debug(
                 "BudgetTracker: Run row %s not found — will persist on first write",
@@ -114,18 +103,16 @@ class BudgetTracker:
             )
             return
 
-        db_consumed, db_budget, db_exceeded, db_justification, db_worker_json = row
-
         # Restore from DB
-        self._consumed = db_consumed or 0
-        if db_budget is not None:
-            self._total_budget = db_budget
-        self._exceeded = db_exceeded or False
-        self._justification = db_justification
+        self._consumed = run.tokens_consumed or 0
+        if run.token_budget is not None:
+            self._total_budget = run.token_budget
+        self._exceeded = run.budget_exceeded or False
+        self._justification = run.fan_out_justification
 
-        if db_worker_json:
+        if run.worker_budgets_json:
             try:
-                self._worker_budgets = json.loads(db_worker_json)
+                self._worker_budgets = json.loads(run.worker_budgets_json)
             except (json.JSONDecodeError, TypeError):
                 self._worker_budgets = {}
 
@@ -160,25 +147,21 @@ class BudgetTracker:
         if self._db is None:
             return
         try:
-            worker_json = json.dumps(self._worker_budgets) if self._worker_budgets else None
-            stmt = (
-                update(Run)
-                .where(Run.id == self._run_id)
-                .values(
-                    token_budget=self._total_budget,
-                    tokens_consumed=self._consumed,
-                    budget_exceeded=self._exceeded,
-                    fan_out_justification=self._justification,
-                    worker_budgets_json=worker_json,
-                )
-            )
-            result = await self._db.execute(stmt)
-            if result.rowcount == 0:
-                # Row doesn't exist — insert via merge pattern
+            run = first(await self._db.select(Run, {"id": self._run_id}))
+            if run is None:
+                # Row doesn't exist — nothing to update (chat path has no Run row)
                 logger.debug(
                     "BudgetTracker: Run %s not found for persist — writing as new",
                     self._run_id[:8],
                 )
+                return
+            worker_json = json.dumps(self._worker_budgets) if self._worker_budgets else None
+            run.token_budget = self._total_budget
+            run.tokens_consumed = self._consumed
+            run.budget_exceeded = self._exceeded
+            run.fan_out_justification = self._justification
+            run.worker_budgets_json = worker_json
+            await self._db.flush()
         except Exception:
             logger.exception("BudgetTracker: failed to persist to Run row %s", self._run_id[:8])
 
@@ -243,12 +226,10 @@ class BudgetTracker:
         self._justification = text
         if self._db is not None:
             try:
-                stmt = (
-                    update(Run)
-                    .where(Run.id == self._run_id)
-                    .values(fan_out_justification=text)
-                )
-                await self._db.execute(stmt)
+                run = first(await self._db.select(Run, {"id": self._run_id}))
+                if run is not None:
+                    run.fan_out_justification = text
+                    await self._db.flush()
             except Exception:
                 logger.exception("BudgetTracker: failed to persist justification")
 

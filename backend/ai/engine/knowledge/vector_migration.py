@@ -20,9 +20,6 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
-
 logger = logging.getLogger("pulse.knowledge.vector_migration")
 
 # ChromaDB's default get batch limit
@@ -47,7 +44,7 @@ class MigrationStats:
 
 
 async def migrate_chromadb_to_pgvector(
-    db_session: AsyncSession,
+    db_session,
     chroma_client=None,
     instance_id: Optional[str] = None,
     dry_run: bool = False,
@@ -94,8 +91,9 @@ async def migrate_chromadb_to_pgvector(
     # ── Check which rows already exist in the target table ────────────────
     existing_ids: set[str] = set()
     try:
-        result = await db_session.execute(text("SELECT id FROM vector_embeddings"))
-        existing_ids = {row[0] for row in result.fetchall()}
+        from ai.engine.core.models import VectorEmbedding
+        rows = await db_session.select(VectorEmbedding)
+        existing_ids = {row.id for row in rows}
     except Exception:
         # Table might not exist yet — treat as empty
         pass
@@ -133,7 +131,7 @@ async def migrate_chromadb_to_pgvector(
 
 
 async def _migrate_collection(
-    db_session: AsyncSession,
+    db_session,
     collection,
     coll_name: str,
     existing_ids: set[str],
@@ -215,7 +213,7 @@ async def _migrate_collection(
 
 
 async def _insert_vector_row(
-    db_session: AsyncSession,
+    db_session,
     id: str,
     collection: str,
     instance_id: str,

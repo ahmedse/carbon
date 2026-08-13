@@ -12,6 +12,9 @@ below are the only remaining static prompts (schema analysis, not chat).
 # which uses LLM-powered prompt generation tailored to each instance.
 
 import logging
+from datetime import datetime
+
+from ai.store import first
 
 logger = logging.getLogger("pulse.llm.prompts")
 
@@ -115,21 +118,20 @@ async def build_chat_prompt(
     if conversation_id and instance_id:
         try:
             from ai.engine.core.models import PromptVersion
-            from sqlalchemy import select
 
             factory2 = get_session_factory()
             async with factory2() as _ab_db:
-                cand_result = await _ab_db.execute(
-                    select(PromptVersion)
-                    .where(
-                        PromptVersion.instance_id == instance_id,
-                        PromptVersion.is_active == False,  # noqa: E712
-                        PromptVersion.improvement_round == 0,
-                    )
-                    .order_by(PromptVersion.synthesized_at.desc())
-                    .limit(1)
+                rows = await _ab_db.select(PromptVersion, {
+                    "instance_id": instance_id,
+                    "is_active": False,
+                    "improvement_round": 0,
+                })
+                rows = sorted(
+                    rows,
+                    key=lambda p: p.synthesized_at or datetime.min,
+                    reverse=True,
                 )
-                candidate = cand_result.scalar_one_or_none()
+                candidate = first(rows)
 
             if candidate is not None:
                 import hashlib

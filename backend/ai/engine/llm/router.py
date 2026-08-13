@@ -94,7 +94,6 @@ async def _check_budget(instance_id: str, db) -> float | None:
     Returns:
         Today's spend so far (USD), or None if the budget has been exceeded.
     """
-    from sqlalchemy import func, select
     from ai.engine.core.models import LLMCallLog
 
     settings = get_settings()
@@ -103,12 +102,12 @@ async def _check_budget(instance_id: str, db) -> float | None:
         return 0.0  # unlimited
 
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-    stmt = select(func.coalesce(func.sum(LLMCallLog.cost_usd), 0.0)).where(
-        LLMCallLog.instance_id == instance_id,
-        LLMCallLog.created_at >= today,
+    agg = await db.aggregate(
+        LLMCallLog,
+        {"spend": ("Sum", "cost_usd")},
+        {"instance_id": instance_id, "created_at__gte": today},
     )
-    result = await db.execute(stmt)
-    spent = result.scalar() or 0.0
+    spent = agg.get("spend") or 0.0
 
     if spent >= budget:
         logger.warning(
@@ -302,50 +301,52 @@ async def _log_call(
 
 async def get_daily_spend(instance_id: str, db) -> float:
     """Return today's total estimated spend for *instance_id*."""
-    from sqlalchemy import func, select
     from ai.engine.core.models import LLMCallLog
 
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-    stmt = select(func.coalesce(func.sum(LLMCallLog.cost_usd), 0.0)).where(
-        LLMCallLog.instance_id == instance_id,
-        LLMCallLog.created_at >= today,
+    agg = await db.aggregate(
+        LLMCallLog,
+        {"spend": ("Sum", "cost_usd")},
+        {"instance_id": instance_id, "created_at__gte": today},
     )
-    result = await db.execute(stmt)
-    return round(result.scalar() or 0.0, 4)
+    return round(agg.get("spend") or 0.0, 4)
 
 
 async def get_instance_stats(instance_id: str, db, days: int = 7) -> dict:
     """Return 7-day stats: total calls, tokens, cost, by model."""
-    from sqlalchemy import func, select
+    from collections import defaultdict
     from ai.engine.core.models import LLMCallLog
 
     since = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0, tzinfo=None,
     )
-    # SQLite doesn't have date arithmetic in the same way, use Python
     from datetime import timedelta
     since = since - timedelta(days=days - 1)
 
-    stmt = (
-        select(
-            LLMCallLog.model,
-            func.count().label("calls"),
-            func.coalesce(func.sum(LLMCallLog.total_tokens), 0).label("tokens"),
-            func.coalesce(func.sum(LLMCallLog.cost_usd), 0.0).label("cost"),
-        )
-        .where(
-            LLMCallLog.instance_id == instance_id,
-            LLMCallLog.created_at >= since,
-        )
-        .group_by(LLMCallLog.model)
-        .order_by(func.sum(LLMCallLog.cost_usd).desc())
+    rows = await db.select(
+        LLMCallLog,
+        {"instance_id": instance_id, "created_at__gte": since},
     )
-    result = await db.execute(stmt)
-    rows = result.all()
+
+    by_model_map: dict[str, dict] = defaultdict(
+        lambda: {"calls": 0, "tokens": 0, "cost": 0.0}
+    )
+    for row in rows:
+        m = by_model_map[row.model]
+        m["calls"] += 1
+        m["tokens"] += row.total_tokens or 0
+        m["cost"] += row.cost_usd or 0.0
 
     by_model = [
-        {"model": row.model, "calls": row.calls, "tokens": row.tokens, "cost_usd": round(row.cost, 4)}
-        for row in rows
+        {
+            "model": k,
+            "calls": v["calls"],
+            "tokens": v["tokens"],
+            "cost_usd": round(v["cost"], 4),
+        }
+        for k, v in sorted(
+            by_model_map.items(), key=lambda item: item[1]["cost"], reverse=True
+        )
     ]
     return {
         "instance_id": instance_id,

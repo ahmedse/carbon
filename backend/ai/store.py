@@ -43,6 +43,99 @@ DEFAULT_VISIBILITY = "private"
 # ``flush``, ``close`` plus async-context-manager support.
 
 
+def resolve_model(model: Any) -> Any:
+    """Map an engine (SQLAlchemy) model class → the Django model class.
+
+    The 49 engine tables are mirrored 1:1 into ``ai.models`` under identical
+    class names, so resolution is a name lookup.  Django models are returned
+    unchanged; unknown classes are returned unchanged so the in-memory
+    backend and lightweight test stubs keep working.
+    """
+    if not isinstance(model, type):
+        return model
+    # Already a Django model (has _meta + objects manager)?
+    if hasattr(model, "_meta") and hasattr(model, "objects"):
+        return model
+    name = model.__name__
+    try:
+        import ai.models as _ai_models
+    except Exception:  # pragma: no cover - import guard for isolated tests
+        return model
+    resolved = getattr(_ai_models, name, None)
+    return resolved if resolved is not None else model
+
+
+def scope_q(model: Any, instance_id: str, host_user_id: str | None) -> Any:
+    """Build a Django ``Q`` for the engine's tenancy triplet.
+
+    Mirrors ``ai.engine.core.models._apply_tenancy_filter`` semantics exactly:
+
+      - ``visibility='global'``  → visible regardless of user
+      - ``visibility='shared'``  → visible to all users of the instance
+      - ``visibility='private'`` → visible only to the owner (host_user_id)
+
+    When ``host_user_id`` is ``None``, only ``global``/``shared`` rows match.
+    """
+    from django.db.models import Q
+
+    if host_user_id:
+        vis = (
+            Q(visibility="global")
+            | Q(visibility="shared")
+            | (Q(visibility="private") & Q(host_user_id=host_user_id))
+        )
+    else:
+        vis = Q(visibility="global") | Q(visibility="shared")
+    return Q(instance_id=instance_id) & vis
+
+
+def _coerce_filter(f: Any) -> Any:
+    """Normalize a single filter into a Django ``Q`` (or pass-through)."""
+    from django.db.models import Q
+
+    if isinstance(f, Q):
+        return f
+    if isinstance(f, dict):
+        return Q(**f)
+    if (
+        isinstance(f, (tuple, list))
+        and len(f) == 2
+        and isinstance(f[0], str)
+    ):
+        return Q(**{f[0]: f[1]})
+    return f
+
+
+def _to_django_instance(obj: Any) -> Any:
+    """Convert a SQLAlchemy model instance → a Django model instance.
+
+    Field names are 1:1 across the two layers, so this is a straight
+    attribute copy (skipping ``None`` so Django defaults — ``id`` UUID,
+    ``app_identifier``, ``visibility``, auto timestamps — apply normally).
+    This is a model-instance mapper, NOT a query translator.
+    """
+    from django.db import models as _dj_models
+
+    if isinstance(obj, _dj_models.Model):
+        return obj
+    dj_cls = resolve_model(obj.__class__)
+    if dj_cls is obj.__class__:
+        return obj
+    dj_obj = dj_cls()
+    for field in dj_obj._meta.fields:
+        name = field.name
+        if hasattr(obj, name):
+            value = getattr(obj, name)
+            if value is not None:
+                setattr(dj_obj, name, value)
+    return dj_obj
+
+
+def first(rows: list[Any]) -> Any:
+    """Return the first row of a native ``select`` result, or ``None``."""
+    return rows[0] if rows else None
+
+
 class Session(ABC):
     """Async session handle. Mirrors the SQLAlchemy AsyncSession surface."""
 
@@ -55,7 +148,11 @@ class Session(ABC):
         ...
 
     @abstractmethod
-    async def add(self, obj: Any) -> None:
+    def add(self, obj: Any) -> None:
+        ...
+
+    @abstractmethod
+    def add_all(self, objs: list[Any]) -> None:
         ...
 
     @abstractmethod
@@ -81,6 +178,19 @@ class Session(ABC):
     @abstractmethod
     async def flush(self) -> None:
         ...
+
+    @abstractmethod
+    def begin_nested(self) -> Any:
+        """Return an async context manager wrapping a savepoint (no-op in Django)."""
+
+    @abstractmethod
+    async def aggregate(self, model: Any, spec: dict[str, tuple[str, str]], *filters: Any) -> dict[str, Any]:
+        """Compute Django-style aggregations over ``model``.
+
+        ``spec`` maps an output alias to a ``(function, field)`` pair where
+        ``function`` is one of ``Sum`` / ``Count`` / ``Avg`` / ``Min`` /
+        ``Max``.  Used for the engine's scalar aggregates (spend, counts).
+        """
 
     @abstractmethod
     async def close(self) -> None:
@@ -131,8 +241,11 @@ class _InMemorySession(Session):
     async def __aexit__(self, *exc_info: Any) -> None:
         await self.close()
 
-    async def add(self, obj: Any) -> None:
-        self._store._pending[self._name].append(obj)
+    def add(self, obj: Any) -> None:
+        self._store._pending.setdefault(self._name, []).append(obj)
+
+    def add_all(self, objs: list[Any]) -> None:
+        self._store._pending.setdefault(self._name, []).extend(objs)
 
     async def commit(self) -> None:
         namespace = self._store._engine(self._name)
@@ -144,8 +257,9 @@ class _InMemorySession(Session):
     async def select(self, model: Any, *filters: Any) -> list[Any]:
         # Filters are opaque in the in-memory backend; return all objects
         # whose class matches ``model``.
+        resolved = resolve_model(model)
         namespace = self._store._engine(self._name)
-        return [o for o in namespace.values() if isinstance(o, model)]
+        return [o for o in namespace.values() if isinstance(o, resolved)]
 
     async def get(self, model: Any, pk: Any) -> Any:
         return self._store._engine(self._name).get(pk)
@@ -161,6 +275,36 @@ class _InMemorySession(Session):
 
     async def flush(self) -> None:
         return None
+
+    def begin_nested(self) -> Any:
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def _nested() -> Any:
+            yield None
+
+        return _nested()
+
+    async def aggregate(self, model: Any, spec: dict[str, tuple[str, str]], *filters: Any) -> dict[str, Any]:
+        resolved = resolve_model(model)
+        namespace = self._store._engine(self._name)
+        rows = [o for o in namespace.values() if isinstance(o, resolved)]
+        out: dict[str, Any] = {}
+        for alias, (func_name, field) in spec.items():
+            values = [getattr(r, field) for r in rows if getattr(r, field, None) is not None]
+            if func_name == "Count":
+                out[alias] = len(rows) if field in ("*", "id", "pk") else len(values)
+            elif func_name == "Sum":
+                out[alias] = sum(values) if values else 0
+            elif func_name == "Avg":
+                out[alias] = (sum(values) / len(values)) if values else 0
+            elif func_name == "Min":
+                out[alias] = min(values) if values else None
+            elif func_name == "Max":
+                out[alias] = max(values) if values else None
+            else:
+                out[alias] = None
+        return out
 
     async def close(self) -> None:
         self._closed = True
@@ -214,6 +358,7 @@ class _DjangoSession(Session):
         self._store = store
         self._name = name
         self._pending: list[Any] = []
+        self._tracked: dict[int, Any] = {}
         self._closed = False
 
     async def __aenter__(self) -> "_DjangoSession":
@@ -222,41 +367,67 @@ class _DjangoSession(Session):
     async def __aexit__(self, *exc_info: Any) -> None:
         await self.close()
 
-    async def add(self, obj: Any) -> None:
-        self._pending.append(obj)
+    def add(self, obj: Any) -> None:
+        self._pending.append(_to_django_instance(obj))
+
+    def add_all(self, objs: list[Any]) -> None:
+        for obj in objs:
+            self._pending.append(_to_django_instance(obj))
 
     async def commit(self) -> None:
         from asgiref.sync import sync_to_async
 
+        pending = list(self._pending)
+        tracked = list(self._tracked.values())
+
         def _commit() -> None:
-            for obj in self._pending:
+            for obj in pending:
+                obj.save()
+            # Re-save fetched objects whose attributes may have been mutated
+            # in place (mirrors SQLAlchemy's dirty-flush on commit).
+            for obj in tracked:
                 obj.save()
             self._pending.clear()
+            self._tracked.clear()
 
         await sync_to_async(_commit, thread_sensitive=True)()
 
     async def select(self, model: Any, *filters: Any) -> list[Any]:
         from asgiref.sync import sync_to_async
 
+        resolved = resolve_model(model)
+        coerced = [_coerce_filter(f) for f in filters]
+
         def _select() -> list[Any]:
-            qs = model.objects.all()
+            qs = resolved.objects.all()
             qs = self._store._apply_tenancy_filter(qs)
-            for f in filters:
-                qs = qs.filter(f) if hasattr(qs, "filter") else qs
+            if coerced:
+                qs = qs.filter(*coerced)
             return list(qs)
 
-        return await sync_to_async(_select, thread_sensitive=True)()
+        rows = await sync_to_async(_select, thread_sensitive=True)()
+        for row in rows:
+            self._tracked[id(row)] = row
+        return rows
 
     async def get(self, model: Any, pk: Any) -> Any:
         from asgiref.sync import sync_to_async
 
-        def _get() -> Any:
-            return model.objects.get(pk=pk)
+        resolved = resolve_model(model)
 
-        return await sync_to_async(_get, thread_sensitive=True)()
+        def _get() -> Any:
+            return resolved.objects.get(pk=pk)
+
+        row = await sync_to_async(_get, thread_sensitive=True)()
+        if row is not None:
+            self._tracked[id(row)] = row
+        return row
 
     async def delete(self, obj: Any) -> None:
         from asgiref.sync import sync_to_async
+
+        self._tracked.pop(id(obj), None)
+        self._pending = [o for o in self._pending if o is not obj]
 
         await sync_to_async(obj.delete, thread_sensitive=True)()
 
@@ -267,6 +438,36 @@ class _DjangoSession(Session):
 
     async def flush(self) -> None:
         await self.commit()
+
+    def begin_nested(self) -> Any:
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def _nested() -> Any:
+            # Django runs in autocommit; a savepoint is unnecessary for the
+            # engine's add-then-flush pattern.  Just yield and let ``flush()``
+            # persist.  On exception, nothing is left half-written.
+            yield None
+
+        return _nested()
+
+    async def aggregate(self, model: Any, spec: dict[str, tuple[str, str]], *filters: Any) -> dict[str, Any]:
+        from asgiref.sync import sync_to_async
+        from django.db.models import Avg, Count, Max, Min, Sum
+
+        resolved = resolve_model(model)
+        coerced = [_coerce_filter(f) for f in filters]
+        _FUNCS = {"Sum": Sum, "Count": Count, "Avg": Avg, "Min": Min, "Max": Max}
+
+        def _aggregate() -> dict[str, Any]:
+            qs = resolved.objects.all()
+            qs = self._store._apply_tenancy_filter(qs)
+            if coerced:
+                qs = qs.filter(*coerced)
+            agg = {alias: _FUNCS[func_name](field) for alias, (func_name, field) in spec.items()}
+            return qs.aggregate(**agg)
+
+        return await sync_to_async(_aggregate, thread_sensitive=True)()
 
     async def close(self) -> None:
         self._closed = True
@@ -356,6 +557,9 @@ __all__ = [
     "DjangoStore",
     "get_store",
     "reset_store",
+    "resolve_model",
+    "scope_q",
+    "first",
     "DEFAULT_APP_IDENTIFIER",
     "DEFAULT_VISIBILITY",
 ]

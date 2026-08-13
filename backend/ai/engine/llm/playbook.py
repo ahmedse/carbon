@@ -20,10 +20,8 @@ import hashlib
 import logging
 from typing import Optional
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.engine.core.models import BLOCK_KINDS, PlaybookBlock, generate_uuid
+from ai.store import first
 
 logger = logging.getLogger("pulse.llm.playbook")
 
@@ -48,7 +46,7 @@ class PlaybookAssembler:
 
     @staticmethod
     async def load_blocks(
-        db: AsyncSession,
+        db,
         instance_id: str,
         block_filter: list[str] | None = None,
     ) -> list[PlaybookBlock]:
@@ -63,16 +61,11 @@ class PlaybookAssembler:
         Returns:
             Ordered list of PlaybookBlock rows ready for assembly.
         """
-        stmt = select(PlaybookBlock).where(
-            PlaybookBlock.instance_id == instance_id,
-            PlaybookBlock.is_active == True,  # noqa: E712
-        )
-
+        filters: dict = {"instance_id": instance_id, "is_active": True}
         if block_filter:
-            stmt = stmt.where(PlaybookBlock.block_type.in_(block_filter))
+            filters["block_type__in"] = list(block_filter)
 
-        result = await db.execute(stmt)
-        blocks = result.scalars().all()
+        blocks = await db.select(PlaybookBlock, filters)
 
         # Sort: canonical block-type order first, then priority descending
         type_rank = {t: i for i, t in enumerate(BLOCK_TYPE_ORDER)}
@@ -86,7 +79,7 @@ class PlaybookAssembler:
 
     async def assemble(
         self,
-        db: AsyncSession,
+        db,
         instance_id: str,
         runtime_context: dict | None = None,
         block_filter: list[str] | None = None,
@@ -139,29 +132,24 @@ class PlaybookAssembler:
 
     async def get_block(
         self,
-        db: AsyncSession,
+        db,
         instance_id: str,
         block_type: str,
         title: str,
     ) -> PlaybookBlock | None:
         """Fetch a specific block by type + title (for surgical edits)."""
-        stmt = (
-            select(PlaybookBlock)
-            .where(
-                PlaybookBlock.instance_id == instance_id,
-                PlaybookBlock.block_type == block_type,
-                PlaybookBlock.title == title,
-                PlaybookBlock.is_active == True,  # noqa: E712
-            )
-            .order_by(PlaybookBlock.version.desc())
-            .limit(1)
-        )
-        result = await db.execute(stmt)
-        return result.scalar_one_or_none()
+        rows = await db.select(PlaybookBlock, {
+            "instance_id": instance_id,
+            "block_type": block_type,
+            "title": title,
+            "is_active": True,
+        })
+        rows = sorted(rows, key=lambda b: b.version, reverse=True)
+        return first(rows)
 
     async def upsert_block(
         self,
-        db: AsyncSession,
+        db,
         instance_id: str,
         block_type: str,
         title: str,
@@ -184,19 +172,14 @@ class PlaybookAssembler:
         content_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
 
         # Look for existing active block
-        stmt = (
-            select(PlaybookBlock)
-            .where(
-                PlaybookBlock.instance_id == instance_id,
-                PlaybookBlock.block_type == block_type,
-                PlaybookBlock.title == title,
-                PlaybookBlock.is_active == True,  # noqa: E712
-            )
-            .order_by(PlaybookBlock.version.desc())
-            .limit(1)
-        )
-        result = await db.execute(stmt)
-        existing = result.scalar_one_or_none()
+        rows = await db.select(PlaybookBlock, {
+            "instance_id": instance_id,
+            "block_type": block_type,
+            "title": title,
+            "is_active": True,
+        })
+        rows = sorted(rows, key=lambda b: b.version, reverse=True)
+        existing = first(rows)
 
         if existing is not None:
             existing_hash = hashlib.sha256(existing.content.encode()).hexdigest()[:16]
@@ -242,7 +225,7 @@ class PlaybookAssembler:
 
     async def export_playbook(
         self,
-        db: AsyncSession,
+        db,
         instance_id: str,
     ) -> dict:
         """Export all blocks as a dict keyed by (block_type, title).

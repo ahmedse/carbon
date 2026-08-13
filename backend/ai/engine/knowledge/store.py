@@ -1,15 +1,14 @@
 """
-Knowledge storage — SQLite + vector store for schema entities.
+Knowledge storage — PostgreSQL (``ai.models.KnowledgeEntity``) + vector store
+for schema entities.
 """
 import json
 import logging
 from typing import Optional
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import KnowledgeEntity, generate_uuid
+from ai.store import first
 
 logger = logging.getLogger("pulse.knowledge.store")
 
@@ -47,7 +46,7 @@ def get_chroma_client():
 
 
 class KnowledgeStore:
-    def __init__(self, db_session: AsyncSession, chroma_client=None):
+    def __init__(self, db_session, chroma_client=None):
         self.db_session = db_session
         from ai.engine.knowledge.vector_store import get_vector_store
         self.vector = get_vector_store(db_session)
@@ -117,12 +116,12 @@ class KnowledgeStore:
         entity_ids = results["ids"][0]
         entities = []
         for eid in entity_ids:
-            stmt = select(KnowledgeEntity).where(
-                KnowledgeEntity.id == eid,
-                KnowledgeEntity.instance_id == instance_id,
+            entity = first(
+                await self.db_session.select(
+                    KnowledgeEntity,
+                    {"id": eid, "instance_id": instance_id},
+                )
             )
-            result = await self.db_session.execute(stmt)
-            entity = result.scalar_one_or_none()
             if entity:
                 entities.append(
                     {
@@ -139,12 +138,12 @@ class KnowledgeStore:
 
     async def get_entity(self, instance_id: str, name: str) -> Optional[dict]:
         """Exact match lookup by entity name."""
-        stmt = select(KnowledgeEntity).where(
-            KnowledgeEntity.instance_id == instance_id,
-            KnowledgeEntity.name == name,
+        entity = first(
+            await self.db_session.select(
+                KnowledgeEntity,
+                {"instance_id": instance_id, "name": name},
+            )
         )
-        result = await self.db_session.execute(stmt)
-        entity = result.scalar_one_or_none()
         if not entity:
             return None
         return {
@@ -158,11 +157,9 @@ class KnowledgeStore:
 
     async def update_entity_description(self, entity_id: str, new_description: str):
         """Admin updates semantic description → re-embed and update vector store."""
-        stmt = select(KnowledgeEntity).where(
-            KnowledgeEntity.id == entity_id,
+        entity = first(
+            await self.db_session.select(KnowledgeEntity, {"id": entity_id})
         )
-        result = await self.db_session.execute(stmt)
-        entity = result.scalar_one_or_none()
         if not entity:
             return
 
