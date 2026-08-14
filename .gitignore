@@ -110,6 +110,8 @@ carbon-frontend/playwright-report/
 carbon-frontend/blob-report/
 carbon-frontend/playwright/.cache/
 carbon-frontend/playwright/.auth/
+carbon-frontend/e2e/e2e-report/
+carbon-frontend/e2e/e2e-results.json
 
 # Runtime media uploads (test-generated)
 mediafiles/evidence/
