@@ -3,6 +3,7 @@
 from django.urls import path
 
 from ai.activation_api import PulseSettingsView, PulseUsageView
+from ai.graph_api import GraphDataView
 from ai.observability_api import (
     PulseArchetypesView,
     PulseDataView,
@@ -18,6 +19,7 @@ urlpatterns = [
     path("inventory/", PulseInventoryView.as_view(), name="ai-pulse-inventory"),
     path("data/<str:key>/", PulseDataView.as_view(), name="ai-pulse-data"),
     path("archetypes/", PulseArchetypesView.as_view(), name="ai-pulse-archetypes"),
+    path("graph/", GraphDataView.as_view(), name="ai-pulse-graph"),
     path("usage/", PulseUsageView.as_view(), name="ai-pulse-usage"),
     path("settings/", PulseSettingsView.as_view(), name="ai-pulse-settings"),
     path("sweeps/", SweepsStatusView.as_view(), name="ai-pulse-sweeps"),

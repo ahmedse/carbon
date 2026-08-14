@@ -53,3 +53,14 @@ export function getUsage(token) {
 export function getSettings(token) {
   return apiFetch(`${BASE}settings/`, { token });
 }
+
+/**
+ * Fetch the normalized knowledge-graph (nodes + edges + stats) for the
+ * force-directed "Knowledge Graph" panel.
+ * @param {string} token - JWT access token
+ * @returns {Promise<{nodes: Array, edges: Array, stats: {node_count,
+ *                    edge_count, truncated, node_types, relationship_counts}}>}
+ */
+export function getPulseGraph(token) {
+  return apiFetch(`${BASE}graph/`, { token });
+}

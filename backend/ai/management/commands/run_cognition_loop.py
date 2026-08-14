@@ -5,12 +5,16 @@ Modes:
   * ``--run-once <task>``  trigger a single cognition task synchronously and
     print its result envelope, then exit (used by smoke tests / ops).
   * ``--status``           print the in-process loop status JSON and exit.
-  * (default)             start the APScheduler ``AsyncIOScheduler`` (which
-    manages its own event loop) and block until SIGINT/SIGTERM.  Signal
-    handlers call ``stop_scheduler()`` before returning.
+  * (default)             start the APScheduler ``AsyncIOScheduler`` on a real
+    asyncio event loop (``asyncio.run``) and block until SIGINT/SIGTERM.
+    Signal handlers call ``stop_scheduler()`` and unblock the loop before
+    returning.
 
-The scheduler's async event loop lives inside APScheduler's own background
-thread, so the command only keeps the main thread alive with ``signal.pause()``.
+``AsyncIOScheduler`` does **not** manage its own event loop — it schedules
+coroutine jobs onto the loop of the thread that starts it.  The command
+therefore runs a dedicated asyncio event loop, registers SIGINT/SIGTERM via
+``loop.add_signal_handler``, and blocks on ``asyncio.Event().wait()`` until a
+signal arrives.
 """
 
 import asyncio
@@ -59,19 +63,36 @@ class Command(BaseCommand):
             self.stdout.write(json.dumps(result, indent=2))
             return
 
-        # Default: start the scheduler and block until a termination signal.
-        start_scheduler()
+        # Default: run the scheduler on a real asyncio event loop and block
+        # until a termination signal.
+        asyncio.run(self._run_scheduler_loop())
 
-        def _stop(signum, frame):
+    async def _run_scheduler_loop(self):
+        """Run the scheduler on a real asyncio loop until SIGINT/SIGTERM.
+
+        ``AsyncIOScheduler`` schedules coroutine jobs onto the event loop of
+        the thread that starts it, so a plain ``signal.pause()`` never yields
+        to the loop and the jobs never fire.  We install signal handlers via
+        ``loop.add_signal_handler`` and block on an ``asyncio.Event``.
+        """
+        loop = asyncio.get_running_loop()
+        stop_event = asyncio.Event()
+
+        def _stop(signum):
             logger.info("Received signal %s — stopping cognition loop", signum)
             stop_scheduler()
+            stop_event.set()
 
-        signal.signal(signal.SIGINT, _stop)
-        signal.signal(signal.SIGTERM, _stop)
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, _stop, sig)
+            except (NotImplementedError, RuntimeError, ValueError):
+                # add_signal_handler is unavailable on some platforms (e.g.
+                # Windows) or when the loop is already closed/not running.
+                logger.warning("Cannot register signal handler for %s", sig)
 
+        start_scheduler()
         try:
-            signal.pause()
-        except KeyboardInterrupt:
-            pass
+            await stop_event.wait()
         finally:
             stop_scheduler()

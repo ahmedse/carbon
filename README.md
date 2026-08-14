@@ -23,6 +23,12 @@ Enterprise carbon emissions management platform. Multi-scope GHG tracking, data 
 - **DevOps**: Docker, Docker Compose
 - **AI Toolkit**: `.ai-toolkit/` — agent instructions, decisions registry, project config
 
+> **Scheduler sidecar** — `docker-compose.yml` also runs a `scheduler` service
+> (`manage.py run_cognition_loop`) for the conscious cognition loop. It builds
+> the same backend image, shares `./backend/.env`, and depends on `backend`,
+> but publishes no ports. It runs the `AsyncIOScheduler` jobs on a dedicated
+> asyncio event loop and blocks until SIGINT/SIGTERM.
+
 ---
 
 ## 📂 Repository Structure
