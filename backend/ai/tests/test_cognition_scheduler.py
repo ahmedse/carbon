@@ -227,3 +227,24 @@ def test_sweeps_endpoint_requires_auth(api_client):
 @pytest.mark.django_db
 def test_sweeps_endpoint_rejects_post(auth_client):
     assert auth_client.post(f"{BASE}/sweeps/", {}).status_code == 405
+
+
+# ── Phase H — supervisor liveness heartbeat ──────────────────────────────
+
+
+def test_heartbeat_writes_fresh_file(cfg, monkeypatch, tmp_path):
+    """_write_heartbeat writes a fresh timestamp to the configured path."""
+    from ai.engine.cognition.loop import _write_heartbeat
+
+    heartbeat = tmp_path / "cognition_loop.heartbeat"
+    monkeypatch.setenv("COGNITION_HEARTBEAT_FILE", str(heartbeat))
+    get_settings.cache_clear()
+
+    _write_heartbeat()
+
+    assert heartbeat.exists()
+    content = heartbeat.read_text().strip()
+    assert content  # ISO-8601 timestamp, non-empty
+    # The file is brand new — mtime within the last few seconds.
+    import time
+    assert time.time() - heartbeat.stat().st_mtime < 5

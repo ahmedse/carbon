@@ -431,6 +431,15 @@ AI_VIEW_CONSOLE = Capability(
     category="admin",
 )
 
+AI_MANAGE_CONSOLE = Capability(
+    key="ai:manage_console",
+    domain="ai",
+    action="manage_console",
+    label="Manage AI (Pulse)",
+    description="Run and manage Pulse AI operations: trigger sweeps, run tasks, and mutate AI state",
+    category="admin",
+)
+
 
 # ═══════════════════════════════════════════════════════════════════
 # ALL CAPABILITIES — master registry
@@ -488,6 +497,7 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     EVIDENCE_MANAGE.key: EVIDENCE_MANAGE,
     # AI (Pulse)
     AI_VIEW_CONSOLE.key: AI_VIEW_CONSOLE,
+    AI_MANAGE_CONSOLE.key: AI_MANAGE_CONSOLE,
 }
 
 
@@ -554,6 +564,9 @@ IMPLIES: Dict[str, Set[str]] = {
 
     # ── Evidence admin → view ──
     EVIDENCE_MANAGE.key: {EVIDENCE_VIEW.key},
+
+    # ── AI admin → view ──
+    AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key},
 }
 
 

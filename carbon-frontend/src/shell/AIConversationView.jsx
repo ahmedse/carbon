@@ -15,6 +15,7 @@ import AIMessageBubble from './AIMessageBubble';
 import AIInputBar from './AIInputBar';
 import AIWorkingIndicator from './AIWorkingIndicator';
 import AIOfflineBanner from './AIOfflineBanner';
+import { DQ_MANAGE_RULES } from '../capabilities';
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -30,8 +31,12 @@ function normalizeConversationShape(payload) {
 }
 
 function AIConversationView({ conversationId }) {
-  const { token } = useAuth();
+  const { token, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { notifyFromError } = useNotification();
+  // CBAC: accepting/rejecting DQ suggestions writes rules → requires dq:manage_rules.
+  const canManageRules = isGlobalAdminFlag || (userCapabilities || []).some(
+    (c) => (typeof c === 'string' ? c : c?.key) === DQ_MANAGE_RULES
+  );
   const [conversation, setConversation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -264,6 +269,7 @@ function AIConversationView({ conversationId }) {
             message={msg}
             onAcceptSuggestion={handleAcceptSuggestion}
             onRejectSuggestion={handleRejectSuggestion}
+            canManageRules={canManageRules}
           />
         ))}
 
@@ -318,24 +324,32 @@ function AIConversationView({ conversationId }) {
                       <Typography variant="caption" color="text.secondary">
                         {s.definition?.name || s.name || `Suggestion ${i + 1}`}
                       </Typography>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="success"
-                        disabled={actionBusyId === `accept-${sid}`}
-                        onClick={() => handleAcceptSuggestion(s)}
-                      >
-                        Accept
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="error"
-                        disabled={actionBusyId === `reject-${sid}`}
-                        onClick={() => handleRejectSuggestion(s)}
-                      >
-                        Reject
-                      </Button>
+                      {canManageRules ? (
+                        <>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="success"
+                            disabled={actionBusyId === `accept-${sid}`}
+                            onClick={() => handleAcceptSuggestion(s)}
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            disabled={actionBusyId === `reject-${sid}`}
+                            onClick={() => handleRejectSuggestion(s)}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      ) : (
+                        <Typography variant="caption" color="text.disabled">
+                          Requires DQ manage permission to accept or reject.
+                        </Typography>
+                      )}
                     </Stack>
                   );
                 })}

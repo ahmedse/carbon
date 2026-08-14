@@ -104,6 +104,8 @@ class Settings(BaseSettings):
     COGNITION_PROMOTION_INTERVAL: int = 604800      # PR-14: weekly fact promotion (7 days)
     COGNITION_FACT_DECAY_INTERVAL: int = 2592000    # PR-14: monthly fact decay (30 days)
     COGNITION_SELF_REFLECT_INTERVAL: int = 604800   # PR-15: weekly self-reflection (7 days)
+    COGNITION_HEARTBEAT_INTERVAL: int = 60          # Phase H: supervisor liveness tick (seconds)
+    COGNITION_HEARTBEAT_FILE: str = "/tmp/cognition_loop.heartbeat"  # Phase H: supervisor healthcheck target
 
     # ── Consolidation Sweep (P4.2) ──
     CONSOLIDATION_SWEEP_MAX_LLM_CALLS: int = 10        # max LLM calls per sweep

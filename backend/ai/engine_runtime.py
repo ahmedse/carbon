@@ -772,11 +772,17 @@ async def _run_anomaly_detect(
     # Best-effort — any failure degrades gracefully to the heuristic above.
     real_profile: dict[str, Any] = {}
     try:
-        if get_settings().HOST_DB_URL:
+        from ai.engine.knowledge_graph.engine import _default_host_db_url
+
+        # Prefer an explicit HOST_DB_URL, but fall back to Django's default
+        # database (Carbon's own PostgreSQL) so live profiling works without
+        # any manual connection-string config — mirroring ExecutionEngine.
+        host_db_url = get_settings().HOST_DB_URL or _default_host_db_url()
+        if host_db_url:
             from ai.engine.knowledge_graph.data_profiler import DataProfiler
 
             profile = await DataProfiler(
-                host_db_url=get_settings().HOST_DB_URL,
+                host_db_url=host_db_url,
                 schema=get_settings().HOST_DB_SCHEMA,
             ).profile_table(
                 table_name=table_name,
@@ -795,7 +801,14 @@ async def _run_anomaly_detect(
                 latest = history[-1]
                 live = profile.row_count
                 last_count = latest.get("row_count")
-                if isinstance(last_count, (int, float)) and isinstance(live, int):
+                # ``row_count == 0`` is ambiguous (empty table vs. missing
+                # table), so only flag a live deviation when the profiler
+                # actually found rows in the host database.
+                if (
+                    live > 0
+                    and isinstance(last_count, (int, float))
+                    and isinstance(live, int)
+                ):
                     delta_pct = (
                         abs(live - last_count) / last_count * 100
                         if last_count
@@ -906,6 +919,33 @@ async def _run_report_draft(
         )
         kg_context = {"error": str(exc)}
 
+    # Real host-DB grounding: pull live table volume from the host database
+    # so the report references actual data present in the platform, never
+    # invented figures.  Best-effort — failure degrades to no live metrics.
+    host_metrics: dict[str, Any] = {}
+    try:
+        from ai.engine.knowledge_graph.engine import ExecutionEngine
+
+        engine = ExecutionEngine(instance_id)
+        outcome = await engine.execute(
+            "SELECT relname AS table_name, n_live_tup AS row_count "
+            "FROM pg_stat_user_tables "
+            "WHERE schemaname = 'public' AND n_live_tup > 0 "
+            "ORDER BY n_live_tup DESC LIMIT 25"
+        )
+        if outcome.success:
+            host_metrics = {
+                "tables": outcome.rows,
+                "total_tables": len(outcome.rows),
+            }
+        else:
+            host_metrics = {"error": "host query failed"}
+    except Exception as exc:
+        logger.warning(
+            "report.draft host metrics failed for %s: %s", instance_id, exc
+        )
+        host_metrics = {"error": str(exc)}
+
     llm_text = await _llm_text(
         task="report_draft",
         instance_id=instance_id,
@@ -916,6 +956,9 @@ async def _run_report_draft(
                 "content": (
                     f"Draft a {report_type} report summary for "
                     f"{period_start} → {period_end}."
+                    f"\n\nKnowledge-graph context: {json.dumps(kg_context, default=str)}"
+                    f"\nLive host-data volume: {json.dumps(host_metrics, default=str)}"
+                    "\n\nGround the narrative in these figures; do not invent numbers."
                 ),
             }
         ],
@@ -931,6 +974,11 @@ async def _run_report_draft(
             "Knowledge-graph context unavailable; figures are not sourced "
             "from the live graph."
         )
+    if host_metrics.get("error") or not host_metrics.get("tables"):
+        caveats.append(
+            "Live host-data volume unavailable; table figures are not "
+            "sourced from the live database."
+        )
 
     sections = [
         {
@@ -939,7 +987,17 @@ async def _run_report_draft(
             "sql": None,
             "data_table": kg_context or None,
             "caveats": caveats,
-        }
+        },
+        {
+            "title": "Data Volume (Live)",
+            "narrative": (
+                "Live row counts for the largest platform tables "
+                "(pg_stat_user_tables)."
+            ),
+            "sql": None,
+            "data_table": host_metrics or None,
+            "caveats": [],
+        },
     ]
     return {
         "status": "completed",
@@ -952,6 +1010,7 @@ async def _run_report_draft(
             "period_end": period_end,
             "generated_at": _now_iso(),
             "kg_context": kg_context,
+            "host_metrics": host_metrics,
             "sections": sections,
         },
     }

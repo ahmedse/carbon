@@ -57,6 +57,8 @@ from accounts.capabilities import (
     DATASCHEMA_MANAGE,
     EVIDENCE_VIEW,
     EVIDENCE_MANAGE,
+    AI_VIEW_CONSOLE,
+    AI_MANAGE_CONSOLE,
     PLATFORM_ADMIN,
     PLATFORM_MANAGE_USERS,
     PLATFORM_MANAGE_GROUPS,
@@ -441,6 +443,15 @@ class TestGroupCapabilityMappings:
         """Only admin/wildcard groups manage evidence; data groups view-only."""
         for group_name in ("dataowners_group", "analysts_group", "viewers_group", "auditors_group"):
             assert EVIDENCE_MANAGE.key not in GROUP_CAPABILITIES[group_name]
+
+    # ── AI (Pulse) capabilities ──
+    def test_ai_capabilities_exist(self):
+        """ai:view_console + ai:manage_console registered; manage implies view."""
+        assert AI_VIEW_CONSOLE.key in ALL_CAPABILITIES
+        assert AI_MANAGE_CONSOLE.key in ALL_CAPABILITIES
+        assert AI_VIEW_CONSOLE.key in IMPLIES[AI_MANAGE_CONSOLE.key]
+        expanded = _expand_capabilities({AI_MANAGE_CONSOLE.key})
+        assert AI_VIEW_CONSOLE.key in expanded
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1556,6 +1567,7 @@ class TestInheritanceDepth:
         (CONNECTIONS_MANAGE.key, CONNECTIONS_VIEW.key),
         (IMPORTEXPORT_MANAGE.key, IMPORTEXPORT_VIEW.key),
         (DATASCHEMA_MANAGE.key, DATASCHEMA_VIEW.key),
+        (AI_MANAGE_CONSOLE.key, AI_VIEW_CONSOLE.key),
     ])
     def test_every_manage_implies_view(self, manage_cap, view_cap):
         """Every manage capability should imply at least one view capability."""

@@ -45,6 +45,16 @@ services:
       - ./backend:/app
       - carbon_static:/static
       - carbon_media:/media
+    # Phase H — supervisor hardening: give the AsyncIOScheduler a grace window
+    # to stop jobs cleanly on SIGTERM, and healthcheck the liveness heartbeat
+    # the loop writes every COGNITION_HEARTBEAT_INTERVAL seconds.
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,time; p='/tmp/cognition_loop.heartbeat'; exit(0 if os.path.exists(p) and (time.time()-os.path.getmtime(p)) < 180 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py run_cognition_loop"

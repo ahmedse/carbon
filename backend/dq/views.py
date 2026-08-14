@@ -1381,7 +1381,7 @@ class DQSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = DQSuggestionSerializer
     permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
-    required_write_capability = 'dq:view'
+    required_write_capability = 'dq:manage_rules'
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['rationale', 'payload']
     ordering_fields = ['created_at', 'confidence']

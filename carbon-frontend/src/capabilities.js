@@ -67,7 +67,8 @@ export const EVIDENCE_VIEW   = 'evidence:view';
 export const EVIDENCE_MANAGE = 'evidence:manage';
 
 // ── AI (Pulse) ─────────────────────────────────────────────────────
-export const AI_VIEW_CONSOLE = 'ai:view_console';
+export const AI_VIEW_CONSOLE   = 'ai:view_console';
+export const AI_MANAGE_CONSOLE = 'ai:manage_console';
 
 // ── Manifest role → capability mapping ─────────────────────────────
 // Maps manifest role keys (carbon:data_owner) to capability keys.
@@ -176,6 +177,7 @@ export const CAPABILITY_INHERITANCE = {
   [IMPORTEXPORT_MANAGE]: [IMPORTEXPORT_VIEW],
   [DATASCHEMA_MANAGE]: [DATASCHEMA_VIEW],
   [EVIDENCE_MANAGE]: [EVIDENCE_VIEW],
+  [AI_MANAGE_CONSOLE]: [AI_VIEW_CONSOLE],
 };
 
 

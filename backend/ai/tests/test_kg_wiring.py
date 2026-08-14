@@ -224,6 +224,52 @@ def test_anomaly_detect_returns_completed(django_store, cfg):
 
 
 @pytest.mark.django_db
+def test_anomaly_detect_live_profile_grounds_real_row_count(django_store, cfg):
+    """G1 — live host-DB profile is attempted (fallback to Django default DB)
+    and a large live/snapshot deviation is flagged with ``.row_count.live``."""
+    from ai.engine_runtime import dispatch_task
+    from ai.engine.knowledge_graph.data_profiler import TableProfile
+
+    def snap(rc, comp):
+        return {
+            "at": "2026-01-01T00:00:00Z", "row_count": rc,
+            "completeness_pct": comp, "null_counts": {},
+        }
+
+    async def _fake_profile(self, table_name, columns=None, sample_size=None,
+                            max_cardinality=None):
+        return TableProfile(
+            table_name=table_name,
+            row_count=5000,
+            columns=[],
+            profiled_at="2026-01-02T00:00:00Z",
+        )
+
+    payload = {
+        "table_name": "emissions",
+        "profile_history": [snap(1000, 98.0), snap(1050, 97.5), snap(1100, 97.0)],
+        "sensitivity": 2.0,
+        "volume_threshold_pct": 30.0,
+    }
+
+    with patch(
+        "ai.engine.knowledge_graph.data_profiler.DataProfiler.profile_table",
+        new=_fake_profile,
+    ):
+        data = dispatch_task("carbon.anomaly.detect", payload, instance_id="carbon")
+
+    assert data.get("status") == "completed", data
+    result = data.get("result") or {}
+    live = result.get("live_profile")
+    assert live, data
+    assert live["row_count"] == 5000, data
+    assert live["table_name"] == "emissions", data
+    # Live count 5000 vs latest snapshot 1100 → >30% deviation → flagged.
+    live_metrics = [a["metric"] for a in result.get("anomalies", [])]
+    assert "emissions.row_count.live" in live_metrics, data
+
+
+@pytest.mark.django_db
 def test_anomaly_explain_returns_completed(django_store, cfg, stub_llm):
     from ai.engine_runtime import dispatch_task
 
@@ -254,6 +300,47 @@ def test_report_draft_returns_completed(django_store, cfg, stub_llm):
     sections = result.get("sections")
     assert isinstance(sections, list) and sections, data
     assert sections[0].get("narrative") or sections[0].get("content"), data
+
+
+@pytest.mark.django_db
+def test_report_draft_includes_host_metrics(django_store, cfg, stub_llm):
+    """G2 — report.draft pulls live pg_stat_user_tables volume and exposes it
+    as a second "Data Volume (Live)" section plus a host_metrics key."""
+    from ai.engine_runtime import dispatch_task
+    from ai.engine.knowledge_graph.engine import ExecutionResult
+
+    async def _fake_execute(self, sql):
+        return ExecutionResult(
+            success=True,
+            rows=[
+                {"table_name": "emissions_activity", "row_count": 1234},
+                {"table_name": "emissions_factors", "row_count": 56},
+            ],
+            row_count=2,
+            duration_ms=2,
+            sql_executed=sql,
+        )
+
+    payload = {"report_type": "emissions_summary", "period_start": "2026-01-01",
+               "period_end": "2026-06-30", "metrics": {}}
+
+    with patch("ai.engine.knowledge_graph.engine.ExecutionEngine.execute",
+               new=_fake_execute):
+        data = dispatch_task("carbon.report.draft", payload, instance_id="carbon")
+
+    assert data.get("status") == "completed", data
+    result = data.get("result") or {}
+    host_metrics = result.get("host_metrics")
+    assert host_metrics, data
+    assert host_metrics.get("total_tables") == 2, data
+    assert host_metrics["tables"][0]["table_name"] == "emissions_activity", data
+
+    sections = result.get("sections")
+    titles = [s.get("title") for s in sections]
+    assert "Summary" in titles, data
+    assert "Data Volume (Live)" in titles, data
+    volume_section = next(s for s in sections if s.get("title") == "Data Volume (Live)")
+    assert volume_section.get("data_table") == host_metrics, data
 
 
 @pytest.mark.django_db

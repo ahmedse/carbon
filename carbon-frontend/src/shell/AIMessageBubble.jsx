@@ -77,7 +77,7 @@ function confidenceLabel(confidence) {
   return `${pct}%`;
 }
 
-function AIMessageBubble({ message, onAcceptSuggestion, onRejectSuggestion }) {
+function AIMessageBubble({ message, onAcceptSuggestion, onRejectSuggestion, canManageRules = true }) {
   const [showTimestamp, setShowTimestamp] = useState(false);
   const isUser = message.role === 'user';
   const metadata = normalizeMetadata(message);
@@ -114,22 +114,30 @@ function AIMessageBubble({ message, onAcceptSuggestion, onRejectSuggestion }) {
                     )}
                   </Box>
                   <Stack direction="row" spacing={0.5}>
-                    <Button
-                      size="small"
-                      color="success"
-                      variant="outlined"
-                      onClick={() => onAcceptSuggestion?.(s)}
-                    >
-                      Accept
-                    </Button>
-                    <Button
-                      size="small"
-                      color="error"
-                      variant="outlined"
-                      onClick={() => onRejectSuggestion?.(s)}
-                    >
-                      Reject
-                    </Button>
+                    {canManageRules ? (
+                      <>
+                        <Button
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                          onClick={() => onAcceptSuggestion?.(s)}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          variant="outlined"
+                          onClick={() => onRejectSuggestion?.(s)}
+                        >
+                          Reject
+                        </Button>
+                      </>
+                    ) : (
+                      <Typography variant="caption" color="text.disabled">
+                        Requires DQ manage permission
+                      </Typography>
+                    )}
                   </Stack>
                 </Stack>
               </Paper>
@@ -320,6 +328,7 @@ AIMessageBubble.propTypes = {
   }).isRequired,
   onAcceptSuggestion: PropTypes.func,
   onRejectSuggestion: PropTypes.func,
+  canManageRules: PropTypes.bool,
 };
 
 export default AIMessageBubble;

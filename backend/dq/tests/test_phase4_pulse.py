@@ -292,6 +292,28 @@ class P4SuggestionApiTests(P4BaseTestCase):
         r = self.client.get(f'{BASE}/suggestions/')
         self.assertEqual(r.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_accept_requires_dq_manage_rules(self):
+        """G4 — accept/reject are write actions gated on dq:manage_rules;
+        a plain authenticated user without the capability is forbidden."""
+        s = self._make_suggestion()
+        plain = User.objects.create_user(username='p4_plain', password='pass')
+        self.client.force_authenticate(user=plain)
+        r = self.client.post(f'{BASE}/suggestions/{s.id}/accept/')
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+        s.refresh_from_db()
+        self.assertEqual(s.status, 'pending')  # no promotion happened
+
+    def test_reject_requires_dq_manage_rules(self):
+        """G4 — reject is also a write action; plain user is forbidden."""
+        s = self._make_suggestion()
+        plain = User.objects.create_user(username='p4_plain2', password='pass')
+        self.client.force_authenticate(user=plain)
+        r = self.client.post(f'{BASE}/suggestions/{s.id}/reject/',
+                             {'reason': 'nope'}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+        s.refresh_from_db()
+        self.assertEqual(s.status, 'pending')  # not rejected
+
 
 # ── Anomaly job ──────────────────────────────────────────────────────────
 

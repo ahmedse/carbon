@@ -565,6 +565,30 @@ async def _run_prompt_refine() -> None:
 
 # ── Scheduler lifecycle ───────────────────────────────────────────────────
 
+def _write_heartbeat() -> None:
+    """Write a liveness timestamp to the supervisor heartbeat file.
+
+    This is the signal the Docker healthcheck watches: as long as the file is
+    fresh, the scheduler process is alive and its event loop is ticking.  A
+    wedged loop (e.g. a blocked await) stops updating the file and Docker marks
+    the container unhealthy → restart policy recovers it.
+
+    Never raises — a healthcheck must not crash the scheduler.
+    """
+    settings = get_settings()
+    path = settings.COGNITION_HEARTBEAT_FILE
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(f"{utcnow().isoformat()}\n")
+    except OSError as exc:
+        logger.warning("Failed to write heartbeat to %s: %s", path, exc)
+
+
+async def _run_heartbeat() -> None:
+    """Scheduler job: refresh the liveness heartbeat every tick."""
+    _write_heartbeat()
+
+
 def start_scheduler():
     """Start the conscious cognition loop with all jobs."""
     settings = get_settings()
@@ -573,6 +597,15 @@ def start_scheduler():
     if scheduler.running:
         logger.info("Scheduler already running")
         return
+
+    # ── Supervisor liveness heartbeat (Phase H) — registered first so the
+    #    healthcheck has a signal immediately after startup. ──
+    _write_heartbeat()
+    scheduler.add_job(
+        _run_heartbeat, "interval",
+        seconds=settings.COGNITION_HEARTBEAT_INTERVAL,
+        id="heartbeat", replace_existing=True,
+    )
 
     # ── Monitoring tasks (existing) ──
     scheduler.add_job(
