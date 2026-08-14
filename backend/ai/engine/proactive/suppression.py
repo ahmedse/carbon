@@ -12,8 +12,7 @@ from datetime import datetime, timedelta
 from ai.engine.core.clock import utcnow
 from collections import defaultdict
 
-from sqlalchemy import select, func as sa_func
-from sqlalchemy.ext.asyncio import AsyncSession
+from ai.store import first
 
 from ai.engine.core.config import get_settings
 from ai.engine.knowledge_graph.models import KgProactiveInsight, KgProactiveTrigger
@@ -107,7 +106,7 @@ def _cluster_by_data(results: list) -> list[list]:
 
 
 async def record_dismissal(
-    db: AsyncSession,
+    db,
     insight_id: str,
     reason: str,
 ) -> bool:
@@ -118,10 +117,7 @@ async def record_dismissal(
     """
     settings = get_settings()
 
-    result = await db.execute(
-        select(KgProactiveInsight).where(KgProactiveInsight.id == insight_id)
-    )
-    insight = result.scalar_one_or_none()
+    insight = first(await db.select(KgProactiveInsight, ("id", insight_id)))
     if not insight:
         return False
 
@@ -143,7 +139,7 @@ async def record_dismissal(
 
 
 async def record_engagement(
-    db: AsyncSession,
+    db,
     insight_id: str,
     action: str,
 ) -> bool:
@@ -154,10 +150,7 @@ async def record_engagement(
     if action not in valid_actions:
         return False
 
-    result = await db.execute(
-        select(KgProactiveInsight).where(KgProactiveInsight.id == insight_id)
-    )
-    insight = result.scalar_one_or_none()
+    insight = first(await db.select(KgProactiveInsight, ("id", insight_id)))
     if not insight:
         return False
 
@@ -167,7 +160,7 @@ async def record_engagement(
 
 
 async def get_dismissal_stats(
-    db: AsyncSession,
+    db,
     instance_id: str,
     days: int = 30,
 ) -> list[dict]:
@@ -177,33 +170,25 @@ async def get_dismissal_stats(
     """
     cutoff = utcnow() - timedelta(days=days)
 
-    stmt = (
-        select(
-            KgProactiveInsight.trigger_id,
-            KgProactiveInsight.disposition,
-            sa_func.count().label("count"),
-        )
-        .where(
-            KgProactiveInsight.instance_id == instance_id,
-            KgProactiveInsight.created_at >= cutoff,
-            KgProactiveInsight.trigger_id != None,  # noqa: E711
-        )
-        .group_by(KgProactiveInsight.trigger_id, KgProactiveInsight.disposition)
+    insights = await db.select(
+        KgProactiveInsight,
+        ("instance_id", instance_id),
+        ("created_at__gte", cutoff),
+        ("trigger_id__isnull", False),
     )
-    result = await db.execute(stmt)
-    rows = result.all()
 
     # Aggregate per trigger
     trigger_stats = defaultdict(lambda: {"total": 0, "dismissed": 0, "engaged": 0, "pending": 0})
-    for trigger_id, disposition, count in rows:
-        stats = trigger_stats[trigger_id]
-        stats["total"] += count
+    for insight in insights:
+        stats = trigger_stats[insight.trigger_id]
+        disposition = insight.disposition or ""
+        stats["total"] += 1
         if disposition.startswith("dismissed"):
-            stats["dismissed"] += count
+            stats["dismissed"] += 1
         elif disposition in ("read", "acted_on"):
-            stats["engaged"] += count
+            stats["engaged"] += 1
         else:
-            stats["pending"] += count
+            stats["pending"] += 1
 
     # Calculate rates and sort
     result_list = []
@@ -224,7 +209,7 @@ async def get_dismissal_stats(
 
 
 async def _learn_from_dismissal(
-    db: AsyncSession,
+    db,
     trigger_id: str,
     reason: str,
 ) -> None:
@@ -236,26 +221,19 @@ async def _learn_from_dismissal(
     cutoff = utcnow() - timedelta(days=30)
 
     # Count recent dismissals for this trigger
-    stmt = (
-        select(sa_func.count())
-        .select_from(KgProactiveInsight)
-        .where(
-            KgProactiveInsight.trigger_id == trigger_id,
-            KgProactiveInsight.created_at >= cutoff,
-            KgProactiveInsight.dismissed_reason == reason,
-        )
+    dismissals = await db.select(
+        KgProactiveInsight,
+        ("trigger_id", trigger_id),
+        ("created_at__gte", cutoff),
+        ("dismissed_reason", reason),
     )
-    result = await db.execute(stmt)
-    count = result.scalar() or 0
+    count = len(dismissals)
 
     if reason == "false_positive" and count >= 3:
         # Flag for review via the review queue
         try:
             from ai.engine.knowledge_graph.feedback import ReviewQueue
-            trigger = await db.execute(
-                select(KgProactiveTrigger).where(KgProactiveTrigger.id == trigger_id)
-            )
-            trig = trigger.scalar_one_or_none()
+            trig = first(await db.select(KgProactiveTrigger, ("id", trigger_id)))
             if trig:
                 rq = ReviewQueue(trig.instance_id)
                 await rq.add_item(
@@ -270,10 +248,7 @@ async def _learn_from_dismissal(
 
     elif reason == "not_relevant" and count >= 5:
         # Increase cooldown by 50%
-        trig_result = await db.execute(
-            select(KgProactiveTrigger).where(KgProactiveTrigger.id == trigger_id)
-        )
-        trig = trig_result.scalar_one_or_none()
+        trig = first(await db.select(KgProactiveTrigger, ("id", trigger_id)))
         if trig:
             trig.cooldown_seconds = int(trig.cooldown_seconds * 1.5)
             await db.commit()

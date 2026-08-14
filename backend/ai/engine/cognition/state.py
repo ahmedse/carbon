@@ -7,10 +7,6 @@ If an instance has no snapshot config, the snapshot is skipped (empty, no error)
 import asyncio
 import json
 import logging
-from datetime import datetime
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Instance, SystemSnapshot, generate_uuid
@@ -23,9 +19,11 @@ def _load_snapshot_config(instance: Instance) -> list[dict]:
     if not instance.config:
         return []
     try:
-        config = json.loads(instance.config)
+        config = instance.config
+        if isinstance(config, str):
+            config = json.loads(config)
         return config.get("cognition", {}).get("snapshots", {}).get("metrics", [])
-    except (json.JSONDecodeError, AttributeError):
+    except (json.JSONDecodeError, TypeError, AttributeError):
         return []
 
 
@@ -168,35 +166,31 @@ async def _summarize_diff(diff: dict, instance_id: str = "system") -> str:
         return "; ".join(parts) if parts else "Changes detected (summary unavailable)."
 
 
-async def take_snapshot(db: AsyncSession, instance: Instance):
+async def take_snapshot(db, instance: Instance):
     """Take a system state snapshot, diff against previous, and store."""
     logger.info(f"Taking snapshot for {instance.name}")
 
     # Collect current metrics
     snapshot_data = await _query_host_metrics(instance)
 
-    # Get previous snapshot for diffing
-    stmt = (
-        select(SystemSnapshot)
-        .where(SystemSnapshot.instance_id == instance.id)
-        .order_by(SystemSnapshot.taken_at.desc())
-        .limit(1)
-    )
-    result = await db.execute(stmt)
-    prev_snapshot = result.scalar_one_or_none()
+    # Get previous snapshot for diffing (latest by taken_at)
+    rows = await db.select(SystemSnapshot, ("instance_id", instance.id))
+    prev_snapshot = max(rows, key=lambda s: s.taken_at) if rows else None
 
     diff = {}
     summary = "Initial snapshot."
 
     if prev_snapshot and prev_snapshot.snapshot_data:
         try:
-            prev_data = json.loads(prev_snapshot.snapshot_data)
+            prev_data = prev_snapshot.snapshot_data
+            if isinstance(prev_data, str):
+                prev_data = json.loads(prev_data)
             diff = _diff_snapshots(prev_data, snapshot_data)
             if diff:
                 summary = await _summarize_diff(diff, instance_id=instance.id)
             else:
                 summary = "No significant changes since last snapshot."
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError):
             pass
 
     # Store new snapshot

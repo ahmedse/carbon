@@ -13,15 +13,13 @@ import json
 import logging
 from datetime import datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Instance
 
 logger = logging.getLogger("pulse.proactive.loop")
 
 
-async def run_proactive_evaluation(db: AsyncSession, instance: Instance) -> dict:
+async def run_proactive_evaluation(db, instance: Instance) -> dict:
     """
     Main proactive evaluation — called per instance by the cognition scheduler.
     Returns a summary dict for status reporting.
@@ -100,7 +98,7 @@ async def run_proactive_evaluation(db: AsyncSession, instance: Instance) -> dict
     return summary
 
 
-async def run_daily_briefing(db: AsyncSession, instance: Instance) -> dict:
+async def run_daily_briefing(db, instance: Instance) -> dict:
     """
     Generate and deliver a daily briefing for an instance.
     Should be called once per day at the configured briefing hour.
@@ -129,7 +127,7 @@ async def run_daily_briefing(db: AsyncSession, instance: Instance) -> dict:
     return summary
 
 
-async def run_drift_detection(db: AsyncSession, instance: Instance) -> dict:
+async def run_drift_detection(db, instance: Instance) -> dict:
     """
     Run performance drift detection for an instance.
     Uses metrics configuration from the instance's domain pack.

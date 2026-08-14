@@ -8,11 +8,11 @@ Three core operations:
 """
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from ai.engine.core.clock import utcnow
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from ai.store import first, scope_q
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import (
@@ -23,7 +23,6 @@ from ai.engine.core.models import (
     Message,
     Notification,
     SystemSnapshot,
-    _apply_tenancy_filter,
     generate_uuid,
 )
 
@@ -32,7 +31,7 @@ logger = logging.getLogger("pulse.cognition.synthesis")
 
 # ── 1. Synthesize Insights ───────────────────────────────────────────────
 
-async def synthesize_insights(db: AsyncSession, instance: Instance):
+async def synthesize_insights(db, instance: Instance):
     """
     Analyze recent system data and generate insights.
     Looks at:
@@ -52,16 +51,14 @@ async def synthesize_insights(db: AsyncSession, instance: Instance):
     # Check for existing recent insights to avoid duplicates.
     # Only count shared/instance-wide insights; private user insights don't affect synthesis.
     recent_cutoff = utcnow() - timedelta(hours=6)
-    recent_insights_base = (
-        select(func.count())
-        .select_from(Insight)
-        .where(
-            Insight.instance_id == instance.id,
-            Insight.created_at > recent_cutoff,
+    recent_count = (
+        await db.aggregate(
+            Insight,
+            {"count": ("Count", "id")},
+            scope_q(Insight, instance.id, None),
+            ("created_at__gt", recent_cutoff),
         )
-    )
-    recent_insights_stmt = _apply_tenancy_filter(recent_insights_base, Insight, instance.id, host_user_id=None)
-    recent_count = (await db.execute(recent_insights_stmt)).scalar() or 0
+    )["count"] or 0
     if recent_count >= 5:
         logger.debug(f"Already {recent_count} recent insights for {instance.name}, skipping")
         return
@@ -128,18 +125,17 @@ async def synthesize_insights(db: AsyncSession, instance: Instance):
     logger.info(f"Synthesized {len(insights_data[:3])} insights for {instance.name}")
 
 
-async def _gather_synthesis_context(db: AsyncSession, instance: Instance) -> dict:
+async def _gather_synthesis_context(db, instance: Instance) -> dict:
     """Gather all relevant data for synthesis."""
     ctx: dict = {"has_data": False, "evidence_summary": {}}
 
     # Recent snapshots (last 5)
-    snap_stmt = (
-        select(SystemSnapshot)
-        .where(SystemSnapshot.instance_id == instance.id)
-        .order_by(SystemSnapshot.taken_at.desc())
-        .limit(5)
+    snapshots = await db.select(
+        SystemSnapshot,
+        ("instance_id", instance.id),
     )
-    snapshots = (await db.execute(snap_stmt)).scalars().all()
+    snapshots.sort(key=lambda s: s.taken_at, reverse=True)
+    snapshots = snapshots[:5]
     ctx["snapshots"] = []
     for s in snapshots:
         entry = {"taken_at": s.taken_at.isoformat() if s.taken_at else None, "summary": s.summary}
@@ -150,15 +146,13 @@ async def _gather_synthesis_context(db: AsyncSession, instance: Instance) -> dic
                 pass
         ctx["snapshots"].append(entry)
 
-    # Recent notifications (last 20)
-    notif_stmt = (
-        select(Notification)
-        .order_by(Notification.created_at.desc())
-        .limit(20)
+    # Recent notifications (last 20) — instance-wide (host_user_id=None → shared + global only)
+    notifications = await db.select(
+        Notification,
+        scope_q(Notification, instance.id, None),
     )
-    # Synthesis is instance-wide (host_user_id=None → shared + global only)
-    notif_stmt = _apply_tenancy_filter(notif_stmt, Notification, instance.id, host_user_id=None)
-    notifications = (await db.execute(notif_stmt)).scalars().all()
+    notifications.sort(key=lambda n: n.created_at, reverse=True)
+    notifications = notifications[:20]
     ctx["notifications"] = [
         {
             "severity": n.severity,
@@ -175,14 +169,13 @@ async def _gather_synthesis_context(db: AsyncSession, instance: Instance) -> dic
     ctx["notification_frequency"] = sev_counts
 
     # Recent episodes (last 20) — shared/global only for instance-wide synthesis
-    ep_base = (
-        select(MemoryEpisodic)
-        .where(MemoryEpisodic.archived == False)
-        .order_by(MemoryEpisodic.occurred_at.desc())
-        .limit(20)
+    episodes = await db.select(
+        MemoryEpisodic,
+        scope_q(MemoryEpisodic, instance.id, None),
+        ("archived", False),
     )
-    ep_stmt = _apply_tenancy_filter(ep_base, MemoryEpisodic, instance.id, host_user_id=None)
-    episodes = (await db.execute(ep_stmt)).scalars().all()
+    episodes.sort(key=lambda e: e.occurred_at, reverse=True)
+    episodes = episodes[:20]
     ctx["episodes"] = [
         {"event_type": e.event_type, "summary": e.summary}
         for e in episodes
@@ -195,34 +188,24 @@ async def _gather_synthesis_context(db: AsyncSession, instance: Instance) -> dic
     ctx["episode_frequency"] = type_counts
 
     # Memory stats — shared/global only for instance-wide synthesis.
-    # Note: _apply_tenancy_filter requires a SELECT from the model table, not an aggregate;
-    # apply instance + visibility filter manually for the count query.
     mem_count = (
-        await db.execute(
-            select(func.count())
-            .select_from(MemoryLongTerm)
-            .where(
-                MemoryLongTerm.instance_id == instance.id,
-                MemoryLongTerm.archived == False,
-                MemoryLongTerm.visibility.in_(["shared", "global"]),
-            )
+        await db.aggregate(
+            MemoryLongTerm,
+            {"count": ("Count", "id")},
+            scope_q(MemoryLongTerm, instance.id, None),
+            ("archived", False),
         )
-    ).scalar() or 0
+    )["count"] or 0
     ctx["memory_count"] = mem_count
 
     # Low-confidence memories — shared/global only for instance-wide synthesis
-    low_conf_base = (
-        select(MemoryLongTerm)
-        .where(
-            MemoryLongTerm.archived == False,
-            MemoryLongTerm.confidence < 0.5,
-        )
-        .limit(5)
+    low_conf = await db.select(
+        MemoryLongTerm,
+        scope_q(MemoryLongTerm, instance.id, None),
+        ("archived", False),
+        ("confidence__lt", 0.5),
     )
-    low_conf_stmt = _apply_tenancy_filter(
-        low_conf_base, MemoryLongTerm, instance.id, host_user_id=None
-    )
-    low_conf = (await db.execute(low_conf_stmt)).scalars().all()
+    low_conf = low_conf[:5]
     ctx["low_confidence_memories"] = [
         {"content": m.content, "confidence": m.confidence, "category": m.category}
         for m in low_conf
@@ -303,7 +286,7 @@ def _statistical_insights(ctx: dict) -> list[dict]:
 
 # ── 2. Reflect on Insights ───────────────────────────────────────────────
 
-async def reflect_on_insights(db: AsyncSession, instance: Instance):
+async def reflect_on_insights(db, instance: Instance):
     """
     Meta-cognition: review existing insights, consolidate duplicates,
     and supersede outdated ones.
@@ -311,11 +294,13 @@ async def reflect_on_insights(db: AsyncSession, instance: Instance):
     logger.info(f"Reflecting on insights for {instance.name}...")
 
     # Get all active insights — instance-wide synthesis; never touch private user rows
-    stmt = _apply_tenancy_filter(
-        select(Insight).where(Insight.archived == False).order_by(Insight.created_at.desc()).limit(50),
-        Insight, instance.id, host_user_id=None,
+    insights = await db.select(
+        Insight,
+        scope_q(Insight, instance.id, None),
+        ("archived", False),
     )
-    insights = (await db.execute(stmt)).scalars().all()
+    insights.sort(key=lambda i: i.created_at, reverse=True)
+    insights = insights[:50]
 
     if len(insights) < 2:
         return
@@ -342,15 +327,13 @@ async def reflect_on_insights(db: AsyncSession, instance: Instance):
 
     # Archive very old insights (>30 days) with low confidence
     cutoff = utcnow() - timedelta(days=30)
-    old_stmt = _apply_tenancy_filter(
-        select(Insight).where(
-            Insight.archived == False,
-            Insight.created_at < cutoff,
-            Insight.confidence < 0.5,
-        ),
-        Insight, instance.id, host_user_id=None,
+    old_insights = await db.select(
+        Insight,
+        scope_q(Insight, instance.id, None),
+        ("archived", False),
+        ("created_at__lt", cutoff),
+        ("confidence__lt", 0.5),
     )
-    old_insights = (await db.execute(old_stmt)).scalars().all()
     for ins in old_insights:
         ins.archived = True
         logger.debug(f"Auto-archived stale insight: {ins.title}")
@@ -372,7 +355,7 @@ def _titles_similar(a: str, b: str) -> bool:
 
 # ── 3. Decay Stale Memories ──────────────────────────────────────────────
 
-async def decay_stale_memories(db: AsyncSession, instance: Instance):
+async def decay_stale_memories(db, instance: Instance):
     """
     Reduce confidence of memories that haven't been used recently.
     Auto-archive memories with very low confidence.
@@ -385,15 +368,13 @@ async def decay_stale_memories(db: AsyncSession, instance: Instance):
     cutoff = utcnow() - timedelta(days=decay_days)
 
     # Get stale, unused memories — instance-wide; never touch private user rows
-    stmt = _apply_tenancy_filter(
-        select(MemoryLongTerm).where(
-            MemoryLongTerm.archived == False,
-            MemoryLongTerm.last_used < cutoff,
-            MemoryLongTerm.confidence > 0.1,
-        ),
-        MemoryLongTerm, instance.id, host_user_id=None,
+    stale_memories = await db.select(
+        MemoryLongTerm,
+        scope_q(MemoryLongTerm, instance.id, None),
+        ("archived", False),
+        ("last_used__lt", cutoff),
+        ("confidence__gt", 0.1),
     )
-    stale_memories = (await db.execute(stmt)).scalars().all()
 
     decayed = 0
     archived = 0
@@ -419,7 +400,7 @@ async def decay_stale_memories(db: AsyncSession, instance: Instance):
 
 # ── 4. User Preference Learning ─────────────────────────────────────────
 
-async def learn_user_preferences(db: AsyncSession, instance: Instance):
+async def learn_user_preferences(db, instance: Instance):
     """
     Analyze conversation history per user to detect behavioral patterns
     and store them as preference memories for personalized interactions.
@@ -437,16 +418,13 @@ async def learn_user_preferences(db: AsyncSession, instance: Instance):
     # Look at conversations from the last 30 days
     cutoff = utcnow() - timedelta(days=30)
 
-    conv_stmt = (
-        select(Conversation)
-        .where(
-            Conversation.instance_id == instance.id,
-            Conversation.started_at >= cutoff,
-            Conversation.user_identifier.isnot(None),
-        )
-        .order_by(Conversation.started_at.desc())
+    conversations = await db.select(
+        Conversation,
+        ("instance_id", instance.id),
+        ("started_at__gte", cutoff),
+        ("user_identifier__isnull", False),
     )
-    conversations = (await db.execute(conv_stmt)).scalars().all()
+    conversations.sort(key=lambda c: c.started_at, reverse=True)
 
     if len(conversations) < 3:
         logger.debug(f"Too few conversations for preference learning ({len(conversations)})")
@@ -467,16 +445,15 @@ async def learn_user_preferences(db: AsyncSession, instance: Instance):
             continue
 
         # Check for existing preference for this user — shared visibility (auto-generated rows)
-        existing = (await db.execute(
-            _apply_tenancy_filter(
-                select(MemoryLongTerm).where(
-                    MemoryLongTerm.category == "preference",
-                    MemoryLongTerm.source == f"auto:user:{user_id}",
-                    MemoryLongTerm.archived == False,
-                ),
-                MemoryLongTerm, instance.id, host_user_id=None,
+        existing = first(
+            await db.select(
+                MemoryLongTerm,
+                scope_q(MemoryLongTerm, instance.id, None),
+                ("category", "preference"),
+                ("source", f"auto:user:{user_id}"),
+                ("archived", False),
             )
-        )).scalars().first()
+        )
 
         pref_text = f"User '{user_id}' patterns: {prefs}"
 
@@ -552,7 +529,7 @@ def _extract_user_patterns(user_id: str, convs: list) -> str:
 
 # ── 5. Recurring Query Pattern Detection ──────────────────────────────────
 
-async def detect_recurring_queries(db: AsyncSession, instance: Instance):
+async def detect_recurring_queries(db, instance: Instance):
     """
     Analyse conversation history to find recurring query patterns.
     When a pattern is detected (same intent >3 times in 14 days),
@@ -564,19 +541,23 @@ async def detect_recurring_queries(db: AsyncSession, instance: Instance):
     instance_id = instance.id
     since = utcnow() - timedelta(days=14)
 
-    # Get user messages from the last 14 days
-    result = await db.execute(
-        select(Message.content)
-        .join(Conversation, Message.conversation_id == Conversation.id)
-        .where(
-            Conversation.instance_id == instance_id,
-            Message.role == "user",
-            Conversation.started_at >= since,
-        )
-        .order_by(Message.timestamp.desc())
-        .limit(500)
+    # Get user messages from the last 14 days (join done in Python — Store has no joins)
+    convs = await db.select(
+        Conversation,
+        ("instance_id", instance_id),
+        ("started_at__gte", since),
     )
-    messages = [r[0] for r in result.all() if r[0] and len(r[0]) > 10]
+    conv_ids = [c.id for c in convs]
+    if not conv_ids:
+        return
+    msg_rows = await db.select(
+        Message,
+        ("conversation_id__in", conv_ids),
+        ("role", "user"),
+    )
+    msg_rows.sort(key=lambda m: m.timestamp, reverse=True)
+    msg_rows = msg_rows[:500]
+    messages = [m.content for m in msg_rows if m.content and len(m.content) > 10]
 
     if len(messages) < 5:
         return
@@ -600,16 +581,13 @@ async def detect_recurring_queries(db: AsyncSession, instance: Instance):
     # Check if we already surfaced a pattern insight recently (7 days)
     from ai.engine.knowledge_graph.models import KgProactiveInsight
 
-    recent_pattern_insights = await db.execute(
-        select(KgProactiveInsight)
-        .where(
-            KgProactiveInsight.instance_id == instance_id,
-            KgProactiveInsight.insight_type == "recurring_query_pattern",
-            KgProactiveInsight.created_at >= utcnow() - timedelta(days=7),
-        )
-        .limit(1)
+    recent_pattern_insights = await db.select(
+        KgProactiveInsight,
+        ("instance_id", instance_id),
+        ("insight_type", "recurring_query_pattern"),
+        ("created_at__gte", utcnow() - timedelta(days=7)),
     )
-    if recent_pattern_insights.scalars().first():
+    if first(recent_pattern_insights):
         return  # Already surfaced recently
 
     # Build the insight
@@ -643,7 +621,7 @@ async def detect_recurring_queries(db: AsyncSession, instance: Instance):
 # ── 6. Per-User Weekly Self-Reflection ───────────────────────────────────
 
 async def self_reflect(
-    db: AsyncSession, instance: Instance, host_user_id: str,
+    db, instance: Instance, host_user_id: str,
     llm_client=None,
 ) -> str | None:
     """
@@ -662,14 +640,15 @@ async def self_reflect(
 
     # ── Idempotency check ──────────────────────────────────────────────
     idem_cutoff = utcnow() - timedelta(days=6)
-    existing = (await db.execute(
-        select(Insight).where(
-            Insight.instance_id == instance.id,
-            Insight.insight_type == "weekly_summary",
-            Insight.host_user_id == host_user_id,
-            Insight.created_at >= idem_cutoff,
-        ).limit(1)
-    )).scalars().first()
+    existing = first(
+        await db.select(
+            Insight,
+            ("instance_id", instance.id),
+            ("insight_type", "weekly_summary"),
+            ("host_user_id", host_user_id),
+            ("created_at__gte", idem_cutoff),
+        )
+    )
     if existing is not None:
         logger.debug(
             "self_reflect: skipping user=%s — summary exists from %s",
@@ -681,42 +660,36 @@ async def self_reflect(
 
     # ── Gather data ────────────────────────────────────────────────────
     # Messages (last 50 user/assistant, past 7 days)
-    msg_rows = (await db.execute(
-        select(Message)
-        .where(
-            Message.host_user_id == host_user_id,
-            Message.timestamp >= week_start,
-            Message.role.in_(["user", "assistant"]),
-        )
-        .order_by(Message.timestamp.desc())
-        .limit(50)
-    )).scalars().all()
+    msg_rows = await db.select(
+        Message,
+        ("host_user_id", host_user_id),
+        ("timestamp__gte", week_start),
+        ("role__in", ["user", "assistant"]),
+    )
+    msg_rows.sort(key=lambda m: m.timestamp, reverse=True)
+    msg_rows = msg_rows[:50]
 
     # Episodes (last 20, past 7 days) — private rows for this user only
-    ep_rows = (await db.execute(
-        select(MemoryEpisodic)
-        .where(
-            MemoryEpisodic.instance_id == instance.id,
-            MemoryEpisodic.host_user_id == host_user_id,
-            MemoryEpisodic.occurred_at >= week_start,
-            MemoryEpisodic.archived == False,
-        )
-        .order_by(MemoryEpisodic.occurred_at.desc())
-        .limit(20)
-    )).scalars().all()
+    ep_rows = await db.select(
+        MemoryEpisodic,
+        ("instance_id", instance.id),
+        ("host_user_id", host_user_id),
+        ("occurred_at__gte", week_start),
+        ("archived", False),
+    )
+    ep_rows.sort(key=lambda e: e.occurred_at, reverse=True)
+    ep_rows = ep_rows[:20]
 
     # Long-term facts (last 10 updated, past 7 days) — private rows for this user
-    lt_rows = (await db.execute(
-        select(MemoryLongTerm)
-        .where(
-            MemoryLongTerm.instance_id == instance.id,
-            MemoryLongTerm.host_user_id == host_user_id,
-            MemoryLongTerm.last_used >= week_start,
-            MemoryLongTerm.archived == False,
-        )
-        .order_by(MemoryLongTerm.last_used.desc())
-        .limit(10)
-    )).scalars().all()
+    lt_rows = await db.select(
+        MemoryLongTerm,
+        ("instance_id", instance.id),
+        ("host_user_id", host_user_id),
+        ("last_used__gte", week_start),
+        ("archived", False),
+    )
+    lt_rows.sort(key=lambda m: m.last_used, reverse=True)
+    lt_rows = lt_rows[:10]
 
     if not msg_rows and not ep_rows and not lt_rows:
         logger.debug(
@@ -859,7 +832,7 @@ def _build_self_reflect_prompt(
     return "\n".join(parts)
 
 
-async def run_self_reflection(db: AsyncSession, instance: Instance):
+async def run_self_reflection(db, instance: Instance):
     """
     Entry point: run self-reflection for every active host user in this instance.
 
@@ -869,16 +842,16 @@ async def run_self_reflection(db: AsyncSession, instance: Instance):
     logger.info("Running self-reflection sweep for %s...", instance.name)
 
     since = utcnow() - timedelta(days=14)
-    user_rows = (await db.execute(
-        select(Message.host_user_id)
-        .where(
-            Message.host_user_id.isnot(None),
-            Message.host_user_id != "",
-            Message.timestamp >= since,
-        )
-        .distinct()
-    )).all()
-    user_ids = [row[0] for row in user_rows if row[0]]
+    msg_rows = await db.select(
+        Message,
+        ("host_user_id__isnull", False),
+        ("timestamp__gte", since),
+    )
+    user_ids: list[str] = []
+    for row in msg_rows:
+        uid = row.host_user_id
+        if uid and uid not in user_ids:
+            user_ids.append(uid)
 
     if not user_ids:
         logger.debug("No active users for self-reflection in %s", instance.name)

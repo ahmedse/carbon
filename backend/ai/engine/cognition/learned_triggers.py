@@ -9,10 +9,9 @@ These are sleep-time jobs — no LLM calls, no hot-path impact.
 """
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from ai.store import first
 
 from ai.engine.core.clock import utcnow
 from ai.engine.core.models import SystemSnapshot
@@ -34,7 +33,7 @@ _CONFIDENCE_ENABLE_MIN = 0.7  # Triggers below this confidence are created disab
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def analyze_snapshots(
-    db: AsyncSession,
+    db,
     instance_id: str,
 ) -> list[dict]:
     """Analyze 30 days of SystemSnapshot rows for anomalies and trends.
@@ -49,15 +48,12 @@ async def analyze_snapshots(
     """
     cutoff = utcnow() - timedelta(days=30)
 
-    result = await db.execute(
-        select(SystemSnapshot)
-        .where(
-            SystemSnapshot.instance_id == instance_id,
-            SystemSnapshot.taken_at >= cutoff,
-        )
-        .order_by(SystemSnapshot.taken_at.asc())
+    snapshots = await db.select(
+        SystemSnapshot,
+        ("instance_id", instance_id),
+        ("taken_at__gte", cutoff),
     )
-    snapshots = result.scalars().all()
+    snapshots.sort(key=lambda s: s.taken_at)
 
     if len(snapshots) < _MIN_SNAPSHOTS:
         logger.debug(
@@ -157,7 +153,7 @@ async def analyze_snapshots(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def seed_learned_triggers(
-    db: AsyncSession,
+    db,
     instance_id: str,
     candidates: list[dict],
 ) -> int:
@@ -180,13 +176,12 @@ async def seed_learned_triggers(
         name = f"Learned: {candidate['field']} {candidate['condition_type']}"
 
         # ── Deduplication check ──
-        existing = await db.execute(
-            select(KgProactiveTrigger.id).where(
-                KgProactiveTrigger.instance_id == instance_id,
-                KgProactiveTrigger.name == name,
-            )
+        existing = await db.select(
+            KgProactiveTrigger,
+            ("instance_id", instance_id),
+            ("name", name),
         )
-        if existing.scalar_one_or_none() is not None:
+        if first(existing) is not None:
             logger.debug("seed_learned_triggers: skipping duplicate '%s'", name)
             continue
 

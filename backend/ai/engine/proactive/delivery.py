@@ -9,11 +9,9 @@ Channel routing:
 """
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from ai.engine.core.clock import utcnow
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.config import get_settings
 from ai.engine.cognition.notifier import create_notification, push_to_subscribers
@@ -24,7 +22,7 @@ logger = logging.getLogger("pulse.proactive.delivery")
 
 
 async def deliver_insight(
-    db: AsyncSession,
+    db,
     instance_id: str,
     insight_data: dict,
     trigger_id: str | None = None,
@@ -83,7 +81,7 @@ async def deliver_insight(
 
 
 async def deliver_batch(
-    db: AsyncSession,
+    db,
     instance_id: str,
     insights: list[dict],
     group_id: str | None = None,
@@ -102,26 +100,20 @@ async def deliver_batch(
     return ids
 
 
-async def expire_stale_insights(db: AsyncSession, instance_id: str) -> int:
+async def expire_stale_insights(db, instance_id: str) -> int:
     """
     Mark expired info-level insights as 'expired'.
     Called periodically by the cognition loop.
     Returns count of expired insights.
     """
-    from sqlalchemy import select, update
-
     now = utcnow()
-    stmt = (
-        select(KgProactiveInsight)
-        .where(
-            KgProactiveInsight.instance_id == instance_id,
-            KgProactiveInsight.disposition == "pending",
-            KgProactiveInsight.expires_at != None,  # noqa: E711
-            KgProactiveInsight.expires_at <= now,
-        )
+    expired = await db.select(
+        KgProactiveInsight,
+        ("instance_id", instance_id),
+        ("disposition", "pending"),
+        ("expires_at__isnull", False),
+        ("expires_at__lte", now),
     )
-    result = await db.execute(stmt)
-    expired = result.scalars().all()
 
     for insight in expired:
         insight.disposition = "expired"
@@ -177,7 +169,7 @@ def _get_relevant_pages(insight_type: str) -> list[str]:
 
 # ── Push mechanisms ──────────────────────────────────────────────────────────
 
-async def _push_websocket(db: AsyncSession, instance_id: str, insight: KgProactiveInsight):
+async def _push_websocket(db, instance_id: str, insight: KgProactiveInsight):
     """Push insight to connected WebSocket clients."""
     from ai.engine.cognition.notifier import _subscribers
 
@@ -216,7 +208,7 @@ async def _push_websocket(db: AsyncSession, instance_id: str, insight: KgProacti
 
 
 async def _create_notification(
-    db: AsyncSession,
+    db,
     instance_id: str,
     insight_data: dict,
     severity: str,

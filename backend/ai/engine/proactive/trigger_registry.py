@@ -11,8 +11,7 @@ from datetime import datetime
 from ai.engine.core.clock import utcnow
 from typing import Optional
 
-from sqlalchemy import select, func as sa_func
-from sqlalchemy.ext.asyncio import AsyncSession
+from ai.store import first
 
 from ai.engine.knowledge_graph.models import KgProactiveTrigger, TRIGGER_CATEGORIES, TRIGGER_SEVERITIES
 
@@ -133,7 +132,7 @@ def validate_condition(category: str, condition: dict) -> list[str]:
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
 async def create_trigger(
-    db: AsyncSession,
+    db,
     instance_id: str,
     name: str,
     category: str,
@@ -191,45 +190,39 @@ async def create_trigger(
 
 
 async def list_triggers(
-    db: AsyncSession,
+    db,
     instance_id: str,
     *,
     category: str | None = None,
     enabled_only: bool = True,
 ) -> list[dict]:
     """List triggers for an instance."""
-    stmt = select(KgProactiveTrigger).where(
-        KgProactiveTrigger.instance_id == instance_id,
+    triggers = await db.select(
+        KgProactiveTrigger,
+        ("instance_id", instance_id),
     )
     if enabled_only:
-        stmt = stmt.where(KgProactiveTrigger.enabled == True)  # noqa: E712
+        triggers = [t for t in triggers if t.enabled]
     if category:
-        stmt = stmt.where(KgProactiveTrigger.category == category)
-    stmt = stmt.order_by(KgProactiveTrigger.severity.desc(), KgProactiveTrigger.name)
+        triggers = [t for t in triggers if t.category == category]
+    _sev_rank = {"critical": 0, "warning": 1, "info": 2}
+    triggers.sort(key=lambda t: (_sev_rank.get(t.severity, 9), t.name))
+    return [_trigger_to_dict(t) for t in triggers]
 
-    result = await db.execute(stmt)
-    return [_trigger_to_dict(t) for t in result.scalars().all()]
 
-
-async def get_trigger(db: AsyncSession, trigger_id: str) -> dict | None:
+async def get_trigger(db, trigger_id: str) -> dict | None:
     """Get a single trigger by ID."""
-    result = await db.execute(
-        select(KgProactiveTrigger).where(KgProactiveTrigger.id == trigger_id)
-    )
-    trigger = result.scalar_one_or_none()
+    trigger = first(await db.select(KgProactiveTrigger, ("id", trigger_id)))
     return _trigger_to_dict(trigger) if trigger else None
 
 
 async def update_trigger(
-    db: AsyncSession,
+    db,
     trigger_id: str,
     **updates,
 ) -> bool:
     """Update a trigger's fields. Returns True if found."""
-    result = await db.execute(
-        select(KgProactiveTrigger).where(KgProactiveTrigger.id == trigger_id)
-    )
-    trigger = result.scalar_one_or_none()
+    trigger = first(await db.select(KgProactiveTrigger, ("id", trigger_id)))
     if not trigger:
         return False
 
@@ -250,12 +243,9 @@ async def update_trigger(
     return True
 
 
-async def delete_trigger(db: AsyncSession, trigger_id: str) -> bool:
+async def delete_trigger(db, trigger_id: str) -> bool:
     """Delete a trigger. Returns True if found."""
-    result = await db.execute(
-        select(KgProactiveTrigger).where(KgProactiveTrigger.id == trigger_id)
-    )
-    trigger = result.scalar_one_or_none()
+    trigger = first(await db.select(KgProactiveTrigger, ("id", trigger_id)))
     if not trigger:
         return False
     await db.delete(trigger)
@@ -263,12 +253,9 @@ async def delete_trigger(db: AsyncSession, trigger_id: str) -> bool:
     return True
 
 
-async def record_fire(db: AsyncSession, trigger_id: str) -> None:
+async def record_fire(db, trigger_id: str) -> None:
     """Record that a trigger has fired (update last_fired_at and fire_count)."""
-    result = await db.execute(
-        select(KgProactiveTrigger).where(KgProactiveTrigger.id == trigger_id)
-    )
-    trigger = result.scalar_one_or_none()
+    trigger = first(await db.select(KgProactiveTrigger, ("id", trigger_id)))
     if trigger:
         trigger.last_fired_at = utcnow()
         trigger.fire_count += 1
@@ -278,7 +265,7 @@ async def record_fire(db: AsyncSession, trigger_id: str) -> None:
 # ── Domain pack seeding ───────────────────────────────────────────────────────
 
 async def seed_from_domain_pack(
-    db: AsyncSession,
+    db,
     instance_id: str,
     pack: dict,
     instance_config: dict | None = None,
@@ -341,16 +328,15 @@ async def seed_from_domain_pack(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def _trigger_exists(db: AsyncSession, instance_id: str, name: str, source: str) -> bool:
+async def _trigger_exists(db, instance_id: str, name: str, source: str) -> bool:
     """Check if a trigger with the same name+source already exists."""
-    result = await db.execute(
-        select(sa_func.count()).select_from(KgProactiveTrigger).where(
-            KgProactiveTrigger.instance_id == instance_id,
-            KgProactiveTrigger.name == name,
-            KgProactiveTrigger.source == source,
-        )
+    rows = await db.select(
+        KgProactiveTrigger,
+        ("instance_id", instance_id),
+        ("name", name),
+        ("source", source),
     )
-    return (result.scalar() or 0) > 0
+    return len(rows) > 0
 
 
 def _trigger_to_dict(t: KgProactiveTrigger) -> dict:

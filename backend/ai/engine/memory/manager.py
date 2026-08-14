@@ -5,7 +5,7 @@ This is what the agent calls before each LLM invocation to get relevant context.
 import logging
 from dataclasses import dataclass, field
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from ai.store import scope_q
 
 from ai.engine.memory.short_term import ShortTermMemory
 from ai.engine.memory.long_term import LongTermMemory
@@ -91,7 +91,7 @@ def get_short_term_memory() -> ShortTermMemory:
 class MemoryManager:
     """Unified memory retrieval across all three memory types."""
 
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session):
         self.short_term = get_short_term_memory()
         self.long_term = LongTermMemory(db_session)
         self.episodic = EpisodicMemory(db_session)
@@ -245,20 +245,17 @@ class MemoryManager:
         Closes the split-brain (B5): agent memory context now sees proactive insights.
         Results are filtered by the tenancy triplet.
         """
-        from sqlalchemy import select, desc
-        from ai.engine.core.models import Insight, _apply_tenancy_filter
+        from ai.engine.core.models import Insight
         from ai.engine.knowledge_graph.models import KgProactiveInsight
 
         # ── Channel A: cognition-synthesized Insight rows ──
-        base_stmt_a = (
-            select(Insight)
-            .where(Insight.archived == False)
-            .where(Insight.confidence >= 0.5)
-            .order_by(desc(Insight.created_at))
-            .limit(limit)
+        rows_a = await self.long_term.db.select(
+            Insight,
+            scope_q(Insight, instance_id, host_user_id),
+            ("archived", False),
+            ("confidence__gte", 0.5),
         )
-        stmt_a = _apply_tenancy_filter(base_stmt_a, Insight, instance_id, host_user_id)
-        result_a = await self.long_term.db.execute(stmt_a)
+        rows_a.sort(key=lambda r: r.created_at, reverse=True)
         cognition_insights = [
             {
                 "insight_type": r.insight_type,
@@ -268,20 +265,18 @@ class MemoryManager:
                 "source": "cognition",
                 "created_at": r.created_at,
             }
-            for r in result_a.scalars().all()
+            for r in rows_a[:limit]
         ]
 
         # ── Channel B: proactive KgProactiveInsight rows (adapt into same shape) ──
         # severity → confidence mapping: critical=0.95, warning=0.80, info=0.60
         _severity_confidence = {"critical": 0.95, "warning": 0.80, "info": 0.60}
-        base_stmt_b = (
-            select(KgProactiveInsight)
-            .where(KgProactiveInsight.instance_id == instance_id)
-            .where(KgProactiveInsight.disposition == "pending")
-            .order_by(desc(KgProactiveInsight.created_at))
-            .limit(limit)
+        rows_b = await self.long_term.db.select(
+            KgProactiveInsight,
+            ("instance_id", instance_id),
+            ("disposition", "pending"),
         )
-        result_b = await self.long_term.db.execute(base_stmt_b)
+        rows_b.sort(key=lambda r: r.created_at, reverse=True)
         proactive_insights = [
             {
                 "insight_type": r.insight_type,
@@ -291,7 +286,7 @@ class MemoryManager:
                 "source": "proactive",
                 "created_at": r.created_at,
             }
-            for r in result_b.scalars().all()
+            for r in rows_b[:limit]
         ]
 
         # ── Merge both channels, sort by confidence desc then recency desc ──
@@ -316,22 +311,16 @@ class MemoryManager:
         host_user_id: str | None = None,
     ) -> list[dict]:
         """Retrieve auto-learned preferences for a specific user."""
-        from ai.engine.core.models import MemoryLongTerm, _apply_tenancy_filter
+        from ai.engine.core.models import MemoryLongTerm
 
-        base_stmt = (
-            select(MemoryLongTerm)
-            .where(
-                MemoryLongTerm.category == "preference",
-                MemoryLongTerm.source == f"auto:user:{user_identifier}",
-                MemoryLongTerm.archived == False,
-            )
-            .limit(3)
+        rows = await self.long_term.db.select(
+            MemoryLongTerm,
+            scope_q(MemoryLongTerm, instance_id, host_user_id),
+            ("category", "preference"),
+            ("source", f"auto:user:{user_identifier}"),
+            ("archived", False),
         )
-        stmt = _apply_tenancy_filter(
-            base_stmt, MemoryLongTerm, instance_id, host_user_id
-        )
-        result = await self.long_term.db.execute(stmt)
-        rows = result.scalars().all()
+        rows = rows[:3]
         return [
             {
                 "id": r.id,

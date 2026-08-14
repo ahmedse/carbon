@@ -28,10 +28,10 @@ async def _write_trajectory_own_session(run_id: str) -> None:
     "another operation is in progress" race (seen in evals, where the
     harness closes the session immediately after the turn).
     """
-    from ai.engine.core.database import get_session_factory
+    from ai.store import get_store
     from ai.engine.cognition.trajectory import write_trajectory
 
-    factory = get_session_factory()
+    factory = get_store().get_session_factory()
     async with factory() as traj_db:
         await write_trajectory(run_id, traj_db)
 
@@ -48,7 +48,7 @@ class TurnPipelineRunner:
         knowledge_store=None,
         memory_manager=None,
         executor=None,
-        db=None,              # AsyncSession for S6 ledger writes
+        db=None,              # Store session for S6 ledger writes
     ):
         self.llm_client = llm_client
         self.knowledge_store = knowledge_store

@@ -11,20 +11,19 @@ from typing import Optional
 
 from ai.engine.core.clock import utcnow
 
-from sqlalchemy import select, update, and_
-from sqlalchemy.ext.asyncio import AsyncSession
+from ai.store import first, scope_q
 
-from ai.engine.core.models import MemoryLongTerm, _apply_tenancy_filter, generate_uuid
+from ai.engine.core.models import MemoryLongTerm, generate_uuid
 
 logger = logging.getLogger("pulse.memory.long_term")
 
 
 class LongTermMemory:
-    """Persistent fact store: SQLite for CRUD, vector store for semantic retrieval."""
+    """Persistent fact store: durable store for CRUD, vector store for semantic retrieval."""
 
     def __init__(
         self,
-        db_session: AsyncSession,
+        db_session,
         chroma_client=None,
     ):
         self.db = db_session
@@ -77,7 +76,7 @@ class LongTermMemory:
                     similarity = 1.0 - distance
                     if similarity > 0.92 and fid != fact_id:
                         # Near-duplicate: update confidence and return existing
-                        existing = await self.db.get(MemoryLongTerm, fid)
+                        existing = first(await self.db.select(MemoryLongTerm, ("id", fid)))
                         if existing and not existing.archived:
                             existing.confidence = max(existing.confidence, confidence)
                             existing.last_used = utcnow()
@@ -105,7 +104,7 @@ class LongTermMemory:
                     distance = results.get("distances", [[1.0]])[0][i]
                     similarity = 1.0 - distance
                     if 0.5 < similarity < 0.92:
-                        existing = await self.db.get(MemoryLongTerm, fid)
+                        existing = first(await self.db.select(MemoryLongTerm, ("id", fid)))
                         if existing and existing.content.strip().lower() != content.strip().lower():
                             logger.warning(
                                 "Possible contradiction: new fact %r vs existing %r "
@@ -166,7 +165,7 @@ class LongTermMemory:
         near-duplicate of an existing fact).
         """
         now = utcnow()
-        old = await self.db.get(MemoryLongTerm, fact_id)
+        old = first(await self.db.select(MemoryLongTerm, ("id", fact_id)))
         if old is None:
             logger.warning("supersede_fact: fact %s not found", fact_id)
             return None
@@ -235,12 +234,11 @@ class LongTermMemory:
                 if fid in facts_by_id:
                     continue  # already found by keyword search
                 # Apply tenancy filter in SQL when fetching by ID
-                base_stmt = select(MemoryLongTerm).where(MemoryLongTerm.id == fid)
-                stmt = _apply_tenancy_filter(
-                    base_stmt, MemoryLongTerm, instance_id, host_user_id
-                )
-                result = await self.db.execute(stmt)
-                fact = result.scalar_one_or_none()
+                fact = first(await self.db.select(
+                    MemoryLongTerm,
+                    scope_q(MemoryLongTerm, instance_id, host_user_id),
+                    ("id", fid),
+                ))
                 if fact:
                     fact.last_used = utcnow()
                     fact.use_count += 1
@@ -271,21 +269,15 @@ class LongTermMemory:
         These are hard constraints — they must be injected into every prompt
         regardless of query wording, so keyword/semantic matching is bypassed.
         """
-        base_stmt = (
-            select(MemoryLongTerm)
-            .where(
-                MemoryLongTerm.category.in_(["correction", "business_rule"]),
-                MemoryLongTerm.archived == False,
-                # BE-02-2: exclude expired facts
-                and_(
-                    MemoryLongTerm.valid_to.is_(None)
-                    | (MemoryLongTerm.valid_to > utcnow()),
-                ),
-            )
+        now = utcnow()
+        facts = await self.db.select(
+            MemoryLongTerm,
+            scope_q(MemoryLongTerm, instance_id, host_user_id),
+            ("category__in", ["correction", "business_rule"]),
+            ("archived", False),
         )
-        stmt = _apply_tenancy_filter(base_stmt, MemoryLongTerm, instance_id, host_user_id)
-        result = await self.db.execute(stmt)
-        facts = result.scalars().all()
+        # BE-02-2: exclude expired facts (valid_to set and in the past)
+        facts = [f for f in facts if f.valid_to is None or f.valid_to > now]
         out = []
         for fact in facts:
             fact.last_used = utcnow()
@@ -332,21 +324,16 @@ class LongTermMemory:
             return []
 
         # Search corrections/business_rules through tenancy-filtered query
-        base_stmt = (
-            select(MemoryLongTerm)
-            .where(
-                MemoryLongTerm.category.in_(["correction", "business_rule"]),
-                MemoryLongTerm.archived == False,
-                # BE-02-2: exclude expired facts
-                and_(
-                    MemoryLongTerm.valid_to.is_(None)
-                    | (MemoryLongTerm.valid_to > utcnow()),
-                ),
-            )
+        now = utcnow()
+        all_corrections = await self.db.select(
+            MemoryLongTerm,
+            scope_q(MemoryLongTerm, instance_id, host_user_id),
+            ("category__in", ["correction", "business_rule"]),
+            ("archived", False),
         )
-        stmt = _apply_tenancy_filter(base_stmt, MemoryLongTerm, instance_id, host_user_id)
-        result = await self.db.execute(stmt)
-        all_corrections = result.scalars().all()
+        all_corrections = [
+            f for f in all_corrections if f.valid_to is None or f.valid_to > now
+        ]
 
         matched = []
         for fact in all_corrections:
@@ -375,9 +362,7 @@ class LongTermMemory:
         new_confidence: float | None = None,
     ):
         """Update fact content and/or confidence. Re-embeds in ChromaDB."""
-        stmt = select(MemoryLongTerm).where(MemoryLongTerm.id == fact_id)
-        result = await self.db.execute(stmt)
-        fact = result.scalar_one_or_none()
+        fact = first(await self.db.select(MemoryLongTerm, ("id", fact_id)))
         if not fact:
             return
 
@@ -415,10 +400,11 @@ class LongTermMemory:
         Used to resolve a forget request to concrete candidate facts.
         """
         words = [w.lower() for w in query.split() if len(w) >= 3]
-        base_stmt = select(MemoryLongTerm).where(MemoryLongTerm.archived == False)
-        stmt = _apply_tenancy_filter(base_stmt, MemoryLongTerm, instance_id, host_user_id)
-        result = await self.db.execute(stmt)
-        facts = result.scalars().all()
+        facts = await self.db.select(
+            MemoryLongTerm,
+            scope_q(MemoryLongTerm, instance_id, host_user_id),
+            ("archived", False),
+        )
 
         scored: list[tuple[int, dict]] = []
         for fact in facts:
@@ -446,9 +432,7 @@ class LongTermMemory:
         embedding from ChromaDB so it is no longer retrieved. Returns True if
         a fact was archived.
         """
-        stmt = select(MemoryLongTerm).where(MemoryLongTerm.id == fact_id)
-        result = await self.db.execute(stmt)
-        fact = result.scalar_one_or_none()
+        fact = first(await self.db.select(MemoryLongTerm, ("id", fact_id)))
         if not fact:
             return False
 
@@ -474,16 +458,12 @@ class LongTermMemory:
         """
         cutoff = utcnow() - timedelta(days=days)
 
-        stmt = (
-            select(MemoryLongTerm)
-            .where(
-                MemoryLongTerm.instance_id == instance_id,
-                MemoryLongTerm.last_used < cutoff,
-                MemoryLongTerm.confidence > 0.1,
-            )
+        stale_facts = await self.db.select(
+            MemoryLongTerm,
+            ("instance_id", instance_id),
+            ("last_used__lt", cutoff),
+            ("confidence__gt", 0.1),
         )
-        result = await self.db.execute(stmt)
-        stale_facts = result.scalars().all()
 
         for fact in stale_facts:
             fact.confidence = max(fact.confidence * 0.5, 0.1)

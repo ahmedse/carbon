@@ -589,3 +589,23 @@ class PulseUser(AppScopeMixin):
         constraints = [
             models.UniqueConstraint(fields=["instance_id", "username"], name="uq_pulse_users_instance_username"),
         ]
+
+
+class CognitionSweepRun(AppScopeMixin):
+    """Phase D — durable per-task sweep-run ledger for the cognition scheduler.
+
+    One row per scheduled task name, upserted by ``loop._tracked`` after each
+    run so the Pulse admin surface can report sweep status without inspecting
+    the in-process scheduler state.
+    """
+
+    id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
+    task_name = models.TextField(db_index=True)
+    last_run = models.DateTimeField(null=True, blank=True)
+    last_status = models.TextField(default="pending")
+    last_duration_ms = models.IntegerField(default=0)
+    run_count = models.IntegerField(default=0)
+    last_error = models.TextField(null=True, blank=True)
+
+    class Meta:
+        app_label = "ai"

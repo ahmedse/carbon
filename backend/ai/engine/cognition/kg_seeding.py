@@ -10,8 +10,8 @@ Sleep-time job — no LLM calls, no hot-path impact.
 import json
 import logging
 import re
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from ai.store import first
 
 from ai.engine.core.models import KgNode, Trajectory, generate_uuid
 
@@ -83,7 +83,7 @@ def _extract_entities(text: str) -> list[str]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def seed_nodes_from_trajectories(
-    db: AsyncSession,
+    db,
     instance_id: str,
 ) -> int:
     """Scan recent unprocessed trajectories for novel entities and seed KG nodes.
@@ -100,16 +100,13 @@ async def seed_nodes_from_trajectories(
         Number of new KgNode rows created.
     """
     # 1. Fetch recent unprocessed trajectories
-    result = await db.execute(
-        select(Trajectory)
-        .where(
-            Trajectory.instance_id == instance_id,
-            Trajectory.consolidation_round == 0,
-        )
-        .order_by(Trajectory.created_at.desc())
-        .limit(_MAX_TRAJECTORIES)
+    trajectories = await db.select(
+        Trajectory,
+        ("instance_id", instance_id),
+        ("consolidation_round", 0),
     )
-    trajectories = result.scalars().all()
+    trajectories.sort(key=lambda t: t.created_at, reverse=True)
+    trajectories = trajectories[:_MAX_TRAJECTORIES]
 
     if not trajectories:
         logger.debug("seed_nodes_from_trajectories: no trajectories for %s", instance_id)
@@ -137,13 +134,12 @@ async def seed_nodes_from_trajectories(
         seen_in_batch.add(canonical)
 
         # Check if already exists
-        existing = await db.execute(
-            select(KgNode.id).where(
-                KgNode.instance_id == instance_id,
-                KgNode.name == entity,
-            )
+        existing = await db.select(
+            KgNode,
+            ("instance_id", instance_id),
+            ("name", entity),
         )
-        if existing.scalar_one_or_none() is not None:
+        if first(existing) is not None:
             logger.debug("seed_nodes_from_trajectories: skipping existing '%s'", entity)
             continue
 

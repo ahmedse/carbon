@@ -8,8 +8,6 @@ Confirmed facts are NOT decayed (they've passed promotion).
 import logging
 
 from ai.engine.core.clock import utcnow
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.models import MemoryLongTerm
 
@@ -19,7 +17,7 @@ _DECAY_AMOUNT = 0.05
 _ARCHIVE_THRESHOLD = 0.1
 
 
-async def run_decay(db: AsyncSession, instance) -> int:
+async def run_decay(db, instance) -> int:
     """Top-level entry point called by the cognition scheduler.
 
     Returns the number of facts decayed.
@@ -35,7 +33,7 @@ async def run_decay(db: AsyncSession, instance) -> int:
 class DecaySweep:
     """Decays confidence on eligible learned facts, archiving those that drop too low."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db):
         self.db = db
 
     async def sweep(self, instance_id: str) -> int:
@@ -43,15 +41,14 @@ class DecaySweep:
         now = utcnow()
 
         # Find learned facts past their decay_at date
-        stmt = select(MemoryLongTerm).where(
-            MemoryLongTerm.instance_id == instance_id,
-            MemoryLongTerm.category == "learned",
-            MemoryLongTerm.decay_at.isnot(None),
-            MemoryLongTerm.decay_at <= now,
-            MemoryLongTerm.archived.is_(False),
+        facts = await self.db.select(
+            MemoryLongTerm,
+            ("instance_id", instance_id),
+            ("category", "learned"),
+            ("decay_at__isnull", False),
+            ("decay_at__lte", now),
+            ("archived", False),
         )
-        result = await self.db.execute(stmt)
-        facts = result.scalars().all()
 
         decayed = 0
         archived = 0

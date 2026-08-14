@@ -24,8 +24,8 @@ import json
 import logging
 
 from ai.engine.core.clock import utcnow
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from ai.store import first
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Skill, Trajectory, generate_uuid
@@ -43,7 +43,7 @@ _MIN_OCCURRENCES_FAILURE = 2  # recurring failures
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def extract_candidates(
-    db: AsyncSession,
+    db,
     instance_id: str,
 ) -> list[dict]:
     """Read unprocessed trajectory rows and return extraction candidates.
@@ -62,16 +62,13 @@ async def extract_candidates(
     candidates: list[dict] = []
 
     # ── Fetch unprocessed trajectories ─────────────────────────────────────
-    result = await db.execute(
-        select(Trajectory)
-        .where(
-            Trajectory.instance_id == instance_id,
-            Trajectory.consolidation_round == 0,
-        )
-        .order_by(Trajectory.created_at.desc())
-        .limit(200)
+    rows = await db.select(
+        Trajectory,
+        ("instance_id", instance_id),
+        ("consolidation_round", 0),
     )
-    rows = result.scalars().all()
+    rows.sort(key=lambda r: r.created_at, reverse=True)
+    rows = rows[:200]
 
     if len(rows) < 2:
         logger.debug(
@@ -222,7 +219,7 @@ If this pattern doesn't warrant a skill, return: {{"skip": true, "rationale": ".
 
 
 async def reflect_on_candidates(
-    db: AsyncSession,
+    db,
     instance_id: str,
     candidates: list[dict],
 ) -> list[dict]:
@@ -299,7 +296,7 @@ async def reflect_on_candidates(
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def curate_deltas(
-    db: AsyncSession,
+    db,
     instance_id: str,
     reflections: list[dict],
 ) -> int:
@@ -312,10 +309,8 @@ async def curate_deltas(
     created = 0
 
     # ── Pre-fetch existing skill names for dedup ──────────────────────────
-    existing_result = await db.execute(
-        select(Skill.name, Skill.kind).where(Skill.instance_id == instance_id)
-    )
-    existing_pairs = {(row[0], row[1]) for row in existing_result.fetchall()}
+    existing_rows = await db.select(Skill, ("instance_id", instance_id))
+    existing_pairs = {(row.name, row.kind) for row in existing_rows}
 
     for ref in reflections:
         confidence = float(ref.get("confidence", 0))
@@ -366,14 +361,11 @@ async def curate_deltas(
 
     if all_traj_ids:
         now = utcnow()
-        await db.execute(
-            update(Trajectory)
-            .where(Trajectory.id.in_(list(all_traj_ids)))
-            .values(
-                consolidation_round=Trajectory.consolidation_round + 1,
-                extracted_at=now,
-            )
-        )
+        for tid in all_traj_ids:
+            traj = first(await db.select(Trajectory, ("id", tid)))
+            if traj is not None:
+                traj.consolidation_round = (traj.consolidation_round or 0) + 1
+                traj.extracted_at = now
 
     try:
         await db.flush()
@@ -390,7 +382,7 @@ async def curate_deltas(
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def _expire_superseded_facts(
-    db: AsyncSession,
+    db,
     instance_id: str,
     candidates: list[dict],
 ) -> int:
@@ -427,16 +419,19 @@ async def _expire_superseded_facts(
             continue
 
         # Look for existing non-expired edges with this pattern
-        existing = await db.execute(
-            select(KnowledgeEdge).where(
-                KnowledgeEdge.instance_id == instance_id,
-                KnowledgeEdge.source_node_id == f"pattern_{instance_id}",
-                KnowledgeEdge.relationship == "HAS_ATTRIBUTE",
-                KnowledgeEdge.valid_to.is_(None),
-                KnowledgeEdge.properties.like(f"%{predicate_id}%"),
-            )
+        existing = await db.select(
+            KnowledgeEdge,
+            ("instance_id", instance_id),
+            ("source_node_id", f"pattern_{instance_id}"),
+            ("relationship", "HAS_ATTRIBUTE"),
+            ("valid_to__isnull", True),
         )
-        old_edge = existing.scalar_one_or_none()
+        old_edge = None
+        for edge in existing:
+            props_json = json.dumps(edge.properties) if edge.properties else ""
+            if predicate_id in props_json:
+                old_edge = edge
+                break
 
         if old_edge is not None:
             # Check if the description changed
@@ -468,7 +463,7 @@ async def _expire_superseded_facts(
 # TOP-LEVEL ORCHESTRATOR
 # ═══════════════════════════════════════════════════════════════════════════
 
-async def run_consolidation_sweep(db: AsyncSession, instance_id: str) -> dict:
+async def run_consolidation_sweep(db, instance_id: str) -> dict:
     """Run the full extract → reflect → curate pipeline for one instance.
 
     Returns a summary dict suitable for logging / API responses::
@@ -526,16 +521,12 @@ async def _run_consolidation_for_all_instances():
     Designed to be used as the callback for _for_each_instance or
     directly from the scheduler.
     """
-    from ai.engine.core.database import get_session_factory
-    from sqlalchemy import select
+    from ai.store import get_store
     from ai.engine.core.models import Instance
 
-    factory = get_session_factory()
+    factory = get_store().get_session_factory()
     async with factory() as db:
-        result = await db.execute(
-            select(Instance).where(Instance.status == "active")
-        )
-        instances = result.scalars().all()
+        instances = await db.select(Instance, ("status", "active"))
 
         for inst in instances:
             try:

@@ -10,11 +10,10 @@ from typing import Optional
 
 from ai.engine.core.clock import utcnow
 
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from ai.store import first, scope_q
 
 from ai.engine.core.config import get_settings
-from ai.engine.core.models import MemoryEpisodic, _apply_tenancy_filter, generate_uuid
+from ai.engine.core.models import MemoryEpisodic, generate_uuid
 
 logger = logging.getLogger("pulse.memory.episodic")
 
@@ -51,7 +50,7 @@ class EpisodicMemory:
 
     def __init__(
         self,
-        db_session: AsyncSession,
+        db_session,
         chroma_client=None,
     ):
         self.db = db_session
@@ -161,15 +160,13 @@ class EpisodicMemory:
             return None
 
         for candidate_id in results["ids"][0]:
-            stmt = select(MemoryEpisodic).where(
-                MemoryEpisodic.id == candidate_id,
-                MemoryEpisodic.archived == False,
+            rows = await self.db.select(
+                MemoryEpisodic,
+                scope_q(MemoryEpisodic, instance_id, host_user_id),
+                ("id", candidate_id),
+                ("archived", False),
             )
-            stmt = _apply_tenancy_filter(
-                stmt, MemoryEpisodic, instance_id, host_user_id
-            )
-            result = await self.db.execute(stmt)
-            ep = result.scalar_one_or_none()
+            ep = first(rows)
             if ep and ep.occurred_at >= window_start and ep.occurred_at < occurred_at:
                 if ep.event_type in related_types:
                     return ep.id
@@ -225,9 +222,8 @@ class EpisodicMemory:
                 break
             seen.add(current_id)
 
-            stmt = select(MemoryEpisodic).where(MemoryEpisodic.id == current_id)
-            result = await self.db.execute(stmt)
-            ep = result.scalar_one_or_none()
+            rows = await self.db.select(MemoryEpisodic, ("id", current_id))
+            ep = first(rows)
             if not ep:
                 break
 
@@ -253,19 +249,18 @@ class EpisodicMemory:
                     continue
                 seen.add(cid)
 
-                stmt = select(MemoryEpisodic).where(MemoryEpisodic.id == cid)
-                result = await self.db.execute(stmt)
-                ep = result.scalar_one_or_none()
+                rows = await self.db.select(MemoryEpisodic, ("id", cid))
+                ep = first(rows)
                 if ep:
                     chain.append(self._episode_to_dict(ep))
 
                 # Find children
-                child_stmt = select(MemoryEpisodic).where(
-                    MemoryEpisodic.caused_by_episode_id == cid,
-                    MemoryEpisodic.archived == False,
+                child_rows = await self.db.select(
+                    MemoryEpisodic,
+                    ("caused_by_episode_id", cid),
+                    ("archived", False),
                 )
-                child_result = await self.db.execute(child_stmt)
-                for child in child_result.scalars().all():
+                for child in child_rows:
                     if child.id not in seen:
                         next_frontier.append(child.id)
 
@@ -296,14 +291,11 @@ class EpisodicMemory:
         now = utcnow()
         archived_count = 0
 
-        base_stmt = select(MemoryEpisodic).where(
-            MemoryEpisodic.archived == False,
+        episodes = await self.db.select(
+            MemoryEpisodic,
+            scope_q(MemoryEpisodic, instance_id, host_user_id),
+            ("archived", False),
         )
-        stmt = _apply_tenancy_filter(
-            base_stmt, MemoryEpisodic, instance_id, host_user_id
-        )
-        result = await self.db.execute(stmt)
-        episodes = result.scalars().all()
 
         for ep in episodes:
             half_life = _HALF_LIFE_DAYS.get(ep.event_type, 7)
@@ -350,9 +342,8 @@ class EpisodicMemory:
         This now assembles the full backward chain to provide richer context.
         Updates the episode's causal_chain field.
         """
-        stmt = select(MemoryEpisodic).where(MemoryEpisodic.id == episode_id)
-        result = await self.db.execute(stmt)
-        episode = result.scalar_one_or_none()
+        rows = await self.db.select(MemoryEpisodic, ("id", episode_id))
+        episode = first(rows)
         if not episode:
             return None
 
@@ -374,10 +365,13 @@ class EpisodicMemory:
 
         details_str = ""
         if episode.details:
-            try:
-                details_str = json.dumps(json.loads(episode.details), indent=2)
-            except json.JSONDecodeError:
-                details_str = episode.details
+            if isinstance(episode.details, str):
+                try:
+                    details_str = json.dumps(json.loads(episode.details), indent=2)
+                except json.JSONDecodeError:
+                    details_str = episode.details
+            else:
+                details_str = json.dumps(episode.details, indent=2, default=str)
 
         prompt = (
             f"Analyze this system event and explain the likely cause-effect chain.\n\n"
@@ -442,15 +436,13 @@ class EpisodicMemory:
         episode_ids = results["ids"][0]
         episodes: list[dict] = []
         for eid in episode_ids:
-            base_stmt = select(MemoryEpisodic).where(
-                MemoryEpisodic.id == eid,
-                MemoryEpisodic.archived == False,
+            rows = await self.db.select(
+                MemoryEpisodic,
+                scope_q(MemoryEpisodic, instance_id, host_user_id),
+                ("id", eid),
+                ("archived", False),
             )
-            stmt = _apply_tenancy_filter(
-                base_stmt, MemoryEpisodic, instance_id, host_user_id
-            )
-            result = await self.db.execute(stmt)
-            ep = result.scalar_one_or_none()
+            ep = first(rows)
             if not ep:
                 continue
 
@@ -476,12 +468,12 @@ class EpisodicMemory:
 
     def _episode_to_dict(self, ep) -> dict:
         """Convert a MemoryEpisodic ORM object to a plain dict."""
-        details = None
-        if ep.details:
+        details = ep.details
+        if isinstance(details, str):
             try:
-                details = json.loads(ep.details)
+                details = json.loads(details)
             except json.JSONDecodeError:
-                details = ep.details
+                pass
 
         return {
             "id": ep.id,

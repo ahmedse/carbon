@@ -15,8 +15,6 @@ from datetime import datetime, timedelta
 from ai.engine.core.clock import utcnow
 
 from openai import AsyncOpenAI
-from sqlalchemy import select, func as sa_func
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Insight, Notification, SystemSnapshot, MemoryEpisodic
@@ -26,7 +24,7 @@ logger = logging.getLogger("pulse.proactive.insight_generator")
 
 
 async def generate_daily_briefing(
-    db: AsyncSession,
+    db,
     instance_id: str,
 ) -> dict | None:
     """
@@ -110,7 +108,7 @@ async def generate_daily_briefing(
 
 
 async def detect_performance_drift(
-    db: AsyncSession,
+    db,
     instance_id: str,
     host_db_url: str,
     metrics_config: list[dict] | None = None,
@@ -179,7 +177,7 @@ async def detect_performance_drift(
 
 
 async def detect_forecast_deviations(
-    db: AsyncSession,
+    db,
     instance_id: str,
     host_db_url: str,
     deviation_config: dict | None = None,
@@ -261,69 +259,63 @@ async def detect_forecast_deviations(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def _recent_notifications(db: AsyncSession, instance_id: str, since: datetime) -> list[dict]:
-    stmt = (
-        select(Notification)
-        .where(Notification.instance_id == instance_id, Notification.created_at >= since)
-        .order_by(Notification.created_at.desc())
-        .limit(20)
+async def _recent_notifications(db, instance_id: str, since: datetime) -> list[dict]:
+    notifications = await db.select(
+        Notification,
+        ("instance_id", instance_id),
+        ("created_at__gte", since),
     )
-    result = await db.execute(stmt)
+    notifications.sort(key=lambda n: n.created_at, reverse=True)
+    notifications = notifications[:20]
     return [
         {"title": n.title, "severity": n.severity, "body": n.body,
          "created_at": n.created_at.isoformat() if n.created_at else None}
-        for n in result.scalars().all()
+        for n in notifications
     ]
 
 
-async def _recent_snapshots(db: AsyncSession, instance_id: str, since: datetime) -> list[dict]:
-    stmt = (
-        select(SystemSnapshot)
-        .where(SystemSnapshot.instance_id == instance_id, SystemSnapshot.taken_at >= since)
-        .order_by(SystemSnapshot.taken_at.desc())
-        .limit(3)
+async def _recent_snapshots(db, instance_id: str, since: datetime) -> list[dict]:
+    snapshots = await db.select(
+        SystemSnapshot,
+        ("instance_id", instance_id),
+        ("taken_at__gte", since),
     )
-    result = await db.execute(stmt)
+    snapshots.sort(key=lambda s: s.taken_at, reverse=True)
+    snapshots = snapshots[:3]
     return [
         {"summary": s.summary, "taken_at": s.taken_at.isoformat() if s.taken_at else None}
-        for s in result.scalars().all()
+        for s in snapshots
     ]
 
 
-async def _recent_episodes(db: AsyncSession, instance_id: str, since: datetime) -> list[dict]:
-    stmt = (
-        select(MemoryEpisodic)
-        .where(
-            MemoryEpisodic.instance_id == instance_id,
-            MemoryEpisodic.occurred_at >= since,
-            MemoryEpisodic.archived == False,  # noqa: E712
-        )
-        .order_by(MemoryEpisodic.occurred_at.desc())
-        .limit(20)
+async def _recent_episodes(db, instance_id: str, since: datetime) -> list[dict]:
+    episodes = await db.select(
+        MemoryEpisodic,
+        ("instance_id", instance_id),
+        ("occurred_at__gte", since),
+        ("archived", False),
     )
-    result = await db.execute(stmt)
+    episodes.sort(key=lambda e: e.occurred_at, reverse=True)
+    episodes = episodes[:20]
     return [
         {"event_type": e.event_type, "summary": e.summary,
          "occurred_at": e.occurred_at.isoformat() if e.occurred_at else None}
-        for e in result.scalars().all()
+        for e in episodes
     ]
 
 
-async def _recent_proactive_insights(db: AsyncSession, instance_id: str, since: datetime) -> list[dict]:
-    stmt = (
-        select(KgProactiveInsight)
-        .where(
-            KgProactiveInsight.instance_id == instance_id,
-            KgProactiveInsight.created_at >= since,
-        )
-        .order_by(KgProactiveInsight.created_at.desc())
-        .limit(20)
+async def _recent_proactive_insights(db, instance_id: str, since: datetime) -> list[dict]:
+    proactive = await db.select(
+        KgProactiveInsight,
+        ("instance_id", instance_id),
+        ("created_at__gte", since),
     )
-    result = await db.execute(stmt)
+    proactive.sort(key=lambda i: i.created_at, reverse=True)
+    proactive = proactive[:20]
     return [
         {"title": i.title, "severity": i.severity, "insight_type": i.insight_type,
          "created_at": i.created_at.isoformat() if i.created_at else None}
-        for i in result.scalars().all()
+        for i in proactive
     ]
 
 

@@ -10,7 +10,6 @@ import logging
 from datetime import datetime
 
 from ai.engine.core.clock import utcnow
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.models import Notification, generate_uuid
 
@@ -57,7 +56,7 @@ def unsubscribe_studio(instance_id: str, websocket):
 
 
 async def create_notification(
-    db: AsyncSession,
+    db,
     instance_id: str,
     severity: str,
     title: str,

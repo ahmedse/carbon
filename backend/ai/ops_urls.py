@@ -9,6 +9,7 @@ from ai.observability_api import (
     PulseInventoryView,
 )
 from ai.ops_api import PulseHealthView, PulseModulesView, PulseTaskStatusView
+from ai.sweeps_api import SweepsStatusView
 
 urlpatterns = [
     path("health/", PulseHealthView.as_view(), name="ai-pulse-health"),
@@ -19,4 +20,5 @@ urlpatterns = [
     path("archetypes/", PulseArchetypesView.as_view(), name="ai-pulse-archetypes"),
     path("usage/", PulseUsageView.as_view(), name="ai-pulse-usage"),
     path("settings/", PulseSettingsView.as_view(), name="ai-pulse-settings"),
+    path("sweeps/", SweepsStatusView.as_view(), name="ai-pulse-sweeps"),
 ]

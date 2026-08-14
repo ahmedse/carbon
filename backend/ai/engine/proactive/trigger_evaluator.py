@@ -15,9 +15,6 @@ from datetime import datetime, timedelta
 from ai.engine.core.clock import utcnow
 from typing import Optional
 
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.engine.core.config import get_settings
 from ai.engine.knowledge_graph.models import KgProactiveTrigger
 
@@ -54,7 +51,7 @@ class TriggerResult:
 
 
 async def evaluate_triggers(
-    db: AsyncSession,
+    db,
     instance_id: str,
     host_db_url: str,
 ) -> list[TriggerResult]:
@@ -67,12 +64,11 @@ async def evaluate_triggers(
         return []
 
     # Fetch enabled triggers
-    stmt = select(KgProactiveTrigger).where(
-        KgProactiveTrigger.instance_id == instance_id,
-        KgProactiveTrigger.enabled == True,  # noqa: E712
+    triggers = await db.select(
+        KgProactiveTrigger,
+        ("instance_id", instance_id),
+        ("enabled", True),
     )
-    result = await db.execute(stmt)
-    triggers = result.scalars().all()
 
     if not triggers:
         return []

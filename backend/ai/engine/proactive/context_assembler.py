@@ -6,13 +6,13 @@ This is what makes proactive insights different from raw alarms — narrative co
 """
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from ai.engine.core.clock import utcnow
 
 from openai import AsyncOpenAI
-from sqlalchemy import select, func as sa_func
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from ai.store import first
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import Notification, SystemSnapshot
@@ -22,7 +22,7 @@ logger = logging.getLogger("pulse.proactive.context_assembler")
 
 
 async def assemble_context(
-    db: AsyncSession,
+    db,
     trigger: dict,
     trigger_result,
     instance_id: str,
@@ -115,19 +115,16 @@ async def _execute_context_queries(
     return results
 
 
-async def _get_related_alerts(db: AsyncSession, instance_id: str) -> list[dict]:
+async def _get_related_alerts(db, instance_id: str) -> list[dict]:
     """Pull recent notifications (last 24h) that might be related."""
     cutoff = utcnow() - timedelta(hours=24)
-    stmt = (
-        select(Notification)
-        .where(
-            Notification.instance_id == instance_id,
-            Notification.created_at >= cutoff,
-        )
-        .order_by(Notification.created_at.desc())
-        .limit(10)
+    notifications = await db.select(
+        Notification,
+        ("instance_id", instance_id),
+        ("created_at__gte", cutoff),
     )
-    result = await db.execute(stmt)
+    notifications.sort(key=lambda n: n.created_at, reverse=True)
+    notifications = notifications[:10]
     return [
         {
             "title": n.title,
@@ -135,25 +132,24 @@ async def _get_related_alerts(db: AsyncSession, instance_id: str) -> list[dict]:
             "body": n.body,
             "created_at": n.created_at.isoformat() if n.created_at else None,
         }
-        for n in result.scalars().all()
+        for n in notifications
     ]
 
 
-async def _get_system_context(db: AsyncSession, instance_id: str) -> dict:
+async def _get_system_context(db, instance_id: str) -> dict:
     """Get the latest system snapshot for ambient context."""
-    stmt = (
-        select(SystemSnapshot)
-        .where(SystemSnapshot.instance_id == instance_id)
-        .order_by(SystemSnapshot.taken_at.desc())
-        .limit(1)
+    snapshots = await db.select(
+        SystemSnapshot,
+        ("instance_id", instance_id),
     )
-    result = await db.execute(stmt)
-    snapshot = result.scalar_one_or_none()
+    snapshots.sort(key=lambda s: s.taken_at, reverse=True)
+    snapshot = first(snapshots)
     if not snapshot:
         return {}
 
+    raw = snapshot.snapshot_data
     try:
-        data = json.loads(snapshot.snapshot_data or "{}")
+        data = json.loads(raw) if isinstance(raw, str) else (raw or {})
     except json.JSONDecodeError:
         data = {}
 

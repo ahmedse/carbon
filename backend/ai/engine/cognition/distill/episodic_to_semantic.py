@@ -7,12 +7,10 @@ stores them with low initial confidence.
 """
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional
 
 from ai.engine.core.clock import utcnow
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.config import get_settings
 from ai.engine.core.models import (
@@ -29,7 +27,7 @@ _MAX_MESSAGES_PER_USER = 40
 _LOOKBACK_HOURS = 24
 
 
-async def run_distillation(db: AsyncSession, instance, llm_client=None):
+async def run_distillation(db, instance, llm_client=None):
     """Top-level entry point called by the cognition scheduler.
 
     Args:
@@ -48,7 +46,7 @@ async def run_distillation(db: AsyncSession, instance, llm_client=None):
 class DistillationSweep:
     """Distills recent conversation messages into candidate long-term facts."""
 
-    def __init__(self, db: AsyncSession, llm_client=None):
+    def __init__(self, db, llm_client=None):
         self.db = db
         self._llm = llm_client
 
@@ -93,36 +91,18 @@ class DistillationSweep:
     async def _active_users(self, instance_id: str) -> list[str]:
         """Return distinct host_user_ids with message activity in the lookback window."""
         since = utcnow() - timedelta(hours=_LOOKBACK_HOURS)
-        stmt = (
-            select(Message.host_user_id)
-            .where(
-                Message.conversation_id.in_(
-                    select(Message.conversation_id)
-                    .where(
-                        Message.host_user_id == Message.host_user_id,
-                        Message.timestamp >= since,
-                        Message.host_user_id.isnot(None),
-                        Message.host_user_id != "",
-                    )
-                ),
-                Message.host_user_id.isnot(None),
-                Message.host_user_id != "",
-            )
-            .distinct()
+        rows = await self.db.select(
+            Message,
+            ("timestamp__gte", since),
+            ("host_user_id__isnull", False),
+            ("role__in", ["user", "assistant"]),
         )
-        # Simpler query: distinct host_user_ids with recent messages
-        stmt = (
-            select(Message.host_user_id)
-            .where(
-                Message.timestamp >= since,
-                Message.host_user_id.isnot(None),
-                Message.host_user_id != "",
-                Message.role.in_(["user", "assistant"]),
-            )
-            .distinct()
-        )
-        result = await self.db.execute(stmt)
-        return [row[0] for row in result.all() if row[0]]
+        user_ids: list[str] = []
+        for row in rows:
+            uid = row.host_user_id
+            if uid and uid not in user_ids:
+                user_ids.append(uid)
+        return user_ids
 
     async def _distill_user(
         self, instance_id: str, host_user_id: str
@@ -140,18 +120,14 @@ class DistillationSweep:
     async def _recent_messages(self, host_user_id: str) -> list[dict]:
         """Fetch recent user/assistant messages for one host user, chronological."""
         since = utcnow() - timedelta(hours=_LOOKBACK_HOURS)
-        stmt = (
-            select(Message)
-            .where(
-                Message.host_user_id == host_user_id,
-                Message.timestamp >= since,
-                Message.role.in_(["user", "assistant"]),
-            )
-            .order_by(Message.timestamp.asc())
-            .limit(_MAX_MESSAGES_PER_USER)
+        rows = await self.db.select(
+            Message,
+            ("host_user_id", host_user_id),
+            ("timestamp__gte", since),
+            ("role__in", ["user", "assistant"]),
         )
-        result = await self.db.execute(stmt)
-        rows = result.scalars().all()
+        rows.sort(key=lambda r: r.timestamp)
+        rows = rows[:_MAX_MESSAGES_PER_USER]
 
         return [
             {

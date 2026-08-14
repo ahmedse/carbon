@@ -7,11 +7,9 @@ Promotes learned candidate facts to 'confirmed' status when:
 - The user explicitly endorsed the fact (host_endorsed=True).
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from ai.engine.core.clock import utcnow
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.models import MemoryLongTerm
 
@@ -21,7 +19,7 @@ _SUSTAINED_DAYS = 14
 _PROMOTION_CONFIDENCE_MIN = 0.8
 
 
-async def run_promotion(db: AsyncSession, instance) -> int:
+async def run_promotion(db, instance) -> int:
     """Top-level entry point called by the cognition scheduler.
 
     Returns the number of facts promoted.
@@ -37,7 +35,7 @@ async def run_promotion(db: AsyncSession, instance) -> int:
 class PromotionSweep:
     """Promotes sustained high-confidence candidates to confirmed."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db):
         self.db = db
 
     async def sweep(self, instance_id: str) -> int:
@@ -45,15 +43,14 @@ class PromotionSweep:
         cutoff = utcnow() - timedelta(days=_SUSTAINED_DAYS)
 
         # Find learned facts with sustained high confidence
-        stmt = select(MemoryLongTerm).where(
-            MemoryLongTerm.instance_id == instance_id,
-            MemoryLongTerm.category == "learned",
-            MemoryLongTerm.confidence >= _PROMOTION_CONFIDENCE_MIN,
-            MemoryLongTerm.created_at <= cutoff,
-            MemoryLongTerm.archived.is_(False),
+        candidates = await self.db.select(
+            MemoryLongTerm,
+            ("instance_id", instance_id),
+            ("category", "learned"),
+            ("confidence__gte", _PROMOTION_CONFIDENCE_MIN),
+            ("created_at__lte", cutoff),
+            ("archived", False),
         )
-        result = await self.db.execute(stmt)
-        candidates = result.scalars().all()
 
         promoted = 0
         for fact in candidates:

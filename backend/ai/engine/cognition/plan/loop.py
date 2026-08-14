@@ -8,7 +8,9 @@ import json
 import logging
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+
+from ai.engine.core.clock import utcnow
+from ai.store import first
 
 from ai.engine.cognition.plan.planner import Plan, PlanStep
 from ai.engine.cognition.turn.witnesses import CriticVerdict, DraftResult, RetrievalResult
@@ -71,7 +73,7 @@ class ReActLoop:
         llm_client=None,
         knowledge_store=None,
         memory_manager=None,
-        db=None,                  # AsyncSession for durable run persistence
+        db=None,                  # Store session for durable run persistence
     ):
         self.draft_witness = draft_witness
         self.critic_witness = critic_witness
@@ -96,7 +98,7 @@ class ReActLoop:
         stream_callback=None,
         dry_run: bool = False,
         confirmation_token: str | None = None,
-        db=None,                  # AsyncSession for durable run persistence (P1.1)
+        db=None,                  # Store session for durable run persistence (P1.1)
         host_user_id: str | None = None,
         resume_run_id: str | None = None,  # P1.3: resume from a paused run
     ) -> ReActResult:
@@ -116,7 +118,7 @@ class ReActLoop:
             stream_callback: optional streaming output
             dry_run: if True, skip real mutations — preview only
             confirmation_token: user-confirmed token for mutation steps
-            db: optional AsyncSession for durable Run/RunStep persistence
+            db: optional Store session for durable Run/RunStep persistence
             host_user_id: optional host user for tenancy
             resume_run_id: P1.3 — if set, resume an existing paused run
                 from the first pending step
@@ -159,9 +161,7 @@ class ReActLoop:
         if _db is not None:
             if resume_run_id:
                 # ── P1.3: Resume existing paused run ──────────────────
-                stmt = select(Run).where(Run.id == run_id)
-                res = await _db.execute(stmt)
-                run_row = res.scalar_one_or_none()
+                run_row = first(await _db.select(Run, ("id", run_id)))
                 if run_row is None:
                     raise ValueError(f"Run {run_id} not found for resume")
                 if run_row.status != "paused":
@@ -169,17 +169,12 @@ class ReActLoop:
                         f"Cannot resume run {run_id} with status '{run_row.status}'"
                     )
                 run_row.status = "running"
-                run_row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                run_row.updated_at = utcnow()
                 await _db.commit()
 
                 # Build completed_ids from existing completed/skipped steps
-                step_stmt = (
-                    select(RunStep)
-                    .where(RunStep.run_id == run_id)
-                    .order_by(RunStep.step_index)
-                )
-                step_res = await _db.execute(step_stmt)
-                existing_steps = step_res.scalars().all()
+                existing_steps = await _db.select(RunStep, ("run_id", run_id))
+                existing_steps.sort(key=lambda s: s.step_index)
                 for s in existing_steps:
                     if s.status in ("completed", "skipped"):
                         completed_ids.add(s.step_index)
@@ -373,14 +368,11 @@ class ReActLoop:
             if is_paused:
                 # Run already set to paused in the loop — just update latency
                 from ai.engine.core.models import Run
-                from sqlalchemy import select
-                stmt = select(Run).where(Run.id == run_id)
-                res = await _db.execute(stmt)
-                row = res.scalar_one_or_none()
+                row = first(await _db.select(Run, ("id", run_id)))
                 if row:
                     row.total_llm_calls = total_llm_calls
                     row.total_latency_ms = total_latency
-                    row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    row.updated_at = utcnow()
                     await _db.commit()
             else:
                 await self._finalize_run(
@@ -577,7 +569,6 @@ class ReActLoop:
     ) -> None:
         """Insert or update a RunStep row for the given step result."""
         from ai.engine.core.models import RunStep, generate_uuid
-        from sqlalchemy import select
 
         # Determine step status from critic verdict or pause
         if result.paused:
@@ -590,12 +581,11 @@ class ReActLoop:
             step_status = "completed" if result.executed else "completed"
 
         # Check if a row already exists for this run+step (resume path)
-        existing_stmt = (
-            select(RunStep)
-            .where(RunStep.run_id == run_id, RunStep.step_index == step.step_id)
-        )
-        existing_res = await _db.execute(existing_stmt)
-        existing = existing_res.scalar_one_or_none()
+        existing = first(await _db.select(
+            RunStep,
+            ("run_id", run_id),
+            ("step_index", step.step_id),
+        ))
 
         if existing:
             # Update existing row (resume path)
@@ -614,7 +604,7 @@ class ReActLoop:
             existing.latency_ms = step_latency_ms
             if result.confirmation_token:
                 existing.confirmation_token = result.confirmation_token
-            existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            existing.updated_at = utcnow()
             await _db.commit()
             logger.debug(
                 "ReActLoop: updated RunStep row run_id=%s step=%d status=%s",
@@ -649,13 +639,10 @@ class ReActLoop:
     async def _pause_run(self, _db, run_id: str) -> None:
         """Set Run status to 'paused'."""
         from ai.engine.core.models import Run
-        from sqlalchemy import select
-        stmt = select(Run).where(Run.id == run_id)
-        res = await _db.execute(stmt)
-        row = res.scalar_one_or_none()
+        row = first(await _db.select(Run, ("id", run_id)))
         if row:
             row.status = "paused"
-            row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            row.updated_at = utcnow()
             await _db.commit()
             logger.info("ReActLoop: paused Run id=%s", run_id)
 
@@ -671,11 +658,8 @@ class ReActLoop:
     ) -> None:
         """Update the Run row with final status and summary."""
         from ai.engine.core.models import Run
-        from sqlalchemy import select
 
-        stmt = select(Run).where(Run.id == run_id)
-        result = await _db.execute(stmt)
-        run_row = result.scalar_one_or_none()
+        run_row = first(await _db.select(Run, ("id", run_id)))
         if run_row is None:
             logger.warning("ReActLoop: Run row id=%s not found for finalization", run_id)
             return
@@ -684,7 +668,7 @@ class ReActLoop:
         run_row.final_response = final_response[:2000] if final_response else None
         run_row.total_llm_calls = total_llm_calls
         run_row.total_latency_ms = total_latency_ms
-        run_row.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        run_row.completed_at = utcnow()
         await _db.commit()
         logger.debug("ReActLoop: finalized Run row id=%s status=%s", run_id, run_row.status)
 

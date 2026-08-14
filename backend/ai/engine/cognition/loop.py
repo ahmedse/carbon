@@ -7,7 +7,6 @@ across snapshots and memories, synthesizes insights, and builds intelligence ove
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta, timezone
 
 from ai.engine.core.clock import utcnow
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -112,6 +111,9 @@ async def _tracked(task_name: str, fn):
         _loop_state["cycle_count"] += 1
         logger.debug(f"Task {task_name} completed in {elapsed}ms — {status}")
 
+        # Durable best-effort ledger (Phase D) — upsert by task name.
+        await _persist_sweep_run(task_name, start, elapsed, status)
+
         # Notify Studio subscribers of completion
         event = "task_completed" if status == "ok" else "task_failed"
         await _broadcast_all_instances(event, task_name, {
@@ -119,6 +121,42 @@ async def _tracked(task_name: str, fn):
             "status": status,
             "run_count": task_state["run_count"],
         })
+
+
+async def _persist_sweep_run(task_name: str, start, elapsed_ms: int, status: str) -> None:
+    """Best-effort upsert of a CognitionSweepRun row for ``task_name``.
+
+    Never raises — sweep persistence must not fail the loop itself.  Uses the
+    Store seam (``AI_STORE_BACKEND``) so it works identically under the
+    ``inmemory`` and ``django`` backends.
+    """
+    try:
+        from ai.store import first, get_store
+        from ai.models.core import CognitionSweepRun
+
+        factory = get_store().get_session_factory()
+        async with factory() as db:
+            rows = await db.select(CognitionSweepRun, ("task_name", task_name))
+            row = first(rows)
+            error = None if status == "ok" else status
+            if row is not None:
+                row.last_run = start
+                row.last_status = status
+                row.last_duration_ms = elapsed_ms
+                row.run_count += 1
+                row.last_error = error
+            else:
+                db.add(CognitionSweepRun(
+                    task_name=task_name,
+                    last_run=start,
+                    last_status=status,
+                    last_duration_ms=elapsed_ms,
+                    run_count=1,
+                    last_error=error,
+                ))
+            await db.commit()
+    except Exception as e:  # pragma: no cover - best-effort ledger
+        logger.warning("Failed to persist sweep run for %s: %s", task_name, e)
 
 
 async def _broadcast_all_instances(event: str, task_name: str, data: dict | None = None):
@@ -134,14 +172,12 @@ async def _broadcast_all_instances(event: str, task_name: str, data: dict | None
 
 async def _for_each_instance(callback):
     """Run an async callback(db, instance) for every active instance."""
-    from ai.engine.core.database import get_session_factory
-    from sqlalchemy import select
+    from ai.store import get_store
     from ai.engine.core.models import Instance
 
-    factory = get_session_factory()
+    factory = get_store().get_session_factory()
     async with factory() as db:
-        result = await db.execute(select(Instance).where(Instance.status == "active"))
-        instances = result.scalars().all()
+        instances = await db.select(Instance, ("status", "active"))
         for instance in instances:
             try:
                 await callback(db, instance)
@@ -314,7 +350,6 @@ async def _run_prompt_refine() -> None:
     async def _refine_instance(db, instance) -> None:
         import json
         from datetime import timedelta
-        from sqlalchemy import func, select, delete
         from ai.engine.core.models import Conversation, Message, PromptVersion
         from ai.engine.llm.prompt_synthesizer import synthesize_system_prompt, _prompt_cache
 
@@ -322,33 +357,38 @@ async def _run_prompt_refine() -> None:
         instance_name = instance.name
         display_name = instance.display_name
 
+        def _one(rows):
+            return rows[0] if rows else None
+
+        def _latest_synth(rows):
+            return max(rows, key=lambda v: v.synthesized_at) if rows else None
+
+        def _max_score(rows):
+            return max(
+                rows,
+                key=lambda v: v.score if v.score is not None else float("-inf"),
+            ) if rows else None
+
         try:
             # ── 0. Resolve previous A/B candidate (if any) ───────────────────
             # A candidate is a PromptVersion with improvement_round=0 and
             # is_active=False — it was staged 6h ago for 20% traffic testing.
-            cand_result = await db.execute(
-                select(PromptVersion)
-                .where(
-                    PromptVersion.instance_id == instance_id,
-                    PromptVersion.is_active == False,  # noqa: E712
-                    PromptVersion.improvement_round == 0,
-                )
-                .order_by(PromptVersion.synthesized_at.desc())
-                .limit(1)
+            cand_rows = await db.select(
+                PromptVersion,
+                ("instance_id", instance_id),
+                ("is_active", False),
+                ("improvement_round", 0),
             )
-            old_candidate = cand_result.scalar_one_or_none()
+            old_candidate = _latest_synth(cand_rows)
 
             if old_candidate is not None:
                 # Compare candidate vs current active
-                active_result = await db.execute(
-                    select(PromptVersion)
-                    .where(
-                        PromptVersion.instance_id == instance_id,
-                        PromptVersion.is_active == True,  # noqa: E712
-                    )
-                    .limit(1)
+                active_rows = await db.select(
+                    PromptVersion,
+                    ("instance_id", instance_id),
+                    ("is_active", True),
                 )
-                current_active = active_result.scalar_one_or_none()
+                current_active = _one(active_rows)
 
                 if current_active is not None and old_candidate.score is not None:
                     active_score = current_active.score or 0.0
@@ -385,31 +425,25 @@ async def _run_prompt_refine() -> None:
                     )
 
             # ── 1. Count user messages since last refinement ────────────────
-            recent_result = await db.execute(
-                select(PromptVersion)
-                .where(PromptVersion.instance_id == instance_id)
-                .order_by(PromptVersion.synthesated_at.desc().nullslast())
-                .limit(1)
-            )
-            last_version = recent_result.scalar_one_or_none()
+            all_versions = await db.select(PromptVersion, ("instance_id", instance_id))
+            last_version = _latest_synth(all_versions)
 
             if last_version is not None and last_version.synthesized_at is not None:
                 since = last_version.synthesized_at
             else:
-                since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
+                since = utcnow() - timedelta(hours=24)
 
-            # Message has no instance_id — join via Conversation
-            count_result = await db.execute(
-                select(func.count())
-                .select_from(Message)
-                .join(Conversation, Message.conversation_id == Conversation.id)
-                .where(
-                    Conversation.instance_id == instance_id,
-                    Message.role == "user",
-                    Message.timestamp >= since,
-                )
+            # Message has no instance_id — resolve conversation IDs first, then count.
+            conv_rows = await db.select(Conversation, ("instance_id", instance_id))
+            conv_ids = [c.id for c in conv_rows]
+            count_result = await db.aggregate(
+                Message,
+                {"count": ("Count", "id")},
+                ("conversation_id__in", conv_ids),
+                ("role", "user"),
+                ("timestamp__gte", since),
             )
-            msg_count = count_result.scalar() or 0
+            msg_count = int(count_result.get("count") or 0)
 
             if msg_count < 10:
                 logger.info(
@@ -427,7 +461,9 @@ async def _run_prompt_refine() -> None:
             old_score = last_version.score if last_version is not None else 0.0
 
             # 2. Parse instance config for description / domain
-            config_data = json.loads(instance.config) if instance.config else {}
+            config_data = instance.config or {}
+            if isinstance(config_data, str):
+                config_data = json.loads(config_data)
             description = config_data.get("description", "")
             domain = config_data.get("domain", "")
 
@@ -447,16 +483,12 @@ async def _run_prompt_refine() -> None:
                 return
 
             # 4. Compare scores and notify
-            active_result = await db.execute(
-                select(PromptVersion)
-                .where(
-                    PromptVersion.instance_id == instance_id,
-                    PromptVersion.is_active == True,  # noqa: E712
-                )
-                .order_by(PromptVersion.score.desc().nullslast())
-                .limit(1)
+            active_rows = await db.select(
+                PromptVersion,
+                ("instance_id", instance_id),
+                ("is_active", True),
             )
-            active = active_result.scalar_one_or_none()
+            active = _max_score(active_rows)
             new_score = active.score if active else 0.0
 
             improvement_pct = (
@@ -475,30 +507,23 @@ async def _run_prompt_refine() -> None:
             # The optimizer activates the winner.  We demote it to a candidate
             # so build_chat_prompt can route 20% traffic to it for real-world
             # A/B testing.  The old active version stays live for the other 80%.
-            save_result = await db.execute(
-                select(PromptVersion)
-                .where(
-                    PromptVersion.instance_id == instance_id,
-                    PromptVersion.is_active == True,  # noqa: E712
-                )
-                .limit(1)
+            save_rows = await db.select(
+                PromptVersion,
+                ("instance_id", instance_id),
+                ("is_active", True),
             )
-            new_winner = save_result.scalar_one_or_none()
+            new_winner = _one(save_rows)
             saved_active_id = None
 
             if new_winner is not None:
                 # Find the version that was active BEFORE this optimization run
-                prev_result = await db.execute(
-                    select(PromptVersion)
-                    .where(
-                        PromptVersion.instance_id == instance_id,
-                        PromptVersion.is_active == False,  # noqa: E712
-                        PromptVersion.id != new_winner.id,
-                    )
-                    .order_by(PromptVersion.synthesized_at.desc())
-                    .limit(1)
+                prev_rows = await db.select(
+                    PromptVersion,
+                    ("instance_id", instance_id),
+                    ("is_active", False),
                 )
-                prev_active = prev_result.scalar_one_or_none()
+                prev_rows = [v for v in prev_rows if v.id != new_winner.id]
+                prev_active = _latest_synth(prev_rows)
 
                 # Demote winner to candidate
                 new_winner.is_active = False
