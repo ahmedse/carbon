@@ -18,10 +18,11 @@ import re
 from pathlib import Path
 
 from rest_framework import serializers
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.ai_scoping import scope_ai_queryset
+from accounts.permissions import AdminOrSuperuserOnly
 from ai.models.core import (
     Agent,
     AgentHandoff,
@@ -199,7 +200,8 @@ def _timestamp_field(model):
 class PulseInventoryView(APIView):
     """GET inventory/ — 13 panels with model-backed row counts."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
 
     def get(self, request):
         panels = []
@@ -208,7 +210,7 @@ class PulseInventoryView(APIView):
                 {
                     "key": key,
                     "label": PANEL_LABELS[key],
-                    "count": sum(model.objects.count() for model in models),
+                    "count": sum(scope_ai_queryset(model.objects, request.user).count() for model in models),
                     "models": [model.__name__ for model in models],
                 }
             )
@@ -219,7 +221,8 @@ class PulseInventoryView(APIView):
 class PulseDataView(APIView):
     """GET data/<key>/ — merged, redacted, capped rows for one panel."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
 
     def get(self, request, key):
         models = PANEL_REGISTRY.get(key)
@@ -234,7 +237,7 @@ class PulseDataView(APIView):
 
         results = []
         for model in models:
-            queryset = model.objects.all()
+            queryset = scope_ai_queryset(model.objects, request.user)
             timestamp = _timestamp_field(model)
             if timestamp is not None:
                 queryset = queryset.order_by(f"-{timestamp}")
@@ -264,7 +267,8 @@ class PulseArchetypesView(APIView):
     bundle list with the error string (never 500).
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
 
     def get(self, request):
         base = Path(__file__).resolve().parent / "engine" / "archetypes"

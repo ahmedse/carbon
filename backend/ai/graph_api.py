@@ -19,10 +19,11 @@ Design notes (mirror :mod:`ai.observability_api`):
 
 import logging
 
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.ai_scoping import scope_ai_queryset
+from accounts.permissions import AdminOrSuperuserOnly
 from ai.models.core import KgEdge, KgNode
 from ai.models.knowledge_graph import KnowledgeEdge, KnowledgeNode
 from ai.observability_api import _redact_secrets
@@ -103,12 +104,13 @@ _EDGE_TO_NODE_MODEL = {
 class GraphDataView(APIView):
     """GET /carbon-api/ai/pulse/graph/ — normalized, capped node/edge graph."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
 
     def get(self, request):
         # ── Nodes: primary (KnowledgeNode) first, then KgNode, capped ────────
-        knowledge_nodes = KnowledgeNode.objects.all()
-        kg_nodes = KgNode.objects.all()
+        knowledge_nodes = scope_ai_queryset(KnowledgeNode.objects, request.user)
+        kg_nodes = scope_ai_queryset(KgNode.objects, request.user)
 
         raw_node_count = knowledge_nodes.count() + kg_nodes.count()
 
@@ -133,13 +135,17 @@ class GraphDataView(APIView):
         edges = [
             e
             for e in (
-                _knowledge_edge_to_dict(e) for e in KnowledgeEdge.objects.all()
+                _knowledge_edge_to_dict(e)
+                for e in scope_ai_queryset(KnowledgeEdge.objects, request.user)
             )
             if _resolves(e)
         ]
         edges.extend(
             e
-            for e in (_kg_edge_to_dict(e) for e in KgEdge.objects.all())
+            for e in (
+                _kg_edge_to_dict(e)
+                for e in scope_ai_queryset(KgEdge.objects, request.user)
+            )
             if _resolves(e)
         )
 

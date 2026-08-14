@@ -66,6 +66,9 @@ export const DATASCHEMA_MANAGE = 'dataschema:manage';
 export const EVIDENCE_VIEW   = 'evidence:view';
 export const EVIDENCE_MANAGE = 'evidence:manage';
 
+// ── AI (Pulse) ─────────────────────────────────────────────────────
+export const AI_VIEW_CONSOLE = 'ai:view_console';
+
 // ── Manifest role → capability mapping ─────────────────────────────
 // Maps manifest role keys (carbon:data_owner) to capability keys.
 // Used by filterMenuItems and canAccessRoute for backward compatibility.
@@ -107,6 +110,9 @@ export const ROUTE_CAPABILITIES = {
   '/catalog/metadata':    CATALOG_MANAGE_METADATA,
   '/catalog/policies':    CATALOG_MANAGE_POLICIES,
   '/catalog/governance':  CATALOG_VIEW_GOVERNANCE,
+
+  // AI (Pulse) admin console — prefix-matched for every /admin/ai/* route
+  '/admin/ai':            AI_VIEW_CONSOLE,
 };
 
 // ── Menu item manifest role → capability ───────────────────────────

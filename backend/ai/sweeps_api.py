@@ -13,9 +13,11 @@ No mutation surface, no model viewset.
 
 import logging
 
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from accounts.ai_scoping import scope_ai_queryset
+from accounts.permissions import AdminOrSuperuserOnly
 
 logger = logging.getLogger("carbon.ai.sweeps_api")
 
@@ -23,7 +25,8 @@ logger = logging.getLogger("carbon.ai.sweeps_api")
 class SweepsStatusView(APIView):
     """GET sweeps/ — durable sweep-run ledger + live loop status."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
 
     def get(self, request):
         from ai.engine.cognition.loop import get_loop_status
@@ -38,7 +41,9 @@ class SweepsStatusView(APIView):
         # Latest row per task_name (defensive: the loop upserts one row per
         # task, but tolerate any historical duplicates by keeping the newest).
         latest: dict[str, "CognitionSweepRun"] = {}
-        for row in CognitionSweepRun.objects.order_by("task_name", "-last_run"):
+        for row in scope_ai_queryset(
+            CognitionSweepRun.objects, request.user
+        ).order_by("task_name", "-last_run"):
             latest.setdefault(row.task_name, row)
 
         tasks = [

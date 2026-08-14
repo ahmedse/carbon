@@ -11,7 +11,8 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
 import SettingsIcon from '@mui/icons-material/Settings';
 import HelpIcon from '@mui/icons-material/Help';
 import { APP_REGISTRY } from '../apps/registry';
-import { isGlobalAdmin, isCatalogAdmin, hasAppAccess } from '../authz';
+import { isGlobalAdmin, isCatalogAdmin, hasAppAccess, hasCap, expandCapabilities } from '../authz';
+import { AI_VIEW_CONSOLE } from '../capabilities';
 import { useEnabledApps } from '../hooks/useEnabledApps';
 
 // Platform studios — shell-owned, NOT app-manifest-driven.
@@ -90,9 +91,13 @@ export function useShellState() {
         return isGlobalAdmin(user, availablePerspectives);
       }
       
-      // Hide AI admin studio if not admin
+      // Hide AI admin studio if not admin or AI console capability holder
       if (s.id === 'ai-admin') {
-        return isGlobalAdmin(user, availablePerspectives);
+        if (isGlobalAdmin(user, availablePerspectives)) return true;
+        const caps = (userCapabilities || []).map(
+          (c) => (typeof c === 'string' ? c : (c?.key || c?.capability))
+        );
+        return hasCap(expandCapabilities(caps), AI_VIEW_CONSOLE);
       }
       
       // Hide catalog studio if not catalog admin

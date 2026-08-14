@@ -27,10 +27,11 @@ import logging
 from django.conf import settings as django_settings
 from django.db.models import Count, Sum
 from django.utils import timezone
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.ai_scoping import scope_ai_queryset
+from accounts.permissions import AdminOrSuperuserOnly
 from ai.observability_api import _redact_secrets
 
 logger = logging.getLogger("carbon.ai.activation_api")
@@ -62,7 +63,8 @@ class PulseUsageView(APIView):
         }
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
 
     def get(self, request):
         try:
@@ -73,12 +75,14 @@ class PulseUsageView(APIView):
             budget_usd = float(settings.LLM_DAILY_BUDGET_USD)
             today = timezone.localdate()
 
-            today_agg = LLMCallLog.objects.filter(created_at__date=today).aggregate(
+            base = scope_ai_queryset(LLMCallLog.objects, request.user)
+
+            today_agg = base.filter(created_at__date=today).aggregate(
                 spent=Sum("cost_usd"),
                 tokens=Sum("total_tokens"),
                 calls=Count("id"),
             )
-            total_agg = LLMCallLog.objects.aggregate(
+            total_agg = base.aggregate(
                 cost=Sum("cost_usd"),
                 tokens=Sum("total_tokens"),
                 calls=Count("id"),
@@ -95,7 +99,7 @@ class PulseUsageView(APIView):
                     "total_tokens": int(row["total_tokens"] or 0),
                     "calls": int(row["calls"] or 0),
                 }
-                for row in LLMCallLog.objects.values("model")
+                for row in base.values("model")
                 .annotate(
                     cost_usd=Sum("cost_usd"),
                     total_tokens=Sum("total_tokens"),
@@ -112,7 +116,7 @@ class PulseUsageView(APIView):
                     "total_tokens": int(row["total_tokens"] or 0),
                     "calls": int(row["calls"] or 0),
                 }
-                for row in LLMCallLog.objects.filter(created_at__date__gte=week_start)
+                for row in base.filter(created_at__date__gte=week_start)
                 .values("created_at__date")
                 .annotate(
                     cost_usd=Sum("cost_usd"),
@@ -301,7 +305,8 @@ class PulseSettingsView(APIView):
     and dict-carrying sections are redacted via ``_redact_secrets``.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
 
     def get(self, request):
         payload = {

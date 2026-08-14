@@ -19,6 +19,7 @@ import {
   CARBON_MANAGE_EMISSION_FACTORS, CARBON_MANAGE_CALCULATION_RULES,
   CARBON_MANAGE_GWP, CARBON_MANAGE_SBTI_TARGETS,
   CARBON_GENERATE_REPORTS, CARBON_MANAGE_REPORTING_PERIODS,
+  AI_VIEW_CONSOLE,
 } from "./capabilities";
 // ── Lazy-loaded page imports ──────────────────────────────────────────
 const TableManagerPage = React.lazy(() => import("./pages/TableManagerPage"));
@@ -309,25 +310,25 @@ export default function App() {
                 <Route path="/admin/audit" element={<AdminRoute><AuditLogPage /></AdminRoute>} />
                 <Route path="/admin/logs" element={<AdminRoute><LogViewerPage /></AdminRoute>} />
                 <Route path="/admin/config" element={<AdminRoute><PlatformConfigPage /></AdminRoute>} />
-                <Route path="/admin/ai" element={<AdminRoute><PulseOverviewPage /></AdminRoute>} />
-                <Route path="/admin/ai/workspace" element={<AdminRoute><AIWorkspacePage /></AdminRoute>} />
-                <Route path="/admin/ai/conversations" element={<AdminRoute><AIConversationsPage /></AdminRoute>} />
-                <Route path="/admin/ai/knowledge" element={<AdminRoute><KnowledgeBasePanel /></AdminRoute>} />
-                <Route path="/admin/ai/memory" element={<AdminRoute><MemoryPanel /></AdminRoute>} />
-                <Route path="/admin/ai/graph" element={<AdminRoute><KnowledgeGraphPanel /></AdminRoute>} />
-                <Route path="/admin/ai/agents" element={<AdminRoute><AgentsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/mcp" element={<AdminRoute><McpServersPanel /></AdminRoute>} />
-                <Route path="/admin/ai/tools" element={<AdminRoute><ToolsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/skills" element={<AdminRoute><SkillsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/archetypes" element={<AdminRoute><PulseArchetypesPanel /></AdminRoute>} />
-                <Route path="/admin/ai/budget-usage" element={<AdminRoute><BudgetUsagePanel /></AdminRoute>} />
-                <Route path="/admin/ai/engine-settings" element={<AdminRoute><EngineSettingsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/prompts" element={<AdminRoute><PromptsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/feedback" element={<AdminRoute><FeedbackPanel /></AdminRoute>} />
-                <Route path="/admin/ai/learning" element={<AdminRoute><LearningJobsPanel /></AdminRoute>} />
-                <Route path="/admin/ai/monitoring" element={<AdminRoute><MonitoringPanel /></AdminRoute>} />
-                <Route path="/admin/ai/audit" element={<AdminRoute><AuditPanel /></AdminRoute>} />
-                <Route path="/admin/ai/logs" element={<AdminRoute><AILogsPanel /></AdminRoute>} />
+                <Route path="/admin/ai" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PulseOverviewPage /></AdminRoute>} />
+                <Route path="/admin/ai/workspace" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AIWorkspacePage /></AdminRoute>} />
+                <Route path="/admin/ai/conversations" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AIConversationsPage /></AdminRoute>} />
+                <Route path="/admin/ai/knowledge" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><KnowledgeBasePanel /></AdminRoute>} />
+                <Route path="/admin/ai/memory" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><MemoryPanel /></AdminRoute>} />
+                <Route path="/admin/ai/graph" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><KnowledgeGraphPanel /></AdminRoute>} />
+                <Route path="/admin/ai/agents" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AgentsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/mcp" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><McpServersPanel /></AdminRoute>} />
+                <Route path="/admin/ai/tools" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><ToolsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/skills" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><SkillsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/archetypes" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PulseArchetypesPanel /></AdminRoute>} />
+                <Route path="/admin/ai/budget-usage" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><BudgetUsagePanel /></AdminRoute>} />
+                <Route path="/admin/ai/engine-settings" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><EngineSettingsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/prompts" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PromptsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/feedback" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><FeedbackPanel /></AdminRoute>} />
+                <Route path="/admin/ai/learning" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LearningJobsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/monitoring" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><MonitoringPanel /></AdminRoute>} />
+                <Route path="/admin/ai/audit" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AuditPanel /></AdminRoute>} />
+                <Route path="/admin/ai/logs" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AILogsPanel /></AdminRoute>} />
                 <Route path="/admin/policies" element={<Navigate to="/catalog/policies" replace />} />
                 <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
                  <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />

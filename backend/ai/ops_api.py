@@ -14,10 +14,10 @@ capabilities and expose task status for the AI admin console.
 import logging
 from dataclasses import asdict
 
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import AdminOrSuperuserOnly
 from ai.engine_runtime import get_task, list_modules
 from ai.intelligence import CarbonIntelligence
 
@@ -27,7 +27,8 @@ logger = logging.getLogger("carbon.ai.ops_api")
 class PulseHealthView(APIView):
     """GET /health/ — engine health plus advertised modules."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
 
     def get(self, request):
         try:
@@ -49,7 +50,8 @@ class PulseHealthView(APIView):
 class PulseModulesView(APIView):
     """GET /modules/ — the task types the in-process engine advertises."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
 
     def get(self, request):
         data = list_modules()
@@ -65,7 +67,8 @@ class PulseTaskStatusView(APIView):
     envelope, which we pass through unchanged.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
 
     def get(self, request, task_id):
         return Response(get_task(task_id))

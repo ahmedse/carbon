@@ -420,6 +420,18 @@ EVIDENCE_MANAGE = Capability(
 )
 
 
+# ── AI (Pulse) domain capabilities ─────────────────────────────────
+
+AI_VIEW_CONSOLE = Capability(
+    key="ai:view_console",
+    domain="ai",
+    action="view_console",
+    label="View AI Admin Console",
+    description="View the Pulse AI admin console (health, modules, tasks, inventory, data, archetypes, graph, usage, settings, sweeps)",
+    category="admin",
+)
+
+
 # ═══════════════════════════════════════════════════════════════════
 # ALL CAPABILITIES — master registry
 # ═══════════════════════════════════════════════════════════════════
@@ -474,6 +486,8 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     # Evidence
     EVIDENCE_VIEW.key: EVIDENCE_VIEW,
     EVIDENCE_MANAGE.key: EVIDENCE_MANAGE,
+    # AI (Pulse)
+    AI_VIEW_CONSOLE.key: AI_VIEW_CONSOLE,
 }
 
 

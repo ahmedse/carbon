@@ -18,7 +18,11 @@ BASE = "/carbon-api/ai/pulse"
 def user(db):
     from accounts.models import User
 
-    return User.objects.create_user(username="ai-ops", password="secret123")
+    user = User.objects.create_user(username="ai-ops", password="secret123")
+    user.is_superuser = True
+    user.is_staff = True
+    user.save()
+    return user
 
 
 @pytest.fixture

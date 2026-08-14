@@ -280,7 +280,12 @@ describe('ROUTE_CAPABILITIES', () => {
   it('admin routes require platform capabilities', () => {
     for (const [route, cap] of Object.entries(caps.ROUTE_CAPABILITIES)) {
       if (route.startsWith('/admin/')) {
-        expect(cap.startsWith('platform:')).toBe(true);
+        // The AI admin console is its own capability domain under /admin.
+        if (route.startsWith('/admin/ai')) {
+          expect(cap).toBe(caps.AI_VIEW_CONSOLE);
+        } else {
+          expect(cap.startsWith('platform:')).toBe(true);
+        }
       }
     }
   });

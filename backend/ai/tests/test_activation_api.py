@@ -24,7 +24,11 @@ _SECRET_KEY_RE = re.compile(r"token|secret|password|api_key", re.IGNORECASE)
 def user(db):
     from accounts.models import User
 
-    return User.objects.create_user(username="ai-activation", password="secret123")
+    user = User.objects.create_user(username="ai-activation", password="secret123")
+    user.is_superuser = True
+    user.is_staff = True
+    user.save()
+    return user
 
 
 @pytest.fixture
