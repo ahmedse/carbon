@@ -177,12 +177,14 @@ WORKER_MODEL_POLICY=ALL worker roles (backend, frontend, devops, data-ml, debugg
 WORKER_MODEL_RUNTIME=Workers run on DeepSeek via VSCode Copilot custom models.
 
 ## TESTING (see .ai-toolkit/shared/testing.md for strategy)
-BACKEND_TEST_CMD=./manage.sh test                          # Django TestCase + DRF APIClient
-BACKEND_TEST_SINGLE=./manage.sh test <app>.tests.test_x    # run one module
+# NOTE: use python -m pytest (NOT ./manage.sh test) — manage.py test hits a
+# Conflicting 'aiconversation' models error under the unittest loader.
+BACKEND_TEST_CMD=cd backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest ai dq accounts -q
+BACKEND_TEST_SINGLE=cd backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest <app>/tests/test_x.py -q
 BACKEND_TEST_DIR=<app>/tests/test_*.py
-BACKEND_TEST_COUNT=329 passing (as of 2026-08-02)
-FRONTEND_UNIT=Vitest 4 + RTL — cd carbon-frontend && npm test (3 files, 8 tests as of 2026-08-02)
-FRONTEND_E2E=NONE (no Playwright, no e2e/ dir)
+BACKEND_TEST_COUNT=741 passing (pytest ai dq accounts, as of 2026-08-15)
+FRONTEND_UNIT=Vitest 4 + RTL — cd carbon-frontend && npm test (330 tests, as of 2026-08-15)
+FRONTEND_E2E=Playwright — npx playwright test --config e2e/playwright.config.ts (journey-09: 4 tests)
 
 ## TROUBLESHOOTING
 PLAYBOOK=.ai-toolkit/troubleshooting/playbook.md           # known issues → verified fixes

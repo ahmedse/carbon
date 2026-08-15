@@ -354,6 +354,7 @@ export async function apiFetch(
     finalErr.normalized = normalized;
     if (err.feedback) finalErr.feedback = err.feedback;
     if (err.status) finalErr.status = err.status;
+    if (err.data !== undefined) finalErr.data = err.data;
     throw finalErr;
   }
 }

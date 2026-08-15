@@ -56,7 +56,7 @@ export default function MetadataManagementPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { token } = useAuth();
-  const { notify } = useNotification();
+  const { notify, notifyFromError } = useNotification();
 
   // Determine initial tab from URL hash or default to 0
   const getInitialTab = () => {
@@ -198,13 +198,17 @@ export default function MetadataManagementPage() {
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
-      if (err.status === 405 && err.data && err.data.detail) {
+      if (err.status === 405) {
         notify({
-          message: err.data.detail,
+          message:
+            err.data?.detail ||
+            err.message ||
+            'This item cannot be hard-deleted and must be archived instead.',
           type: 'warning',
         });
+        setDeleteConfirm(null);
       } else {
-        notify({ message: err.message || 'Delete failed', type: 'error' });
+        notifyFromError(err, 'Delete failed');
       }
     }
   };

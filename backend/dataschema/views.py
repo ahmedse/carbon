@@ -254,7 +254,9 @@ class DataFieldViewSet(ScopedViewSet):
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
         # Dependency check: catalog profile
-        if hasattr(instance, 'catalog_profile') and instance.catalog_profile:
+        # catalog_profile is a reverse FK manager (AssetProfile.data_field) — always
+        # present, so we must test .exists() rather than truthiness of the manager.
+        if hasattr(instance, 'catalog_profile') and instance.catalog_profile.exists():
             raise AppFeedback(
                 code="field_has_catalog_profile",
                 title="Cannot delete field",

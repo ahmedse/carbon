@@ -24,7 +24,10 @@ from emissions.models import (
 from catalog.models import GovernanceEvent
 from dataschema.models import DataTable, DataField, DataRow
 from core.models import Module
-from mdm.models import OrgUnit
+from mdm.models import OrgUnit, ReferenceSet
+from connections.models import DataSource, ConsumingConnection
+from importexport.models import ExportProject, ImportJob, ExportJob
+from dq.models import DQRule, RuleFieldAssignment
 
 User = get_user_model()
 
@@ -411,6 +414,143 @@ class DataFieldDeleteTests(APITestCase):
         return DataField.objects.create(
             data_table=table, name=name, label=name, type='number'
         )
+
+    def test_delete_field_succeeds(self):
+        field = self._create_field(name='clean_field')
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('dataschema-field-detail', kwargs={'pk': field.pk})
+        resp = self.client.delete(f'{url}?data_table={field.data_table_id}')
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(DataField.objects.filter(pk=field.pk).exists())
+
+    def test_delete_field_with_rule_assignments_blocked(self):
+        field = self._create_field(name='bound_field')
+        rule = DQRule.objects.create(name='DF Not Null Rule', rule_type='not_null')
+        RuleFieldAssignment.objects.create(
+            rule=rule, data_field=field, data_table=field.data_table
+        )
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('dataschema-field-detail', kwargs={'pk': field.pk})
+        resp = self.client.delete(f'{url}?data_table={field.data_table_id}')
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data['code'], 'field_has_rules')
+        self.assertTrue(DataField.objects.filter(pk=field.pk).exists())
+
+    def test_delete_field_bound_to_reference_set_blocked(self):
+        ref_set = ReferenceSet.objects.create(name='DF Reference Set')
+        table = DataTable.objects.create(module=self.module, name='refset_table')
+        field = DataField.objects.create(
+            data_table=table, name='ref_bound', label='Ref Bound',
+            type='number', reference_set=ref_set,
+        )
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('dataschema-field-detail', kwargs={'pk': field.pk})
+        resp = self.client.delete(f'{url}?data_table={table.pk}')
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data['code'], 'field_bound_to_reference_set')
+        self.assertTrue(DataField.objects.filter(pk=field.pk).exists())
+
+
+class DataSourceDeleteTests(APITestCase):
+    """Tests for DataSourceViewSet.destroy soft-delete (status -> inactive)."""
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_superuser(
+            username='ds_admin', password='Admin_123'
+        )
+
+    def test_delete_source_soft_deletes(self):
+        source = DataSource.objects.create(
+            name='Delete Safety Source', source_type='api',
+        )
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('datasource-detail', kwargs={'pk': source.pk})
+        resp = self.client.delete(url)
+        self.assertEqual(resp.status_code, 204)
+        source.refresh_from_db()
+        self.assertEqual(source.status, 'inactive')
+        self.assertTrue(DataSource.objects.filter(pk=source.pk).exists())
+
+
+class ConsumingConnectionDeleteTests(APITestCase):
+    """Tests for ConsumingConnectionViewSet.destroy soft-delete (is_active -> False)."""
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_superuser(
+            username='cc_admin', password='Admin_123'
+        )
+
+    def test_delete_connection_soft_deletes(self):
+        conn = ConsumingConnection.objects.create(
+            name='Delete Safety Conn', system_type='api_key',
+        )
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('consumingconnection-detail', kwargs={'pk': conn.pk})
+        resp = self.client.delete(url)
+        self.assertEqual(resp.status_code, 204)
+        conn.refresh_from_db()
+        self.assertFalse(conn.is_active)
+        self.assertTrue(ConsumingConnection.objects.filter(pk=conn.pk).exists())
+
+
+class ExportProjectDeleteTests(APITestCase):
+    """Tests for ExportProjectViewSet.destroy archive vs hard-delete."""
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_superuser(
+            username='ep_admin', password='Admin_123'
+        )
+        self.org = OrgUnit.objects.create(name='EP Test Org', slug='ep-test-org')
+        self.module = Module.objects.create(name='EP Module', scope=1, org_unit=self.org)
+        self.table = DataTable.objects.create(module=self.module, name='ep_table')
+
+    def test_delete_project_with_jobs_archives(self):
+        project = ExportProject.objects.create(
+            name='Archived Project', data_table=self.table,
+        )
+        ExportJob.objects.create(
+            export_project=project, data_table=self.table, format='csv',
+        )
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('exportproject-detail', kwargs={'pk': project.pk})
+        resp = self.client.delete(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.data['archived'])
+        self.assertEqual(resp.data['job_count'], 1)
+        project.refresh_from_db()
+        self.assertFalse(project.is_active)
+
+    def test_delete_project_without_jobs_hard_deletes(self):
+        project = ExportProject.objects.create(
+            name='Clean Project', data_table=self.table,
+        )
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('exportproject-detail', kwargs={'pk': project.pk})
+        resp = self.client.delete(url)
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(ExportProject.objects.filter(pk=project.pk).exists())
+
+
+class ImportJobDeleteTests(APITestCase):
+    """Tests for ImportJobViewSet.destroy — always 405 (audit trail)."""
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_superuser(
+            username='ij_admin', password='Admin_123'
+        )
+        self.org = OrgUnit.objects.create(name='IJ Test Org', slug='ij-test-org')
+        self.module = Module.objects.create(name='IJ Module', scope=1, org_unit=self.org)
+        self.table = DataTable.objects.create(module=self.module, name='ij_table')
+
+    def test_delete_import_job_returns_405(self):
+        job = ImportJob.objects.create(
+            data_table=self.table, file='imports/2026/01/test.xlsx',
+        )
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('importjob-detail', kwargs={'pk': job.pk})
+        resp = self.client.delete(url)
+        self.assertEqual(resp.status_code, 405)
+        self.assertTrue(ImportJob.objects.filter(pk=job.pk).exists())
 
 
 class DataRowDeleteTests(APITestCase):

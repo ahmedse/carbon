@@ -133,7 +133,7 @@ export default function EmissionFactorsPage() {
   const handleDelete = async (factorId) => {
     try {
       await deleteEmissionFactor(factorId, token);
-      notify({ message: 'Factor deleted', type: 'success' });
+      notify({ message: 'Factor deactivated', type: 'success' });
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
@@ -298,9 +298,9 @@ export default function EmissionFactorsPage() {
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         open={!!deleteConfirm}
-        title="Delete Factor?"
-        message="This action cannot be undone. Calculations using this factor may be affected."
-        confirmLabel="Delete"
+        title="Deactivate Factor?"
+        message="This deactivates the factor (soft delete). Factors referenced by calculation rules cannot be removed."
+        confirmLabel="Deactivate"
         destructive
         onConfirm={() => handleDelete(deleteConfirm)}
         onCancel={() => setDeleteConfirm(null)}

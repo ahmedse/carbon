@@ -23,9 +23,9 @@
 ## Design Principles (Non-Negotiable)
 
 1. **Every ViewSet with DELETE MUST override `destroy()`.** No silent inheritance.
-2. **Soft-delete is the default.** Use existing `is_active`/`is_archived` model fields. Hard delete only when there are zero dependencies AND an audit event is emitted.
+2. **Soft-delete is the default.** Use existing `is_active`/`is_archived` model fields where they exist. Entities WITHOUT such a field (GWP, SBTiTarget) hard-delete WITH an audit event — never add a migration just for soft-delete. Hard delete only when there are zero dependencies AND an audit event is emitted.
 3. **Dependency checks must return structured `AppFeedback`.** Never let `IntegrityError` / `ProtectedError` reach the user as a 500.
-4. **Every delete MUST emit a governance audit event.** Use `emit_governance_event()` (from `catalog.events`) or `_log_schema_change()` (dataschema pattern).
+4. **Every delete MUST emit a governance audit event.** Use `emit_governance_event()` (from `catalog.audit_utils` — NOTE: `catalog.events` does NOT exist) or `_log_schema_change()` (dataschema pattern).
 5. **The `?force=true` escape hatch is reserved for superusers only** and only on entities where data loss is acceptable (tables, modules, rows — already implemented).
 
 ---
@@ -74,7 +74,7 @@ def destroy(self, request, *args, **kwargs):
     period.status = 'closed'
     period.save(update_fields=['status', 'updated_at'])
     # Audit
-    from catalog.events import emit_governance_event
+    from catalog.audit_utils import emit_governance_event
     emit_governance_event(
         entity_type='ReportingPeriod', entity_id=period.id,
         action='delete', before={'status': 'draft'}, after={'status': 'closed'},
@@ -112,7 +112,7 @@ def destroy(self, request, *args, **kwargs):
         )
     factor.is_active = False
     factor.save(update_fields=['is_active', 'updated_at'])
-    from catalog.events import emit_governance_event
+    from catalog.audit_utils import emit_governance_event
     emit_governance_event(
         entity_type='EmissionFactor', entity_id=factor.id,
         action='delete', before={'is_active': True}, after={'is_active': False},
@@ -132,7 +132,7 @@ def destroy(self, request, *args, **kwargs):
 ```python
 def destroy(self, request, *args, **kwargs):
     calc = self.get_object()
-    from catalog.events import emit_governance_event
+    from catalog.audit_utils import emit_governance_event
     emit_governance_event(
         entity_type='Calculation', entity_id=calc.id,
         action='delete',
@@ -160,7 +160,7 @@ def destroy(self, request, *args, **kwargs):
     if audit_count > 0:
         rule.is_active = False
         rule.save(update_fields=['is_active', 'updated_at'])
-        from catalog.events import emit_governance_event
+        from catalog.audit_utils import emit_governance_event
         emit_governance_event(
             entity_type='CalculationRule', entity_id=rule.id,
             action='archive', before={'is_active': True}, after={'is_active': False, 'audit_count': audit_count},
@@ -171,7 +171,7 @@ def destroy(self, request, *args, **kwargs):
             'audit_count': audit_count,
             'detail': f'Rule archived. {audit_count} audit records preserved.',
         }, status=status.HTTP_200_OK)
-    from catalog.events import emit_governance_event
+    from catalog.audit_utils import emit_governance_event
     emit_governance_event(
         entity_type='CalculationRule', entity_id=rule.id,
         action='delete', before={'name': rule.name}, after={'deleted': True},
@@ -184,20 +184,21 @@ def destroy(self, request, *args, **kwargs):
 
 **Current:** No `destroy()` override. `PROTECT` on `reporting_period` would block period deletion. M2M with org_units.
 
-**Fix:** Soft-delete only. Add `is_active` field if not present (check model), or block hard delete entirely.
+**Fix (VERIFIED):** `SBTiTarget` has NO `is_active` field — hard-delete WITH an audit event (no migration). Import is `catalog.audit_utils`, not `catalog.events`.
 
 ```python
 def destroy(self, request, *args, **kwargs):
     target = self.get_object()
-    # SBTi targets are organizational commitments — never hard delete
-    target.is_active = False
-    target.save(update_fields=['is_active', 'updated_at'])
-    from catalog.events import emit_governance_event
+    # SBTiTarget has no is_active field — hard delete with audit trail
+    from catalog.audit_utils import emit_governance_event
     emit_governance_event(
         entity_type='SBTiTarget', entity_id=target.id,
-        action='delete', before={'is_active': True}, after={'is_active': False},
+        action='delete',
+        before={'name': target.name, 'base_year': target.base_year, 'target_year': target.target_year},
+        after={'deleted': True},
         user=request.user,
     )
+    target.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
 ```
 
@@ -244,19 +245,20 @@ def destroy(self, request, *args, **kwargs):
 
 **Current:** No `destroy()` override. GWPs are climate science reference data.
 
-**Fix:** Soft-delete `is_active=False` only.
+**Fix (VERIFIED):** `GWP` has NO `is_active` field — hard-delete WITH an audit event (no migration). Import is `catalog.audit_utils`.
 
 ```python
 def destroy(self, request, *args, **kwargs):
     gwp = self.get_object()
-    gwp.is_active = False
-    gwp.save(update_fields=['is_active'])
-    from catalog.events import emit_governance_event
+    from catalog.audit_utils import emit_governance_event
     emit_governance_event(
         entity_type='GWP', entity_id=gwp.id,
-        action='delete', before={'is_active': True}, after={'is_active': False},
+        action='delete',
+        before={'gas_name': gwp.gas_name, 'gas_formula': gwp.gas_formula},
+        after={'deleted': True},
         user=request.user,
     )
+    gwp.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
 ```
 
@@ -281,7 +283,7 @@ def destroy(self, request, *args, **kwargs):
         )
     boundary.is_active = False
     boundary.save(update_fields=['is_active'])
-    from catalog.events import emit_governance_event
+    from catalog.audit_utils import emit_governance_event
     emit_governance_event(
         entity_type='OrganizationalBoundary', entity_id=boundary.id,
         action='delete', before={'is_active': True}, after={'is_active': False},
@@ -309,7 +311,7 @@ def destroy(self, request, *args, **kwargs):
             remediation=[],
             status_code=status.HTTP_400_BAD_REQUEST,
         )
-    from catalog.events import emit_governance_event
+    from catalog.audit_utils import emit_governance_event
     emit_governance_event(
         entity_type='BaseYear', entity_id=base_year.id,
         action='delete', before={'year': base_year.year}, after={'deleted': True},
@@ -333,7 +335,7 @@ def destroy(self, request, *args, **kwargs):
     source = self.get_object()
     source.is_active = False
     source.save(update_fields=['is_active'])
-    from catalog.events import emit_governance_event
+    from catalog.audit_utils import emit_governance_event
     emit_governance_event(
         entity_type='DataSource', entity_id=source.id,
         action='delete', before={'is_active': True}, after={'is_active': False},
@@ -470,7 +472,7 @@ The "This action cannot be undone" dialog should be enhanced to catch and displa
 
 **File:** `carbon-frontend/src/pages/catalog/MetadataManagementPage.jsx` (~line 188)
 
-DataDomain, GlossaryTerm, Tag return 405. The delete button should either be removed (replaced by "Archive") or the error handler should display the remediation message ("Use PATCH {is_active: false} to archive") from the 405 response.
+DataDomain, GlossaryTerm, Tag return 405. NOTE: these models have NO `is_active` field (only `AssetProfile` does), so "Archive via PATCH" is NOT implementable. Implement the error-handler fallback instead: display the 405 remediation message (`err.data?.detail`) and close the dialog. This is what shipped.
 
 ### 4E. Import/Export — Import Job Delete
 
@@ -514,7 +516,7 @@ Import jobs will return 405 after fix. Either remove the delete button for impor
 
 ```python
 from core.feedback import AppFeedback
-from catalog.events import emit_governance_event  # if not already imported
+from catalog.audit_utils import emit_governance_event  # NOTE: catalog.events does NOT exist
 ```
 
 ---
@@ -530,8 +532,8 @@ from catalog.events import emit_governance_event  # if not already imported
 - [ ] `DELETE /carbon-api/carbon/factors/{id}/` with no rules → 204, `is_active=False`
 - [ ] `DELETE /carbon-api/carbon/rules/{id}/` with audit records → 200 with `{archived: true}`
 - [ ] `DELETE /carbon-api/carbon/rules/{id}/` with no audit → 204
-- [ ] `DELETE /carbon-api/carbon/sbti-targets/{id}/` → 204, `is_active=False`
-- [ ] `DELETE /carbon-api/carbon/gwp/{id}/` → 204, `is_active=False`
+- [ ] `DELETE /carbon-api/carbon/sbti-targets/{id}/` → 204 (hard delete + audit event; no `is_active` field)
+- [ ] `DELETE /carbon-api/carbon/gwp/{id}/` → 204 (hard delete + audit event; no `is_active` field)
 - [ ] `DELETE /carbon-api/carbon/boundaries/{id}/` referenced by periods → 400
 - [ ] `DELETE /carbon-api/carbon/base-years/{id}/` with triggers → 400
 - [ ] `DELETE /connections/sources/{id}/` → 204, `is_active=False`
@@ -550,7 +552,7 @@ from catalog.events import emit_governance_event  # if not already imported
 - [ ] DQ Hub: archived rules show "archived" message with result count
 - [ ] Calculation Rules: archived rules show "archived" message with audit count
 - [ ] Emission Factors: dependency error shows rule names in alert
-- [ ] Metadata page: domain/tag/glossary delete replaced with "Archive" (PATCH is_active)
+- [ ] Metadata page: domain/tag/glossary delete shows 405 remediation message (no `is_active` field on these models)
 - [ ] Import/Export page: import job delete button removed or shows 405 message  
 - [ ] `npm run build` passes
 
@@ -570,7 +572,7 @@ from catalog.events import emit_governance_event  # if not already imported
 ## Architecture Rules
 
 - All new `destroy()` methods MUST import `AppFeedback` from `core.feedback`
-- All governance audit events MUST use `emit_governance_event()` from `catalog.events`
+- All governance audit events MUST use `emit_governance_event()` from `catalog.audit_utils` (NOT `catalog.events`, which does not exist)
 - Soft-delete MUST use `update_fields=[...]` for performance (avoid full model save)
 - Structured errors MUST use `AppFeedback` with `code`, `title`, `detail`, `reasons`, `remediation`, `context`
 - Never let a raw Django exception (`ProtectedError`, `IntegrityError`) reach the user

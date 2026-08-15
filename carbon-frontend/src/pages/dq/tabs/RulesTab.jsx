@@ -215,8 +215,15 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
     if (!deleteTarget) return;
     setActionBusyId(`delete-${deleteTarget.id}`);
     try {
-      await deleteDQRule(token, deleteTarget.id);
-      notify({ message: `Rule "${deleteTarget.name}" deleted`, type: 'success' });
+      const result = await deleteDQRule(token, deleteTarget.id);
+      if (result && result.archived) {
+        notify({
+          message: `Rule "${deleteTarget.name}" archived. ${result.results_count || 0} historical results preserved.`,
+          type: 'info',
+        });
+      } else {
+        notify({ message: `Rule "${deleteTarget.name}" deleted`, type: 'success' });
+      }
       setDeleteTarget(null);
       load();
     } catch (err) {

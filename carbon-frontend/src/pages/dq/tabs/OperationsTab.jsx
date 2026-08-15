@@ -69,8 +69,15 @@ function OperationsTab({ rule, onChanged }) {
   const handleArchive = async () => {
     setBusy('archive');
     try {
-      await deleteDQRule(rule.id);
-      notify({ message: `Rule "${rule.name}" archived`, type: 'success' });
+      const result = await deleteDQRule(rule.id);
+      if (result && result.archived) {
+        notify({
+          message: `Rule "${rule.name}" archived. ${result.results_count || 0} historical results preserved.`,
+          type: 'info',
+        });
+      } else {
+        notify({ message: `Rule "${rule.name}" deleted`, type: 'success' });
+      }
       setConfirmArchive(false);
       navigate('/dq', { replace: true });
     } catch (err) {
@@ -83,8 +90,15 @@ function OperationsTab({ rule, onChanged }) {
   const handleDelete = async () => {
     setBusy('delete');
     try {
-      await deleteDQRule(rule.id);
-      notify({ message: `Rule "${rule.name}" deleted`, type: 'success' });
+      const result = await deleteDQRule(rule.id);
+      if (result && result.archived) {
+        notify({
+          message: `Rule "${rule.name}" archived. ${result.results_count || 0} historical results preserved.`,
+          type: 'info',
+        });
+      } else {
+        notify({ message: `Rule "${rule.name}" deleted`, type: 'success' });
+      }
       setConfirmDelete(false);
       navigate('/dq', { replace: true });
     } catch (err) {
