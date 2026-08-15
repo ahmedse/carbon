@@ -10,6 +10,7 @@ import {
   getConversation,
   rejectSuggestion,
   sendMessage as apiSendMessage,
+  sendMessageStream,
 } from '../api/aiWorkspace';
 import AIMessageBubble from './AIMessageBubble';
 import AIInputBar from './AIInputBar';
@@ -43,8 +44,12 @@ function AIConversationView({ conversationId }) {
   const [actionBusyId, setActionBusyId] = useState(null);
   const [workingStartedAt, setWorkingStartedAt] = useState(null);
   const [providerOffline, setProviderOffline] = useState(false);
+  // Transient assistant text accumulated while a chat response streams in.
+  const [streamingText, setStreamingText] = useState(null);
   const scrollRef = useRef(null);
   const pollRef = useRef(null);
+  // True while an SSE stream is in flight — polling must not clobber it.
+  const streamingActiveRef = useRef(false);
 
   // Load conversation
   const load = useCallback(async () => {
@@ -76,6 +81,8 @@ function AIConversationView({ conversationId }) {
     }
 
     pollRef.current = setInterval(async () => {
+      // Never clobber an in-flight stream — its onDone owns reconciliation.
+      if (streamingActiveRef.current) return;
       try {
         const data = await getConversation(token, conversationId);
         const canonical = normalizeConversationShape(data);
@@ -96,12 +103,12 @@ function AIConversationView({ conversationId }) {
     };
   }, [conversation?.status, conversation, token, conversationId]);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages and while streaming deltas arrive.
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [conversation?.messages?.length]);
+  }, [conversation?.messages?.length, streamingText]);
 
   useEffect(() => {
     const isWorking = conversation?.status === 'working' || sending;
@@ -115,8 +122,66 @@ function AIConversationView({ conversationId }) {
   const handleSend = useCallback(
     async (content) => {
       if (!conversationId || !content.trim()) return;
+      const type = conversation?.conversation_type || conversation?.task_payload_json?.type || 'chat';
       setSending(true);
       setProviderOffline(false);
+
+      // chat → stream the final answer over SSE (typing effect).
+      if (type === 'chat') {
+        setStreamingText('');
+        streamingActiveRef.current = true;
+        // Optimistically append the user message; replaced by the persisted copy on done.
+        setConversation((prev) =>
+          prev
+            ? {
+                ...prev,
+                messages: [
+                  ...(prev.messages || []),
+                  {
+                    id: `local-${Date.now()}`,
+                    role: 'user',
+                    content,
+                    created_at: new Date().toISOString(),
+                  },
+                ],
+              }
+            : prev,
+        );
+
+        await sendMessageStream(token, conversationId, content, {
+          onChunk: (delta) => {
+            setStreamingText((prev) => (prev ?? '') + delta);
+          },
+          onDone: (conv) => {
+            streamingActiveRef.current = false;
+            setStreamingText(null);
+            const canonical = normalizeConversationShape(conv);
+            setConversation(canonical);
+            if (canonical?.status !== 'working') {
+              setSending(false);
+            }
+          },
+          onError: (message) => {
+            streamingActiveRef.current = false;
+            setStreamingText(null);
+            setSending(false);
+            if (message?.includes('unavailable') || message?.includes('offline')) {
+              setProviderOffline(true);
+            }
+            notifyFromError(new Error(message || 'Could not send message'), 'Could not send message');
+          },
+        });
+
+        // Safety net: if the stream ended without a terminal frame, release the UI.
+        if (streamingActiveRef.current) {
+          streamingActiveRef.current = false;
+          setStreamingText(null);
+          setSending(false);
+        }
+        return;
+      }
+
+      // Non-chat → existing non-streaming path.
       try {
         const data = await apiSendMessage(token, conversationId, content);
         const canonical = normalizeConversationShape(data);
@@ -132,7 +197,7 @@ function AIConversationView({ conversationId }) {
         notifyFromError(err, 'Could not send message');
       }
     },
-    [token, conversationId, notifyFromError],
+    [token, conversationId, conversation, notifyFromError],
   );
 
   const handleRetry = useCallback(() => {
@@ -273,7 +338,16 @@ function AIConversationView({ conversationId }) {
           />
         ))}
 
-        {isWorking && (
+        {streamingText !== null ? (
+          <AIMessageBubble
+            message={{
+              id: 'streaming',
+              role: 'assistant',
+              content: streamingText || '…',
+              created_at: new Date().toISOString(),
+            }}
+          />
+        ) : isWorking ? (
           <>
             {messages.length > 0 && (
               <AIMessageBubble
@@ -294,7 +368,7 @@ function AIConversationView({ conversationId }) {
               </Box>
             )}
           </>
-        )}
+        ) : null}
 
         {providerOffline && messages.length > 0 && (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>

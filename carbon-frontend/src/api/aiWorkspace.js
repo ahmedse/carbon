@@ -1,7 +1,9 @@
 // src/api/aiWorkspace.js
 // API layer for AI Workspace — conversation CRUD + messaging.
 // All calls go through Carbon backend → AI Heart → AI provider. Never direct.
-import { apiFetch } from './api';
+import { apiFetch, refreshAccessToken } from './api';
+import { API_BASE_URL } from '../config';
+import { isJwtExpired } from '../jwt';
 
 const BASE = 'ai/workspace/';
 
@@ -57,6 +59,116 @@ export function sendMessage(token, conversationId, content) {
     method: 'POST',
     body: { content },
   });
+}
+
+/**
+ * Stream a chat message over SSE (POST .../messages/stream/) and deliver
+ * frames through callbacks. Uses fetch + ReadableStream (NOT EventSource,
+ * which cannot send a POST body or an Authorization header).
+ *
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} content - user message text
+ * @param {object} handlers - { onChunk(delta), onDone(conversation), onError(message) }
+ */
+export async function sendMessageStream(token, conversationId, content, { onChunk, onDone, onError }) {
+  // Replicate apiFetch's auth: supplied token (or stored access token),
+  // refreshing it first if expired.
+  let accessToken = token || localStorage.getItem('access');
+  if (accessToken && isJwtExpired(accessToken)) {
+    try {
+      accessToken = await refreshAccessToken();
+    } catch {
+      onError?.('Session expired');
+      return;
+    }
+  }
+
+  const base = API_BASE_URL.replace(/\/+$/, '');
+  const path = `${BASE}conversations/${conversationId}/messages/stream/`.replace(/^\/+/, '');
+  const url = `${base}/${path}`;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+  };
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ content }),
+    });
+  } catch (err) {
+    onError?.(err?.message || 'Network error');
+    return;
+  }
+
+  if (!response.ok) {
+    let message = `Request failed: ${response.status}`;
+    try {
+      const text = await response.text();
+      if (text) {
+        try {
+          const parsed = JSON.parse(text);
+          message = parsed?.error || parsed?.detail || parsed?.message || message;
+        } catch {
+          message = text;
+        }
+      }
+    } catch {
+      // ignore — fall back to status-based message
+    }
+    onError?.(message);
+    return;
+  }
+
+  if (!response.body) {
+    onError?.('Streaming is not supported by this browser');
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  const processFrame = (raw) => {
+    const line = raw.trim();
+    if (!line.startsWith('data:')) return;
+    const payload = line.slice(5).trim();
+    if (!payload) return;
+    let frame;
+    try {
+      frame = JSON.parse(payload);
+    } catch {
+      return;
+    }
+    if (frame.type === 'chunk') {
+      onChunk?.(frame.content ?? '');
+    } else if (frame.type === 'done') {
+      onDone?.(frame.conversation);
+    } else if (frame.type === 'error') {
+      onError?.(frame.error || 'Stream failed');
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const raw = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        processFrame(raw);
+      }
+    }
+    buffer += decoder.decode().replace(/\r\n/g, '\n');
+    if (buffer.trim()) processFrame(buffer);
+  } catch (err) {
+    onError?.(err?.message || 'Stream interrupted');
+  }
 }
 
 /**
