@@ -285,6 +285,15 @@ export default function TestTab({ rule }) {
     }, {
       title: `DQ Test: ${rule.name}`,
       source_page: 'dq-rule-test',
+      workspaceContext: {
+        workspace: 'dq',
+        current_view: 'rule_test',
+        entity_type: 'rule',
+        entity_id: rule?.id ?? null,
+        entity_name: rule?.name ?? null,
+        intent_signal: 'debug',
+        recent_actions: [],
+      },
     });
     setTransferring(false);
   };

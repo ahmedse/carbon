@@ -95,6 +95,7 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
           title,
           app_identifier: appIdentifier,
           task_payload: { type, ...normalizedPayload },
+          workspace_context: metadata.workspaceContext,
         });
         setPendingTransferId(conv.id);
         return conv.id;

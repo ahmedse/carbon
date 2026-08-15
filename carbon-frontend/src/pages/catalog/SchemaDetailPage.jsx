@@ -24,6 +24,8 @@ import SystemDialog from '../../components/SystemDialog';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 import StorageIcon from '@mui/icons-material/Storage';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import { useAITaskTransfer } from '../../shell/useAITaskTransfer';
 import { fetchDataSchemaTable, fetchDataSchemaFields, updateDataSchemaTable } from '../../api/dataschema';
 import { fetchTableRelations } from '../../api/catalog';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
@@ -38,6 +40,7 @@ export default function SchemaDetailPage() {
   const { tableId } = useParams();
   const { token, user, availablePerspectives, isGlobalAdminFlag } = useAuth();
   const { notify } = useNotification();
+  const { transferTask } = useAITaskTransfer();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -97,6 +100,31 @@ export default function SchemaDetailPage() {
     navigate(-1);
   };
 
+  const tableLabel = table?.name || table?.title || `Table #${tableId}`;
+
+  const handleAskAI = async () => {
+    await transferTask(
+      'chat',
+      {
+        prompt: `Explore this table and summarize its structure, quality, and relationships.`,
+        table_name: tableLabel,
+      },
+      {
+        title: `Explore: ${tableLabel}`,
+        source_page: 'catalog-schema-detail',
+        workspaceContext: {
+          workspace: 'catalog',
+          current_view: 'table_detail',
+          entity_type: 'table',
+          entity_id: table?.id ?? tableId ?? null,
+          entity_name: table?.name ?? table?.title ?? null,
+          intent_signal: 'explore',
+          recent_actions: [],
+        },
+      },
+    );
+  };
+
   const handleSaveMetadata = async () => {
     setSaving(true);
     try {
@@ -154,6 +182,16 @@ export default function SchemaDetailPage() {
       description={table?.description || 'Table definition and relationships'}
       icon={StorageIcon}
       onClose={handleClose}
+      actions={
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<AutoAwesomeIcon />}
+          onClick={handleAskAI}
+        >
+          Ask AI
+        </Button>
+      }
     />
   );
 

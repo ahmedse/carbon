@@ -24,12 +24,15 @@ import {
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { useAuth } from '../../auth/AuthContext';
+import { useAITaskTransfer } from '../../shell/useAITaskTransfer';
 import { fetchReportingPeriods, generateReport, downloadReportCsv, createReportConfig } from '../../api/emissions-extended';
 
 export default function ReportGeneratorPage() {
   useDocumentTitle("Generate Report");
   const { user: _user, token } = useAuth();
+  const { transferTask } = useAITaskTransfer();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [snackbar, setSnackbar] = useState(null);
@@ -128,11 +131,48 @@ export default function ReportGeneratorPage() {
     }
   };
 
+  const handleAskAI = async () => {
+    const periodName = periods.find(
+      (p) => String(p.id) === String(state.reporting_period_id),
+    )?.name ?? null;
+    await transferTask(
+      'chat',
+      {
+        prompt: 'Help me configure and generate a greenhouse gas emissions report.',
+        reporting_period_id: state.reporting_period_id || null,
+        ghg_scopes: state.ghg_scopes,
+      },
+      {
+        title: 'Emissions Report Help',
+        source_page: 'emissions-report-generator',
+        workspaceContext: {
+          workspace: 'emissions',
+          current_view: 'report_generator',
+          entity_type: 'report',
+          entity_id: state.reporting_period_id || null,
+          entity_name: periodName,
+          intent_signal: 'explore',
+          recent_actions: [],
+        },
+      },
+    );
+  };
+
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 3 }}>
-        Report Generator
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+          Report Generator
+        </Typography>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<AutoAwesomeIcon />}
+          onClick={handleAskAI}
+        >
+          Ask AI
+        </Button>
+      </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 

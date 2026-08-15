@@ -100,6 +100,15 @@ function DefinitionTab({ rule, onChanged }) {
     }, {
       title: `DQ: ${rule.name}`,
       source_page: 'dq-rule-definition',
+      workspaceContext: {
+        workspace: 'dq',
+        current_view: 'rule_definition',
+        entity_type: 'rule',
+        entity_id: rule?.id ?? null,
+        entity_name: rule?.name ?? null,
+        intent_signal: 'debug',
+        recent_actions: [],
+      },
     });
     setTransferring(false);
   };

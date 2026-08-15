@@ -366,6 +366,15 @@ function SuggestionsTab() {
       {
         title: `Refine suggestion #${suggestion.id}`,
         source_page: 'dq-workspace-suggestions',
+        workspaceContext: {
+          workspace: 'dq',
+          current_view: 'suggestions',
+          entity_type: 'table',
+          entity_id: suggestion.table_id ?? suggestion.data_table ?? null,
+          entity_name: suggestion.table_name ?? null,
+          intent_signal: 'explore',
+          recent_actions: [],
+        },
       },
     );
   };
@@ -638,6 +647,15 @@ function MonitoringTab() {
           {
             title: `Anomaly Scan: ${row?.table_name || `Table #${tableId}`}`,
             source_page: 'dq-workspace-monitoring',
+            workspaceContext: {
+              workspace: 'dq',
+              current_view: 'monitoring',
+              entity_type: 'table',
+              entity_id: tableId,
+              entity_name: row?.table_name || `Table #${tableId}`,
+              intent_signal: 'explore',
+              recent_actions: [],
+            },
           },
         );
       } finally {
@@ -1061,6 +1079,18 @@ export default function DQWorkspacePage() {
     setMountedTabs((prev) => new Set([...prev, tab]));
   }, [tab]);
 
+  // WorkspaceContext emitted with every AI transfer from the DQ Workspace.
+  // No selection → entity_type 'workspace'; table filter → 'table'.
+  const buildWorkspaceContext = useCallback(() => ({
+    workspace: 'dq',
+    current_view: TAB_IDS[tab] ?? 'overview',
+    entity_type: tableFilter ? 'table' : 'workspace',
+    entity_id: tableFilter || null,
+    entity_name: tableFilter ? `Table #${tableFilter}` : null,
+    intent_signal: 'explore',
+    recent_actions: [],
+  }), [tab, tableFilter]);
+
   const handleAskAIHealth = useCallback(async () => {
     await transferTask(
       'nl_query',
@@ -1072,9 +1102,10 @@ export default function DQWorkspacePage() {
       {
         title: 'DQ Health Summary',
         source_page: 'dq-workspace-overview',
+        workspaceContext: buildWorkspaceContext(),
       },
     );
-  }, [transferTask, results.length]);
+  }, [transferTask, results.length, buildWorkspaceContext]);
 
   const handleSuggestRulesAI = useCallback(async () => {
     await transferTask(
@@ -1086,9 +1117,10 @@ export default function DQWorkspacePage() {
       {
         title: tableFilter ? `Suggest Rules: Table #${tableFilter}` : 'Suggest Rules',
         source_page: 'dq-workspace-rules',
+        workspaceContext: buildWorkspaceContext(),
       },
     );
-  }, [transferTask, tableFilter]);
+  }, [transferTask, tableFilter, buildWorkspaceContext]);
 
   const handleAnalyzeFailuresAI = useCallback(async () => {
     await transferTask(
@@ -1101,9 +1133,10 @@ export default function DQWorkspacePage() {
       {
         title: 'Analyze DQ Failures',
         source_page: 'dq-workspace-jobs',
+        workspaceContext: buildWorkspaceContext(),
       },
     );
-  }, [transferTask, runningJobs.length]);
+  }, [transferTask, runningJobs.length, buildWorkspaceContext]);
 
   return (
     <PageContainer>

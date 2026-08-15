@@ -14,12 +14,14 @@ import CloseIcon from '@mui/icons-material/Close';
  * - description: Optional subtitle/description
  * - icon: Icon component to display
  * - onClose: Callback when close button clicked
+ * - actions: Optional React node(s) rendered before the close button
  */
 export default function DetailHeader({
   title = '',
   description = '',
   icon: Icon = null,
   onClose = () => {},
+  actions = null,
 }) {
   const _navigate = useNavigate();
   const theme = useTheme();
@@ -56,20 +58,23 @@ export default function DetailHeader({
         </Box>
       </Box>
 
-      {/* Right: Close button */}
-      <IconButton
-        onClick={onClose}
-        size="small"
-        sx={{
-          flexShrink: 0,
-          bgcolor: 'action.hover',
-          '&:hover': {
-            bgcolor: 'action.selected',
-          },
-        }}
-      >
-        <CloseIcon fontSize="small" />
-      </IconButton>
+      {/* Right: actions + close button */}
+      <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
+        {actions}
+        <IconButton
+          onClick={onClose}
+          size="small"
+          sx={{
+            flexShrink: 0,
+            bgcolor: 'action.hover',
+            '&:hover': {
+              bgcolor: 'action.selected',
+            },
+          }}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </Box>
     </Box>
   );
 }

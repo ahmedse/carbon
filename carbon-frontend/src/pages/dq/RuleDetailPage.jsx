@@ -128,6 +128,17 @@ export default function RuleDetailPage() {
     />
   );
 
+  // WorkspaceContext emitted with every AI transfer from the rule detail page.
+  const workspaceContext = {
+    workspace: 'dq',
+    current_view: 'rule_detail',
+    entity_type: 'rule',
+    entity_id: rule?.id ?? null,
+    entity_name: rule?.name ?? null,
+    intent_signal: 'debug',
+    recent_actions: [],
+  };
+
   const handleAnalyzeTrendWithAI = async () => {
     await transferTask(
       'nl_query',
@@ -139,6 +150,7 @@ export default function RuleDetailPage() {
       {
         title: `Trend Analysis: ${rule.name}`,
         source_page: 'dq-rule-stats',
+        workspaceContext,
       },
     );
   };
@@ -154,6 +166,7 @@ export default function RuleDetailPage() {
       {
         title: `Failure Analysis: ${rule.name}`,
         source_page: 'dq-rule-results',
+        workspaceContext,
       },
     );
   };

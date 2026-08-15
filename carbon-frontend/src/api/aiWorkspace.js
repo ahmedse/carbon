@@ -8,14 +8,15 @@ const BASE = 'ai/workspace/';
 /**
  * Create a new AI conversation.
  * @param {string} token - JWT access token
- * @param {object} params - { conversation_type, title?, app_identifier?, task_payload? }
+ * @param {object} params - { conversation_type, title?, app_identifier?, task_payload?, workspace_context? }
  * @returns {Promise<object>} Serialized AIConversation
  */
-export function createConversation(token, { conversation_type, title, app_identifier, task_payload }) {
+export function createConversation(token, { conversation_type, title, app_identifier, task_payload, workspace_context }) {
   const body = { conversation_type };
   if (title) body.title = title;
   if (app_identifier) body.app_identifier = app_identifier;
   if (task_payload) body.task_payload = task_payload;
+  if (workspace_context) body.workspace_context = workspace_context;
   return apiFetch(`${BASE}conversations/`, { token, method: 'POST', body });
 }
 
