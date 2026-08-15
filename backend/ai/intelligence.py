@@ -35,6 +35,8 @@ from backend.ai.protocol import (
     WorkspaceContext,
 )
 from backend.ai.providers.pulse import PulseProvider
+from ai.domain_protocol import DomainContext, get_domain, has_domain
+from ai.domain import emissions  # noqa: F401  (registers the emissions domain)
 
 logger = logging.getLogger("carbon.ai.intelligence")
 
@@ -755,6 +757,7 @@ class CarbonIntelligence:
             conversation.task_payload_json or {},
         )
         message = self._prepend_workspace_context(conversation, content)
+        message = self._prepend_domain_context(scope, message)
         chat_request = ChatRequest(
             message=message,
             conversation=conv_ctx,
@@ -799,6 +802,26 @@ class CarbonIntelligence:
         if ctx is None:
             return content
         prefix = ctx.to_prompt_prefix()
+        if not prefix:
+            return content
+        return f"{prefix}\n\n{content}"
+
+    def _prepend_domain_context(self, scope: Scope, content: str) -> str:
+        """Inject domain context (GHG vocabulary, etc.) when scope.app_identifier
+        maps to a registered domain. AI CONTRACT §8: platform-level injection.
+
+        NEVER crashes on missing/unregistered/malformed domain — returns
+        content unchanged in every failure path.
+        """
+        if not scope or not getattr(scope, "app_identifier", None):
+            return content
+        if not has_domain(scope.app_identifier):
+            return content
+        try:
+            ctx = get_domain(scope.app_identifier)().get_domain_context()
+        except Exception:
+            return content
+        prefix = _domain_context_prompt_prefix(ctx)
         if not prefix:
             return content
         return f"{prefix}\n\n{content}"
@@ -1081,6 +1104,37 @@ def _intent_aware_opener(ctx: WorkspaceContext) -> str | None:
         return "How can I help with your workspace?"
 
     return None
+
+
+def _domain_context_prompt_prefix(ctx: DomainContext) -> str:
+    """Render a DomainContext into a compact system-prompt prefix."""
+    lines = [f"[Domain: {ctx.app_identifier}]"]
+    knowledge = ctx.domain_knowledge or {}
+    config = ctx.domain_config or {}
+    if knowledge.get("protocol"):
+        lines.append(f"Protocol: {knowledge['protocol']}")
+    scopes = knowledge.get("scopes") or {}
+    if scopes:
+        lines.append("Scopes:")
+        for key, desc in scopes.items():
+            lines.append(f"  - {key}: {desc}")
+    if knowledge.get("ar_version"):
+        lines.append(f"GWP version: {knowledge['ar_version']}")
+    if knowledge.get("units"):
+        lines.append(f"Units: {', '.join(knowledge['units'])}")
+    if knowledge.get("calculation_methods"):
+        lines.append(
+            f"Calculation methods: {', '.join(knowledge['calculation_methods'])}"
+        )
+    if config:
+        for key, value in config.items():
+            if isinstance(value, list):
+                lines.append(f"{key}: {', '.join(value)}")
+            else:
+                lines.append(f"{key}: {value}")
+    if len(lines) == 1:
+        return ""
+    return "\n".join(lines)
 
 
 def _format_dq_results(response) -> str:
