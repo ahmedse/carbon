@@ -16,6 +16,7 @@ import CloudOffIcon from '@mui/icons-material/CloudOff';
 import TuneIcon from '@mui/icons-material/Tune';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
+import { CarbonDataGrid } from '../../../components/DataGrid';
 import { useAuth } from '../../../auth/AuthContext';
 import { getSettings } from '../../../api/aiPulse';
 
@@ -92,29 +93,102 @@ function ChipList({ title, items }) {
   );
 }
 
-/** Tool catalog: name + description rows. */
+/** Kind chip color per tool origin. */
+const KIND_COLORS = {
+  static: 'default',
+  plugin: 'primary',
+  workflow: 'secondary',
+  mcp: 'info',
+};
+
+/** Tool catalog: rich metadata (kind, confirmation, capability, app). */
 function ToolsCatalog({ tools }) {
+  const rows = (tools ?? []).map((tool, index) => ({
+    id: tool.name || `tool-${index}`,
+    name: tool.name ?? '—',
+    kind: tool.kind ?? 'unknown',
+    requiresConfirmation: Boolean(tool.requires_confirmation),
+    capability: tool.capability ?? '',
+    appIdentifier: tool.app_identifier ?? '',
+    description: tool.description ?? '',
+  }));
+
+  const columns = [
+    {
+      field: 'name',
+      headerName: 'Tool',
+      width: 220,
+      renderCell: ({ value }) => (
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>{value}</Typography>
+      ),
+    },
+    {
+      field: 'kind',
+      headerName: 'Kind',
+      width: 120,
+      renderCell: ({ value }) => (
+        <Chip size="small" variant="outlined" color={KIND_COLORS[value] || 'default'} label={value} />
+      ),
+    },
+    {
+      field: 'requiresConfirmation',
+      headerName: 'Confirm',
+      width: 100,
+      renderCell: ({ value }) => (
+        <Chip
+          size="small"
+          variant="outlined"
+          color={value ? 'warning' : 'success'}
+          label={value ? 'confirm' : 'auto'}
+        />
+      ),
+    },
+    {
+      field: 'capability',
+      headerName: 'Capability',
+      width: 180,
+      renderCell: ({ value }) => (
+        <Typography variant="body2" color={value ? 'text.primary' : 'text.secondary'}>
+          {value || '—'}
+        </Typography>
+      ),
+    },
+    {
+      field: 'appIdentifier',
+      headerName: 'App',
+      width: 110,
+      renderCell: ({ value }) => (
+        <Typography variant="body2" color={value ? 'text.primary' : 'text.secondary'}>
+          {value || '—'}
+        </Typography>
+      ),
+    },
+    {
+      field: 'description',
+      headerName: 'Description',
+      flex: 1,
+      minWidth: 320,
+      renderCell: ({ value }) => (
+        <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
+          {value || '—'}
+        </Typography>
+      ),
+    },
+  ];
+
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Typography variant="overline" color="text.secondary">Tools catalog</Typography>
-      {tools.length ? (
-        <Stack spacing={0} sx={{ mt: 1 }}>
-          {tools.map((tool) => (
-            <Stack
-              key={tool.name}
-              direction="row"
-              spacing={2}
-              sx={{ py: 0.5, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 } }}
-            >
-              <Typography variant="body2" sx={{ width: 260, flexShrink: 0, fontWeight: 600 }}>
-                {tool.name}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
-                {tool.description || '—'}
-              </Typography>
-            </Stack>
-          ))}
-        </Stack>
+      {rows.length ? (
+        <Box sx={{ mt: 1 }}>
+          <CarbonDataGrid
+            columns={columns}
+            rows={rows}
+            density="compact"
+            showColumnToggle={false}
+            emptyMessage="No tools registered."
+          />
+        </Box>
       ) : (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           No tools registered.
