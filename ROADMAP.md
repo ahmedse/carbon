@@ -250,7 +250,7 @@ CarbonIntelligence.send_message_stream()
 
 ## Sprint 9 — Feedback persistence: the learning flywheel (2 weeks)
 **Goal:** Every accept/reject/correct from the user feeds AI's knowledge.
-**Spec:** `tasks/SPRINT-9-FEEDBACK.md` — 🔨 in progress (Phase 9-A backend / 9-B frontend; 9-C async learning job deferred to Sprint 10)
+**Spec:** `tasks/SPRINT-9-FEEDBACK.md` — ✅ Done (Phase 9-A backend `b828114` + Phase 9-B frontend `3758b72`). Phase 9-C (async learning job → KG weights + long-term memory) deferred to Sprint 10.
 
 Without this, AI doesn't learn. With this, every user interaction makes AI smarter
 for that org's specific data patterns.
