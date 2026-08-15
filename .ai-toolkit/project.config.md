@@ -126,7 +126,7 @@ RULE_1=Tenant model/code is FULLY removed. Do NOT reintroduce tenant, multi-tena
 RULE_2=Project model is FULLY removed (replaced by OrgUnit in mdm). Do NOT reintroduce Project.
 RULE_3=Core apps (accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport) MUST NOT import from emissions. Emissions may import core.
 RULE_4=API prefix is /carbon-api/ (config/urls.py). All backend routes are under this prefix.
-RULE_5=Frontend base path is /carbon/. Vite base + router basename must use this.
+RULE_5=Frontend routes are ABSOLUTE and namespace-prefixed (/carbon/*, /admin/*, /catalog/*, /dq/*, /settings, /help, /emissions). VITE_BASE (router basename) MUST stay "/" — App.jsx already carries the namespace prefixes, so any non-/ basename would double-prefix and 404.
 RULE_6=Pulse is IN-HAND, vendored under backend/ai/engine/ (stateless engine only — agent/llm/cognition/core). Pulse holds NO memory, does NO learning, stores NO graphs. All durable AI state (conversations, knowledge, memory, feedback, graphs) is Carbon-owned via Django apps in backend/ai/. NO separate AI database: durable state → Carbon Postgres; transient/queue state → Redis.
 RULE_13=Pulse engine is called in-process (in-hand), NOT over HTTP and NOT dependent on being online. The task envelope (docs/PULSE_CONTRACT_SPEC.md) remains the internal async job contract carried over Redis, not a network boundary. Graceful degradation: timeout 10s sync, 60s async; fall back to deterministic path on failure.
 RULE_14=DQ Level 2 (nl_check rules) are evaluated by Pulse. Carbon sends row data + natural language rule → Pulse returns {passed, explanation, failed_rows}. DQ executor Phase A (deterministic: unique/threshold/reference_integrity) runs locally; Phase B (nl_check) calls Pulse.
@@ -143,6 +143,7 @@ RULE_18=AI CONTRACT IS BINDING — Every AI operation MUST follow .ai-toolkit/sh
 RULE_19=DOMAIN AI ISOLATION — Adding a new domain app's AI operations: create ai/domain/{app}.py with a DomainAIOperations ABC. NEVER add domain-specific methods to ai/protocol.py (platform ABC). Guards run automatically — domain developer does NOT write scope checks.
 RULE_20=NO DATA LEAKAGE — AI provider MUST NOT use data from App A when processing App B. Scope.org_unit_ids filters ALL queries. DataIsolationGuard sanitizes responses. Cache keys include app_identifier. No cross-app embeddings or knowledge graph sharing.
 RULE_21=NO AUTO-MUTATION — AI suggests, Carbon executes. NEVER auto-apply AI-suggested fixes. Fix suggestions ALWAYS have requires_confirmation=True. AI MUST NOT execute INSERT/UPDATE/DELETE/DROP. MutationGuard validates provider responses.
+RULE_22=NO DANGLING ROUTES — every top-level route namespace MUST register an index route at its bare root (e.g. /carbon→/carbon/console, /admin→/admin/users, /settings/profile→/settings), so a bare namespace path or deployment mount path never 404s. Every navigate()/Navigate/Link/to=/href=/path: target MUST resolve to a <Route> in App.jsx. Enforce with .ai-toolkit/scripts/audit-routes.py (wired into verify.sh frontend/all/full).
 
 ## KEY ARCHITECTURE FILES
 # Workers should read these files first when working in related areas.

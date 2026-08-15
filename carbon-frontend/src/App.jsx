@@ -186,12 +186,17 @@ export default function App() {
                 <Route path="help" element={<Help />} />
                 <Route path="feedback" element={<Feedback />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                {/* Settings sub-nav aliases — sidebar links Profile/Preferences to the tabbed Settings page. RULE_22. */}
+                <Route path="/settings/profile" element={<Navigate to="/settings" replace />} />
+                <Route path="/settings/preferences" element={<Navigate to="/settings" replace />} />
                 <Route path="/" element={<RoleAwareLanding />} />
                 
                 {/* /dashboard redirects to PlatformHome (/) — backward compat */}
                 <Route path="/dashboard" element={<Navigate to="/" replace />} />
                 
                 {/* Legacy dashboards redirect to domain app equivalents */}
+                {/* Namespace root redirect — bare /dashboards root. RULE_22. */}
+                <Route path="/dashboards" element={<Navigate to="/carbon/dashboard" replace />} />
                 <Route path="/dashboards/executive" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/dashboards/analytics" element={<Navigate to="/carbon/analytics" replace />} />
                 <Route path="/dashboards/targets" element={<Navigate to="/carbon/admin/targets" replace />} />
@@ -202,9 +207,14 @@ export default function App() {
                 
                 {/* Emissions Calculator Routes */}
                 <Route path="/emissions" element={<EmissionsDashboard />} />
+                {/* Legacy command-palette alias — /emissions/dashboard resolves to the canonical dashboard */}
+                <Route path="/emissions/dashboard" element={<Navigate to="/carbon/dashboard" replace />} />
                 <Route path="/emissions/report" element={<EmissionsReport />} />
                 
                 {/* Carbon App — all routes under /carbon/* namespace */}
+                {/* Namespace root redirect — hitting the bare /carbon root (e.g. the
+                    /carbon/ deployment mount path) must never 404. RULE_22. */}
+                <Route path="/carbon" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/carbon/console" element={<CarbonConsolePage />} />
                 <Route path="/carbon/dashboard" element={<EmissionsDashboard />} />
                 {/* Carbon-domain admin routes — accessible by global admins OR carbon_lead Domain Leads */}
@@ -234,7 +244,10 @@ export default function App() {
                 <Route path="/data-owner" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/data-owner/dashboard" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/data-owner/assets" element={<Navigate to="/carbon/owner/assets" replace />} />
+                <Route path="/data-owner/reports/generate" element={<Navigate to="/carbon/reporting/generate" replace />} />
                 {/* Admin-only: Schema Admin > Table Manager */}
+                {/* Namespace root redirect — bare /schema-admin root. RULE_22. */}
+                <Route path="/schema-admin" element={<Navigate to="/schema-admin/table-manager" replace />} />
                 <Route
                   path="/schema-admin/table-manager"
                   element={
@@ -243,6 +256,8 @@ export default function App() {
                     </AdminRoute>
                   }
                 />
+                {/* Namespace root redirect — the "Admin" breadcrumb parent links here. RULE_22. */}
+                <Route path="/admin" element={<Navigate to="/admin/users" replace />} />
                 <Route
                   path="/admin/org-units"
                   element={
@@ -330,7 +345,10 @@ export default function App() {
                 <Route path="/admin/ai/audit" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AuditPanel /></AdminRoute>} />
                 <Route path="/admin/ai/logs" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AILogsPanel /></AdminRoute>} />
                 <Route path="/admin/policies" element={<Navigate to="/catalog/policies" replace />} />
+                {/* Namespace root redirects — bare /modules and /scopes roots. RULE_22. */}
+                <Route path="/modules" element={<Navigate to="/carbon/my-data" replace />} />
                 <Route path="/modules/:moduleId" element={<ModuleLandingPage />} />
+                <Route path="/scopes" element={<Navigate to="/carbon/console" replace />} />
                  <Route path="/scopes/:scopeId" element={<ScopeInfoPage />} />
                 {/* Dataschema legacy routes */}
                 <Route path="/dataschema" element={<DataHubHome />} />

@@ -79,7 +79,7 @@ const COMMANDS = [
     id: 'emissions-dashboard',
     label: 'Emissions Dashboard',
     description: 'View emissions by scope and source',
-    path: '/emissions/dashboard',
+    path: '/carbon/dashboard',
     icon: Co2Icon,
     keywords: ['emissions', 'carbon', 'co2', 'scope', 'sources'],
   },

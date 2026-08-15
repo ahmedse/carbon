@@ -262,3 +262,24 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: every `React.lazy()` component that is always mounted (not behind a conditional route) MUST have its own `<ErrorBoundary>` guard in addition to `<Suspense>`. Route-level lazy imports in `App.jsx` are lower risk (loaded on navigation only) but should also be wrapped per-route for maximum resilience.
 - Regression guard: build passes (`npm run build`) — confirmed. Visual: restart frontend with `./manage.sh restart frontend`, reload browser — shell renders normally, CommandPalette failure shows a contained error widget rather than crashing the shell.
 - First seen: 2026-08-11
+
+### PB-25 — "Page Not Found: /carbon/" on first open (bare namespace root)
+- Symptom: opening the app at a namespace root (e.g. `/carbon/`, or a deployment mount
+  path) shows NotFound while the sidebar still highlights the correct studio.
+- Layer: frontend
+- Root cause: routes are absolute + namespace-prefixed (`/carbon/console`, `/admin/users`,
+  …) but the namespace root itself (`/carbon`, `/admin`, `/settings/profile`, …) had no
+  `<Route>`, so the bare path fell through to `<Route path="*">` → NotFound. The combined
+  nginx mount serves the SPA at `/carbon/`, and `VITE_BASE=/` does not strip it.
+- Fix: add index redirects at each bare root, e.g.
+  `<Route path="/carbon" element={<Navigate to="/carbon/console" replace />} />`, plus
+  `/admin` → `/admin/users`, `/settings/profile` & `/settings/preferences` → `/settings`,
+  `/emissions/dashboard` → `/carbon/dashboard`, `/data-owner/reports/generate` →
+  `/carbon/reporting/generate`, `/modules` → `/carbon/my-data`, `/scopes` & `/dashboards`
+  & `/schema-admin` → their canonical pages. Fixed the dead source references too
+  (CommandPalette `/emissions/dashboard`, SavedReportsPage `/data-owner/reports/generate`).
+- Best practice note: every top-level route namespace MUST declare a bare-root index route
+  (RULE_22). A deployment mount path is just the bare root of a namespace.
+- Regression guard: `.ai-toolkit/scripts/audit-routes.py` (wired into `verify.sh frontend`)
+  fails on any missing namespace root or dangling nav target.
+- First seen: 2026-08.
