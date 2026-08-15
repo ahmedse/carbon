@@ -147,7 +147,7 @@ Frontend only. All backend APIs already exist.
 
 ## Sprint 6 — WorkspaceContext: AI knows what you're doing (2–3 weeks)
 **Goal:** The DQ scenario step 2 — AI opens already knowing your context.
-**Spec:** To be written as `tasks/SPRINT-6-WORKSPACE-CONTEXT.md`
+**Spec:** `tasks/SPRINT-6-WORKSPACE-CONTEXT.md`
 
 **What it is:** The frontend serializes what the user is doing into a structured
 `WorkspaceContext` object and sends it when opening the AI tab. No screenshots.

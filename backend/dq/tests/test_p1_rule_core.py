@@ -57,6 +57,39 @@ class RuleSchemaValidationTests(TestCase):
         errors = validate_definition(d)
         self.assertEqual(errors, [])
 
+    def test_valid_standalone_rule_no_bindings(self):
+        """ADR-0006: a rule must be valid without any bindings (standalone authoring)."""
+        from dq.rule_schema import validate_definition
+        d = {
+            'schema_version': 1,
+            'name': 'standalone range',
+            'level': 'field',
+            'dimension': 'validity',
+            'type': 'range',
+            'severity': 'error',
+            'active': True,
+            # no 'bindings' key at all — must validate clean
+            'params': {'min': 0, 'max': 100},
+        }
+        errors = validate_definition(d)
+        self.assertEqual(errors, [])
+
+    def test_valid_standalone_rule_empty_bindings_list(self):
+        """ADR-0006: an explicit empty bindings list is also valid (still standalone)."""
+        from dq.rule_schema import validate_definition
+        d = {
+            'schema_version': 1,
+            'name': 'standalone not_null',
+            'level': 'field',
+            'dimension': 'completeness',
+            'type': 'not_null',
+            'severity': 'warn',
+            'active': True,
+            'bindings': [],
+        }
+        errors = validate_definition(d)
+        self.assertEqual(errors, [])
+
     def test_invalid_missing_name(self):
         from dq.rule_schema import validate_definition
         d = {
