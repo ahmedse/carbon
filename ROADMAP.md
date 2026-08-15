@@ -187,7 +187,7 @@ Workspaces to wire: DQ, Catalog, DataSchema, Emissions.
 ---
 
 ## Sprint 7 — ai/domain/emissions.py: GHG vocabulary (3 days)
-**Status:** 🔨 Spec written — ready for Backend Worker dispatch
+**Status:** ✅ Done — backend `6fe5529` (774 backend tests passing)
 **Goal:** AI knows GHG Protocol vocabulary, scope 1/2/3, emission factors.
 **Spec:** `tasks/SPRINT-7-DOMAIN-EMISSIONS.md`
 
