@@ -73,6 +73,7 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
             title=serializer.validated_data.get("title", ""),
             app_identifier=serializer.validated_data.get("app_identifier"),
             task_payload=serializer.validated_data.get("task_payload"),
+            workspace_context=serializer.validated_data.get("workspace_context"),
         )
         return Response(conversation, status=status.HTTP_201_CREATED)
 

@@ -74,6 +74,58 @@ class ConversationContext:
     # Each message: {"role": "user"|"assistant"|"system", "content": "...", "timestamp": "..."}
 
 
+# ── Workspace Context (§11 user situation) ────────────────────────────
+
+@dataclass
+class WorkspaceContext:
+    """Structured description of what the user is currently doing.
+
+    Sent by the frontend when opening the AI workspace tab.
+    Never inferred — always explicitly serialized by the source workspace.
+
+    AI CONTRACT §11.4: NEVER used for security decisions — that is Scope's job.
+    AI CONTRACT §11.5: ``form_state`` must be sanitized before sending.
+    """
+
+    workspace: str                      # "dq" | "catalog" | "emissions" | "dataschema" | ...
+    current_view: str                   # page or tab name, e.g. "rule_list", "table_detail"
+    entity_type: str | None = None      # "table" | "rule" | "calculation" | "asset" | ...
+    entity_id: str | None = None        # PK or slug of the focused entity
+    entity_name: str | None = None      # human-readable name
+    form_state: dict | None = None      # partial form data if user was filling a form (SANITIZED — §11.5)
+    recent_actions: list[str] = field(default_factory=list)  # last 3-5 user actions
+    intent_signal: str | None = None    # "create" | "edit" | "debug" | "explore" | None
+    app_identifier: str | None = None   # domain app scope (mirrors Scope.app_identifier)
+
+    def to_prompt_prefix(self) -> str:
+        """Render a compact system-prompt prefix describing the user's situation."""
+        if not self.workspace:
+            return ""
+        parts = [f"User is in the {self.workspace} workspace"]
+        if self.current_view:
+            parts.append(f"viewing {self.current_view}")
+        if self.entity_type and self.entity_name:
+            parts.append(f"on {self.entity_type} '{self.entity_name}'")
+        elif self.entity_type:
+            parts.append(f"on a {self.entity_type}")
+        if self.intent_signal:
+            parts.append(f"with intent '{self.intent_signal}'")
+        if self.recent_actions:
+            parts.append(f"recent actions: {', '.join(self.recent_actions[:3])}")
+        return ". ".join(parts) + "."
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "WorkspaceContext | None":
+        if not data or not isinstance(data, dict) or not data.get("workspace"):
+            return None
+        known = {
+            "workspace", "current_view", "entity_type", "entity_id",
+            "entity_name", "form_state", "recent_actions",
+            "intent_signal", "app_identifier",
+        }
+        return cls(**{k: v for k, v in data.items() if k in known})
+
+
 # ── 1. DQ Validate ──────────────────────────────────────────────────────
 
 @dataclass

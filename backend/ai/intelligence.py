@@ -32,6 +32,7 @@ from backend.ai.protocol import (
     ProviderStatus,
     Scope,
     TableProfile,
+    WorkspaceContext,
 )
 from backend.ai.providers.pulse import PulseProvider
 
@@ -219,8 +220,13 @@ class CarbonIntelligence:
         title: str = "",
         app_identifier: str | None = None,
         task_payload: dict[str, Any] | None = None,
+        workspace_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create a new conversation.
+
+        ``workspace_context`` (optional, additive) is merged into
+        ``task_payload_json`` under the ``workspace_context`` key
+        (AI CONTRACT §11.2).
 
         Returns a serialized dict of the AIConversation.
         """
@@ -229,6 +235,10 @@ class CarbonIntelligence:
         scope = build_scope(user)
         scope_json = scope.to_dict() if scope else {}
 
+        stored_payload = dict(task_payload or {})
+        if workspace_context:
+            stored_payload["workspace_context"] = workspace_context
+
         conversation = AIConversation.objects.create(
             user=user,
             conversation_type=conversation_type,
@@ -236,8 +246,10 @@ class CarbonIntelligence:
             app_identifier=app_identifier,
             status="pending",
             scope_json=scope_json,
-            task_payload_json=task_payload or {},
+            task_payload_json=stored_payload,
         )
+
+        self._seed_intent_aware_opener(conversation, workspace_context)
 
         return _serialize_conversation(conversation)
 
@@ -742,8 +754,9 @@ class CarbonIntelligence:
             "workspace_chat",
             conversation.task_payload_json or {},
         )
+        message = self._prepend_workspace_context(conversation, content)
         chat_request = ChatRequest(
-            message=content,
+            message=message,
             conversation=conv_ctx,
             scope=scope,
         )
@@ -763,6 +776,64 @@ class CarbonIntelligence:
             chat_response.status,
             chat_response.content,
             chat_response.follow_up_questions,
+        )
+
+    def _prepend_workspace_context(
+        self,
+        conversation,
+        content: str,
+    ) -> str:
+        """Prepend the WorkspaceContext prompt prefix to a chat message.
+
+        AI CONTRACT §11.3: the engine receives WorkspaceContext as part of
+        the prompt, injected by CarbonIntelligence (NOT the frontend).
+        §11.4: never used for security — that is Scope's job.
+
+        Malformed or absent context is silently ignored — never crash.
+        """
+        try:
+            payload = conversation.task_payload_json or {}
+            ctx = WorkspaceContext.from_dict(payload.get("workspace_context"))
+        except Exception:
+            return content
+        if ctx is None:
+            return content
+        prefix = ctx.to_prompt_prefix()
+        if not prefix:
+            return content
+        return f"{prefix}\n\n{content}"
+
+    def _seed_intent_aware_opener(
+        self,
+        conversation,
+        workspace_context: dict[str, Any] | None,
+    ) -> None:
+        """Seed an initial assistant opener when WorkspaceContext carries intent.
+
+        Sprint 6 Phase 6-C: if the workspace context has an intent_signal,
+        write a context-aware first assistant message so the AI opens already
+        knowing the user's intent.
+
+        Optional + additive — no context or no intent → no opener, no status
+        change. Malformed context is ignored; conversation creation never fails.
+        """
+        try:
+            ctx = WorkspaceContext.from_dict(workspace_context)
+            if ctx is None:
+                return
+            opener = _intent_aware_opener(ctx)
+        except Exception:
+            return
+        if not opener:
+            return
+        self._save_assistant_message(
+            conversation,
+            opener,
+            metadata={
+                "type": "workspace_context_opener",
+                "intent_signal": ctx.intent_signal,
+            },
+            status="needs_input",
         )
 
     def _guard_workspace_operation(
@@ -963,6 +1034,53 @@ def _default_title(conversation_type: str) -> str:
         "anomaly": "Anomaly Review",
     }
     return titles.get(conversation_type, "Conversation")
+
+
+def _intent_aware_opener(ctx: WorkspaceContext) -> str | None:
+    """Build a context-aware first assistant opener from ``intent_signal``.
+
+    Sprint 6 Phase 6-C: seed an initial assistant message so the AI opens
+    already knowing the user's intent. Returns None when no opener applies
+    (no intent, or an intent without a specialized opener).
+    """
+    intent = (ctx.intent_signal or "").strip().lower()
+    if not intent:
+        return None
+
+    entity_type = (ctx.entity_type or "").strip().lower()
+    entity_name = (ctx.entity_name or "").strip()
+
+    if intent == "create" and entity_type == "rule":
+        subject = f"table {entity_name}" if entity_name else "your table"
+        return (
+            f"I see you want to create a new DQ rule. Based on {subject}'s "
+            "profile, I'd suggest starting with a completeness or uniqueness "
+            "check on the key fields — tell me which fields matter most and "
+            "I'll draft the rule."
+        )
+
+    if intent == "debug":
+        if entity_name:
+            return (
+                f"I see you're debugging {entity_name}. Share the failing rows "
+                "or the error you're seeing and I'll help trace the root cause."
+            )
+        return (
+            "I see you're debugging. Share the failure context — the rule, "
+            "the failing rows, or the error message — and I'll help trace it."
+        )
+
+    if intent in ("explore", "edit"):
+        if entity_name:
+            return (
+                f"You're working on {entity_name}. What would you like to do "
+                "with it — inspect, edit, or analyze?"
+            )
+        if entity_type:
+            return f"You're working on a {entity_type}. How can I help?"
+        return "How can I help with your workspace?"
+
+    return None
 
 
 def _format_dq_results(response) -> str:

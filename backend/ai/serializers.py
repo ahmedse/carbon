@@ -15,6 +15,7 @@ class CreateConversationSerializer(serializers.Serializer):
         max_length=50, required=False, allow_null=True, allow_blank=True,
     )
     task_payload = serializers.JSONField(required=False, default=dict)
+    workspace_context = serializers.JSONField(required=False, default=None)
 
 
 class SendMessageSerializer(serializers.Serializer):
