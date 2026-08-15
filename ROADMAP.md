@@ -39,6 +39,7 @@ deployable. Later sprints depend on earlier ones.
 ---
 
 ## Sprint 1 — Foundation fixes (1 day)
+**Status:** ✅ Done — 1A (rule unbind `c87d4e7` + Monaco `RuleJsonEditor` + regression tests), 1B (email `EmailConfig` + `run_backup` command + `config_views` + `PlatformConfigPage`), G1 (password reset pages), G5 (log viewer `log_api.py` + `log_viewer.py` + `LogViewerPage`), B1 (export-audits fix), B2 (Table Manager sidebar). Backup cron is a server crontab line (documented in `tasks/SPRINT-1-QUICK-WINS.md §G2`), not a code deliverable.
 **Goal:** Fix the two things that block clean AI rule creation.
 
 ### 1A — DQ Rule Unbind (25 min, backend + frontend)
@@ -69,6 +70,7 @@ cd carbon-frontend && npm run build
 ---
 
 ## Sprint 2 — Delete safety (2–3 days)
+**Status:** ✅ Done — `9aa27c3`. All 17 ViewSets now have dependency-guarded `destroy()`: ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, SBTiTarget, OrganizationalBoundary, BaseYear (emissions); DataSource, ConsumingConnection (connections); ExportProject, ImportJob (importexport); DataField (perform_destroy guards + audit), DataRow (soft-delete `is_archived`).
 **Goal:** Close the data integrity risk before any production data grows.
 **Spec:** `tasks/SPRINT-2-DELETE-SAFETY.md`
 
@@ -101,6 +103,7 @@ cd backend && python -m pytest emissions/tests/ -q
 ---
 
 ## Sprint 3 — AI Workspace Phase 2 frontend (1 week)
+**Status:** ✅ Done — backend routing `intelligence.py` (`_send_dq_suggest_message`/`_send_nl_query_message`/`_send_anomaly_message` + `_build_anomaly_request`); frontend `AIMessageBubble` typed cards (dq_suggestions/nl_query_result/anomalies), `AITaskTransferContext` smart defaults, `AIWorkingIndicator` contextual messages, `AIConversationView` needs_input + working notices, `DQWorkspacePage` Ask/Suggest/Analyze AI buttons; `test_workspace_messages.py`.
 **Goal:** Complete the AI workspace so dq_suggest, nl_query, and anomaly are usable.
 **Spec:** `tasks/SPRINT-3-AI-WORKSPACE-PHASE2.md`
 
@@ -124,6 +127,7 @@ cd carbon-frontend && npm run build && npm run lint
 ---
 
 ## Sprint 4 — Log viewer backend (1–2 days)
+**Status:** ✅ Done — `backend/config/log_api.py` (`GET /carbon-api/system/logs/?lines=&search=&level=`) + `backend/config/log_viewer.py` (admin-only, sanitized path) + `LogViewerPage.jsx` wired to live API via `/admin/logs` (ShellSidebar "System Logs").
 **Goal:** `LogViewerPage.jsx` exists; the backend API doesn't.
 **Spec:** `tasks/SPRINT-1-QUICK-WINS.md §G5`
 
@@ -135,6 +139,7 @@ cd carbon-frontend && npm run build && npm run lint
 ---
 
 ## Sprint 5 — DQ Hub (1 week)
+**Status:** ✅ Done — consolidated into `/dq` (not `/catalog/dq-hub`): `DQWorkspacePage` with Overview|Rules|Jobs|Suggestions|Monitoring tabs; old `DQDashboardPage`/`DQRulesPage` removed and redirected to `/dq`; backend `bulk-execute` action + `FreshnessCheckViewSet` + `SchemaChangeViewSet`; `api/dq.js` wrappers (getFreshnessChecks, getSchemaChanges, accept/rejectDQSuggestion). Final target surface is the single `/dq` workspace.
 **Goal:** Replace 6 fragmented DQ surfaces with one unified workspace.
 **Spec:** `tasks/SPRINT-5-DQ-HUB.md`
 
@@ -334,12 +339,12 @@ At this point:
 
 | Item | Notes |
 |---|---|
-| Monaco Editor for DQ rule JSON | Sprint 1B Phase C — professional code editor |
-| OrganizationalBoundary + BaseYear frontend | Backend done, no UI |
-| ai/domain/water.py | When water domain app starts |
-| Chunk size optimization | MUI 643kB — needs manual chunking |
-| Fix 53 react-hooks/exhaustive-deps warnings | No errors, cleanup sprint |
-| Production v1.3 tag + deploy | After Sprint 3 (AI Workspace Phase 2) |
+| ~~Monaco Editor for DQ rule JSON~~ | ✅ Done — `RuleJsonEditor.jsx` + `dqRuleSchema.json` |
+| ~~OrganizationalBoundary + BaseYear frontend~~ | ✅ Done — `8f62236` (admin UI) |
+| ~~ai/domain/water.py~~ | ✅ Done — `a6fe919` (water domain) |
+| ~~Chunk size optimization~~ | ✅ Done — MUI chunk split (`8f62236`) |
+| ~~Fix 53 react-hooks/exhaustive-deps warnings~~ | ✅ Done — lint clean (`a6fe919`) |
+| Production v1.3 tag + deploy | Ops — after final QA gate |
 
 ---
 
