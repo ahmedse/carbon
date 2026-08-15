@@ -132,22 +132,27 @@ class LongTermMemory:
         self.db.add(fact)
         await self.db.commit()
 
-        # Embed in vector store for semantic search
-        await self._vector.upsert(
-            collection=self._collection_name(instance_id),
-            ids=[fact_id],
-            documents=[content],
-            metadatas=[
-                {
-                    "instance_id": instance_id,
-                    "category": category,
-                    "confidence": confidence,
-                    "host_user_id": host_user_id or "",
-                    "visibility": effective_visibility,
-                }
-            ],
-            instance_id=instance_id,
-        )
+        # Embed in vector store for semantic search (optional — degrade
+        # gracefully when the vector backend is unavailable, mirroring
+        # KnowledgeGraphStore's upsert handling).
+        try:
+            await self._vector.upsert(
+                collection=self._collection_name(instance_id),
+                ids=[fact_id],
+                documents=[content],
+                metadatas=[
+                    {
+                        "instance_id": instance_id,
+                        "category": category,
+                        "confidence": confidence,
+                        "host_user_id": host_user_id or "",
+                        "visibility": effective_visibility,
+                    }
+                ],
+                instance_id=instance_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Vector store upsert failed for fact {fact_id}: {exc}")
 
         logger.info(f"Stored fact [{category}]: {content[:80]}...")
         return fact_id

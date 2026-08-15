@@ -270,7 +270,7 @@ for that org's specific data patterns.
 accepted/rejected/corrected answer becomes a `KgFeedbackRecord` (+ long-term memory), so
 the AI actually learns.
 
-**Spec:** `tasks/SPRINT-10-LEARNING.md` — 🔨 Spec written, awaiting backend dispatch.
+**Spec:** `tasks/SPRINT-10-LEARNING.md` — ✅ Done (learning bridge `ai/learning.py` + `learn_from_feedback` command + `learned_at` migration + 8 tests; 806 backend tests pass).
 
 | Task | Worker | Detail |
 |---|---|---|

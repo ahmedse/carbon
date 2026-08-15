@@ -129,6 +129,12 @@ class AIMessage(models.Model):
         default="",
         help_text="User's correction when outcome='corrected'.",
     )
+    learned_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Set once this message's outcome has been consumed by the learning job.",
+    )
 
     class Meta:
         app_label = "ai"

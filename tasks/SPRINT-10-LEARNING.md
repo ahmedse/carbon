@@ -37,7 +37,10 @@ nothing new that already exists.
 2. **Engine long-term memory already exists** — `backend/ai/engine/memory/long_term.py`:
    `LongTermMemory(db_session).store_fact(instance_id, category, content, source, confidence,
    host_user_id, visibility, ...)` — **async**, with semantic dedup + contradiction detection
-   (vector lookups are `try/except`-tolerant; missing chroma → fact still stored).
+   (the dedup/contradiction *queries* are `try/except`-tolerant). **Note:** the final
+   `_vector.upsert(...)` was originally **not** guarded — this sprint wraps it in a
+   `try/except` (see hazard #6) so a missing vector backend degrades gracefully instead of
+   leaving `learned_at` unset.
 3. **Engine models are Django models** in the single `ai` app namespace:
    - `from ai.models import KgFeedbackRecord, KgGoldenPair, MemoryLongTerm, AIMessage, AIConversation`
    - `KgFeedbackRecord` fields: `instance_id, conversation_id, message_id, signal_type,
@@ -330,7 +333,12 @@ cd /home/ahmed/aast/carbon/backend && /home/ahmed/aast/carbon/.venv/bin/python -
 5. **Idempotency is mandatory** — the `learned_at IS NULL` filter plus set-on-success
    (not set-on-failure) is what makes re-runs safe. Do not mark `learned_at` before the
    engine write succeeds.
-6. **Vector store may be absent** (chromadb not installed) — `LongTermMemory.store_fact`
-   already tolerates this; do not add a hard chroma dependency or skip the fact write.
+6. **Vector store may be absent** (chromadb not installed). The dedup/contradiction queries
+   already tolerate this, but the final `await self._vector.upsert(...)` in `store_fact` was
+   **not** guarded — it raised `ImportError` *after* the fact was committed, which would leave
+   `learned_at` unset and retry the message forever. **Fix (done):** wrap the final upsert in
+   `try/except Exception` + `logger.warning`, mirroring the dedup/contradiction guards. Do NOT
+   add a hard chroma dependency and do NOT skip the durable fact write (which commits before
+   the upsert).
 7. **`asyncio.run` bridge** mirrors `run_cognition_loop.py`; do not run inside an already
    running loop (the management command / pytest are sync, so this is safe).
