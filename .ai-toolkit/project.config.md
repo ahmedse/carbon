@@ -88,26 +88,22 @@ ARCH_CORE_APPS=accounts, core, catalog, mdm, dq, dataschema, connections, eviden
 # Hosted apps (may import core apps, never the reverse):
 ARCH_HOSTED_APPS=emissions
 # Superseded / out of active scope:
-ARCH_SUPERSEDED=ai_copilot (AI Heart owns AI/RAG now)
-# ── AI Heart Architecture ────────────────────────────────────────────
-# FULL CONTRACT: .ai-toolkit/shared/ai-contract.md — THE binding AI contract
-# FULL ADR: .ai-toolkit/decisions/0004-ai-multi-app-architecture.md
-# FULL AI SPEC: docs/PULSE_CONTRACT_SPEC.md
-ARCH_AI_NAME=Pulse — unified name for the ENTIRE in-hand AI/intelligence layer (engine + orchestrator + knowledge + guards).
-ARCH_AI_HEART=backend/ai/ — THE canonical AI interface (Pulse Orchestrator, formerly "AI Heart"). All AI ops flow through here.
+ARCH_SUPERSEDED=ai_copilot (superseded by backend/ai/)
+# ── AI Architecture ─────────────────────────────────────────────────
+# NAMING: "AI" or "Carbon AI" = the ENTIRE backend/ai/ system. Never "Pulse" in user-facing text.
+# FULL CONTRACT: .ai-toolkit/shared/ai-contract.md — THE binding AI contract (v2.0, updated 2026-08-15)
+# FULL ADRs: decisions/0004 (3-layer arch), 0007 (in-hand engine), 0008 (monolith), 0009 (seam swap)
+ARCH_AI_NAME=AI (Carbon AI) — the ENTIRE backend/ai/ system: orchestrator + guards + memory + engine + workspace.
+ARCH_AI_ROOT=backend/ai/ — single Django app for all AI tiers. No new AI Django apps (ADR-0008).
+ARCH_AI_ENTRY=CarbonIntelligence (ai/intelligence.py) — ONLY entry point. All Carbon code calls it.
 ARCH_AI_LAYERS=3 layers: Platform AI (ai/protocol.py) → Domain AI (ai/domain/{app}.py) → Security Guards (ai/guards.py)
-ARCH_AI_PLATFORM_OPS=dq.validate, dq.suggest, query.nl, query.explain, schema.analyze, fix.suggest — work on ANY table, ANY app
-ARCH_AI_DOMAIN_OPS=Per-app ABCs in ai/domain/{app}.py — anomaly.detect, anomaly.explain, report.draft (emissions)
-ARCH_AI_GUARDS=ScopeGuard, AccessGuard, DataIsolationGuard, MutationGuard, AuditTrail — run BEFORE every AI call
-ARCH_AI_PROVIDER=AI engine is IN-HAND (backend/ai/engine/) — NO provider swappability. backend/ai/providers/pulse.py is the single adapter seam (implementation detail, not a strategy guarantee).
-# AI provider specifics:
-ARCH_AI_ENGINE=backend/ai/engine/ — vendored Pulse engine (agent/, llm/, cognition/, core/, memory/, knowledge/, knowledge_graph/, ingestion/, proactive/, archetypes/, skills/). Engine is STATEFUL in source (SQLAlchemy); statelessness is achieved in Phase 2 by swapping core/database.py to a Django Store seam. In-hand, in-process; long inference runs via async jobs on Redis.
-ARCH_AI_CONTRACT=Task envelope (id, type, payload, scope) — internal async job contract carried over Redis (was HTTP POST /tasks). Carbon generates task ID (UUID v4, idempotent). Engine returns {task_id, status, result, error}. Status: pending|working|completed|failed|partial. Carbon owns durable state; the engine is stateless.
-ARCH_AI_TASK_1=dq.validate (sync, 10s) — NL DQ rule validation. Carbon sends rules+rows → AI provider returns {results: [{rule_id, status, failing_rows, explanation, confidence}]}
-ARCH_AI_TASK_2=classification.infer (sync, 5s) — Auto-classify DataField metadata → glossary terms, PII detection, data type suggestions
-ARCH_AI_TASK_3=query.answer (stream, 15s) — NL question → structured answer with data payload
-ARCH_AI_TASK_4=dq.suggest (async, 60s) — Propose DQ rules from table profile statistics
-ARCH_AI_TASK_5=anomaly.detect (async, 120s) — Scan DQ profile snapshots for anomalous patterns
+ARCH_AI_ENGINE=backend/ai/engine/ — in-process stateless reasoning engine (TurnPipelineRunner, six-witness pipeline, LLM router, KG, memory, skills). Adapter seam: ai/providers/pulse.py. No runtime provider swap (ADR-0007).
+ARCH_AI_STORE=backend/ai/store.py — DjangoStore: CBAC-partitioned (app_identifier/org_unit_id/host_user_id/visibility). Carbon owns ALL durable AI state.
+ARCH_AI_PLATFORM_OPS=dq.validate, dq.suggest, query.nl, query.explain, schema.analyze, fix.suggest, chat — work on ANY table, ANY app
+ARCH_AI_DOMAIN_OPS=Per-app ABCs in ai/domain/{app}.py — anomaly.detect, anomaly.explain, report.draft (emissions). ⚠️ ai/domain/emissions.py NOT YET CREATED.
+ARCH_AI_GUARDS=ScopeGuard, AccessGuard, DataIsolationGuard, MutationGuard, RateLimiter — run BEFORE every AI call
+ARCH_AI_WORKSPACE=Conversation CRUD: ai/workspace_api.py. Ops observability: ai/ops_api.py. Models: ai/models/workspace.py.
+ARCH_AI_MISSING=WorkspaceContext (§11 in ai-contract.md), streaming SSE path, feedback persistence, ai/domain/emissions.py
 ARCH_AI_TASK_6=report.draft (async, 60s) — Dashboard data → narrative GHG report draft
 ARCH_AI_DISCOVERY=No HTTP agent-card (engine is in-hand). Engine capabilities validated at import/startup.
 ARCH_AI_PACKAGE=Modular monolith: ONE Django app (backend/ai/). All Pulse modules are internal Python packages (engine/, knowledge/, memory/, graph/, ingestion/, proactive/, archetypes/, learning/, feedback/). One backend/ai/models/ + one migrations/ namespace. NO new Django apps.
