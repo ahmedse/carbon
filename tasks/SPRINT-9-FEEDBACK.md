@@ -261,7 +261,7 @@ File: `carbon-frontend/src/shell/AIMessageBubble.jsx`
 - Show a small action row under the content (Accept / Reject / Correct, `size="small"`
   `variant="outlined"`). Reuse the existing `Button` import.
 - "Correct" opens a lightweight inline input (a `TextField` + Save/Cancel, or a prompt-based
-  `SystemDialog` — match the project's dialog convention; see `src/components/layout/SystemDialog.jsx`).
+  `SystemDialog` — match the project's dialog convention; see `src/components/SystemDialog.jsx`).
   On save, call `onCorrect(message, correctionText)`.
 - After feedback is persisted, render a status chip (`Accepted`/`Rejected`/`Corrected`) and,
   if `correction_text` is present, show it below the message in a distinct style. Read the
