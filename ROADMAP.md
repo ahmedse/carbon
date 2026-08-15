@@ -227,7 +227,7 @@ class EmissionsDomainAI(DomainAIOperations):
 ---
 
 ## Sprint 8 — Streaming SSE: human speed (2–3 weeks)
-**Status:** 🔨 Spec written — ready for Backend Worker dispatch
+**Status:** 🔨 Phase 8-A done (backend `0e6187f`) — Phase 8-B (frontend) pending
 **Goal:** AI responses arrive token by token, typing effect — not as a single blob.
 **Spec:** `tasks/SPRINT-8-STREAMING.md`
 
