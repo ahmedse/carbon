@@ -301,6 +301,7 @@ frontend console.
 ---
 
 ## Sprint 12 — Tool/Workflow plugin registry: Carbon AI grows (1 week)
+**Status:** ✅ Done — backend `6919da6` (registry + create_dq_rule + catalog API, 841 backend tests), frontend `a640d6b` (tool catalog console; lint/test/build green).
 **Goal:** Tools stop being generic API bridges and become well-defined, self-registering
 process plugins, so adding a new AI capability is *registering a tool*, not writing a new
 app or a new hardcoded function. This is the "Carbon AI becomes and grows" sprint.
