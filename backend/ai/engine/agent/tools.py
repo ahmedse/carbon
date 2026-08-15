@@ -5,6 +5,7 @@ import json
 import logging
 import re
 
+from ai.engine.agent.plugins import load_plugins
 from ai.engine.core.config import get_settings
 from ai.engine.core.exceptions import ToolExecutionError
 from ai.engine.llm.router import route_chat
@@ -1438,14 +1439,33 @@ MCP_TOOLS: list[dict] = []
 MCP_EXECUTORS: dict[str, object] = {}
 
 
+def _dedup_definitions(definitions: list[dict]) -> list[dict]:
+    """Drop duplicate tool names (first wins) so the catalog is name-unique."""
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for tool in definitions:
+        name = (tool or {}).get("function", {}).get("name", "")
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        deduped.append(tool)
+    return deduped
+
+
 def get_tool_definitions() -> list[dict]:
-    """Return all tool definitions: static built-in + MCP-injected."""
-    return STATIC_TOOL_DEFINITIONS + MCP_TOOLS
+    """Return all tool definitions: static + plugin + MCP (name-unique)."""
+    plugin_defs, _ = load_plugins()
+    return _dedup_definitions(list(STATIC_TOOL_DEFINITIONS) + plugin_defs + list(MCP_TOOLS))
 
 
 async def get_tool_executors() -> dict:
-    """Return all tool executors: static built-in + MCP-injected."""
-    return {**STATIC_TOOL_EXECUTORS, **MCP_EXECUTORS}
+    """Return all tool executors: static + plugin + MCP.
+
+    Static and MCP executors take precedence over a same-named plugin on
+    collision (a plugin must not shadow a built-in).
+    """
+    _, plugin_execs = load_plugins()
+    return {**plugin_execs, **STATIC_TOOL_EXECUTORS, **MCP_EXECUTORS}
 
 
 async def init_mcp_tools(registry) -> int:

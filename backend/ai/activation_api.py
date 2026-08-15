@@ -254,17 +254,75 @@ def _settings_mcp() -> list:
     return servers
 
 
+# Static tools that mutate durable state or are confirmation-gated by design
+# (RULE_21: AI suggests, Carbon executes).  Reads are never confirmation-gated.
+_STATIC_CONFIRMATION_TOOLS = {
+    "call_host_api",
+    "run_ops_workflow",
+    "learn_fact",
+    "forget_fact",
+    "draft_skill",
+}
+
+
 def _settings_tools() -> list:
-    """Registered tool catalog (name + description) — static + MCP-injected."""
-    from ai.engine.agent.tools import get_tool_definitions
+    """Registered tool catalog (rich metadata) — static + plugin + MCP.
+
+    Sprint 12 (ARCH_AI_EXTENSIBILITY): each entry carries ``kind``,
+    ``requires_confirmation``, ``capability`` and ``app_identifier`` so the
+    admin console can show the growth surface — not just a flat name list.
+    """
+    from ai.engine.agent.plugins import WorkflowPlugin, registered_plugins
+    from ai.engine.agent.tools import (
+        MCP_TOOLS,
+        STATIC_TOOL_DEFINITIONS,
+        get_tool_definitions,
+    )
+
+    static_names = {t["function"]["name"] for t in STATIC_TOOL_DEFINITIONS}
+    mcp_names = {t["function"]["name"] for t in MCP_TOOLS}
+
+    plugin_meta = {}
+    for plugin in registered_plugins():
+        plugin_meta[plugin.name] = {
+            "kind": "workflow" if isinstance(plugin, WorkflowPlugin) else "plugin",
+            "requires_confirmation": bool(plugin.requires_confirmation),
+            "capability": plugin.capability,
+            "app_identifier": plugin.app_identifier,
+        }
 
     catalog = []
     for tool in get_tool_definitions():
         function = (tool or {}).get("function", {}) or {}
+        name = function.get("name", "")
+        if name in static_names:
+            meta = {
+                "kind": "static",
+                "requires_confirmation": name in _STATIC_CONFIRMATION_TOOLS,
+                "capability": None,
+                "app_identifier": None,
+            }
+        elif name in plugin_meta:
+            meta = plugin_meta[name]
+        elif name in mcp_names:
+            meta = {
+                "kind": "mcp",
+                "requires_confirmation": False,
+                "capability": None,
+                "app_identifier": None,
+            }
+        else:
+            meta = {
+                "kind": "unknown",
+                "requires_confirmation": False,
+                "capability": None,
+                "app_identifier": None,
+            }
         catalog.append(
             {
-                "name": function.get("name", ""),
+                "name": name,
                 "description": function.get("description", ""),
+                **meta,
             }
         )
     return catalog
@@ -296,7 +354,8 @@ class PulseSettingsView(APIView):
             "rate_limit": int,
             "routing": {task: model, ...},
             "mcp_servers": [{name, command, args}, ...] | [],
-            "tools_catalog": [{name, description}, ...] | [],
+            "tools_catalog": [{name, description, kind, requires_confirmation,
+                              capability, app_identifier}, ...] | [],
             "agents": [name, ...] | [],
         }
 

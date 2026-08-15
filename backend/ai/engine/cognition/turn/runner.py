@@ -469,6 +469,7 @@ class TurnPipelineRunner:
         hook_pipeline = build_default_pipeline()
         hook_ctx_defaults = {
             "instance_id": instance_id,
+            "conversation_id": conversation_id,
             "host_user_id": host_user_id,
             "run_id": turn_id,
             "agent_role": "orchestrator",

@@ -262,6 +262,18 @@ async def _execute_single_tool(
             }
 
         t_exec = time.monotonic()
+
+        # ── Sprint 12: expose turn context to tool/workflow plugins ──────
+        from ai.engine.agent.plugins import ToolContext, set_tool_context
+        ctx_defaults = hook_ctx_defaults or {}
+        set_tool_context(ToolContext(
+            instance_id=ctx_defaults.get("instance_id", ""),
+            conversation_id=ctx_defaults.get("conversation_id", ""),
+            host_user_id=ctx_defaults.get("host_user_id"),
+            instance_config=ctx_defaults.get("instance_config"),
+            host_api=executor_override,
+        ))
+
         result = await executor_fn(args)
         elapsed = (time.monotonic() - t_exec) * 1000
 

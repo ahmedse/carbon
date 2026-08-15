@@ -13,3 +13,11 @@ class AIConfig(AppConfig):
     name = "ai"
     label = "ai"
     verbose_name = "AI Copilot"
+
+    def ready(self):
+        # Sprint 12 (ARCH_AI_EXTENSIBILITY): register built-in tool/workflow
+        # plugins once at startup. Idempotent by name, so safe for ready(),
+        # management commands, and the test suite alike.
+        from ai.plugins import register_builtin_plugins
+
+        register_builtin_plugins()
