@@ -227,8 +227,9 @@ class EmissionsDomainAI(DomainAIOperations):
 ---
 
 ## Sprint 8 — Streaming SSE: human speed (2–3 weeks)
+**Status:** 🔨 Spec written — ready for Backend Worker dispatch
 **Goal:** AI responses arrive token by token, typing effect — not as a single blob.
-**Spec:** To be written as `tasks/SPRINT-8-STREAMING.md`
+**Spec:** `tasks/SPRINT-8-STREAMING.md`
 
 This is the "Pulse fills in the form at human speed" piece from the original vision.
 
