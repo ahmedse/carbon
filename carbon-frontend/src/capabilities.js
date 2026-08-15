@@ -95,6 +95,8 @@ export const ROUTE_CAPABILITIES = {
   '/carbon/admin/rules':      CARBON_MANAGE_CALCULATION_RULES,
   '/carbon/admin/gwp':        CARBON_MANAGE_GWP,
   '/carbon/admin/targets':    CARBON_MANAGE_SBTI_TARGETS,
+  '/carbon/admin/boundaries': CARBON_MANAGE_REPORTING_PERIODS,
+  '/carbon/admin/base-years': CARBON_MANAGE_REPORTING_PERIODS,
 
   // Carbon — reporting
   '/carbon/reporting/generate': CARBON_GENERATE_REPORTS,
@@ -139,6 +141,8 @@ export const MENU_ITEM_CAPABILITIES = {
   'Calculation Rules':    CARBON_MANAGE_CALCULATION_RULES,
   'GWP Reference':        CARBON_MANAGE_GWP,
   'SBTi Targets':         CARBON_MANAGE_SBTI_TARGETS,
+  'Organizational Boundaries': CARBON_MANAGE_REPORTING_PERIODS,
+  'Base Years':               CARBON_MANAGE_REPORTING_PERIODS,
 };
 
 // ═══════════════════════════════════════════════════════════════════

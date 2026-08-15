@@ -67,6 +67,8 @@ const EmissionFactorsPage = React.lazy(() => import("./pages/emissions/EmissionF
 const CalculationRulesPage = React.lazy(() => import("./pages/emissions/CalculationRulesPage"));
 const GWPReferencePage = React.lazy(() => import("./pages/emissions/GWPReferencePage"));
 const SBTiTargetsPage = React.lazy(() => import("./pages/carbon/SBTiTargetsPage"));
+const OrganizationalBoundariesPage = React.lazy(() => import("./pages/carbon/OrganizationalBoundariesPage"));
+const BaseYearsPage = React.lazy(() => import("./pages/carbon/BaseYearsPage"));
 const ReportGeneratorPage = React.lazy(() => import("./pages/emissions/ReportGeneratorPage"));
 const SavedReportsPage = React.lazy(() => import("./pages/emissions/SavedReportsPage"));
 const ReportingPeriodsPage = React.lazy(() => import("./pages/emissions/ReportingPeriodsPage"));
@@ -230,6 +232,8 @@ export default function App() {
                 <Route path="/carbon/admin/rules" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_CALCULATION_RULES}><CalculationRulesPage /></AdminRoute>} />
                 <Route path="/carbon/admin/gwp" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_GWP}><GWPReferencePage /></AdminRoute>} />
                 <Route path="/carbon/admin/targets" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_SBTI_TARGETS}><SBTiTargetsPage /></AdminRoute>} />
+                <Route path="/carbon/admin/boundaries" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_REPORTING_PERIODS}><OrganizationalBoundariesPage /></AdminRoute>} />
+                <Route path="/carbon/admin/base-years" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_REPORTING_PERIODS}><BaseYearsPage /></AdminRoute>} />
                 <Route path="/carbon/reporting/generate" element={<AdminRoute appId="carbon" requiredCapability={CARBON_GENERATE_REPORTS}><ReportGeneratorPage /></AdminRoute>} />
                 <Route path="/carbon/reporting/saved" element={<AdminRoute appId="carbon" requiredCapability={CARBON_GENERATE_REPORTS}><SavedReportsPage /></AdminRoute>} />
                 <Route path="/carbon/reporting/periods" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_REPORTING_PERIODS}><ReportingPeriodsPage /></AdminRoute>} />

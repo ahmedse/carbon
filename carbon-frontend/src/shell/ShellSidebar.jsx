@@ -71,6 +71,8 @@ const CARBON_ITEM_ICONS = {
   'Verification':         VerifiedUserIcon,
   'GWP Reference':        ScienceIcon,
   'SBTi Targets':         TrackChangesIcon,
+  'Organizational Boundaries': AccountTreeIcon,
+  'Base Years':               HistoryIcon,
   'Table Manager':        TableChartIcon,
   'Dashboard':            DashboardIcon,
 };

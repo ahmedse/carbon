@@ -77,6 +77,8 @@ export default {
       { label: 'Calculation Rules',    path: '/carbon/admin/rules',        role: 'carbon:admin' },
       { label: 'GWP Reference',        path: '/carbon/admin/gwp',          role: 'carbon:admin' },
       { label: 'SBTi Targets',         path: '/carbon/admin/targets',      role: 'carbon:admin' },
+      { label: 'Organizational Boundaries', path: '/carbon/admin/boundaries', role: 'carbon:admin' },
+      { label: 'Base Years',               path: '/carbon/admin/base-years',  role: 'carbon:admin' },
     ],
   },
 

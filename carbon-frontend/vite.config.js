@@ -20,7 +20,12 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            mui: ['@mui/material', '@mui/icons-material', '@mui/x-date-pickers'],
+            // Split MUI into separate chunks — the combined chunk was 643 kB (over the
+            // 500 kB warning limit). Keeping @mui/material, the icons set, and the date
+            // pickers apart lets the browser cache and load each independently.
+            'mui-core': ['@mui/material'],
+            'mui-icons': ['@mui/icons-material'],
+            'mui-date-pickers': ['@mui/x-date-pickers'],
             vendor: ['react', 'react-dom', 'react-router-dom'],
           },
         },

@@ -172,6 +172,103 @@ export async function deleteSBTiTarget(id, token) {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════════
+// GHG Protocol Phase 2 — Organizational Boundaries (admin CRUD)
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Fetch all organizational boundaries
+ */
+export async function fetchOrganizationalBoundaries(token) {
+  return apiFetch(API_ROUTES.emissionsBoundaries, { token });
+}
+
+/**
+ * Create a new organizational boundary (admin only)
+ */
+export async function createOrganizationalBoundary(data, token) {
+  return apiFetch(API_ROUTES.emissionsBoundaries, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Update an existing organizational boundary (admin only)
+ */
+export async function updateOrganizationalBoundary(id, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsBoundaries}${id}/`, {
+    method: "PATCH",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Delete an organizational boundary (admin only)
+ */
+export async function deleteOrganizationalBoundary(id, token) {
+  return apiFetch(`${API_ROUTES.emissionsBoundaries}${id}/`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// GHG Protocol Phase 2 — Base Years (admin CRUD + recalculate)
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Fetch all base years
+ */
+export async function fetchBaseYears(token) {
+  return apiFetch(API_ROUTES.emissionsBaseYears, { token });
+}
+
+/**
+ * Create a new base year (admin only)
+ */
+export async function createBaseYear(data, token) {
+  return apiFetch(API_ROUTES.emissionsBaseYears, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Update an existing base year (admin only)
+ */
+export async function updateBaseYear(id, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsBaseYears}${id}/`, {
+    method: "PATCH",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Delete a base year (admin only)
+ */
+export async function deleteBaseYear(id, token) {
+  return apiFetch(`${API_ROUTES.emissionsBaseYears}${id}/`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+/**
+ * Trigger a base year recalculation (creates a RecalculationTrigger)
+ */
+export async function recalculateBaseYear(id, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsBaseYears}${id}/recalculate/`, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
 /**
  * Delete a report configuration
  */

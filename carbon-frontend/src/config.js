@@ -137,6 +137,8 @@ export const API_ROUTES = {
   emissionsGWP: "carbon/gwp/",
   emissionsTargets: "carbon/targets/",
   emissionsReportConfigs: "carbon/report-configs/",
+  emissionsBoundaries: "carbon/boundaries/",
+  emissionsBaseYears: "carbon/base-years/",
 };
 
 // Pulse AI Configuration
