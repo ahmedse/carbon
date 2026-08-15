@@ -65,19 +65,21 @@ Add near `ConversationContext` (after §10 block):
 
 @dataclass
 class WorkspaceContext:
-    """Structured snapshot of what the user is doing when they open AI.
+    """Structured description of what the user is currently doing.
 
-    AI CONTRACT §11: Frontend serializes current UI state into this object.
-    Optional — conversations may be created without it (plain chat).
+    Sent by the frontend when opening the AI workspace tab.
+    Never inferred — always explicitly serialized by the source workspace.
     """
 
-    workspace: str                     # "dq" | "catalog" | "dataschema" | "emissions" | "admin"
-    current_view: str | None = None    # e.g. "rule_list", "table_detail", "rule_detail"
-    entity_type: str | None = None     # "rule" | "table" | "module" | "field" | "factor" | ...
-    entity_id: str | int | None = None
-    entity_name: str | None = None
-    intent_signal: str | None = None   # "create" | "explore" | "debug" | "analyze" | None
-    recent_actions: list[str] = field(default_factory=list)
+    workspace: str                      # "dq" | "catalog" | "emissions" | "dataschema" | ...
+    current_view: str                   # page or tab name, e.g. "rule_list", "table_detail"
+    entity_type: str | None = None      # "table" | "rule" | "calculation" | "asset" | ...
+    entity_id: str | None = None        # PK or slug of the focused entity
+    entity_name: str | None = None      # human-readable name
+    form_state: dict | None = None      # partial form data if user was filling a form (SANITIZED — §11.5)
+    recent_actions: list[str] = field(default_factory=list)  # last 3-5 user actions
+    intent_signal: str | None = None    # "create" | "edit" | "debug" | "explore" | None
+    app_identifier: str | None = None   # domain app scope (mirrors Scope.app_identifier)
 
     def to_prompt_prefix(self) -> str:
         """Render a compact system-prompt prefix describing the user's situation."""
@@ -102,10 +104,15 @@ class WorkspaceContext:
             return None
         known = {
             "workspace", "current_view", "entity_type", "entity_id",
-            "entity_name", "intent_signal", "recent_actions",
+            "entity_name", "form_state", "recent_actions",
+            "intent_signal", "app_identifier",
         }
         return cls(**{k: v for k, v in data.items() if k in known})
 ```
+
+Note: `form_state` MUST be sanitized by the frontend before sending (§11.5) —
+no passwords or secrets. `WorkspaceContext` is NEVER used for security decisions
+(§11.4) — that is Scope's job.
 
 **Verify:**
 ```bash
@@ -226,7 +233,7 @@ const workspaceContext = {
   entity_type: selectedTable ? 'table' : 'workspace',
   entity_id: selectedTable?.id ?? null,
   entity_name: selectedTable?.table_name ?? null,
-  intent_signal: 'analyze',
+  intent_signal: 'explore',
   recent_actions: [],             // optional — see TASK 11
 };
 ```
@@ -242,7 +249,7 @@ const workspaceContext = {
   entity_type: 'rule',
   entity_id: rule?.id ?? null,
   entity_name: rule?.name ?? null,
-  intent_signal: 'analyze',
+  intent_signal: 'debug',         // viewing a specific rule (its results/failures)
 };
 ```
 
@@ -258,7 +265,7 @@ entity_id: table?.id, entity_name: table?.name, intent_signal: 'explore' }`.
 Pick the primary Emissions workspace page (e.g. the dashboard or a data-entry
 page with an AI trigger) and emit
 `{ workspace: 'emissions', current_view: <view>, entity_type: <type>,
-entity_id: <id>, entity_name: <name>, intent_signal: 'analyze' }`.
+entity_id: <id>, entity_name: <name>, intent_signal: 'explore' }`.
 
 #### TASK 11 (stretch, if time): recent_actions
 
@@ -301,7 +308,7 @@ message (or adjust the chat prompt) so the AI opens with a context-aware opener:
   *"I see you want to create a new DQ rule. Based on table X's profile, I'd
   suggest…"*
 - `intent_signal="debug"` → open with the failure context pre-loaded.
-- `intent_signal="analyze"` / `"explore"` → a neutral context-aware opener
+- `intent_signal="explore"` / `"edit"` → a neutral context-aware opener
   referencing the entity name.
 
 Follow the existing assistant-message creation path; reuse
