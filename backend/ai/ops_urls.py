@@ -4,6 +4,7 @@ from django.urls import path
 
 from ai.activation_api import PulseSettingsView, PulseUsageView
 from ai.graph_api import GraphDataView
+from ai.learning_api import LearningRunView, LearningStatusView
 from ai.observability_api import (
     PulseArchetypesView,
     PulseDataView,
@@ -23,4 +24,6 @@ urlpatterns = [
     path("usage/", PulseUsageView.as_view(), name="ai-pulse-usage"),
     path("settings/", PulseSettingsView.as_view(), name="ai-pulse-settings"),
     path("sweeps/", SweepsStatusView.as_view(), name="ai-pulse-sweeps"),
+    path("learning-status/", LearningStatusView.as_view(), name="ai-pulse-learning-status"),
+    path("learning-status/run/", LearningRunView.as_view(), name="ai-pulse-learning-status-run"),
 ]

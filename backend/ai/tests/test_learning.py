@@ -176,7 +176,7 @@ def test_ignored_and_unset_outcome_are_noop(user):
 def test_failure_leaves_retryable(user, monkeypatch):
     from ai import learning
 
-    async def _boom(message, signal_type):
+    async def _boom(message, signal_type, **kwargs):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(learning, "_learn_async", _boom)

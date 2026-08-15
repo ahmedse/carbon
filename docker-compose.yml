@@ -59,6 +59,28 @@ services:
       sh -c "python manage.py migrate --noinput &&
              python manage.py run_cognition_loop"
 
+  # Sprint 11 — learning-feedback sweep sidecar. Consumes judged AIMessage
+  # outcomes that the real-time trigger left unconsumed (transient failures).
+  learning-scheduler:
+    build: ./backend
+    container_name: carbon-learning-scheduler
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      - LEARNING_SWEEP_INTERVAL=${LEARNING_SWEEP_INTERVAL:-300}
+    depends_on:
+      - backend
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./backend:/app
+      - carbon_static:/static
+      - carbon_media:/media
+    stop_grace_period: 30s
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py run_learning_loop"
+
 volumes:
   carbon_static:
   carbon_media:            

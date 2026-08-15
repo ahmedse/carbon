@@ -566,6 +566,22 @@ class CarbonIntelligence:
 
         message.outcome = outcome
         message.save(update_fields=["outcome", "correction_text"])
+
+        # Sprint 11 — real-time learning: consume the judgement immediately so the
+        # feedback flywheel turns without waiting for the scheduler sweep. Best-effort
+        # only: a failure here leaves learned_at NULL and the sweep retries it; it must
+        # never turn a successful feedback write into a 500.
+        try:
+            from ai.learning import learn_from_message
+
+            learn_from_message(message)
+        except Exception:  # noqa: BLE001 — feedback must still succeed
+            logger.warning(
+                "real-time learning failed for message %s",
+                message.id,
+                exc_info=True,
+            )
+
         return _serialize_message(message)
 
     def list_conversations(

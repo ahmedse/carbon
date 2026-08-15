@@ -50,18 +50,37 @@ def learn_from_message(message) -> bool:
     signal_type = OUTCOME_SIGNAL_MAP.get(message.outcome)
     if signal_type is None:
         return False
-    asyncio.run(_learn_async(message, signal_type))
+
+    # Resolve FK fields *synchronously* before entering the async engine loop.
+    # `_learn_async` must never lazily touch `message.conversation` — Django
+    # forbids sync ORM access from an async context.
+    conversation = message.conversation
+    asyncio.run(
+        _learn_async(
+            message=message,
+            signal_type=signal_type,
+            conversation_id=str(message.conversation_id),
+            user_id=str(conversation.user_id) if conversation.user_id else "",
+            content=message.content or "",
+            correction_text=message.correction_text or None,
+        )
+    )
     message.learned_at = timezone.now()
     message.save(update_fields=["learned_at"])
     return True
 
 
-async def _learn_async(message, signal_type) -> None:
+async def _learn_async(
+    message,
+    signal_type,
+    *,
+    conversation_id: str,
+    user_id: str,
+    content: str,
+    correction_text: str | None,
+) -> None:
     instance_id = DEFAULT_APP_IDENTIFIER
-    conversation_id = str(message.conversation_id)
     message_id = str(message.id)
-    user_id = str(message.conversation.user_id) if message.conversation.user_id else ""
-    content = message.content or ""
 
     factory = get_store().get_session_factory(instance_id)
     session = factory()
@@ -78,19 +97,19 @@ async def _learn_async(message, signal_type) -> None:
             resolved_utterance=content,
             generated_sql="",
             corrected_sql=None,       # chat/text answers carry no SQL; never fabricate
-            user_comment=message.correction_text or None,
+            user_comment=correction_text,
         )
 
         # 2) Persist long-term memory facts.
         memory = LongTermMemory(session)
-        if signal_type == "correction" and message.correction_text:
+        if signal_type == "correction" and correction_text:
             await memory.store_fact(
                 instance_id=instance_id,
                 category="correction",
-                content=message.correction_text,
+                content=correction_text,
                 source="feedback",
                 confidence=1.0,
-                host_user_id=str(message.conversation.user_id) if message.conversation.user_id else None,
+                host_user_id=user_id or None,
                 visibility="private",
             )
         elif signal_type == "explicit_positive" and content:
@@ -100,7 +119,7 @@ async def _learn_async(message, signal_type) -> None:
                 content=content[:1000],
                 source="feedback",
                 confidence=1.0,
-                host_user_id=str(message.conversation.user_id) if message.conversation.user_id else None,
+                host_user_id=user_id or None,
                 visibility="private",
             )
 
