@@ -146,6 +146,7 @@ Frontend only. All backend APIs already exist.
 ---
 
 ## Sprint 6 — WorkspaceContext: AI knows what you're doing (2–3 weeks)
+**Status:** ✅ Done — backend `fdfdaf4`, frontend `891c1fd` (759 backend tests, 336 frontend tests passing)
 **Goal:** The DQ scenario step 2 — AI opens already knowing your context.
 **Spec:** `tasks/SPRINT-6-WORKSPACE-CONTEXT.md`
 
@@ -186,8 +187,9 @@ Workspaces to wire: DQ, Catalog, DataSchema, Emissions.
 ---
 
 ## Sprint 7 — ai/domain/emissions.py: GHG vocabulary (3 days)
+**Status:** 🔨 Spec written — ready for Backend Worker dispatch
 **Goal:** AI knows GHG Protocol vocabulary, scope 1/2/3, emission factors.
-**Spec:** To be written as `tasks/SPRINT-7-DOMAIN-EMISSIONS.md`
+**Spec:** `tasks/SPRINT-7-DOMAIN-EMISSIONS.md`
 
 Required by `ARCHITECTURE.md` and `ai-contract.md §8`. Currently `ai/domain/` is empty.
 
