@@ -264,6 +264,26 @@ for that org's specific data patterns.
 
 ---
 
+## Sprint 10 — Learning job: close the feedback flywheel (1 week)
+
+**Goal:** Consume the persisted `AIMessage.outcome` (Sprint 9) into the engine — every
+accepted/rejected/corrected answer becomes a `KgFeedbackRecord` (+ long-term memory), so
+the AI actually learns.
+
+**Spec:** `tasks/SPRINT-10-LEARNING.md` — 🔨 Spec written, awaiting backend dispatch.
+
+| Task | Worker | Detail |
+|---|---|---|
+| Add `AIMessage.learned_at` + migration | Backend Worker | Idempotency marker for the learning job |
+| `ai/learning.py` — outcome→signal bridge | Backend Worker | Maps accepted/corrected/rejected → engine `record_feedback` + `LongTermMemory.store_fact` |
+| `learn_from_feedback` management command | Backend Worker | Batch job (`--limit`, `--dry-run`) over unprocessed messages |
+| Tests (mapping + bridge + idempotency) | Backend Worker | `backend/ai/tests/test_learning.py` |
+
+Deferred to Sprint 11: real-time trigger on feedback POST, scheduler wiring, learn-facts
+frontend console.
+
+---
+
 ## After Sprint 9: system is complete for DQ+AI
 
 At this point:
