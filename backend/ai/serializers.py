@@ -28,3 +28,17 @@ class ConversationListSerializer(serializers.Serializer):
         required=False,
     )
     limit = serializers.IntegerField(required=False, default=50, max_value=200, min_value=1)
+
+
+class MessageFeedbackSerializer(serializers.Serializer):
+    outcome = serializers.ChoiceField(
+        choices=["accepted", "rejected", "corrected", "ignored"],
+    )
+    correction_text = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs):
+        if attrs.get("outcome") == "corrected" and not attrs.get("correction_text", "").strip():
+            raise serializers.ValidationError(
+                {"correction_text": "A correction is required when outcome is 'corrected'."}
+            )
+        return attrs

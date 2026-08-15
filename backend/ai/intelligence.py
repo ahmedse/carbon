@@ -40,6 +40,11 @@ from ai.domain import emissions  # noqa: F401  (registers the emissions domain)
 
 logger = logging.getLogger("carbon.ai.intelligence")
 
+
+class NotAssistantMessageError(ValueError):
+    """Feedback can only target assistant messages (client error, not a 404)."""
+
+
 # ── Scope builder ─────────────────────────────────────────────────────────
 
 
@@ -524,6 +529,44 @@ class CarbonIntelligence:
             for m in conversation.messages.order_by("created_at")
         ]
         return data
+
+    def record_feedback(
+        self,
+        user,
+        conversation_id,
+        message_id,
+        outcome,
+        correction_text="",
+    ):
+        """Record user judgement (accept/reject/correct/ignore) on an AI message.
+
+        The message lookup is scoped through the user's own conversation so
+        feedback can never leak across users. Idempotent: re-posting the same
+        outcome simply overwrites.
+        """
+        from ai.models import AIConversation, AIMessage
+
+        try:
+            conversation = AIConversation.objects.get(id=conversation_id, user=user)
+        except AIConversation.DoesNotExist:
+            raise ValueError(f"Conversation {conversation_id} not found.")
+
+        try:
+            message = AIMessage.objects.get(id=message_id, conversation=conversation)
+        except AIMessage.DoesNotExist:
+            raise ValueError(f"Message {message_id} not found.")
+
+        if message.role != "assistant":
+            raise NotAssistantMessageError("Only assistant messages can receive feedback.")
+
+        if outcome == "corrected":
+            message.correction_text = correction_text
+        else:
+            message.correction_text = ""
+
+        message.outcome = outcome
+        message.save(update_fields=["outcome", "correction_text"])
+        return _serialize_message(message)
 
     def list_conversations(
         self,
@@ -1194,6 +1237,8 @@ def _serialize_message(message) -> dict[str, Any]:
         "role": message.role,
         "content": message.content,
         "metadata_json": message.metadata_json,
+        "outcome": message.outcome,
+        "correction_text": message.correction_text,
         "created_at": message.created_at.isoformat(),
     }
 

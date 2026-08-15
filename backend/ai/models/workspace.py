@@ -109,6 +109,27 @@ class AIMessage(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    OUTCOME_CHOICES = [
+        ("accepted", "Accepted"),
+        ("rejected", "Rejected"),
+        ("corrected", "Corrected"),
+        ("ignored", "Ignored"),
+    ]
+
+    outcome = models.CharField(
+        max_length=20,
+        choices=OUTCOME_CHOICES,
+        blank=True,
+        null=True,
+        default=None,
+        help_text="User judgement on this AI message (learning signal).",
+    )
+    correction_text = models.TextField(
+        blank=True,
+        default="",
+        help_text="User's correction when outcome='corrected'.",
+    )
+
     class Meta:
         app_label = "ai"
         ordering = ["created_at"]

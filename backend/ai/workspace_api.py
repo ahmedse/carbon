@@ -22,10 +22,11 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from ai.intelligence import CarbonIntelligence
+from ai.intelligence import CarbonIntelligence, NotAssistantMessageError
 from ai.serializers import (
     ConversationListSerializer,
     CreateConversationSerializer,
+    MessageFeedbackSerializer,
     SendMessageSerializer,
 )
 
@@ -111,6 +112,26 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 {"error": str(e)},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+    @action(detail=True, methods=["post"], url_path="messages/(?P<message_id>[^/.]+)/feedback")
+    def message_feedback(self, request, pk=None, message_id=None):
+        """Record user feedback (accept/reject/correct/ignore) on an AI message."""
+        serializer = MessageFeedbackSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            message = self.intelligence.record_feedback(
+                user=request.user,
+                conversation_id=pk,
+                message_id=message_id,
+                outcome=serializer.validated_data["outcome"],
+                correction_text=serializer.validated_data.get("correction_text", ""),
+            )
+            return Response(message)
+        except NotAssistantMessageError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=["post"], url_path="messages/stream")
     def send_message_stream(self, request, pk=None):
