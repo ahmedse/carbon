@@ -3,7 +3,7 @@
 // Pattern: GWPReferencePage style — MUI Table with icons, Drawer for create/edit
 // All colours via theme.palette, zero hardcoded hex
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -322,11 +322,7 @@ export default function SBTiTargetsPage() {
 
   const isAdmin = user?.is_staff || user?.is_superuser || (availablePerspectives || []).includes('carbon-admin');
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -337,7 +333,11 @@ export default function SBTiTargetsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleCreate = () => {
     setCurrentTarget(null);

@@ -2,7 +2,7 @@
 // Catalog: Browse and manage asset profiles (metadata for tables/fields)
 // Phase 1: Unified list view with DataGrid, filtering, searching, sorting, pagination
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
@@ -151,12 +151,7 @@ export default function AssetsPage() {
   const [filterQuality, setFilterQuality] = useState('');
   const [filterAssetType, setFilterAssetType] = useState('');
 
-  // Load assets and domains on mount
-  useEffect(() => {
-    loadData();
-  }, [token]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -173,7 +168,12 @@ export default function AssetsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, notify]);
+
+  // Load assets and domains on mount
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Filter and sort assets
   const filteredAssets = useMemo(() => {

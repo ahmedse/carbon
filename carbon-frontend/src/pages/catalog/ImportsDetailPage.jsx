@@ -1,6 +1,6 @@
 // src/pages/catalog/ImportsDetailPage.jsx
 // Imports: Import job history and upload wizard
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
@@ -50,11 +50,7 @@ export default function ImportsDetailPage() {
     format: 'excel'
   });
 
-  useEffect(() => {
-    loadData();
-  }, [token]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -71,7 +67,11 @@ export default function ImportsDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, notify]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleFileChange = (e) => {
     setUploadForm({ ...uploadForm, file: e.target.files[0] });

@@ -9,6 +9,7 @@ import WifiOffIcon from "@mui/icons-material/WifiOff";
 const NetworkStatusContext = createContext({ online: true });
 
 /** Hook for components/API calls to check online state before firing. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useNetworkStatus() {
   return useContext(NetworkStatusContext);
 }

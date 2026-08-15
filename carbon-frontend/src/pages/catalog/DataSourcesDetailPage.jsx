@@ -1,6 +1,6 @@
 // src/pages/catalog/DataSourcesDetailPage.jsx
 // Data Sources: Enhanced CRUD with test functionality and status indicators
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import SystemDialog from '../../components/SystemDialog';
@@ -56,11 +56,7 @@ export default function DataSourcesDetailPage() {
   const [testingId, setTestingId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  useEffect(() => {
-    loadSources();
-  }, [token]);
-
-  const loadSources = async () => {
+  const loadSources = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -73,7 +69,11 @@ export default function DataSourcesDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, notify]);
+
+  useEffect(() => {
+    loadSources();
+  }, [loadSources]);
 
   const openCreate = () => {
     setEditingSource(null);

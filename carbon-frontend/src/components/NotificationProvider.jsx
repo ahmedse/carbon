@@ -264,6 +264,7 @@ export function NotificationProvider({ children }) {
 }
 
 // Robust: never throw, just warn if out of context, and always provide a safe fallback
+// eslint-disable-next-line react-refresh/only-export-components
 export function useNotification() {
   const ctx = useContext(NotificationContext);
   if (!ctx || typeof ctx.notify !== "function") {

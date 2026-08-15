@@ -329,25 +329,31 @@ export function Shell() {
                 }
               }}
             >
-              {/* Main Editor Area */}
-              <Allotment.Pane minSize={320} preferredSize={1}>
+              {/* Main Editor Area.
+                  Never remounted: this pane keeps a stable key/identity, so
+                  toggling the copilot below only adds/removes the second pane
+                  and does NOT reset page state (e.g. active DQ Workspace tab). */}
+              <Allotment.Pane key="editor" minSize={320} preferredSize={1}>
                 <EditorArea />
               </Allotment.Pane>
 
               {/* Right Copilot Pane — AI Workspace.
-                  Kept mounted and toggled via `visible` so opening/closing the
-                  pane never remounts the EditorArea (which would reset page
-                  state such as the active DQ Workspace tab). */}
-              <Allotment.Pane
-                minSize={280}
-                preferredSize={copilotPaneSize}
-                maxSize={520}
-                visible={copilotVisible}
-              >
-                <ErrorBoundary>
-                  <AIWorkspace onClose={toggleCopilot} />
-                </ErrorBoundary>
-              </Allotment.Pane>
+                  Conditionally rendered (NOT `visible`): allotment 1.20's
+                  `visible` prop throws "Index out of bounds" under React 19
+                  StrictMode. Adding/removing this pane does not remount the
+                  editor pane above. */}
+              {copilotVisible && (
+                <Allotment.Pane
+                  key="copilot"
+                  minSize={280}
+                  preferredSize={copilotPaneSize}
+                  maxSize={520}
+                >
+                  <ErrorBoundary>
+                    <AIWorkspace onClose={toggleCopilot} />
+                  </ErrorBoundary>
+                </Allotment.Pane>
+              )}
             </Allotment>
           </Box>
         </AITaskTransferProvider>

@@ -23,7 +23,7 @@ export default function DataHubHome() {
   useDocumentTitle("Data Hub");
   const navigate = useNavigate();
   const { context, availablePerspectives, tablesByModule } = useAuth();
-  const modules = context?.modules || [];
+  const modules = useMemo(() => context?.modules || [], [context?.modules]);
   const isAdmin = availablePerspectives?.includes('admin') || availablePerspectives?.includes('carbon-admin');
 
   const [scopeFilter, setScopeFilter] = useState('all');

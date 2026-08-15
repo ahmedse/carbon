@@ -2,7 +2,7 @@
 // Asset Detail: Full view of a data asset with governance metadata and audit history
 // Phase 2: Detail page using BaseDetailPage pattern with tabs
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
@@ -46,12 +46,7 @@ export default function AssetDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load asset, governance events, and select options
-  useEffect(() => {
-    loadAssetData();
-  }, [assetId, token]);
-
-  const loadAssetData = async () => {
+  const loadAssetData = useCallback(async () => {
     if (!assetId || assetId === 'new') {
       setLoading(false);
       return;
@@ -87,7 +82,12 @@ export default function AssetDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, assetId, notify]);
+
+  // Load asset, governance events, and select options on mount
+  useEffect(() => {
+    loadAssetData();
+  }, [loadAssetData]);
 
   const handleAssetUpdated = async () => {
     // Refresh asset and events after update

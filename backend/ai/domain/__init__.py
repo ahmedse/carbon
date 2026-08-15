@@ -7,6 +7,6 @@ See .ai-toolkit/shared/ai-contract.md §8 for registration steps.
 
 Current domains:
   - emissions (carbon footprint)
-  - (future) water
+  - water (water management)
   - (future) waste
 """

@@ -1,7 +1,7 @@
 // File: src/pages/admin/AuditLogPage.jsx
 // Admin Audit Log Page - comprehensive record of all system changes and user actions
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
   Container,
@@ -191,7 +191,7 @@ export default function AuditLogPage() {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
 
-  const fetchAudits = async () => {
+  const fetchAudits = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -215,11 +215,11 @@ export default function AuditLogPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterAction, filterUser, filterDateFrom, filterDateTo]);
 
   useEffect(() => {
     fetchAudits();
-  }, [filterAction, filterUser, filterDateFrom, filterDateTo]);
+  }, [fetchAudits]);
 
   const handleRefresh = () => {
     fetchAudits();

@@ -1,7 +1,7 @@
 // src/pages/catalog/MetadataManagementPage.jsx
 // Consolidated metadata management: Domains, Glossary, Tags in one place
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
@@ -77,10 +77,6 @@ export default function MetadataManagementPage() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  useEffect(() => {
-    loadData();
-  }, [token]);
-
   // Sync URL hash with tab
   useEffect(() => {
     const tabNames = ['domains', 'glossary', 'tags'];
@@ -90,7 +86,7 @@ export default function MetadataManagementPage() {
     }
   }, [tabIndex, location.hash, location.pathname, navigate]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [domainsData, glossaryData, tagsData] = await Promise.all([
@@ -106,7 +102,11 @@ export default function MetadataManagementPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, notify]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleTabChange = (event, newValue) => {
     setTabIndex(newValue);

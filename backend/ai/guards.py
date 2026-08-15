@@ -105,7 +105,7 @@ class DataIsolationGuard:
     # Registered domain apps and their allowed table prefixes
     DOMAIN_TABLES: dict[str, list[str]] = {
         "emissions": ["emissions_", "carbon_", "footprint_", "emission_"],
-        # Future: "water": ["water_", "aquifer_"],
+        "water": ["water_", "aquifer_", "chilled_water_", "effluent_"],
         # Future: "waste": ["waste_", "landfill_"],
     }
 

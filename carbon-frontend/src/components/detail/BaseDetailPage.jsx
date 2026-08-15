@@ -1,7 +1,7 @@
 // File: src/components/detail/BaseDetailPage.jsx
 // Unified base component for all detail pages with three-column layout pattern
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   CircularProgress,
@@ -82,7 +82,7 @@ export default function BaseDetailPage({
     localStorage.setItem(`${storageKey}:metricsTab`, newValue);
   };
 
-  const handlePanelWidthChange = (newWidth) => {
+  const handlePanelWidthChange = useCallback((newWidth) => {
     const maxWidth = MAX_PANEL_WIDTH_PERCENT * window.innerWidth;
     const constrainedWidth = Math.max(
       MIN_PANEL_WIDTH,
@@ -90,7 +90,7 @@ export default function BaseDetailPage({
     );
     setPanelWidth(constrainedWidth);
     localStorage.setItem(`${storageKey}:panelWidth`, constrainedWidth);
-  };
+  }, [storageKey]);
 
   const handleToggleMetricsPanel = () => {
     const newState = !metricsPanelOpen;
@@ -118,7 +118,7 @@ export default function BaseDetailPage({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDragging]);
+  }, [isDragging, handlePanelWidthChange]);
 
   // Loading state
   if (loading) {

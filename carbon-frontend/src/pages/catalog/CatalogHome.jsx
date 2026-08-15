@@ -1,6 +1,6 @@
 // src/pages/catalog/CatalogHome.jsx
 // Catalog Studio Home: Dashboard overview of data governance
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
@@ -32,11 +32,7 @@ export default function CatalogHome() {
     qualityScore: 0,
   });
 
-  useEffect(() => {
-    loadDashboardData();
-  }, [token]);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -64,7 +60,11 @@ export default function CatalogHome() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, notify]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   if (loading) {
     return (

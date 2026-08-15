@@ -1,7 +1,7 @@
 // src/pages/catalog/ConnectionsPage.jsx
 // Catalog: Manage data sources and consuming connections (API keys for external systems)
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import SystemDialog from '../../components/SystemDialog';
@@ -103,11 +103,7 @@ export default function ConnectionsPage() {
     { value: 'custom', label: 'Custom' },
   ];
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -122,7 +118,11 @@ export default function ConnectionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleOpenDialog = (type, item = null) => {
     setDialogType(type);

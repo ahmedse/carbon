@@ -14,7 +14,7 @@ const ALLOWED_TYPES = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': []
 };
 
-export default function EvidenceUploader({ dataRowId, token, onUploadComplete }) {
+export default function EvidenceUploader({ dataRowId, onUploadComplete }) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState([]);
@@ -57,7 +57,7 @@ export default function EvidenceUploader({ dataRowId, token, onUploadComplete })
     } finally {
       setUploading(false);
     }
-  }, [dataRowId, token, onUploadComplete]);
+  }, [dataRowId, onUploadComplete]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

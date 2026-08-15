@@ -1,7 +1,7 @@
 // File: src/pages/dataschema/ResizableDivider.jsx
 // Resizable divider between main content and metrics panel
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Box } from '@mui/material';
 
 const MIN_WIDTH = 250;
@@ -15,11 +15,11 @@ export default function ResizableDivider({ onResize }) {
     setIsDragging(true);
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     setIsDragging(false);
-  };
+  }, []);
 
-  const handleMouseMove = (e) => {
+  const handleMouseMove = useCallback((e) => {
     if (!isDragging) return;
 
     // Calculate new panel width based on mouse position
@@ -30,7 +30,7 @@ export default function ResizableDivider({ onResize }) {
     if (newWidth >= MIN_WIDTH && newWidth <= maxWidth) {
       onResize(newWidth);
     }
-  };
+  }, [isDragging, onResize]);
 
   // Attach/detach mouse events
   React.useEffect(() => {
@@ -47,7 +47,7 @@ export default function ResizableDivider({ onResize }) {
         document.body.style.cursor = 'auto';
       };
     }
-  }, [isDragging]);
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
   return (
     <Box

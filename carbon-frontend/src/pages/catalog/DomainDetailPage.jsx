@@ -51,7 +51,7 @@ export default function DomainDetailPage() {
     };
 
     fetchDomain();
-  }, [domainId, token]);
+  }, [domainId, token, notify]);
 
   const headerComponent = (
     <DetailHeader

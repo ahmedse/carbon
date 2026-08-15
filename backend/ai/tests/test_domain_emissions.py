@@ -126,7 +126,7 @@ def test_prepend_domain_context_no_app_identifier():
 
 def test_prepend_domain_context_unknown_domain():
     ci = _make_ci()
-    assert ci._prepend_domain_context(Scope(app_identifier="water"), "hello") == "hello"
+    assert ci._prepend_domain_context(Scope(app_identifier="waste"), "hello") == "hello"
 
 
 def test_prepend_domain_context_none_scope():

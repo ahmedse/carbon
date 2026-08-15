@@ -85,9 +85,9 @@ export default function KnowledgeGraphPanel() {
     };
   }, [token]);
 
-  const nodes = data?.nodes ?? [];
-  const edges = data?.edges ?? [];
-  const stats = data?.stats ?? {};
+  const nodes = useMemo(() => data?.nodes ?? [], [data?.nodes]);
+  const edges = useMemo(() => data?.edges ?? [], [data?.edges]);
+  const stats = useMemo(() => data?.stats ?? {}, [data?.stats]);
 
   // ── Derived: deterministic type → color mapping + node degrees ───────────
   const typeColors = useMemo(() => {

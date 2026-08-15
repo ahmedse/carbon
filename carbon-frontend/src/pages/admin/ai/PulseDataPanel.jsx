@@ -153,7 +153,7 @@ export default function PulseDataPanel({ title, description, dataKey, emptyHint 
     };
   }, [token, dataKey]);
 
-  const rows = data?.results ?? [];
+  const rows = useMemo(() => data?.results ?? [], [data?.results]);
 
   const columns = useMemo(() => {
     if (!rows.length) return [];

@@ -219,11 +219,11 @@ export default function EmissionsDashboard({ projectId }) {
   };
 
   // Scope colors
-  const scopeColors = {
+  const scopeColors = useMemo(() => ({
     1: "#10b981", // Green - Scope 1
     2: "#3b82f6", // Blue - Scope 2
     3: "#f59e0b", // Orange - Scope 3
-  };
+  }), []);
 
   // Chart configurations
   const monthlyTrendChart = useMemo(() => {
@@ -264,7 +264,7 @@ export default function EmissionsDashboard({ projectId }) {
         },
       ],
     };
-  }, [data]);
+  }, [data, scopeColors]);
 
   const scopePieChart = useMemo(() => {
     if (!data?.scope_breakdown) return null;
@@ -281,7 +281,7 @@ export default function EmissionsDashboard({ projectId }) {
         },
       ],
     };
-  }, [data]);
+  }, [data, scopeColors]);
 
   const categoryBarChart = useMemo(() => {
     if (!data?.category_breakdown) return null;

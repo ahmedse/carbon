@@ -2,7 +2,7 @@
 // Master Data Management: Reference Sets and Org Units
 // Standard grids with quick-filter toolbar, full CRUD dialogs, all four data states
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { useAuth } from '../../auth/AuthContext';
@@ -141,7 +141,7 @@ export default function MDMPage() {
   // Confirm delete dialog
   const [confirmState, setConfirmState] = useState(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -162,11 +162,11 @@ export default function MDMPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, notify]);
 
   useEffect(() => {
     loadData();
-  }, [token]);
+  }, [loadData]);
 
   // ---- Reference Set dialog handlers ----
   const openRefSetDialog = (row = null) => {

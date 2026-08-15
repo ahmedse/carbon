@@ -37,6 +37,7 @@ from backend.ai.protocol import (
 from backend.ai.providers.pulse import PulseProvider
 from ai.domain_protocol import DomainContext, get_domain, has_domain
 from ai.domain import emissions  # noqa: F401  (registers the emissions domain)
+from ai.domain import water  # noqa: F401  (registers the water domain)
 
 logger = logging.getLogger("carbon.ai.intelligence")
 

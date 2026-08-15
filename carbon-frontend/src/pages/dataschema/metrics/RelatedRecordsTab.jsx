@@ -9,7 +9,7 @@
 //   4. Find temporal neighbors (adjacent period_month rows)
 //   5. Build collapsible relationship groups with PanelTable
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -33,12 +33,8 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
+  const discoverRelationships = useCallback(async () => {
     if (!tableId || !token) return;
-    discoverRelationships();
-  }, [tableId, rowId, token]);
-
-  async function discoverRelationships() {
     setLoading(true);
     setError(null);
     const built = [];
@@ -184,7 +180,11 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
 
     setGroups(built);
     setLoading(false);
-  }
+  }, [tableId, token, rowData, rowId]);
+
+  useEffect(() => {
+    discoverRelationships();
+  }, [discoverRelationships]);
 
   function renderGroupRows(rows) {
     return rows.map(r => {

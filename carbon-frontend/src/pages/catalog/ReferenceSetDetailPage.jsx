@@ -2,7 +2,7 @@
 // Reference Set Detail: Full view with governance metadata and values management
 // Phase 2: Detail page using BaseDetailPage pattern with tabs
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
@@ -42,11 +42,7 @@ export default function ReferenceSetDetailPage() {
   const [error, setError] = useState(null);
 
   // Load reference set, values, and select options
-  useEffect(() => {
-    loadReferenceSetData();
-  }, [setId, token]);
-
-  const loadReferenceSetData = async () => {
+  const loadReferenceSetData = useCallback(async () => {
     if (!setId || setId === 'new') {
       setLoading(false);
       return;
@@ -78,7 +74,11 @@ export default function ReferenceSetDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, setId, notify]);
+
+  useEffect(() => {
+    loadReferenceSetData();
+  }, [loadReferenceSetData]);
 
   const handleRefSetUpdated = async () => {
     // Refresh reference set and values after update

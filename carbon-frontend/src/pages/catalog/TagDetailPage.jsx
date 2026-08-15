@@ -49,7 +49,7 @@ export default function TagDetailPage() {
     };
 
     fetchTag();
-  }, [tagId, token]);
+  }, [tagId, token, notify]);
 
   const headerComponent = (
     <DetailHeader

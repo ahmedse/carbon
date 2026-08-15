@@ -3,7 +3,7 @@
 // Pattern: EmissionFactorsPage style — MUI Table with icons, dialogs for create/edit
 // All colours via theme.palette, zero hardcoded hex
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -297,11 +297,7 @@ export default function CalculationRulesPage() {
   const { notify, notifyFromError } = useNotification();
   const isAdmin = user?.is_superuser || user?.groups?.includes('admins_group');
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -313,7 +309,11 @@ export default function CalculationRulesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, notifyFromError]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleCreate = () => {
     setCurrentRule(null);

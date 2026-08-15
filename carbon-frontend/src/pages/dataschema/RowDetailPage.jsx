@@ -355,7 +355,7 @@ function RowHistoryTab({ rowId, tableId, token }) {
       } catch { /* ok if empty */ }
       setLoading(false);
     })();
-  }, [token, rowId]);
+  }, [token, rowId, tableId]);
 
   const total = events.length;
   const paged = events.slice((page - 1) * pageSize, page * pageSize);

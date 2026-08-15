@@ -37,7 +37,7 @@ describe('Capability Constants', () => {
     const constants = Object.entries(caps)
       .filter(([k, v]) => k === k.toUpperCase() && typeof v === 'string' && v.includes(':'));
     expect(constants.length).toBeGreaterThan(0);
-    for (const [name, value] of constants) {
+    for (const [, value] of constants) {
       expect(value).toMatch(/^[a-z_]+:[a-z_]+$/);
     }
   });
@@ -774,7 +774,7 @@ describe('canAccessRoute', () => {
   });
 
   it('denies inherited route when no matching route', () => {
-    const expanded = new Set([caps.CARBON_MANAGE_EMISSION_FACTORS, caps.CARBON_VIEW_CONSOLE]);
+    const _expanded = new Set([caps.CARBON_MANAGE_EMISSION_FACTORS, caps.CARBON_VIEW_CONSOLE]);
     // /carbon/analytics requires CARBON_VIEW_ANALYTICS specifically
     // Unless inherited, this should be denied
   });
@@ -1292,12 +1292,11 @@ describe('RBAC Utils — canAccessRoute (legacy)', () => {
 });
 
 describe('RBAC Utils — filterMenuItems (legacy)', () => {
-  let filterMenuItems, isGlobalAdmin;
+  let filterMenuItems;
 
   beforeAll(async () => {
     const rbac = await import('../utils/rbac');
     filterMenuItems = rbac.filterMenuItems;
-    isGlobalAdmin = rbac.isGlobalAdmin;
   });
 
   const sampleItems = [
@@ -1358,7 +1357,7 @@ describe('RBAC Utils — filterMenuItems (legacy)', () => {
 // TEST SUITE 13: AdminRoute Component
 // ═══════════════════════════════════════════════════════════════════
 describe('AdminRoute Component', () => {
-  let useAuthMock;
+  let _useAuthMock;
 
   beforeEach(async () => {
     vi.resetModules();
@@ -1384,9 +1383,9 @@ describe('AdminRoute Component', () => {
     vi.restoreAllMocks();
   });
 
-  const renderAdminRoute = async (props = {}) => {
+  const _renderAdminRoute = async (props = {}) => {
     const { useAuth } = await import('../auth/AuthContext');
-    useAuthMock = useAuth;
+    _useAuthMock = useAuth;
 
     const { default: AdminRoute } = await import('../components/AdminRoute');
     return render(
@@ -1477,7 +1476,7 @@ describe('AdminRoute Component', () => {
       isGlobalAdminFlag: false,
     });
     const { default: AdminRoute } = await import('../components/AdminRoute');
-    const { container } = render(
+    render(
       <MemoryRouter>
         <AdminRoute>
           <div>Admin Content</div>
@@ -1766,7 +1765,7 @@ describe('Edge Cases', () => {
     const expanded = new Set([caps.PLATFORM_MANAGE_USERS]);
     // Trailing slashes should still work (exact match)
     const noTrail = caps.canAccessRoute(expanded, '/admin/users');
-    const withTrail = caps.canAccessRoute(expanded, '/admin/users/');
+    const _withTrail = caps.canAccessRoute(expanded, '/admin/users/');
     // Both should behave the same since we removed the /* pattern
     // The route map has no trailing slash, so trailing slash won't match
     // But the function defaults to true for unknown routes
@@ -1877,7 +1876,7 @@ describe('Cross-Module Integration', () => {
     // Every named export that is a string constant should be non-empty
     const stringExports = Object.entries(caps)
       .filter(([k, v]) => k === k.toUpperCase() && typeof v === 'string');
-    for (const [name, value] of stringExports) {
+    for (const [, value] of stringExports) {
       expect(value.length).toBeGreaterThan(0);
     }
   });
@@ -1887,7 +1886,7 @@ describe('Cross-Module Integration', () => {
     const ci = {
       'carbon:manage_emission_factors': ['carbon:view_console'],
     };
-    for (const [key, val] of Object.entries(ci)) {
+    for (const [, val] of Object.entries(ci)) {
       expect(Array.isArray(val)).toBe(true);
       val.forEach(v => expect(typeof v).toBe('string'));
     }

@@ -1,6 +1,6 @@
 // src/pages/catalog/GovernancePage.jsx
 // Governance: Read-only audit log of governance events
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
@@ -22,11 +22,7 @@ export default function GovernancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    loadEvents();
-  }, [token]);
-
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -40,7 +36,11 @@ export default function GovernancePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, notify]);
+
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
 
   if (loading) {
     return (

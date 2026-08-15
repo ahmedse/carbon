@@ -8,7 +8,7 @@
 //   - With requiredCapability: explicit capability check via can(user, 'access_route', path, ctx)
 //     where the path is looked up in ROUTE_CAPABILITIES to find the matching capability.
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useNotification } from "./NotificationProvider";
@@ -19,9 +19,12 @@ export default function AdminRoute({ children, redirectTo = "/", appId = null, r
   const { user, loading, availablePerspectives, isGlobalAdminFlag, userCapabilities, context } = useAuth();
   const location = useLocation();
   const notifyCtx = useNotification();
-  const notify = typeof notifyCtx?.notify === "function"
-    ? notifyCtx.notify
-    : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
+  const notify = useMemo(
+    () => typeof notifyCtx?.notify === "function"
+      ? notifyCtx.notify
+      : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification")),
+    [notifyCtx?.notify]
+  );
   const notifiedRef = useRef(false);
 
   // Build unified auth context

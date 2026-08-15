@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box, Paper, Typography, Tabs, Tab, TextField, Select, MenuItem,
   FormControl, InputLabel, Button, Switch, FormControlLabel,
@@ -55,7 +55,7 @@ export default function PlatformConfigPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   const configs = [emailConfig, backupConfig, logConfig, apiConfig];
-  const setters = [setEmailConfig, setBackupConfig, setLogConfig, setApiConfig];
+  const setters = useMemo(() => [setEmailConfig, setBackupConfig, setLogConfig, setApiConfig], []);
 
   const fetchConfig = useCallback(async (idx) => {
     try {
@@ -64,7 +64,7 @@ export default function PlatformConfigPage() {
     } catch {
       // ignore — user may not have perms
     }
-  }, []);
+  }, [setters]);
 
   useEffect(() => {
     setLoading(true);

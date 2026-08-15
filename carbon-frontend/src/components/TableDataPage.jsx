@@ -1,6 +1,6 @@
 // File: src/components/TableDataPage.jsx
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Box, Typography, Button } from "@mui/material";
 import UploadIcon from "@mui/icons-material/Upload";
 import DownloadIcon from "@mui/icons-material/Download";
@@ -51,12 +51,15 @@ export default function TableDataPage({
   const [showImportWizard, setShowImportWizard] = useState(false);
 
   const notifyCtx = useNotification();
-  const notify = typeof notifyCtx?.notify === "function"
-    ? notifyCtx.notify
-    : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification"));
+  const notify = useMemo(
+    () => typeof notifyCtx?.notify === "function"
+      ? notifyCtx.notify
+      : (msg) => window.alert(typeof msg === "string" ? msg : (msg?.message ?? "Notification")),
+    [notifyCtx?.notify]
+  );
 
   // Helper to handle and notify all errors
-  function handleError(err, defaultMsg) {
+  const handleError = useCallback((err, defaultMsg) => {
     // Log all error details for developers
     console.error("[TableDataPage] Error:", err);
 
@@ -91,7 +94,7 @@ export default function TableDataPage({
         type: "error",
       });
     }
-  }
+  }, [notify]);
 
   // Defensive: ensure fetches are always safe
   const fetchRows = useCallback(() => {
@@ -108,7 +111,7 @@ export default function TableDataPage({
         setLoading(false);
         handleError(err, "Failed to fetch rows");
       });
-  }, [token, tableId, filters, project_id, module_id]);
+  }, [token, tableId, filters, project_id, module_id, handleError]);
 
   // Fetch schema on mount
   useEffect(() => {

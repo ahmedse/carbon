@@ -56,7 +56,7 @@ export default function OrgUnitDetailPage() {
     };
 
     fetchData();
-  }, [orgUnitId, user?.token]);
+  }, [orgUnitId, user?.token, notify]);
 
   const headerComponent = (
     <DetailHeader

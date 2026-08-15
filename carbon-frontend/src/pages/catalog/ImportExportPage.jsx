@@ -1,7 +1,7 @@
 // src/pages/catalog/ImportExportPage.jsx
 // Catalog: Manage bulk import/export of data (jobs and reusable export projects)
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import SystemDialog from '../../components/SystemDialog';
@@ -107,11 +107,7 @@ export default function ImportExportPage() {
     { value: 'monthly', label: 'Monthly' },
   ];
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -132,7 +128,11 @@ export default function ImportExportPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleOpenDialog = (type, project = null) => {
     setDialogType(type);

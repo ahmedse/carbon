@@ -1,5 +1,5 @@
 // src/pages/admin/tabs/GroupRoleAssignmentsTab.jsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -45,7 +45,7 @@ export default function GroupRoleAssignmentsTab({ entityData: group }) {
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!group?.id) return;
     setLoading(true);
     setError(null);
@@ -67,11 +67,11 @@ export default function GroupRoleAssignmentsTab({ entityData: group }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, group?.id]);
 
   useEffect(() => {
     loadData();
-  }, [group?.id, token]);
+  }, [loadData]);
 
   const openCreate = () => {
     setError(null);

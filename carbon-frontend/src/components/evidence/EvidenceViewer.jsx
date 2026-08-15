@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, List, ListItem, ListItemText, ListItemIcon, IconButton, CircularProgress, Alert } from '@mui/material';
 import { InsertDriveFile as FileIcon, Download as DownloadIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { authFetch } from '../../api/api';
@@ -20,7 +20,7 @@ export default function EvidenceViewer({ dataRowId, token, onDelete }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchEvidence = async () => {
+  const fetchEvidence = useCallback(async () => {
     if (!dataRowId) return;
     setLoading(true);
     setError(null);
@@ -55,11 +55,11 @@ export default function EvidenceViewer({ dataRowId, token, onDelete }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dataRowId]);
 
   useEffect(() => {
     fetchEvidence();
-  }, [dataRowId, token]);
+  }, [dataRowId, token, fetchEvidence]);
 
   useEffect(() => {
     const onEvidenceRefresh = (event) => {
@@ -69,7 +69,7 @@ export default function EvidenceViewer({ dataRowId, token, onDelete }) {
 
     window.addEventListener('evidenceRefresh', onEvidenceRefresh);
     return () => window.removeEventListener('evidenceRefresh', onEvidenceRefresh);
-  }, [dataRowId, token]);
+  }, [dataRowId, token, fetchEvidence]);
 
   const handleDownload = async (evidenceId, filename) => {
     try {
