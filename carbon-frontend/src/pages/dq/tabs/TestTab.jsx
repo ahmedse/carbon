@@ -22,9 +22,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { PlayArrow, CheckCircle, Cancel, RemoveCircle, SmartToy } from '@mui/icons-material';
+import { PlayArrow, CheckCircle, Cancel, RemoveCircle } from '@mui/icons-material';
 import { RULE_TYPE_LABELS } from '../constants';
 import { useAITaskTransfer } from '../../../shell/useAITaskTransfer';
+import AIActionButton from '../../../components/dq/AIActionButton';
 
 // ── Client-side evaluator (mirrors backend dq/engine.py evaluate) ──────────
 
@@ -386,16 +387,11 @@ export default function TestTab({ rule }) {
             >
               Test
             </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              color="secondary"
-              startIcon={<SmartToy />}
+            <AIActionButton
+              title="Check with AI"
               onClick={handleTransferToAI}
-              disabled={transferring}
-            >
-              {transferring ? 'Transferring…' : 'Check with AI'}
-            </Button>
+              busy={transferring}
+            />
           </Stack>
         </Paper>
 

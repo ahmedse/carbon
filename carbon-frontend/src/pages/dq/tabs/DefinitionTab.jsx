@@ -10,11 +10,12 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { Save, SmartToy } from '@mui/icons-material';
+import { Save } from '@mui/icons-material';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { useAITaskTransfer } from '../../../shell/useAITaskTransfer';
 import RuleJsonEditor from '../../../components/dq/RuleJsonEditor';
+import AIActionButton from '../../../components/dq/AIActionButton';
 import { validateDefinitionClient, normalizeServerErrors } from '../../../components/dq/ruleJsonValidation';
 import { updateDQRule, listDQTags } from '../../../api/dq';
 import { fetchAssetProfiles } from '../../../api/catalog';
@@ -161,16 +162,12 @@ function DefinitionTab({ rule, onChanged }) {
         />
         {rule?.archived ? <Chip size="small" variant="outlined" color="default" label="Archived" /> : null}
         <Box sx={{ flexGrow: 1 }} />
-        <Button
-          variant="outlined"
-          size="small"
-          color="secondary"
-          startIcon={<SmartToy />}
+        <AIActionButton
+          title="Validate with AI"
           onClick={handleTransferToAI}
-          disabled={transferring || rule?.archived}
-        >
-          {transferring ? 'Transferring…' : 'Validate with AI'}
-        </Button>
+          disabled={rule?.archived}
+          busy={transferring}
+        />
         <Button
           variant="contained"
           size="small"

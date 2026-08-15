@@ -189,6 +189,12 @@ export function useShellState() {
     setCopilotVisible(prev => !prev);
   }, []);
 
+  // Explicitly OPEN the copilot pane (used by task transfer to auto-open when hidden).
+  // Unlike toggleCopilot, this never closes an already-open pane.
+  const openCopilot = useCallback(() => {
+    setCopilotVisible(true);
+  }, []);
+
   return {
     studios,
     activeStudio,
@@ -202,6 +208,7 @@ export function useShellState() {
     togglePanel,
     copilotVisible,
     toggleCopilot,
+    openCopilot,
     commandPaletteOpen,
     setCommandPaletteOpen,
   };

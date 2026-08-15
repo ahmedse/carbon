@@ -1,9 +1,9 @@
 // carbon-frontend/src/pages/dq/tabs/StatsTab.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Alert, Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Box, Chip, Paper, Stack, Typography } from '@mui/material';
 import Grid from '@mui/material/Grid';
-import { TrendingDown, TrendingUp, TrendingFlat, AutoAwesome } from '@mui/icons-material';
+import { TrendingDown, TrendingUp, TrendingFlat } from '@mui/icons-material';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -20,6 +20,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { getDQRuleHistory, getDQResults } from '../../../api/dq';
 import { RESULT_STATUS_COLORS } from '../constants';
+import AIActionButton from '../../../components/dq/AIActionButton';
 
 ChartJS.register(
   CategoryScale,
@@ -152,14 +153,7 @@ function StatsTab({ rule, onAnalyzeAI }) {
           {runs.length} recorded run{runs.length === 1 ? '' : 's'}
         </Typography>
         <Box sx={{ flexGrow: 1 }} />
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<AutoAwesome />}
-          onClick={onAnalyzeAI}
-        >
-          Analyze trend with AI
-        </Button>
+        <AIActionButton title="Analyze trend with AI" onClick={onAnalyzeAI} />
       </Stack>
 
       <Grid container spacing={2} sx={{ mb: 2 }}>

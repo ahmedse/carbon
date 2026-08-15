@@ -85,6 +85,7 @@ export function Shell() {
     pinSidebar,
     copilotVisible,
     toggleCopilot,
+    openCopilot,
   } = useShellState();
 
   // Sync active studio with current URL
@@ -313,10 +314,9 @@ export function Shell() {
         )}
 
         {/* Resizable Main + Copilot Panes */}
-        <AITaskTransferProvider onRequestOpen={toggleCopilot}>
+        <AITaskTransferProvider onRequestOpen={openCopilot}>
           <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
             <Allotment
-              key={copilotVisible ? '2panes' : '1pane'}
               onChange={(sizes) => {
                 if (copilotVisible && sizes.length >= 2) {
                   const w = sizes[sizes.length - 1];
@@ -334,14 +334,20 @@ export function Shell() {
                 <EditorArea />
               </Allotment.Pane>
 
-              {/* Right Copilot Pane — AI Workspace */}
-              {copilotVisible && (
-                <Allotment.Pane minSize={280} preferredSize={copilotPaneSize} maxSize={520}>
-                  <ErrorBoundary>
-                    <AIWorkspace onClose={toggleCopilot} />
-                  </ErrorBoundary>
-                </Allotment.Pane>
-              )}
+              {/* Right Copilot Pane — AI Workspace.
+                  Kept mounted and toggled via `visible` so opening/closing the
+                  pane never remounts the EditorArea (which would reset page
+                  state such as the active DQ Workspace tab). */}
+              <Allotment.Pane
+                minSize={280}
+                preferredSize={copilotPaneSize}
+                maxSize={520}
+                visible={copilotVisible}
+              >
+                <ErrorBoundary>
+                  <AIWorkspace onClose={toggleCopilot} />
+                </ErrorBoundary>
+              </Allotment.Pane>
             </Allotment>
           </Box>
         </AITaskTransferProvider>

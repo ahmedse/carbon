@@ -10,13 +10,14 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { AutoAwesome, Close, InfoOutlined } from '@mui/icons-material';
+import { Close, InfoOutlined } from '@mui/icons-material';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
 import PanelTable from '../../../components/panel/PanelTable';
 import { getDQResults, getDQResultFailures } from '../../../api/dq';
 import { RESULT_STATUS_COLORS } from '../constants';
+import AIActionButton from '../../../components/dq/AIActionButton';
 
 function unwrap(data) {
   if (Array.isArray(data)) return data;
@@ -221,14 +222,7 @@ function ResultsTab({ rule, onExplainAI }) {
   return (
     <Box sx={{ p: 3 }}>
       <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<AutoAwesome />}
-          onClick={onExplainAI}
-        >
-          Explain failures with AI
-        </Button>
+        <AIActionButton title="Explain failures with AI" onClick={onExplainAI} />
       </Stack>
       <Paper variant="outlined" sx={{ borderRadius: 2 }}>
         <CarbonDataGrid

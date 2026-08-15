@@ -18,7 +18,6 @@ import {
 } from '@mui/material';
 import {
   AutoAwesome,
-  BugReport,
   CheckCircle,
   Dashboard,
   ErrorOutline,
@@ -60,6 +59,7 @@ import {
 } from './constants';
 import RulesTab from './tabs/RulesTab';
 import JobsTab from './tabs/JobsTab';
+import AIActionButton from '../../components/dq/AIActionButton';
 
 function unwrap(data) {
   if (Array.isArray(data)) return data;
@@ -222,13 +222,6 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
         </Grid>
       </Grid>
 
-      {Number(metrics_.skipped_rules) > 0 ? (
-        <Alert severity="warning" sx={{ mb: 1.5 }}>
-          Pulse could not evaluate {metrics_.skipped_rules} rule(s) — results are marked
-          skipped_unavailable and excluded from the pass-rate statistics above.
-        </Alert>
-      ) : null}
-
       {runningJobs.length > 0 ? (
         <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5, borderRadius: 2 }}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
@@ -254,9 +247,7 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
           {attentionResults.length ? ` (${attentionResults.length})` : ''}
         </Typography>
         <Stack direction="row" spacing={1}>
-          <Button size="small" variant="outlined" startIcon={<AutoAwesome />} onClick={onAskAI}>
-            Ask AI about DQ health
-          </Button>
+          <AIActionButton title="Ask AI about DQ health" onClick={onAskAI} />
           <Button size="small" variant="outlined" onClick={onRefresh}>
             Refresh
           </Button>
@@ -473,14 +464,10 @@ function SuggestionsTab() {
                   >
                     Reject
                   </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<AutoAwesome />}
+                  <AIActionButton
+                    title="Refine this suggestion with AI"
                     onClick={() => handleRefineWithAI(s)}
-                  >
-                    Refine with AI
-                  </Button>
+                  />
                 </Stack>
               </Stack>
             </Paper>
@@ -707,15 +694,12 @@ function MonitoringTab() {
         renderCell: ({ row }) => {
           const tableId = row?.data_table || row?.table_id || row?.id;
           return (
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<BugReport />}
-              disabled={!tableId || anomalyBusyTableId === tableId}
+            <AIActionButton
+              title="Analyze anomalies with AI"
+              disabled={!tableId}
+              busy={anomalyBusyTableId === tableId}
               onClick={() => handleAnalyzeAnomaliesWithAI(row)}
-            >
-              Analyze with AI
-            </Button>
+            />
           );
         },
       },
@@ -1184,14 +1168,7 @@ export default function DQWorkspacePage() {
       {mountedTabs.has(1) ? (
         <Box sx={{ display: tab === 1 ? 'block' : 'none' }}>
           <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<AutoAwesome />}
-              onClick={handleSuggestRulesAI}
-            >
-              Suggest rules with AI
-            </Button>
+            <AIActionButton title="Suggest rules with AI" onClick={handleSuggestRulesAI} />
           </Stack>
           <RulesTab onJobCreated={handleJobCreated} tableFilter={tableFilter} />
         </Box>
@@ -1199,14 +1176,7 @@ export default function DQWorkspacePage() {
       {mountedTabs.has(2) ? (
         <Box sx={{ display: tab === 2 ? 'block' : 'none' }}>
           <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<AutoAwesome />}
-              onClick={handleAnalyzeFailuresAI}
-            >
-              Analyze failures with AI
-            </Button>
+            <AIActionButton title="Analyze failures with AI" onClick={handleAnalyzeFailuresAI} />
           </Stack>
           <JobsTab jobs={jobs} loading={jobsLoading} reload={reloadJobs} />
         </Box>

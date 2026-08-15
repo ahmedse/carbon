@@ -34,6 +34,7 @@ import {
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import Editor from '@monaco-editor/react';
+import AIActionButton from './AIActionButton';
 import { useAuth } from '../../auth/AuthContext';
 import { useThemeMode } from '../../theme/useThemeMode';
 import { useNotification } from '../NotificationProvider';
@@ -198,15 +199,11 @@ export default function RuleJsonEditor({
             Validate
           </Button>
         </Tooltip>
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<AutoAwesomeIcon />}
+        <AIActionButton
+          title="Draft a rule with AI"
           onClick={() => setAiDraftOpen(true)}
           disabled={disabled || tables.length === 0}
-        >
-          Draft with AI
-        </Button>
+        />
         <Chip
           size="small"
           label={jsonValid ? 'JSON OK' : 'JSON invalid'}
