@@ -284,6 +284,39 @@ frontend console.
 
 ---
 
+## Sprint 11 — Learning flywheel: trigger + scheduler + console (2 days)
+**Status:** ✅ Done — backend `dfbfae1` (813 backend tests), frontend `learning-flywheel` console (lint/test/build green).
+**Goal:** Make the Sprint 9→10 feedback flywheel run itself and be observable.
+**Spec:** `tasks/SPRINT-11-LEARNING-TRIGGER.md`
+
+| Task | Worker | Detail |
+|---|---|---|
+| Real-time trigger in `record_feedback` | Backend Worker | `learn_from_message` runs best-effort after each feedback POST; failure never 500s the response |
+| `run_learning_loop` management command | Backend Worker | `--run-once` / `--status` / default interval scheduler (mirrors `run_cognition_loop`) |
+| Flywheel status + run API | Backend Worker | `GET ai/pulse/learning-status/` (`ai:view_console`) + `POST ai/pulse/learning-status/run/` (`ai:manage_console`) |
+| Durable store + scheduler sidecar | DevOps | `AI_STORE_BACKEND=django` in `.env`/`.env.example`; `learning-scheduler` service in `docker-compose.yml` |
+| Learn-facts console | Frontend Worker | `LearningFlywheelPanel` (status cards + recent facts + feedback ledger + Run-sweep button), `aiPulse.js` helpers, route `/admin/ai/learning-flywheel` + sidebar entry |
+| Tests | Backend Worker | `backend/ai/tests/test_learning_trigger.py` (7 new) |
+
+---
+
+## Sprint 12 — Tool/Workflow plugin registry: Carbon AI grows (1 week)
+**Goal:** Tools stop being generic API bridges and become well-defined, self-registering
+process plugins, so adding a new AI capability is *registering a tool*, not writing a new
+app or a new hardcoded function. This is the "Carbon AI becomes and grows" sprint.
+
+**Spec:** `tasks/SPRINT-12-PLUGIN-REGISTRY.md`
+
+| Task | Worker | Detail |
+|---|---|---|
+| `ToolPlugin` / `WorkflowPlugin` ABCs | Backend Worker | Declarative plugin contract (name, description, JSON schema, confirmation policy, execution fn) |
+| Self-registering registry (`engine/agent/registry.py`) | Backend Worker | Plugins discovered at startup; tool catalog assembled from static + plugin + MCP tools |
+| `create_dq_rule` workflow plugin (reference impl) | Backend Worker | First "specific-process" tool: natural-language rule → validated `DQRule` via the host API (JWT, confirmation-gated) |
+| Tool catalog read API + console | Backend + Frontend | CRUD-read surface over the registry so the catalog is inspectable and grows visibly |
+| Spec is the contract | Master Architect | Formalize the plugin ABC + registry + catalog + extensibility rules in `tasks/SPRINT-12-PLUGIN-REGISTRY.md` |
+
+---
+
 ## After Sprint 9: system is complete for DQ+AI
 
 At this point:

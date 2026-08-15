@@ -64,3 +64,26 @@ export function getSettings(token) {
 export function getPulseGraph(token) {
   return apiFetch(`${BASE}graph/`, { token });
 }
+
+/**
+ * Fetch the learning-flywheel status (durable backend, pending/processed
+ * judged messages, outcome breakdown, recent long-term-memory facts, and the
+ * feedback-record ledger).
+ * @param {string} token - JWT access token
+ * @returns {Promise<{backend, durable, pending, processed, by_outcome,
+ *                    facts: {counts, recent},
+ *                    feedback_records: {count, recent}}>}
+ */
+export function getLearningStatus(token) {
+  return apiFetch(`${BASE}learning-status/`, { token });
+}
+
+/**
+ * Trigger an on-demand learning sweep and return the refreshed status.
+ * @param {string} token - JWT access token
+ * @returns {Promise<{sweep: {processed, accepted, rejected, corrected, errors},
+ *                    status: object}>}
+ */
+export function runLearningSweep(token) {
+  return apiFetch(`${BASE}learning-status/run/`, { method: 'POST', token });
+}

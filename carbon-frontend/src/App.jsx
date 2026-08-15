@@ -94,6 +94,7 @@ const EngineSettingsPanel = React.lazy(() => import("./pages/admin/ai/EngineSett
 const PromptsPanel = React.lazy(() => import("./pages/admin/ai/PromptsPanel"));
 const FeedbackPanel = React.lazy(() => import("./pages/admin/ai/FeedbackPanel"));
 const LearningJobsPanel = React.lazy(() => import("./pages/admin/ai/LearningJobsPanel"));
+const LearningFlywheelPanel = React.lazy(() => import("./pages/admin/ai/LearningFlywheelPanel"));
 const MonitoringPanel = React.lazy(() => import("./pages/admin/ai/MonitoringPanel"));
 const AuditPanel = React.lazy(() => import("./pages/admin/ai/AuditPanel"));
 const AILogsPanel = React.lazy(() => import("./pages/admin/ai/AILogsPanel"));
@@ -341,6 +342,7 @@ export default function App() {
                 <Route path="/admin/ai/prompts" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PromptsPanel /></AdminRoute>} />
                 <Route path="/admin/ai/feedback" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><FeedbackPanel /></AdminRoute>} />
                 <Route path="/admin/ai/learning" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LearningJobsPanel /></AdminRoute>} />
+                <Route path="/admin/ai/learning-flywheel" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LearningFlywheelPanel /></AdminRoute>} />
                 <Route path="/admin/ai/monitoring" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><MonitoringPanel /></AdminRoute>} />
                 <Route path="/admin/ai/audit" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AuditPanel /></AdminRoute>} />
                 <Route path="/admin/ai/logs" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AILogsPanel /></AdminRoute>} />

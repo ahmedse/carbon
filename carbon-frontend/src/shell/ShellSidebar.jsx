@@ -47,6 +47,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import FeedbackIcon from '@mui/icons-material/Feedback';
 import LoopIcon from '@mui/icons-material/Loop';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
@@ -159,6 +160,7 @@ function getSidebarItems(studioId) {
         { type: 'group', label: 'Feedback & Learning' },
         { label: 'Feedback Review', path: '/admin/ai/feedback', icon: FeedbackIcon, role: 'admin' },
         { label: 'Learning Jobs', path: '/admin/ai/learning', icon: LoopIcon, role: 'admin' },
+        { label: 'Learning Flywheel', path: '/admin/ai/learning-flywheel', icon: AutorenewIcon, role: 'admin' },
         { type: 'group', label: 'Observability' },
         { label: 'Monitoring', path: '/admin/ai/monitoring', icon: MonitorHeartIcon, role: 'admin' },
         { label: 'Audit Trail', path: '/admin/ai/audit', icon: HistoryIcon, role: 'admin' },
