@@ -17,7 +17,9 @@ from __future__ import annotations
 import json
 import logging
 import math
+import queue
 import re
+import threading
 import time
 import uuid
 from typing import Any
@@ -65,7 +67,7 @@ def _run_async(coro):
 
 
 async def _run_chat(
-    instance_id: str, payload: dict[str, Any], task_id: str
+    instance_id: str, payload: dict[str, Any], task_id: str, *, stream_callback=None
 ) -> dict[str, Any]:
     """Run a single chat turn through the six-witness pipeline.
 
@@ -93,6 +95,7 @@ async def _run_chat(
             conversation_id=conversation_id,
             user_message=message,
             conversation_history=history_messages,
+            stream_callback=stream_callback,
         )
         return {
             "status": "completed",
@@ -1360,6 +1363,51 @@ def dispatch_task(
         }
 
 
+def dispatch_task_stream(task_type: str, payload: dict[str, Any], *, instance_id: str = "carbon"):
+    """Stream a ``chat`` turn as ``(kind, value)`` tuples from a background thread.
+
+    The engine's turn runner is async and yields text deltas through an async
+    ``stream_callback``; this generator bridges that async stream to a sync
+    iterator using a ``queue.Queue`` and a daemon thread so Django views can
+    consume it inside a ``StreamingHttpResponse`` without blocking the event
+    loop.
+
+    Yields:
+        ("chunk", delta)  — one text delta (may repeat)
+        ("done", result)  — terminal success (same dict shape ``chat()`` reads)
+        ("error", message) — terminal failure
+    """
+    if task_type != "chat":
+        yield "error", f"streaming not supported for {task_type!r}"
+        return
+
+    q: queue.Queue = queue.Queue()
+
+    async def _collect():
+        async def cb(delta: str):
+            q.put(("chunk", delta))
+
+        try:
+            result = await _run_chat(instance_id, payload, _new_task_id(), stream_callback=cb)
+            q.put(("done", result))
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("chat stream failed for instance=%s", instance_id)
+            q.put(("error", f"chat failed: {exc}"))
+        finally:
+            q.put(("eof", None))
+
+    def _thread_target():
+        _run_async(_collect())
+
+    threading.Thread(target=_thread_target, daemon=True).start()
+
+    while True:
+        kind, value = q.get()
+        if kind == "eof":
+            break
+        yield kind, value
+
+
 def get_task(task_id: str, *, timeout: int | None = None) -> dict[str, Any]:
     """Retrieve an in-process task's status."""
     return {
@@ -1371,4 +1419,4 @@ def get_task(task_id: str, *, timeout: int | None = None) -> dict[str, Any]:
     }
 
 
-__all__ = ["MODULES", "list_modules", "dispatch_task", "get_task"]
+__all__ = ["MODULES", "list_modules", "dispatch_task", "dispatch_task_stream", "get_task"]

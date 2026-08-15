@@ -352,6 +352,157 @@ class CarbonIntelligence:
             "assistant_message": response,
         }
 
+    def send_message_stream(
+        self,
+        user,
+        conversation_id: str,
+        content: str,
+    ):
+        """Stream a chat answer as a generator of SSE-ready dict frames.
+
+        Mirrors :meth:`send_message` for persistence and finalization, but for
+        ``conversation_type == "chat"`` it streams provider deltas instead of
+        blocking for the full answer.  Yields:
+
+          {"type": "chunk", "content": delta}
+          {"type": "done", "conversation": {...}}
+          {"type": "error", "error": message}
+
+        Non-chat conversation types fall back to the synchronous path and
+        emit a single ``done`` frame.  A user message is always persisted and
+        the conversation is never left stuck in ``working``.
+        """
+        from ai.models import AIConversation, AIMessage
+
+        try:
+            conversation = AIConversation.objects.get(
+                id=conversation_id, user=user,
+            )
+        except AIConversation.DoesNotExist:
+            raise ValueError(f"Conversation {conversation_id} not found.")
+
+        # Non-chat conversations have no streaming path — delegate to the
+        # synchronous flow (which persists the user message itself).
+        if conversation.conversation_type != "chat":
+            self.send_message(user, conversation_id, content)
+            yield {
+                "type": "done",
+                "conversation": self.get_conversation(user, conversation_id),
+            }
+            return
+
+        # Save user message (identical to send_message).
+        AIMessage.objects.create(
+            conversation=conversation,
+            role="user",
+            content=content,
+        )
+
+        # Build conversation context from history.
+        history = list(
+            conversation.messages.order_by("created_at").values(
+                "role", "content", "created_at",
+            )
+        )
+        conv_ctx = ConversationContext(
+            conversation_id=str(conversation.id),
+            messages=[
+                {
+                    "role": m["role"],
+                    "content": m["content"],
+                    "timestamp": m["created_at"].isoformat(),
+                }
+                for m in history
+            ],
+        )
+
+        # Build fresh scope (NOT frozen — user's permissions may have changed).
+        scope = build_scope(user)
+        if conversation.app_identifier:
+            scope.app_identifier = conversation.app_identifier
+
+        # Mark working.
+        conversation.status = "working"
+        conversation.save(update_fields=["status"])
+
+        started_at = time.perf_counter()
+        try:
+            guard_chain, operation = self._guard_workspace_operation(
+                scope,
+                "workspace_chat",
+                conversation.task_payload_json or {},
+            )
+            message = self._prepend_workspace_context(conversation, content)
+            message = self._prepend_domain_context(scope, message)
+            chat_request = ChatRequest(
+                message=message,
+                conversation=conv_ctx,
+                scope=scope,
+            )
+
+            for kind, value in self.provider.chat_stream(chat_request):
+                if kind == "chunk":
+                    yield {"type": "chunk", "content": value}
+                    continue
+                if kind == "error":
+                    latency_ms = int((time.perf_counter() - started_at) * 1000)
+                    guard_chain.audit_trail.log(
+                        scope,
+                        operation,
+                        self.provider.provider_name,
+                        latency_ms,
+                        "failed",
+                        error_message=value,
+                    )
+                    self._save_assistant_message(
+                        conversation,
+                        value,
+                        metadata={},
+                        status="failed",
+                    )
+                    yield {"type": "error", "error": value}
+                    return
+                if kind == "done":
+                    latency_ms = int((time.perf_counter() - started_at) * 1000)
+                    result = value or {}
+                    res = result.get("result") or {}
+                    guard_chain.audit_trail.log(
+                        scope,
+                        operation,
+                        self.provider.provider_name,
+                        latency_ms,
+                        result.get("status", "completed"),
+                    )
+                    self._build_ai_message(
+                        conversation,
+                        "completed",
+                        res.get("content"),
+                        res.get("follow_up_questions", []),
+                    )
+                    yield {
+                        "type": "done",
+                        "conversation": self.get_conversation(user, conversation_id),
+                    }
+                    return
+        except (PermissionError, ValueError) as exc:
+            self._save_assistant_message(
+                conversation,
+                str(exc),
+                metadata={},
+                status="failed",
+            )
+            raise
+        except Exception as exc:  # noqa: BLE001 - fail-visible, never stuck in working
+            msg = f"chat failed: {exc}"
+            self._save_assistant_message(
+                conversation,
+                msg,
+                metadata={},
+                status="failed",
+            )
+            yield {"type": "error", "error": msg}
+            return
+
     def get_conversation(
         self,
         user,

@@ -7,6 +7,7 @@ GET    /carbon-api/ai/workspace/conversations/{id}/
 POST   /carbon-api/ai/workspace/conversations/{id}/messages/
 """
 
+import json
 import sys, os
 
 # Ensure repo root is on path so that `backend.ai.*` imports resolve.
@@ -15,6 +16,7 @@ _repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
+from django.http import StreamingHttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -109,3 +111,30 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 {"error": str(e)},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+    @action(detail=True, methods=["post"], url_path="messages/stream")
+    def send_message_stream(self, request, pk=None):
+        """Stream a chat answer as Server-Sent Events.
+
+        Frames are ``data: <json>\n\n``.  Terminal frames are
+        ``{"type": "done", "conversation": {...}}`` on success or
+        ``{"type": "error", "error": message}`` on failure.
+        """
+        serializer = SendMessageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        def event_stream():
+            try:
+                for frame in self.intelligence.send_message_stream(
+                    user=request.user,
+                    conversation_id=pk,
+                    content=serializer.validated_data["content"],
+                ):
+                    yield f"data: {json.dumps(frame)}\n\n"
+            except ValueError as e:
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+        return StreamingHttpResponse(
+            event_stream(),
+            content_type="text/event-stream",
+        )

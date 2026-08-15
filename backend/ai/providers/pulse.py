@@ -45,7 +45,7 @@ from backend.ai.protocol import (
     Scope,
     TableProfile,
 )
-from backend.ai.engine_runtime import dispatch_task, list_modules
+from backend.ai.engine_runtime import dispatch_task, dispatch_task_stream, list_modules
 
 logger = logging.getLogger("carbon.ai.pulse_provider")
 
@@ -488,6 +488,27 @@ class PulseProvider(AIProvider):
             status=_map_status(data.get("status")),
             error=data.get("error"),
         )
+
+    def chat_stream(self, request: ChatRequest):
+        """Stream a chat answer as ``(kind, value)`` tuples (SSE-ready).
+
+        Builds the identical payload as :meth:`chat`, then yields from the
+        in-process streaming dispatcher:
+
+          ("chunk", delta)   — one text delta
+          ("done", result)   — terminal success (same dict shape ``chat()`` reads)
+          ("error", message) — terminal failure
+        """
+        payload: dict[str, Any] = {
+            "message": request.message,
+        }
+        if request.conversation is not None:
+            payload["conversation_history"] = {
+                "conversation_id": request.conversation.conversation_id,
+                "messages": request.conversation.messages,
+            }
+
+        yield from dispatch_task_stream(T_CHAT, payload)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────
