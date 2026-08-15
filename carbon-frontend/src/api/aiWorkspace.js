@@ -172,6 +172,22 @@ export async function sendMessageStream(token, conversationId, content, { onChun
 }
 
 /**
+ * Persist user feedback (accept/reject/correct) on an assistant message.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} messageId - UUID of the assistant message
+ * @param {string} outcome - 'accepted' | 'rejected' | 'corrected' | 'ignored'
+ * @param {string} correctionText - required-in-spirit when outcome === 'corrected'
+ * @returns {Promise<object>} Serialized message including outcome + correction_text
+ */
+export function recordFeedback(token, conversationId, messageId, outcome, correctionText = '') {
+  return apiFetch(
+    `${BASE}conversations/${conversationId}/messages/${messageId}/feedback/`,
+    { token, method: 'POST', body: { outcome, correction_text: correctionText } },
+  );
+}
+
+/**
  * Accept a DQ suggestion from within AI Workspace.
  * @param {string} token - JWT access token
  * @param {number|string} suggestionId

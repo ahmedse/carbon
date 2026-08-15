@@ -8,6 +8,7 @@ import { useNotification } from '../components/NotificationProvider';
 import {
   acceptSuggestion,
   getConversation,
+  recordFeedback,
   rejectSuggestion,
   sendMessage as apiSendMessage,
   sendMessageStream,
@@ -247,6 +248,53 @@ function AIConversationView({ conversationId }) {
     [token, handleSend, notifyFromError],
   );
 
+  const updateMessageInState = useCallback((updatedMessage) => {
+    if (!updatedMessage?.id) return;
+    setConversation((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        messages: (prev.messages || []).map((m) =>
+          m.id === updatedMessage.id ? { ...m, ...updatedMessage } : m,
+        ),
+      };
+    });
+  }, []);
+
+  const persistFeedback = useCallback(
+    async (message, outcome, correctionText = '') => {
+      if (!message?.id) return;
+      try {
+        const updatedMessage = await recordFeedback(
+          token,
+          conversationId,
+          message.id,
+          outcome,
+          correctionText,
+        );
+        updateMessageInState(updatedMessage);
+      } catch (err) {
+        notifyFromError(err, 'Could not save feedback');
+      }
+    },
+    [token, conversationId, updateMessageInState, notifyFromError],
+  );
+
+  const handleAcceptFeedback = useCallback(
+    (message) => persistFeedback(message, 'accepted'),
+    [persistFeedback],
+  );
+
+  const handleRejectFeedback = useCallback(
+    (message) => persistFeedback(message, 'rejected'),
+    [persistFeedback],
+  );
+
+  const handleCorrectFeedback = useCallback(
+    (message, correctionText) => persistFeedback(message, 'corrected', correctionText || ''),
+    [persistFeedback],
+  );
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -335,6 +383,9 @@ function AIConversationView({ conversationId }) {
             onAcceptSuggestion={handleAcceptSuggestion}
             onRejectSuggestion={handleRejectSuggestion}
             canManageRules={canManageRules}
+            onAccept={handleAcceptFeedback}
+            onReject={handleRejectFeedback}
+            onCorrect={handleCorrectFeedback}
           />
         ))}
 

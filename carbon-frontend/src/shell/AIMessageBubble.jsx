@@ -1,7 +1,7 @@
 // src/shell/AIMessageBubble.jsx
 import React, { Suspense, lazy, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Button, Chip, Paper, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Button, Chip, Paper, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
 import { Link } from 'react-router-dom';
@@ -41,6 +41,13 @@ const META_SX = {
   opacity: 0.7,
 };
 
+const OUTCOME_LABELS = {
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+  corrected: 'Corrected',
+  ignored: 'Ignored',
+};
+
 function normalizeMetadata(message) {
   return message.metadata || message.metadata_json || {};
 }
@@ -77,14 +84,29 @@ function confidenceLabel(confidence) {
   return `${pct}%`;
 }
 
-function AIMessageBubble({ message, onAcceptSuggestion, onRejectSuggestion, canManageRules = true }) {
+function AIMessageBubble({
+  message,
+  onAcceptSuggestion,
+  onRejectSuggestion,
+  canManageRules = true,
+  onAccept,
+  onReject,
+  onCorrect,
+}) {
   const [showTimestamp, setShowTimestamp] = useState(false);
+  const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [correctionText, setCorrectionText] = useState('');
   const isUser = message.role === 'user';
   const metadata = normalizeMetadata(message);
   const followUps = metadata.follow_up_questions || [];
 
   const bubbleSx = isUser ? USER_BUBBLE_SX : AI_BUBBLE_SX;
   const Icon = isUser ? PersonIcon : SmartToyIcon;
+
+  const outcomeLabel = OUTCOME_LABELS[message.outcome] || message.outcome;
+  const outcomeColor =
+    message.outcome === 'accepted' ? 'success' : message.outcome === 'rejected' ? 'error' : 'default';
+  const showFeedback = !isUser && (message.outcome || onAccept || onReject || onCorrect);
 
   const renderStructuredContent = () => {
     if (isUser || !metadata?.type) return null;
@@ -283,6 +305,80 @@ function AIMessageBubble({ message, onAcceptSuggestion, onRejectSuggestion, canM
 
         {structuredContent}
 
+        {showFeedback && (
+          <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {message.outcome ? (
+              <>
+                <Chip size="small" color={outcomeColor} label={outcomeLabel} />
+                {message.correction_text ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    {message.correction_text}
+                  </Typography>
+                ) : null}
+              </>
+            ) : correctionOpen ? (
+              <>
+                <TextField
+                  size="small"
+                  fullWidth
+                  multiline
+                  minRows={2}
+                  label="Correction"
+                  value={correctionText}
+                  onChange={(event) => setCorrectionText(event.target.value)}
+                  placeholder="Describe what the answer should have said…"
+                />
+                <Stack direction="row" spacing={0.5}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={!correctionText.trim()}
+                    onClick={() => onCorrect?.(message, correctionText.trim())}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      setCorrectionOpen(false);
+                      setCorrectionText('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </Stack>
+              </>
+            ) : (
+              <Stack direction="row" spacing={0.5}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="success"
+                  onClick={() => onAccept?.(message)}
+                >
+                  Accept
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="error"
+                  onClick={() => onReject?.(message)}
+                >
+                  Reject
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setCorrectionOpen(true)}
+                >
+                  Correct
+                </Button>
+              </Stack>
+            )}
+          </Box>
+        )}
+
         {followUps.length > 0 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
             {followUps.map((q, i) => (
@@ -325,10 +421,15 @@ AIMessageBubble.propTypes = {
     created_at: PropTypes.string,
     metadata: PropTypes.object,
     metadata_json: PropTypes.object,
+    outcome: PropTypes.string,
+    correction_text: PropTypes.string,
   }).isRequired,
   onAcceptSuggestion: PropTypes.func,
   onRejectSuggestion: PropTypes.func,
   canManageRules: PropTypes.bool,
+  onAccept: PropTypes.func,
+  onReject: PropTypes.func,
+  onCorrect: PropTypes.func,
 };
 
 export default AIMessageBubble;
