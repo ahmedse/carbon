@@ -344,6 +344,7 @@ At this point:
 | ~~ai/domain/water.py~~ | ✅ Done — `a6fe919` (water domain) |
 | ~~Chunk size optimization~~ | ✅ Done — MUI chunk split (`8f62236`) |
 | ~~Fix 53 react-hooks/exhaustive-deps warnings~~ | ✅ Done — lint clean (`a6fe919`) |
+| DQ rule contradiction detection | Future — detect two *different* rules on the same field that can't both pass (disjoint `range`/`allowed_values` intervals), warn on redundant overlap (duplicate `not_null`, `unique`+`not_null`), and emit a composite "conflict" verdict at runtime for semantically-undecidable overlaps (e.g. `nl_check` vs `regex`). Applicability (rule-type ↔ field-type) is already enforced at bind time — this is the complementary semantic layer. |
 | Production v1.3 tag + deploy | Ops — after final QA gate |
 
 ---

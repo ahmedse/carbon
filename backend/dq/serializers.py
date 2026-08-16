@@ -3,6 +3,8 @@ from rest_framework import serializers
 from .models import TableProfile, FieldProfile, DQRule, DQResult, DQProfileConfig
 from .models import FreshnessCheck, SchemaSnapshot, SchemaChange, RuleTag, RuleFieldAssignment
 from .models import DQJob, DQSuggestion, DQAnomaly
+from dataschema.models import DataField
+from .rule_schema import rule_field_type_compatible
 
 
 class DQJobSerializer(serializers.ModelSerializer):
@@ -200,6 +202,9 @@ class DQRuleSerializer(serializers.ModelSerializer):
         tag_ids = validated_data.pop('tag_ids', [])
         field_assignments_data = validated_data.pop('field_assignments_write', [])
         validated_data.pop('replace_assignments', None)
+        self._validate_field_applicability(
+            validated_data.get('rule_type'), field_assignments_data,
+        )
         rule = super().create(validated_data)
         if tag_ids:
             rule.tags.set(tag_ids)
@@ -210,6 +215,32 @@ class DQRuleSerializer(serializers.ModelSerializer):
                 data_field_id=assn.get('data_field'),
             )
         return rule
+
+    @staticmethod
+    def _validate_field_applicability(rule_type, assignments):
+        """Reject bindings whose field type is incompatible with the rule type.
+
+        Business rules (data_field omitted) skip the check. Field-validation
+        rules must bind to a field type the rule engine can meaningfully
+        evaluate (see rule_schema.RULE_FIELD_TYPE_COMPAT).
+        """
+        errors = []
+        for assn in assignments:
+            field_id = assn.get('data_field')
+            if not field_id:
+                continue  # table-level business rule — no field to check
+            try:
+                field = DataField.objects.get(pk=field_id)
+            except DataField.DoesNotExist:
+                errors.append(f'data_field {field_id} does not exist')
+                continue
+            if not rule_field_type_compatible(rule_type, field.type):
+                errors.append(
+                    f"Rule type '{rule_type}' cannot apply to field "
+                    f"'{field.name}' (type '{field.type}')"
+                )
+        if errors:
+            raise serializers.ValidationError({'field_assignments_write': errors})
 
     @staticmethod
     def _reconcile_flat_into_definition(definition, validated_data):
@@ -249,6 +280,11 @@ class DQRuleSerializer(serializers.ModelSerializer):
                         'Pass replace_assignments=true to confirm, or omit field_assignments_write.'
                     )
                 })
+            # Applicability guard: each field binding must match the rule type.
+            self._validate_field_applicability(
+                validated_data.get('rule_type', instance.rule_type),
+                field_assignments_data,
+            )
 
         # D1 — definition is the single source of truth, but honor explicit flat
         # columns so DQRule.save() does not revert them (rename / activate bug).

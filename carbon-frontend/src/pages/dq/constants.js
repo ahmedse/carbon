@@ -80,3 +80,37 @@ export const SCHEMA_CHANGE_COLORS = {
   removed: 'error',
   modified: 'warning',
 };
+
+// ── Field type ↔ rule type applicability ─────────────────────────────────────
+// Mirrors backend/dq/rule_schema.py RULE_FIELD_TYPE_COMPAT and
+// backend/dataschema/models.py DataField.FIELD_TYPES — keep in sync.
+export const FIELD_TYPE_LABELS = {
+  string: 'String',
+  text: 'Text',
+  number: 'Number',
+  date: 'Date',
+  boolean: 'Boolean',
+  select: 'Select',
+  multiselect: 'Multi Select',
+  file: 'File',
+  reference: 'Reference',
+};
+
+// rule_type → array of compatible field types. null/undefined = any type.
+export const RULE_FIELD_TYPE_COMPAT = {
+  not_null: null,
+  unique: null,
+  allowed_values: ['string', 'text', 'select', 'number', 'date', 'boolean'],
+  range: ['number'],
+  regex: ['string', 'text'],
+  reference_integrity: ['reference', 'select'],
+  threshold: ['number'],
+  nl_check: null,
+  anomaly_detect: null,
+};
+
+export function isRuleCompatibleWithField(ruleType, fieldType) {
+  const allowed = RULE_FIELD_TYPE_COMPAT[ruleType];
+  if (!allowed) return true;
+  return allowed.includes(fieldType);
+}

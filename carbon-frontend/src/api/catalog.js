@@ -117,6 +117,13 @@ export function fetchAssetProfile(token, id) {
 }
 
 /**
+ * Fetch the table-level asset profile for a specific data table (server-side filter).
+ */
+export function fetchTableAssetProfile(token, tableId) {
+  return apiFetch(`${API_ROUTES.assets}?data_table=${tableId}`, { token });
+}
+
+/**
  * Create a new asset profile.
  */
 export function createAssetProfile(token, data) {

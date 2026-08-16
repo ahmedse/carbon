@@ -65,6 +65,16 @@ class AssetProfileScopedAccessTest(TestCase):
         self.assertIn(self.asset1.id, asset_ids)
         self.assertIn(self.asset2.id, asset_ids)
     
+    def test_filter_by_data_table(self):
+        """GET /assets/?data_table=<id> returns only that table's profile."""
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get(f'/carbon-api/catalog/assets/?data_table={self.table1.id}')
+        self.assertEqual(response.status_code, 200)
+        results = response.data if isinstance(response.data, list) else response.data.get('results', [])
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['data_table'], self.table1.id)
+        self.assertIsNone(results[0]['data_field'])
+    
     def test_owner1_sees_only_their_assets(self):
         """Owner1 sees only their org-unit assets (ReadAnyWriteGlobalAdmin allows reads)."""
         self.client.force_authenticate(user=self.owner1)

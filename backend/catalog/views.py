@@ -226,6 +226,8 @@ class AssetProfileViewSet(viewsets.ModelViewSet):
         if p.get('module_id'):
             mid = p['module_id']
             qs = qs.filter(Q(data_table__module_id=mid) | Q(data_field__data_table__module_id=mid))
+        if p.get('data_table'):
+            qs = qs.filter(data_table_id=p['data_table'])
         return qs.distinct().order_by('id')
 
     def perform_update(self, serializer):

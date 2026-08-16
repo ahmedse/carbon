@@ -45,6 +45,33 @@ GATE_ELIGIBLE_TYPES = frozenset({
 THRESHOLD_OPERATORS = frozenset({'gte', 'gt', 'lte', 'lt', 'eq', 'neq'})
 
 
+# ── Rule type → field type applicability ─────────────────────────────────────
+# Which DataField.type values a rule_type can meaningfully apply to.
+# `None` means "any field type" (no restriction). Keys must stay in sync with
+# RULE_TYPES above and DataField.FIELD_TYPES in dataschema/models.py.
+# `range`/`threshold` are numeric-only because the engine coerces via float();
+# `regex` is string/text; `reference_integrity` targets reference/select fields.
+RULE_FIELD_TYPE_COMPAT = {
+    'not_null': None,
+    'unique': None,
+    'allowed_values': {'string', 'text', 'select', 'number', 'date', 'boolean'},
+    'range': {'number'},
+    'regex': {'string', 'text'},
+    'reference_integrity': {'reference', 'select'},
+    'threshold': {'number'},
+    'nl_check': None,
+    'anomaly_detect': None,
+}
+
+
+def rule_field_type_compatible(rule_type: str, field_type: str) -> bool:
+    """Return True if `rule_type` can apply to a DataField of `field_type`."""
+    allowed = RULE_FIELD_TYPE_COMPAT.get(rule_type)
+    if allowed is None:
+        return True
+    return field_type in allowed
+
+
 def validate_definition(d: Dict[str, Any]) -> List[Dict[str, str]]:
     """Validate a DQ rule JSON definition (v1).
 

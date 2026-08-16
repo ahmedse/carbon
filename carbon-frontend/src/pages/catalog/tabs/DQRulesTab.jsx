@@ -6,17 +6,15 @@ import {
   Box, Button, Table, TableHead, TableBody, TableRow, TableCell,
   IconButton, Chip, CircularProgress, Alert, Typography, Tooltip, Stack,
   TextField, FormControl, InputLabel, Select, MenuItem, List, ListItemButton,
-  ListItemText, ListItemIcon, Radio, InputAdornment,
+  ListItemText, ListItemIcon, Radio, InputAdornment, FormHelperText,
 } from '@mui/material';
 import SystemDialog from '../../../components/SystemDialog';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import AddIcon from '@mui/icons-material/Add';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import ToggleOnIcon from '@mui/icons-material/ToggleOn';
 import ToggleOffIcon from '@mui/icons-material/ToggleOff';
 import SearchIcon from '@mui/icons-material/Search';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
@@ -27,6 +25,7 @@ import { fetchDataSchemaFields } from '../../../api/dataschema';
 import {
   RULE_TYPE_LABELS, DIMENSION_LABELS,
   SEVERITY_LABELS, SEVERITY_COLORS, RESULT_STATUS_COLORS,
+  FIELD_TYPE_LABELS, RULE_FIELD_TYPE_COMPAT, isRuleCompatibleWithField,
 } from '../../dq/constants';
 
 const STATUS_LABEL = { passed: 'Passed', failed: 'Failed', skipped_unavailable: 'Skipped' };
@@ -40,7 +39,6 @@ function unwrap(data) {
 export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
   const { token } = useAuth();
   const { notify } = useNotification();
-  const navigate = useNavigate();
 
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -226,7 +224,12 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
       const next = (detail.field_assignments || [])
         .filter((a) => String(a.data_table) !== String(tableId))
         .map((a) => ({ data_table: a.data_table, data_field: a.data_field }));
-      await updateDQRule(token, detachTarget.id, { field_assignments_write: next });
+      // Detach is a deliberate, confirmed action — replace_assignments confirms the
+      // drop so the serializer's drift guard doesn't block removing the last binding.
+      await updateDQRule(token, detachTarget.id, {
+        field_assignments_write: next,
+        replace_assignments: true,
+      });
       notify({ message: `"${detachTarget.name}" removed from this table`, type: 'success' });
       setDetachTarget(null);
       loadRules();
@@ -356,11 +359,6 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                           </IconButton>
                         </span>
                       </Tooltip>
-                      <Tooltip title="Open in DQ workspace">
-                        <IconButton size="small" onClick={() => navigate(`/dq/rules/${rule.id}`)}>
-                          <VisibilityIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
                       <Tooltip title="Remove from this table">
                         <span>
                           <IconButton size="small" disabled={actionBusyId === `detach-${rule.id}`} onClick={() => setDetachTarget(rule)}>
@@ -487,8 +485,30 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                 value={selectedFieldId}
                 onChange={(e) => setSelectedFieldId(e.target.value)}
               >
-                {fields.map((f) => <MenuItem key={f.id} value={f.id}>{f.label || f.name || f.id}</MenuItem>)}
+                {fields.map((f) => {
+                  const compatible = isRuleCompatibleWithField(selectedRule.rule_type, f.type);
+                  return (
+                    <MenuItem key={f.id} value={f.id} disabled={!compatible}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: 2 }}>
+                        <span>{f.label || f.name || f.id}</span>
+                        <Typography component="span" variant="caption" color="text.secondary">
+                          {FIELD_TYPE_LABELS[f.type] || f.type}{compatible ? '' : ' · incompatible'}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  );
+                })}
               </Select>
+              <FormHelperText>
+                {(() => {
+                  const allowed = RULE_FIELD_TYPE_COMPAT[selectedRule.rule_type];
+                  const typeLabel = RULE_TYPE_LABELS[selectedRule.rule_type] || selectedRule.rule_type;
+                  const target = !allowed
+                    ? 'any field type'
+                    : allowed.map((t) => FIELD_TYPE_LABELS[t] || t).join(', ');
+                  return `${typeLabel} rules apply to ${target}.`;
+                })()}
+              </FormHelperText>
             </FormControl>
           )}
         </Stack>
