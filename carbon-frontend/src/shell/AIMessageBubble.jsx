@@ -10,6 +10,7 @@ import { formatDistanceToNow } from '../utils/dateUtils';
 import { formatContextLines } from '../utils/aiProvenance';
 import NLRuleTestCard from './NLRuleTestCard';
 import InvestigationCard from './InvestigationCard';
+import ReportDraftCard from './ReportDraftCard';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
 
@@ -154,6 +155,9 @@ function AIMessageBubble({
   onRerun,
   onChatAbout,
   onCreateRule,
+  onSaveReportArtifact,
+  onExportReport,
+  onRedraftReport,
 }) {
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [correctionOpen, setCorrectionOpen] = useState(false);
@@ -347,6 +351,19 @@ function AIMessageBubble({
             onRerun={onRerun}
             onChatAbout={onChatAbout}
             onCreateRule={onCreateRule}
+          />
+        </Box>
+      );
+    }
+
+    if (metadata.type === 'report') {
+      return (
+        <Box sx={{ mt: 1 }}>
+          <ReportDraftCard
+            metadata={metadata}
+            onSaveArtifact={onSaveReportArtifact}
+            onExport={onExportReport}
+            onRedraft={onRedraftReport}
           />
         </Box>
       );
@@ -603,6 +620,9 @@ AIMessageBubble.propTypes = {
   onRejectSuggestion: PropTypes.func,
   canManageRules: PropTypes.bool,
   onAccept: PropTypes.func,
+  onSaveReportArtifact: PropTypes.func,
+  onExportReport: PropTypes.func,
+  onRedraftReport: PropTypes.func,
   onReject: PropTypes.func,
   onCorrect: PropTypes.func,
   onFollowUp: PropTypes.func,

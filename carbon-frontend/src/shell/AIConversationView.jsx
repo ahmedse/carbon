@@ -502,6 +502,81 @@ function AIConversationView({ conversationId }) {
     [transferTask],
   );
 
+  // Phase 10-B — "Save as Artifact" on a report draft: persist the report
+  // metadata as an artifact of type `report`. The card hands back the exact
+  // `metadata` object; resolve the owning message by reference so the artifact
+  // links to the message that rendered it.
+  const handleSaveReportArtifact = useCallback(
+    async (metadata) => {
+      const reportMessage = messages.find(
+        (m) =>
+          m.role === 'assistant' &&
+          (m.metadata === metadata || m.metadata_json === metadata),
+      );
+      try {
+        await createArtifact(token, {
+          conversation_id: conversationId,
+          message_id: reportMessage?.id ?? null,
+          title: metadata?.title || 'Report',
+          artifact_type: 'report',
+          content_json: metadata,
+        });
+        notify({ message: 'Saved to Artifacts', type: 'success' });
+      } catch (err) {
+        notifyFromError(err, 'Could not save artifact');
+      }
+    },
+    [token, conversationId, messages, notify, notifyFromError],
+  );
+
+  // Phase 10-B — "Export .md": build Markdown from the draft's title, summary
+  // and section titles/content/caveats, then trigger a client-side download.
+  const handleExportReport = useCallback(
+    (metadata) => {
+      const title = metadata?.title || 'Report';
+      const summary = metadata?.summary || '';
+      const sections = Array.isArray(metadata?.sections) ? metadata.sections : [];
+      const lines = [`# ${title}`, ''];
+      if (summary) {
+        lines.push(summary, '');
+      }
+      sections.forEach((section) => {
+        if (section?.title) {
+          lines.push(`## ${section.title}`, '');
+        }
+        if (section?.content) {
+          lines.push(section.content, '');
+        }
+        if (section?.caveat) {
+          lines.push(`> ${section.caveat}`, '');
+        }
+      });
+      const text = lines.join('\n');
+      const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const safeTitle =
+        title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'report';
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${safeTitle}.md`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      notify({ message: 'Exported as Markdown', type: 'success' });
+    },
+    [notify],
+  );
+
+  // Phase 10-B — "Re-draft": re-send the same sentinel the one-click trigger
+  // uses, so the backend regenerates the draft in-thread.
+  const handleRedraftReport = useCallback(() => {
+    handleSend('Draft this report');
+  }, [handleSend]);
+
   const updateMessageInState = useCallback((updatedMessage) => {
     if (!updatedMessage?.id) return;
     setMessages((prev) =>
@@ -799,6 +874,9 @@ function AIConversationView({ conversationId }) {
             onRerun={handleRerunInvestigation}
             onChatAbout={handleChatAboutFinding}
             onCreateRule={handleCreateRuleFromFinding}
+            onSaveReportArtifact={handleSaveReportArtifact}
+            onExportReport={handleExportReport}
+            onRedraftReport={handleRedraftReport}
           />
         ))}
 

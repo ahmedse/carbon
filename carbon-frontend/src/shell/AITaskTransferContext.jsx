@@ -141,6 +141,21 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
           }
         }
 
+        // Phase 10-B — one-click trigger: a report_draft transfer with a module
+        // or period target kicks off the draft immediately by sending the
+        // sentinel message (mirrors the "Draft Report" entry point on the
+        // module detail page).
+        if (
+          type === 'report_draft' &&
+          (normalizedPayload.module_id || normalizedPayload.period_id)
+        ) {
+          try {
+            await sendMessage(token, conv.id, 'Draft this report');
+          } catch {
+            // The conversation still exists; the user can re-trigger from the thread.
+          }
+        }
+
         return conv.id;
       } catch (err) {
         notifyFromError(err, 'Could not transfer task to AI Workspace');

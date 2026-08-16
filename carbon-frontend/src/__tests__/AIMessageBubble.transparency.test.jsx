@@ -174,6 +174,29 @@ describe('AIMessageBubble investigation rendering', () => {
   });
 });
 
+describe('AIMessageBubble report rendering', () => {
+  const reportMetadata = {
+    type: 'report',
+    title: 'GHG Summary Report',
+    summary: 'A draft GHG summary.',
+    report_type: 'ghg_summary',
+    period_start: '2026-01-01',
+    period_end: '2026-12-31',
+    generated_at: '2026-08-16T12:00:00+00:00',
+    sections: [
+      { title: 'Summary', content: 'Scope 2 volume grew.', sql: null, data: null, caveat: null },
+    ],
+  };
+
+  it('renders the report draft card for report metadata', () => {
+    renderBubble({ ...baseMessage, metadata: reportMetadata });
+
+    expect(screen.getByText('GHG Summary Report')).toBeInTheDocument();
+    expect(screen.getByText('A draft GHG summary.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save as Artifact' })).toBeInTheDocument();
+  });
+});
+
 describe('formatContextLines', () => {
   it('formats budget tiers with labels and KG entity names, never [object Object]', () => {
     const lines = formatContextLines({

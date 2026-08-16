@@ -338,3 +338,102 @@ $ npm run build
 ### Issues Found
 - **Sentinel string is load-bearing:** `"Investigate this table"` must stay consistent across `AITaskTransferContext` (trigger), `AIConversationView` `handleRerunInvestigation` (re-run), and the entry-point path. Any change in one must be mirrored in the others.
 - **Uncommitted working tree (still unresolved):** `git status` continues to show interleaved uncommitted changes from prior phases. **No commit was made** — awaiting direction on commit/push scope before touching git history.
+
+---
+
+## [2026-08-16] Backend Worker — Phase 10-A: Report Draft typed route + provider wiring
+
+### Summary
+5/5 tests pass; full AI suite 369 passed, 0 failed. 2 files changed (1 modified, 1 created). The engine (`_run_report_draft`), protocol dataclasses, and provider (`pulse.draft_report`) were already built and tested — this phase added only the intelligence-layer typed handler and its routing, per the "KEY FACT: this is SMALL" directive.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Route `report_draft` → `_send_report_draft_message` in `_route_typed_message` | ✅ | Retired the `_send_staged_task_message` placeholder |
+| 2 | Add `_send_report_draft_message` (mirrors `_send_anomaly_message`) | ✅ | guard `workspace_report_draft` → translate payload → `provider.draft_report` → serialize sections → save `needs_input` |
+| 3 | Create `backend/ai/tests/test_report_draft.py` (5 cases) | ✅ | routing, period_id resolution, direct params, shape, deterministic fallback |
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| MODIFY | `backend/ai/intelligence.py` | +~100 | `ReportDraftRequest` import; `_route_typed_message` now routes `report_draft` → typed handler; added `_send_report_draft_message`; removed dead `_send_staged_task_message` (kept `_progress_stage_label` with its `report_draft` entry for the streaming path) |
+| CREATE | `backend/ai/tests/test_report_draft.py` | 302 | 5 tests covering routing, parameter resolution, frozen metadata shape, and deterministic LLM-outage fallback |
+
+### Verification Output
+```
+$ ../.venv/bin/python -m pytest ai/tests/test_report_draft.py ai/tests/test_kg_wiring.py ai/tests/test_provider_pulse.py -q
+51 passed
+
+$ ../.venv/bin/python -m pytest ai -q
+369 passed
+
+$ ./.ai-toolkit/scripts/verify.sh backend
+GATE PASSED
+
+$ ./.ai-toolkit/scripts/verify.sh antipatterns
+GATE PASSED
+```
+
+### Deviations
+- **`pytest` not `manage.py test`:** per project.config.md TESTING note, `manage.py test` hits a "Conflicting models in application 'ai'" error — used `python -m pytest` (addopts `--reuse-db --nomigrations -n auto`).
+- **`_send_staged_task_message` deleted** (now-dead code) rather than left in place — the spec allows either; `_progress_stage_label` and its `"report_draft"` entry are retained (still used by `send_message_stream`).
+
+### Issues Found
+- **`type` is `"report"`, not `"report_draft"`:** the frozen metadata contract uses `metadata.type == "report"` (message status `needs_input`). 10-B must key on `type === 'report'`.
+- **`period_type` → `report_type` map:** `annual→annual_summary`, `quarterly→quarterly_summary`, `monthly→monthly_summary`, everything else `ghg_summary`. The handler defaults `report_type="ghg_summary"` when neither `period_id` nor `report_type` is present (overriding the engine's internal `"summary"` default).
+- **Uncommitted working tree (still unresolved):** `git status` continues to show interleaved uncommitted changes from prior phases. **No commit was made** — awaiting direction on commit/push scope before touching git history.
+
+---
+
+## [2026-08-16] Frontend Worker — Phase 10-B: ReportDraftCard + one-click trigger
+
+### Summary
+Frontend-only phase. Report cards key on `metadata.type === 'report'` (NOT `conversation_type`), rendered via a new presentational `ReportDraftCard` dispatched from `AIMessageBubble`. The "Draft Report" entry point already existed (manifest + `AIDomainEntryPoints`), so this phase closed the remaining gap: the one-click trigger in `AITaskTransferContext.transferTask` (sends the sentinel `"Draft this report"` after `createConversation` when `type === 'report_draft'` and `module_id || period_id`). The card renders whatever the backend returns (title, summary, period, sections with caveats, generated-at) and never invents emissions figures. "Save as Artifact" reuses `createArtifact` (`artifact_type:'report'`, `content_json: metadata`); "Export .md" is client-side Markdown generation + download; "Re-draft" re-sends the sentinel. 433 frontend tests pass; lint and build clean.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Add `report_draft` label to `AIConversationTabs` | ✅ | `report_draft: 'Report'` in `CONVERSATION_TYPE_LABELS` |
+| 2 | Create `ReportDraftCard` | ✅ | presentational card: title + Draft chip, period, summary, sections (+ caveats), generated-at, 3 actions |
+| 3 | Dispatch card in `AIMessageBubble` | ✅ | `if (metadata.type === 'report')` → `<ReportDraftCard …/>` |
+| 4 | Wire callbacks in `AIConversationView` | ✅ | save artifact / export md / re-draft |
+| 5 | One-click trigger in `AITaskTransferContext` | ✅ | sentinel `"Draft this report"` after `createConversation` |
+| 6 | Tests | ✅ | ReportDraftCard (5), bubble report case (1), transfer context (2) |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `carbon-frontend/src/shell/AIConversationTabs.jsx` | `report_draft: 'Report'` label |
+| CREATE | `carbon-frontend/src/shell/ReportDraftCard.jsx` | presentational report card (title/summary/period/sections/caveats + save/export/re-draft) |
+| MODIFY | `carbon-frontend/src/shell/AIMessageBubble.jsx` | import + `report` dispatch branch + 3 propTypes |
+| MODIFY | `carbon-frontend/src/shell/AIConversationView.jsx` | `handleSaveReportArtifact` (createArtifact), `handleExportReport` (client md), `handleRedraftReport` (sentinel) wired into bubble |
+| MODIFY | `carbon-frontend/src/shell/AITaskTransferContext.jsx` | `report_draft` trigger → `sendMessage(…, 'Draft this report')` |
+| CREATE | `carbon-frontend/src/__tests__/ReportDraftCard.test.jsx` | 5 tests |
+| MODIFY | `carbon-frontend/src/__tests__/AIMessageBubble.transparency.test.jsx` | report render case |
+| MODIFY | `carbon-frontend/src/__tests__/AITaskTransferContext.test.jsx` | report_draft positive + negative |
+
+### Verification Output
+```
+$ npm run lint
+(clean — no output)
+
+$ npm test -- --run
+Test Files  23 passed (23)
+      Tests  433 passed (433)
+
+$ npm run build
+✓ built in 12.42s
+
+$ grep -rn "\bitem\b.*xs=\|<Grid item\b" src/ --include="*.jsx"
+(0 results)
+```
+
+### Deviations
+- **Cards key on `metadata.type`, not `conversation_type`** (mandated): dispatch is `if (metadata.type === 'report')`; no `cards/` dir — card lives at `src/shell/ReportDraftCard.jsx`.
+- **Entry point NOT re-added**: "Draft Report" already exists in the manifest + `AIDomainEntryPoints`; this phase only added the one-click trigger and rendering.
+
+### Issues Found
+- **Report is a DRAFT, not the calculated GHG report**: the card renders only what the backend returns (KG context + live host-table volumes + narrative). No emissions figures are invented client-side.
+- **Sentinel string is load-bearing:** `"Draft this report"` must stay consistent between `AITaskTransferContext` (trigger) and `AIConversationView` `handleRedraftReport` (re-draft).
+- **`get_errors` did not catch a JSX parse error**: a `multi_replace_string_in_file` on `AIMessageBubble.jsx` nested the report branch inside the investigation JSX; only `npm run lint` surfaced `356:8 Parsing error: Unexpected token (`. Fixed by rewriting the block and re-verifying with lint.
+- **Uncommitted working tree (still unresolved):** `git status` continues to show interleaved uncommitted changes from prior phases. **No commit was made** — awaiting direction on commit/push scope before touching git history.

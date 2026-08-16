@@ -36,6 +36,7 @@ const CONVERSATION_TYPE_LABELS = {
   nl_query: 'NL Query',
   anomaly: 'Anomaly',
   investigate: 'Investigate',
+  report_draft: 'Report',
 };
 
 function AIConversationTabs({

@@ -141,4 +141,31 @@ describe('AITaskTransferContext enrichPayload (Phase 7C)', () => {
 
     expect(sendMessage).not.toHaveBeenCalled();
   });
+
+  // Phase 10-B — one-click report_draft trigger.
+  it('sends the report sentinel when transferring report_draft with a module', async () => {
+    const body = await dispatch(
+      'report_draft',
+      { module_id: 'm1', module_name: 'Scope 2 Electricity' },
+      { app_identifier: 'emissions' },
+    );
+
+    expect(body.task_payload).toEqual({
+      type: 'report_draft',
+      module_id: 'm1',
+      module_name: 'Scope 2 Electricity',
+      period_id: null,
+    });
+    expect(sendMessage).toHaveBeenCalledWith(
+      'test-token',
+      'conv-1',
+      'Draft this report',
+    );
+  });
+
+  it('does not send the sentinel when report_draft has no module or period', async () => {
+    await dispatch('report_draft', {}, { app_identifier: 'emissions' });
+
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
 });
