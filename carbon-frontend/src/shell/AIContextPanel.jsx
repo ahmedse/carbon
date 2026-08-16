@@ -29,24 +29,28 @@ const KIND_COLOR = {
 };
 
 // Compute per-tier token budget percentages from context_snapshot_json.
+// The backend budget dict uses tier keys T2_history / T2b_summary /
+// T3_retrieval / T4_memory (see backend/ai/context_assembler.py).
+const BUDGET_TIERS = [
+  { key: 'T2_history', label: 'History' },
+  { key: 'T2b_summary', label: 'Summary' },
+  { key: 'T3_retrieval', label: 'KG Retrieval' },
+  { key: 'T4_memory', label: 'Memory' },
+];
+
 function parseBudget(snapshot) {
   if (!snapshot || typeof snapshot !== 'object') return null;
-  const tiers = ['T0', 'T1', 'T2', 'T3', 'T4'];
-  const entries = tiers.map((t) => ({ tier: t, tokens: Number(snapshot[t] ?? 0) }));
+  const entries = BUDGET_TIERS.map((t) => ({
+    tier: t.key,
+    label: t.label,
+    tokens: Number(snapshot[t.key] ?? 0),
+  }));
   const total = entries.reduce((s, e) => s + e.tokens, 0);
   if (!total) return null;
   return entries.map((e) => ({ ...e, pct: Math.round((e.tokens / total) * 100) }));
 }
 
-const TIER_LABELS = {
-  T0: 'System',
-  T1: 'Workspace',
-  T2: 'History',
-  T3: 'Retrieval',
-  T4: 'Memory',
-};
-
-const TIER_COLORS = ['primary', 'info', 'success', 'warning', 'secondary'];
+const TIER_COLORS = ['primary', 'info', 'success', 'warning'];
 
 function AIContextPanel({ conversation, mentions, onSummarized }) {
   const { token } = useAuth();
@@ -57,6 +61,7 @@ function AIContextPanel({ conversation, mentions, onSummarized }) {
   const scopeJson = conversation?.scope_json || {};
   const snapshot = conversation?.context_snapshot_json || {};
   const budget = parseBudget(snapshot);
+  const kgEntities = Array.isArray(snapshot?.kg_entities) ? snapshot.kg_entities : [];
 
   const orgUnits = scopeJson?.org_unit_ids || [];
   const appId = conversation?.app_identifier;
@@ -179,6 +184,40 @@ function AIContextPanel({ conversation, mentions, onSummarized }) {
 
           <Divider />
 
+          {/* Knowledge Graph retrieval (T3) */}
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+              Knowledge Graph
+            </Typography>
+            {kgEntities.length === 0 ? (
+              <Typography variant="caption" color="text.disabled">
+                None retrieved
+              </Typography>
+            ) : (
+              <Stack spacing={0.75}>
+                {kgEntities.map((e) => (
+                  <Box key={e.name}>
+                    <Stack direction="row" justifyContent="space-between" gap={0.5}>
+                      <Typography variant="caption" fontWeight={600} sx={{ wordBreak: 'break-word' }}>
+                        {e.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap>
+                        {Math.round((Number(e.confidence) || 0) * 100)}%
+                      </Typography>
+                    </Stack>
+                    {Array.isArray(e.attributes) && e.attributes.length > 0 && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-word' }}>
+                        {e.attributes.join(', ')}
+                      </Typography>
+                    )}
+                  </Box>
+                ))}
+              </Stack>
+            )}
+          </Box>
+
+          <Divider />
+
           {/* Token budget bar */}
           <Box>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
@@ -194,7 +233,7 @@ function AIContextPanel({ conversation, mentions, onSummarized }) {
                   <Box key={e.tier}>
                     <Stack direction="row" justifyContent="space-between">
                       <Typography variant="caption" color="text.secondary">
-                        {TIER_LABELS[e.tier] || e.tier}
+                        {e.label}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {e.tokens} tok

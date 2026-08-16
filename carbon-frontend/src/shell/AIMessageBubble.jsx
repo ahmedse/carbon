@@ -7,6 +7,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
+import { formatContextLines } from '../utils/aiProvenance';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
 
@@ -157,9 +158,11 @@ function AIMessageBubble({
   const statusLabel = message.status === 'stopped' ? 'Interrupted' : message.status === 'failed' ? 'Error' : null;
   const statusColor = message.status === 'stopped' ? 'warning' : 'error';
 
-  // "Why this answer" provenance: prefer explicit provenance payload from backend,
-  // fall back to scope/type info from conversation props.
-  const provenancePayload = metadata?.provenance;
+  // "Why this answer" provenance: prefer the backend's top-level serialized
+  // ``message.provenance`` (built by ``_build_message_provenance``), falling
+  // back to a provenance block embedded in ``metadata_json``, then to scope/type
+  // info from conversation props.
+  const provenancePayload = message.provenance || metadata?.provenance;
   const provenanceLines = [];
   if (provenancePayload && typeof provenancePayload === 'object') {
     if (provenancePayload.model) provenanceLines.push(`Model: ${provenancePayload.model}`);
@@ -174,13 +177,7 @@ function AIMessageBubble({
         .join(' · ');
       if (guards) provenanceLines.push(`Guards: ${guards}`);
     }
-    const ctxSnap = provenancePayload.context_snapshot;
-    if (ctxSnap && typeof ctxSnap === 'object') {
-      const tiers = Object.entries(ctxSnap)
-        .map(([t, tok]) => `${t} ${tok} tok`)
-        .join(' · ');
-      if (tiers) provenanceLines.push(`Context: ${tiers}`);
-    }
+    provenanceLines.push(...formatContextLines(provenancePayload.context_snapshot));
     const scopeSnap = provenancePayload.scope_snapshot || scopeJson;
     const units = orgUnitCount(scopeSnap);
     if (units !== null) provenanceLines.push(`Org units: ${units}`);

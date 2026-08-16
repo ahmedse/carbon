@@ -22,11 +22,16 @@ vi.mock('../shell/AISuggestionRail', () => ({ default: () => null }));
 vi.mock('../shell/AIEmptyState', () => ({ default: () => null }));
 vi.mock('../shell/AIOfflineBanner', () => ({ default: () => null }));
 
+vi.mock('../api/aiPulse', () => ({
+  listDomainManifests: vi.fn().mockResolvedValue({ apps: [] }),
+}));
+
 vi.mock('../api/aiWorkspace', () => ({
   listConversations: vi.fn(),
   createConversation: vi.fn(),
   updateConversation: vi.fn(),
   deleteConversation: vi.fn(),
+  sendMessage: vi.fn(),
 }));
 
 import { AIWorkspace } from '../shell/AIWorkspace';

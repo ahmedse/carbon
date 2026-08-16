@@ -26,9 +26,11 @@ import { useNotification } from '../components/NotificationProvider';
 import {
   createConversation as apiCreateConversation,
   listConversations as apiListConversations,
+  sendMessage as apiSendMessage,
   updateConversation as apiUpdateConversation,
   deleteConversation as apiDeleteConversation,
 } from '../api/aiWorkspace';
+import { listDomainManifests } from '../api/aiPulse';
 import AIWorkspaceHeader from './AIWorkspaceHeader';
 import AIConversationTabs from './AIConversationTabs';
 import AIConversationView from './AIConversationView';
@@ -63,6 +65,7 @@ export function AIWorkspace({ onClose }) {
   const [providerOffline, setProviderOffline] = useState(false);
   // Fixed mode tabs: 'chat' | 'artifacts'
   const [mode, setMode] = useState('chat');
+  const [manifests, setManifests] = useState([]);
 
   const activeRef = useRef(activeId);
   activeRef.current = activeId;
@@ -108,6 +111,14 @@ export function AIWorkspace({ onClose }) {
   useEffect(() => {
     loadList();
   }, [loadList]);
+
+  // Load domain-app manifests once on mount. Failures are silent — an empty
+  // manifests array simply keeps the existing empty-state fallback.
+  useEffect(() => {
+    listDomainManifests(token)
+      .then((data) => setManifests(data?.apps || []))
+      .catch(() => setManifests([]));
+  }, [token]);
 
   // React to task transfers from the main workspace.
   useEffect(() => {
@@ -184,6 +195,30 @@ export function AIWorkspace({ onClose }) {
       notifyFromError(err, 'Could not create conversation');
     }
   }, [token, notifyFromError]);
+
+  // Handle a manifest starter chip: open a conversation of the right type and
+  // (for prompt-bearing chips) seed the first user message.
+  const handleStartStarter = useCallback(
+    async (appId, taskType, label, prompt) => {
+      try {
+        const conv = await apiCreateConversation(token, {
+          conversation_type: taskType,
+          title: label,
+          app_identifier: appId,
+        });
+        setById((prev) => ({ ...prev, [conv.id]: conv }));
+        setOrder((prev) => [conv.id, ...prev]);
+        setActiveId(conv.id);
+        setShowArchived(false);
+        if (prompt) {
+          await apiSendMessage(token, conv.id, prompt);
+        }
+      } catch (err) {
+        notifyFromError(err, 'Could not start conversation');
+      }
+    },
+    [token, notifyFromError],
+  );
 
   // Archive (persistent close). Reversible via restore.
   const handleArchive = useCallback(
@@ -443,14 +478,22 @@ export function AIWorkspace({ onClose }) {
       {mode === 'artifacts' ? (
         <AIArtifactBrowser />
       ) : !hasAny ? (
-        <AIEmptyState onStartChat={handleNewChat} />
+        <AIEmptyState
+          onStartChat={handleNewChat}
+          manifests={manifests}
+          onStartStarter={handleStartStarter}
+        />
       ) : activeConversation ? (
         <AIConversationView
           key={activeConversation.id}
           conversationId={activeConversation.id}
         />
       ) : (
-        <AIEmptyState onStartChat={handleNewChat} />
+        <AIEmptyState
+          onStartChat={handleNewChat}
+          manifests={manifests}
+          onStartStarter={handleStartStarter}
+        />
       )}
 
       {/* Delete confirmation */}

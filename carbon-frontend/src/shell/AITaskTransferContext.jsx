@@ -64,6 +64,36 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
       };
     }
 
+    if (type === 'dq_validate' || type === 'investigate') {
+      return {
+        ...base,
+        table_id: payload.table_id ?? null,
+        table_name: payload.table_name ?? payload.table ?? null,
+        row_count: payload.row_count ?? null,
+        module_id: payload.module_id ?? null,
+        module_name: payload.module_name ?? null,
+      };
+    }
+
+    if (type === 'report_draft') {
+      return {
+        ...base,
+        module_id: payload.module_id ?? null,
+        module_name: payload.module_name ?? null,
+        period_id: payload.period_id ?? null,
+      };
+    }
+
+    if (type === 'chat') {
+      return {
+        ...base,
+        table_id: payload.table_id ?? null,
+        table_name: payload.table_name ?? payload.table ?? null,
+        module_id: payload.module_id ?? null,
+        module_name: payload.module_name ?? null,
+      };
+    }
+
     return base;
   }, []);
 

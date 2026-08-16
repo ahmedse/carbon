@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import AIMessageBubble from '../shell/AIMessageBubble';
+import { formatContextLines } from '../utils/aiProvenance';
 
 const baseMessage = {
   id: 'msg-1',
@@ -76,7 +77,7 @@ describe('AIMessageBubble "why this answer" provenance tooltip', () => {
           engine_turn_id: 'abc123',
           app_identifier: 'platform',
           guard_results: { ScopeGuard: true, AccessGuard: true },
-          context_snapshot: { T0: 120, T1: 340, T2: 420 },
+          context_snapshot: { T2_history: 120, T3_retrieval: 340 },
           scope_snapshot: { org_unit_ids: ['*'] },
         },
       },
@@ -84,5 +85,57 @@ describe('AIMessageBubble "why this answer" provenance tooltip', () => {
 
     // Icon renders even with provenance from metadata.
     expect(screen.getByLabelText('Why this answer')).toBeInTheDocument();
+  });
+
+  it('reads the backend top-level message.provenance field (real serialization shape)', () => {
+    renderBubble({
+      ...baseMessage,
+      // Backend serializes provenance as a top-level key, NOT inside metadata_json.
+      provenance: {
+        model: 'gpt-4o',
+        engine_turn_id: 'abc123',
+        guard_results: { ScopeGuard: true },
+        context_snapshot: {
+          T2_history: 120,
+          T3_retrieval: 340,
+          kg_entities: [{ name: 'monthly_electricity' }, { name: 'emission_factors' }],
+        },
+        scope_snapshot: { org_unit_ids: ['*'] },
+      },
+    }, { conversationType: 'chat', appIdentifier: 'carbon' });
+
+    // The icon renders without crashing when provenance is top-level, and the
+    // KG entities are not coerced into "[object Object] tok".
+    expect(screen.getByLabelText('Why this answer')).toBeInTheDocument();
+  });
+});
+
+describe('formatContextLines', () => {
+  it('formats budget tiers with labels and KG entity names, never [object Object]', () => {
+    const lines = formatContextLines({
+      T2_history: 12,
+      T3_retrieval: 34,
+      kg_entities: [{ name: 'monthly_electricity' }, { name: 'emission_factors' }],
+    });
+
+    expect(lines).toContain('Context: History 12 tok · KG Retrieval 34 tok');
+    expect(lines).toContain('Knowledge Graph: monthly_electricity, emission_factors');
+    expect(lines.join('\n')).not.toContain('[object Object]');
+  });
+
+  it('omits zero tiers and returns an empty array for a missing snapshot', () => {
+    expect(formatContextLines({ T2_history: 0, T4_memory: 0 })).toEqual([]);
+    expect(formatContextLines(undefined)).toEqual([]);
+    expect(formatContextLines(null)).toEqual([]);
+  });
+
+  it('truncates KG entity names to 5', () => {
+    const kg = Array.from({ length: 8 }, (_, i) => ({ name: `entity_${i}` }));
+    const lines = formatContextLines({ T3_retrieval: 1, kg_entities: kg });
+
+    const kgLine = lines.find((l) => l.startsWith('Knowledge Graph:'));
+    expect(kgLine).toBeDefined();
+    const names = kgLine.replace('Knowledge Graph: ', '').split(', ');
+    expect(names).toHaveLength(5);
   });
 });

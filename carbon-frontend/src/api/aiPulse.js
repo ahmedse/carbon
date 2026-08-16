@@ -87,3 +87,12 @@ export function getLearningStatus(token) {
 export function runLearningSweep(token) {
   return apiFetch(`${BASE}learning-status/run/`, { method: 'POST', token });
 }
+
+/**
+ * List manifests for all registered domain apps.
+ * @param {string} token - JWT access token
+ * @returns {Promise<{apps: Array, count: number}>}
+ */
+export function listDomainManifests(token) {
+  return apiFetch(`${BASE}apps/`, { token });
+}

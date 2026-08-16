@@ -14,6 +14,7 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
+import AIDomainEntryPoints from '../../shell/AIDomainEntryPoints';
 
 import { fetchModule, fetchModuleQualitySummary, fetchModuleAuditTrail } from '../../api/modules';
 import { fetchDataSchemaTables } from '../../api/dataschema';
@@ -122,6 +123,13 @@ export default function DataProductDetailPage() {
       description={product.description || product.org_unit_name || ''}
       icon={Inventory2Icon}
       onClose={() => navigate(-1)}
+      actions={
+        <AIDomainEntryPoints
+          entityType="module"
+          entityId={product?.id ?? moduleId}
+          entity={product}
+        />
+      }
     />
   ) : (
     <DetailHeader
