@@ -1467,7 +1467,9 @@ class CarbonIntelligence:
             return self._send_nl_query_message(conversation, content, conv_ctx, scope)
         if conv_type == "anomaly":
             return self._send_anomaly_message(conversation, content, conv_ctx, scope)
-        if conv_type in {"investigate", "nl_rule_test", "report_draft"}:
+        if conv_type == "nl_rule_test":
+            return self._send_nl_rule_test_message(conversation, content, conv_ctx, scope)
+        if conv_type in {"investigate", "report_draft"}:
             return self._send_staged_task_message(conversation, conv_type)
         return self._send_chat_message(conversation, content, conv_ctx, scope)
 
@@ -1481,7 +1483,6 @@ class CarbonIntelligence:
         """
         labels = {
             "investigate": "Investigate",
-            "nl_rule_test": "NL rule testing",
             "report_draft": "Report drafting",
         }
         label = labels.get(conv_type, conv_type)
@@ -1693,6 +1694,153 @@ class CarbonIntelligence:
         return self._save_assistant_message(
             conversation,
             f"AI generated {len(suggestions)} DQ suggestion(s) for {table_profile.name}.",
+            metadata=metadata,
+            status="needs_input",
+        )
+
+    def _send_nl_rule_test_message(
+        self,
+        conversation,
+        content: str,
+        conv_ctx: ConversationContext,
+        scope: Scope,
+    ) -> dict[str, Any]:
+        """Handle nl_rule_test conversation messages (Phase 8-A).
+
+        Parses the user's NL rule into a v1 definition and dry-runs it
+        read-only against the table's rows.  Nothing is persisted to DQ —
+        the frontend (8-B) owns the "Save Rule" (Execute Mode) gate.
+        """
+        payload = conversation.task_payload_json or {}
+        guard_chain, operation = self._guard_workspace_operation(
+            scope,
+            "workspace_nl_rule_test",
+            payload,
+        )
+
+        table_id = payload.get("table_id")
+        if not table_id:
+            guard_chain.audit_trail.log(
+                scope,
+                operation,
+                self.provider.provider_name,
+                0,
+                "failed",
+                error_message="NL rule test requires a table_id.",
+            )
+            return self._save_assistant_message(
+                conversation,
+                "NL rule testing requires a target table. Start this thread from a table or suggestion.",
+                metadata={"type": "nl_rule_test", "rule_preview": None, "test_summary": None, "violations": []},
+                status="failed",
+            )
+
+        from dataschema.models import DataRow, DataTable
+
+        try:
+            table = DataTable.objects.get(id=table_id)
+        except DataTable.DoesNotExist:
+            guard_chain.audit_trail.log(
+                scope,
+                operation,
+                self.provider.provider_name,
+                0,
+                "failed",
+                error_message=f"Table {table_id} not found.",
+            )
+            return self._save_assistant_message(
+                conversation,
+                f"Could not find the target table (id={table_id}).",
+                metadata={"type": "nl_rule_test", "rule_preview": None, "test_summary": None, "violations": []},
+                status="failed",
+            )
+
+        fields = list(table.fields.filter(is_archived=False))
+        schema = [
+            {"name": f.name, "label": f.label, "type": f.type}
+            for f in fields
+        ]
+        rows = list(DataRow.objects.filter(data_table=table, is_archived=False))
+
+        # Resolve the target field: prefer an explicit payload field, else the
+        # first active field (the engine may still refine it from the parse).
+        field_name = payload.get("field_name")
+        if not field_name and fields:
+            field_name = fields[0].name
+
+        # The NL rule text may arrive as the message content (design-doc flow:
+        # task_payload carries the table, the rule is the typed message) or,
+        # for "Test live"-style entry points, pre-seeded in task_payload.nl.
+        # Accept either so the 8-B frontend can't wire it wrong.
+        nl_text = (content or "").strip() or str(payload.get("nl") or "").strip()
+
+        task_payload = {
+            "table_id": table.id,
+            "table_name": table.name,
+            "schema": schema,
+            "nl": nl_text,
+            "rows": rows,
+            "field_name": field_name,
+        }
+
+        started_at = time.perf_counter()
+        result = dispatch_task("dq.rule_test", task_payload, timeout=60)
+        latency_ms = int((time.perf_counter() - started_at) * 1000)
+        guard_chain.audit_trail.log(
+            scope,
+            operation,
+            self.provider.provider_name,
+            latency_ms,
+            result.get("status"),
+            error_message=_error_message(result.get("error")),
+        )
+
+        if result.get("status") == "pulse_unavailable":
+            return self._save_provider_unavailable_message(conversation)
+        if result.get("status") != "completed":
+            return self._save_assistant_message(
+                conversation,
+                f"Rule test failed: {_error_message(result.get('error'))}",
+                metadata={"type": "nl_rule_test", "rule_preview": None, "test_summary": None, "violations": []},
+                status="failed",
+            )
+
+        r = result.get("result") or {}
+        rule_preview = r.get("rule_preview")
+        test_summary = r.get("test_summary") or {}
+        violations = r.get("violations") or []
+        detail_rows = r.get("rows") or []
+        recommendation = r.get("recommendation") or ""
+
+        metadata = guard_chain.sanitize_response(
+            scope,
+            {
+                "type": "nl_rule_test",
+                "rule_preview": rule_preview,
+                "test_summary": test_summary,
+                "violations": violations,
+                "rows": detail_rows,
+                "recommendation": recommendation,
+            },
+        )
+
+        failed = test_summary.get("failed")
+        if failed:
+            summary = (
+                f"Rule tested against {test_summary.get('total_rows', 0)} row(s): "
+                f"{failed} violation(s) found."
+            )
+        else:
+            summary = (
+                f"Rule tested against {test_summary.get('total_rows', 0)} row(s): "
+                "no violations."
+            )
+        if recommendation:
+            summary = f"{summary} {recommendation}"
+
+        return self._save_assistant_message(
+            conversation,
+            summary,
             metadata=metadata,
             status="needs_input",
         )

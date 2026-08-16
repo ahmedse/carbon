@@ -118,3 +118,55 @@ NONE — implemented verbatim per spec. One note: `useDomainManifests` is used b
 
 ### Issues Found
 - **Uncommitted working tree (pre-existing):** `git status` shows substantial uncommitted changes from Phases 6/7A/7B (backend `ai/` files, migrations, tests, docs) that predate this phase and were never committed. My 7C edits to `emissions.py` and `AITaskTransferContext.jsx` are interleaved with that prior work. I did **not** commit to avoid entangling unrelated changes — awaiting direction on commit/push scope.
+
+## [2026-08-16] Backend Worker — Phase 8-A: `nl_rule_test` Execution Path (Execute Mode gate)
+
+### Summary
+5/5 gates passed. 4 files changed (1 created, 3 modified). 9 new tests (all passing); full `ai` suite 357 passed, 0 failed, 0 skipped.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Register `dq.rule_test` task type + `_nl_rule_test_prompt` + `_run_nl_rule_test` | ✅ | `MODULES` now 11; deterministic-only parse; `dispatch_task` handler wired |
+| 2 | Route `nl_rule_test` conversations + `_send_nl_rule_test_message` | ✅ | `_route_typed_message` branch; loads table fields + rows read-only; `timeout=60` |
+| 3 | Tests: `test_nl_rule.py` (9 tests) + bump `test_ops_api.py` count | ✅ | 10→11 module count; fail-visible contract covered |
+| 4 | Add spec-REQUIRED `rows` detail (per-applicable-row actual/expected/passed) | ✅ | `_rule_test_rows` mirrors `dq.engine.evaluate` branches; threshold slider re-score data |
+| 5 | Verification gates | ✅ | `check`, `pytest ai`, `makemigrations --check`, `verify.sh backend`, `verify.sh antipatterns` all green |
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| MODIFY | `backend/ai/engine_runtime.py` | +230 | `dq.rule_test` in `MODULES`; `_nl_rule_test_prompt`; `_is_empty_value`; `_rule_test_rows` (per-row actual/expected/passed); `_run_nl_rule_test` (LLM parse → `dq.engine.evaluate` dry-run → preview + summary + violations + rows) |
+| MODIFY | `backend/ai/intelligence.py` | +40 | `nl_rule_test` routing; `_send_nl_rule_test_message` (guard chain, table/rows load, dispatch, audit-log, metadata includes `rows`) |
+| CREATE | `backend/ai/tests/test_nl_rule.py` | 381 | 9 tests: not_null/zero-row/all-fail/threshold-rows/LLM-outage/unparseable/unsupported/empty-nl/routing |
+| MODIFY | `backend/ai/tests/test_ops_api.py` | 3 | module count 10→11, test renamed to `_eleven_types` |
+
+### Verification Output
+```
+$ cd backend && .venv/bin/python manage.py check
+System check identified no issues (0 silenced).
+
+$ .venv/bin/python manage.py makemigrations --check --dry-run
+No changes detected
+
+$ .venv/bin/python -m pytest ai -q
+357 passed in 12.95s
+
+$ .venv/bin/python -m pytest ai/tests/test_nl_rule.py -v
+9 passed in 4.69s
+
+$ cd /home/ahmed/aast/carbon && ./.ai-toolkit/scripts/verify.sh backend
+GATE PASSED
+
+$ cd /home/ahmed/aast/carbon && ./.ai-toolkit/scripts/verify.sh antipatterns
+GATE PASSED
+```
+
+### Deviations
+- **`rows` detail shape:** the `dq.engine.evaluate` return only exposes aggregate `(passed, checked, failed, sample_failures[:20])` — no per-row enumeration. Per TASKS.md ("`rows` is REQUIRED — one entry per *applicable* row"), I added a dedicated `_rule_test_rows` helper that mirrors `evaluate`'s deterministic branches (`not_null`/`unique`/`allowed_values`/`range`/`regex`/`threshold`/`reference_integrity`) to emit `{row_id, actual, expected, passed}`. `expected` is typed per rule (`{"min","max"}` for range, `{"operator","value"}` for threshold, a `pattern` string for regex, `"non-empty"` for not_null, etc.) so Phase 8-B's threshold slider can re-score client-side with no round-trip.
+- **`reference_integrity`/`allowed_values` reference-set lookup:** for reference-backed rules the helper reads `mdm.models` (ReferenceValue/ReferenceSet) read-only to populate `expected`; this never mutates DQ.
+- **Severity default `"warn"`** (matches existing `_run_dq_suggest` convention), not `"error"` — the spec text does not mandate a default severity, so I followed the in-repo idiom.
+
+### Issues Found
+- **Pre-existing (not in my scope):** `verify.sh antipatterns` still reports `raw fetch()` in `carbon-frontend/src/pages/{ForgotPasswordPage,ResetPasswordPage}.jsx` and `src/api/aiWorkspace.js:228`, plus 28 `print()` calls in backend app code. None are in files I touched.
+- **Phase 8-B dependency note:** the `metadata.rows` array and `rule_preview`/`test_summary`/`violations` fields are now the authoritative server payload for the `NLRuleTestCard`; 8-B should render from `metadata` and do threshold re-scoring purely client-side (no POST to `/dq/rules/` until the user confirms "Save Rule").

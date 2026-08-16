@@ -21,6 +21,7 @@ import queue
 import re
 import threading
 import time
+import types
 import uuid
 from typing import Any
 
@@ -30,6 +31,7 @@ logger = logging.getLogger("carbon.ai.engine_runtime")
 MODULES: list[str] = [
     "dq.validate",
     "dq.suggest",
+    "dq.rule_test",
     "carbon.query.nl",
     "carbon.query.explain",
     "carbon.anomaly.detect",
@@ -1278,10 +1280,358 @@ async def _run_dq_suggest(
     }
 
 
+# Deterministic v1 rule types that ``dq.engine.evaluate`` can dry-run without
+# an NL-check round-trip.  The LLM is constrained to emit only these; anything
+# else is fail-visible (never a fabricated pass/fail).
+_DETERMINISTIC_RULE_TYPES = {
+    "not_null",
+    "unique",
+    "allowed_values",
+    "range",
+    "regex",
+    "reference_integrity",
+    "threshold",
+}
+
+
+def _nl_rule_test_prompt(
+    nl: str, schema: list[dict[str, Any]], table_name: str
+) -> str:
+    """Build the parse message that turns NL into a v1 rule definition.
+
+    Requires a JSON object using ``type`` + ``params`` keys (NOT
+    ``rule_type``) so the output matches ``dq.engine.evaluate`` directly.
+    """
+    schema_json = json.dumps(schema, default=str)[:2000]
+    return (
+        "You are a data-quality engineer. Convert the natural-language rule "
+        "below into a single JSON object describing a deterministic v1 DQ "
+        "rule definition:\n"
+        '{"type": str, "params": object, "severity": "info"|"warn"|"error", '
+        '"confidence": float, "field": str}\n'
+        '"type" must be one of: not_null, unique, allowed_values, range, '
+        'regex, reference_integrity, threshold.\n'
+        '"params" hold the parameters for that type: range -> {"min","max"}; '
+        'threshold -> {"operator","value"}; regex -> {"pattern"}; '
+        'allowed_values -> {"values":[...]}; unique -> {}; not_null -> {}; '
+        'reference_integrity -> {"reference_set_id": int}.\n'
+        '"field" is the column name the rule applies to (use one of the '
+        'columns below).\n'
+        f"Table name: {table_name}\n"
+        f"Columns: {schema_json}\n"
+        f"Natural-language rule: {nl}\n"
+        "Return only the JSON object, nothing else."
+    )
+
+
+def _is_empty_value(v: Any) -> bool:
+    """Mirror dq.engine's emptiness rule (None/''/[] are empty)."""
+    return v is None or v == "" or v == []
+
+
+def _rule_test_rows(
+    rule_type: str,
+    params: dict[str, Any],
+    rows: list[Any],
+    field_name: str | None,
+) -> list[dict[str, Any]]:
+    """Per-row detail for the Phase 8-B threshold slider re-score.
+
+    One entry per *applicable* row carrying ``{row_id, actual, expected,
+    passed}`` so the frontend can re-score client-side with no server
+    round-trip.  Mirrors dq.engine.evaluate's deterministic branches; pure
+    and read-only.
+    """
+    out: list[dict[str, Any]] = []
+
+    # Pre-compute uniqueness counts (the 'unique' verdict depends on the set).
+    unique_counts: dict[str, int] = {}
+    if rule_type == "unique":
+        for r in rows:
+            v = r.values.get(field_name)
+            if _is_empty_value(v):
+                continue
+            unique_counts[str(v)] = unique_counts.get(str(v), 0) + 1
+
+    # Pre-compute allowed values for reference-set-backed rules (read-only).
+    allowed: set[str] | None = None
+    if rule_type == "allowed_values":
+        from mdm.models import ReferenceValue
+
+        rs_id = params.get("reference_set")
+        if rs_id:
+            allowed = {
+                str(c)
+                for c in ReferenceValue.objects.filter(
+                    reference_set_id=rs_id, is_active=True
+                ).values_list("code", flat=True)
+            }
+        else:
+            allowed = {str(a) for a in (params.get("values") or [])}
+    elif rule_type == "reference_integrity":
+        rs_id = params.get("reference_set_id")
+        if rs_id:
+            from mdm.models import ReferenceSet
+
+            try:
+                ref_set = ReferenceSet.objects.get(id=rs_id)
+                allowed = {
+                    str(c)
+                    for c in ref_set.get_current_values().values_list("code", flat=True)
+                }
+            except ReferenceSet.DoesNotExist:
+                allowed = set()
+        else:
+            allowed = set()
+
+    for r in rows:
+        v = r.values.get(field_name)
+        row_id = r.id
+
+        if rule_type == "not_null":
+            out.append(
+                {
+                    "row_id": row_id,
+                    "actual": v,
+                    "expected": "non-empty",
+                    "passed": not _is_empty_value(v),
+                }
+            )
+            continue
+
+        if _is_empty_value(v):
+            continue  # not applicable for every other deterministic type
+
+        if rule_type == "unique":
+            passed = unique_counts.get(str(v), 0) <= 1
+            out.append(
+                {"row_id": row_id, "actual": v, "expected": "unique", "passed": passed}
+            )
+        elif rule_type == "allowed_values":
+            out.append(
+                {
+                    "row_id": row_id,
+                    "actual": v,
+                    "expected": sorted(allowed) if allowed is not None else [],
+                    "passed": str(v) in (allowed or set()),
+                }
+            )
+        elif rule_type == "range":
+            lo = params.get("min")
+            hi = params.get("max")
+            try:
+                fv = float(v)
+                passed = (lo is None or fv >= lo) and (hi is None or fv <= hi)
+            except (TypeError, ValueError):
+                passed = False
+            out.append(
+                {
+                    "row_id": row_id,
+                    "actual": v,
+                    "expected": {"min": lo, "max": hi},
+                    "passed": passed,
+                }
+            )
+        elif rule_type == "regex":
+            pat = params.get("pattern", "")
+            try:
+                rx = re.compile(pat) if pat else None
+            except re.error:
+                rx = None
+            passed = rx is None or rx.search(str(v)) is not None
+            out.append(
+                {
+                    "row_id": row_id,
+                    "actual": v,
+                    "expected": pat,
+                    "passed": passed,
+                }
+            )
+        elif rule_type == "threshold":
+            op = params.get("operator", "gte")
+            tv = params.get("value")
+            try:
+                fv = float(v)
+                t = float(tv) if tv is not None else None
+                if t is None:
+                    passed = False
+                elif op == "gte":
+                    passed = fv >= t
+                elif op == "gt":
+                    passed = fv > t
+                elif op == "lte":
+                    passed = fv <= t
+                elif op == "lt":
+                    passed = fv < t
+                elif op == "eq":
+                    passed = fv == t
+                elif op == "neq":
+                    passed = fv != t
+                else:
+                    passed = True  # unknown operator → no-op (matches evaluate)
+            except (TypeError, ValueError):
+                passed = False
+            out.append(
+                {
+                    "row_id": row_id,
+                    "actual": v,
+                    "expected": {"operator": op, "value": tv},
+                    "passed": passed,
+                }
+            )
+        elif rule_type == "reference_integrity":
+            out.append(
+                {
+                    "row_id": row_id,
+                    "actual": v,
+                    "expected": params.get("reference_set_id"),
+                    "passed": str(v) in (allowed or set()),
+                }
+            )
+
+    return out
+
+
+async def _run_nl_rule_test(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    """Parse an NL rule into a v1 definition and dry-run it (read-only).
+
+    Never writes a DQRule/DQResult: the LLM parse and the
+    ``dq.engine.evaluate`` call are both pure.  An LLM outage, an unparseable
+    definition, or an unsupported rule type returns ``pulse_unavailable`` —
+    never a fabricated pass/fail.
+    """
+    nl = str(payload.get("nl") or "").strip()
+    table_name = str(payload.get("table_name") or "table")
+    schema = payload.get("schema") or []
+    rows = payload.get("rows") or []
+    field_name = payload.get("field_name")
+
+    if not nl:
+        return {
+            "status": "completed",
+            "task_id": task_id,
+            "result": {
+                "rule_preview": None,
+                "test_summary": {
+                    "total_rows": len(rows),
+                    "applicable_rows": 0,
+                    "passed": 0,
+                    "failed": 0,
+                    "pass_rate": 0.0,
+                },
+                "violations": [],
+                "rows": [],
+                "recommendation": "No natural-language rule was provided.",
+            },
+        }
+
+    llm_text = await _llm_text(
+        task="cognition",
+        instance_id=instance_id,
+        conversation_id=f"nl-rule-test-{task_id}",
+        messages=[
+            {"role": "user", "content": _nl_rule_test_prompt(nl, schema, table_name)}
+        ],
+        temperature=0.3,
+        response_format={"type": "json_object"},
+    )
+    if not llm_text:
+        return _llm_unavailable(
+            task_id, "LLM unavailable while parsing the natural-language rule."
+        )
+
+    try:
+        parsed = json.loads(llm_text)
+    except (json.JSONDecodeError, TypeError):
+        parsed = None
+    if not isinstance(parsed, dict):
+        return _llm_unavailable(
+            task_id, "LLM returned an unparseable rule definition."
+        )
+
+    rule_type = str(parsed.get("type") or "")
+    if rule_type not in _DETERMINISTIC_RULE_TYPES:
+        return _llm_unavailable(
+            task_id, f"LLM returned an unsupported rule type {rule_type!r}."
+        )
+
+    params = parsed.get("params")
+    if not isinstance(params, dict):
+        params = {}
+    severity = str(parsed.get("severity") or "warn").lower()
+    if severity not in ("info", "warn", "error"):
+        severity = "warn"
+    confidence = _coerce_confidence(parsed.get("confidence"))
+    resolved_field = parsed.get("field") or field_name
+
+    rule_def = {
+        "type": rule_type,
+        "params": params,
+        "severity": severity,
+    }
+
+    # ``dq.engine.evaluate`` only needs ``field.name`` (and, for
+    # reference_integrity, ``field.reference_set_id``) — pass a lightweight
+    # namespace rather than importing dataschema models into the engine.
+    field_obj = (
+        types.SimpleNamespace(name=resolved_field, reference_set_id=None)
+        if resolved_field
+        else None
+    )
+
+    from dq.engine import evaluate as engine_evaluate
+
+    _passed, checked, failed, sample_failures, _score = engine_evaluate(
+        rule_def, rows, field=field_obj
+    )
+
+    passed_count = checked - failed
+    pass_rate = round(passed_count / checked, 4) if checked else 0.0
+
+    # Per-applicable-row detail (actual vs expected) so the Phase 8-B
+    # threshold slider can re-score client-side with no server round-trip.
+    detail_rows = _rule_test_rows(rule_type, params, rows, resolved_field)
+
+    if failed == 0:
+        recommendation = "All applicable rows pass — this rule can be saved as-is."
+    else:
+        recommendation = (
+            f"{failed} of {checked} applicable row(s) fail. Review the "
+            "violations before saving the rule."
+        )
+
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {
+            "rule_preview": {
+                "type": rule_type,
+                "params": params,
+                "severity": severity,
+                "confidence": confidence,
+                "field": resolved_field,
+            },
+            "test_summary": {
+                "total_rows": len(rows),
+                "applicable_rows": checked,
+                "passed": passed_count,
+                "failed": failed,
+                "pass_rate": pass_rate,
+            },
+            "violations": sample_failures,
+            "rows": detail_rows,
+            "recommendation": recommendation,
+        },
+    }
+
+
 # Handler registry: task type → async handler.
 _TASK_HANDLERS: dict[str, Any] = {
     "dq.validate": _run_dq_validate,
     "dq.suggest": _run_dq_suggest,
+    "dq.rule_test": _run_nl_rule_test,
     "carbon.query.nl": _run_query_nl,
     "carbon.query.explain": _run_query_explain,
     "carbon.schema.analyze": _run_schema_analyze,
