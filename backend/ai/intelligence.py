@@ -37,6 +37,7 @@ from backend.ai.protocol import (
     DqValidateResponse,
     NlQueryRequest,
     ProviderStatus,
+    ReportDraftRequest,
     Scope,
     TableProfile,
     WorkspaceContext,
@@ -1472,27 +1473,123 @@ class CarbonIntelligence:
         if conv_type == "investigate":
             return self._send_investigate_message(conversation, content, conv_ctx, scope)
         if conv_type == "report_draft":
-            return self._send_staged_task_message(conversation, conv_type)
+            return self._send_report_draft_message(conversation, content, conv_ctx, scope)
         return self._send_chat_message(conversation, content, conv_ctx, scope)
 
-    def _send_staged_task_message(self, conversation, conv_type: str) -> dict[str, Any]:
-        """Fail-visible placeholder for recognized-but-not-yet-executable types.
+    def _send_report_draft_message(
+        self,
+        conversation,
+        content: str,
+        conv_ctx: ConversationContext,
+        scope: Scope,
+    ) -> dict[str, Any]:
+        """Handle report_draft conversation messages (Phase 10-A).
 
-        The conversation type is valid (accepted by the manifest-driven
-        registry) so the thread can be created and persisted with the correct
-        type, but the execution path ships in a later phase. Answering with an
-        explicit notice is more honest than silently treating it as a chat turn.
+        The engine (``_run_report_draft``), protocol dataclasses, and provider
+        (``draft_report``) are already built and tested; this is the typed
+        intelligence-layer handler that bridges the frontend entry-point
+        payload (``{module_id, module_name, period_id}``) to the engine's
+        ``{report_type, period_start, period_end}`` shape.
         """
-        labels = {
-            "report_draft": "Report drafting",
-        }
-        label = labels.get(conv_type, conv_type)
+        payload = conversation.task_payload_json or {}
+        guard_chain, operation = self._guard_workspace_operation(
+            scope,
+            "workspace_report_draft",
+            payload,
+        )
+
+        # Translate payload → report params. Wrap in try/except so a malformed
+        # scope (missing period, bad period_id) never crashes the turn.
+        try:
+            from emissions.models import ReportingPeriod
+
+            period_id = payload.get("period_id")
+            if period_id:
+                period = ReportingPeriod.objects.get(id=period_id)
+                period_type_map = {
+                    "annual": "annual_summary",
+                    "quarterly": "quarterly_summary",
+                    "monthly": "monthly_summary",
+                }
+                report_type = period_type_map.get(period.period_type, "ghg_summary")
+                period_start = period.start_date.isoformat()
+                period_end = period.end_date.isoformat()
+            else:
+                report_type = payload.get("report_type") or "ghg_summary"
+                period_start = payload.get("period_start") or ""
+                period_end = payload.get("period_end") or ""
+        except Exception as exc:  # noqa: BLE001 - fail-visible, never crash the turn
+            guard_chain.audit_trail.log(
+                scope,
+                operation,
+                self.provider.provider_name,
+                0,
+                "failed",
+                error_message=f"Invalid report parameters: {exc}",
+            )
+            return self._save_assistant_message(
+                conversation,
+                f"Could not build the report request: {exc}",
+                metadata={"type": "report", "sections": []},
+                status="failed",
+            )
+
+        request = ReportDraftRequest(
+            report_type,
+            period_start,
+            period_end,
+            scope,
+        )
+        started_at = time.perf_counter()
+        response = self.provider.draft_report(request)
+        latency_ms = int((time.perf_counter() - started_at) * 1000)
+        guard_chain.audit_trail.log(
+            scope,
+            operation,
+            self.provider.provider_name,
+            latency_ms,
+            response.status,
+            error_message=_error_message(response.error),
+        )
+
+        if response.status == "provider_unavailable":
+            return self._save_provider_unavailable_message(conversation)
+        if response.status != "completed":
+            return self._save_assistant_message(
+                conversation,
+                f"Report drafting failed: {_error_message(response.error)}",
+                metadata={"type": "report", "sections": []},
+                status="failed",
+            )
+
+        sections = [
+            {
+                "title": s.title,
+                "content": s.content or s.narrative or "",
+                "sql": s.sql,
+                "data": s.data,
+                "caveat": s.caveat,
+            }
+            for s in response.sections
+        ]
+        metadata = guard_chain.sanitize_response(
+            scope,
+            {
+                "type": "report",
+                "title": response.title,
+                "summary": response.summary,
+                "report_type": response.report_type,
+                "period_start": response.period_start,
+                "period_end": response.period_end,
+                "generated_at": response.generated_at,
+                "sections": sections,
+            },
+        )
         return self._save_assistant_message(
             conversation,
-            f"“{label}” is recognized but its execution path is scheduled for a "
-            "later phase. This thread is saved as a “{conv_type}” conversation; "
-            "start a chat or a data-quality task in the meantime.",
-            metadata={"type": "staged_task", "task_type": conv_type},
+            f"Drafted {response.title or 'report'} "
+            f"({response.period_start} → {response.period_end}).",
+            metadata=metadata,
             status="needs_input",
         )
 
