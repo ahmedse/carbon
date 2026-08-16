@@ -155,6 +155,25 @@ describe('AIMessageBubble nl_rule_test rendering', () => {
   });
 });
 
+describe('AIMessageBubble investigation rendering', () => {
+  const investigationMetadata = {
+    type: 'investigation',
+    table_id: 7,
+    table_name: 'emissions',
+    summary: 'One rule failed.',
+    plan_steps: [{ step: 1, label: 'Profile table', status: 'done', detail: '10 rows' }],
+    findings: [],
+    counts: { rules_run: 1, rules_failed: 1, anomalies: 0, kg_entities: 0 },
+  };
+
+  it('renders the investigation card for investigation metadata', () => {
+    renderBubble({ ...baseMessage, metadata: investigationMetadata });
+
+    expect(screen.getByText('Investigation: emissions')).toBeInTheDocument();
+    expect(screen.getByText('One rule failed.')).toBeInTheDocument();
+  });
+});
+
 describe('formatContextLines', () => {
   it('formats budget tiers with labels and KG entity names, never [object Object]', () => {
     const lines = formatContextLines({

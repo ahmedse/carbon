@@ -21,6 +21,7 @@ vi.mock('../shell/AIConversationView', () => ({ default: () => null }));
 vi.mock('../shell/AISuggestionRail', () => ({ default: () => null }));
 vi.mock('../shell/AIEmptyState', () => ({ default: () => null }));
 vi.mock('../shell/AIOfflineBanner', () => ({ default: () => null }));
+vi.mock('../shell/InvestigateTab', () => ({ default: () => <div data-testid="investigate-tab" /> }));
 
 vi.mock('../api/aiPulse', () => ({
   listDomainManifests: vi.fn().mockResolvedValue({ apps: [] }),
@@ -97,5 +98,16 @@ describe('AIWorkspace durable archive on close (G1)', () => {
         is_archived: true,
       });
     });
+  });
+});
+
+describe('AIWorkspace Investigate mode tab (Phase 9-B)', () => {
+  it('renders the InvestigateTab when Investigate mode is selected', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const investigateTab = await screen.findByRole('tab', { name: 'Investigate' });
+    fireEvent.click(investigateTab);
+
+    expect(await screen.findByTestId('investigate-tab')).toBeInTheDocument();
   });
 });

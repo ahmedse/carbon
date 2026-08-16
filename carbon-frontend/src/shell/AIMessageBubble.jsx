@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
 import { formatContextLines } from '../utils/aiProvenance';
 import NLRuleTestCard from './NLRuleTestCard';
+import InvestigationCard from './InvestigationCard';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
 
@@ -150,6 +151,9 @@ function AIMessageBubble({
   executeMode = false,
   onTestLive,
   onSave,
+  onRerun,
+  onChatAbout,
+  onCreateRule,
 }) {
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [correctionOpen, setCorrectionOpen] = useState(false);
@@ -330,6 +334,19 @@ function AIMessageBubble({
             metadata={metadata}
             executeMode={executeMode}
             onSave={onSave}
+          />
+        </Box>
+      );
+    }
+
+    if (metadata.type === 'investigation') {
+      return (
+        <Box sx={{ mt: 1 }}>
+          <InvestigationCard
+            metadata={metadata}
+            onRerun={onRerun}
+            onChatAbout={onChatAbout}
+            onCreateRule={onCreateRule}
           />
         </Box>
       );
@@ -596,6 +613,9 @@ AIMessageBubble.propTypes = {
   executeMode: PropTypes.bool,
   onTestLive: PropTypes.func,
   onSave: PropTypes.func,
+  onRerun: PropTypes.func,
+  onChatAbout: PropTypes.func,
+  onCreateRule: PropTypes.func,
 };
 
 export default AIMessageBubble;

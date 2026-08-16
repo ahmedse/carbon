@@ -38,6 +38,7 @@ import AIEmptyState from './AIEmptyState';
 import AIOfflineBanner from './AIOfflineBanner';
 import AIArtifactBrowser from './AIArtifactBrowser';
 import AISuggestionRail from './AISuggestionRail';
+import InvestigateTab from './InvestigateTab';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { ExecuteModeProvider } from './ExecuteModeContext';
 
@@ -64,7 +65,7 @@ export function AIWorkspace({ onClose }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [loading, setLoading] = useState(true);
   const [providerOffline, setProviderOffline] = useState(false);
-  // Fixed mode tabs: 'chat' | 'artifacts'
+  // Fixed mode tabs: 'chat' | 'investigate' | 'artifacts'
   const [mode, setMode] = useState('chat');
   const [manifests, setManifests] = useState([]);
 
@@ -163,6 +164,18 @@ export function AIWorkspace({ onClose }) {
     [visibleIds, byId],
   );
 
+  // Phase 9-B — investigate conversations, newest first.
+  const investigateConversations = useMemo(() => {
+    const list = order
+      .map((id) => byId[id])
+      .filter((c) => c && c.conversation_type === 'investigate');
+    return [...list].sort((a, b) => {
+      const ta = a.updated_at || a.last_message_at || a.created_at || '';
+      const tb = b.updated_at || b.last_message_at || b.created_at || '';
+      return String(tb).localeCompare(String(ta));
+    });
+  }, [order, byId]);
+
   // The active tab must always reference a visible conversation. Derive the
   // effective id so the Tabs `value` is always valid (MUI rejects a null or
   // stale value with "The `value` provided to the Tabs component is invalid").
@@ -220,6 +233,31 @@ export function AIWorkspace({ onClose }) {
     },
     [token, notifyFromError],
   );
+
+  // Phase 9-B — "New investigation" opens a bare investigate conversation
+  // (chat-style); the real one-click trigger lives on the table detail page.
+  const handleNewInvestigation = useCallback(async () => {
+    try {
+      const conv = await apiCreateConversation(token, {
+        conversation_type: 'investigate',
+        title: 'Investigation',
+        task_payload: { type: 'investigate' },
+      });
+      setById((prev) => ({ ...prev, [conv.id]: conv }));
+      setOrder((prev) => [conv.id, ...prev]);
+      setActiveId(conv.id);
+      setShowArchived(false);
+      setMode('chat');
+    } catch (err) {
+      notifyFromError(err, 'Could not create investigation');
+    }
+  }, [token, notifyFromError]);
+
+  // Phase 9-B — open an investigate conversation's thread (rendered in chat mode).
+  const handleOpenInvestigation = useCallback((convId) => {
+    setActiveId(convId);
+    setMode('chat');
+  }, []);
 
   // Archive (persistent close). Reversible via restore.
   const handleArchive = useCallback(
@@ -419,12 +457,13 @@ export function AIWorkspace({ onClose }) {
         sx={{ minHeight: 36, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { minHeight: 36, py: 0, px: 2, fontSize: '0.8125rem', textTransform: 'none' } }}
       >
         <Tab label="Chat" value="chat" />
+        <Tab label="Investigate" value="investigate" />
         <Tab label="Artifacts" value="artifacts" />
       </Tabs>
 
       {providerOffline && <AIOfflineBanner />}
 
-      {hasAny && (
+      {mode !== 'investigate' && hasAny && (
         <Box
           sx={{
             display: 'flex',
@@ -459,11 +498,11 @@ export function AIWorkspace({ onClose }) {
 
       {/* Phase 5B — proactive suggestions rail, pinned above the thread rail.
           Only rendered when there is an effective active conversation. */}
-      {hasAny && effectiveActiveId && (
+      {mode !== 'investigate' && hasAny && effectiveActiveId && (
         <AISuggestionRail conversationId={effectiveActiveId} />
       )}
 
-      {hasAny && (
+      {mode !== 'investigate' && hasAny && (
         <AIConversationTabs
           conversations={visibleConversations}
           activeId={effectiveActiveId}
@@ -479,6 +518,12 @@ export function AIWorkspace({ onClose }) {
 
       {mode === 'artifacts' ? (
         <AIArtifactBrowser />
+      ) : mode === 'investigate' ? (
+        <InvestigateTab
+          conversations={investigateConversations}
+          onSelect={handleOpenInvestigation}
+          onNew={handleNewInvestigation}
+        />
       ) : !hasAny ? (
         <AIEmptyState
           onStartChat={handleNewChat}

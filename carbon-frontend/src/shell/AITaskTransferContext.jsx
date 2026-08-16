@@ -14,7 +14,7 @@ import React, {
 } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
-import { createConversation } from '../api/aiWorkspace';
+import { createConversation, sendMessage } from '../api/aiWorkspace';
 import { normalizeAppIdentifier } from './aiTaskTransferUtils';
 import { AITaskTransferContext } from './aiTaskTransferContext';
 
@@ -128,6 +128,19 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
           workspace_context: metadata.workspaceContext,
         });
         setPendingTransferId(conv.id);
+
+        // Phase 9-B — one-click trigger: an investigate transfer with a target
+        // table kicks off the read-only pipeline immediately by sending the
+        // sentinel message (mirrors the "Investigate" entry point on the table
+        // detail page).
+        if (type === 'investigate' && normalizedPayload.table_id) {
+          try {
+            await sendMessage(token, conv.id, 'Investigate this table');
+          } catch {
+            // The conversation still exists; the user can re-trigger from the thread.
+          }
+        }
+
         return conv.id;
       } catch (err) {
         notifyFromError(err, 'Could not transfer task to AI Workspace');

@@ -468,6 +468,40 @@ function AIConversationView({ conversationId }) {
     [token, notify, notifyFromError],
   );
 
+  // Phase 9-B — re-run the read-only investigation pipeline for the active
+  // conversation by re-sending the same sentinel the one-click trigger uses.
+  const handleRerunInvestigation = useCallback(() => {
+    handleSend('Investigate this table');
+  }, [handleSend]);
+
+  // Phase 9-B — "Chat about this" on a finding: follow up in-thread.
+  const handleChatAboutFinding = useCallback(
+    (finding) => {
+      const parts = [finding?.title, finding?.detail, finding?.recommended_action].filter(Boolean);
+      handleSend(`Tell me more about this finding and how to resolve it: ${parts.join(' — ')}`);
+    },
+    [handleSend],
+  );
+
+  // Phase 9-B — "Create rule" on a finding: open an nl_rule_test conversation
+  // scoped to the investigated table, seeded from the finding text, reusing the
+  // Phase 8-B test → save flow.
+  const handleCreateRuleFromFinding = useCallback(
+    (finding) => {
+      const tableId =
+        conversationRef.current?.task_payload_json?.table_id ??
+        conversationRef.current?.task_payload_json?.table ??
+        null;
+      const nl = [finding?.title, finding?.recommended_action].filter(Boolean).join(' — ');
+      transferTask(
+        'nl_rule_test',
+        { table_id: tableId, nl },
+        { title: `NL rule: ${finding?.title || 'finding'}` },
+      );
+    },
+    [transferTask],
+  );
+
   const updateMessageInState = useCallback((updatedMessage) => {
     if (!updatedMessage?.id) return;
     setMessages((prev) =>
@@ -762,6 +796,9 @@ function AIConversationView({ conversationId }) {
             executeMode={executeMode}
             onTestLive={handleTestLive}
             onSave={handleSaveRule}
+            onRerun={handleRerunInvestigation}
+            onChatAbout={handleChatAboutFinding}
+            onCreateRule={handleCreateRuleFromFinding}
           />
         ))}
 

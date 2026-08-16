@@ -227,3 +227,114 @@ $ npm run build
 
 ### Issues Found
 - **Uncommitted working tree (still unresolved):** `git status` continues to show interleaved uncommitted changes from Phases 6/7A/7B/7C/8-A/8-B (backend `ai/` files, migrations, tests, docs, plus all new frontend shell files). **No commit was made** — awaiting direction on commit/push scope before touching git history.
+
+---
+
+## [2026-08-16] Backend Worker — Phase 9-A: Investigate Mode (read-only pipeline)
+
+### Summary
+5/5 gates passed. 4 files changed (1 created, 3 modified). 7 new tests (all passing); full `ai` suite 364 passed, canonical `ai dq accounts` suite 961 passed, 0 failed, 0 skipped.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Add `"investigate"` to `MODULES` + register `_TASK_HANDLERS["investigate"]` | ✅ | `MODULES` now 12; `_run_investigate` wired into `dispatch_task` |
+| 2 | Implement `_run_investigate` read-only pipeline | ✅ | 5 plan steps (profile → DQ → anomaly → KG → synthesis); DQ via pure `dq.engine.evaluate` loop; anomaly reuses `_run_anomaly_detect`; LLM outage → `llm_unavailable` (never `pulse_unavailable`) |
+| 3 | Route `investigate` conversations + `_send_investigate_message` | ✅ | Removed `investigate` from staged placeholder; pre-loads schema/rows/latest `TableProfile`/rule_defs/anomaly payload/KG (all read-only, RULE_21); `timeout=90` |
+| 4 | Tests: `test_investigate.py` (7 tests) + bump `test_ops_api.py` count | ✅ | 11→12 module count; test renamed to `_twelve_types` |
+| 5 | Verification gates | ✅ | `check`, `pytest ai`, `pytest ai dq accounts`, `verify.sh backend`, `verify.sh antipatterns` all green |
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| MODIFY | `backend/ai/engine_runtime.py` | +~235 | `"investigate"` in `MODULES`; `_INVESTIGATE_SEVERITY_MAP`/`_investigate_severity`; `_run_investigate` (5-step read-only pipeline, frozen `counts`/`plan_steps`/`findings`/`summary` metadata contract) |
+| MODIFY | `backend/ai/intelligence.py` | +~175 | `investigate` routing branch; `_send_investigate_message` (guard chain, read-only pre-load, anomaly payload translation, KG retrieval via `_retrieve_knowledge_graph`, dispatch, audit-log, sanitized metadata) |
+| CREATE | `backend/ai/tests/test_investigate.py` | 303 | 7 tests: empty-table 5 done steps, DQ `error→high`, DQ `warn→medium`, anomaly `error→high`, insufficient-history, LLM-outage `llm_unavailable`, routing |
+| MODIFY | `backend/ai/tests/test_ops_api.py` | 4 | module count 11→12, test renamed to `_twelve_types`, asserts `"investigate" in engine_runtime.MODULES` |
+
+### Verification Output
+```
+$ cd backend && .venv/bin/python manage.py check
+System check identified no issues (0 silenced).
+
+$ .venv/bin/python -m pytest ai/tests/test_investigate.py ai/tests/test_ops_api.py -q
+12 passed in 3.84s
+
+$ .venv/bin/python -m pytest ai -q
+364 passed in 11.96s
+
+$ .venv/bin/python -m pytest ai dq accounts -q
+961 passed in 22.92s
+
+$ cd /home/ahmed/aast/carbon && ./.ai-toolkit/scripts/verify.sh backend
+GATE PASSED
+
+$ cd /home/ahmed/aast/carbon && ./.ai-toolkit/scripts/verify.sh antipatterns
+GATE PASSED
+```
+
+### Deviations
+- **Test runner:** the spec's gate cites `manage.py test ai.tests.test_investigate ...`, but `project.config.md` (TESTING note) and `.ai-toolkit/scripts/verify.sh` both document that `manage.py test` aborts with a "Conflicting … models in application 'ai'" error under the unittest loader. Used `python -m pytest` (the canonical runner) instead — same test targets, no loss of coverage.
+- **Anomaly payload translation:** `build_anomaly_payload(table_id)` returns a `{table, history, sensitivity, volume_anomaly_pct, ...}` shape, but `_run_anomaly_detect` consumes `{table_name, profile_history, sensitivity, volume_threshold_pct}`. `_send_investigate_message` translates between the two (mirroring `_build_anomaly_request`), so `_run_investigate` passes the exact shape `_run_anomaly_detect` expects. `None` (insufficient history) → a `done` plan step with `"insufficient history"` and 0 anomalies (not an error).
+- **Field-less deterministic rules skipped:** rules whose field_assignments resolve to no table field are excluded from `rule_defs` (a `not_null` with no field would otherwise fail every row spuriously).
+
+### Issues Found
+- **Pre-existing (not in my scope):** `verify.sh antipatterns` still reports `raw fetch()` in `carbon-frontend/src/pages/{ForgotPasswordPage,ResetPasswordPage}.jsx` and `src/api/aiWorkspace.js:228`, plus 28 `print()` calls in backend app code. None are in files I touched.
+- **Phase 9-B dependency note:** the frozen metadata contract `{type:"investigation", table_id, table_name, summary, plan_steps[], findings[], counts{rules_run,rules_failed,anomalies,kg_entities}}` is now the authoritative payload for the frontend. Each `finding` carries `{severity: high|medium|low, title, detail, recommended_action, entity_ref}`; each `plan_step` carries `{step, label, status: done|llm_unavailable, detail}`. Message status is `needs_input` when findings exist, else `completed`.
+- **Uncommitted working tree (still unresolved):** `git status` continues to show interleaved uncommitted changes from prior phases. **No commit was made** — awaiting direction on commit/push scope before touching git history.
+
+---
+
+## [2026-08-16] Frontend Worker — Phase 9-B: Investigate Mode Frontend (tab + card + one-click trigger)
+
+### Summary
+All gates passed. 11 files changed (2 created, 9 modified). 8 new tests added; full suite 425 passed, 0 failed, 0 skipped.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Add `investigate` label to `AIConversationTabs` | ✅ | `CONVERSATION_TYPE_LABELS` now: chat, dq_validate, dq_suggest, nl_query, anomaly, investigate |
+| 2 | Create `InvestigationCard.jsx` | ✅ | Renders frozen `investigation` metadata: summary, counts chips, plan steps (`done`/`llm_unavailable`), severity-tinted findings, per-finding Chat/Create-rule/Dismiss + Re-run |
+| 3 | Create `InvestigateTab.jsx` | ✅ | Lists `conversation_type==='investigate'`, New-investigation button, status chip, relative `last_message_at || updated_at || created_at` time |
+| 4 | Dispatch card in `AIMessageBubble` | ✅ | `metadata.type === 'investigation'` branch after `nl_rule_test` |
+| 5 | Wire callbacks in `AIConversationView` | ✅ | `handleRerunInvestigation` / `handleChatAboutFinding` / `handleCreateRuleFromFinding` (→ `transferTask('nl_rule_test', …)`) |
+| 6 | Add Investigate mode to `AIWorkspace` | ✅ | third tab, `investigateConversations` memo, `handleNewInvestigation` / `handleOpenInvestigation`, gated search/rail/tabs |
+| 7 | One-click trigger in `AITaskTransferContext` | ✅ | sends sentinel `"Investigate this table"` when `type==='investigate'` && `table_id` |
+| 8 | Tests | ✅ | 4 files: `InvestigationCard.test.jsx` (new, 6), `AIMessageBubble.transparency` (+1), `AIWorkspace.shell` (+1), `AITaskTransferContext` (+2 incl. negative) |
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| CREATE | `carbon-frontend/src/shell/InvestigationCard.jsx` | ~150 | Severity/step meta maps, summary, counts, plan steps, tinted findings, dismiss set, Re-run |
+| CREATE | `carbon-frontend/src/shell/InvestigateTab.jsx` | ~120 | Status meta, empty state, list of investigate conversations, New button |
+| MODIFY | `carbon-frontend/src/shell/AIConversationTabs.jsx` | +1 | `investigate: 'Investigate'` label |
+| MODIFY | `carbon-frontend/src/shell/AIMessageBubble.jsx` | +6 | `import InvestigationCard`, props `onRerun/onChatAbout/onCreateRule`, render branch |
+| MODIFY | `carbon-frontend/src/shell/AIConversationView.jsx` | +~25 | three `useCallback`s wired into `<AIMessageBubble>` |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | +~40 | `import InvestigateTab`, memo, handlers, `<Tab>`, mode gating, render branch |
+| MODIFY | `carbon-frontend/src/shell/AITaskTransferContext.jsx` | +~10 | `sendMessage` import + sentinel send after `setPendingTransferId` |
+| MODIFY | `carbon-frontend/src/__tests__/InvestigationCard.test.jsx` | 6 tests | summary/steps, severity tint, `llm_unavailable`, callbacks, re-run, dismiss |
+| MODIFY | `carbon-frontend/src/__tests__/AIMessageBubble.transparency.test.jsx` | +1 test | investigation render case |
+| MODIFY | `carbon-frontend/src/__tests__/AIWorkspace.shell.test.jsx` | +1 mock +1 test | Investigate tab renders `<InvestigateTab>` |
+| MODIFY | `carbon-frontend/src/__tests__/AITaskTransferContext.test.jsx` | +2 tests | sentinel sent with `table_id`; not sent without |
+
+### Verification Output
+```
+$ npm run lint
+> eslint .
+(exit 0 — clean)
+
+$ npm test -- --run
+ Test Files  22 passed (22)
+      Tests  425 passed (425)
+
+$ npm run build
+✓ built in 12.81s
+```
+
+### Deviations
+- **Design-doc file map stale:** §9-B referenced `src/shell/cards/InvestigationCard.jsx`, but no `cards/` directory exists. Card placed at `src/shell/InvestigationCard.jsx` alongside the other shell cards (e.g. `NLRuleTestCard.jsx`).
+- **No new Investigate button added:** the "Investigate" entry-point already exists (domain manifest + `AIDomainEntryPoints`). The real gap was `transferTask` creating a conversation but never sending a message — fixed with the sentinel send, not a new button.
+
+### Issues Found
+- **Sentinel string is load-bearing:** `"Investigate this table"` must stay consistent across `AITaskTransferContext` (trigger), `AIConversationView` `handleRerunInvestigation` (re-run), and the entry-point path. Any change in one must be mirrored in the others.
+- **Uncommitted working tree (still unresolved):** `git status` continues to show interleaved uncommitted changes from prior phases. **No commit was made** — awaiting direction on commit/push scope before touching git history.

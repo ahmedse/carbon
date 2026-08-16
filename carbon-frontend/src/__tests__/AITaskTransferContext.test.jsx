@@ -14,11 +14,12 @@ vi.mock('../components/NotificationProvider', () => ({
 
 vi.mock('../api/aiWorkspace', () => ({
   createConversation: vi.fn(),
+  sendMessage: vi.fn(),
 }));
 
 import { AITaskTransferProvider } from '../shell/AITaskTransferContext';
 import { useAITaskTransfer } from '../shell/useAITaskTransfer';
-import { createConversation } from '../api/aiWorkspace';
+import { createConversation, sendMessage } from '../api/aiWorkspace';
 
 let transferTask;
 
@@ -110,5 +111,34 @@ describe('AITaskTransferContext enrichPayload (Phase 7C)', () => {
       module_id: null,
       module_name: null,
     });
+  });
+
+  // Phase 9-B — one-click investigate trigger.
+  it('sends the investigate sentinel when transferring investigate with a table', async () => {
+    const body = await dispatch(
+      'investigate',
+      { table_id: 't1', table_name: 'Emissions' },
+      { app_identifier: 'emissions' },
+    );
+
+    expect(body.task_payload).toEqual({
+      type: 'investigate',
+      table_id: 't1',
+      table_name: 'Emissions',
+      row_count: null,
+      module_id: null,
+      module_name: null,
+    });
+    expect(sendMessage).toHaveBeenCalledWith(
+      'test-token',
+      'conv-1',
+      'Investigate this table',
+    );
+  });
+
+  it('does not send the sentinel when investigate has no table', async () => {
+    await dispatch('investigate', {}, { app_identifier: 'emissions' });
+
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 });
