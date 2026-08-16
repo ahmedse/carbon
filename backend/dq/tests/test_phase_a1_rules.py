@@ -143,3 +143,61 @@ class VersionBumpTests(_A1Base):
             f'{BASE}/rules/{self.rule.id}/', {'definition': _definition()}, format='json')
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
         self.assertEqual(r.data['version'], 1)
+
+
+class FlatColumnReconcileTests(_A1Base):
+    """D1 — flat-only PATCH columns must not be reverted by DQRule.save().
+
+    DQRule.save() re-derives name/severity/dimension/is_active from
+    `definition`, so a flat edit (toggle, rename) would be silently reverted
+    unless the serializer reconciles the flat column back into the definition.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.rule = DQRule.objects.create(
+            name='Amount in range', rule_type='range', rule_level='field_validation',
+            is_active=True, created_by=self.admin,
+            definition=_definition(name='Amount in range', active=True),
+        )
+
+    def test_flat_only_is_active_toggle_persists(self):
+        r = self.client.patch(
+            f'{BASE}/rules/{self.rule.id}/', {'is_active': False}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertFalse(r.data['is_active'])
+        self.rule.refresh_from_db()
+        self.assertFalse(self.rule.is_active)
+        self.assertFalse(self.rule.definition.get('active'))
+
+    def test_flat_only_rename_persists(self):
+        r = self.client.patch(
+            f'{BASE}/rules/{self.rule.id}/', {'name': 'Renamed Rule'}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(r.data['name'], 'Renamed Rule')
+        self.rule.refresh_from_db()
+        self.assertEqual(self.rule.name, 'Renamed Rule')
+        self.assertEqual(self.rule.definition.get('name'), 'Renamed Rule')
+
+    def test_flat_only_toggle_does_not_bump_version(self):
+        r = self.client.patch(
+            f'{BASE}/rules/{self.rule.id}/', {'is_active': False}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.rule.refresh_from_db()
+        self.assertEqual(self.rule.version, 1)
+
+    def test_definition_with_flat_override_merges_and_bumps(self):
+        body = {
+            'definition': _definition(name='Stale', active=True),
+            'name': 'Flat Name',
+            'severity': 'warn',
+        }
+        r = self.client.patch(f'{BASE}/rules/{self.rule.id}/', body, format='json')
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(r.data['name'], 'Flat Name')
+        self.assertEqual(r.data['severity'], 'warn')
+        self.rule.refresh_from_db()
+        self.assertEqual(self.rule.name, 'Flat Name')
+        self.assertEqual(self.rule.definition.get('name'), 'Flat Name')
+        self.assertEqual(self.rule.definition.get('severity'), 'warn')
+        self.assertEqual(self.rule.version, 2)

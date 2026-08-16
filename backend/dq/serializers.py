@@ -211,6 +211,29 @@ class DQRuleSerializer(serializers.ModelSerializer):
             )
         return rule
 
+    @staticmethod
+    def _reconcile_flat_into_definition(definition, validated_data):
+        """Write explicit flat columns back into the definition dict.
+
+        DQRule.save() re-derives name/severity/dimension/is_active from
+        `definition`, so a flat-only PATCH (e.g. `{is_active: false}`) or a flat
+        column that disagrees with the JSON (e.g. renaming via the top-level
+        `name` field while `definition.name` is stale) would be silently reverted
+        on save. Reconcile them here so definition stays the single source of
+        truth and flat edits stick.
+        """
+        if 'name' in validated_data:
+            definition['name'] = validated_data['name']
+        if 'severity' in validated_data:
+            definition['severity'] = validated_data['severity']
+        if 'dimension' in validated_data:
+            definition['dimension'] = validated_data['dimension']
+        if 'description' in validated_data:
+            definition['description'] = validated_data['description']
+        if 'is_active' in validated_data:
+            definition['active'] = bool(validated_data['is_active'])
+        return definition
+
     def update(self, instance, validated_data):
         tag_ids = validated_data.pop('tag_ids', None)
         field_assignments_data = validated_data.pop('field_assignments_write', None)
@@ -226,6 +249,30 @@ class DQRuleSerializer(serializers.ModelSerializer):
                         'Pass replace_assignments=true to confirm, or omit field_assignments_write.'
                     )
                 })
+
+        # D1 — definition is the single source of truth, but honor explicit flat
+        # columns so DQRule.save() does not revert them (rename / activate bug).
+        flat_keys = ('name', 'severity', 'dimension', 'description', 'is_active')
+        if any(k in validated_data for k in flat_keys):
+            from .rule_schema import validate_definition
+            definition = validated_data.get('definition')
+            if definition is not None:
+                # Definition supplied: merge flat columns into it and let the
+                # normal version-bump logic below treat it as a definition edit.
+                definition = self._reconcile_flat_into_definition(dict(definition), validated_data)
+                derrors = validate_definition(definition)
+                if derrors:
+                    raise serializers.ValidationError({'definition': derrors})
+                validated_data['definition'] = definition
+            elif instance.definition:
+                # Flat-only update on a definition-backed rule: update the stored
+                # definition in place so save() re-syncs consistently, without
+                # tripping the "definition changed → version bump" check.
+                definition = self._reconcile_flat_into_definition(dict(instance.definition), validated_data)
+                derrors = validate_definition(definition)
+                if derrors:
+                    raise serializers.ValidationError({'definition': derrors})
+                instance.definition = definition
 
         # F7 — bump the monotonic version when the definition actually changes.
         if 'definition' in validated_data and instance.definition != validated_data['definition']:

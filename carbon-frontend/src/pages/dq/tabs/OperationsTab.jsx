@@ -69,7 +69,7 @@ function OperationsTab({ rule, onChanged }) {
   const handleArchive = async () => {
     setBusy('archive');
     try {
-      const result = await deleteDQRule(rule.id);
+      const result = await deleteDQRule(token, rule.id);
       if (result && result.archived) {
         notify({
           message: `Rule "${rule.name}" archived. ${result.results_count || 0} historical results preserved.`,
@@ -90,7 +90,7 @@ function OperationsTab({ rule, onChanged }) {
   const handleDelete = async () => {
     setBusy('delete');
     try {
-      const result = await deleteDQRule(rule.id);
+      const result = await deleteDQRule(token, rule.id);
       if (result && result.archived) {
         notify({
           message: `Rule "${rule.name}" archived. ${result.results_count || 0} historical results preserved.`,
