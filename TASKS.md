@@ -553,7 +553,7 @@ Commit with `feat(ai-workspace): Phase 11-B — Suggestion rail actions + badge 
 
 ## Phase 12 — Shared Threads frontend (read-only collaboration)
 
-**Status:** PENDING
+**Status:** DONE (`f1bae71`) — frontend-only; backend was already complete.
 **Role:** frontend-worker
 **Source spec:** `docs/DESIGN_AI_WORKSPACE_V4.md` §Phase 11 (Shared Threads). The BACKEND is already complete — this is a frontend-only phase.
 
