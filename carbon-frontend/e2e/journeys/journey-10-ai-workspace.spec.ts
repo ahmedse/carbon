@@ -722,17 +722,17 @@ test.describe.serial('Journey 10: AI Workspace — extensive-use simulation', ()
 
   test('S9. Export conversation → 200 for json and markdown', async ({ request }) => {
     expect(adminChatId).toBeTruthy();
-    const json = await request.get(`${WS}/conversations/${adminChatId}/export/?format=json`, {
+    const json = await request.get(`${WS}/conversations/${adminChatId}/export/?fmt=json`, {
       headers: hdr('admin'),
     });
     console.log(`  S9 json export actual HTTP status = ${json.status()}`);
     expect(json.status()).toBe(200);
-    const md = await request.get(`${WS}/conversations/${adminChatId}/export/?format=markdown`, {
+    const md = await request.get(`${WS}/conversations/${adminChatId}/export/?fmt=markdown`, {
       headers: hdr('admin'),
     });
     console.log(`  S9 markdown export actual HTTP status = ${md.status()}`);
     expect(md.status()).toBe(200);
-    const bad = await request.get(`${WS}/conversations/${adminChatId}/export/?format=xml`, {
+    const bad = await request.get(`${WS}/conversations/${adminChatId}/export/?fmt=xml`, {
       headers: hdr('admin'),
     });
     console.log(`  S9 xml export actual HTTP status = ${bad.status()}`);

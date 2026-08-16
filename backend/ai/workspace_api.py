@@ -318,8 +318,13 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
 
     @action(detail=True, methods=["get"], url_path="export")
     def export(self, request, pk=None):
-        """Export a conversation as JSON or Markdown (?format=json|markdown)."""
-        fmt = request.query_params.get("format", "json")
+        """Export a conversation as JSON or Markdown (?fmt=json|markdown).
+
+        The param is ``fmt`` (not ``format``) because DRF reserves ``format``
+        for URL_FORMAT_OVERRIDE content negotiation, which 404s on unknown
+        renderer formats (QA F2).
+        """
+        fmt = request.query_params.get("fmt", "json")
         if fmt not in ("json", "markdown"):
             return Response(
                 {"error": f"Unsupported export format: {fmt}"},

@@ -34,7 +34,10 @@ class ConversationListSerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False, default=50, max_value=200, min_value=1)
     q = serializers.CharField(required=False)
     is_archived = serializers.BooleanField(required=False)
-    is_pinned = serializers.BooleanField(required=False)
+    # allow_null=True so an ABSENT is_pinned stays None instead of DRF's
+    # default_empty_html=False (which filtered pinned conversations out of the
+    # default list and ?q= search — QA F3).
+    is_pinned = serializers.BooleanField(required=False, allow_null=True)
     conversation_type = serializers.ChoiceField(
         choices=["chat", "dq_validate", "dq_suggest", "nl_query", "anomaly"],
         required=False,

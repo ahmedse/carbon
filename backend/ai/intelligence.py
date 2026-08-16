@@ -835,6 +835,12 @@ class CarbonIntelligence:
                 has_more = conversation.messages.filter(
                     created_at__gt=window[-1].created_at
                 ).exists()
+            else:
+                # No cursor: the default page is the OLDEST `limit` messages in
+                # ascending order, so more remain when a newer message exists.
+                has_more = conversation.messages.filter(
+                    created_at__gt=window[-1].created_at
+                ).exists()
 
         return {
             "messages": [_serialize_message(m) for m in window],

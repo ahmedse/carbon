@@ -306,3 +306,63 @@ def test_cross_user_endpoint_returns_404(user):
         _detail_url(conversation), {"title": "hijacked"}, format="json"
     )
     assert response.status_code == 404
+
+
+# ── QA AI Workspace simulation regressions (F2, F3, F4) ─────────────────
+
+
+@pytest.mark.django_db
+def test_pinned_conversation_included_in_default_list(user):
+    """F3 — a pinned conversation must not be dropped from the default list."""
+    ci = CarbonIntelligence()
+    pinned = _make_conversation(user, "chat", {})
+    unpinned = _make_conversation(user, "chat", {})
+    ci.update_conversation(user, str(pinned.id), is_pinned=True)
+
+    ids = [c["id"] for c in ci.list_conversations(user)]
+    assert str(pinned.id) in ids
+    assert str(unpinned.id) in ids
+
+    # And the API endpoint (serializer must yield is_pinned=None, not False).
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.get(reverse("ai-workspace-conversation-list"))
+    assert response.status_code == 200
+    ids = [c["id"] for c in response.data]
+    assert str(pinned.id) in ids
+
+
+@pytest.mark.django_db
+def test_first_page_has_more_true(user):
+    """F4 — the no-cursor first page must report has_more when more remain."""
+    ci = CarbonIntelligence()
+    conversation = _make_conversation(user, "chat", {})
+
+    base = timezone.now()
+    for i in range(55):
+        m = AIMessage.objects.create(
+            conversation=conversation,
+            role="user",
+            content=f"message {i}",
+        )
+        AIMessage.objects.filter(pk=m.pk).update(created_at=base + timedelta(seconds=i))
+
+    result = ci.list_messages(user, str(conversation.id), limit=50)
+    assert len(result["messages"]) == 50
+    assert result["has_more"] is True
+
+
+@pytest.mark.django_db
+def test_export_fmt_markdown_and_bad_format(user):
+    """F2 — ?fmt=markdown → 200, unsupported ?fmt=xml → 400."""
+    client = APIClient()
+    client.force_authenticate(user=user)
+    conversation = _make_conversation(user, "chat", {})
+    url = reverse("ai-workspace-conversation-export", kwargs={"pk": conversation.id})
+
+    md = client.get(url, {"fmt": "markdown"})
+    assert md.status_code == 200
+    assert md.data["format"] == "markdown"
+
+    bad = client.get(url, {"fmt": "xml"})
+    assert bad.status_code == 400

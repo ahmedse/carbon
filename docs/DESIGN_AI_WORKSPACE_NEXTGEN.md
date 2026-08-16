@@ -210,7 +210,7 @@ Existing (kept): `POST/GET conversations`, `GET conversations/{id}`,
 | `PATCH` | `conversations/{id}/messages/{message_id}/` | edit user message (creates branch) | 2 |
 | `POST` | `conversations/{id}/stop/` | set cancellation token for the running turn | 2 |
 | `POST` | `conversations/{id}/summary/` | force compaction / regenerate `summary` | 3 |
-| `GET` | `conversations/{id}/export/` | transcript as JSON or Markdown (`?format=`) | 4 |
+| `GET` | `conversations/{id}/export/` | transcript as JSON or Markdown (`?fmt=`) | 4 |
 | `POST` | `conversations/{id}/messages/stream` | **extended** — progress frames for all types | 2 |
 
 ### 5.1 Extended SSE protocol

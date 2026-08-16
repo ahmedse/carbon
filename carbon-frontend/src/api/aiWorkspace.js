@@ -147,8 +147,9 @@ export function editMessage(token, conversationId, messageId, content) {
  * @returns {Promise<object>} Export payload
  */
 export function exportConversation(token, conversationId, format = 'json') {
+  // `fmt` (not `format`): DRF reserves `format` for URL_FORMAT_OVERRIDE.
   return apiFetch(
-    `${BASE}conversations/${conversationId}/export/?format=${encodeURIComponent(format)}`,
+    `${BASE}conversations/${conversationId}/export/?fmt=${encodeURIComponent(format)}`,
     { token },
   );
 }
