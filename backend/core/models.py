@@ -5,6 +5,11 @@ from django.db import models
 class Module(models.Model):
     """
     Top-level organisational unit for data collection (Scope 1/2/3).
+
+    `scope` is GHG emission scope — carbon-domain metadata. Per ADR-0010 it is
+    migrating into `domain_attributes` (keyed by app_id) so the generic Data
+    Product surface stays domain-neutral. `scope` is retained for backward
+    compatibility and removed in a later step.
     """
     SCOPE_CHOICES = [
         (1, 'Scope 1'),
@@ -14,6 +19,10 @@ class Module(models.Model):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True, default='')
     scope = models.PositiveSmallIntegerField(choices=SCOPE_CHOICES, default=1)
+    domain_attributes = models.JSONField(
+        default=dict, blank=True,
+        help_text='Per-domain-app metadata keyed by app_id (e.g. {"carbon": {"scope": 1}}).',
+    )
     org_unit = models.ForeignKey(
         'mdm.OrgUnit', null=True, blank=True, on_delete=models.SET_NULL, related_name='modules'
     )
@@ -28,8 +37,19 @@ class Module(models.Model):
         verbose_name = "Module"
         verbose_name_plural = "Modules"
 
+    def carbon_scope(self):
+        """Emission scope for the carbon domain app (from domain_attributes)."""
+        carbon = (self.domain_attributes or {}).get('carbon') or {}
+        return carbon.get('scope', self.scope)
+
+    def set_carbon_scope(self, value):
+        attrs = dict(self.domain_attributes or {})
+        attrs.setdefault('carbon', {})
+        attrs['carbon']['scope'] = value
+        self.domain_attributes = attrs
+
     def __str__(self):
-        return f"{self.name} (Scope {self.scope})"
+        return f"{self.name} (Scope {self.carbon_scope()})"
 
 
 class Feedback(models.Model):
