@@ -200,17 +200,34 @@ Gate: `pytest dq/ -q`; browser Monitoring tab shows real percentages where data 
 (`v7_startTransition`, `v7_relativeSplatPath`) or pin the major to silence the upgrade warnings.
 Gate: `npm run build`; console warnings gone.
 
-### T13 (NEW — found during A1 review) — normalizeServerErrors ignores the `details` envelope
+### T13 (NEW — found during A1 review) — normalizeServerErrors ignores the real error envelopes
 `carbon-frontend/src/components/dq/ruleJsonValidation.js` `normalizeServerErrors()` only reads
-`payload.definition` and `payload.error`. But `catalog/exceptions.py::data_trust_exception_handler`
-wraps validation errors as `{error, message, details: {...}}`. So:
-- the drift-guard 400 (`details.field_assignments_write`) surfaces as opaque "ValidationError", and
-- the serializer's `anomaly_detect` whitelist rejection (`details.definition`) is also swallowed.
-Fix: unwrap `payload.details` first (`const raw = payload?.details?.definition ?? payload?.definition`),
-and read the drift-guard key (`payload?.details?.field_assignments_write`) into an actionable error row.
+`payload.definition` and `payload.error`. CONFIRMED facts (verified against settings + code):
+
+1. Active handler is `catalog.exceptions.data_trust_exception_handler` (settings.py line 284 — the
+   ACTIVE line; line 283 is a stale commented-out duplicate). It wraps every DRF `ValidationError` as:
+   `{ error, message, timestamp, path, details, suggested_action? }` where `details` = `exc.detail`
+   (a dict). So field-level errors live under `payload.details`, NOT `payload.definition`.
+2. `core/feedback.py::AppFeedback` produces a DIFFERENT top-level shape:
+   `{ code, severity, title, detail, reasons, remediation, context }` (no `error`/`details`).
+   The drift-guard and serializer whitelist rejections may surface as either shape depending on path.
+3. `core/feedback.py::unified_exception_handler` is DEAD CODE — defined but never wired into settings.
+   Do not implement against it.
+
+Consequences today: the drift-guard 400 (`details.field_assignments_write`) and the serializer
+`anomaly_detect` whitelist rejection (`details.definition`) both surface as opaque "ValidationError"
+in the UI.
+
+Fix `normalizeServerErrors()` to unwrap BOTH shapes:
+- `const raw = payload?.details?.definition ?? payload?.definition;` for definition errors,
+- read `payload?.details?.field_assignments_write` into an actionable error row ("Would drop N
+  existing binding(s)"),
+- for `AppFeedback`, read `payload?.detail` / `payload?.reasons` (array) / `payload?.title` into
+  actionable rows.
 Do NOT change the envelope shape server-side (other clients may depend on it).
-Gate: `npm run lint`; browser — trigger the drift guard (PATCH a bound rule with `field_assignments_write:[]`
-via curl) and confirm the UI shows "Would drop N existing binding(s)", not "ValidationError".
+Gate: `npm run lint`; browser — trigger the drift guard (PATCH a bound rule with
+`field_assignments_write:[]` via curl) and confirm the UI shows the actionable message, not
+"ValidationError".
 
 ---
 
@@ -218,7 +235,9 @@ via curl) and confirm the UI shows "Would drop N existing binding(s)", not "Vali
 - `backend/dq/models.py` — EXCEPT confirming `save()` doesn't overwrite `version` (T3). Do not change
   the denormalization logic.
 - `backend/dq/rule_schema.py` — bindings already optional; do not reintroduce a required check.
-- `carbon-frontend/src/components/dq/ruleJsonValidation.js` — already ADR-0006-correct.
+- `carbon-frontend/src/components/dq/ruleJsonValidation.js` — EXCEPT the `normalizeServerErrors()`
+  function (T13 target). The rest of the file (client-side validation, ADR-0006) is correct; do not
+  touch `validateDefinitionClient()` or `EMPTY_DEFINITION_TEMPLATE`.
 - `carbon-frontend/src/components/dq/RuleJsonEditor.jsx` — Monaco editor is working; no changes.
 - `e2e/`, `e2e/fixtures/users.ts` — test artifacts only, do not modify existing specs.
 
