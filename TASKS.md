@@ -454,3 +454,135 @@ npm run lint             # → 0 new errors
 npm run build            # → clean
 ```
 > The `metadata` fixture for `report` must mirror the 10-A contract exactly: `{type:"report", title, summary, report_type, period_start, period_end, generated_at, sections:[{title, content, sql, data, caveat}]}`. Commit with `feat(ai-workspace): Phase 10-B — ReportDraftCard + one-click trigger`.
+
+---
+
+## Phase 11-A — Proactive suggestion accept/dismiss endpoint
+
+**Status:** PENDING
+**Role:** backend-worker
+**Source spec:** `docs/DESIGN_AI_WORKSPACE_V4.md` §Phase 10 item 1 (Proactive Suggestions Rail). This is the LAST backend gap — the `AISuggestionRail` is display-only because there is no endpoint to mark a `KgProactiveInsight` acknowledged/dismissed.
+
+### Ground truth (ALREADY built — do NOT re-implement)
+- `backend/ai/models/knowledge_graph.py` — `KgProactiveInsight` model already has `disposition = TextField(default="pending")` and `dismissed_reason = TextField(null=True, blank=True)`. The field is `disposition`, NOT `status`. Target values: `"acknowledged"` and `"dismissed"`.
+- `backend/ai/intelligence.py` — `list_proactive_suggestions(user, conversation_id=None, limit=10)` (~L1059) already scopes via `scope_ai_queryset(KgProactiveInsight.objects.all(), user)` and filters `disposition="pending"` + unexpired. `_serialize_proactive_suggestion(insight)` (~L1088) already exists. `_get_accessible_conversation(user, conversation_id)` (~L1253) already exists.
+- `backend/ai/workspace_api.py` — `WorkspaceConversationViewSet` already has a `suggestions` GET detail action (~L353) and a `resume` POST action (~L380). The accept/dismiss action is the ONLY missing piece.
+- `backend/ai/tests/test_proactive_resume.py` — existing tests for `list_proactive_suggestions` + `resume_conversation`; add new tests here (do NOT create a new test file).
+
+### Implementation
+1. **`backend/ai/intelligence.py`** — add ONE method `acknowledge_proactive_suggestion(self, user, conversation_id, suggestion_id, disposition="acknowledged", reason=None)`:
+   - Verify conversation access first: `if self._get_accessible_conversation(user, conversation_id) is None: raise ValueError(f"Conversation {conversation_id} not found.")` (mirror `list_proactive_suggestions`).
+   - Validate `disposition in {"acknowledged", "dismissed"}` else `raise ValueError`.
+   - `from ai.models import KgProactiveInsight` + `from accounts.ai_scoping import scope_ai_queryset`.
+   - `qs = scope_ai_queryset(KgProactiveInsight.objects.all(), user)`; `insight = qs.get(id=suggestion_id)` (catch `KgProactiveInsight.DoesNotExist` → `raise ValueError(f"Suggestion {suggestion_id} not found.")`).
+   - Set `insight.disposition = disposition`; if `reason` and `disposition == "dismissed"` set `insight.dismissed_reason = reason`; `insight.save(update_fields=["disposition"] + (["dismissed_reason"] if reason else []))`.
+   - Return `self._serialize_proactive_suggestion(insight)`.
+2. **`backend/ai/workspace_api.py`** — add TWO `@action` methods on `WorkspaceConversationViewSet` (after the existing `suggestions` action):
+   - `@action(detail=True, methods=["post"], url_path="suggestions/(?P<suggestion_id>[^/.]+)/accept", url_name="suggestion-accept")` → `accept_suggestion(self, request, pk=None, suggestion_id=None)` calls `acknowledge_proactive_suggestion(user=request.user, conversation_id=pk, suggestion_id=suggestion_id, disposition="acknowledged")`.
+   - `@action(detail=True, methods=["post"], url_path="suggestions/(?P<suggestion_id>[^/.]+)/dismiss", url_name="suggestion-dismiss")` → `dismiss_suggestion(...)` calls the same with `disposition="dismissed", reason=request.data.get("reason")`.
+   - Both: catch `ValueError` → `Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)`; else `Response(result)`.
+3. **`backend/ai/workspace_api.py`** — add ONE list-level action for the notification badge (no `pk` needed):
+   - `@action(detail=False, methods=["get"], url_path="suggestions", url_name="workspace-suggestions")` → `workspace_suggestions(self, request)` reads `limit` from query params (default 10, clamp 1–50), returns `Response({"suggestions": self.intelligence.list_proactive_suggestions(user=request.user, limit=limit)})`.
+   - This coexists with the detail `suggestions` action (different URL: `/conversations/suggestions/` vs `/conversations/{pk}/suggestions/`).
+
+### DO NOT TOUCH
+- `backend/ai/models/knowledge_graph.py` (field already exists — no migration).
+- `backend/ai/intelligence.py` `list_proactive_suggestions` / `_serialize_proactive_suggestion` / `resume_conversation` (already correct).
+- Any `carbon-frontend/**` (11-B owns it).
+
+### Tests (append to `backend/ai/tests/test_proactive_resume.py`)
+1. `test_acknowledge_proactive_suggestion_sets_disposition` — create a pending insight, call `acknowledge_proactive_suggestion(..., disposition="acknowledged")`, assert `disposition == "acknowledged"` and the returned dict still has `id`/`title`.
+2. `test_dismiss_proactive_suggestion_sets_reason` — `disposition="dismissed", reason="not relevant"` → `dismissed_reason == "not relevant"`.
+3. `test_acknowledge_unknown_suggestion_raises` — bogus id → `ValueError`.
+4. `test_acknowledge_bad_disposition_raises` — `disposition="banana"` → `ValueError`.
+5. `test_acknowledge_inaccessible_conversation_raises` — a conversation not accessible to the user → `ValueError`.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+../.venv/bin/python -m pytest ai/tests/test_proactive_resume.py -q
+../.venv/bin/python -m pytest ai -q
+../.venv/bin/python manage.py check
+```
+All green. Commit with `feat(ai-workspace): Phase 11-A — Proactive suggestion accept/dismiss endpoint`.
+
+---
+
+## Phase 11-B — Suggestion rail actions + notification badge + catch-up button
+
+**Status:** PENDING
+**Role:** frontend-worker
+**Depends on:** Phase 11-A (accept/dismiss endpoints).
+
+### Ground truth (ALREADY built — do NOT re-implement)
+- `carbon-frontend/src/shell/AISuggestionRail.jsx` — display-only rail (fetches via `getSuggestions`, renders severity chip + title + narrative + recommended actions + expand). Add Accept/Dismiss buttons here.
+- `carbon-frontend/src/api/aiWorkspace.js` — `getSuggestions(token, conversationId, limit)` already exists. `acceptSuggestion`/`rejectSuggestion` ALREADY EXIST but they hit the **DQ** endpoints (`dq/suggestions/{id}/accept/`) — do NOT reuse them for proactive insights; add NEW helpers.
+- `carbon-frontend/src/shell/AIConversationView.jsx` — resume catch-up banner (~L805) already renders an `Alert` with `HistoryIcon`, `hours_since_last_view`, and a `summary_lines` bullet list. The ONLY missing piece is a **"Catch me up"** action button.
+- `carbon-frontend/src/shell/StatusBar.jsx` — the AI Workspace toggle button lives HERE (~L203), NOT in `ActivityBar` (the design doc file map is stale). Props `copilotVisible` + `onToggleCopilot` are already threaded. Add the unread `Badge` around the toggle `IconButton`.
+- `carbon-frontend/src/shell/useShellState.js` — `copilotVisible` state + `toggleCopilot`/`openCopilot` already exist.
+- `carbon-frontend/src/auth/AuthContext.jsx` — exposes `token` + user info.
+
+### Implementation
+1. **`carbon-frontend/src/api/aiWorkspace.js`** — add three helpers:
+   - `acceptProactiveSuggestion(token, conversationId, suggestionId)` → `POST ${BASE}conversations/${conversationId}/suggestions/${suggestionId}/accept/`.
+   - `dismissProactiveSuggestion(token, conversationId, suggestionId, reason)` → `POST .../dismiss/` with optional `{reason}` body.
+   - `listWorkspaceSuggestions(token, limit = 50)` → `GET ${BASE}conversations/suggestions/?limit=...` (list-level, added by 11-A, for the badge — the detail `suggestions` endpoint requires a `pk`; the badge has none).
+2. **`carbon-frontend/src/shell/AISuggestionRail.jsx`** — add an **Accept** (check icon, `color="success"`) and **Dismiss** (close icon) action per item; on click call the new helpers then remove the item from local state optimistically (filter out by `id`). On error, `notifyFromError` (the component already imports from `../components/NotificationProvider`? — if not, accept an `onError` prop or import `useNotification`). Keep display-only fallback if the endpoint 404s.
+3. **`carbon-frontend/src/shell/StatusBar.jsx`** — wrap the AI Workspace toggle `IconButton` with MUI `<Badge>` showing `badgeContent` = count of pending workspace suggestions; hide the badge when `copilotVisible` is true (the rail inside already shows them — "clears on open"). Fetch count via `listWorkspaceSuggestions` on mount + on a lightweight interval (e.g. 60s) + refresh when `copilotVisible` flips.
+4. **`carbon-frontend/src/shell/AIConversationView.jsx`** — add a **"Catch me up"** `Button` (size small, `startIcon={<AutoAwesomeIcon/>}`) to the resume catch-up banner; on click, send a chat follow-up `handleSend("Summarize what changed since my last visit.")` (reuse the existing `handleSend` callback already in scope) and clear the banner (`setCatchUp(null)`).
+
+### Tests (extend existing + new)
+- `carbon-frontend/src/__tests__/aiWorkspacePhase5.test.jsx` — (a) rail renders Accept/Dismiss buttons; (b) Accept calls `acceptProactiveSuggestion` and removes the item; (c) Dismiss calls `dismissProactiveSuggestion` with reason. Mock the new API helpers.
+- `carbon-frontend/src/__tests__/StatusBar.test.jsx` (or nearest existing StatusBar test) — badge shows count, hides when `copilotVisible`.
+- `carbon-frontend/src/__tests__/aiWorkspacePhase5.test.jsx` — resume banner renders "Catch me up" and clicking it calls `handleSend`.
+
+### DO NOT TOUCH
+- Any `backend/**` file (11-A owns it).
+- `AISuggestionRail`'s existing severity/render logic (only ADD actions).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm test -- --run        # → all green
+npm run lint             # → 0 new errors
+npm run build            # → clean
+```
+Commit with `feat(ai-workspace): Phase 11-B — Suggestion rail actions + badge + catch-up`.
+
+---
+
+## Phase 12 — Shared Threads frontend (read-only collaboration)
+
+**Status:** PENDING
+**Role:** frontend-worker
+**Source spec:** `docs/DESIGN_AI_WORKSPACE_V4.md` §Phase 11 (Shared Threads). The BACKEND is already complete — this is a frontend-only phase.
+
+### Ground truth (backend ALREADY done — do NOT touch backend)
+- `backend/ai/models/workspace.py` — `AIConversation.visibility` (`private`/`shared`) already exists.
+- `backend/ai/intelligence.py` — `update_conversation` already accepts `visibility`; `list_conversations` already returns shared conversations via `_shared_conversation_ids`; `delete_conversation` already requires `ai:manage_console` for shared; `send_message` already denies non-owners (`objects.get(id=..., user=user)`); `_serialize_conversation` already includes `visibility` + `user_id`.
+- `carbon-frontend/src/api/aiWorkspace.js` — `updateConversation(token, id, fields)` already exists (supports `visibility`).
+
+### Implementation (frontend-only)
+1. **`carbon-frontend/src/shell/AIConversationTabs.jsx`** — split the thread list into two groups: **"My threads"** (`visibility === 'private'` OR `user_id === currentUserId`) and **"Shared with me"** (`visibility === 'shared'` AND `user_id !== currentUserId`). A non-owner shared thread renders a "Shared" chip. Current user id comes from `useAuth` (AuthContext). Keep existing tab/pin/archive/rename behavior on owned threads only.
+2. **`carbon-frontend/src/shell/AIConversationView.jsx`** — when the active conversation is a shared non-owned thread (`visibility === 'shared' && user_id !== currentUserId`):
+   - Hide the input bar (no `AIInputBar`), no "Save Rule" / mutation actions.
+   - Show a read-only banner ("You have read-only access to this shared thread").
+   - Disable any action that mutates (save-artifact, re-draft, create-rule, follow-up chips that send).
+3. **`carbon-frontend/src/shell/AIWorkspace.jsx`** (or `AIWorkspaceHeader.jsx`) — add a **"Share"** toggle on the active owned conversation that calls `updateConversation(token, id, { visibility: 'shared' | 'private' })` and reflects the current state. Non-owners do NOT see this toggle.
+
+### Tests (new `carbon-frontend/src/__tests__/AISharedThreads.test.jsx`)
+- (a) thread list groups owned vs shared and shows "Shared" chip.
+- (b) read-only view hides the input bar for a non-owned shared thread.
+- (c) Share toggle calls `updateConversation` with `{visibility:'shared'}`.
+
+### DO NOT TOUCH
+- Any `backend/**` file (already complete).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm test -- --run        # → all green
+npm run lint             # → 0 new errors
+npm run build            # → clean
+```
+Commit with `feat(ai-workspace): Phase 12 — Shared threads read-only collaboration`.
