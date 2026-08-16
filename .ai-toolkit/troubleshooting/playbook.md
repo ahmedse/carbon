@@ -391,3 +391,12 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: every pagination path must set `has_more`; when you add a cursor branch, make sure the no-cursor default branch is also covered (and tested).
 - Regression guard: seed 55 messages, assert first page (limit=50) returns `has_more is True`.
 - First seen: 2026-08-16.
+
+### PB-38 — Domain-app vocabulary leaks into the generic catalog UI (GHG `scope` on Data Products)
+- Symptom: the "Data Products" catalog list exposes a **Scope** filter/column/form field with options Scope 1/2/3 — meaningless to any non-carbon domain, and a smell that the "generic" Data Trust core is hard-wired to the first hosted app.
+- Layer: cross-cutting (model + frontend vocabulary)
+- Root cause: `Module` (the code entity surfaced as "Data Product") lives in the domain-agnostic `core` app but carries `scope = PositiveSmallIntegerField(choices=[(1,'Scope 1'),(2,'Scope 2'),(3,'Scope 3')])` — GHG emission scope. `DataProductsPage.jsx` mirrors it as a filter/column/form, and `terminology.js` ships `SCOPE_LABEL`/`SCOPE_OPTIONS` next to the generic `DATA_PRODUCT` label.
+- Fix: treat emission scope as carbon-domain metadata. Near-term: move `scope` into a per-domain attribute (JSON `domain_attributes` on `Module` keyed by `app_id`, or a `DomainModuleProfile` extension) and add the *generic* filter dimensions that are missing: `domain` (`DataDomain`), `classification`, `tags`, owner/steward, quality status (all already exist on `AssetProfile`, one level below).
+- Best practice note: a domain-agnostic core (Catalog/MDM/DQ/schema) must never expose a hosted app's enum in its shared model or UI — same leak class as PB-29 (`level` field/business vs `rule_level`). When a "generic" surface has a filter only one domain understands, it's a boundary violation, not a feature.
+- Regression guard: assert `Module`/Data Product serializer and list page expose only generic dimensions (org_unit, domain, classification, tags, quality) — no `scope` unless the active domain app is carbon.
+- First seen: 2026-08-16.
