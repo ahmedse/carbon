@@ -58,6 +58,7 @@ dist/
 *.DS_Store
 Thumbs.db
 ehthumbs.db
+backups/*.sql.gz
 *.sql
 *.dump
 *.rdb
