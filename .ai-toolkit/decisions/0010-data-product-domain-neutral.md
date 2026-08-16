@@ -1,6 +1,6 @@
 # ADR 0010 — Data Product must not carry GHG `scope` (domain vocabulary stays out of the generic core)
 
-- **Status:** Proposed
+- **Status:** Accepted (Option B — `Module.domain_attributes` JSON)
 - **Date:** 2026-08-16
 - **Deciders:** Master Architect + QA validator
 - **Area:** data | frontend | cross-cutting
@@ -58,3 +58,18 @@ meaningless "Scope 1/2/3" filter on its own data products.
 - `catalog/models.py::AssetProfile` (domain/classification/tags/quality — the
   generic metadata that SHOULD be filterable at the product level)
 - playbook PB-38 (same leak class as PB-29)
+
+## Implementation status
+- ✅ Step 1 — `Module.domain_attributes` JSONField + `carbon_scope()`/`set_carbon_scope()`
+  helpers (`core/models.py`, migration `0013`).
+- ✅ Step 2 — `ModuleSerializer` exposes `domain_attributes` (writable) + read-only
+  `carbon_scope` (`core/serializers.py`).
+- ✅ Step 3 — generic Data Product UI drops Scope filter/column/form
+  (`DataProductsPage`, `ProductForm`, `DataProductEditTab`, `DataProductOverviewTab`,
+  `DataProductMetricsPanel`).
+- ✅ Step 4 — `SCOPE_LABEL`/`SCOPE_OPTIONS` removed from generic `terminology.js`
+  (carbon scope metadata lives in `theme/themeTokens.js::SCOPE_META` and per-page configs).
+- ✅ Step 5a — data migration backfills `domain_attributes["carbon"]["scope"]` (`0014`).
+- ⏳ Step 5b — drop legacy `Module.scope` column once carbon-domain readers
+  (`emissions`/`ShellSidebar`/`ModuleWorkspacePage`/`authz` etc.) switch to
+  `carbon_scope`/`domain_attributes`; add a carbon-specific scope picker.
