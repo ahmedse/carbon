@@ -337,3 +337,30 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: destructive reconcile (replace-all) of user data requires an explicit diff + confirmation — never silently shrink a relationship list on a partial update.
 - Regression guard: test asserting a save that omits a binding does not delete it without confirmation.
 - First seen: 2026-08-16.
+
+### PB-32 — DQ flat-column PATCH silently reverted: `DQRule.save()` re-syncs name/is_active from `definition` (double source of truth)
+- Symptom: "Lifecycle" Deactivate/Activate button and "Save Definition" rename both appear to work (200 + success snackbar) but the value snaps back on reload — rule stays Active, name stays old.
+- Layer: backend (serializer ↔ model `save()` interaction)
+- Root cause: `DQRule.save()` re-derives `name`, `severity`, `dimension`, `is_active` (and `rule_level`/`rule_type`) FROM `definition` on every save. The serializer's `validate()` uses `data.setdefault(...)` (flat field "wins"), but `save()` then overwrites the flat value with the (stale) `definition` value. Two sources of truth; the JSON one silently wins at the last moment.
+- Fix: in `DQRuleSerializer.update()`, when an explicit flat column is present (`name`/`severity`/`dimension`/`description`/`is_active`), reconcile it INTO the definition before saving. If the client sent `definition`, merge flat→definition and let the normal version-bump run; if flat-only, update `instance.definition` in place (no version bump). Verified: `PATCH {is_active:false}` now sticks (version unchanged); `PATCH {name, definition(stale name)}` sticks + bumps version.
+- Best practice note: a `save()` override that re-derives denormalized columns must never clobber an explicitly-provided value — reconcile flat inputs into the source-of-truth document at the serializer boundary, not silently.
+- Regression guard: API test that PATCHes `{is_active: false}` (no definition) and asserts the rule is inactive after reload; and a PATCH of `{name, definition}` where `definition.name` differs, asserting the new name wins.
+- First seen: 2026-08-16.
+
+### PB-33 — DQ Lifecycle "Delete"/"Archive" buttons 404: `deleteDQRule` called without token
+- Symptom: clicking Delete or Archive in the Lifecycle tab fails with a 404 (or "Could not delete rule"), even though the rule exists.
+- Layer: frontend
+- Root cause: `OperationsTab.handleDelete()` / `handleArchive()` called `deleteDQRule(rule.id)` but the wrapper signature is `deleteDQRule(token, id)` — so `token` received the rule id and `id` was `undefined`, hitting `dq/rules/undefined/`.
+- Fix: pass `token` first — `deleteDQRule(token, rule.id)`.
+- Best practice note: every `apiFetch`-wrapping helper takes `(token, ...)`; always pass the token from `useAuth()` — a missing-token call compiles fine but hits a bogus URL. A TS signature or an eslint rule flagging the arity mismatch would have caught this statically.
+- Regression guard: component test that mocks `deleteDQRule` and asserts it's called with `(token, id)`.
+- First seen: 2026-08-16.
+
+### PB-34 — AI `build_scope` AttributeError: `ScopedRole` has no `is_read_only` column
+- Symptom: every AI create/send (conversation, message) returns HTTP 500 `{"error":"AttributeError"}` for non-superuser, non-staff users (QA journey SEC2). Superusers unaffected (early `is_superuser` return).
+- Layer: backend (RBAC scope builder)
+- Root cause: `build_scope()` iterated `ScopedRole` rows and read `role.is_read_only`, but `ScopedRole` has no such field — read-only is derived from the assigned `group.name` against `accounts.constants.READ_ONLY_ROLES` (`viewers_group`, `analysts_group`). The attribute access raised `AttributeError` → 500.
+- Fix: derive `is_read_only` from `role.group.name not in READ_ONLY_ROLES` (a single write-capable role flips the user out of read-only), and add `group` to `select_related()` to avoid N+1.
+- Best practice note: never read a model attribute that isn't declared on the model — read-only/role semantics that live in `constants.py` must be checked via the actual FK (`group.name`), not a phantom column. A `hasattr`/`.only()` guard or a Pydantic/serializer boundary would surface this at import time instead of runtime.
+- Regression guard: unit test that builds a scope from roles whose `group.name` is only read-only roles and asserts `is_read_only is True`, plus one with a write role asserting `False`.
+- First seen: 2026-08-16.
