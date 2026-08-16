@@ -61,9 +61,25 @@ export function getTableProfiles(filters = {}, token) {
  * List DQ rules for a table (and optionally a field).
  */
 export function listDQRules(token, filters = {}) {
+  const FORWARDED = [
+    'search',
+    'rule_level',
+    'rule_type',
+    'dimension',
+    'severity',
+    'is_active',
+    'tag',
+    'data_table',
+    'data_field',
+    'include_archived',
+  ];
   const params = new URLSearchParams();
-  if (filters.data_table != null) params.set('data_table', filters.data_table);
-  if (filters.data_field != null) params.set('data_field', filters.data_field);
+  FORWARDED.forEach((key) => {
+    const value = filters[key];
+    if (value !== null && value !== undefined && value !== '') {
+      params.set(key, value);
+    }
+  });
   const qs = params.toString();
   return apiFetch(`${API_ROUTES.dqRules}${qs ? `?${qs}` : ''}`, { token });
 }

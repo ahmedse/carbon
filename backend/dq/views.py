@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied, NotFound
+from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 from django.utils import timezone
 
@@ -137,7 +138,7 @@ class DQRuleViewSet(viewsets.ModelViewSet):
     serializer_class = DQRuleSerializer
     permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
     required_write_capability = 'dq:manage_rules'
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description', 'rule_type']
     ordering_fields = ['created_at', 'name', 'severity', 'rule_level']
     filterset_fields = ['rule_level', 'rule_type', 'severity', 'is_active', 'dimension', 'archived']
