@@ -170,3 +170,60 @@ GATE PASSED
 ### Issues Found
 - **Pre-existing (not in my scope):** `verify.sh antipatterns` still reports `raw fetch()` in `carbon-frontend/src/pages/{ForgotPasswordPage,ResetPasswordPage}.jsx` and `src/api/aiWorkspace.js:228`, plus 28 `print()` calls in backend app code. None are in files I touched.
 - **Phase 8-B dependency note:** the `metadata.rows` array and `rule_preview`/`test_summary`/`violations` fields are now the authoritative server payload for the `NLRuleTestCard`; 8-B should render from `metadata` and do threshold re-scoring purely client-side (no POST to `/dq/rules/` until the user confirms "Save Rule").
+
+---
+
+## [2026-08-16] Frontend Worker — Phase 8-B: Execute Mode toggle + NL Rule Test Card
+
+### Summary
+3/3 gates passed. 8 source files changed (4 created, 4 modified) + 2 test files (1 created, 1 extended). Full suite 415 passed, 0 failed, 0 skipped.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Create `executeModeContext.js` | ✅ | Shared context object (mirrors `aiTaskTransferContext.js` pattern) |
+| 2 | Create `useExecuteMode.js` | ✅ | Hook with safe no-op fallback outside provider |
+| 3 | Create `ExecuteModeContext.jsx` | ✅ | Provider + toggle persisted to `sessionStorage` (`carbon.executeMode`) |
+| 4 | Create `NLRuleTestCard.jsx` | ✅ | Renders `nl_rule_test` metadata; threshold slider re-scores client-side; Save gated by `executeMode` |
+| 5 | Edit `AIInputBar.jsx` | ✅ | Execute Mode toggle button + warning border, `aria-pressed` |
+| 6 | Edit `AIMessageBubble.jsx` | ✅ | `nl_rule_test` branch + "Test live" on DQ suggestions |
+| 7 | Edit `AIConversationView.jsx` | ✅ | `handleTestLive` + `handleSaveRule` (builds DQ definition, `createDQRule`) |
+| 8 | Edit `AIWorkspace.jsx` | ✅ | Wrap main return in `<ExecuteModeProvider>` |
+| 9 | Tests | ✅ | `NLRuleTestCard.test.jsx` (5) + `AIMessageBubble.transparency.test.jsx` (+2) |
+| 10 | Verification gates | ✅ | lint clean, 415 tests green, build clean |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `carbon-frontend/src/shell/executeModeContext.js` | `createContext(null)` export |
+| CREATE | `carbon-frontend/src/shell/useExecuteMode.js` | `useContext` + no-op fallback |
+| CREATE | `carbon-frontend/src/shell/ExecuteModeContext.jsx` | `ExecuteModeProvider` + `sessionStorage` persistence |
+| CREATE | `carbon-frontend/src/shell/NLRuleTestCard.jsx` | Presentational card (rule preview, summary, violations, threshold slider, Save) |
+| MODIFY | `carbon-frontend/src/shell/AIInputBar.jsx` | Execute Mode toggle (Bolt/Lock icon, warning border) |
+| MODIFY | `carbon-frontend/src/shell/AIMessageBubble.jsx` | `nl_rule_test` card branch + "Test live" button |
+| MODIFY | `carbon-frontend/src/shell/AIConversationView.jsx` | `handleTestLive`, `handleSaveRule`, prop plumbing |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | `<ExecuteModeProvider>` wrap |
+| CREATE | `carbon-frontend/src/__tests__/NLRuleTestCard.test.jsx` | 5 unit tests |
+| MODIFY | `carbon-frontend/src/__tests__/AIMessageBubble.transparency.test.jsx` | +2 tests (nl_rule_test render, Test live button) |
+
+### Verification Output
+```
+$ npm run lint
+> eslint .
+(exit 0 — clean; 2 initial react-hooks warnings in NLRuleTestCard fixed via useMemo)
+
+$ npm test -- --run
+Test Files  21 passed (21)
+     Tests  415 passed (415)
+
+$ npm run build
+✓ built in 11.64s
+```
+
+### Deviations
+- **Design-doc file map was STALE:** §8-B referenced a nonexistent `src/shell/cards/` directory and `DQSuggestionCard.jsx`. Resolved by placing the card at `src/shell/NLRuleTestCard.jsx` and rendering "Test live" inline in `AIMessageBubble.jsx`'s `dq_suggestions` branch.
+- **Threshold slider is NOT gated by `executeMode`:** preview-only re-scoring remains available with Execute Mode OFF; only the Save button is gated. This keeps the test experience usable for exploration while still preventing writes until explicitly enabled.
+- **Backend `violations` shape is `[{row, value}]`** (not the illustrative `{month, total_kwh, expected_min, deficit_pct}` in §8.2). `NLRuleTestCard` defensively handles both shapes via `toColumns` + `rescoreThreshold` reading `r?.actual ?? r?.value`.
+
+### Issues Found
+- **Uncommitted working tree (still unresolved):** `git status` continues to show interleaved uncommitted changes from Phases 6/7A/7B/7C/8-A/8-B (backend `ai/` files, migrations, tests, docs, plus all new frontend shell files). **No commit was made** — awaiting direction on commit/push scope before touching git history.

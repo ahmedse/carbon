@@ -1,6 +1,6 @@
 // src/__tests__/AIMessageBubble.transparency.test.jsx
 // Sprint 17 — per-turn usage chip Tooltip + "why this answer" provenance tooltip.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import AIMessageBubble from '../shell/AIMessageBubble';
@@ -107,6 +107,51 @@ describe('AIMessageBubble "why this answer" provenance tooltip', () => {
     // The icon renders without crashing when provenance is top-level, and the
     // KG entities are not coerced into "[object Object] tok".
     expect(screen.getByLabelText('Why this answer')).toBeInTheDocument();
+  });
+});
+
+describe('AIMessageBubble nl_rule_test rendering', () => {
+  const nlRuleTestMetadata = {
+    type: 'nl_rule_test',
+    rule_preview: {
+      type: 'threshold',
+      params: { operator: 'gte', value: 80 },
+      severity: 'warn',
+      confidence: 0.84,
+      field: 'total_kwh',
+      rule_text: 'Monthly electricity ≥ 80% of prior year',
+    },
+    test_summary: { total_rows: 3, applicable_rows: 3, passed: 1, failed: 2, pass_rate: 0.333 },
+    violations: [
+      { row: 2, value: 41200 },
+      { row: 3, value: 38900 },
+    ],
+    recommendation: 'Review the violations before saving the rule.',
+  };
+
+  it('renders the NL rule test card for nl_rule_test metadata', () => {
+    renderBubble({ ...baseMessage, metadata: nlRuleTestMetadata });
+
+    expect(screen.getByText('Monthly electricity ≥ 80% of prior year')).toBeInTheDocument();
+    expect(screen.getByText(/Pass rate: 33%/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save Rule' })).toBeInTheDocument();
+  });
+
+  it('exposes a Test live action on DQ suggestions', () => {
+    renderBubble(
+      {
+        ...baseMessage,
+        metadata: {
+          type: 'dq_suggestions',
+          suggestions: [
+            { id: 's1', name: 'Electricity threshold', confidence: 0.9 },
+          ],
+        },
+      },
+      { onTestLive: vi.fn(), canManageRules: true },
+    );
+
+    expect(screen.getByRole('button', { name: 'Test live' })).toBeInTheDocument();
   });
 });
 

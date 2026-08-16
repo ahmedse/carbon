@@ -8,6 +8,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
 import { formatContextLines } from '../utils/aiProvenance';
+import NLRuleTestCard from './NLRuleTestCard';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
 
@@ -146,6 +147,9 @@ function AIMessageBubble({
   conversationType,
   appIdentifier,
   scopeJson,
+  executeMode = false,
+  onTestLive,
+  onSave,
 }) {
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [correctionOpen, setCorrectionOpen] = useState(false);
@@ -231,6 +235,15 @@ function AIMessageBubble({
                   <Stack direction="row" spacing={0.5}>
                     {canManageRules ? (
                       <>
+                        {onTestLive && (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => onTestLive?.(s)}
+                          >
+                            Test live
+                          </Button>
+                        )}
                         <Button
                           size="small"
                           color="success"
@@ -306,6 +319,18 @@ function AIMessageBubble({
           <Typography variant="caption" color="text.secondary">
             {metadata.row_count ?? rows.length} rows
           </Typography>
+        </Box>
+      );
+    }
+
+    if (metadata.type === 'nl_rule_test') {
+      return (
+        <Box sx={{ mt: 1 }}>
+          <NLRuleTestCard
+            metadata={metadata}
+            executeMode={executeMode}
+            onSave={onSave}
+          />
         </Box>
       );
     }
@@ -568,6 +593,9 @@ AIMessageBubble.propTypes = {
   conversationType: PropTypes.string,
   appIdentifier: PropTypes.string,
   scopeJson: PropTypes.object,
+  executeMode: PropTypes.bool,
+  onTestLive: PropTypes.func,
+  onSave: PropTypes.func,
 };
 
 export default AIMessageBubble;

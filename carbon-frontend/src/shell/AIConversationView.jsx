@@ -20,11 +20,14 @@ import {
   sendMessageStream,
   stopGeneration,
 } from '../api/aiWorkspace';
+import { createDQRule } from '../api/dq';
 import AIMessageBubble from './AIMessageBubble';
 import AIContextPanel from './AIContextPanel';
 import AIInputBar from './AIInputBar';
 import AIWorkingIndicator from './AIWorkingIndicator';
 import AIOfflineBanner from './AIOfflineBanner';
+import { useAITaskTransfer } from './useAITaskTransfer';
+import { useExecuteMode } from './useExecuteMode';
 import { DQ_MANAGE_RULES } from '../capabilities';
 
 function normalizeConversationShape(payload) {
@@ -41,6 +44,8 @@ function normalizeConversationShape(payload) {
 function AIConversationView({ conversationId }) {
   const { token, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
+  const { executeMode } = useExecuteMode();
+  const { transferTask } = useAITaskTransfer();
   // CBAC: accepting/rejecting DQ suggestions writes rules → requires dq:manage_rules.
   const canManageRules = isGlobalAdminFlag || (userCapabilities || []).some(
     (c) => (typeof c === 'string' ? c : c?.key) === DQ_MANAGE_RULES
@@ -405,6 +410,64 @@ function AIConversationView({ conversationId }) {
     [token, handleSend, notifyFromError],
   );
 
+  // Phase 8-B — "Test live" on a DQ suggestion: open a dedicated nl_rule_test
+  // conversation scoped to the suggestion's table, so the engine can evaluate
+  // the candidate rule against live rows before it is saved.
+  const handleTestLive = useCallback(
+    (suggestion) => {
+      const tableId =
+        suggestion?.table_id ??
+        suggestion?.data_table ??
+        suggestion?.definition?.table_id ??
+        conversationRef.current?.task_payload_json?.table_id ??
+        null;
+      const nl = suggestion?.prompt || suggestion?.definition?.name || suggestion?.name || '';
+      transferTask(
+        'nl_rule_test',
+        { table_id: tableId, nl },
+        { title: `NL test: ${suggestion?.definition?.name || suggestion?.name || 'rule'}` },
+      );
+    },
+    [transferTask],
+  );
+
+  // Phase 8-B — persist a tested NL rule into the DQ catalog.
+  const handleSaveRule = useCallback(
+    async (rulePreview) => {
+      const tableId =
+        rulePreview?.table_id ??
+        conversationRef.current?.task_payload_json?.table_id ??
+        null;
+      const definition = {
+        schema_version: 1,
+        name: rulePreview?.name || rulePreview?.rule_text || 'NL rule',
+        level: 'field',
+        dimension: 'accuracy',
+        type: rulePreview?.type || 'threshold',
+        severity: rulePreview?.severity || 'warn',
+        active: true,
+        bindings: [],
+        params: rulePreview?.params || {},
+        enforcement: { on_write: false },
+      };
+      try {
+        const created = await createDQRule(token, {
+          definition,
+          field_assignments_write: tableId
+            ? [{ data_table: tableId, data_field: null }]
+            : [],
+          tag_ids: [],
+        });
+        notify({ message: `Saved rule "${created?.name || created?.id}"`, type: 'success' });
+        return created;
+      } catch (err) {
+        notifyFromError(err, 'Could not save rule');
+        throw err;
+      }
+    },
+    [token, notify, notifyFromError],
+  );
+
   const updateMessageInState = useCallback((updatedMessage) => {
     if (!updatedMessage?.id) return;
     setMessages((prev) =>
@@ -696,6 +759,9 @@ function AIConversationView({ conversationId }) {
             conversationType={conversationType}
             appIdentifier={conversation.app_identifier}
             scopeJson={conversation.scope_json}
+            executeMode={executeMode}
+            onTestLive={handleTestLive}
+            onSave={handleSaveRule}
           />
         ))}
 

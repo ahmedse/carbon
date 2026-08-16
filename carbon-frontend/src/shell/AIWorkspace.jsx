@@ -39,6 +39,7 @@ import AIOfflineBanner from './AIOfflineBanner';
 import AIArtifactBrowser from './AIArtifactBrowser';
 import AISuggestionRail from './AISuggestionRail';
 import { useAITaskTransfer } from './useAITaskTransfer';
+import { ExecuteModeProvider } from './ExecuteModeContext';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
 
@@ -400,14 +401,15 @@ export function AIWorkspace({ onClose }) {
   const hasAny = order.length > 0 || archivedIds.length > 0;
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        bgcolor: 'background.default',
-      }}
-    >
+    <ExecuteModeProvider>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          bgcolor: 'background.default',
+        }}
+      >
       <AIWorkspaceHeader onClose={onClose} />
 
       {/* Fixed mode tabs — never dynamic per conversation */}
@@ -513,7 +515,8 @@ export function AIWorkspace({ onClose }) {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+      </Box>
+    </ExecuteModeProvider>
   );
 }
 

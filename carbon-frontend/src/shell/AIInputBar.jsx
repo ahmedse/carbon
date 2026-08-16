@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types';
 import {
   Box,
+  Button,
   CircularProgress,
   IconButton,
   List,
@@ -15,9 +16,13 @@ import {
   Typography,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
+import BoltIcon from '@mui/icons-material/Bolt';
+import LockIcon from '@mui/icons-material/Lock';
 import { useAuth } from '../auth/AuthContext';
+import { useNotification } from '../components/NotificationProvider';
 import { apiFetch } from '../api/api';
 import { API_ROUTES } from '../config';
+import { useExecuteMode } from './useExecuteMode';
 
 const PLACEHOLDER_MAP = {
   working: 'AI is thinking… (Enter to queue)',
@@ -30,6 +35,10 @@ const SEND_MODE_OPTIONS = [
   { value: 'steer', label: 'Interrupt & send' },
   { value: 'stop', label: 'Stop' },
 ];
+
+const EXECUTE_MODE_OFF_TOOLTIP =
+  'Execute Mode off — AI can suggest actions but cannot apply them. Turn on to allow AI to create rules, fix data, and run queries.';
+const EXECUTE_MODE_ON_TOOLTIP = 'Execute Mode on — AI may apply data changes.';
 
 const MENTION_KINDS = ['table', 'rule', 'field', 'module'];
 
@@ -73,6 +82,8 @@ function AIInputBar({
   onMentionsChange,
 }) {
   const { token } = useAuth();
+  const { notify } = useNotification();
+  const { executeMode, setExecuteMode } = useExecuteMode();
   const inputRef = useRef(null);
   const [value, setValue] = useState('');
   // Stage: null | 'kind' | 'entity'
@@ -186,6 +197,17 @@ function AIInputBar({
     setResolvedMentions([]);
   }, [value, working, sendMode, onSend, onStop, resolvedMentions]);
 
+  const handleToggleExecuteMode = useCallback(() => {
+    const next = !executeMode;
+    setExecuteMode(next);
+    notify({
+      message: next
+        ? 'Execute Mode enabled — AI may now propose data changes.'
+        : 'Execute Mode disabled.',
+      type: next ? 'warning' : 'info',
+    });
+  }, [executeMode, setExecuteMode, notify]);
+
   const handleKeyDown = useCallback(
     (event) => {
       if (event.key === 'Escape' && stage) {
@@ -215,17 +237,62 @@ function AIInputBar({
   return (
     <Box
       sx={{
-        display: 'flex',
-        alignItems: 'flex-end',
-        gap: 0.5,
-        px: 1.5,
-        py: 1,
         borderTop: 1,
-        borderColor: 'divider',
+        borderLeft: executeMode ? 1 : 0,
+        borderRight: executeMode ? 1 : 0,
+        borderBottom: executeMode ? 1 : 0,
+        borderColor: executeMode ? 'warning.main' : 'divider',
         bgcolor: 'background.paper',
       }}
     >
-      <Box sx={{ position: 'relative', flex: 1, minWidth: 0 }}>
+      {/* Execute Mode toggle (Phase 8-B §5.3) */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          px: 1.5,
+          pt: 0.5,
+        }}
+      >
+        <Tooltip
+          title={executeMode ? EXECUTE_MODE_ON_TOOLTIP : EXECUTE_MODE_OFF_TOOLTIP}
+          arrow
+        >
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleToggleExecuteMode}
+            startIcon={
+              executeMode ? (
+                <BoltIcon fontSize="small" />
+              ) : (
+                <LockIcon fontSize="small" />
+              )
+            }
+            aria-pressed={executeMode}
+            sx={{
+              fontSize: '0.75rem',
+              textTransform: 'none',
+              borderColor: executeMode ? 'warning.main' : 'divider',
+              color: executeMode ? 'warning.main' : 'text.secondary',
+            }}
+          >
+            Execute Mode {executeMode ? 'ON' : 'OFF'}
+          </Button>
+        </Tooltip>
+      </Box>
+
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: 0.5,
+          px: 1.5,
+          py: 1,
+        }}
+      >
+        <Box sx={{ position: 'relative', flex: 1, minWidth: 0 }}>
         <TextField
           inputRef={inputRef}
           fullWidth
@@ -361,7 +428,8 @@ function AIInputBar({
             <SendIcon fontSize="small" />
           </IconButton>
         </span>
-      </Tooltip>
+        </Tooltip>
+      </Box>
     </Box>
   );
 }
