@@ -25,13 +25,20 @@ export function createConversation(token, { conversation_type, title, app_identi
 /**
  * List conversations for the current user.
  * @param {string} token - JWT access token
- * @param {object} params - { status?, limit? }
+ * @param {object} params - { status?, limit?, q?, is_archived?, is_pinned?, conversation_type? }
  * @returns {Promise<Array>} List of conversation summaries
  */
-export function listConversations(token, { status, limit } = {}) {
+export function listConversations(
+  token,
+  { status, limit, q, is_archived, is_pinned, conversation_type } = {},
+) {
   const params = new URLSearchParams();
   if (status) params.append('status', status);
   if (limit) params.append('limit', String(limit));
+  if (q) params.append('q', q);
+  if (is_archived !== undefined) params.append('is_archived', String(is_archived));
+  if (is_pinned !== undefined) params.append('is_pinned', String(is_pinned));
+  if (conversation_type) params.append('conversation_type', conversation_type);
   const qs = params.toString();
   return apiFetch(`${BASE}conversations/${qs ? `?${qs}` : ''}`, { token });
 }
@@ -44,6 +51,121 @@ export function listConversations(token, { status, limit } = {}) {
  */
 export function getConversation(token, conversationId) {
   return apiFetch(`${BASE}conversations/${conversationId}/`, { token });
+}
+
+/**
+ * Partially update a conversation (title/is_pinned/is_archived/visibility).
+ * @param {string} token - JWT access token
+ * @param {string} id - UUID
+ * @param {object} fields - { title?, is_pinned?, is_archived?, visibility? }
+ * @returns {Promise<object>} Serialized AIConversation
+ */
+export function updateConversation(token, id, fields = {}) {
+  return apiFetch(`${BASE}conversations/${id}/`, {
+    token,
+    method: 'PATCH',
+    body: fields,
+  });
+}
+
+/**
+ * Hard-delete a conversation (owner-only).
+ * @param {string} token - JWT access token
+ * @param {string} id - UUID
+ * @returns {Promise<object>} { deleted: id }
+ */
+export function deleteConversation(token, id) {
+  return apiFetch(`${BASE}conversations/${id}/`, { token, method: 'DELETE' });
+}
+
+/**
+ * List a conversation's messages with cursor pagination.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {object} params - { limit?, before?, after? }
+ * @returns {Promise<object>} { messages: Array, has_more: boolean }
+ */
+export function listMessages(token, conversationId, { limit, before, after } = {}) {
+  const params = new URLSearchParams();
+  if (limit) params.append('limit', String(limit));
+  if (before) params.append('before', before);
+  if (after) params.append('after', after);
+  const qs = params.toString();
+  return apiFetch(
+    `${BASE}conversations/${conversationId}/messages/${qs ? `?${qs}` : ''}`,
+    { token },
+  );
+}
+
+/**
+ * Request cancellation of a running generation (idempotent).
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @returns {Promise<object>} Serialized AIConversation
+ */
+export function stopGeneration(token, conversationId) {
+  return apiFetch(`${BASE}conversations/${conversationId}/stop/`, {
+    token,
+    method: 'POST',
+  });
+}
+
+/**
+ * Regenerate an assistant reply (non-streaming).
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} messageId - UUID of the assistant message
+ * @returns {Promise<object>} Serialized AIConversation
+ */
+export function regenerateMessage(token, conversationId, messageId) {
+  return apiFetch(
+    `${BASE}conversations/${conversationId}/messages/${messageId}/regenerate/`,
+    { token, method: 'POST' },
+  );
+}
+
+/**
+ * Edit a user message's content and regenerate the reply.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} messageId - UUID of the user message
+ * @param {string} content - new message text
+ * @returns {Promise<object>} Serialized AIConversation
+ */
+export function editMessage(token, conversationId, messageId, content) {
+  return apiFetch(
+    `${BASE}conversations/${conversationId}/messages/${messageId}/`,
+    { token, method: 'PATCH', body: { content } },
+  );
+}
+
+/**
+ * Export a conversation as JSON or Markdown.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} format - 'json' | 'markdown'
+ * @returns {Promise<object>} Export payload
+ */
+export function exportConversation(token, conversationId, format = 'json') {
+  return apiFetch(
+    `${BASE}conversations/${conversationId}/export/?format=${encodeURIComponent(format)}`,
+    { token },
+  );
+}
+
+/**
+ * Generate (or refresh) a conversation's rolling summary.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {boolean} force - force refresh
+ * @returns {Promise<object>} Serialized AIConversation
+ */
+export function summarizeConversation(token, conversationId, force = false) {
+  return apiFetch(`${BASE}conversations/${conversationId}/summary/`, {
+    token,
+    method: 'POST',
+    body: { force },
+  });
 }
 
 /**
@@ -69,9 +191,14 @@ export function sendMessage(token, conversationId, content) {
  * @param {string} token - JWT access token
  * @param {string} conversationId - UUID
  * @param {string} content - user message text
- * @param {object} handlers - { onChunk(delta), onDone(conversation), onError(message) }
+ * @param {object} handlers - { onChunk(delta), onProgress(stage, message), onDone(conversation), onStopped(conversation), onError(message) }
  */
-export async function sendMessageStream(token, conversationId, content, { onChunk, onDone, onError }) {
+export async function sendMessageStream(
+  token,
+  conversationId,
+  content,
+  { onChunk, onProgress, onDone, onStopped, onError, workspaceContext },
+) {
   // Replicate apiFetch's auth: supplied token (or stored access token),
   // refreshing it first if expired.
   let accessToken = token || localStorage.getItem('access');
@@ -92,12 +219,15 @@ export async function sendMessageStream(token, conversationId, content, { onChun
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
 
+  const body = { content };
+  if (workspaceContext) body.workspace_context = workspaceContext;
+
   let response;
   try {
     response = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(body),
     });
   } catch (err) {
     onError?.(err?.message || 'Network error');
@@ -145,8 +275,12 @@ export async function sendMessageStream(token, conversationId, content, { onChun
     }
     if (frame.type === 'chunk') {
       onChunk?.(frame.content ?? '');
+    } else if (frame.type === 'progress') {
+      onProgress?.(frame.stage, frame.message);
     } else if (frame.type === 'done') {
       onDone?.(frame.conversation);
+    } else if (frame.type === 'stopped') {
+      onStopped?.(frame.conversation);
     } else if (frame.type === 'error') {
       onError?.(frame.error || 'Stream failed');
     }

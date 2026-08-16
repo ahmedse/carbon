@@ -22,12 +22,45 @@ class SendMessageSerializer(serializers.Serializer):
     content = serializers.CharField(required=True, allow_blank=False)
 
 
+class EditMessageSerializer(serializers.Serializer):
+    content = serializers.CharField(required=True, allow_blank=False)
+
+
 class ConversationListSerializer(serializers.Serializer):
     status = serializers.ChoiceField(
         choices=["pending", "working", "needs_input", "completed", "failed"],
         required=False,
     )
     limit = serializers.IntegerField(required=False, default=50, max_value=200, min_value=1)
+    q = serializers.CharField(required=False)
+    is_archived = serializers.BooleanField(required=False)
+    is_pinned = serializers.BooleanField(required=False)
+    conversation_type = serializers.ChoiceField(
+        choices=["chat", "dq_validate", "dq_suggest", "nl_query", "anomaly"],
+        required=False,
+    )
+    cursor = serializers.CharField(required=False)
+
+
+class ConversationUpdateSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=255, required=False)
+    is_pinned = serializers.BooleanField(required=False)
+    is_archived = serializers.BooleanField(required=False)
+    visibility = serializers.ChoiceField(
+        choices=["private", "shared"],
+        required=False,
+    )
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("At least one field is required.")
+        return attrs
+
+
+class MessageListSerializer(serializers.Serializer):
+    limit = serializers.IntegerField(required=False, default=50, max_value=200, min_value=1)
+    before = serializers.CharField(required=False)
+    after = serializers.CharField(required=False)
 
 
 class MessageFeedbackSerializer(serializers.Serializer):

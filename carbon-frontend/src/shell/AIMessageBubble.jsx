@@ -4,6 +4,7 @@ import PropTypes from 'prop-types';
 import { Box, Button, Chip, Paper, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
 
@@ -84,6 +85,53 @@ function confidenceLabel(confidence) {
   return `${pct}%`;
 }
 
+// Build a compact usage chip label from token_usage_json. Defensive: any
+// missing field is simply omitted, so a partial usage block still renders.
+function buildUsageLabel(usage) {
+  if (!usage || typeof usage !== 'object') return null;
+  const parts = [];
+  if (usage.model) parts.push(String(usage.model));
+  if (usage.total_tokens != null) parts.push(`${usage.total_tokens} tok`);
+  if (usage.cost_usd != null) parts.push(`$${usage.cost_usd}`);
+  if (usage.latency_ms != null) parts.push(`${usage.latency_ms}ms`);
+  return parts.length ? parts.join(' · ') : null;
+}
+
+// Build a multi-line breakdown for the usage chip Tooltip.
+function buildUsageBreakdown(usage) {
+  if (!usage || typeof usage !== 'object') return null;
+  const lines = [];
+  if (usage.model) lines.push(`Model: ${usage.model}`);
+  if (usage.prompt_tokens != null) lines.push(`Prompt tokens: ${usage.prompt_tokens}`);
+  if (usage.completion_tokens != null) lines.push(`Completion tokens: ${usage.completion_tokens}`);
+  if (usage.total_tokens != null) lines.push(`Total tokens: ${usage.total_tokens}`);
+  if (usage.cost_usd != null) lines.push(`Cost: $${usage.cost_usd}`);
+  if (usage.latency_ms != null) lines.push(`Latency: ${usage.latency_ms}ms`);
+  return lines.length ? lines.join('\n') : null;
+}
+
+// Count org units from a frozen Scope (scope_json). ["*"] means all access.
+function orgUnitCount(scopeJson) {
+  const ids = scopeJson?.org_unit_ids;
+  if (!Array.isArray(ids)) return null;
+  if (ids.length === 1 && ids[0] === '*') return 'All';
+  return ids.length;
+}
+
+// Render a stacked, multi-line Tooltip title.
+function TooltipLines({ lines }) {
+  if (!Array.isArray(lines) || lines.length === 0) return null;
+  return (
+    <Box component="span" sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+      {lines.map((line) => (
+        <Typography key={line} component="span" variant="caption" sx={{ display: 'block' }}>
+          {line}
+        </Typography>
+      ))}
+    </Box>
+  );
+}
+
 function AIMessageBubble({
   message,
   onAcceptSuggestion,
@@ -92,6 +140,10 @@ function AIMessageBubble({
   onAccept,
   onReject,
   onCorrect,
+  onFollowUp,
+  conversationType,
+  appIdentifier,
+  scopeJson,
 }) {
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [correctionOpen, setCorrectionOpen] = useState(false);
@@ -99,6 +151,21 @@ function AIMessageBubble({
   const isUser = message.role === 'user';
   const metadata = normalizeMetadata(message);
   const followUps = metadata.follow_up_questions || [];
+  const usageLabel = buildUsageLabel(message.token_usage_json);
+  const usageBreakdown = buildUsageBreakdown(message.token_usage_json);
+  const statusLabel = message.status === 'stopped' ? 'Interrupted' : message.status === 'failed' ? 'Error' : null;
+  const statusColor = message.status === 'stopped' ? 'warning' : 'error';
+
+  // "Why this answer" provenance (read-only): surface what shaped the answer.
+  const provenanceLines = [];
+  if (conversationType) provenanceLines.push(`Conversation: ${conversationType}`);
+  if (appIdentifier) provenanceLines.push(`App: ${appIdentifier}`);
+  const scopeUnits = orgUnitCount(scopeJson);
+  if (scopeUnits !== null) provenanceLines.push(`Org units: ${scopeUnits}`);
+  if (!provenanceLines.length) provenanceLines.push('Structured AI response');
+  const hasStructured = !!metadata?.type;
+  const hasScope = !!conversationType || !!appIdentifier || scopeJson?.org_unit_ids != null;
+  const showProvenance = !isUser && (hasStructured || hasScope);
 
   const bubbleSx = isUser ? USER_BUBBLE_SX : AI_BUBBLE_SX;
   const Icon = isUser ? PersonIcon : SmartToyIcon;
@@ -290,6 +357,17 @@ function AIMessageBubble({
           <Typography variant="caption" fontWeight={600}>
             {isUser ? 'You' : 'AI'}
           </Typography>
+          {statusLabel && (
+            <Chip size="small" color={statusColor} label={statusLabel} sx={{ height: 16, '& .MuiChip-label': { px: 0.5, fontSize: '0.625rem' } }} />
+          )}
+          {showProvenance && (
+            <Tooltip title={<TooltipLines lines={provenanceLines} />} arrow>
+              <InfoOutlinedIcon
+                sx={{ fontSize: 13, color: 'text.secondary', cursor: 'help' }}
+                aria-label="Why this answer"
+              />
+            </Tooltip>
+          )}
         </Box>
 
         <Typography
@@ -379,6 +457,22 @@ function AIMessageBubble({
           </Box>
         )}
 
+        {usageLabel && (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+            <Tooltip
+              title={<TooltipLines lines={(usageBreakdown || usageLabel).split('\n')} />}
+              arrow
+            >
+              <Chip
+                size="small"
+                variant="outlined"
+                label={usageLabel}
+                sx={{ color: 'text.secondary' }}
+              />
+            </Tooltip>
+          </Box>
+        )}
+
         {followUps.length > 0 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
             {followUps.map((q, i) => (
@@ -389,6 +483,7 @@ function AIMessageBubble({
                 variant="outlined"
                 color="primary"
                 clickable
+                onClick={() => onFollowUp?.(q)}
               />
             ))}
           </Box>
@@ -421,6 +516,8 @@ AIMessageBubble.propTypes = {
     created_at: PropTypes.string,
     metadata: PropTypes.object,
     metadata_json: PropTypes.object,
+    token_usage_json: PropTypes.object,
+    status: PropTypes.string,
     outcome: PropTypes.string,
     correction_text: PropTypes.string,
   }).isRequired,
@@ -430,6 +527,10 @@ AIMessageBubble.propTypes = {
   onAccept: PropTypes.func,
   onReject: PropTypes.func,
   onCorrect: PropTypes.func,
+  onFollowUp: PropTypes.func,
+  conversationType: PropTypes.string,
+  appIdentifier: PropTypes.string,
+  scopeJson: PropTypes.object,
 };
 
 export default AIMessageBubble;

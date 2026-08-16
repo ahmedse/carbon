@@ -1,25 +1,27 @@
 // src/shell/AIConversationView.jsx
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Button, Chip, Menu, MenuItem, Stack, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import DownloadIcon from '@mui/icons-material/Download';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
   acceptSuggestion,
+  exportConversation,
   getConversation,
+  listMessages,
   recordFeedback,
   rejectSuggestion,
-  sendMessage as apiSendMessage,
   sendMessageStream,
+  stopGeneration,
 } from '../api/aiWorkspace';
 import AIMessageBubble from './AIMessageBubble';
 import AIInputBar from './AIInputBar';
 import AIWorkingIndicator from './AIWorkingIndicator';
 import AIOfflineBanner from './AIOfflineBanner';
 import { DQ_MANAGE_RULES } from '../capabilities';
-
-const POLL_INTERVAL_MS = 2000;
 
 function normalizeConversationShape(payload) {
   const candidate = payload?.conversation || payload;
@@ -34,30 +36,48 @@ function normalizeConversationShape(payload) {
 
 function AIConversationView({ conversationId }) {
   const { token, userCapabilities, isGlobalAdminFlag } = useAuth();
-  const { notifyFromError } = useNotification();
+  const { notify, notifyFromError } = useNotification();
   // CBAC: accepting/rejecting DQ suggestions writes rules → requires dq:manage_rules.
   const canManageRules = isGlobalAdminFlag || (userCapabilities || []).some(
     (c) => (typeof c === 'string' ? c : c?.key) === DQ_MANAGE_RULES
   );
   const [conversation, setConversation] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [sending, setSending] = useState(false);
+  const [stopped, setStopped] = useState(false);
+  const [workingStage, setWorkingStage] = useState(null);
+  const [sendMode, setSendMode] = useState('queue');
   const [actionBusyId, setActionBusyId] = useState(null);
   const [workingStartedAt, setWorkingStartedAt] = useState(null);
   const [providerOffline, setProviderOffline] = useState(false);
+  const [exportAnchorEl, setExportAnchorEl] = useState(null);
   // Transient assistant text accumulated while a chat response streams in.
   const [streamingText, setStreamingText] = useState(null);
   const scrollRef = useRef(null);
-  const pollRef = useRef(null);
-  // True while an SSE stream is in flight — polling must not clobber it.
+  // Latest user content (for "Continue" after an interrupt).
+  const lastUserContentRef = useRef(null);
+  // Queued content while a generation is in-flight (send mode: queue).
+  const queuedRef = useRef(null);
+  // Monotonic generation counter — stale terminal frames are ignored.
+  const generationRef = useRef(0);
+  // True while an SSE stream is in flight (safety net for missing terminal frame).
   const streamingActiveRef = useRef(false);
+  const conversationRef = useRef(null);
+  conversationRef.current = conversation;
 
-  // Load conversation
+  // Load conversation (initial): metadata + first page of messages.
   const load = useCallback(async () => {
     if (!conversationId) return;
     try {
       const data = await getConversation(token, conversationId);
-      setConversation(normalizeConversationShape(data));
+      const canonical = normalizeConversationShape(data);
+      setConversation(canonical);
+      const initial = canonical?.messages || [];
+      setMessages(initial);
+      setHasMore(initial.length >= 50);
     } catch (err) {
       notifyFromError(err, 'Could not load conversation');
     } finally {
@@ -68,48 +88,16 @@ function AIConversationView({ conversationId }) {
   useEffect(() => {
     setLoading(true);
     setConversation(null);
+    setMessages([]);
     load();
   }, [load]);
-
-  // Poll when conversation is in working state
-  useEffect(() => {
-    if (!conversation || conversation.status !== 'working') {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-      return;
-    }
-
-    pollRef.current = setInterval(async () => {
-      // Never clobber an in-flight stream — its onDone owns reconciliation.
-      if (streamingActiveRef.current) return;
-      try {
-        const data = await getConversation(token, conversationId);
-        const canonical = normalizeConversationShape(data);
-        setConversation(canonical);
-        if (canonical?.status !== 'working') {
-          setSending(false);
-        }
-      } catch {
-        // transient poll failure — keep polling
-      }
-    }, POLL_INTERVAL_MS);
-
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [conversation?.status, conversation, token, conversationId]);
 
   // Auto-scroll to bottom on new messages and while streaming deltas arrive.
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [conversation?.messages?.length, streamingText]);
+  }, [messages.length, streamingText, workingStage]);
 
   useEffect(() => {
     const isWorking = conversation?.status === 'working' || sending;
@@ -120,90 +108,130 @@ function AIConversationView({ conversationId }) {
     setWorkingStartedAt((prev) => prev || Date.now());
   }, [conversation?.status, sending]);
 
-  const handleSend = useCallback(
-    async (content) => {
-      if (!conversationId || !content.trim()) return;
-      const type = conversation?.conversation_type || conversation?.task_payload_json?.type || 'chat';
-      setSending(true);
-      setProviderOffline(false);
-
-      // chat → stream the final answer over SSE (typing effect).
-      if (type === 'chat') {
-        setStreamingText('');
-        streamingActiveRef.current = true;
-        // Optimistically append the user message; replaced by the persisted copy on done.
-        setConversation((prev) =>
-          prev
-            ? {
-                ...prev,
-                messages: [
-                  ...(prev.messages || []),
-                  {
-                    id: `local-${Date.now()}`,
-                    role: 'user',
-                    content,
-                    created_at: new Date().toISOString(),
-                  },
-                ],
+  // Finish a streamed generation: reconcile canonical messages + release UI.
+  const finishStream = useCallback(
+    (conv) => {
+      const canonical = normalizeConversationShape(conv);
+      if (canonical) {
+        setConversation((prev) => ({ ...prev, ...canonical }));
+        const canonicalMsgs = canonical.messages || [];
+        if (canonicalMsgs.length) {
+          setMessages((prev) => {
+            const nonLocal = prev.filter((m) => !String(m.id).startsWith('local-'));
+            const seen = new Set(nonLocal.map((m) => m.id));
+            const merged = [...nonLocal];
+            for (const m of canonicalMsgs) {
+              if (!seen.has(m.id)) {
+                merged.push(m);
+                seen.add(m.id);
               }
-            : prev,
-        );
-
-        await sendMessageStream(token, conversationId, content, {
-          onChunk: (delta) => {
-            setStreamingText((prev) => (prev ?? '') + delta);
-          },
-          onDone: (conv) => {
-            streamingActiveRef.current = false;
-            setStreamingText(null);
-            const canonical = normalizeConversationShape(conv);
-            setConversation(canonical);
-            if (canonical?.status !== 'working') {
-              setSending(false);
             }
-          },
-          onError: (message) => {
-            streamingActiveRef.current = false;
-            setStreamingText(null);
-            setSending(false);
-            if (message?.includes('unavailable') || message?.includes('offline')) {
-              setProviderOffline(true);
-            }
-            notifyFromError(new Error(message || 'Could not send message'), 'Could not send message');
-          },
-        });
-
-        // Safety net: if the stream ended without a terminal frame, release the UI.
-        if (streamingActiveRef.current) {
-          streamingActiveRef.current = false;
-          setStreamingText(null);
-          setSending(false);
+            return merged;
+          });
         }
-        return;
       }
-
-      // Non-chat → existing non-streaming path.
-      try {
-        const data = await apiSendMessage(token, conversationId, content);
-        const canonical = normalizeConversationShape(data);
-        setConversation(canonical);
-        if (canonical?.status !== 'working') {
-          setSending(false);
-        }
-      } catch (err) {
+      setStreamingText(null);
+      setWorkingStage(null);
+      if (canonical?.status !== 'working') {
         setSending(false);
-        if (err.message?.includes('unavailable') || err.message?.includes('offline')) {
-          setProviderOffline(true);
-        }
-        notifyFromError(err, 'Could not send message');
       }
     },
-    [token, conversationId, conversation, notifyFromError],
+    [],
   );
 
   const handleRetry = useCallback(() => {
     setProviderOffline(false);
   }, []);
+
+  // Core streaming send — every conversation type goes through SSE now.
+  const streamSend = useCallback(
+    async (content, mentions = []) => {
+      if (!conversationId || !content?.trim()) return;
+      const type =
+        conversationRef.current?.conversation_type ||
+        conversationRef.current?.task_payload_json?.type ||
+        'chat';
+      const genId = ++generationRef.current;
+      lastUserContentRef.current = content;
+      streamingActiveRef.current = true;
+      setSending(true);
+      setStopped(false);
+      setProviderOffline(false);
+
+      if (type === 'chat') {
+        setStreamingText('');
+      } else {
+        setWorkingStage('Starting…');
+      }
+
+      // Optimistically append the user message; replaced by the persisted copy on done.
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `local-${Date.now()}`,
+          role: 'user',
+          content,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      // Sprint 17: resolved #-mentions ride along as workspace_context. TODO(mentions):
+      // map #table/#rule/#field/#module kinds to concrete entity ids from the source
+      // workspace before sending (the stream serializer persists only `content` today).
+      const workspaceContext =
+        Array.isArray(mentions) && mentions.length > 0 ? { mentions } : undefined;
+
+      await sendMessageStream(token, conversationId, content, {
+        workspaceContext,
+        onChunk: (delta) => {
+          if (genId !== generationRef.current) return;
+          setStreamingText((prev) => (prev ?? '') + delta);
+        },
+        onProgress: (stage, message) => {
+          if (genId !== generationRef.current) return;
+          setWorkingStage(message || stage);
+        },
+        onDone: (conv) => {
+          if (genId !== generationRef.current) return;
+          streamingActiveRef.current = false;
+          finishStream(conv);
+        },
+        onStopped: (conv) => {
+          if (genId !== generationRef.current) return;
+          streamingActiveRef.current = false;
+          setStopped(true);
+          finishStream(conv);
+        },
+        onError: (message) => {
+          if (genId !== generationRef.current) return;
+          streamingActiveRef.current = false;
+          setStreamingText(null);
+          setWorkingStage(null);
+          setSending(false);
+          if (message?.includes('unavailable') || message?.includes('offline')) {
+            setProviderOffline(true);
+          }
+          notifyFromError(new Error(message || 'Could not send message'), 'Could not send message');
+        },
+      });
+
+      // Safety net: if the stream ended without a terminal frame, release the UI.
+      if (genId === generationRef.current && streamingActiveRef.current) {
+        streamingActiveRef.current = false;
+        setStreamingText(null);
+        setWorkingStage(null);
+        setSending(false);
+      }
+    },
+    [token, conversationId, finishStream, notifyFromError],
+  );
+
+  const handleSend = useCallback(
+    (content) => {
+      streamSend(content);
+    },
+    [streamSend],
+  );
 
   const handleFollowUp = useCallback(
     (question) => {
@@ -211,6 +239,91 @@ function AIConversationView({ conversationId }) {
     },
     [handleSend],
   );
+
+  const handleStop = useCallback(async () => {
+    if (!conversationId) return;
+    try {
+      await stopGeneration(token, conversationId);
+    } catch (err) {
+      notifyFromError(err, 'Could not stop generation');
+    }
+  }, [token, conversationId, notifyFromError]);
+
+  const handleSteer = useCallback(
+    async (content, mentions = []) => {
+      if (!conversationId || !content?.trim()) return;
+      try {
+        await stopGeneration(token, conversationId);
+      } catch (err) {
+        notifyFromError(err, 'Could not interrupt generation');
+        return;
+      }
+      streamSend(content, mentions);
+    },
+    [token, conversationId, notifyFromError, streamSend],
+  );
+
+  // Send-mode aware input: queue (buffer) / steer (stop then send) / stop.
+  const handleInputSend = useCallback(
+    (content, mentions = []) => {
+      const val = (content || '').trim();
+      if (!val) return;
+      if (!sending) {
+        streamSend(val, mentions);
+        return;
+      }
+      if (sendMode === 'steer') {
+        handleSteer(val, mentions);
+      } else {
+        // queue — send once the current generation finishes.
+        queuedRef.current = { content: val, mentions };
+      }
+    },
+    [sending, sendMode, streamSend, handleSteer],
+  );
+
+  // Flush a queued message once the current generation finishes.
+  useEffect(() => {
+    if (!sending && queuedRef.current) {
+      const { content, mentions } = queuedRef.current;
+      queuedRef.current = null;
+      streamSend(content, mentions);
+    }
+  }, [sending, streamSend]);
+
+  const handleContinue = useCallback(() => {
+    streamSend(lastUserContentRef.current || 'Please continue.');
+  }, [streamSend]);
+
+  // Infinite scroll: page older messages when the user reaches the top.
+  const loadOlder = useCallback(async () => {
+    if (!conversationId || !hasMore || loadingMore) return;
+    const oldest = messages[0];
+    if (!oldest) return;
+    setLoadingMore(true);
+    try {
+      const data = await listMessages(token, conversationId, { limit: 50, before: oldest.id });
+      const older = data?.messages || [];
+      setMessages((prev) => {
+        const seen = new Set(prev.map((m) => m.id));
+        const unique = older.filter((m) => !seen.has(m.id));
+        return [...unique, ...prev];
+      });
+      setHasMore(!!data?.has_more);
+    } catch {
+      // transient pagination failure — ignore; user can scroll again.
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [token, conversationId, hasMore, loadingMore, messages]);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !hasMore || loadingMore) return;
+    if (el.scrollTop <= 40) {
+      loadOlder();
+    }
+  }, [hasMore, loadingMore, loadOlder]);
 
   const handleAcceptSuggestion = useCallback(
     async (suggestion) => {
@@ -250,15 +363,9 @@ function AIConversationView({ conversationId }) {
 
   const updateMessageInState = useCallback((updatedMessage) => {
     if (!updatedMessage?.id) return;
-    setConversation((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        messages: (prev.messages || []).map((m) =>
-          m.id === updatedMessage.id ? { ...m, ...updatedMessage } : m,
-        ),
-      };
-    });
+    setMessages((prev) =>
+      prev.map((m) => (m.id === updatedMessage.id ? { ...m, ...updatedMessage } : m)),
+    );
   }, []);
 
   const persistFeedback = useCallback(
@@ -295,6 +402,51 @@ function AIConversationView({ conversationId }) {
     [persistFeedback],
   );
 
+  const handleExportMenuOpen = useCallback((event) => {
+    setExportAnchorEl(event.currentTarget);
+  }, []);
+
+  const handleExportMenuClose = useCallback(() => {
+    setExportAnchorEl(null);
+  }, []);
+
+  const handleExport = useCallback(
+    async (format) => {
+      setExportAnchorEl(null);
+      if (!conversationId) return;
+      try {
+        const result = await exportConversation(token, conversationId, format);
+        const isJson = format === 'json';
+        const content = result?.content;
+        const text = isJson
+          ? JSON.stringify(content, null, 2)
+          : typeof content === 'string'
+            ? content
+            : JSON.stringify(content, null, 2);
+        const mime = isJson ? 'application/json' : 'text/markdown';
+        const ext = isJson ? 'json' : 'md';
+        const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+        const url = URL.createObjectURL(blob);
+        const safeTitle =
+          (conversation?.title || 'conversation')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'conversation';
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${safeTitle}.${ext}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        notify({ message: `Exported as ${isJson ? 'JSON' : 'Markdown'}`, type: 'success' });
+      } catch (err) {
+        notifyFromError(err, 'Could not export conversation');
+      }
+    },
+    [token, conversationId, conversation, notify, notifyFromError],
+  );
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -315,7 +467,6 @@ function AIConversationView({ conversationId }) {
     );
   }
 
-  const messages = conversation.messages || [];
   const isWorking = conversation.status === 'working' || sending;
   const convStatus = conversation.status;
   const conversationType = conversation.conversation_type || conversation.task_payload_json?.type || 'chat';
@@ -357,9 +508,48 @@ function AIConversationView({ conversationId }) {
     >
       {providerOffline && <AIOfflineBanner />}
 
+      {/* Export / provenance header action */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          px: 1.5,
+          py: 0.5,
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<DownloadIcon />}
+          endIcon={<ArrowDropDownIcon />}
+          onClick={handleExportMenuOpen}
+          aria-label="Export conversation"
+        >
+          Export
+        </Button>
+        <Menu
+          anchorEl={exportAnchorEl}
+          open={Boolean(exportAnchorEl)}
+          onClose={handleExportMenuClose}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <MenuItem onClick={() => handleExport('markdown')} sx={{ fontSize: '0.8125rem' }}>
+            Markdown (.md)
+          </MenuItem>
+          <MenuItem onClick={() => handleExport('json')} sx={{ fontSize: '0.8125rem' }}>
+            JSON (.json)
+          </MenuItem>
+        </Menu>
+      </Box>
+
       {/* Messages area */}
       <Box
         ref={scrollRef}
+        onScroll={handleScroll}
         sx={{
           flex: 1,
           overflowY: 'auto',
@@ -368,6 +558,14 @@ function AIConversationView({ conversationId }) {
           pb: 0.5,
         }}
       >
+        {loadingMore && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.5 }}>
+            <Typography variant="caption" color="text.disabled">
+              Loading older messages…
+            </Typography>
+          </Box>
+        )}
+
         {messages.length === 0 && !isWorking && (
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="caption" color="text.disabled">
@@ -386,6 +584,10 @@ function AIConversationView({ conversationId }) {
             onAccept={handleAcceptFeedback}
             onReject={handleRejectFeedback}
             onCorrect={handleCorrectFeedback}
+            onFollowUp={handleFollowUp}
+            conversationType={conversationType}
+            appIdentifier={conversation.app_identifier}
+            scopeJson={conversation.scope_json}
           />
         ))}
 
@@ -410,7 +612,7 @@ function AIConversationView({ conversationId }) {
                 }}
               />
             )}
-            <AIWorkingIndicator conversationType={conversationType} />
+            <AIWorkingIndicator conversationType={conversationType} stage={workingStage} />
             {workingNotice && (
               <Box sx={{ px: 2, pb: 1 }}>
                 <Typography variant="caption" color="text.secondary">
@@ -420,6 +622,20 @@ function AIConversationView({ conversationId }) {
             )}
           </>
         ) : null}
+
+        {stopped && !isWorking && (
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ px: 2, py: 1 }}>
+            <Chip
+              size="small"
+              color="warning"
+              label="Interrupted"
+              sx={{ fontSize: '0.625rem', height: 20 }}
+            />
+            <Button size="small" variant="outlined" onClick={handleContinue}>
+              Continue
+            </Button>
+          </Stack>
+        )}
 
         {providerOffline && messages.length > 0 && (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
@@ -526,8 +742,11 @@ function AIConversationView({ conversationId }) {
 
       {/* Input bar */}
       <AIInputBar
-        onSend={handleSend}
-        disabled={isWorking}
+        onSend={handleInputSend}
+        working={isWorking}
+        sendMode={sendMode}
+        onModeChange={setSendMode}
+        onStop={handleStop}
         conversationStatus={convStatus}
       />
     </Box>

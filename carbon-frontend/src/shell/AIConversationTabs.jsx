@@ -1,9 +1,25 @@
 // src/shell/AIConversationTabs.jsx
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, IconButton, Tab, Tabs, Tooltip, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Menu,
+  MenuItem,
+  Tab,
+  Tabs,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 
 const STATUS_DOT_COLORS = {
   completed: 'success.main',
@@ -18,6 +34,7 @@ const CONVERSATION_TYPE_LABELS = {
   dq_validate: 'DQ Check',
   dq_suggest: 'DQ Suggest',
   nl_query: 'NL Query',
+  anomaly: 'Anomaly',
 };
 
 function AIConversationTabs({
@@ -26,17 +43,50 @@ function AIConversationTabs({
   onSelect,
   onNew,
   onClose,
+  onRename,
+  onPin,
+  onArchive,
+  onDelete,
 }) {
-  const activeIdx = useMemo(() => {
-    const idx = conversations.findIndex((c) => c.id === activeId);
-    return idx >= 0 ? idx : false;
-  }, [conversations, activeId]);
+  const [menuConvId, setMenuConvId] = useState(null);
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const [renameConvId, setRenameConvId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  const menuConv = useMemo(
+    () => conversations.find((c) => c.id === menuConvId) || null,
+    [conversations, menuConvId],
+  );
+
+  const closeMenu = useCallback(() => {
+    setMenuAnchor(null);
+    setMenuConvId(null);
+  }, []);
+
+  const openMenu = useCallback((e, conv) => {
+    e.stopPropagation();
+    setMenuAnchor(e.currentTarget);
+    setMenuConvId(conv.id);
+  }, []);
+
+  const openRename = useCallback((conv) => {
+    setRenameConvId(conv.id);
+    setRenameValue(conv.title || '');
+    closeMenu();
+  }, [closeMenu]);
+
+  const commitRename = useCallback(() => {
+    if (renameConvId && renameValue.trim()) {
+      onRename?.(renameConvId, renameValue.trim());
+    }
+    setRenameConvId(null);
+    setRenameValue('');
+  }, [renameConvId, renameValue, onRename]);
 
   const label = useCallback(
     (conv) => {
-      const title =
-        conv.title ||
-        `${CONVERSATION_TYPE_LABELS[conv.conversation_type] || 'Chat'} #${conv.id?.slice(0, 6)}`;
+      const typeLabel = CONVERSATION_TYPE_LABELS[conv.conversation_type] || 'Chat';
+      const title = conv.title || `${typeLabel} #${conv.id?.slice(0, 6)}`;
       const truncated = title.length > 20 ? title.slice(0, 18) + '…' : title;
       return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -52,14 +102,23 @@ function AIConversationTabs({
           <Typography
             variant="caption"
             noWrap
-            sx={{ maxWidth: 120, fontSize: '0.75rem' }}
+            sx={{ maxWidth: 110, fontSize: '0.75rem' }}
           >
             {truncated}
           </Typography>
+          <IconButton
+            size="small"
+            component="span"
+            onClick={(e) => openMenu(e, conv)}
+            sx={{ p: 0.25, ml: 0.25 }}
+            aria-label={`Conversation actions for ${title}`}
+          >
+            <MoreVertIcon sx={{ fontSize: 12 }} />
+          </IconButton>
         </Box>
       );
     },
-    [],
+    [openMenu],
   );
 
   if (!conversations.length) {
@@ -94,10 +153,9 @@ function AIConversationTabs({
       }}
     >
       <Tabs
-        value={activeIdx}
-        onChange={(_, idx) => {
-          const conv = conversations[idx];
-          if (conv) onSelect(conv.id);
+        value={activeId}
+        onChange={(_, id) => {
+          if (id) onSelect(id);
         }}
         variant="scrollable"
         scrollButtons="auto"
@@ -117,7 +175,7 @@ function AIConversationTabs({
           <Tab
             key={conv.id}
             label={label(conv)}
-            value={conversations.indexOf(conv)}
+            value={conv.id}
             iconPosition="end"
             icon={
               <IconButton
@@ -146,6 +204,68 @@ function AIConversationTabs({
           <AddIcon fontSize="small" />
         </IconButton>
       </Tooltip>
+
+      {/* Per-tab context menu */}
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
+        <MenuItem
+          onClick={() => {
+            if (menuConv) onPin?.(menuConv.id);
+            closeMenu();
+          }}
+        >
+          {menuConv?.is_pinned ? 'Unpin' : 'Pin'}
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (menuConv) openRename(menuConv);
+          }}
+        >
+          Rename
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (menuConv) onArchive?.(menuConv.id);
+            closeMenu();
+          }}
+        >
+          {menuConv?.is_archived ? 'Restore' : 'Archive'}
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (menuConv) onDelete?.(menuConv.id);
+            closeMenu();
+          }}
+        >
+          Delete
+        </MenuItem>
+      </Menu>
+
+      {/* Rename dialog */}
+      <Dialog open={Boolean(renameConvId)} onClose={() => setRenameConvId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Rename conversation</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitRename();
+              else if (e.key === 'Escape') setRenameConvId(null);
+            }}
+            inputProps={{ 'aria-label': 'Conversation title' }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button size="small" onClick={() => setRenameConvId(null)}>
+            Cancel
+          </Button>
+          <Button size="small" variant="contained" onClick={commitRename} disabled={!renameValue.trim()}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -156,6 +276,10 @@ AIConversationTabs.propTypes = {
   onSelect: PropTypes.func.isRequired,
   onNew: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
+  onRename: PropTypes.func,
+  onPin: PropTypes.func,
+  onArchive: PropTypes.func,
+  onDelete: PropTypes.func,
 };
 
 export default AIConversationTabs;

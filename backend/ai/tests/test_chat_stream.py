@@ -218,24 +218,34 @@ def test_send_message_stream_emits_chunks_and_done_and_persists_ai(user):
 
 
 @pytest.mark.django_db
-def test_send_message_stream_non_chat_falls_back_to_sync(user):
+def test_send_message_stream_non_chat_streams_progress(user):
     conversation = _make_conversation(user, "dq_suggest", {})
 
     ci = CarbonIntelligence()
-    ci.send_message = MagicMock(
-        return_value={"conversation": {}, "user_message": {}, "assistant_message": {}}
-    )
-    ci.get_conversation = MagicMock(
-        return_value={"id": str(conversation.id), "messages": []}
-    )
+
+    def _fake_route(*args, **kwargs):
+        conversation.status = "completed"
+        conversation.save(update_fields=["status"])
+        return {"id": "assistant-1", "role": "assistant"}
+
+    ci._route_typed_message = MagicMock(side_effect=_fake_route)
 
     frames = list(ci.send_message_stream(user, str(conversation.id), "hi"))
 
-    ci.send_message.assert_called_once_with(user, str(conversation.id), "hi")
-    assert len(frames) == 1
-    assert frames[0]["type"] == "done"
-    # The streaming path must not double-persist the user message.
-    assert AIMessage.objects.filter(conversation=conversation, role="user").count() == 0
+    ci._route_typed_message.assert_called_once()
+    types = [f["type"] for f in frames]
+    assert types == ["progress", "progress", "done"]
+    assert frames[0]["stage"] == "start"
+    assert frames[0]["message"] == "Analyzing table profile…"
+    assert frames[1]["stage"] == "done"
+    assert frames[2]["type"] == "done"
+
+    # The non-chat path persists the user message itself (no sync delegation).
+    assert AIMessage.objects.filter(
+        conversation=conversation, role="user", content="hi"
+    ).exists()
+    conversation.refresh_from_db()
+    assert conversation.status == "completed"
 
 
 @pytest.mark.django_db

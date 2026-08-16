@@ -22,11 +22,18 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from ai.intelligence import CarbonIntelligence, NotAssistantMessageError
+from ai.intelligence import (
+    CarbonIntelligence,
+    NotAssistantMessageError,
+    NotUserMessageError,
+)
 from ai.serializers import (
     ConversationListSerializer,
+    ConversationUpdateSerializer,
     CreateConversationSerializer,
+    EditMessageSerializer,
     MessageFeedbackSerializer,
+    MessageListSerializer,
     SendMessageSerializer,
 )
 
@@ -53,7 +60,8 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
     def list(self, request):
         """List conversations for the current user.
 
-        Query params: status, limit (default 50).
+        Query params: status, limit (default 50), q, is_archived, is_pinned,
+        conversation_type, cursor.
         """
         serializer = ConversationListSerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
@@ -62,6 +70,10 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
             user=request.user,
             status=serializer.validated_data.get("status"),
             limit=serializer.validated_data.get("limit", 50),
+            query=serializer.validated_data.get("q"),
+            is_archived=serializer.validated_data.get("is_archived"),
+            is_pinned=serializer.validated_data.get("is_pinned"),
+            conversation_type=serializer.validated_data.get("conversation_type"),
         )
         return Response(conversations)
 
@@ -94,9 +106,50 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-    @action(detail=True, methods=["post"], url_path="messages")
+    def partial_update(self, request, pk=None):
+        """Partially update a conversation (title/is_pinned/is_archived/visibility)."""
+        serializer = ConversationUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            conversation = self.intelligence.update_conversation(
+                user=request.user,
+                conversation_id=pk,
+                **serializer.validated_data,
+            )
+            return Response(conversation)
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    def destroy(self, request, pk=None):
+        """Hard-delete a conversation (owner-only)."""
+        try:
+            result = self.intelligence.delete_conversation(
+                user=request.user,
+                conversation_id=pk,
+            )
+            return Response(result)
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    @action(detail=True, methods=["get", "post"], url_path="messages")
     def send_message(self, request, pk=None):
-        """Send a message and get AI response."""
+        """GET: paginate messages. POST: send a message and get AI response.
+
+        Both share ``conversations/{id}/messages/`` (list vs. create). DRF cannot
+        register two ``@action`` methods on the same ``url_path`` without one
+        shadowing the other, so the two operations are dispatched by HTTP method
+        here.
+        """
+        if request.method == "GET":
+            return self.list_messages(request, pk)
+
         serializer = SendMessageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -105,6 +158,26 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 user=request.user,
                 conversation_id=pk,
                 content=serializer.validated_data["content"],
+            )
+            return Response(result)
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    def list_messages(self, request, pk=None):
+        """List a conversation's messages with cursor pagination."""
+        serializer = MessageListSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            result = self.intelligence.list_messages(
+                user=request.user,
+                conversation_id=pk,
+                limit=serializer.validated_data.get("limit", 50),
+                before=serializer.validated_data.get("before"),
+                after=serializer.validated_data.get("after"),
             )
             return Response(result)
         except ValueError as e:
@@ -159,3 +232,109 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
             event_stream(),
             content_type="text/event-stream",
         )
+
+    @action(detail=True, methods=["post"], url_path="stop")
+    def stop_generation(self, request, pk=None):
+        """Request cancellation of a running generation (idempotent)."""
+        try:
+            result = self.intelligence.stop_generation(
+                user=request.user,
+                conversation_id=pk,
+            )
+            return Response(result)
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="messages/(?P<message_id>[^/.]+)/regenerate",
+    )
+    def regenerate_message(self, request, pk=None, message_id=None):
+        """Regenerate an assistant reply (non-streaming)."""
+        try:
+            conversation = self.intelligence.regenerate_message(
+                user=request.user,
+                conversation_id=pk,
+                message_id=message_id,
+            )
+            return Response(conversation)
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    @action(
+        detail=True,
+        methods=["patch"],
+        # `(?!stream/)` keeps the literal `messages/stream/` SSE route from
+        # being shadowed by this parameterized route: DRF registers extra
+        # actions alphabetically, so `edit_message` would otherwise match
+        # "stream" as a message_id and reject POST with 405.
+        url_path="messages/(?P<message_id>(?!stream/)[^/.]+)",
+    )
+    def edit_message(self, request, pk=None, message_id=None):
+        """Edit a user message's content and regenerate the reply."""
+        serializer = EditMessageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            conversation = self.intelligence.edit_message(
+                user=request.user,
+                conversation_id=pk,
+                message_id=message_id,
+                content=serializer.validated_data["content"],
+            )
+            return Response(conversation)
+        except NotUserMessageError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    @action(detail=True, methods=["post"], url_path="summary")
+    def summarize(self, request, pk=None):
+        """Generate (or force-refresh) a conversation's rolling summary."""
+        force = bool(request.data.get("force", False))
+
+        try:
+            conversation = self.intelligence.summarize_conversation(
+                user=request.user,
+                conversation_id=pk,
+                force=force,
+            )
+            return Response(conversation)
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    @action(detail=True, methods=["get"], url_path="export")
+    def export(self, request, pk=None):
+        """Export a conversation as JSON or Markdown (?format=json|markdown)."""
+        fmt = request.query_params.get("format", "json")
+        if fmt not in ("json", "markdown"):
+            return Response(
+                {"error": f"Unsupported export format: {fmt}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            result = self.intelligence.export_conversation(
+                user=request.user,
+                conversation_id=pk,
+                fmt=fmt,
+            )
+            return Response(result)
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_404_NOT_FOUND,
+            )

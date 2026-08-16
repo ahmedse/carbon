@@ -18,8 +18,8 @@ const TYPE_MESSAGES = {
   chat: 'AI is thinking…',
 };
 
-function AIWorkingIndicator({ conversationType = 'chat' }) {
-  const label = TYPE_MESSAGES[conversationType] || TYPE_MESSAGES.chat;
+function AIWorkingIndicator({ conversationType = 'chat', stage = null }) {
+  const label = stage || TYPE_MESSAGES[conversationType] || TYPE_MESSAGES.chat;
 
   return (
     <Box
@@ -61,6 +61,7 @@ function AIWorkingIndicator({ conversationType = 'chat' }) {
 
 AIWorkingIndicator.propTypes = {
   conversationType: PropTypes.string,
+  stage: PropTypes.string,
 };
 
 export default AIWorkingIndicator;

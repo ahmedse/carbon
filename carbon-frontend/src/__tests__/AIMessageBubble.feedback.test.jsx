@@ -90,3 +90,66 @@ describe('AIMessageBubble feedback controls', () => {
     expect(screen.queryByRole('button', { name: 'Correct' })).not.toBeInTheDocument();
   });
 });
+
+describe('AIMessageBubble follow-up chips (G7 regression)', () => {
+  const followUpMessage = {
+    ...assistantMessage,
+    metadata: {
+      follow_up_questions: ['What is the trend?', 'Show anomalies'],
+    },
+  };
+
+  it('invokes onFollowUp with the question when a follow-up chip is clicked', () => {
+    const onFollowUp = vi.fn();
+    renderBubble(followUpMessage, { onFollowUp });
+
+    fireEvent.click(screen.getByRole('button', { name: 'What is the trend?' }));
+
+    expect(onFollowUp).toHaveBeenCalledTimes(1);
+    expect(onFollowUp).toHaveBeenCalledWith('What is the trend?');
+  });
+
+  it('renders both follow-up questions as clickable chips', () => {
+    renderBubble(followUpMessage, { onFollowUp: vi.fn() });
+
+    expect(screen.getByRole('button', { name: 'What is the trend?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show anomalies' })).toBeInTheDocument();
+  });
+});
+
+describe('AIMessageBubble usage + status chips', () => {
+  it('renders a usage chip from token_usage_json', () => {
+    renderBubble({
+      ...assistantMessage,
+      token_usage_json: {
+        model: 'gpt-4o',
+        total_tokens: 1234,
+        cost_usd: 0.0042,
+        latency_ms: 950,
+      },
+    });
+
+    expect(screen.getByText('gpt-4o · 1234 tok · $0.0042 · 950ms')).toBeInTheDocument();
+  });
+
+  it('omits missing usage fields from the usage chip', () => {
+    renderBubble({
+      ...assistantMessage,
+      token_usage_json: { total_tokens: 512 },
+    });
+
+    expect(screen.getByText('512 tok')).toBeInTheDocument();
+  });
+
+  it('renders an "Interrupted" chip when status is stopped', () => {
+    renderBubble({ ...assistantMessage, status: 'stopped' });
+
+    expect(screen.getByText('Interrupted')).toBeInTheDocument();
+  });
+
+  it('renders an "Error" chip when status is failed', () => {
+    renderBubble({ ...assistantMessage, status: 'failed' });
+
+    expect(screen.getByText('Error')).toBeInTheDocument();
+  });
+});
