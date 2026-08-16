@@ -209,3 +209,124 @@ def test_resume_unknown_conversation_raises(user):
     ci = CarbonIntelligence()
     with pytest.raises(ValueError):
         ci.resume_conversation(user, "00000000-0000-0000-0000-000000000000")
+
+
+# ── 3. proactive suggestion accept/dismiss ─────────────────────────────
+
+
+@pytest.mark.django_db
+def test_acknowledge_proactive_suggestion_sets_disposition(user):
+    ci = CarbonIntelligence()
+    conversation = _make_conversation(user)
+    insight = KgProactiveInsight.objects.create(
+        instance_id="carbon",
+        title="Acknowledge me",
+        narrative="do the thing",
+        severity="warning",
+        insight_type="threshold_alert",
+        disposition="pending",
+        visibility="shared",
+    )
+
+    result = ci.acknowledge_proactive_suggestion(
+        user,
+        str(conversation.id),
+        str(insight.id),
+        disposition="acknowledged",
+    )
+
+    assert result["id"] == str(insight.id)
+    assert result["title"] == "Acknowledge me"
+    insight.refresh_from_db()
+    assert insight.disposition == "acknowledged"
+    assert insight.dismissed_reason is None
+
+
+@pytest.mark.django_db
+def test_dismiss_proactive_suggestion_sets_reason(user):
+    ci = CarbonIntelligence()
+    conversation = _make_conversation(user)
+    insight = KgProactiveInsight.objects.create(
+        instance_id="carbon",
+        title="Dismiss me",
+        narrative="no thanks",
+        severity="info",
+        insight_type="threshold_alert",
+        disposition="pending",
+        visibility="shared",
+    )
+
+    ci.acknowledge_proactive_suggestion(
+        user,
+        str(conversation.id),
+        str(insight.id),
+        disposition="dismissed",
+        reason="not relevant",
+    )
+
+    insight.refresh_from_db()
+    assert insight.disposition == "dismissed"
+    assert insight.dismissed_reason == "not relevant"
+
+
+@pytest.mark.django_db
+def test_acknowledge_unknown_suggestion_raises(user):
+    ci = CarbonIntelligence()
+    conversation = _make_conversation(user)
+
+    with pytest.raises(ValueError):
+        ci.acknowledge_proactive_suggestion(
+            user,
+            str(conversation.id),
+            "00000000-0000-0000-0000-000000000000",
+            disposition="acknowledged",
+        )
+
+
+@pytest.mark.django_db
+def test_acknowledge_bad_disposition_raises(user):
+    ci = CarbonIntelligence()
+    conversation = _make_conversation(user)
+    insight = KgProactiveInsight.objects.create(
+        instance_id="carbon",
+        title="Whatever",
+        narrative="n",
+        severity="info",
+        insight_type="threshold_alert",
+        disposition="pending",
+        visibility="shared",
+    )
+
+    with pytest.raises(ValueError):
+        ci.acknowledge_proactive_suggestion(
+            user,
+            str(conversation.id),
+            str(insight.id),
+            disposition="banana",
+        )
+
+
+@pytest.mark.django_db
+def test_acknowledge_inaccessible_conversation_raises(user):
+    ci = CarbonIntelligence()
+    other_user = User.objects.create_user(
+        username="proactive-other", password="secret123"
+    )
+    other_conversation = _make_conversation(other_user)  # private by default
+    insight = KgProactiveInsight.objects.create(
+        instance_id="carbon",
+        title="Hidden",
+        narrative="n",
+        severity="info",
+        insight_type="threshold_alert",
+        disposition="pending",
+        visibility="shared",
+    )
+
+    with pytest.raises(ValueError):
+        ci.acknowledge_proactive_suggestion(
+            user,
+            str(other_conversation.id),
+            str(insight.id),
+            disposition="acknowledged",
+        )

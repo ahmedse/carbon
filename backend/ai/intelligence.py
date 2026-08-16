@@ -1107,6 +1107,41 @@ class CarbonIntelligence:
             "created_at": insight.created_at.isoformat(),
         }
 
+    def acknowledge_proactive_suggestion(
+        self,
+        user,
+        conversation_id: str,
+        suggestion_id: str,
+        disposition: str = "acknowledged",
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Mark a proactive suggestion acknowledged or dismissed.
+
+        Scoped identically to ``list_proactive_suggestions``: the user must be
+        able to access both the conversation and the insight.
+        """
+        from accounts.ai_scoping import scope_ai_queryset
+        from ai.models import KgProactiveInsight
+
+        if self._get_accessible_conversation(user, conversation_id) is None:
+            raise ValueError(f"Conversation {conversation_id} not found.")
+        if disposition not in {"acknowledged", "dismissed"}:
+            raise ValueError(f"Invalid disposition: {disposition}")
+
+        qs = scope_ai_queryset(KgProactiveInsight.objects.all(), user)
+        try:
+            insight = qs.get(id=suggestion_id)
+        except KgProactiveInsight.DoesNotExist:
+            raise ValueError(f"Suggestion {suggestion_id} not found.")
+
+        update_fields = ["disposition"]
+        insight.disposition = disposition
+        if reason and disposition == "dismissed":
+            insight.dismissed_reason = reason
+            update_fields.append("dismissed_reason")
+        insight.save(update_fields=update_fields)
+        return self._serialize_proactive_suggestion(insight)
+
     # ------------------------------------------------------------------ #
     # Resume catch-up (Phase 5 item 4)
     # ------------------------------------------------------------------ #

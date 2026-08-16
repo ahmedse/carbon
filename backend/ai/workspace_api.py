@@ -392,6 +392,50 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+    @action(detail=True, methods=["post"], url_path="suggestions/(?P<suggestion_id>[^/.]+)/accept", url_name="suggestion-accept")
+    def accept_suggestion(self, request, pk=None, suggestion_id=None):
+        """Accept a proactive suggestion."""
+        try:
+            result = self.intelligence.acknowledge_proactive_suggestion(
+                user=request.user,
+                conversation_id=pk,
+                suggestion_id=suggestion_id,
+                disposition="acknowledged",
+            )
+            return Response(result)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=["post"], url_path="suggestions/(?P<suggestion_id>[^/.]+)/dismiss", url_name="suggestion-dismiss")
+    def dismiss_suggestion(self, request, pk=None, suggestion_id=None):
+        """Dismiss a proactive suggestion (optionally with a reason)."""
+        try:
+            result = self.intelligence.acknowledge_proactive_suggestion(
+                user=request.user,
+                conversation_id=pk,
+                suggestion_id=suggestion_id,
+                disposition="dismissed",
+                reason=request.data.get("reason") if request.data else None,
+            )
+            return Response(result)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=["get"], url_path="suggestions", url_name="workspace-suggestions")
+    def workspace_suggestions(self, request):
+        """List pending proactive suggestions workspace-wide (no conversation pk)."""
+        limit = request.query_params.get("limit", 10)
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            limit = 10
+        limit = max(1, min(limit, 50))
+        suggestions = self.intelligence.list_proactive_suggestions(
+            user=request.user,
+            limit=limit,
+        )
+        return Response({"suggestions": suggestions})
+
 
 class WorkspaceArtifactViewSet(viewsets.GenericViewSet):
     """AI Workspace artifact API."""
