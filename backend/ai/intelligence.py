@@ -76,7 +76,11 @@ def build_scope(user) -> Scope:
         return Scope()
 
     if user.is_superuser:
-        return Scope(is_superuser=True, org_unit_ids=["*"])
+        return Scope(
+            is_superuser=True,
+            org_unit_ids=["*"],
+            user_identifier=str(user.pk),
+        )
 
     if user.is_staff:
         is_read_only = False

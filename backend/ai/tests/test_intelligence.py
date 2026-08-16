@@ -97,9 +97,14 @@ class TestBuildScope:
 
     def test_superuser_returns_wildcard_scope(self):
         user = MagicMock(is_superuser=True, is_staff=False, is_authenticated=True)
+        user.pk = 13
         scope = build_scope(user)
         assert scope.org_unit_ids == ["*"]
         assert scope.is_superuser is True
+        # Regression: ScopeGuard §1 requires a user_identifier on every scope,
+        # including superusers (admin). Empty here used to reject every AI call
+        # from a superuser with "Scope with empty user_identifier".
+        assert scope.user_identifier == "13"
 
     def test_authenticated_user_with_roles(self):
         user = MagicMock(is_superuser=False, is_staff=False, is_authenticated=True)

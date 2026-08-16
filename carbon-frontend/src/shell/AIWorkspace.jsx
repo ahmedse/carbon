@@ -145,13 +145,23 @@ export function AIWorkspace({ onClose }) {
     [visibleIds, byId],
   );
 
-  // If the active conversation is no longer visible (archived/deleted/filtered),
-  // switch to the first visible one.
+  // The active tab must always reference a visible conversation. Derive the
+  // effective id so the Tabs `value` is always valid (MUI rejects a null or
+  // stale value with "The `value` provided to the Tabs component is invalid").
+  // Falls back to the first visible conversation when none is active — e.g. a
+  // fresh session with no stored selection, or the active tab was just closed.
+  const effectiveActiveId = useMemo(
+    () => (visibleIds.includes(activeId) ? activeId : visibleIds[0] || null),
+    [visibleIds, activeId],
+  );
+
+  // Persist the effective id into state so localStorage and the activeRef
+  // (Ctrl+W archive target) stay in sync with what's actually rendered.
   useEffect(() => {
-    if (activeId && !visibleIds.includes(activeId)) {
-      setActiveId(visibleIds[0] || null);
+    if (activeId !== effectiveActiveId) {
+      setActiveId(effectiveActiveId);
     }
-  }, [activeId, visibleIds]);
+  }, [activeId, effectiveActiveId]);
 
   // Handle new chat.
   const handleNewChat = useCallback(async () => {
@@ -314,8 +324,8 @@ export function AIWorkspace({ onClose }) {
 
   // Compute status.
   const activeConversation = useMemo(
-    () => (activeId ? byId[activeId] || null : null),
-    [byId, activeId],
+    () => (effectiveActiveId ? byId[effectiveActiveId] || null : null),
+    [byId, effectiveActiveId],
   );
 
   // Edge: loading.
@@ -397,7 +407,7 @@ export function AIWorkspace({ onClose }) {
       {hasAny && (
         <AIConversationTabs
           conversations={visibleConversations}
-          activeId={activeId}
+          activeId={effectiveActiveId}
           onSelect={handleSelect}
           onNew={handleNewChat}
           onClose={handleArchive}
