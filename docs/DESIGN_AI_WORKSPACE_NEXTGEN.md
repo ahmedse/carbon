@@ -1,6 +1,6 @@
 # DESIGN — Carbon AI Workspace, Next-Generation (v3)
 
-**Status:** Active design — Phases 0–2 backend implemented (Sprints 13–16); Phases 3–5 pending
+**Status:** Active design — Phases 0–2 backend implemented (Sprints 13–16); Phase 2.5 QA fixes landed on main; Phases 3–5 pending
 **Author:** Master Architect
 **Date:** 2026-08-16 (v3 — comprehensive UX/workflow/phased expansion)
 **Audience:** Backend Worker, Frontend Worker, QA Validator, DevOps Worker
@@ -21,7 +21,7 @@
 | Added §13 — Error Taxonomy & Recovery Patterns | Error handling was scattered; centralize to one reference |
 | Added §14 — Accessibility & Keyboard Contract | WCAG AA is baseline; keyboard contract unambiguous |
 | Added §15 — Metrics & Observability Contract | Instrumentation spec so UX decisions are data-driven |
-| Replaced §9 Phased Roadmap → §16 | Expanded with explicit acceptance criteria, file lists, gates |
+| Replaced §9 Phased Roadmap → §16 | Expanded with explicit acceptance criteria, file lists, gates, browser checklists |
 | Old §10–§11 renumbered → §17–§18 | No content change |
 
 ---
@@ -899,8 +899,7 @@ cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run
 filter params (`q`, `is_archived`, `is_pinned`, `conversation_type`), `update_conversation`,
 `delete_conversation`, `list_messages` in `intelligence.py`, auto-title.
 
-**Open finding (F3/F4 from QA sim):** pinned conversations excluded from default list;
-first-page `has_more` always false. Fix before Phase 2 ships.
+**QA follow-up:** F3/F4 were reproduced during QA simulation and then fixed on main in the Phase 2.5 bug sprint (`9c4e019`). Keep the regression tests in place; if the list/pagination contract changes, this is the first place to re-check.
 
 **Gate (regression):**
 ```bash
@@ -919,9 +918,9 @@ steer/stop; `AIMessageBubble` follow-up fix (G7), usage chip, stopped chip; thre
 lifecycle shell (normalized store, id-based tabs, archive/restore/pin/rename/search).
 
 **Open findings (from QA sim):**
-- F1 (P1): non-superuser create/send → 500 (ScopedRole.is_read_only missing). Fix target: pre-Phase 3.
-- F2 (P2): export `?format=markdown` → 404 (DRF URL format override collision).
-- F4 (P2): first-page `has_more` always false.
+- F1 (P1): non-superuser create/send → 500 (ScopedRole.is_read_only missing). Fixed in `8d7b1b6`; keep the regression.
+- F2 (P2): export `?format=markdown` → 404 (DRF URL format override collision). Fixed in `9c4e019` by switching to `?fmt=`.
+- F4 (P2): first-page `has_more` always false. Fixed in `9c4e019` with the no-cursor branch.
 
 **Gate:**
 ```bash
@@ -943,7 +942,7 @@ cd carbon-frontend && npm run build
 ### Phase 2.5 — Bug Sprint (pre-Phase 3 mandatory)
 
 **Role:** Backend Worker (Debugger/Fixer)
-**Status:** 🚀 Ready to dispatch
+**Status:** ✅ Completed on `main`
 **Scope:** Fix exactly the open findings from Phase 2 QA. No new features.
 
 **Files:**
@@ -958,7 +957,7 @@ cd backend && ../.venv/bin/python -m pytest ai -q  # must include regression for
 cd backend && ../.venv/bin/python manage.py check
 ```
 
-**Tests required:** one failing test per finding → patch → passing test (classic regression).
+**Tests required:** one failing test per finding → patch → passing test (classic regression). Already added and verified on main.
 
 ---
 
