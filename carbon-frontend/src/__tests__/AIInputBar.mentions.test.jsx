@@ -49,9 +49,13 @@ describe('AIInputBar #-mentions', () => {
     fireEvent.change(input, { target: { value: 'summarize #' } });
     fireEvent.click(screen.getByRole('option', { name: '#table' }));
 
-    expect(onMentionsChange).toHaveBeenLastCalledWith(['#table']);
+    // After kind selection the input reads '#table ' and no entity was selected;
+    // the mentions change callback is called with an empty resolved array.
+    expect(onMentionsChange).toHaveBeenLastCalledWith([]);
 
+    // Close the entity picker, then send.
+    fireEvent.keyDown(input, { key: 'Escape' });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(onSend).toHaveBeenCalledWith('summarize #table', ['#table']);
+    expect(onSend).toHaveBeenCalledWith('summarize #table', []);
   });
 });

@@ -156,12 +156,40 @@ function AIMessageBubble({
   const statusLabel = message.status === 'stopped' ? 'Interrupted' : message.status === 'failed' ? 'Error' : null;
   const statusColor = message.status === 'stopped' ? 'warning' : 'error';
 
-  // "Why this answer" provenance (read-only): surface what shaped the answer.
+  // "Why this answer" provenance: prefer explicit provenance payload from backend,
+  // fall back to scope/type info from conversation props.
+  const provenancePayload = metadata?.provenance;
   const provenanceLines = [];
-  if (conversationType) provenanceLines.push(`Conversation: ${conversationType}`);
-  if (appIdentifier) provenanceLines.push(`App: ${appIdentifier}`);
-  const scopeUnits = orgUnitCount(scopeJson);
-  if (scopeUnits !== null) provenanceLines.push(`Org units: ${scopeUnits}`);
+  if (provenancePayload && typeof provenancePayload === 'object') {
+    if (provenancePayload.model) provenanceLines.push(`Model: ${provenancePayload.model}`);
+    if (conversationType) provenanceLines.push(`Type: ${conversationType}`);
+    if (provenancePayload.engine_turn_id) provenanceLines.push(`Turn: ${provenancePayload.engine_turn_id}`);
+    if (appIdentifier || provenancePayload.app_identifier)
+      provenanceLines.push(`App: ${appIdentifier || provenancePayload.app_identifier}`);
+    const guardResults = provenancePayload.guard_results;
+    if (guardResults && typeof guardResults === 'object') {
+      const guards = Object.entries(guardResults)
+        .map(([g, ok]) => `${g}: ${ok ? '✓' : '✗'}`)
+        .join(' · ');
+      if (guards) provenanceLines.push(`Guards: ${guards}`);
+    }
+    const ctxSnap = provenancePayload.context_snapshot;
+    if (ctxSnap && typeof ctxSnap === 'object') {
+      const tiers = Object.entries(ctxSnap)
+        .map(([t, tok]) => `${t} ${tok} tok`)
+        .join(' · ');
+      if (tiers) provenanceLines.push(`Context: ${tiers}`);
+    }
+    const scopeSnap = provenancePayload.scope_snapshot || scopeJson;
+    const units = orgUnitCount(scopeSnap);
+    if (units !== null) provenanceLines.push(`Org units: ${units}`);
+  } else {
+    // Fallback: build from conversation props.
+    if (conversationType) provenanceLines.push(`Type: ${conversationType}`);
+    if (appIdentifier) provenanceLines.push(`App: ${appIdentifier}`);
+    const scopeUnits = orgUnitCount(scopeJson);
+    if (scopeUnits !== null) provenanceLines.push(`Org units: ${scopeUnits}`);
+  }
   if (!provenanceLines.length) provenanceLines.push('Structured AI response');
   const hasStructured = !!metadata?.type;
   const hasScope = !!conversationType || !!appIdentifier || scopeJson?.org_unit_ids != null;

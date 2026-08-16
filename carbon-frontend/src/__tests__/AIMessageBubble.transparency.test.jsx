@@ -66,4 +66,23 @@ describe('AIMessageBubble "why this answer" provenance tooltip', () => {
 
     expect(screen.queryByLabelText('Why this answer')).not.toBeInTheDocument();
   });
+
+  it('uses backend provenance payload when present in metadata_json', () => {
+    renderBubble({
+      ...baseMessage,
+      metadata_json: {
+        provenance: {
+          model: 'gpt-4o',
+          engine_turn_id: 'abc123',
+          app_identifier: 'platform',
+          guard_results: { ScopeGuard: true, AccessGuard: true },
+          context_snapshot: { T0: 120, T1: 340, T2: 420 },
+          scope_snapshot: { org_unit_ids: ['*'] },
+        },
+      },
+    }, { conversationType: 'dq_validate' });
+
+    // Icon renders even with provenance from metadata.
+    expect(screen.getByLabelText('Why this answer')).toBeInTheDocument();
+  });
 });

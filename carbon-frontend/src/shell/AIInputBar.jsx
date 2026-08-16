@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types';
 import {
   Box,
+  CircularProgress,
   IconButton,
   List,
   ListItemButton,
@@ -14,6 +15,9 @@ import {
   Typography,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
+import { useAuth } from '../auth/AuthContext';
+import { apiFetch } from '../api/api';
+import { API_ROUTES } from '../config';
 
 const PLACEHOLDER_MAP = {
   working: 'AI is thinking… (Enter to queue)',
@@ -27,19 +31,36 @@ const SEND_MODE_OPTIONS = [
   { value: 'stop', label: 'Stop' },
 ];
 
-// Sprint 17: fixed mention kinds the WorkspaceContext understands. Selecting a
-// kind inserts "#table " / "#rule " etc. TODO(mentions): resolve these kinds to
-// concrete entity ids from the source workspace (table pk / rule id / field name /
-// module slug) and send the resolved entities in workspace_context — this sprint
-// only surfaces the kind list (no remote entity search).
 const MENTION_KINDS = ['table', 'rule', 'field', 'module'];
 
-// Matches a trailing "#" + partial word at the very end of the input.
-const MENTION_TRIGGER_RE = /(^|[\s\n])#([a-zA-Z]*)$/;
+// Two-stage mention: first '#' shows kinds; after kind + space typed, search entities.
+// Stage 1: /(^|\s)#([a-zA-Z]*)$/ — kind picker
+// Stage 2: /(^|\s)#(table|rule|field|module) ([^#]*)$/ — entity search within a kind
+const KIND_TRIGGER_RE = /(^|[\s\n])#([a-zA-Z]*)$/;
+const ENTITY_TRIGGER_RE = /(^|[\s\n])#(table|rule|field|module) ([^#\n]*)$/;
 
-function extractMentions(text) {
-  const matches = (text || '').match(/#(table|rule|field|module)\b/g) || [];
-  return Array.from(new Set(matches));
+// Map kind → API route + label/value keys
+const KIND_CONFIG = {
+  table:  { route: API_ROUTES.tables,  labelKey: 'title',    idKey: 'id',  extra: ['name'] },
+  field:  { route: API_ROUTES.fields,  labelKey: 'label',    idKey: 'id',  extra: ['name'] },
+  rule:   { route: API_ROUTES.dqRules, labelKey: 'name',     idKey: 'id',  extra: [] },
+  module: { route: API_ROUTES.modules, labelKey: 'name',     idKey: 'id',  extra: [] },
+};
+
+function entityLabel(kind, item) {
+  const cfg = KIND_CONFIG[kind];
+  if (!cfg) return String(item.id);
+  return item[cfg.labelKey] || item[cfg.extra?.[0]] || String(item.id);
+}
+
+// Build the canonical mention object that rides in workspace_context.mentions
+function buildMention(kind, item) {
+  return { kind, id: String(item.id), name: entityLabel(kind, item) };
+}
+
+// Replace the trailing #kind word+ with the display token.
+function replaceEntityTrigger(text, kind, displayName) {
+  return text.replace(ENTITY_TRIGGER_RE, `$1@${displayName} `);
 }
 
 function AIInputBar({
@@ -51,40 +72,107 @@ function AIInputBar({
   conversationStatus,
   onMentionsChange,
 }) {
+  const { token } = useAuth();
   const inputRef = useRef(null);
   const [value, setValue] = useState('');
-  const [mentionQuery, setMentionQuery] = useState('');
-  const [mentionOpen, setMentionOpen] = useState(false);
+  // Stage: null | 'kind' | 'entity'
+  const [stage, setStage] = useState(null);
+  const [kindQuery, setKindQuery] = useState('');
+  const [activeKind, setActiveKind] = useState(null);
+  const [entityQuery, setEntityQuery] = useState('');
+  const [entities, setEntities] = useState([]);
+  const [entityLoading, setEntityLoading] = useState(false);
+  // Resolved mention objects: { kind, id, name }
+  const [resolvedMentions, setResolvedMentions] = useState([]);
 
-  const mentions = useMemo(() => extractMentions(value), [value]);
   const visibleKinds = useMemo(
-    () => MENTION_KINDS.filter((kind) => kind.startsWith(mentionQuery)),
-    [mentionQuery],
+    () => MENTION_KINDS.filter((k) => k.startsWith(kindQuery)),
+    [kindQuery],
   );
 
+  // Notify parent of mention changes.
   useEffect(() => {
-    onMentionsChange?.(mentions);
-  }, [mentions, onMentionsChange]);
+    onMentionsChange?.(resolvedMentions);
+  }, [resolvedMentions, onMentionsChange]);
+
+  // Fetch entities when the entity query changes (debounced via useEffect cleanup).
+  useEffect(() => {
+    if (stage !== 'entity' || !activeKind) return;
+    const cfg = KIND_CONFIG[activeKind];
+    if (!cfg) return;
+    let cancelled = false;
+    setEntityLoading(true);
+    const url = entityQuery.trim()
+      ? `${cfg.route}?q=${encodeURIComponent(entityQuery.trim())}&limit=8`
+      : `${cfg.route}?limit=8`;
+    apiFetch(url, { token })
+      .then((data) => {
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : (data?.results ?? []);
+        setEntities(list.slice(0, 8));
+      })
+      .catch(() => { if (!cancelled) setEntities([]); })
+      .finally(() => { if (!cancelled) setEntityLoading(false); });
+    return () => { cancelled = true; };
+  }, [stage, activeKind, entityQuery, token]);
+
+  const closePicker = useCallback(() => {
+    setStage(null);
+    setKindQuery('');
+    setActiveKind(null);
+    setEntityQuery('');
+    setEntities([]);
+  }, []);
 
   const handleChange = useCallback((event) => {
     const next = event.target.value;
     setValue(next);
-    const match = MENTION_TRIGGER_RE.exec(next);
-    if (match) {
-      setMentionQuery(match[2]);
-      setMentionOpen(true);
-    } else {
-      setMentionQuery('');
-      setMentionOpen(false);
+
+    // Check entity stage first (more specific match).
+    const entityMatch = ENTITY_TRIGGER_RE.exec(next);
+    if (entityMatch) {
+      const kind = entityMatch[2];
+      const query = entityMatch[3];
+      setStage('entity');
+      setActiveKind(kind);
+      setEntityQuery(query);
+      return;
     }
-  }, []);
+
+    const kindMatch = KIND_TRIGGER_RE.exec(next);
+    if (kindMatch) {
+      setStage('kind');
+      setKindQuery(kindMatch[2]);
+      setActiveKind(null);
+      setEntityQuery('');
+      setEntities([]);
+      return;
+    }
+
+    closePicker();
+  }, [closePicker]);
 
   const handleSelectKind = useCallback((kind) => {
-    setValue((prev) => prev.replace(MENTION_TRIGGER_RE, `$1#${kind} `));
-    setMentionQuery('');
-    setMentionOpen(false);
+    // Replace trailing #partial with #kind (keep the space so entity search starts).
+    setValue((prev) => prev.replace(KIND_TRIGGER_RE, `$1#${kind} `));
+    setStage('entity');
+    setActiveKind(kind);
+    setKindQuery('');
+    setEntityQuery('');
+    setEntities([]);
     inputRef.current?.focus();
   }, []);
+
+  const handleSelectEntity = useCallback((kind, item) => {
+    const mention = buildMention(kind, item);
+    setValue((prev) => replaceEntityTrigger(prev, kind, mention.name));
+    setResolvedMentions((prev) => {
+      const already = prev.some((m) => m.kind === kind && m.id === mention.id);
+      return already ? prev : [...prev, mention];
+    });
+    closePicker();
+    inputRef.current?.focus();
+  }, [closePicker]);
 
   const handleSubmit = useCallback(() => {
     const val = value.trim();
@@ -93,24 +181,24 @@ function AIInputBar({
       onStop?.();
       return;
     }
-    onSend(val, extractMentions(value));
+    onSend(val, resolvedMentions);
     setValue('');
-  }, [value, working, sendMode, onSend, onStop]);
+    setResolvedMentions([]);
+  }, [value, working, sendMode, onSend, onStop, resolvedMentions]);
 
   const handleKeyDown = useCallback(
     (event) => {
-      if (event.key === 'Escape' && mentionOpen) {
+      if (event.key === 'Escape' && stage) {
         event.preventDefault();
-        setMentionOpen(false);
-        setMentionQuery('');
+        closePicker();
         return;
       }
-      if (event.key === 'Enter' && !event.shiftKey && !mentionOpen) {
+      if (event.key === 'Enter' && !event.shiftKey && !stage) {
         event.preventDefault();
         handleSubmit();
       }
     },
-    [handleSubmit, mentionOpen],
+    [handleSubmit, stage, closePicker],
   );
 
   const placeholder = working
@@ -118,6 +206,11 @@ function AIInputBar({
     : conversationStatus === 'needs_input'
       ? PLACEHOLDER_MAP.needs_input
       : PLACEHOLDER_MAP.default;
+
+  const popperOpen = stage !== null && (
+    (stage === 'kind' && visibleKinds.length > 0) ||
+    (stage === 'entity')
+  );
 
   return (
     <Box
@@ -152,7 +245,9 @@ function AIInputBar({
           }}
           inputProps={{ 'aria-label': 'Message input' }}
         />
-        {mentionOpen && visibleKinds.length > 0 && (
+
+        {/* Stage 1: kind picker */}
+        {stage === 'kind' && visibleKinds.length > 0 && (
           <Paper
             elevation={2}
             role="listbox"
@@ -189,7 +284,57 @@ function AIInputBar({
             </List>
           </Paper>
         )}
+
+        {/* Stage 2: entity search */}
+        {stage === 'entity' && popperOpen && (
+          <Paper
+            elevation={2}
+            role="listbox"
+            aria-label={`${activeKind} search results`}
+            sx={{
+              position: 'absolute',
+              bottom: '100%',
+              left: 0,
+              mb: 0.5,
+              zIndex: 10,
+              minWidth: 220,
+              maxHeight: 220,
+              overflowY: 'auto',
+            }}
+          >
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', px: 1.5, py: 0.5 }}
+            >
+              Select a {activeKind}
+            </Typography>
+            {entityLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                <CircularProgress size={16} />
+              </Box>
+            ) : entities.length === 0 ? (
+              <Typography variant="caption" color="text.disabled" sx={{ display: 'block', px: 1.5, pb: 1 }}>
+                No matches
+              </Typography>
+            ) : (
+              <List dense disablePadding>
+                {entities.map((item) => (
+                  <ListItemButton
+                    key={item.id}
+                    role="option"
+                    onClick={() => handleSelectEntity(activeKind, item)}
+                    sx={{ fontSize: '0.8125rem' }}
+                  >
+                    {entityLabel(activeKind, item)}
+                  </ListItemButton>
+                ))}
+              </List>
+            )}
+          </Paper>
+        )}
       </Box>
+
       {working && (
         <Select
           size="small"

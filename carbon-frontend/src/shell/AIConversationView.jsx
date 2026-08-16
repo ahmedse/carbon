@@ -18,6 +18,7 @@ import {
   stopGeneration,
 } from '../api/aiWorkspace';
 import AIMessageBubble from './AIMessageBubble';
+import AIContextPanel from './AIContextPanel';
 import AIInputBar from './AIInputBar';
 import AIWorkingIndicator from './AIWorkingIndicator';
 import AIOfflineBanner from './AIOfflineBanner';
@@ -54,6 +55,8 @@ function AIConversationView({ conversationId }) {
   const [workingStartedAt, setWorkingStartedAt] = useState(null);
   const [providerOffline, setProviderOffline] = useState(false);
   const [exportAnchorEl, setExportAnchorEl] = useState(null);
+  // Resolved mention objects from the input bar: [{ kind, id, name }, …]
+  const [mentions, setMentions] = useState([]);
   // Transient assistant text accumulated while a chat response streams in.
   const [streamingText, setStreamingText] = useState(null);
   const scrollRef = useRef(null);
@@ -227,11 +230,18 @@ function AIConversationView({ conversationId }) {
   );
 
   const handleSend = useCallback(
-    (content) => {
-      streamSend(content);
+    (content, extraMentions = []) => {
+      streamSend(content, extraMentions);
     },
     [streamSend],
   );
+
+  // Called when the conversation is refreshed after a summarize action.
+  const handleSummarized = useCallback((updated) => {
+    if (!updated) return;
+    const canonical = normalizeConversationShape(updated);
+    if (canonical) setConversation((prev) => ({ ...prev, ...canonical }));
+  }, []);
 
   const handleFollowUp = useCallback(
     (question) => {
@@ -265,21 +275,23 @@ function AIConversationView({ conversationId }) {
 
   // Send-mode aware input: queue (buffer) / steer (stop then send) / stop.
   const handleInputSend = useCallback(
-    (content, mentions = []) => {
+    (content, resolvedMentions = []) => {
       const val = (content || '').trim();
       if (!val) return;
+      // Merge input-bar resolved mentions with any in-flight panel state.
+      const allMentions = resolvedMentions.length ? resolvedMentions : mentions;
       if (!sending) {
-        streamSend(val, mentions);
+        streamSend(val, allMentions);
         return;
       }
       if (sendMode === 'steer') {
-        handleSteer(val, mentions);
+        handleSteer(val, allMentions);
       } else {
         // queue — send once the current generation finishes.
-        queuedRef.current = { content: val, mentions };
+        queuedRef.current = { content: val, mentions: allMentions };
       }
     },
-    [sending, sendMode, streamSend, handleSteer],
+    [sending, sendMode, streamSend, handleSteer, mentions],
   );
 
   // Flush a queued message once the current generation finishes.
@@ -498,10 +510,13 @@ function AIConversationView({ conversationId }) {
           : null;
 
   return (
+    <Box sx={{ display: 'flex', flexDirection: 'row', height: '100%', overflow: 'hidden' }}>
     <Box
       sx={{
         display: 'flex',
         flexDirection: 'column',
+        flex: 1,
+        minWidth: 0,
         height: '100%',
         overflow: 'hidden',
       }}
@@ -748,7 +763,16 @@ function AIConversationView({ conversationId }) {
         onModeChange={setSendMode}
         onStop={handleStop}
         conversationStatus={convStatus}
+        onMentionsChange={setMentions}
       />
+    </Box>
+
+    {/* Context panel — collapsible right rail */}
+    <AIContextPanel
+      conversation={conversation}
+      mentions={mentions}
+      onSummarized={handleSummarized}
+    />
     </Box>
   );
 }
