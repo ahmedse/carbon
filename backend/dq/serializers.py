@@ -91,6 +91,8 @@ class DQRuleSerializer(serializers.ModelSerializer):
     Write: provide `tag_ids` (list of int) and `field_assignments` (list of
     {data_field, data_table}). Read: returns nested `tags` and `field_assignments`.
     """
+    name = serializers.CharField(required=False)
+    rule_type = serializers.CharField(required=False)
     tags = RuleTagSerializer(many=True, read_only=True)
     tag_ids = serializers.ListField(
         child=serializers.IntegerField(), write_only=True, required=False,
@@ -100,6 +102,10 @@ class DQRuleSerializer(serializers.ModelSerializer):
     field_assignments_write = serializers.ListField(
         child=serializers.DictField(), write_only=True, required=False,
         help_text='List of {data_table (required), data_field (optional, int|null)} dicts'
+    )
+    replace_assignments = serializers.BooleanField(
+        write_only=True, required=False, default=False,
+        help_text='Confirm dropping existing bindings when field_assignments_write is empty'
     )
     results_count = serializers.SerializerMethodField()
     is_locked = serializers.SerializerMethodField()
@@ -112,7 +118,8 @@ class DQRuleSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'rule_level', 'rule_type', 'name', 'description',
             'params', 'severity', 'is_active', 'tags', 'tag_ids',
-            'field_assignments', 'field_assignments_write', 'results_count', 'is_locked',
+            'field_assignments', 'field_assignments_write', 'replace_assignments',
+            'results_count', 'is_locked',
             'dimension', 'definition', 'version', 'archived',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
         ]
@@ -126,39 +133,73 @@ class DQRuleSerializer(serializers.ModelSerializer):
         """Rule is locked if it has been executed at least once (has DQResults)."""
         return obj.results.exists()
 
-    def validate_rule_type(self, value):
-        ALLOWED = ['not_null', 'unique', 'allowed_values', 'range', 'regex',
-                   'reference_integrity', 'threshold', 'nl_check']
-        if value not in ALLOWED:
-            raise serializers.ValidationError(f"rule_type must be one of {ALLOWED}")
-        return value
-
+    ALLOWED_RULE_TYPES = ['not_null', 'unique', 'allowed_values', 'range', 'regex',
+                          'reference_integrity', 'threshold', 'nl_check']
     THRESHOLD_OPERATORS = {'gte', 'gt', 'lte', 'lt', 'eq', 'neq'}
 
+    def validate_rule_type(self, value):
+        if value not in self.ALLOWED_RULE_TYPES:
+            raise serializers.ValidationError(
+                f"rule_type must be one of {self.ALLOWED_RULE_TYPES}")
+        return value
+
     def validate(self, data):
-        rule_type = data.get('rule_type')
-        if rule_type == 'threshold':
-            params = data.get('params', {})
-            if not isinstance(params, dict):
-                raise serializers.ValidationError({"params": "params must be a JSON object"})
-            operator = params.get('operator', 'gte')
-            if operator not in self.THRESHOLD_OPERATORS:
-                raise serializers.ValidationError({
-                    "params": f"operator must be one of {sorted(self.THRESHOLD_OPERATORS)}, got '{operator}'"
-                })
-            if 'value' not in params:
-                raise serializers.ValidationError({"params": "value is required for threshold rules"})
-            try:
-                float(params['value'])
-            except (TypeError, ValueError):
-                raise serializers.ValidationError({
-                    "params": f"value must be numeric, got '{params['value']}'"
-                })
+        definition = data.get('definition')
+        if definition:
+            from .rule_schema import validate_definition
+            derrors = validate_definition(definition)
+            if derrors:
+                raise serializers.ValidationError({'definition': derrors})
+            # D1 — definition is the source of truth: derive flat columns from it.
+            data.setdefault('name', definition.get('name'))
+            rt = definition.get('type')
+            if rt not in self.ALLOWED_RULE_TYPES:
+                raise serializers.ValidationError(
+                    {'definition': f"type must be one of {self.ALLOWED_RULE_TYPES}"})
+            data.setdefault('rule_type', rt)
+            level = definition.get('level')
+            if level in ('field', 'field_validation'):
+                data.setdefault('rule_level', 'field_validation')
+            elif level in ('business', 'business_rule'):
+                data.setdefault('rule_level', 'business_rule')
+            data.setdefault('severity', definition.get('severity', 'error'))
+            data.setdefault('dimension', definition.get('dimension', 'validity'))
+            if 'active' in definition:
+                data.setdefault('is_active', bool(definition['active']))
+        else:
+            # No definition — flat fields are the source of truth (create only;
+            # partial updates keep the instance's existing name/rule_type).
+            if self.instance is None:
+                if not data.get('name'):
+                    raise serializers.ValidationError({'name': 'This field is required.'})
+                if not data.get('rule_type'):
+                    raise serializers.ValidationError({'rule_type': 'This field is required.'})
+            # Keep the flat threshold validation (the definition path is already
+            # covered by validate_definition's per-type params check).
+            rule_type = data.get('rule_type')
+            if rule_type == 'threshold':
+                params = data.get('params', {})
+                if not isinstance(params, dict):
+                    raise serializers.ValidationError({"params": "params must be a JSON object"})
+                operator = params.get('operator', 'gte')
+                if operator not in self.THRESHOLD_OPERATORS:
+                    raise serializers.ValidationError({
+                        "params": f"operator must be one of {sorted(self.THRESHOLD_OPERATORS)}, got '{operator}'"
+                    })
+                if 'value' not in params:
+                    raise serializers.ValidationError({"params": "value is required for threshold rules"})
+                try:
+                    float(params['value'])
+                except (TypeError, ValueError):
+                    raise serializers.ValidationError({
+                        "params": f"value must be numeric, got '{params['value']}'"
+                    })
         return data
 
     def create(self, validated_data):
         tag_ids = validated_data.pop('tag_ids', [])
         field_assignments_data = validated_data.pop('field_assignments_write', [])
+        validated_data.pop('replace_assignments', None)
         rule = super().create(validated_data)
         if tag_ids:
             rule.tags.set(tag_ids)
@@ -173,6 +214,23 @@ class DQRuleSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         tag_ids = validated_data.pop('tag_ids', None)
         field_assignments_data = validated_data.pop('field_assignments_write', None)
+        replace_assignments = validated_data.pop('replace_assignments', False)
+
+        # F3 / D4 — drift guard: reject a silent drop of existing bindings.
+        if field_assignments_data is not None:
+            existing_count = instance.field_assignments.count()
+            if not field_assignments_data and existing_count and not replace_assignments:
+                raise serializers.ValidationError({
+                    'field_assignments_write': (
+                        f'Would drop {existing_count} existing binding(s). '
+                        'Pass replace_assignments=true to confirm, or omit field_assignments_write.'
+                    )
+                })
+
+        # F7 — bump the monotonic version when the definition actually changes.
+        if 'definition' in validated_data and instance.definition != validated_data['definition']:
+            instance.version += 1
+
         rule = super().update(instance, validated_data)
         if tag_ids is not None:
             rule.tags.set(tag_ids)
