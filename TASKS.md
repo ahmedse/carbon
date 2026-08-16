@@ -459,7 +459,7 @@ npm run build            # → clean
 
 ## Phase 11-A — Proactive suggestion accept/dismiss endpoint
 
-**Status:** PENDING
+**Status:** DONE (`bcee0d5`)
 **Role:** backend-worker
 **Source spec:** `docs/DESIGN_AI_WORKSPACE_V4.md` §Phase 10 item 1 (Proactive Suggestions Rail). This is the LAST backend gap — the `AISuggestionRail` is display-only because there is no endpoint to mark a `KgProactiveInsight` acknowledged/dismissed.
 
