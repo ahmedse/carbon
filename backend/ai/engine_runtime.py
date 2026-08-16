@@ -39,6 +39,7 @@ MODULES: list[str] = [
     "carbon.report.draft",
     "carbon.schema.analyze",
     "carbon.fix.suggest",
+    "investigate",
     "chat",
 ]
 
@@ -1627,6 +1628,223 @@ async def _run_nl_rule_test(
     }
 
 
+# Severity mapping for investigate findings (DQ + anomaly → high|medium|low).
+_INVESTIGATE_SEVERITY_MAP = {
+    "error": "high",
+    "warn": "medium",
+    "warning": "medium",
+    "info": "low",
+}
+
+
+def _investigate_severity(value: str) -> str:
+    """Map a DQ/anomaly severity string to high|medium|low."""
+    return _INVESTIGATE_SEVERITY_MAP.get(str(value or "").lower(), "medium")
+
+
+async def _run_investigate(
+    instance_id: str, payload: dict[str, Any], task_id: str
+) -> dict[str, Any]:
+    """Read-only investigation pipeline (Phase 9-A).
+
+    Consumes a pre-loaded payload (assembled by the intelligence layer) and
+    produces ``plan_steps`` + ``findings`` + ``summary``.  Never writes to DQ:
+    the DQ step calls the pure ``dq.engine.evaluate`` loop (RULE_21), the
+    anomaly step reuses the already-registered ``_run_anomaly_detect``, and
+    the KG step reports entities retrieved upstream (retrieval needs
+    ``scope``, which only the intelligence layer holds).
+
+    An LLM outage only degrades the narrative ``summary`` — deterministic
+    findings are still returned, and the synthesis step is marked
+    ``llm_unavailable`` (never ``pulse_unavailable``).
+    """
+    from dq.engine import evaluate as engine_evaluate
+
+    table_id = payload.get("table_id")
+    table_name = str(payload.get("table_name") or "table")
+    schema = payload.get("schema") or []
+    rows = payload.get("rows") or []
+    profile_summary = payload.get("profile_summary") or {}
+    rule_defs = [r for r in (payload.get("rule_defs") or []) if isinstance(r, dict)]
+    anomaly_payload = payload.get("anomaly_payload")
+    kg_entries = payload.get("kg_entries") or []
+
+    field_type_by_name = {
+        str(f.get("name")): f.get("type")
+        for f in schema
+        if isinstance(f, dict) and f.get("name")
+    }
+
+    plan_steps: list[dict[str, Any]] = []
+
+    # Step 1 — Profile (read-only, from the latest TableProfile summary).
+    row_count = profile_summary.get("row_count", len(rows))
+    field_count = profile_summary.get("field_count", len(schema))
+    plan_steps.append(
+        {
+            "step": 1,
+            "label": "Profile table",
+            "status": "done",
+            "detail": f"{row_count} rows · {field_count} fields",
+        }
+    )
+
+    # Step 2 — DQ rules (pure evaluate loop mirroring run_dq's selection, but
+    # with no persistence).
+    findings: list[dict[str, Any]] = []
+    rules_run = 0
+    rules_failed = 0
+    for rule_def in rule_defs:
+        field_name = rule_def.get("field_name")
+        field = (
+            types.SimpleNamespace(
+                name=field_name,
+                data_type=field_type_by_name.get(field_name),
+                reference_set_id=rule_def.get("reference_set_id"),
+            )
+            if field_name
+            else None
+        )
+        try:
+            _passed, checked, failed, _sample, _score = engine_evaluate(
+                rule_def, rows, field=field
+            )
+        except Exception as exc:  # noqa: BLE001 - a bad rule def must not kill the turn
+            logger.warning(
+                "investigate DQ eval failed for rule %s: %s",
+                rule_def.get("name"),
+                exc,
+            )
+            continue
+        rules_run += 1
+        if failed > 0:
+            rules_failed += 1
+            label = rule_def.get("name") or rule_def.get("id")
+            findings.append(
+                {
+                    "severity": _investigate_severity(rule_def.get("severity")),
+                    "title": f"DQ rule '{label}' failed",
+                    "detail": f"{failed} of {checked} applicable row(s) violated rule '{label}'.",
+                    "recommended_action": "Review the failing rows and correct or quarantine them.",
+                    "entity_ref": field_name,
+                }
+            )
+    plan_steps.append(
+        {
+            "step": 2,
+            "label": "Evaluate DQ rules",
+            "status": "done",
+            "detail": f"{rules_run} rules run · {rules_failed} failed",
+        }
+    )
+
+    # Step 3 — Anomalies (reuse the already-registered _run_anomaly_detect).
+    anomalies: list[dict[str, Any]] = []
+    if anomaly_payload:
+        anomaly_result = await _run_anomaly_detect(instance_id, anomaly_payload, task_id)
+        anomalies = (anomaly_result.get("result") or {}).get("anomalies") or []
+        for anomaly in anomalies:
+            if not isinstance(anomaly, dict):
+                continue
+            findings.append(
+                {
+                    "severity": _investigate_severity(anomaly.get("severity")),
+                    "title": f"Anomaly: {anomaly.get('metric', table_name)}",
+                    "detail": str(anomaly.get("explanation") or "Detected an anomalous value."),
+                    "recommended_action": "Investigate this anomaly before it propagates downstream.",
+                    "entity_ref": anomaly.get("metric") or table_name,
+                }
+            )
+        detail = f"{len(anomalies)} anomalies" if anomalies else "0 anomalies"
+    else:
+        detail = "insufficient history"
+    plan_steps.append(
+        {
+            "step": 3,
+            "label": "Detect anomalies",
+            "status": "done",
+            "detail": detail,
+        }
+    )
+
+    # Step 4 — Knowledge graph (retrieved upstream in the intelligence layer).
+    plan_steps.append(
+        {
+            "step": 4,
+            "label": "Retrieve knowledge graph",
+            "status": "done",
+            "detail": f"{len(kg_entries)} entities",
+        }
+    )
+
+    counts = {
+        "rules_run": rules_run,
+        "rules_failed": rules_failed,
+        "anomalies": len(anomalies),
+        "kg_entities": len(kg_entries),
+    }
+
+    # Step 5 — Synthesis (best-effort LLM narrative; deterministic fallback).
+    llm_text = await _llm_text(
+        task="investigate",
+        instance_id=instance_id,
+        conversation_id=f"investigate-{task_id}",
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Summarize the data-quality investigation of table "
+                    f"{table_name!r}. Return a JSON object: "
+                    '{"summary": str}.\n'
+                    f"Findings: {json.dumps(findings, default=str)}"
+                ),
+            }
+        ],
+        temperature=0.3,
+        response_format={"type": "json_object"},
+    )
+    summary = None
+    if llm_text:
+        try:
+            parsed_summary = json.loads(llm_text)
+            if isinstance(parsed_summary, dict):
+                summary = str(parsed_summary.get("summary") or "").strip()
+        except (json.JSONDecodeError, TypeError):
+            summary = None
+
+    if summary:
+        synthesis_status = "done"
+        synthesis_detail = summary
+    else:
+        summary = (
+            f"{rules_failed} of {rules_run} rule(s) failed, "
+            f"{len(anomalies)} anomaly(s) detected."
+        )
+        synthesis_status = "llm_unavailable"
+        synthesis_detail = "LLM unavailable — deterministic summary used."
+    plan_steps.append(
+        {
+            "step": 5,
+            "label": "Synthesize findings",
+            "status": synthesis_status,
+            "detail": synthesis_detail,
+        }
+    )
+
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {
+            "table_id": table_id,
+            "table_name": table_name,
+            "plan_steps": plan_steps,
+            "findings": findings,
+            "summary": summary,
+            "counts": counts,
+        },
+    }
+
+
 # Handler registry: task type → async handler.
 _TASK_HANDLERS: dict[str, Any] = {
     "dq.validate": _run_dq_validate,
@@ -1639,6 +1857,7 @@ _TASK_HANDLERS: dict[str, Any] = {
     "carbon.anomaly.explain": _run_anomaly_explain,
     "carbon.report.draft": _run_report_draft,
     "carbon.fix.suggest": _run_fix_suggest,
+    "investigate": _run_investigate,
 }
 
 

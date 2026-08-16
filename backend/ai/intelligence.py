@@ -1469,7 +1469,9 @@ class CarbonIntelligence:
             return self._send_anomaly_message(conversation, content, conv_ctx, scope)
         if conv_type == "nl_rule_test":
             return self._send_nl_rule_test_message(conversation, content, conv_ctx, scope)
-        if conv_type in {"investigate", "report_draft"}:
+        if conv_type == "investigate":
+            return self._send_investigate_message(conversation, content, conv_ctx, scope)
+        if conv_type == "report_draft":
             return self._send_staged_task_message(conversation, conv_type)
         return self._send_chat_message(conversation, content, conv_ctx, scope)
 
@@ -1482,7 +1484,6 @@ class CarbonIntelligence:
         explicit notice is more honest than silently treating it as a chat turn.
         """
         labels = {
-            "investigate": "Investigate",
             "report_draft": "Report drafting",
         }
         label = labels.get(conv_type, conv_type)
@@ -1843,6 +1844,223 @@ class CarbonIntelligence:
             summary,
             metadata=metadata,
             status="needs_input",
+        )
+
+    def _send_investigate_message(
+        self,
+        conversation,
+        content: str,
+        conv_ctx: ConversationContext,
+        scope: Scope,
+    ) -> dict[str, Any]:
+        """Handle investigate conversation messages (Phase 9-A).
+
+        Runs the READ-ONLY investigation pipeline (RULE_21): profile (latest
+        ``TableProfile`` only), DQ rules via the pure ``dq.engine.evaluate``
+        loop, anomaly detection reusing ``_run_anomaly_detect``, and KG
+        retrieval (here, because it needs ``scope``).  Nothing in this path
+        calls ``run_dq`` or ``profile_table`` — neither mutates DQ state.
+        """
+        payload = conversation.task_payload_json or {}
+        guard_chain, operation = self._guard_workspace_operation(
+            scope,
+            "workspace_investigate",
+            payload,
+        )
+
+        table_id = payload.get("table_id")
+        if not table_id:
+            guard_chain.audit_trail.log(
+                scope,
+                operation,
+                self.provider.provider_name,
+                0,
+                "failed",
+                error_message="Investigate requires a table_id.",
+            )
+            return self._save_assistant_message(
+                conversation,
+                "Investigation requires a target table. Start this thread from a table or asset.",
+                metadata={"type": "investigation", "findings": []},
+                status="failed",
+            )
+
+        from django.db.models import Q
+
+        from dataschema.models import DataRow, DataTable
+        from dq.models import DQRule, TableProfile
+        from dq.services import build_anomaly_payload
+        from ai.context_assembler import _retrieve_knowledge_graph
+
+        try:
+            table = DataTable.objects.get(id=table_id)
+        except DataTable.DoesNotExist:
+            guard_chain.audit_trail.log(
+                scope,
+                operation,
+                self.provider.provider_name,
+                0,
+                "failed",
+                error_message=f"Table {table_id} not found.",
+            )
+            return self._save_assistant_message(
+                conversation,
+                f"Could not find the target table (id={table_id}).",
+                metadata={"type": "investigation", "findings": []},
+                status="failed",
+            )
+
+        # ── READ-ONLY pre-load ─────────────────────────────────────────
+        fields = list(table.fields.filter(is_archived=False))
+        schema = [
+            {"name": f.name, "label": f.label, "type": f.type}
+            for f in fields
+        ]
+        rows = list(DataRow.objects.filter(data_table=table, is_archived=False))
+
+        # Latest TableProfile only — do NOT re-profile.
+        profile_summary: dict[str, Any] = {}
+        latest_profile = (
+            TableProfile.objects.filter(data_table=table)
+            .order_by("-profiled_at")
+            .first()
+        )
+        if latest_profile is not None:
+            profile_summary = {
+                "row_count": latest_profile.row_count,
+                "completeness_pct": latest_profile.completeness_pct,
+                "field_count": len(fields),
+                "profiled_at": (
+                    latest_profile.profiled_at.isoformat()
+                    if latest_profile.profiled_at
+                    else None
+                ),
+            }
+
+        # Active deterministic rules, mirroring run_dq's selection (but with no
+        # persistence). nl_check/anomaly_detect are excluded — the former is
+        # LLM-only, the latter is fed to the anomaly step.
+        field_by_id = {f.id: f for f in fields}
+        field_ids = list(field_by_id)
+        rules = list(
+            DQRule.objects.filter(is_active=True)
+            .filter(
+                Q(field_assignments__data_table_id=table.id)
+                | Q(field_assignments__data_field_id__in=field_ids)
+            )
+            .prefetch_related("field_assignments__data_field")
+            .distinct()
+        )
+        rule_defs: list[dict[str, Any]] = []
+        for rule in rules:
+            if rule.rule_type in ("nl_check", "anomaly_detect"):
+                continue
+            field_name = None
+            reference_set_id = None
+            for assn in rule.field_assignments.all():
+                if assn.data_field_id and assn.data_field_id in field_by_id:
+                    f = field_by_id[assn.data_field_id]
+                    field_name = f.name
+                    reference_set_id = f.reference_set_id
+                    break
+            if field_name is None:
+                for assn in rule.field_assignments.all():
+                    if assn.data_field_id:
+                        field_name = assn.data_field.name
+                        reference_set_id = assn.data_field.reference_set_id
+                        break
+            if field_name is None:
+                # Field-level deterministic rules need a resolvable field.
+                continue
+            rule_defs.append(
+                {
+                    "id": rule.id,
+                    "name": rule.name,
+                    "type": rule.rule_type,
+                    "severity": rule.severity,
+                    "params": rule.params or {},
+                    "field_name": field_name,
+                    "reference_set_id": reference_set_id,
+                }
+            )
+
+        # Anomaly payload, translated into the shape _run_anomaly_detect
+        # consumes (mirrors _build_anomaly_request). None = insufficient history
+        # → a "done" step with 0 anomalies, NOT an error.
+        raw_anomaly_payload, anomaly_err = build_anomaly_payload(table.id)
+        anomaly_payload: dict[str, Any] | None = None
+        if raw_anomaly_payload is not None:
+            anomaly_payload = {
+                "table_name": raw_anomaly_payload["table"].get("name", table.name),
+                "profile_history": raw_anomaly_payload.get("history", []),
+                "sensitivity": float(raw_anomaly_payload.get("sensitivity", 2.0)),
+                "volume_threshold_pct": float(
+                    raw_anomaly_payload.get("volume_anomaly_pct", 30.0)
+                ),
+            }
+
+        # KG retrieval needs scope, so it happens here (not in the engine).
+        kg_entries, kg_tokens = _retrieve_knowledge_graph(scope, 800)
+
+        task_payload = {
+            "table_id": table.id,
+            "table_name": table.name,
+            "schema": schema,
+            "rows": rows,
+            "profile_summary": profile_summary,
+            "rule_defs": rule_defs,
+            "anomaly_payload": anomaly_payload,
+            "kg_entries": kg_entries,
+            "kg_tokens": kg_tokens,
+        }
+
+        started_at = time.perf_counter()
+        result = dispatch_task("investigate", task_payload, timeout=90)
+        latency_ms = int((time.perf_counter() - started_at) * 1000)
+        guard_chain.audit_trail.log(
+            scope,
+            operation,
+            self.provider.provider_name,
+            latency_ms,
+            result.get("status"),
+            error_message=_error_message(result.get("error")),
+        )
+
+        if result.get("status") == "pulse_unavailable":
+            return self._save_provider_unavailable_message(conversation)
+        if result.get("status") != "completed":
+            return self._save_assistant_message(
+                conversation,
+                f"Investigation failed: {_error_message(result.get('error'))}",
+                metadata={"type": "investigation", "findings": []},
+                status="failed",
+            )
+
+        r = result.get("result") or {}
+        metadata = guard_chain.sanitize_response(
+            scope,
+            {
+                "type": "investigation",
+                "table_id": r.get("table_id"),
+                "table_name": r.get("table_name"),
+                "summary": r.get("summary"),
+                "plan_steps": r.get("plan_steps") or [],
+                "findings": r.get("findings") or [],
+                "counts": r.get("counts") or {},
+            },
+        )
+
+        findings = r.get("findings") or []
+        status = "needs_input" if findings else "completed"
+        message = (
+            f"Investigation of {r.get('table_name', 'table')} found "
+            f"{len(findings)} finding(s)."
+        )
+        return self._save_assistant_message(
+            conversation,
+            message,
+            metadata=metadata,
+            status=status,
         )
 
     def _send_nl_query_message(

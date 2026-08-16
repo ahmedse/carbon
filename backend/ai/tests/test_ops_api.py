@@ -2,7 +2,7 @@
 
 Tests:
   * health/ returns 200 with healthy=True and dq.validate/chat advertised
-  * modules/ returns 200 with count == 11, every type in engine_runtime.MODULES
+  * modules/ returns 200 with count == 12, every type in engine_runtime.MODULES
   * tasks/{unknown}/ is fail-visible (200, pulse_unavailable / not_found)
   * all three endpoints require auth (anonymous GET -> 401)
   * health/ rejects write methods with 405 (structural read-only)
@@ -43,11 +43,12 @@ def test_health_returns_healthy_modules(auth_client):
 
 
 @pytest.mark.django_db
-def test_modules_returns_eleven_types(auth_client):
+def test_modules_returns_twelve_types(auth_client):
     resp = auth_client.get(f"{BASE}/modules/")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["count"] == 11
+    assert body["count"] == 12
+    assert "investigate" in engine_runtime.MODULES
     assert all(m["type"] in engine_runtime.MODULES for m in body["modules"])
 
 
