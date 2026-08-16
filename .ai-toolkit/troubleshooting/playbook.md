@@ -283,3 +283,57 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Regression guard: `.ai-toolkit/scripts/audit-routes.py` (wired into `verify.sh frontend`)
   fails on any missing namespace root or dangling nav target.
 - First seen: 2026-08.
+
+### PB-26 — DQ rule CREATE always 400: JSON-first `definition` vs DRF top-level required fields
+- Symptom: "New Rule" dialog always fails with `{"rule_type": required, "name": required}` (UI shows `field: _root (server)` ValidationError). Standalone curl create with a valid `definition` + empty `bindings` succeeds (201) — so the backend accepts the definition, but the UI path never does.
+- Layer: backend / frontend (contract mismatch)
+- Root cause: `DQRuleSerializer` keeps `rule_type` and `name` as required **top-level** model fields (not read-only), so DRF rejects a payload that only sends `definition`. `createDQRule` (`src/api/dq.js`) sends `{definition, field_assignments_write}` and omits both. ADR-0006 says `definition` is the single source of truth, but the serializer also demands the denormalized columns — **two sources of truth for the same field**.
+- Fix: either (a) `createDQRule` forwards top-level `name` + `rule_type` (derived from `definition.name` / `definition.type`), or (b) make the serializer derive/accept them from `definition` (cleaner — honors ADR-0006). Note `definition.type` uses `level: 'field'|'business'` while the model `rule_level` uses `field_validation`/`business_rule` — `DQRule.save()` maps them, but DRF validates the model field **before** `save()`, so any top-level `rule_level:'business'` also 400s (see PB-29).
+- Best practice note: when a JSON blob is declared the source of truth, the serializer must NOT also require its denormalized mirror columns on the same payload — derive them server-side (or mark them read-only + populate in `create()`).
+- Regression guard: `backend/dq/tests/test_dq.py` — add a create test that POSTs `definition`-only and asserts 201.
+- First seen: 2026-08-16.
+
+### PB-27 — DQ standalone rules rejected client-side (bindings hard-required, contradicts ADR-0006)
+- Symptom: "why does rule creation require a table and field?" — the New Rule dialog pre-fills `bindings: [{table:'',field:''}]` and client validation hard-fails when `bindings` is empty, even though standalone rules are legal per ADR-0006.
+- Layer: frontend
+- Root cause: `src/pages/dq/tabs/RulesTab.jsx` `openCreate()` seeds a blank binding, and `src/pages/dq/bindings.js` `resolveBindings()` pushes a hard `code:'empty'` error when `bindings.length === 0`. The backend `rule_schema.py` treats bindings as **optional** (verified: empty-bindings create → 201).
+- Fix: stop pre-filling a blank binding; allow `bindings: []` through `resolveBindings` (skip resolution, return `[]`). Bindings are applied separately at the data-product level.
+- Best practice note: a client-side "required" guard must mirror the backend contract — if the backend schema marks a field optional, the frontend must not invent a hard requirement.
+- Regression guard: unit test `validateDefinitionClient` + `resolveBindings` with `bindings: []` returns no error.
+- First seen: 2026-08-16.
+
+### PB-28 — Frontend list API helper drops filter/search params → filters silently no-op
+- Symptom: DQ Rules search box + Filters (rule_type/dimension/severity/is_active/tag/include_archived) appear to do nothing — typing "Not Null" still returns every row. Backend list endpoint DOES honor `search`, `rule_type`, `dimension`, etc. (verified via curl).
+- Layer: frontend / api
+- Root cause: `listDQRules` (`src/api/dq.js`) builds `URLSearchParams` for **only** `data_table` and `data_field`; the UI passes `search`, `rule_level`, `rule_type`, `dimension`, `severity`, `is_active`, `tag`, `include_archived` which are silently dropped before the request.
+- Fix: forward every filter the UI exposes (or filter client-side). Add an explicit "unsupported param" guard so unknown filters fail loud instead of vanishing.
+- Best practice note: a list API wrapper and its consumer must agree on the full filter surface — when a filter is added to the UI, add it to the query builder in the same change. This is a **candidate for UP promotion** (filter-forwarding drift recurs across list pages).
+- Regression guard: integration test asserting `search=` narrows the result set through the real API wrapper.
+- First seen: 2026-08-16.
+
+### PB-29 — DQ definition vs model vocabulary drift (`level` field/business vs `rule_level` field_validation/business_rule)
+- Symptom: passing top-level `rule_level: "business"` → 400 `invalid choice`; UI/store values look inconsistent.
+- Layer: backend
+- Root cause: `definition.level` uses `'field'|'business'` (rule_schema RULE_LEVELS), but the `DQRule.rule_level` model field uses DRF choices `field_validation`/`business_rule`. `DQRule.save()` maps `'field'→'field_validation'`, `'business'→'business_rule'`, but DRF validates the model field **before** `save()` runs, so clients that pass the definition-style value are rejected.
+- Fix: accept both vocabularies in the serializer (normalize `field`↔`field_validation`, `business`↔`business_rule` in `validate_rule_level`), or expose only one vocabulary to clients.
+- Best practice note: one concept = one vocabulary. If a denormalized column must differ from the JSON representation, do the translation in the serializer's `validate_*`/`to_internal_value`, never rely on `Model.save()` (which runs too late for field validation).
+- Regression guard: serializer unit test for both `'business'` and `'business_rule'` inputs.
+- First seen: 2026-08-16.
+
+### PB-30 — DQ Test tab silently all-passes standalone rules (reader/writer field-fallback mismatch)
+- Symptom: testing a standalone regex rule (no bindings) against sample rows shows every row `undefined` → all "Passed" with no reason, even values that should fail (e.g. `"!!!"` against an email regex).
+- Layer: frontend
+- Root cause: `TestTab.jsx` `evaluateRule` resolved the field to check ONLY from `bindings[0].field`, falling back to `null` when bindings are empty → every row read `undefined`, and `regex`/`not_null` short-circuit "empty" values to pass. `defaultSampleForRule` wrote the sample under a `'value'` key using a **different** fallback, so the evaluator never read the data it generated.
+- Fix: unify the fallback — binding field wins, else infer the key from the first sample row's first object key, else `'value'` (the template key). Verified: `[{"value":"abc123@example.com"},{"value":"!!!"},{"value":"test@example.com"}]` → 2/3 passed, `"!!!"` correctly failed.
+- Best practice note: when a value's source can be absent (no binding), the reader and writer MUST agree on the same fallback key — a silent `undefined`→pass is the worst failure mode (false green). This is the same class as CB-09 (validate-before-use); see also "test results must fail loud, not pass silently".
+- Regression guard: component test for `evaluateRule` with `bindings: []` + a sample row that should fail.
+- First seen: 2026-08-16.
+
+### PB-31 — DQ "Save Definition" silently drops field_assignments not present in `definition.bindings` (data loss)
+- Symptom: editing/saving a rule's definition removed a bound table/field that was not re-listed in `definition.bindings` (rule 104 went 2 bindings → 1) with no warning.
+- Layer: frontend (drift reconciliation)
+- Root cause: `DefinitionTab.handleSave()` PATCHes `{definition, name, description, tag_ids, field_assignments_write}` where `field_assignments_write` is derived only from `definition.bindings`. Any existing assignment missing from the definition is silently dropped (replace-all semantics).
+- Fix: before replacing, diff `definition.bindings` vs existing `field_assignments` and warn on any drop (or preserve unmentioned assignments unless explicitly removed).
+- Best practice note: destructive reconcile (replace-all) of user data requires an explicit diff + confirmation — never silently shrink a relationship list on a partial update.
+- Regression guard: test asserting a save that omits a binding does not delete it without confirmation.
+- First seen: 2026-08-16.
