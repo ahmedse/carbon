@@ -66,6 +66,7 @@ def build_scope(user) -> Scope:
     Scope is injected into every AIProvider request so the provider
     can enforce data-access boundaries.
     """
+    from accounts.constants import READ_ONLY_ROLES
     from accounts.models import ScopedRole
 
     org_unit_ids: list[str] = []
@@ -86,7 +87,7 @@ def build_scope(user) -> Scope:
         is_read_only = False
 
     roles = ScopedRole.objects.filter(user=user, is_active=True).select_related(
-        "org_unit", "module"
+        "org_unit", "module", "group"
     )
 
     for role in roles:
@@ -94,7 +95,9 @@ def build_scope(user) -> Scope:
             org_unit_ids.append(str(role.org_unit_id))
         if role.module_id and str(role.module_id) not in module_ids:
             module_ids.append(str(role.module_id))
-        if not role.is_read_only:
+        # Read-only is derived from the group name (ScopedRole has no is_read_only
+        # column). A single write-capable role flips the user out of read-only.
+        if role.group.name not in READ_ONLY_ROLES:
             is_read_only = False
 
     return Scope(

@@ -110,8 +110,10 @@ class TestBuildScope:
         user = MagicMock(is_superuser=False, is_staff=False, is_authenticated=True)
         user.pk = 99
 
-        role1 = MagicMock(org_unit_id=1, module_id=None, is_read_only=True)
-        role2 = MagicMock(org_unit_id=2, module_id=10, is_read_only=False)
+        role1 = MagicMock(org_unit_id=1, module_id=None)
+        role1.group.name = "viewers_group"
+        role2 = MagicMock(org_unit_id=2, module_id=10)
+        role2.group.name = "dataowners_group"
 
         with patch("accounts.models.ScopedRole") as MockScopedRole:
             MockScopedRole.objects.filter.return_value.select_related.return_value = [
@@ -123,6 +125,24 @@ class TestBuildScope:
             assert "10" in scope.module_ids
             assert scope.is_read_only is False
             assert scope.user_identifier == "99"
+
+    def test_read_only_only_roles_stay_read_only(self):
+        user = MagicMock(is_superuser=False, is_staff=False, is_authenticated=True)
+        user.pk = 100
+
+        role1 = MagicMock(org_unit_id=1, module_id=None)
+        role1.group.name = "viewers_group"
+        role2 = MagicMock(org_unit_id=2, module_id=None)
+        role2.group.name = "analysts_group"
+
+        with patch("accounts.models.ScopedRole") as MockScopedRole:
+            MockScopedRole.objects.filter.return_value.select_related.return_value = [
+                role1, role2,
+            ]
+            scope = build_scope(user)
+            assert "1" in scope.org_unit_ids
+            assert scope.is_read_only is True
+            assert scope.user_identifier == "100"
 
 
 # ── CarbonIntelligence tests ──────────────────────────────────────────────
