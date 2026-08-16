@@ -23,12 +23,19 @@ class AIConversation(models.Model):
                          failed ─────────────────┘
     """
 
+    # Core types are fixed; domain apps may declare additional task types via
+    # ``DomainAIOperations.supported_task_types`` (see
+    # ai.domain_protocol.supported_conversation_types). The full set is the
+    # union of both — this list documents the built-in core only.
     CONVERSATION_TYPES = [
         ("chat", "Chat"),
         ("dq_validate", "DQ Validate"),
         ("dq_suggest", "DQ Suggest"),
         ("nl_query", "NL Query"),
         ("anomaly", "Anomaly"),
+        ("investigate", "Investigate"),
+        ("nl_rule_test", "NL Rule Test"),
+        ("report_draft", "Report Draft"),
     ]
 
     STATUS_CHOICES = [
@@ -79,11 +86,24 @@ class AIConversation(models.Model):
         default="",
         help_text="Rolling compaction summary of older turns (written in Sprint 15).",
     )
+    last_summarized_message_id = models.UUIDField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Latest AIMessage id included when the rolling summary was last generated.",
+    )
     last_message_at = models.DateTimeField(
         null=True,
         blank=True,
         default=None,
         help_text="Denormalized sort/group key from the latest AIMessage.",
+    )
+    last_viewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="When the user last opened/resumed this conversation "
+                  "(drives the >24h resume catch-up summary).",
     )
     visibility = models.CharField(
         max_length=20,
@@ -210,6 +230,60 @@ class AIMessage(models.Model):
 
     def __str__(self):
         return f"{self.role} @ {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class AIArtifact(models.Model):
+    """A durable artifact promoted from an AI conversation."""
+
+    ARTIFACT_TYPES = [
+        ("report", "Report"),
+        ("rule_set", "Rule Set"),
+        ("query", "Query"),
+        ("analysis", "Analysis"),
+    ]
+
+    VISIBILITY_CHOICES = [
+        ("private", "Private"),
+        ("shared", "Shared"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    conversation = models.ForeignKey(
+        AIConversation,
+        on_delete=models.CASCADE,
+        related_name="artifacts",
+    )
+    message = models.ForeignKey(
+        AIMessage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="artifacts",
+    )
+    title = models.CharField(max_length=255)
+    artifact_type = models.CharField(max_length=30, choices=ARTIFACT_TYPES)
+    content_json = models.JSONField(default=dict, blank=True)
+    visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default="private")
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_ai_artifacts",
+    )
+
+    class Meta:
+        app_label = "ai"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["conversation", "visibility", "-created_at"], name="ai_art_conv_vis_idx"),
+            models.Index(fields=["created_by", "visibility"], name="ai_art_creator_vis_idx"),
+            models.Index(fields=["artifact_type", "visibility"], name="ai_art_type_vis_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.title} ({self.artifact_type})"
 
 
 class AIGeneration(models.Model):

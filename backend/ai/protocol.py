@@ -94,6 +94,7 @@ class WorkspaceContext:
     entity_name: str | None = None      # human-readable name
     form_state: dict | None = None      # partial form data if user was filling a form (SANITIZED — §11.5)
     recent_actions: list[str] = field(default_factory=list)  # last 3-5 user actions
+    mentions: list[dict[str, Any]] = field(default_factory=list)  # sanitized entity references
     intent_signal: str | None = None    # "create" | "edit" | "debug" | "explore" | None
     app_identifier: str | None = None   # domain app scope (mirrors Scope.app_identifier)
 
@@ -112,6 +113,9 @@ class WorkspaceContext:
             parts.append(f"with intent '{self.intent_signal}'")
         if self.recent_actions:
             parts.append(f"recent actions: {', '.join(self.recent_actions[:3])}")
+        mention_summary = _mention_summary(self.mentions)
+        if mention_summary:
+            parts.append(mention_summary)
         return ". ".join(parts) + "."
 
     @classmethod
@@ -121,10 +125,74 @@ class WorkspaceContext:
         known = {
             "workspace", "current_view", "entity_type", "entity_id",
             "entity_name", "form_state", "recent_actions",
-            "intent_signal", "app_identifier",
+            "mentions", "intent_signal", "app_identifier",
         }
-        return cls(**{k: v for k, v in data.items() if k in known})
+        payload = {k: v for k, v in data.items() if k in known}
+        payload["mentions"] = _sanitize_mentions(payload.get("mentions"))
+        return cls(**payload)
 
+def _sanitize_mentions(mentions: Any) -> list[dict[str, Any]]:
+    """Return a compact, JSON-safe mention list."""
+    if not isinstance(mentions, list):
+        return []
+
+    normalized: list[dict[str, Any]] = []
+    allowed_keys = {
+        "kind",
+        "id",
+        "name",
+        "label",
+        "type",
+        "rule_type",
+        "module_id",
+        "table_id",
+        "org_unit_id",
+    }
+
+    for mention in mentions:
+        if not isinstance(mention, dict):
+            continue
+
+        kind = mention.get("kind") or mention.get("entity_kind") or mention.get("entity_type")
+        identifier = mention.get("id") or mention.get("entity_id")
+        if identifier is None:
+            continue
+
+        cleaned: dict[str, Any] = {"id": identifier}
+        if kind:
+            cleaned["kind"] = kind
+        for key in allowed_keys - {"kind", "id"}:
+            value = mention.get(key)
+            if value is not None:
+                cleaned[key] = value
+        normalized.append(cleaned)
+
+    return normalized
+
+
+def _mention_summary(mentions: list[dict[str, Any]], limit: int = 3) -> str:
+    parts: list[str] = []
+    for mention in mentions[:limit]:
+        kind = str(mention.get("kind") or "mention").strip()
+        label = (
+            mention.get("name")
+            or mention.get("label")
+            or mention.get("rule_type")
+            or mention.get("type")
+            or mention.get("id")
+        )
+        if label is None:
+            continue
+        parts.append(f"{kind} {label}")
+
+    if not parts:
+        return ""
+
+    suffix = ""
+    remaining = len(mentions) - len(parts)
+    if remaining > 0:
+        suffix = f" (+{remaining} more)"
+    return f"mentions: {', '.join(parts)}{suffix}"
 
 # ── 1. DQ Validate ──────────────────────────────────────────────────────
 

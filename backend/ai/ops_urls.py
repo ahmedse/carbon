@@ -10,7 +10,13 @@ from ai.observability_api import (
     PulseDataView,
     PulseInventoryView,
 )
-from ai.ops_api import PulseHealthView, PulseModulesView, PulseTaskStatusView
+from ai.ops_api import (
+    DomainAppManifestDetailView,
+    DomainAppManifestListView,
+    PulseHealthView,
+    PulseModulesView,
+    PulseTaskStatusView,
+)
 from ai.sweeps_api import SweepsStatusView
 
 urlpatterns = [
@@ -26,4 +32,7 @@ urlpatterns = [
     path("sweeps/", SweepsStatusView.as_view(), name="ai-pulse-sweeps"),
     path("learning-status/", LearningStatusView.as_view(), name="ai-pulse-learning-status"),
     path("learning-status/run/", LearningRunView.as_view(), name="ai-pulse-learning-status-run"),
+    # Domain app manifest API — available to all authenticated users
+    path("apps/", DomainAppManifestListView.as_view(), name="ai-domain-apps"),
+    path("apps/<str:app_identifier>/", DomainAppManifestDetailView.as_view(), name="ai-domain-app-detail"),
 ]

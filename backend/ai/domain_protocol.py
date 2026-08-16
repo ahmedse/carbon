@@ -16,6 +16,22 @@ Architecture:
 
 NEVER import domain-specific code into platform-level code.
 NEVER cross-reference domain modules.
+
+─────────────────────────────────────────────────────────────
+MANIFEST CONTRACT (v4, 2026-08-16)
+─────────────────────────────────────────────────────────────
+Every DomainAIOperations subclass is ALSO the AI manifest for its domain app.
+The manifest layer (class attributes + instance methods below) is what the
+platform uses to:
+
+  1. Surface the right entry-point buttons on domain app pages.
+  2. Render context-aware starter chips in the AI workspace empty state.
+  3. Validate task_payload before dispatch (fail-fast, clear error).
+  4. Inject domain-specific T1 context (WorkspaceContext enrichment).
+  5. Serve the frontend via GET /carbon-api/ai/apps/{app_identifier}/.
+
+Adding a NEW domain app AI capability = write ai_manifest in your domain class.
+Zero changes to the platform AI workspace code required.
 """
 
 from __future__ import annotations
@@ -78,21 +94,65 @@ class DomainAIOperations(ABC):
         """
         ...
 
-    # ── Domain-specific operations ───────────────────────────────────
-    # Each domain defines its own operations here.
-    # Platform operations (DQ, NL query, anomaly, etc.) live in protocol.py.
-    #
-    # Example for emissions domain:
-    #
-    # @abstractmethod
-    # def calculate_footprint(
-    #     self, activity_data: list[dict[str, Any]]
-    # ) -> FootprintResponse: ...
-    #
-    # @abstractmethod
-    # def suggest_reduction(
-    #     self, current_footprint: dict[str, Any]
-    # ) -> ReductionResponse: ...
+    # ── Manifest Layer ────────────────────────────────────────────────────
+    # Class-level attributes — override in every concrete domain class.
+    # These drive the frontend manifest API and the AI workspace UI.
+
+    # Task types this domain supports. Platform base types available:
+    # chat | dq_validate | dq_suggest | nl_query | anomaly | investigate |
+    # nl_rule_test | report_draft
+    supported_task_types: list[str] = []
+
+    # Entry points: buttons rendered on this domain's pages.
+    # Schema: [{label, task_type, on_entity ("table"|"module"|"*"), icon}]
+    # "on_entity" controls which entity types cause the button to appear.
+    entry_points: list[dict[str, str]] = []
+
+    # Context-aware starter prompts for the empty state.
+    # Keys: entity_type ("table"|"module"|"default"). Values: list of
+    # {label, prompt, task_type}. "@{entity_name}" in prompt is replaced.
+    starter_prompts: dict[str, list[dict[str, str]]] = {}
+
+    # Injected verbatim as the last paragraph of the T0 system prompt.
+    # Use to give domain vocabulary, units, and business rules.
+    system_prompt_extension: str = ""
+
+    # ── Manifest instance methods ─────────────────────────────────────────
+
+    def build_workspace_context(
+        self, user: Any, entity_type: str | None, entity_id: str | None
+    ) -> dict[str, Any]:
+        """Return domain-specific context injected into T1 (workspace tier).
+
+        Override to enrich the context with live domain data (e.g. row counts,
+        module scope, recent calculations). Keep results small (<200 tokens).
+        Default: empty dict (no enrichment).
+        """
+        return {}
+
+    def validate_task_payload(
+        self, task_type: str, payload: dict[str, Any]
+    ) -> tuple[bool, str]:
+        """Validate task_payload before dispatch.
+
+        Return (True, "") on success; (False, <reason>) on validation failure.
+        Called by CarbonIntelligence before every send_message / send_message_stream.
+        Default: always passes.
+        """
+        return True, ""
+
+    def to_manifest_dict(self) -> dict[str, Any]:
+        """Serialize the manifest for the GET /ai/apps/{id}/ API endpoint."""
+        return {
+            "app_identifier": self.app_identifier,
+            "display_name": self.app_display_name,
+            "supported_task_types": self.supported_task_types,
+            "entry_points": self.entry_points,
+            "starter_prompts": self.starter_prompts,
+            "system_prompt_extension": bool(self.system_prompt_extension),  # never leak the full text
+        }
+
+    # ── Abstract required fields (unchanged from original contract) ────────
 
 
 # ── Domain Registration ──────────────────────────────────────────────────
@@ -142,3 +202,40 @@ def has_domain(app_identifier: str) -> bool:
 def list_domains() -> list[str]:
     """List all registered domain app identifiers."""
     return list(_DOMAIN_REGISTRY.keys())
+
+
+def get_manifest(app_identifier: str) -> dict[str, Any]:
+    """Return the serialized manifest for a registered domain.
+
+    Raises KeyError if domain is not registered.
+    Used by the manifest API endpoint.
+    """
+    return get_domain(app_identifier)().to_manifest_dict()
+
+
+def all_manifests() -> list[dict[str, Any]]:
+    """Return all registered domain manifests as a list."""
+    return [cls().to_manifest_dict() for cls in _DOMAIN_REGISTRY.values()]
+
+
+# Built-in conversation types that every domain AI conversation may use,
+# regardless of which domain manifests are registered. Domain manifests may
+# declare additional task types via ``supported_task_types``; those are added
+# to the allowed set at runtime by :func:`supported_conversation_types`.
+CORE_CONVERSATION_TYPES: frozenset[str] = frozenset(
+    {"chat", "dq_validate", "dq_suggest", "nl_query", "anomaly"}
+)
+
+
+def supported_conversation_types() -> frozenset[str]:
+    """Return the full set of conversation types the platform accepts.
+
+    This is the union of the built-in core types and every task type declared
+    by a registered domain manifest. Keeping this manifest-driven means a new
+    domain app can introduce a new conversation type with zero core changes
+    (ADR-0010).
+    """
+    types = set(CORE_CONVERSATION_TYPES)
+    for cls in _DOMAIN_REGISTRY.values():
+        types.update(cls.supported_task_types)
+    return frozenset(types)

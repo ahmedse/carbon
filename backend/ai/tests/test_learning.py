@@ -191,6 +191,57 @@ def test_failure_leaves_retryable(user, monkeypatch):
     assert message.learned_at is None
 
 
+# ── 6b. retry after partial failure is idempotent ────────────────────────
+
+
+@pytest.mark.django_db
+def test_retry_after_partial_failure_does_not_duplicate_feedback(user, monkeypatch):
+    """A retry re-runs the memory write but never duplicates KgFeedbackRecord.
+
+    The feedback write commits before the memory write; if the memory write
+    fails the message stays retryable (``learned_at IS NULL``).  The retry must
+    skip the already-recorded feedback instead of inserting a second row.
+    """
+    from ai import learning
+
+    real_long_term_memory = learning.LongTermMemory
+
+    class _FlakyMemory:
+        calls = 0
+
+        def __init__(self, session):
+            self._real = real_long_term_memory(session)
+
+        async def store_fact(self, **kwargs):
+            type(self).calls += 1
+            if type(self).calls == 1:
+                raise RuntimeError("memory write boom")
+            await self._real.store_fact(**kwargs)
+
+    monkeypatch.setattr(learning, "LongTermMemory", _FlakyMemory)
+
+    content = f"AI answer {uuid4().hex[:10]}"
+    conversation = _make_conversation(user)
+    message = _make_message(conversation, content=content, outcome="accepted")
+
+    # First attempt: feedback write commits, memory write fails → retryable.
+    with pytest.raises(RuntimeError):
+        learning.learn_from_message(message)
+
+    message.refresh_from_db()
+    assert message.learned_at is None
+    assert KgFeedbackRecord.objects.filter(message_id=str(message.id)).count() == 1
+    assert not MemoryLongTerm.objects.filter(category="learned", content=content).exists()
+
+    # Second attempt (retry): feedback already recorded → skipped; memory written.
+    assert learning.learn_from_message(message) is True
+
+    message.refresh_from_db()
+    assert message.learned_at is not None
+    assert KgFeedbackRecord.objects.filter(message_id=str(message.id)).count() == 1
+    assert MemoryLongTerm.objects.filter(category="learned", content=content).count() == 1
+
+
 # ── 7. learn_all_pending idempotency ─────────────────────────────────────
 
 

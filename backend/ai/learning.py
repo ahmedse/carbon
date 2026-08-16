@@ -41,11 +41,29 @@ OUTCOME_SIGNAL_MAP = {
 LEARNABLE_OUTCOMES = list(OUTCOME_SIGNAL_MAP.keys())  # ["accepted", "rejected", "corrected"]
 
 
+def _feedback_already_recorded(message, signal_type: str) -> bool:
+    """True when a ``KgFeedbackRecord`` already exists for this message+signal.
+
+    The feedback write and the memory write are not atomic; if the memory write
+    fails after the feedback write succeeded, a retry would otherwise insert a
+    duplicate ``KgFeedbackRecord``.  This guard makes the retry idempotent.
+    """
+    from ai.models import KgFeedbackRecord
+
+    return KgFeedbackRecord.objects.filter(
+        instance_id=DEFAULT_APP_IDENTIFIER,
+        message_id=str(message.id),
+        signal_type=signal_type,
+    ).exists()
+
+
 def learn_from_message(message) -> bool:
     """Consume one judged AIMessage into the engine. Returns True on success.
 
     No-op (returns False) when message.outcome is not learnable.
     Marks message.learned_at on success; leaves it null on failure (retry).
+    Idempotent: a retry after a partial failure re-runs the memory write but
+    never duplicates the ``KgFeedbackRecord``.
     """
     signal_type = OUTCOME_SIGNAL_MAP.get(message.outcome)
     if signal_type is None:
@@ -55,6 +73,7 @@ def learn_from_message(message) -> bool:
     # `_learn_async` must never lazily touch `message.conversation` — Django
     # forbids sync ORM access from an async context.
     conversation = message.conversation
+    record_feedback_flag = not _feedback_already_recorded(message, signal_type)
     asyncio.run(
         _learn_async(
             message=message,
@@ -63,6 +82,7 @@ def learn_from_message(message) -> bool:
             user_id=str(conversation.user_id) if conversation.user_id else "",
             content=message.content or "",
             correction_text=message.correction_text or None,
+            record_feedback_flag=record_feedback_flag,
         )
     )
     message.learned_at = timezone.now()
@@ -78,6 +98,7 @@ async def _learn_async(
     user_id: str,
     content: str,
     correction_text: str | None,
+    record_feedback_flag: bool = True,
 ) -> None:
     instance_id = DEFAULT_APP_IDENTIFIER
     message_id = str(message.id)
@@ -86,19 +107,22 @@ async def _learn_async(
     session = factory()
     async with session:
         # 1) Record the feedback signal (KgFeedbackRecord + golden-pair logic).
-        await record_feedback(
-            db=session,
-            instance_id=instance_id,
-            conversation_id=conversation_id,
-            message_id=message_id,
-            signal_type=signal_type,
-            user_id=user_id,
-            original_utterance=content,
-            resolved_utterance=content,
-            generated_sql="",
-            corrected_sql=None,       # chat/text answers carry no SQL; never fabricate
-            user_comment=correction_text,
-        )
+        #    Skipped when already recorded (idempotent retry after a partial
+        #    failure between the feedback write and the memory write below).
+        if record_feedback_flag:
+            await record_feedback(
+                db=session,
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                message_id=message_id,
+                signal_type=signal_type,
+                user_id=user_id,
+                original_utterance=content,
+                resolved_utterance=content,
+                generated_sql="",
+                corrected_sql=None,       # chat/text answers carry no SQL; never fabricate
+                user_comment=correction_text,
+            )
 
         # 2) Persist long-term memory facts.
         memory = LongTermMemory(session)

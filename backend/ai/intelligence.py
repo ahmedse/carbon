@@ -18,9 +18,12 @@ import json
 import logging
 import time
 import uuid
+from datetime import timedelta
 from typing import Any
 
+from django.db import models
 from django.utils import timezone
+from rest_framework.exceptions import PermissionDenied
 
 from backend.ai.engine_runtime import dispatch_task, get_task
 from backend.ai.protocol import (
@@ -44,6 +47,9 @@ from ai.domain import emissions  # noqa: F401  (registers the emissions domain)
 from ai.domain import water  # noqa: F401  (registers the water domain)
 from ai.context_assembler import assemble_context
 from ai.generation_registry import GENERATIONS
+from accounts.capabilities import has_capability
+from accounts.constants import VISIBILITY_ROLES
+from accounts.rbac_utils import get_allowed_org_unit_ids, user_is_global_admin
 
 logger = logging.getLogger("carbon.ai.intelligence")
 
@@ -329,8 +335,11 @@ class CarbonIntelligence:
             messages=assembled["messages"],
         )
 
-        # Persist the context budget telemetry snapshot.
-        conversation.context_snapshot_json = assembled["budget"]
+        # Persist the context budget telemetry snapshot + retrieved KG entities.
+        conversation.context_snapshot_json = {
+            **assembled["budget"],
+            "kg_entities": assembled["kg_entities"],
+        }
         conversation.save(update_fields=["context_snapshot_json"])
 
         # Mark working
@@ -432,8 +441,11 @@ class CarbonIntelligence:
                 messages=assembled["messages"],
             )
 
-            # Persist the context budget telemetry snapshot.
-            conversation.context_snapshot_json = assembled["budget"]
+            # Persist the context budget telemetry snapshot + retrieved KG entities.
+            conversation.context_snapshot_json = {
+                **assembled["budget"],
+                "kg_entities": assembled["kg_entities"],
+            }
             conversation.save(update_fields=["context_snapshot_json"])
 
             # Mark working.
@@ -626,13 +638,8 @@ class CarbonIntelligence:
         conversation_id: str,
     ) -> dict[str, Any]:
         """Get a conversation with all its messages."""
-        from ai.models import AIConversation
-
-        try:
-            conversation = AIConversation.objects.get(
-                id=conversation_id, user=user,
-            )
-        except AIConversation.DoesNotExist:
+        conversation = self._get_accessible_conversation(user, conversation_id)
+        if conversation is None:
             raise ValueError(f"Conversation {conversation_id} not found.")
 
         data = _serialize_conversation(conversation)
@@ -711,11 +718,15 @@ class CarbonIntelligence:
         Archived conversations are excluded by default and only included when
         ``is_archived=True`` is explicitly passed.
         """
-        from django.db.models import Q
-
         from ai.models import AIConversation
 
-        qs = AIConversation.objects.filter(user=user)
+        if getattr(user, "is_authenticated", False):
+            shared_ids = self._shared_conversation_ids(user)
+            qs = AIConversation.objects.filter(
+                models.Q(user=user) | models.Q(id__in=shared_ids)
+            )
+        else:
+            qs = AIConversation.objects.none()
         if is_archived is True:
             qs = qs.filter(is_archived=True)
         else:
@@ -725,7 +736,7 @@ class CarbonIntelligence:
         if conversation_type:
             qs = qs.filter(conversation_type=conversation_type)
         if query:
-            qs = qs.filter(Q(title__icontains=query))
+            qs = qs.filter(models.Q(title__icontains=query))
         if status:
             qs = qs.filter(status=status)
         qs = qs.order_by("-updated_at")[:limit]
@@ -747,9 +758,7 @@ class CarbonIntelligence:
         from ai.models import AIConversation
 
         try:
-            conversation = AIConversation.objects.get(
-                id=conversation_id, user=user,
-            )
+            conversation = AIConversation.objects.get(id=conversation_id, user=user)
         except AIConversation.DoesNotExist:
             raise ValueError(f"Conversation {conversation_id} not found.")
 
@@ -774,14 +783,14 @@ class CarbonIntelligence:
 
         Raises ``ValueError`` when the conversation is not found or not owned.
         """
-        from ai.models import AIConversation
-
-        try:
-            conversation = AIConversation.objects.get(
-                id=conversation_id, user=user,
-            )
-        except AIConversation.DoesNotExist:
+        conversation = self._get_accessible_conversation(user, conversation_id)
+        if conversation is None:
             raise ValueError(f"Conversation {conversation_id} not found.")
+
+        if conversation.visibility == "shared" and not has_capability(user, "ai:manage_console"):
+            raise PermissionDenied("Deleting a shared conversation requires ai:manage_console.")
+        if conversation.visibility != "shared" and conversation.user_id != user.id:
+            raise PermissionDenied("You do not have access to delete this conversation.")
 
         deleted_id = conversation.id
         conversation.delete()
@@ -802,14 +811,12 @@ class CarbonIntelligence:
         in the pagination direction.  Raises ``ValueError`` when the conversation
         or a cursor message is not found.
         """
-        from ai.models import AIConversation
-
-        try:
-            conversation = AIConversation.objects.get(
-                id=conversation_id, user=user,
-            )
-        except AIConversation.DoesNotExist:
+        conversation = self._get_accessible_conversation(user, conversation_id)
+        if conversation is None:
             raise ValueError(f"Conversation {conversation_id} not found.")
+
+        if conversation.visibility != "shared" and conversation.user_id != user.id:
+            raise PermissionDenied("You do not have access to this conversation.")
 
         qs = conversation.messages.order_by("created_at")
 
@@ -858,8 +865,10 @@ class CarbonIntelligence:
         Deterministic fallback: concatenate the first three user messages
         (each truncated to 120 chars) into a single summary line.  No LLM call
         is made — the LLM summarizer is a future seam (see TODO below).
-
+        if conversation.visibility == "shared" and not has_capability(user, "ai:manage_console"):
         Returns the serialized conversation.
+        if conversation.visibility != "shared" and conversation.user_id != user.id:
+            raise PermissionDenied("You do not have access to delete this conversation.")
         """
         from ai.models import AIConversation
 
@@ -870,24 +879,25 @@ class CarbonIntelligence:
         except AIConversation.DoesNotExist:
             raise ValueError(f"Conversation {conversation_id} not found.")
 
-        if not force and conversation.summary:
+        latest_message_id = conversation.messages.order_by("-created_at", "-id").values_list(
+            "id",
+            flat=True,
+        ).first()
+
+        if (
+            not force
+            and conversation.summary
+            and conversation.last_summarized_message_id == latest_message_id
+        ):
             return _serialize_conversation(conversation)
 
         # TODO(Sprint 16+): LLM summarizer seam — dispatch a compaction prompt to
         # the provider and store the returned summary.  The deterministic fallback
         # below is the shipped behavior: cheap, deterministic, and offline-safe
         # (no hidden LLM cost in tests).
-        user_messages = list(
-            conversation.messages.filter(role="user").order_by("created_at")[:3]
-        )
-        snippets = []
-        for message in user_messages:
-            text = (message.content or "").strip()
-            if text:
-                snippets.append(text[:120])
-
-        conversation.summary = " ".join(snippets) if snippets else "No user messages yet."
-        conversation.save(update_fields=["summary"])
+        conversation.summary = _build_deterministic_summary(conversation)
+        conversation.last_summarized_message_id = latest_message_id
+        conversation.save(update_fields=["summary", "last_summarized_message_id"])
         return _serialize_conversation(conversation)
 
     def export_conversation(
@@ -903,13 +913,8 @@ class CarbonIntelligence:
         a fenced ```json block when non-empty).  Both are wrapped as
         ``{"format": fmt, "content": <...>}``.
         """
-        from ai.models import AIConversation
-
-        try:
-            conversation = AIConversation.objects.get(
-                id=conversation_id, user=user,
-            )
-        except AIConversation.DoesNotExist:
+        conversation = self._get_accessible_conversation(user, conversation_id)
+        if conversation is None:
             raise ValueError(f"Conversation {conversation_id} not found.")
 
         messages = [
@@ -948,6 +953,356 @@ class CarbonIntelligence:
             }
 
         raise ValueError(f"Unsupported export format: {fmt}")
+
+    def list_artifacts(self, user) -> list[dict[str, Any]]:
+        from ai.models import AIArtifact
+
+        shared_conversation_ids = list(
+            self._shared_conversation_queryset(user).values_list("id", flat=True)
+        )
+        artifacts = AIArtifact.objects.filter(
+            models.Q(conversation__user=user) | models.Q(conversation_id__in=shared_conversation_ids, visibility="shared")
+        ).order_by("-created_at")
+        return [self._serialize_artifact(artifact) for artifact in artifacts]
+
+    def get_artifact(self, user, artifact_id: str) -> dict[str, Any]:
+        from ai.models import AIArtifact
+
+        try:
+            artifact = AIArtifact.objects.select_related("conversation").get(id=artifact_id)
+        except AIArtifact.DoesNotExist:
+            raise ValueError(f"Artifact {artifact_id} not found.")
+
+        self._ensure_artifact_access(user, artifact)
+        return self._serialize_artifact(artifact)
+
+    def create_artifact(
+        self,
+        user,
+        conversation_id: str,
+        title: str,
+        artifact_type: str,
+        content_json: dict[str, Any],
+        message_id: str | None = None,
+        visibility: str = "private",
+    ) -> dict[str, Any]:
+        from ai.models import AIArtifact, AIMessage
+
+        conversation = self._get_own_conversation(user, conversation_id)
+        if conversation is None:
+            raise ValueError(f"Conversation {conversation_id} not found.")
+
+        message = None
+        if message_id is not None:
+            try:
+                message = AIMessage.objects.get(id=message_id, conversation=conversation)
+            except AIMessage.DoesNotExist:
+                raise ValueError(f"Message {message_id} not found.")
+
+        artifact = AIArtifact.objects.create(
+            conversation=conversation,
+            message=message,
+            created_by=user,
+            title=title,
+            artifact_type=artifact_type,
+            content_json=content_json,
+            visibility=visibility,
+        )
+        return self._serialize_artifact(artifact)
+
+    def update_artifact(
+        self,
+        user,
+        artifact_id: str,
+        **updates: Any,
+    ) -> dict[str, Any]:
+        from ai.models import AIArtifact
+
+        try:
+            artifact = AIArtifact.objects.select_related("conversation").get(id=artifact_id)
+        except AIArtifact.DoesNotExist:
+            raise ValueError(f"Artifact {artifact_id} not found.")
+
+        self._ensure_artifact_access(user, artifact, write=True)
+
+        if "message_id" in updates:
+            message_id = updates.pop("message_id")
+            if message_id is None:
+                artifact.message = None
+            else:
+                artifact.message = artifact.conversation.messages.get(id=message_id)
+
+        for field in ("title", "artifact_type", "content_json", "visibility"):
+            if field in updates:
+                setattr(artifact, field, updates[field])
+
+        artifact.save()
+        return self._serialize_artifact(artifact)
+
+    def delete_artifact(self, user, artifact_id: str) -> dict[str, Any]:
+        from ai.models import AIArtifact
+
+        try:
+            artifact = AIArtifact.objects.select_related("conversation").get(id=artifact_id)
+        except AIArtifact.DoesNotExist:
+            raise ValueError(f"Artifact {artifact_id} not found.")
+
+        self._ensure_artifact_access(user, artifact, write=True)
+        deleted = str(artifact.id)
+        artifact.delete()
+        return {"deleted": deleted}
+
+    # ------------------------------------------------------------------ #
+    # Proactive suggestions (Phase 5 item 3)
+    # ------------------------------------------------------------------ #
+    def list_proactive_suggestions(
+        self,
+        user,
+        conversation_id: str | None = None,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Return pending, unexpired proactive suggestions scoped to the user.
+
+        CBAC-scoped via ``scope_ai_queryset`` (app + visibility + org subtree).
+        When ``conversation_id`` is given it is only used to verify access —
+        the result set is the user's workspace-level suggestion rail.
+        """
+        from django.db.models import Q
+
+        from accounts.ai_scoping import scope_ai_queryset
+        from ai.models import KgProactiveInsight
+
+        qs = scope_ai_queryset(KgProactiveInsight.objects.all(), user)
+        qs = qs.filter(disposition="pending")
+        now = timezone.now()
+        qs = qs.filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+
+        if conversation_id is not None:
+            if self._get_accessible_conversation(user, conversation_id) is None:
+                raise ValueError(f"Conversation {conversation_id} not found.")
+
+        qs = qs.order_by("-created_at")[:limit]
+        return [self._serialize_proactive_suggestion(insight) for insight in qs]
+
+    def _serialize_proactive_suggestion(self, insight) -> dict[str, Any]:
+        def _coerce(value, default):
+            if value is None:
+                return default
+            if isinstance(value, str):
+                try:
+                    return json.loads(value)
+                except Exception:
+                    return default
+            return value
+
+        return {
+            "id": str(insight.id),
+            "severity": insight.severity,
+            "title": insight.title,
+            "narrative": insight.narrative,
+            "insight_type": insight.insight_type,
+            "recommended_actions": _coerce(insight.recommended_actions_json, []),
+            "context": _coerce(insight.context_json, {}),
+            "created_at": insight.created_at.isoformat(),
+        }
+
+    # ------------------------------------------------------------------ #
+    # Resume catch-up (Phase 5 item 4)
+    # ------------------------------------------------------------------ #
+    RESUME_CATCH_UP_GAP_HOURS = 24
+
+    def resume_conversation(self, user, conversation_id: str) -> dict[str, Any]:
+        """Mark a conversation as resumed; return a catch-up summary when stale.
+
+        When more than ``RESUME_CATCH_UP_GAP_HOURS`` have elapsed since the last
+        view, a backend-generated catch-up is built (new DQ violations,
+        anomalies, durable memory facts, and proactive suggestions).  The
+        ``last_viewed_at`` marker is bumped on every resume so the summary is
+        not re-emitted on every open.
+        """
+        from ai.models import AIConversation
+
+        conversation = self._get_accessible_conversation(user, conversation_id)
+        if conversation is None:
+            raise ValueError(f"Conversation {conversation_id} not found.")
+
+        now = timezone.now()
+        previous_viewed_at = conversation.last_viewed_at
+        catch_up = None
+        if previous_viewed_at is not None:
+            if now - previous_viewed_at > timedelta(hours=self.RESUME_CATCH_UP_GAP_HOURS):
+                catch_up = self._build_catch_up_summary(
+                    user, conversation, previous_viewed_at
+                )
+
+        conversation.last_viewed_at = now
+        conversation.save(update_fields=["last_viewed_at"])
+
+        return {
+            "conversation": _serialize_conversation(conversation),
+            "catch_up": catch_up,
+        }
+
+    def _build_catch_up_summary(self, user, conversation, since) -> dict[str, Any]:
+        from accounts.ai_scoping import scope_ai_queryset
+        from ai.models import KgProactiveInsight, MemoryLongTerm
+
+        org_int_ids, is_global = self._conversation_org_scope(conversation)
+
+        new_memory_facts = scope_ai_queryset(
+            MemoryLongTerm.objects.all(), user
+        ).filter(archived=False, created_at__gt=since).count()
+
+        new_suggestions = scope_ai_queryset(
+            KgProactiveInsight.objects.all(), user
+        ).filter(disposition="pending", created_at__gt=since).count()
+
+        new_dq_violations = self._count_new_dq_violations(org_int_ids, is_global, since)
+        new_anomalies = self._count_new_anomalies(org_int_ids, is_global, since)
+
+        lines = []
+        if new_dq_violations:
+            lines.append(f"{new_dq_violations} new DQ violation(s)")
+        if new_anomalies:
+            lines.append(f"{new_anomalies} new anomaly/anomalies")
+        if new_memory_facts:
+            lines.append(f"{new_memory_facts} new memory fact(s)")
+        if new_suggestions:
+            lines.append(f"{new_suggestions} new suggestion(s)")
+
+        return {
+            "since": since.isoformat(),
+            "hours_since_last_view": int(
+                (timezone.now() - since).total_seconds() // 3600
+            ),
+            "new_dq_violations": new_dq_violations,
+            "new_anomalies": new_anomalies,
+            "new_memory_facts": new_memory_facts,
+            "new_suggestions": new_suggestions,
+            "summary_lines": lines or ["No new activity since your last visit."],
+        }
+
+    @staticmethod
+    def _conversation_org_scope(conversation) -> tuple[list[int], bool]:
+        """Extract the frozen org scope from a conversation's ``scope_json``.
+
+        Returns ``(org_int_ids, is_global)``.  ``is_global`` means the thread was
+        created with scope ``["*"]`` (superuser/global) and DQ counts should not
+        be org-filtered.
+        """
+        scope_org_ids = (conversation.scope_json or {}).get("org_unit_ids") or []
+        if "*" in scope_org_ids:
+            return [], True
+        int_ids = [int(o) for o in scope_org_ids if str(o).isdigit()]
+        return int_ids, False
+
+    @staticmethod
+    def _count_new_dq_violations(org_int_ids, is_global, since) -> int:
+        from dq.models import DQResult
+
+        qs = DQResult.objects.filter(status="failed", run_at__gt=since)
+        if is_global:
+            return qs.count()
+        if not org_int_ids:
+            return 0
+        return qs.filter(
+            rule__field_assignments__data_table__module__org_unit_id__in=org_int_ids
+        ).distinct().count()
+
+    @staticmethod
+    def _count_new_anomalies(org_int_ids, is_global, since) -> int:
+        from dq.models import DQAnomaly
+
+        qs = DQAnomaly.objects.filter(detected_at__gt=since)
+        if is_global:
+            return qs.count()
+        if not org_int_ids:
+            return 0
+        return qs.filter(
+            data_table__module__org_unit_id__in=org_int_ids
+        ).count()
+
+    def _get_own_conversation(self, user, conversation_id: str):
+        from ai.models import AIConversation
+
+        try:
+            return AIConversation.objects.get(id=conversation_id, user=user)
+        except AIConversation.DoesNotExist:
+            return None
+
+    def _shared_conversation_queryset(self, user):
+        from ai.models import AIConversation
+
+        if not getattr(user, "is_authenticated", False):
+            return AIConversation.objects.none()
+
+        scope = build_scope(user)
+        org_ids = set(scope.org_unit_ids)
+        qs = AIConversation.objects.filter(visibility="shared")
+        if "*" in org_ids:
+            return qs
+
+        shared_ids = [
+            str(conversation.id)
+            for conversation in qs
+            if self._conversation_scope_matches_user(conversation, org_ids)
+        ]
+        return AIConversation.objects.filter(id__in=shared_ids)
+
+    def _get_accessible_conversation(self, user, conversation_id: str):
+        from ai.models import AIConversation
+
+        try:
+            conversation = AIConversation.objects.get(id=conversation_id, user=user)
+        except AIConversation.DoesNotExist:
+            conversation = None
+
+        if conversation is not None:
+            return conversation
+
+        if not getattr(user, "is_authenticated", False):
+            return None
+
+        try:
+            return self._shared_conversation_queryset(user).get(id=conversation_id)
+        except AIConversation.DoesNotExist:
+            return None
+
+    def _shared_conversation_ids(self, user) -> list[str]:
+        return [str(conversation.id) for conversation in self._shared_conversation_queryset(user)]
+
+    def _conversation_scope_matches_user(self, conversation, user_org_ids: set[str]) -> bool:
+        scope_org_ids = set((conversation.scope_json or {}).get("org_unit_ids") or [])
+        if "*" in scope_org_ids:
+            return True
+        if not user_org_ids and not scope_org_ids:
+            return True
+        return bool(user_org_ids & scope_org_ids)
+
+    def _ensure_artifact_access(self, user, artifact, write: bool = False) -> None:
+        conversation = artifact.conversation
+        if conversation.user_id == user.id:
+            return
+        if artifact.visibility != "shared" or conversation.visibility != "shared":
+            raise PermissionDenied("Artifact is not shared.")
+        if write and not has_capability(user, "ai:manage_console"):
+            raise PermissionDenied("Modifying a shared artifact requires ai:manage_console.")
+        if not self._get_accessible_conversation(user, conversation.id):
+            raise PermissionDenied("You do not have access to this shared artifact.")
+
+    def _serialize_artifact(self, artifact) -> dict[str, Any]:
+        return {
+            "id": str(artifact.id),
+            "conversation_id": str(artifact.conversation_id),
+            "message_id": str(artifact.message_id) if artifact.message_id else None,
+            "title": artifact.title,
+            "artifact_type": artifact.artifact_type,
+            "content_json": artifact.content_json,
+            "visibility": artifact.visibility,
+            "created_by_id": str(artifact.created_by_id) if artifact.created_by_id else None,
+            "created_at": artifact.created_at.isoformat(),
+            "updated_at": getattr(artifact, "updated_at", artifact.created_at).isoformat(),
+        }
 
     def _resolve_message(self, conversation, message_id: str):
         """Resolve a message cursor id to its message (scoped to the conversation)."""
@@ -1112,7 +1467,32 @@ class CarbonIntelligence:
             return self._send_nl_query_message(conversation, content, conv_ctx, scope)
         if conv_type == "anomaly":
             return self._send_anomaly_message(conversation, content, conv_ctx, scope)
+        if conv_type in {"investigate", "nl_rule_test", "report_draft"}:
+            return self._send_staged_task_message(conversation, conv_type)
         return self._send_chat_message(conversation, content, conv_ctx, scope)
+
+    def _send_staged_task_message(self, conversation, conv_type: str) -> dict[str, Any]:
+        """Fail-visible placeholder for recognized-but-not-yet-executable types.
+
+        The conversation type is valid (accepted by the manifest-driven
+        registry) so the thread can be created and persisted with the correct
+        type, but the execution path ships in a later phase. Answering with an
+        explicit notice is more honest than silently treating it as a chat turn.
+        """
+        labels = {
+            "investigate": "Investigate",
+            "nl_rule_test": "NL rule testing",
+            "report_draft": "Report drafting",
+        }
+        label = labels.get(conv_type, conv_type)
+        return self._save_assistant_message(
+            conversation,
+            f"“{label}” is recognized but its execution path is scheduled for a "
+            "later phase. This thread is saved as a “{conv_type}” conversation; "
+            "start a chat or a data-quality task in the meantime.",
+            metadata={"type": "staged_task", "task_type": conv_type},
+            status="needs_input",
+        )
 
     def _progress_stage_label(self, conversation_type: str) -> str:
         """Human label for the progress frame of a non-chat generation."""
@@ -1121,6 +1501,9 @@ class CarbonIntelligence:
             "dq_suggest": "Analyzing table profile…",
             "nl_query": "Translating question to SQL…",
             "anomaly": "Detecting anomalies…",
+            "investigate": "Investigating…",
+            "nl_rule_test": "Testing rule…",
+            "report_draft": "Drafting report…",
         }
         return labels.get(conversation_type, "Working…")
 
@@ -1678,11 +2061,22 @@ class CarbonIntelligence:
     ) -> dict[str, Any]:
         from ai.models import AIMessage
 
+        # Freeze the current turn's assembled context snapshot onto the message
+        # so per-turn provenance (incl. retrieved KG entities) survives later
+        # turns, which overwrite ``conversation.context_snapshot_json``.
+        # ``_build_message_provenance`` reads ``metadata["context_snapshot"]``
+        # first, so this makes "Why this answer" per-turn rather than latest-turn.
+        snapshot = dict(metadata or {})
+        snapshot.setdefault(
+            "context_snapshot",
+            getattr(conversation, "context_snapshot_json", None) or {},
+        )
+
         ai_msg = AIMessage.objects.create(
             conversation=conversation,
             role="assistant",
             content=content,
-            metadata_json=metadata,
+            metadata_json=snapshot,
             token_usage_json=usage or {},
             status=message_status,
         )
@@ -1725,6 +2119,20 @@ class CarbonIntelligence:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
+
+
+def _build_deterministic_summary(conversation) -> str:
+    """Fallback summary builder used until the cheap LLM seam is wired."""
+    user_messages = list(
+        conversation.messages.filter(role="user").order_by("created_at")[:3]
+    )
+    snippets = []
+    for message in user_messages:
+        text = (message.content or "").strip()
+        if text:
+            snippets.append(text[:120])
+
+    return " ".join(snippets) if snippets else "No user messages yet."
 
 
 def _extract_prompt(rule) -> str:
@@ -1779,6 +2187,11 @@ def _serialize_conversation(conversation) -> dict[str, Any]:
             if conversation.last_message_at
             else None
         ),
+        "last_viewed_at": (
+            conversation.last_viewed_at.isoformat()
+            if conversation.last_viewed_at
+            else None
+        ),
         "visibility": conversation.visibility,
         "context_snapshot_json": conversation.context_snapshot_json,
         "created_at": conversation.created_at.isoformat(),
@@ -1804,7 +2217,24 @@ def _serialize_message(message) -> dict[str, Any]:
         "provider_model": message.provider_model,
         "outcome": message.outcome,
         "correction_text": message.correction_text,
+        "provenance": _build_message_provenance(message),
         "created_at": message.created_at.isoformat(),
+    }
+
+
+def _build_message_provenance(message) -> dict[str, Any]:
+    metadata = message.metadata_json or {}
+    if isinstance(metadata.get("provenance"), dict):
+        return metadata["provenance"]
+
+    usage = message.token_usage_json or {}
+    conversation = getattr(message, "conversation", None)
+    return {
+        "model": message.provider_model or usage.get("model") or None,
+        "scope_snapshot": metadata.get("scope_snapshot") or getattr(conversation, "scope_json", {}) or {},
+        "context_snapshot": metadata.get("context_snapshot") or getattr(conversation, "context_snapshot_json", {}) or {},
+        "guard_results": metadata.get("guard_results") or [],
+        "engine_turn_id": metadata.get("engine_turn_id") or str(message.id),
     }
 
 

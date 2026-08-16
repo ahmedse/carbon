@@ -6,7 +6,7 @@ import pytest
 
 from accounts.models import User
 from ai.intelligence import CarbonIntelligence
-from ai.models import AIConversation
+from ai.models import AIConversation, KnowledgeEdge, KnowledgeNode
 from backend.ai.protocol import (
     AnomalyDetectResponse,
     ChatResponse,
@@ -243,6 +243,13 @@ def test_empty_table_profile_returns_useful_error(user, table_graph):
 
 @pytest.mark.django_db
 def test_conversation_context_carries_full_history_each_turn(user, table_graph):
+    # T3 now reads instance-scoped schema-graph ENTITY nodes.  Other modules
+    # (test_kg_cluster_migration) commit such rows on a separate connection, so
+    # clear them inside this transaction to keep the exact history-count
+    # assertion deterministic.
+    KnowledgeNode.objects.filter(instance_id="carbon").delete()
+    KnowledgeEdge.objects.filter(instance_id="carbon").delete()
+
     conversation = _conversation(
         user,
         "nl_query",

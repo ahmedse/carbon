@@ -206,3 +206,137 @@ def test_chat_message_skips_domain_without_app_identifier(user):
 
     sent = ci._provider.chat.call_args[0][0]
     assert sent.message == "hello"
+
+
+# ── Manifest layer ────────────────────────────────────────────────────────
+
+
+def test_manifest_supported_task_types():
+    manifest = EmissionsDomainAI()
+    assert "chat" in manifest.supported_task_types
+    assert "dq_validate" in manifest.supported_task_types
+    assert "report_draft" in manifest.supported_task_types
+    assert "investigate" in manifest.supported_task_types
+
+
+def test_manifest_entry_points_have_required_fields():
+    for ep in EmissionsDomainAI.entry_points:
+        assert "label" in ep
+        assert "task_type" in ep
+        assert "on_entity" in ep
+        assert "icon" in ep
+
+
+def test_manifest_starter_prompts_have_required_fields():
+    prompts = EmissionsDomainAI.starter_prompts
+    assert "table" in prompts
+    assert "module" in prompts
+    assert "default" in prompts
+    for section in prompts.values():
+        for item in section:
+            assert "label" in item
+            assert "task_type" in item
+
+
+def test_manifest_system_prompt_extension_is_non_empty():
+    assert len(EmissionsDomainAI.system_prompt_extension) > 50
+
+
+def test_manifest_validate_task_payload_table_required():
+    manifest = EmissionsDomainAI()
+    ok, _ = manifest.validate_task_payload("dq_validate", {"table_id": 7})
+    assert ok is True
+    ok, reason = manifest.validate_task_payload("dq_validate", {})
+    assert ok is False
+    assert "table_id" in reason
+
+
+def test_manifest_validate_task_payload_report_requires_module_or_period():
+    manifest = EmissionsDomainAI()
+    ok, _ = manifest.validate_task_payload("report_draft", {"module_id": 1})
+    assert ok is True
+    ok, reason = manifest.validate_task_payload("report_draft", {})
+    assert ok is False
+    assert "module_id" in reason or "period_id" in reason
+
+
+def test_manifest_validate_chat_always_passes():
+    manifest = EmissionsDomainAI()
+    ok, _ = manifest.validate_task_payload("chat", {})
+    assert ok is True
+
+
+def test_to_manifest_dict_shape():
+    d = EmissionsDomainAI().to_manifest_dict()
+    assert d["app_identifier"] == "emissions"
+    assert d["display_name"] == "Carbon Footprint"
+    assert isinstance(d["supported_task_types"], list)
+    assert isinstance(d["entry_points"], list)
+    assert isinstance(d["starter_prompts"], dict)
+    # system_prompt_extension is never leaked as raw text
+    assert isinstance(d["system_prompt_extension"], bool)
+    assert d["system_prompt_extension"] is True
+
+
+def test_all_manifests_includes_emissions():
+    from ai.domain_protocol import all_manifests
+    ids = [m["app_identifier"] for m in all_manifests()]
+    assert "emissions" in ids
+
+
+def test_get_manifest_returns_dict():
+    from ai.domain_protocol import get_manifest
+    d = get_manifest("emissions")
+    assert d["app_identifier"] == "emissions"
+
+
+def test_get_manifest_unknown_raises():
+    from ai.domain_protocol import get_manifest
+    with pytest.raises(KeyError):
+        get_manifest("nonexistent_app")
+
+
+# ── Manifest API endpoints ────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_manifest_list_endpoint(client, user):
+    from rest_framework_simplejwt.tokens import RefreshToken
+    token = str(RefreshToken.for_user(user).access_token)
+    resp = client.get(
+        "/carbon-api/ai/pulse/apps/",
+        HTTP_AUTHORIZATION=f"Bearer {token}",
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "apps" in data
+    assert any(a["app_identifier"] == "emissions" for a in data["apps"])
+
+
+@pytest.mark.django_db
+def test_manifest_detail_endpoint(client, user):
+    from rest_framework_simplejwt.tokens import RefreshToken
+    token = str(RefreshToken.for_user(user).access_token)
+    resp = client.get(
+        "/carbon-api/ai/pulse/apps/emissions/",
+        HTTP_AUTHORIZATION=f"Bearer {token}",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["app_identifier"] == "emissions"
+
+
+@pytest.mark.django_db
+def test_manifest_detail_endpoint_unknown_returns_404(client, user):
+    from rest_framework_simplejwt.tokens import RefreshToken
+    token = str(RefreshToken.for_user(user).access_token)
+    resp = client.get(
+        "/carbon-api/ai/pulse/apps/nonexistent/",
+        HTTP_AUTHORIZATION=f"Bearer {token}",
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+def test_manifest_list_endpoint_unauthenticated(client):
+    resp = client.get("/carbon-api/ai/pulse/apps/")
+    assert resp.status_code == 401

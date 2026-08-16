@@ -21,3 +21,10 @@ class AIConfig(AppConfig):
         from ai.plugins import register_builtin_plugins
 
         register_builtin_plugins()
+
+        # Register built-in domain apps so the manifest API and per-domain
+        # prompt injection work in production (the domain modules are otherwise
+        # never imported outside the test suite). Idempotent by identifier.
+        from ai.domain import register_builtin_domains
+
+        register_builtin_domains()

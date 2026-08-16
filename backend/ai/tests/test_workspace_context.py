@@ -73,6 +73,10 @@ def test_from_dict_valid_populates_fields():
             "entity_name": "email_not_null",
             "form_state": {"severity": "error"},
             "recent_actions": ["opened table", "clicked create"],
+            "mentions": [
+                {"kind": "table", "id": "123", "name": "emissions_fuel"},
+                {"kind": "rule", "id": "456", "name": "email_not_null"},
+            ],
             "intent_signal": "debug",
             "app_identifier": "dq",
         }
@@ -85,6 +89,10 @@ def test_from_dict_valid_populates_fields():
     assert ctx.entity_name == "email_not_null"
     assert ctx.form_state == {"severity": "error"}
     assert ctx.recent_actions == ["opened table", "clicked create"]
+    assert ctx.mentions == [
+        {"kind": "table", "id": "123", "name": "emissions_fuel"},
+        {"kind": "rule", "id": "456", "name": "email_not_null"},
+    ]
     assert ctx.intent_signal == "debug"
     assert ctx.app_identifier == "dq"
 
@@ -117,6 +125,21 @@ def test_to_prompt_prefix_includes_entity_and_intent():
     assert "rule_list" in prefix
     assert "emissions_fuel" in prefix
     assert "explore" in prefix
+
+
+def test_to_prompt_prefix_includes_mention_summary():
+    ctx = WorkspaceContext(
+        workspace="dq",
+        current_view="rule_detail",
+        mentions=[
+            {"kind": "table", "id": "123", "name": "emissions_fuel"},
+            {"kind": "rule", "id": "456", "name": "email_not_null"},
+        ],
+    )
+    prefix = ctx.to_prompt_prefix()
+    assert "mentions:" in prefix
+    assert "table emissions_fuel" in prefix
+    assert "rule email_not_null" in prefix
 
 
 def test_to_prompt_prefix_empty_workspace_is_empty():
