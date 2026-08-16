@@ -7,6 +7,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import HistoryIcon from '@mui/icons-material/History';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import GroupIcon from '@mui/icons-material/Group';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
@@ -20,6 +21,7 @@ import {
   resumeConversation,
   sendMessageStream,
   stopGeneration,
+  updateConversation,
 } from '../api/aiWorkspace';
 import { createDQRule } from '../api/dq';
 import AIMessageBubble from './AIMessageBubble';
@@ -43,7 +45,7 @@ function normalizeConversationShape(payload) {
 }
 
 function AIConversationView({ conversationId }) {
-  const { token, userCapabilities, isGlobalAdminFlag } = useAuth();
+  const { token, user, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const { executeMode } = useExecuteMode();
   const { transferTask } = useAITaskTransfer();
@@ -64,6 +66,7 @@ function AIConversationView({ conversationId }) {
   const [workingStartedAt, setWorkingStartedAt] = useState(null);
   const [providerOffline, setProviderOffline] = useState(false);
   const [exportAnchorEl, setExportAnchorEl] = useState(null);
+  const [sharing, setSharing] = useState(false);
   // Resolved mention objects from the input bar: [{ kind, id, name }, …]
   const [mentions, setMentions] = useState([]);
   // Transient assistant text accumulated while a chat response streams in.
@@ -689,6 +692,25 @@ function AIConversationView({ conversationId }) {
     [token, conversationId, conversation, notify, notifyFromError],
   );
 
+  // Phase 12 — toggle shared visibility for an owned thread.
+  const handleToggleShare = useCallback(async () => {
+    if (!conversation || sharing) return;
+    const newValue = conversation.visibility === 'shared' ? 'private' : 'shared';
+    setSharing(true);
+    try {
+      await updateConversation(token, conversation.id, { visibility: newValue });
+      setConversation((prev) => (prev ? { ...prev, visibility: newValue } : prev));
+      notify({
+        message: newValue === 'shared' ? 'Thread shared' : 'Thread made private',
+        type: 'success',
+      });
+    } catch (err) {
+      notifyFromError(err, 'Could not update sharing');
+    } finally {
+      setSharing(false);
+    }
+  }, [conversation, sharing, token, notify, notifyFromError]);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -710,6 +732,7 @@ function AIConversationView({ conversationId }) {
   }
 
   const isWorking = conversation.status === 'working' || sending;
+  const isOwner = !conversation || conversation.visibility !== 'shared' || String(conversation.user_id) === String(user?.id);
   const convStatus = conversation.status;
   const conversationType = conversation.conversation_type || conversation.task_payload_json?.type || 'chat';
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
@@ -765,6 +788,18 @@ function AIConversationView({ conversationId }) {
           borderColor: 'divider',
         }}
       >
+        {isOwner && (
+          <Button
+            size="small"
+            variant={conversation.visibility === 'shared' ? 'contained' : 'outlined'}
+            startIcon={<GroupIcon />}
+            onClick={handleToggleShare}
+            disabled={sharing}
+            sx={{ mr: 1 }}
+          >
+            {conversation.visibility === 'shared' ? 'Shared' : 'Share'}
+          </Button>
+        )}
         <Button
           size="small"
           variant="outlined"
@@ -810,16 +845,18 @@ function AIConversationView({ conversationId }) {
             icon={<HistoryIcon fontSize="inherit" />}
             onClose={() => setCatchUp(null)}
             action={
-              <Button
-                size="small"
-                startIcon={<AutoAwesomeIcon />}
-                onClick={() => {
-                  setCatchUp(null);
-                  handleSend('Summarize what changed since my last visit.');
-                }}
-              >
-                Catch me up
-              </Button>
+              isOwner ? (
+                <Button
+                  size="small"
+                  startIcon={<AutoAwesomeIcon />}
+                  onClick={() => {
+                    setCatchUp(null);
+                    handleSend('Summarize what changed since my last visit.');
+                  }}
+                >
+                  Catch me up
+                </Button>
+              ) : null
             }
             sx={{
               mx: 1,
@@ -952,7 +989,7 @@ function AIConversationView({ conversationId }) {
         )}
 
         {/* Needs-input action area */}
-        {convStatus === 'needs_input' && !isWorking && (
+        {isOwner && convStatus === 'needs_input' && !isWorking && (
           <Box sx={{ px: 2, py: 1 }}>
             <Typography variant="caption" color="text.secondary">
               AI needs your input to continue:
@@ -1042,16 +1079,22 @@ function AIConversationView({ conversationId }) {
         </Box>
       )}
 
-      {/* Input bar */}
-      <AIInputBar
-        onSend={handleInputSend}
-        working={isWorking}
-        sendMode={sendMode}
-        onModeChange={setSendMode}
-        onStop={handleStop}
-        conversationStatus={convStatus}
-        onMentionsChange={setMentions}
-      />
+      {/* Input bar / read-only banner */}
+      {isOwner ? (
+        <AIInputBar
+          onSend={handleInputSend}
+          working={isWorking}
+          sendMode={sendMode}
+          onModeChange={setSendMode}
+          onStop={handleStop}
+          conversationStatus={convStatus}
+          onMentionsChange={setMentions}
+        />
+      ) : (
+        <Alert severity="info" sx={{ m: 1.5 }}>
+          You have read-only access to this shared thread.
+        </Alert>
+      )}
     </Box>
 
     {/* Context panel — collapsible right rail */}

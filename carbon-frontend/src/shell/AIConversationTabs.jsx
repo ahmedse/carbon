@@ -4,10 +4,12 @@ import PropTypes from 'prop-types';
 import {
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
   Menu,
   MenuItem,
@@ -20,6 +22,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { useAuth } from '../auth/AuthContext';
 
 const STATUS_DOT_COLORS = {
   completed: 'success.main',
@@ -50,10 +53,19 @@ function AIConversationTabs({
   onArchive,
   onDelete,
 }) {
+  const { user } = useAuth();
   const [menuConvId, setMenuConvId] = useState(null);
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [renameConvId, setRenameConvId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
+
+  const isOwned = useCallback(
+    (c) => c.visibility !== 'shared' || String(c.user_id) === String(user?.id),
+    [user],
+  );
+
+  const owned = useMemo(() => conversations.filter(isOwned), [conversations, isOwned]);
+  const shared = useMemo(() => conversations.filter((c) => !isOwned(c)), [conversations, isOwned]);
 
   const menuConv = useMemo(
     () => conversations.find((c) => c.id === menuConvId) || null,
@@ -90,6 +102,7 @@ function AIConversationTabs({
       const typeLabel = CONVERSATION_TYPE_LABELS[conv.conversation_type] || 'Chat';
       const title = conv.title || `${typeLabel} #${conv.id?.slice(0, 6)}`;
       const truncated = title.length > 20 ? title.slice(0, 18) + '…' : title;
+      const isShared = !isOwned(conv);
       return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
           <Box
@@ -108,6 +121,7 @@ function AIConversationTabs({
           >
             {truncated}
           </Typography>
+          {isShared && <Chip size="small" label="Shared" />}
           <IconButton
             size="small"
             component="span"
@@ -120,7 +134,7 @@ function AIConversationTabs({
         </Box>
       );
     },
-    [openMenu],
+    [openMenu, isOwned],
   );
 
   if (!conversations.length) {
@@ -144,6 +158,34 @@ function AIConversationTabs({
     );
   }
 
+  const renderTab = (conv) => {
+    const ownedTab = isOwned(conv);
+    return (
+      <Tab
+        key={conv.id}
+        label={label(conv)}
+        value={conv.id}
+        iconPosition="end"
+        icon={
+          ownedTab ? (
+            <IconButton
+              size="small"
+              component="span"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose(conv.id);
+              }}
+              sx={{ ml: 0.25, p: 0.25 }}
+              aria-label={`Close conversation ${conv.title || conv.id}`}
+            >
+              <CloseIcon sx={{ fontSize: 12 }} />
+            </IconButton>
+          ) : null
+        }
+      />
+    );
+  };
+
   return (
     <Box
       sx={{
@@ -154,48 +196,55 @@ function AIConversationTabs({
         minHeight: 36,
       }}
     >
-      <Tabs
-        value={activeId}
-        onChange={(_, id) => {
-          if (id) onSelect(id);
-        }}
-        variant="scrollable"
-        scrollButtons="auto"
-        sx={{
-          minHeight: 36,
-          flex: 1,
-          '& .MuiTab-root': {
+      <Box sx={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+        <Tabs
+          value={activeId}
+          onChange={(_, id) => {
+            if (id) onSelect(id);
+          }}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
             minHeight: 36,
-            py: 0,
-            px: 1.25,
-            fontSize: '0.75rem',
-            textTransform: 'none',
-          },
-        }}
-      >
-        {conversations.map((conv) => (
-          <Tab
-            key={conv.id}
-            label={label(conv)}
-            value={conv.id}
-            iconPosition="end"
-            icon={
-              <IconButton
-                size="small"
-                component="span"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose(conv.id);
-                }}
-                sx={{ ml: 0.25, p: 0.25 }}
-                aria-label={`Close conversation ${conv.title || conv.id}`}
-              >
-                <CloseIcon sx={{ fontSize: 12 }} />
-              </IconButton>
-            }
-          />
-        ))}
-      </Tabs>
+            flex: 1,
+            '& .MuiTab-root': {
+              minHeight: 36,
+              py: 0,
+              px: 1.25,
+              fontSize: '0.75rem',
+              textTransform: 'none',
+            },
+          }}
+        >
+          {owned.map(renderTab)}
+        </Tabs>
+        {owned.length > 0 && shared.length > 0 && (
+          <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+        )}
+        {shared.length > 0 && (
+          <Tabs
+            value={activeId}
+            onChange={(_, id) => {
+              if (id) onSelect(id);
+            }}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{
+              minHeight: 36,
+              flex: 1,
+              '& .MuiTab-root': {
+                minHeight: 36,
+                py: 0,
+                px: 1.25,
+                fontSize: '0.75rem',
+                textTransform: 'none',
+              },
+            }}
+          >
+            {shared.map(renderTab)}
+          </Tabs>
+        )}
+      </Box>
       <Tooltip title="New chat">
         <IconButton
           size="small"
@@ -209,34 +258,41 @@ function AIConversationTabs({
 
       {/* Per-tab context menu */}
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
-        <MenuItem
-          onClick={() => {
-            if (menuConv) onPin?.(menuConv.id);
-            closeMenu();
-          }}
-        >
-          {menuConv?.is_pinned ? 'Unpin' : 'Pin'}
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (menuConv) openRename(menuConv);
-          }}
-        >
-          Rename
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (menuConv) onArchive?.(menuConv.id);
-            closeMenu();
-          }}
-        >
-          {menuConv?.is_archived ? 'Restore' : 'Archive'}
-        </MenuItem>
+        {menuConv && isOwned(menuConv) && (
+          <MenuItem
+            onClick={() => {
+              if (menuConv) onPin?.(menuConv.id);
+              closeMenu();
+            }}
+          >
+            {menuConv?.is_pinned ? 'Unpin' : 'Pin'}
+          </MenuItem>
+        )}
+        {menuConv && isOwned(menuConv) && (
+          <MenuItem
+            onClick={() => {
+              if (menuConv) openRename(menuConv);
+            }}
+          >
+            Rename
+          </MenuItem>
+        )}
+        {menuConv && isOwned(menuConv) && (
+          <MenuItem
+            onClick={() => {
+              if (menuConv) onArchive?.(menuConv.id);
+              closeMenu();
+            }}
+          >
+            {menuConv?.is_archived ? 'Restore' : 'Archive'}
+          </MenuItem>
+        )}
         <MenuItem
           onClick={() => {
             if (menuConv) onDelete?.(menuConv.id);
             closeMenu();
           }}
+          disabled={!!menuConv && !isOwned(menuConv)}
         >
           Delete
         </MenuItem>

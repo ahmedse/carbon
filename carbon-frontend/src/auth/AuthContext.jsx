@@ -44,6 +44,12 @@ export const AuthProvider = ({ children }) => {
   const fetchPerspectiveContext = async (token) => {
     try {
       const data = await apiFetch('accounts/me/context/', { method: 'GET', token }); // fetch perspective
+      // Phase 12 enabler — expose the numeric owner id so shared-thread
+      // ownership checks can compare conversation.user_id against user.id.
+      if (data?.user?.id != null) {
+        localStorage.setItem("user_id", String(data.user.id));
+        setUser((prev) => (prev ? { ...prev, id: data.user.id } : prev));
+      }
       setAvailablePerspectives(data.perspectives || []);
       setIsGlobalAdminFlag(data.is_global_admin === true);
       // Store capabilities for CBAC (capability-based access control)
@@ -82,7 +88,9 @@ export const AuthProvider = ({ children }) => {
       const storedPerspectives = JSON.parse(
         localStorage.getItem("available_perspectives") || "[]"
       );
-      if (storedUser?.token) setUser(storedUser);
+      if (storedUser?.token) {
+        setUser({ ...storedUser, id: localStorage.getItem("user_id") || storedUser.id || undefined });
+      }
       if (Array.isArray(storedProjects)) setProjects(storedProjects);
       if (storedContext) setContext(storedContext);
       const storedIsGlobalAdmin = localStorage.getItem("is_global_admin") === "1";
@@ -207,9 +215,9 @@ export const AuthProvider = ({ children }) => {
       const { roles } = rolesData;
 
       // Fetch perspective context
-      await fetchPerspectiveContext(access);
+      const perspective = await fetchPerspectiveContext(access);
 
-      const userObj = { username, token: access, refresh, roles };
+      const userObj = { id: perspective?.user?.id, username, token: access, refresh, roles };
       setUser(userObj);
       localStorage.setItem("user", JSON.stringify(userObj));
       localStorage.setItem("access", access);
