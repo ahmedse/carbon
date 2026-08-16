@@ -510,7 +510,7 @@ All green. Commit with `feat(ai-workspace): Phase 11-A — Proactive suggestion 
 
 ## Phase 11-B — Suggestion rail actions + notification badge + catch-up button
 
-**Status:** PENDING
+**Status:** DONE (`6048e4b`)
 **Role:** frontend-worker
 **Depends on:** Phase 11-A (accept/dismiss endpoints).
 
