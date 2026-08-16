@@ -347,6 +347,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
               <span>
                 <IconButton
                   size="small"
+                  aria-label={row.is_active ? 'Deactivate' : 'Activate'}
                   disabled={actionBusyId === `toggle-${row.id}`}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -361,6 +362,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
               <span>
                 <IconButton
                   size="small"
+                  aria-label="Delete / archive"
                   disabled={actionBusyId === `delete-${row.id}`}
                   onClick={(e) => {
                     e.stopPropagation();

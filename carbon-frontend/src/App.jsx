@@ -177,7 +177,7 @@ export default function App() {
     <ErrorBoundary>
       <NetworkStatusProvider>
         <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <BrowserRouter basename={import.meta.env.VITE_BASE}>
+          <BrowserRouter basename={import.meta.env.VITE_BASE} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Suspense fallback={<LoadingSpinner />}>
               <Routes>
                 <Route path="/login" element={<Login />} />

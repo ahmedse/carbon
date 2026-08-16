@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import { useTheme, Box, Typography, Paper } from '@mui/material';
@@ -9,6 +9,26 @@ function NoRowsOverlay({ message }) {
       <Typography sx={{ color: 'text.secondary' }}>{message}</Typography>
     </Paper>
   );
+}
+
+// MUI X DataGrid does not re-measure its width when a grid is mounted inside a
+// `display:none` tab panel (e.g. MUI Tabs) — it renders at 0px and stays
+// collapsed when the tab is revealed. We observe the container and only mount
+// the grid once it has a real width, then re-render on every resize so it
+// re-measures correctly on tab switches.
+function useContainerWidth() {
+  const ref = useRef(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const measure = () => setWidth(el.getBoundingClientRect().width);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width];
 }
 
 function CarbonDataGrid({
@@ -29,6 +49,8 @@ function CarbonDataGrid({
   showColumnToggle,
 }) {
   const theme = useTheme();
+  const [containerRef, containerWidth] = useContainerWidth();
+  const visible = containerWidth > 0;
   const usesAutoHeight = !height || height === 'auto';
   const stripedBg = theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50];
   const stripedAlt = theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[100];
@@ -40,53 +62,56 @@ function CarbonDataGrid({
 
   return (
     <Box
+      ref={containerRef}
       sx={{
         width: '100%',
         height: usesAutoHeight ? 'auto' : height,
         minHeight: usesAutoHeight ? theme.spacing(40) : undefined,
       }}
     >
-      <DataGrid
-        rows={rows}
-        columns={columns}
-        autoHeight={usesAutoHeight}
-        loading={loading}
-        getRowId={getRowId}
-        checkboxSelection={checkboxSelection}
-        onSelectionModelChange={(selection) => onSelectionChange?.(selection)}
-        pageSize={pageSize}
-        rowsPerPageOptions={pageSizeOptions}
-        density={density}
-        onRowClick={onRowClick}
-        disableSelectionOnClick
-        components={components}
-        sx={{
-          border: 'none',
-          '& .MuiDataGrid-columnHeaders': {
-            position: stickyHeader ? 'sticky' : 'static',
-            top: 0,
-            zIndex: 1,
-            backgroundColor: theme.palette.action.hover,
-            color: theme.palette.text.secondary,
-          },
-          '& .MuiDataGrid-row:nth-of-type(odd)': {
-            backgroundColor: stripedBg,
-          },
-          '& .MuiDataGrid-row:nth-of-type(even)': {
-            backgroundColor: stripedAlt,
-          },
-          '& .highlighted-row': {
-            backgroundColor: theme.palette.warning.light,
-          },
-          '& .MuiDataGrid-virtualScrollerRenderZone': {
-            alignContent: 'start',
-          },
-        }}
-        getRowClassName={(params) => {
-          if (highlightRow?.(params.row)) return 'highlighted-row';
-          return '';
-        }}
-      />
+      {visible ? (
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          autoHeight={usesAutoHeight}
+          loading={loading}
+          getRowId={getRowId}
+          checkboxSelection={checkboxSelection}
+          onSelectionModelChange={(selection) => onSelectionChange?.(selection)}
+          pageSize={pageSize}
+          rowsPerPageOptions={pageSizeOptions}
+          density={density}
+          onRowClick={onRowClick}
+          disableSelectionOnClick
+          components={components}
+          sx={{
+            border: 'none',
+            '& .MuiDataGrid-columnHeaders': {
+              position: stickyHeader ? 'sticky' : 'static',
+              top: 0,
+              zIndex: 1,
+              backgroundColor: theme.palette.action.hover,
+              color: theme.palette.text.secondary,
+            },
+            '& .MuiDataGrid-row:nth-of-type(odd)': {
+              backgroundColor: stripedBg,
+            },
+            '& .MuiDataGrid-row:nth-of-type(even)': {
+              backgroundColor: stripedAlt,
+            },
+            '& .highlighted-row': {
+              backgroundColor: theme.palette.warning.light,
+            },
+            '& .MuiDataGrid-virtualScrollerRenderZone': {
+              alignContent: 'start',
+            },
+          }}
+          getRowClassName={(params) => {
+            if (highlightRow?.(params.row)) return 'highlighted-row';
+            return '';
+          }}
+        />
+      ) : null}
     </Box>
   );
 }

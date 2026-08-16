@@ -40,8 +40,17 @@ function evaluateRule(definition, sampleRows) {
   const params = definition.params || {};
   const bindings = definition.bindings || [];
 
-  // Resolve the field name to check from the first binding
-  const fieldName = bindings.length > 0 ? bindings[0].field : null;
+  // Resolve the field to check: the first binding's field wins; for standalone
+  // rules (no bindings) infer the key from the first sample row, falling back to
+  // the 'value' key that defaultSampleForRule writes.
+  const boundField =
+    bindings.length > 0 && bindings[0].field ? bindings[0].field : null;
+  const firstRow = sampleRows && sampleRows[0];
+  const inferredField =
+    firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow)
+      ? Object.keys(firstRow)[0]
+      : null;
+  const fieldName = boundField || inferredField || 'value';
 
   if (UNSUPPORTED_TYPES.includes(ruleType)) {
     return { unsupported: true, ruleType };
