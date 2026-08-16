@@ -1,7 +1,7 @@
 // src/shell/AISuggestionRail.jsx
 // Phase 5B — 🔔 Suggestions rail (proactive KgProactiveInsight display).
-// Read-only: these insights have no accept/reject endpoint in scope, so the
-// rail is display-only. Non-blocking: it never displaces the thread rail.
+// Non-blocking: it never displaces the thread rail. Each item offers Accept
+// (acknowledge) / Dismiss actions backed by the proactive-suggestion endpoints.
 import React, { useCallback, useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
@@ -17,8 +17,15 @@ import {
 import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 import { useAuth } from '../auth/AuthContext';
-import { getSuggestions } from '../api/aiWorkspace';
+import { useNotification } from '../components/NotificationProvider';
+import {
+  acceptProactiveSuggestion,
+  dismissProactiveSuggestion,
+  getSuggestions,
+} from '../api/aiWorkspace';
 import { formatDistanceToNow } from '../utils/dateUtils';
 
 const STORAGE_KEY = 'carbon-ai-suggestions-rail-open';
@@ -48,6 +55,7 @@ function createdAtLabel(createdAt) {
 
 function AISuggestionRail({ conversationId }) {
   const { token } = useAuth();
+  const { notifyFromError } = useNotification();
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
@@ -101,6 +109,30 @@ function AISuggestionRail({ conversationId }) {
   const toggleExpand = useCallback((id) => {
     setExpandedId((prev) => (prev === id ? null : id));
   }, []);
+
+  const handleAccept = useCallback(
+    async (id) => {
+      try {
+        await acceptProactiveSuggestion(token, conversationId, id);
+        setSuggestions((prev) => prev.filter((x) => (x.id ?? x.title) !== id));
+      } catch (err) {
+        notifyFromError(err, 'Could not accept suggestion');
+      }
+    },
+    [token, conversationId, notifyFromError],
+  );
+
+  const handleDismiss = useCallback(
+    async (id) => {
+      try {
+        await dismissProactiveSuggestion(token, conversationId, id, 'dismissed');
+        setSuggestions((prev) => prev.filter((x) => (x.id ?? x.title) !== id));
+      } catch (err) {
+        notifyFromError(err, 'Could not dismiss suggestion');
+      }
+    },
+    [token, conversationId, notifyFromError],
+  );
 
   // Loading / error / empty → render nothing. The rail only appears when there
   // are actual insights to show, so it never displaces the thread rail.
@@ -217,6 +249,29 @@ function AISuggestionRail({ conversationId }) {
                         </Typography>
                       )}
                     </Box>
+                    <Stack direction="row" spacing={0.25} alignItems="center">
+                      <Tooltip title="Accept suggestion">
+                        <IconButton
+                          size="small"
+                          color="success"
+                          onClick={(e) => { e.stopPropagation(); handleAccept(id); }}
+                          aria-label="Accept suggestion"
+                          sx={{ p: 0.25 }}
+                        >
+                          <CheckIcon sx={{ fontSize: 16 }} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Dismiss suggestion">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => { e.stopPropagation(); handleDismiss(id); }}
+                          aria-label="Dismiss suggestion"
+                          sx={{ p: 0.25 }}
+                        >
+                          <CloseIcon sx={{ fontSize: 16 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
                   </Stack>
                 </Paper>
               );

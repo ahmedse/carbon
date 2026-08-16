@@ -2,11 +2,12 @@
 // 22px bottom status bar with system state, toggle buttons, and footer links
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Box, Typography, IconButton, Tooltip, Link } from '@mui/material';
+import { Box, Typography, IconButton, Tooltip, Link, Badge } from '@mui/material';
 import { useLocation } from 'react-router-dom';
 import ViewSidebarIcon from '@mui/icons-material/ViewSidebar';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { useAuth } from '../auth/AuthContext';
+import { listWorkspaceSuggestions } from '../api/aiWorkspace';
 
 export function StatusBar({
   sidebarMode,
@@ -15,14 +16,40 @@ export function StatusBar({
   onToggleCopilot,
 }) {
   const location = useLocation();
-  const { context } = useAuth();
+  const { context, token } = useAuth();
   const [systemStatus, setSystemStatus] = useState('ready');
+  const [suggestionCount, setSuggestionCount] = useState(0);
 
   useEffect(() => {
     // TODO: Poll backend for system status
     // For now, just show ready state
     setSystemStatus('ready');
   }, []);
+
+  // Pending proactive suggestions — drives the AI Workspace badge.
+  // Clears on open (the rail already surfaces them) and refreshes on a timer.
+  useEffect(() => {
+    if (!token) return undefined;
+    let cancelled = false;
+
+    const fetchCount = () => {
+      listWorkspaceSuggestions(token)
+        .then((data) => {
+          if (cancelled) return;
+          setSuggestionCount((data?.suggestions || []).length);
+        })
+        .catch(() => {
+          // Non-critical surface — ignore failures so the status bar is unaffected.
+        });
+    };
+
+    fetchCount();
+    const interval = setInterval(fetchCount, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [token]);
 
   const statusColor = systemStatus === 'error' ? '#f87171' :
                       systemStatus === 'processing' ? '#fbbf24' :
@@ -201,29 +228,37 @@ export function StatusBar({
         </Tooltip>
 
         <Tooltip title={`${copilotVisible ? 'Hide' : 'Show'} AI Workspace (Ctrl+\\)`} placement="top">
-          <IconButton
-            size="small"
-            onClick={onToggleCopilot}
-            aria-label={`${copilotVisible ? 'Hide' : 'Show'} AI Workspace`}
-            aria-pressed={copilotVisible}
-            sx={{
-              p: 0.25,
-              color: 'inherit',
-              opacity: copilotVisible ? 1 : 0.5,
-              borderRadius: 0.5,
-              '&:hover': {
-                opacity: 1,
-                bgcolor: 'rgba(255,255,255,0.15)',
-              },
-              '&:focus-visible': {
-                outline: '2px solid',
-                outlineColor: '#fff',
-                outlineOffset: '2px',
-              },
-            }}
+          <Badge
+            badgeContent={copilotVisible ? 0 : suggestionCount}
+            color="error"
+            variant="standard"
+            invisible={copilotVisible || suggestionCount === 0}
+            overlap="circular"
           >
-            <AutoAwesomeIcon sx={{ fontSize: 13 }} aria-hidden="true" />
-          </IconButton>
+            <IconButton
+              size="small"
+              onClick={onToggleCopilot}
+              aria-label={`${copilotVisible ? 'Hide' : 'Show'} AI Workspace`}
+              aria-pressed={copilotVisible}
+              sx={{
+                p: 0.25,
+                color: 'inherit',
+                opacity: copilotVisible ? 1 : 0.5,
+                borderRadius: 0.5,
+                '&:hover': {
+                  opacity: 1,
+                  bgcolor: 'rgba(255,255,255,0.15)',
+                },
+                '&:focus-visible': {
+                  outline: '2px solid',
+                  outlineColor: '#fff',
+                  outlineOffset: '2px',
+                },
+              }}
+            >
+              <AutoAwesomeIcon sx={{ fontSize: 13 }} aria-hidden="true" />
+            </IconButton>
+          </Badge>
         </Tooltip>
       </Box>
 

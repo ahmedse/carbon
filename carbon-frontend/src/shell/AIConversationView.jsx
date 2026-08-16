@@ -6,6 +6,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import DownloadIcon from '@mui/icons-material/Download';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import HistoryIcon from '@mui/icons-material/History';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
@@ -808,6 +809,18 @@ function AIConversationView({ conversationId }) {
             severity="info"
             icon={<HistoryIcon fontSize="inherit" />}
             onClose={() => setCatchUp(null)}
+            action={
+              <Button
+                size="small"
+                startIcon={<AutoAwesomeIcon />}
+                onClick={() => {
+                  setCatchUp(null);
+                  handleSend('Summarize what changed since my last visit.');
+                }}
+              >
+                Catch me up
+              </Button>
+            }
             sx={{
               mx: 1,
               mt: 1,

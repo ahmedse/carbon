@@ -404,3 +404,45 @@ export function resumeConversation(token, conversationId) {
     method: 'POST',
   });
 }
+
+/**
+ * Accept a proactive suggestion (KgProactiveInsight) in a conversation.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} suggestionId - suggestion id
+ * @returns {Promise<object>} Acknowledged suggestion
+ */
+export function acceptProactiveSuggestion(token, conversationId, suggestionId) {
+  return apiFetch(
+    `${BASE}conversations/${conversationId}/suggestions/${suggestionId}/accept/`,
+    { token, method: 'POST' },
+  );
+}
+
+/**
+ * Dismiss a proactive suggestion (KgProactiveInsight) in a conversation.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} suggestionId - suggestion id
+ * @param {string} reason - optional dismiss reason
+ * @returns {Promise<object>} Dismissed suggestion
+ */
+export function dismissProactiveSuggestion(token, conversationId, suggestionId, reason) {
+  const body = reason ? { reason } : {};
+  return apiFetch(
+    `${BASE}conversations/${conversationId}/suggestions/${suggestionId}/dismiss/`,
+    { token, method: 'POST', body },
+  );
+}
+
+/**
+ * List pending proactive suggestions across all conversations (for the badge).
+ * @param {string} token - JWT access token
+ * @param {number} limit - 1–50 (default 50)
+ * @returns {Promise<object>} { suggestions: Array }
+ */
+export function listWorkspaceSuggestions(token, limit = 50) {
+  const params = new URLSearchParams();
+  params.append('limit', String(limit));
+  return apiFetch(`${BASE}conversations/suggestions/?${params.toString()}`, { token });
+}

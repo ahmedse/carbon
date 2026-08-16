@@ -1,7 +1,7 @@
 // src/__tests__/aiWorkspacePhase5.test.jsx
 // Phase 5B — suggestions rail + resume catch-up banner.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../auth/AuthContext', () => ({
@@ -33,9 +33,19 @@ vi.mock('../api/aiWorkspace', () => ({
   recordFeedback: vi.fn(),
   createArtifact: vi.fn(),
   exportConversation: vi.fn(),
+  acceptProactiveSuggestion: vi.fn(),
+  dismissProactiveSuggestion: vi.fn(),
+  listWorkspaceSuggestions: vi.fn(),
 }));
 
-import { getSuggestions, resumeConversation, getConversation } from '../api/aiWorkspace';
+import {
+  acceptProactiveSuggestion,
+  dismissProactiveSuggestion,
+  getSuggestions,
+  resumeConversation,
+  getConversation,
+  sendMessageStream,
+} from '../api/aiWorkspace';
 import AISuggestionRail from '../shell/AISuggestionRail';
 import AIConversationView from '../shell/AIConversationView';
 
@@ -75,6 +85,9 @@ beforeEach(() => {
   getSuggestions.mockReset();
   resumeConversation.mockReset();
   getConversation.mockReset();
+  acceptProactiveSuggestion.mockReset();
+  dismissProactiveSuggestion.mockReset();
+  sendMessageStream.mockReset();
 });
 
 function renderView() {
@@ -104,6 +117,52 @@ describe('AISuggestionRail', () => {
 
     await waitFor(() => expect(getSuggestions).toHaveBeenCalled());
     expect(screen.queryByText('Suggestions')).not.toBeInTheDocument();
+  });
+
+  it('renders Accept and Dismiss buttons per suggestion', async () => {
+    getSuggestions.mockResolvedValue({ suggestions: SUGGESTIONS });
+    render(<AISuggestionRail conversationId="conv-1" />);
+
+    expect(await screen.findByText('DQ violation spike')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Accept suggestion' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dismiss suggestion' })).toBeInTheDocument();
+  });
+
+  it('accepting a suggestion calls acceptProactiveSuggestion and removes the item', async () => {
+    acceptProactiveSuggestion.mockResolvedValue({ id: 's1' });
+    getSuggestions.mockResolvedValue({ suggestions: SUGGESTIONS });
+    render(<AISuggestionRail conversationId="conv-1" />);
+
+    expect(await screen.findByText('DQ violation spike')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept suggestion' }));
+
+    await waitFor(() =>
+      expect(acceptProactiveSuggestion).toHaveBeenCalledWith('test-token', 'conv-1', 's1'),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText('DQ violation spike')).not.toBeInTheDocument(),
+    );
+  });
+
+  it('dismissing a suggestion calls dismissProactiveSuggestion with a reason and removes the item', async () => {
+    dismissProactiveSuggestion.mockResolvedValue({ id: 's1' });
+    getSuggestions.mockResolvedValue({ suggestions: SUGGESTIONS });
+    render(<AISuggestionRail conversationId="conv-1" />);
+
+    expect(await screen.findByText('DQ violation spike')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss suggestion' }));
+
+    await waitFor(() =>
+      expect(dismissProactiveSuggestion).toHaveBeenCalledWith(
+        'test-token',
+        'conv-1',
+        's1',
+        'dismissed',
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText('DQ violation spike')).not.toBeInTheDocument(),
+    );
   });
 });
 
@@ -140,5 +199,32 @@ describe('AIConversationView resume catch-up', () => {
     expect(screen.queryByText('Since your last visit')).not.toBeInTheDocument();
     // 404 is expected for inaccessible ids — must not surface a toast.
     expect(mockNotifyFromError).not.toHaveBeenCalled();
+  });
+
+  it('renders a "Catch me up" button that sends a follow-up and clears the banner', async () => {
+    getConversation.mockResolvedValue(CONVERSATION);
+    resumeConversation.mockResolvedValue({ conversation: CONVERSATION, catch_up: CATCH_UP });
+    // Stream resolves immediately via its onDone callback (no SSE in jsdom).
+    sendMessageStream.mockImplementation(async (_token, _id, _content, handlers) => {
+      handlers?.onDone?.(CONVERSATION);
+    });
+    renderView();
+
+    const button = await screen.findByRole('button', { name: /Catch me up/i });
+    fireEvent.click(button);
+
+    // Banner is dismissed immediately.
+    await waitFor(() =>
+      expect(screen.queryByText('Since your last visit')).not.toBeInTheDocument(),
+    );
+    // The follow-up send is dispatched with the summary request.
+    await waitFor(() =>
+      expect(sendMessageStream).toHaveBeenCalledWith(
+        'test-token',
+        'conv-1',
+        expect.stringContaining('Summarize'),
+        expect.any(Object),
+      ),
+    );
   });
 });
