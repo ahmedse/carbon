@@ -3,7 +3,7 @@ import logging
 import time
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
-from rest_framework import viewsets, status, filters
+from rest_framework import serializers, viewsets, status, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -101,8 +101,61 @@ class FieldProfileViewSet(viewsets.ReadOnlyModelViewSet):
         return qs.distinct()
 
 
+class TableProfileMetricsSerializer(TableProfileSerializer):
+    """TableProfile list serializer with derived metrics for the Monitoring tab.
+
+    ``column_count``, ``null_pct`` and ``distinctness`` are derived from the
+    per-column summary JSON already stored on the profile (never fabricated):
+    each is ``None`` when the profile has no rows/columns, and the UI renders
+    ``—`` for null values.
+    """
+    column_count = serializers.SerializerMethodField()
+    null_pct = serializers.SerializerMethodField()
+    distinctness = serializers.SerializerMethodField()
+    profiled = serializers.SerializerMethodField()
+
+    class Meta(TableProfileSerializer.Meta):
+        fields = TableProfileSerializer.Meta.fields + [
+            'column_count', 'null_pct', 'distinctness', 'profiled',
+        ]
+
+    def get_column_count(self, obj):
+        counts = obj.null_counts or {}
+        return len(counts) if isinstance(counts, dict) else 0
+
+    def get_null_pct(self, obj):
+        counts = obj.null_counts or {}
+        if not isinstance(counts, dict):
+            return None
+        column_count = len(counts)
+        if not column_count or not obj.row_count:
+            return None
+        total_nulls = sum(int(v) for v in counts.values() if v is not None)
+        return round(total_nulls / (obj.row_count * column_count) * 100, 2)
+
+    def get_distinctness(self, obj):
+        counts = obj.distinct_counts or {}
+        if not isinstance(counts, dict) or not obj.row_count:
+            return None
+        ratios = []
+        for value in counts.values():
+            if value is None:
+                continue
+            try:
+                distinct = int(value)
+            except (TypeError, ValueError):
+                continue
+            ratios.append(min(distinct / obj.row_count, 1.0))
+        if not ratios:
+            return None
+        return round(sum(ratios) / len(ratios), 4)
+
+    def get_profiled(self, obj):
+        return True
+
+
 class TableProfileViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = TableProfileSerializer
+    serializer_class = TableProfileMetricsSerializer
     permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
     required_write_capability = 'dq:view'
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
