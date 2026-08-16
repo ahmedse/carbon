@@ -371,3 +371,36 @@ export function createArtifact(token, { conversation_id, message_id, title, arti
 export function deleteArtifact(token, artifactId) {
   return apiFetch(`${BASE}artifacts/${artifactId}/`, { token, method: 'DELETE' });
 }
+
+// ── Phase 5 — proactive suggestions + resume catch-up ────────────────────
+
+/**
+ * Get proactive suggestions (KgProactiveInsight) for a conversation.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {number} limit - 1–50 (default 10)
+ * @returns {Promise<object>} { suggestions: Array }
+ */
+export function getSuggestions(token, conversationId, limit = 10) {
+  const params = new URLSearchParams();
+  if (limit != null) params.append('limit', String(limit));
+  const qs = params.toString();
+  return apiFetch(
+    `${BASE}conversations/${conversationId}/suggestions/${qs ? `?${qs}` : ''}`,
+    { token },
+  );
+}
+
+/**
+ * Mark a conversation as viewed and fetch a resume catch-up when stale (>24h).
+ * Idempotency lives server-side (bumps last_viewed_at) — call once per open.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @returns {Promise<object>} { conversation, catch_up|null }
+ */
+export function resumeConversation(token, conversationId) {
+  return apiFetch(`${BASE}conversations/${conversationId}/resume/`, {
+    token,
+    method: 'POST',
+  });
+}

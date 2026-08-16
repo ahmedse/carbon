@@ -18,6 +18,7 @@ vi.mock('../shell/useAITaskTransfer', () => ({
 
 vi.mock('../shell/AIWorkspaceHeader', () => ({ default: () => null }));
 vi.mock('../shell/AIConversationView', () => ({ default: () => null }));
+vi.mock('../shell/AISuggestionRail', () => ({ default: () => null }));
 vi.mock('../shell/AIEmptyState', () => ({ default: () => null }));
 vi.mock('../shell/AIOfflineBanner', () => ({ default: () => null }));
 

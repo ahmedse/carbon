@@ -1,10 +1,11 @@
 // src/shell/AIConversationView.jsx
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Button, Chip, Menu, MenuItem, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Menu, MenuItem, Stack, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DownloadIcon from '@mui/icons-material/Download';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import HistoryIcon from '@mui/icons-material/History';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
@@ -15,6 +16,7 @@ import {
   listMessages,
   recordFeedback,
   rejectSuggestion,
+  resumeConversation,
   sendMessageStream,
   stopGeneration,
 } from '../api/aiWorkspace';
@@ -60,6 +62,10 @@ function AIConversationView({ conversationId }) {
   const [mentions, setMentions] = useState([]);
   // Transient assistant text accumulated while a chat response streams in.
   const [streamingText, setStreamingText] = useState(null);
+  // Phase 5B — pinned "Since your last visit" catch-up summary (null = no banner).
+  const [catchUp, setCatchUp] = useState(null);
+  // Guard so `resume` fires exactly once per conversation open (idempotent).
+  const resumeRequestedRef = useRef(null);
   const scrollRef = useRef(null);
   // Latest user content (for "Continue" after an interrupt).
   const lastUserContentRef = useRef(null);
@@ -95,6 +101,31 @@ function AIConversationView({ conversationId }) {
     setMessages([]);
     load();
   }, [load]);
+
+  // Phase 5B — resume catch-up. Call once per conversation open (server is
+  // idempotent: it bumps last_viewed_at, so a stale thread only yields a
+  // catch-up the first reopen). 404s are expected for inaccessible ids and
+  // must not block the thread — handled quietly.
+  useEffect(() => {
+    if (!conversationId || resumeRequestedRef.current === conversationId) return;
+    resumeRequestedRef.current = conversationId;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await resumeConversation(token, conversationId);
+        if (!cancelled && data?.catch_up) setCatchUp(data.catch_up);
+      } catch (err) {
+        if (cancelled) return;
+        // 404 = inaccessible/unknown id — the thread still renders; stay quiet.
+        if (err?.status !== 404) {
+          notifyFromError(err, 'Could not load conversation summary');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, conversationId, notifyFromError]);
 
   // Auto-scroll to bottom on new messages and while streaming deltas arrive.
   useEffect(() => {
@@ -599,6 +630,41 @@ function AIConversationView({ conversationId }) {
           pb: 0.5,
         }}
       >
+        {/* Phase 5B — pinned catch-up summary (distinct surface, not a bubble) */}
+        {catchUp && (
+          <Alert
+            severity="info"
+            icon={<HistoryIcon fontSize="inherit" />}
+            onClose={() => setCatchUp(null)}
+            sx={{
+              mx: 1,
+              mt: 1,
+              borderRadius: 1,
+              '& .MuiAlert-message': { flex: 1 },
+            }}
+          >
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              Since your last visit
+            </Typography>
+            {typeof catchUp.hours_since_last_view === 'number' && (
+              <Typography variant="caption" color="text.secondary">
+                {catchUp.hours_since_last_view}h since your last visit
+              </Typography>
+            )}
+            {Array.isArray(catchUp.summary_lines) && catchUp.summary_lines.length > 0 && (
+              <Box component="ul" sx={{ m: 0, pl: 2.5, mt: 0.5 }}>
+                {catchUp.summary_lines.map((line, i) => (
+                  <Box component="li" key={i}>
+                    <Typography variant="caption" color="text.primary">
+                      {line}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Alert>
+        )}
+
         {loadingMore && (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.5 }}>
             <Typography variant="caption" color="text.disabled">

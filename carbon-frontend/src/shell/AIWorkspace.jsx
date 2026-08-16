@@ -35,6 +35,7 @@ import AIConversationView from './AIConversationView';
 import AIEmptyState from './AIEmptyState';
 import AIOfflineBanner from './AIOfflineBanner';
 import AIArtifactBrowser from './AIArtifactBrowser';
+import AISuggestionRail from './AISuggestionRail';
 import { useAITaskTransfer } from './useAITaskTransfer';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
@@ -417,6 +418,12 @@ export function AIWorkspace({ onClose }) {
             Archived ({archivedIds.length})
           </Button>
         </Box>
+      )}
+
+      {/* Phase 5B — proactive suggestions rail, pinned above the thread rail.
+          Only rendered when there is an effective active conversation. */}
+      {hasAny && effectiveActiveId && (
+        <AISuggestionRail conversationId={effectiveActiveId} />
       )}
 
       {hasAny && (
