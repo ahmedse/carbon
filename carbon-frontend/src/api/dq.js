@@ -112,16 +112,6 @@ export function getDQRule(token, id) {
   return apiFetch(`${API_ROUTES.dqRules}${id}/`, { token });
 }
 
-/**
- * Run a DQ rule now — creates a followable DQ job
- * (rule_run for deterministic rules, nl_check for NL rules).
- * @returns {Promise<object>} DQJob
- */
-export function runDQRule(token, id, prompt) {
-  const body = prompt ? { prompt } : {};
-  return apiFetch(`${API_ROUTES.dqRules}${id}/run/`, { method: 'POST', token, body });
-}
-
 export function getDQRuleHistory(token, id) {
   return apiFetch(`${API_ROUTES.dqRules}${id}/history/`, { token });
 }

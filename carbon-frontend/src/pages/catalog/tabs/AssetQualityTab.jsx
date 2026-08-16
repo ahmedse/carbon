@@ -17,7 +17,6 @@ import { useNotification } from '../../../components/NotificationProvider';
 import { useNavigate } from 'react-router-dom';
 import LaunchIcon from '@mui/icons-material/Launch';
 import { getTableDQMetrics, getFieldDQMetrics, getDQResults, listDQRules } from '../../../api/dq';
-import DQRulesList from '../../../components/dq/DQRulesList';
 
 const STATUS_COLOR = {
   passing: 'success',
@@ -169,12 +168,17 @@ export default function AssetQualityTab({ entityData }) {
         </Grid>
       </Grid>
 
-      <Box sx={{ mt: 3 }}>
-        <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
-          Quality Rules for this Asset
-        </Typography>
-        <DQRulesList rules={rules} loading={false} error={null} />
-      </Box>
+      {entityData?.data_table && (
+        <Box sx={{ mt: 3 }}>
+          <Button
+            variant="outlined"
+            startIcon={<LaunchIcon />}
+            onClick={() => navigate(`/dq?table=${entityData.data_table}`)}
+          >
+            View rules in DQ Workspace
+          </Button>
+        </Box>
+      )}
     </DetailTabContent>
   );
 }
