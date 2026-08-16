@@ -364,3 +364,30 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: never read a model attribute that isn't declared on the model — read-only/role semantics that live in `constants.py` must be checked via the actual FK (`group.name`), not a phantom column. A `hasattr`/`.only()` guard or a Pydantic/serializer boundary would surface this at import time instead of runtime.
 - Regression guard: unit test that builds a scope from roles whose `group.name` is only read-only roles and asserts `is_read_only is True`, plus one with a write role asserting `False`.
 - First seen: 2026-08-16.
+
+### PB-35 — AI export `?format=markdown|xml` → 404 (DRF `URL_FORMAT_OVERRIDE` collision)
+- Symptom: `GET conversations/{id}/export/?format=markdown` returns 404; `?format=xml` returns 404 instead of the intended 400 "unsupported format"; only `?format=json` works.
+- Layer: backend (DRF content negotiation)
+- Root cause: `format` is DRF's reserved `URL_FORMAT_OVERRIDE` query param. Content negotiation runs in `finalize_response` and calls `filter_renderers(renderers, "markdown")`, which raises `NotFound` (404) because no renderer has `format="markdown"` — so the view never even gets to return its 400.
+- Fix: rename the export query param to `fmt` (`?fmt=json|markdown`). Updated `workspace_api.export`, `aiWorkspace.exportConversation`, e2e S9, and `DESIGN_AI_WORKSPACE_NEXTGEN.md`.
+- Best practice note: never name your own query param `format` (or `callback` for JSONP) — DRF reserves it. Also audit `emissions/views.py` (`?format=` at lines ~265/847), which has the same latent collision.
+- Regression guard: API test asserting `?fmt=markdown` → 200 and `?fmt=xml` → 400.
+- First seen: 2026-08-16.
+
+### PB-36 — AI pinned conversations missing from default list/search
+- Symptom: a conversation pinned via `PATCH {is_pinned:true}` disappears from `GET conversations/` (and `?q=` search) unless the client explicitly passes `?is_pinned=true`.
+- Layer: backend (DRF serializer field defaults)
+- Root cause: `is_pinned = BooleanField(required=False)` — for absent input DRF's `BooleanField` returns `default_empty_html=False` (NOT None), so `validated_data["is_pinned"]` is `False`, and `list_conversations` filtered OUT pinned rows.
+- Fix: `is_pinned = BooleanField(required=False, allow_null=True)` so an absent value stays `None` and the filter is skipped. (Leave `is_archived` as-is: its default `False` = "exclude archived" is the intended default.)
+- Best practice note: a filterable `BooleanField(required=False)` means "absent ⇒ no filter", which requires `allow_null=True` (absent ⇒ `None`), not the default `False`.
+- Regression guard: test that the default list endpoint includes a pinned conversation.
+- First seen: 2026-08-16.
+
+### PB-37 — AI `list_messages` first page always reports `has_more=False`
+- Symptom: `GET conversations/{id}/messages/?limit=50` with >50 messages returns 50 rows but `has_more:false`, so clients never page forward.
+- Layer: backend (cursor pagination)
+- Root cause: `list_messages` computed `has_more` only in the `before`/`after` cursor branches; the no-cursor (first page, oldest-first) branch left it `False`.
+- Fix: add an `else` branch — the default page returns the OLDEST `limit` messages ascending, so `has_more = messages.filter(created_at__gt=window[-1].created_at).exists()`.
+- Best practice note: every pagination path must set `has_more`; when you add a cursor branch, make sure the no-cursor default branch is also covered (and tested).
+- Regression guard: seed 55 messages, assert first page (limit=50) returns `has_more is True`.
+- First seen: 2026-08-16.
