@@ -558,22 +558,33 @@ Commit with `feat(ai-workspace): Phase 11-B — Suggestion rail actions + badge 
 **Source spec:** `docs/DESIGN_AI_WORKSPACE_V4.md` §Phase 11 (Shared Threads). The BACKEND is already complete — this is a frontend-only phase.
 
 ### Ground truth (backend ALREADY done — do NOT touch backend)
-- `backend/ai/models/workspace.py` — `AIConversation.visibility` (`private`/`shared`) already exists.
-- `backend/ai/intelligence.py` — `update_conversation` already accepts `visibility`; `list_conversations` already returns shared conversations via `_shared_conversation_ids`; `delete_conversation` already requires `ai:manage_console` for shared; `send_message` already denies non-owners (`objects.get(id=..., user=user)`); `_serialize_conversation` already includes `visibility` + `user_id`.
+- `backend/ai/models/workspace.py` — `AIConversation.visibility` (`private`/`shared`) already exists; `AIConversation.user` is a `ForeignKey(AUTH_USER_MODEL)`.
+- `backend/ai/intelligence.py` — `update_conversation` already accepts `visibility`; `list_conversations` already returns shared conversations via `_shared_conversation_ids`; `delete_conversation` already requires `ai:manage_console` for shared; `send_message` already denies non-owners (`objects.get(id=..., user=user)`); `_serialize_conversation` already includes `visibility` + `user_id` (numeric owner PK).
 - `carbon-frontend/src/api/aiWorkspace.js` — `updateConversation(token, id, fields)` already exists (supports `visibility`).
+- **CRITICAL ENCOUNTERED FACT:** `useAuth().user` currently is `{ username, token, refresh, roles }` — it has **NO `id`**. `accounts/me/context/` returns `data.user.id` (numeric) but AuthContext currently drops it. You MUST add the enabler below or ownership detection cannot work.
 
 ### Implementation (frontend-only)
-1. **`carbon-frontend/src/shell/AIConversationTabs.jsx`** — split the thread list into two groups: **"My threads"** (`visibility === 'private'` OR `user_id === currentUserId`) and **"Shared with me"** (`visibility === 'shared'` AND `user_id !== currentUserId`). A non-owner shared thread renders a "Shared" chip. Current user id comes from `useAuth` (AuthContext). Keep existing tab/pin/archive/rename behavior on owned threads only.
-2. **`carbon-frontend/src/shell/AIConversationView.jsx`** — when the active conversation is a shared non-owned thread (`visibility === 'shared' && user_id !== currentUserId`):
-   - Hide the input bar (no `AIInputBar`), no "Save Rule" / mutation actions.
-   - Show a read-only banner ("You have read-only access to this shared thread").
-   - Disable any action that mutates (save-artifact, re-draft, create-rule, follow-up chips that send).
-3. **`carbon-frontend/src/shell/AIWorkspace.jsx`** (or `AIWorkspaceHeader.jsx`) — add a **"Share"** toggle on the active owned conversation that calls `updateConversation(token, id, { visibility: 'shared' | 'private' })` and reflects the current state. Non-owners do NOT see this toggle.
+0. **ENABLER — `carbon-frontend/src/auth/AuthContext.jsx`** — expose the current user's numeric id on `useAuth().user.id`:
+   - In `fetchPerspectiveContext` (after `const data = await apiFetch(...)`), persist `data.user?.id`: `localStorage.setItem("user_id", String(data.user.id))` and merge into state `setUser((prev) => (prev ? { ...prev, id: data.user.id } : prev))`.
+   - In `login`, capture the perspective result: `const perspective = await fetchPerspectiveContext(access);` then build `const userObj = { id: perspective?.user?.id, username, token: access, refresh, roles };`.
+   - In the mount `useEffect`, when restoring `storedUser`, merge the persisted id: `setUser({ ...storedUser, id: localStorage.getItem("user_id") || storedUser.id || undefined })` (only when `storedUser?.token` is truthy).
+   - Do NOT otherwise change auth flow. The id may be numeric; compare with `String(a) === String(b)` everywhere.
+1. **`carbon-frontend/src/shell/AIConversationTabs.jsx`** — group the tab bar into **"My threads"** (owned) and **"Shared with me"** (non-owned shared). `const { user } = useAuth()`; `const isOwned = (c) => c.visibility !== 'shared' || String(c.user_id) === String(user?.id);`
+   - Order tabs owned-first then shared; insert a thin vertical `<Divider orientation="vertical" flexItem />` between the two groups.
+   - Non-owned shared tabs render a small **"Shared"** `<Chip size="small" label="Shared" />` in the tab label.
+   - Hide the per-tab close "X" `IconButton` for non-owned shared tabs (closing maps to `onClose`→`handleArchive` which the backend rejects for non-owners).
+   - In the context `Menu`, disable/hide Pin/Rename/Archive/Delete for non-owned shared tabs (non-owners cannot mutate; backend enforces this — UI must match).
+   - Keep existing behavior on owned tabs unchanged.
+2. **`carbon-frontend/src/shell/AIConversationView.jsx`** — derive `const { user } = useAuth(); const isOwner = !conversation || conversation.visibility !== 'shared' || String(conversation.user_id) === String(user?.id);`
+   - When `!isOwner`: hide the `<AIInputBar />` (render a read-only `<Alert severity="info">You have read-only access to this shared thread.</Alert>` in its place), and disable/suppress all mutation actions (suggestion Accept/Reject, anomaly View Details/Dismiss follow-ups, catch-up "Catch me up" send, artifact save, re-draft, rule-create, export is read-only so keep it).
+   - Add a **"Share"/"Unshare"** toggle in the header action row (next to Export) shown ONLY when `isOwner`: button calls `updateConversation(token, conversation.id, { visibility: current === 'shared' ? 'private' : 'shared' })` then updates local `conversation` state. Import `updateConversation` from `../api/aiWorkspace` and a suitable icon (e.g. `GroupIcon`/`LockIcon`).
+3. **No backend changes.**
 
 ### Tests (new `carbon-frontend/src/__tests__/AISharedThreads.test.jsx`)
-- (a) thread list groups owned vs shared and shows "Shared" chip.
-- (b) read-only view hides the input bar for a non-owned shared thread.
-- (c) Share toggle calls `updateConversation` with `{visibility:'shared'}`.
+- (a) owned vs shared tab grouping shows a "Shared" chip on non-owned shared tabs and hides the close button.
+- (b) read-only view hides the input bar and shows the read-only banner for a non-owned shared thread.
+- (c) Share toggle calls `updateConversation` with `{visibility:'shared'}` and the toggle is absent for non-owners.
+- (d) AuthContext exposes `user.id` after `accounts/me/context/` returns `data.user.id` (mock `apiFetch`).
 
 ### DO NOT TOUCH
 - Any `backend/**` file (already complete).
