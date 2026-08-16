@@ -27,7 +27,6 @@ export default function DataProductEditTab({ entityData, additionalProps = {} })
   const [form, setForm] = useState(() => ({
     name: entityData?.name || '',
     description: entityData?.description || '',
-    scope: entityData?.scope || 1,
     org_unit: entityData?.org_unit ?? '',
     is_locked: Boolean(entityData?.is_locked),
   }));
@@ -51,7 +50,6 @@ export default function DataProductEditTab({ entityData, additionalProps = {} })
       await updateModule(token, entityData.id, {
         name: form.name.trim(),
         description: form.description.trim(),
-        scope: Number(form.scope),
         org_unit: form.org_unit === '' ? null : Number(form.org_unit),
         is_locked: form.is_locked,
       });

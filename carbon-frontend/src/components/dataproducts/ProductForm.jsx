@@ -4,12 +4,11 @@
 // no margin="normal", SystemDialog lives at the call site (CB-14).
 import React from 'react';
 import { Box, Stack, TextField, MenuItem, FormControlLabel, Switch, Typography } from '@mui/material';
-import { SCOPE_LABEL, SCOPE_OPTIONS } from '../../constants/terminology';
 
 /**
  * ProductForm - field set for Data Product (Module) metadata.
  * Props:
- * - form: {name, description, scope, org_unit, is_locked?}
+ * - form: {name, description, org_unit, is_locked?}
  * - onChange(nextForm): called with a new form object on any field change
  * - orgUnits: [{id, name}] for the Org Unit select
  * - error: optional message to display at top
@@ -52,20 +51,6 @@ export default function ProductForm({
           value={form.description || ''}
           onChange={(e) => onChange({ ...form, description: e.target.value })}
         />
-        <TextField
-          select
-          fullWidth
-          label="Scope"
-          size="small"
-          disabled={readOnly}
-          value={form.scope ?? ''}
-          onChange={(e) => onChange({ ...form, scope: e.target.value })}
-          helperText="Default GHG scope for this product's activity data"
-        >
-          {SCOPE_OPTIONS.map((s) => (
-            <MenuItem key={s} value={s}>{SCOPE_LABEL[s]}</MenuItem>
-          ))}
-        </TextField>
         <TextField
           select
           fullWidth

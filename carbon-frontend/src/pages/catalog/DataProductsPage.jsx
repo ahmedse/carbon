@@ -21,13 +21,13 @@ import { fetchDataSchemaTables } from '../../api/dataschema';
 import { fetchAssetProfiles } from '../../api/catalog';
 import { createModule, updateModule, deleteModule } from '../../api/modules';
 import { fetchOrgUnits } from '../../api/orgUnits';
-import { DATA_PRODUCTS, DATA_PRODUCT, SCOPE_LABEL, SCOPE_OPTIONS } from '../../constants/terminology';
+import { DATA_PRODUCTS, DATA_PRODUCT } from '../../constants/terminology';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import SystemDialog from '../../components/SystemDialog';
 import ProductForm from '../../components/dataproducts/ProductForm';
 
-const EMPTY_FORM = { name: '', description: '', scope: 1, org_unit: '' };
+const EMPTY_FORM = { name: '', description: '', org_unit: '' };
 
 // ISO → compact date+time, '—' for missing/invalid (codebase convention)
 function formatModified(value) {
@@ -49,7 +49,6 @@ export default function DataProductsPage() {
   const [tables, setTables] = useState([]);
   const [assets, setAssets] = useState([]);
   const [searchText, setSearchText] = useState('');
-  const [filterScope, setFilterScope] = useState('');
   const [filterOrgUnit, setFilterOrgUnit] = useState('');
   const [orgUnits, setOrgUnits] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -94,7 +93,7 @@ export default function DataProductsPage() {
   const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setDialogOpen(true); };
   const openEdit = useCallback((m) => {
     setEditing(m);
-    setForm({ name: m.name || '', description: m.description || '', scope: m.scope || 1, org_unit: m.org_unit ?? '' });
+    setForm({ name: m.name || '', description: m.description || '', org_unit: m.org_unit ?? '' });
     setDialogOpen(true);
   }, []);
   const closeDialog = () => { if (!submitting) { setDialogOpen(false); setEditing(null); } };
@@ -106,7 +105,6 @@ export default function DataProductsPage() {
       const payload = {
         name: form.name.trim(),
         description: form.description.trim(),
-        scope: Number(form.scope),
         org_unit: form.org_unit === '' ? null : Number(form.org_unit),
       };
       if (editing) {
@@ -158,7 +156,7 @@ export default function DataProductsPage() {
     return map;
   }, [tables, assets]);
 
-  const hasFilters = Boolean(searchText || filterScope || filterOrgUnit);
+  const hasFilters = Boolean(searchText || filterOrgUnit);
 
   const filtered = useMemo(() => {
     let f = modules;
@@ -168,16 +166,13 @@ export default function DataProductsPage() {
         (m.name || '').toLowerCase().includes(s) || (m.description || '').toLowerCase().includes(s)
       );
     }
-    if (filterScope) {
-      f = f.filter((m) => String(m.scope) === filterScope);
-    }
     if (filterOrgUnit) {
       f = f.filter((m) => String(m.org_unit ?? '') === filterOrgUnit);
     }
     return f;
-  }, [modules, searchText, filterScope, filterOrgUnit]);
+  }, [modules, searchText, filterOrgUnit]);
 
-  const handleClearFilters = () => { setSearchText(''); setFilterScope(''); setFilterOrgUnit(''); };
+  const handleClearFilters = () => { setSearchText(''); setFilterOrgUnit(''); };
 
   const columns = useMemo(() => [
     {
@@ -215,17 +210,6 @@ export default function DataProductsPage() {
       align: 'right',
       headerAlign: 'right',
       valueGetter: (value, row) => statsByModule[row.id]?.count || 0,
-    },
-    {
-      field: 'scope',
-      headerName: 'Scope',
-      width: 110,
-      renderCell: (params) =>
-        params.row.scope ? (
-          <Chip label={SCOPE_LABEL[params.row.scope] || `Scope ${params.row.scope}`} size="small" variant="outlined" />
-        ) : (
-          <Chip label="—" size="small" variant="outlined" />
-        ),
     },
     {
       field: 'quality',
@@ -312,22 +296,15 @@ export default function DataProductsPage() {
         onSearchChange={setSearchText}
         filterDefs={[
           {
-            key: 'scope',
-            label: 'Scope',
-            emptyLabel: 'All Scopes',
-            options: SCOPE_OPTIONS.map((s) => ({ value: String(s), label: SCOPE_LABEL[s] })),
-          },
-          {
             key: 'org_unit',
             label: 'Org Unit',
             emptyLabel: 'All Org Units',
             options: orgUnits.map((ou) => ({ value: String(ou.id), label: ou.name })),
           },
         ]}
-        filterValues={{ scope: filterScope, org_unit: filterOrgUnit }}
+        filterValues={{ org_unit: filterOrgUnit }}
         onFilterChange={(key, value) => {
-          if (key === 'scope') setFilterScope(value);
-          else if (key === 'org_unit') setFilterOrgUnit(value);
+          if (key === 'org_unit') setFilterOrgUnit(value);
         }}
         onClearFilters={handleClearFilters}
         pageSize={25}

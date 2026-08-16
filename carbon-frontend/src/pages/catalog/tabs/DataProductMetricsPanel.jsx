@@ -88,13 +88,6 @@ export default function DataProductMetricsPanel({ entityData, additionalProps = 
         </Typography>
 
         <Typography variant="caption" color="text.secondary" display="block">
-          Scope
-        </Typography>
-        <Typography variant="body2" sx={{ mb: 2 }}>
-          {entityData.scope ? `Scope ${entityData.scope}` : 'Not assigned'}
-        </Typography>
-
-        <Typography variant="caption" color="text.secondary" display="block">
           Lock Status
         </Typography>
         <Typography variant="body2" sx={{ mb: 2 }}>

@@ -5,9 +5,7 @@ import React from 'react';
 import { Box, Table, TableRow, TableCell, TableBody, Typography, Chip } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
-import { SCOPE_LABEL } from '../../../constants/terminology';
 
-const SCOPE_COLOR = { 1: 'error', 2: 'warning', 3: 'primary' };
 const QUALITY_COLOR = { passing: 'success', warning: 'warning', failing: 'error', unknown: 'default' };
 
 function formatDate(value) {
@@ -31,17 +29,6 @@ export default function DataProductOverviewTab({ entityData, additionalProps = {
     { label: 'ID', value: entityData.id },
     { label: 'Name', value: entityData.name || '—' },
     { label: 'Description', value: entityData.description || '—' },
-    {
-      label: 'Scope',
-      value: entityData.scope ? (
-        <Chip
-          label={SCOPE_LABEL[entityData.scope] || `Scope ${entityData.scope}`}
-          size="small"
-          color={SCOPE_COLOR[entityData.scope] || 'default'}
-          variant="outlined"
-        />
-      ) : '—',
-    },
   ];
 
   const governanceAttributes = [
