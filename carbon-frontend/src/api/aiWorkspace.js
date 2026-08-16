@@ -348,3 +348,26 @@ export function rejectSuggestion(token, suggestionId, reason) {
     body,
   });
 }
+
+// ── Artifacts ─────────────────────────────────────────────────────────
+
+export function listArtifacts(token, { conversation_id, artifact_type, limit = 50 } = {}) {
+  const params = new URLSearchParams();
+  if (conversation_id) params.append('conversation_id', conversation_id);
+  if (artifact_type) params.append('artifact_type', artifact_type);
+  if (limit) params.append('limit', String(limit));
+  const qs = params.toString();
+  return apiFetch(`${BASE}artifacts/${qs ? `?${qs}` : ''}`, { token });
+}
+
+export function createArtifact(token, { conversation_id, message_id, title, artifact_type, content_json }) {
+  return apiFetch(`${BASE}artifacts/`, {
+    token,
+    method: 'POST',
+    body: { conversation_id, message_id, title, artifact_type, content_json },
+  });
+}
+
+export function deleteArtifact(token, artifactId) {
+  return apiFetch(`${BASE}artifacts/${artifactId}/`, { token, method: 'DELETE' });
+}

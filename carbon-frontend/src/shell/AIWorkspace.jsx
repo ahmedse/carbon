@@ -16,6 +16,8 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from '@mui/material';
@@ -32,6 +34,7 @@ import AIConversationTabs from './AIConversationTabs';
 import AIConversationView from './AIConversationView';
 import AIEmptyState from './AIEmptyState';
 import AIOfflineBanner from './AIOfflineBanner';
+import AIArtifactBrowser from './AIArtifactBrowser';
 import { useAITaskTransfer } from './useAITaskTransfer';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
@@ -57,6 +60,8 @@ export function AIWorkspace({ onClose }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [loading, setLoading] = useState(true);
   const [providerOffline, setProviderOffline] = useState(false);
+  // Fixed mode tabs: 'chat' | 'artifacts'
+  const [mode, setMode] = useState('chat');
 
   const activeRef = useRef(activeId);
   activeRef.current = activeId;
@@ -369,6 +374,16 @@ export function AIWorkspace({ onClose }) {
     >
       <AIWorkspaceHeader onClose={onClose} />
 
+      {/* Fixed mode tabs — never dynamic per conversation */}
+      <Tabs
+        value={mode}
+        onChange={(_, v) => setMode(v)}
+        sx={{ minHeight: 36, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { minHeight: 36, py: 0, px: 2, fontSize: '0.8125rem', textTransform: 'none' } }}
+      >
+        <Tab label="Chat" value="chat" />
+        <Tab label="Artifacts" value="artifacts" />
+      </Tabs>
+
       {providerOffline && <AIOfflineBanner />}
 
       {hasAny && (
@@ -418,7 +433,9 @@ export function AIWorkspace({ onClose }) {
         />
       )}
 
-      {!hasAny ? (
+      {mode === 'artifacts' ? (
+        <AIArtifactBrowser />
+      ) : !hasAny ? (
         <AIEmptyState onStartChat={handleNewChat} />
       ) : activeConversation ? (
         <AIConversationView

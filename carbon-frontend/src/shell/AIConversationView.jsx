@@ -9,6 +9,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
   acceptSuggestion,
+  createArtifact,
   exportConversation,
   getConversation,
   listMessages,
@@ -414,6 +415,31 @@ function AIConversationView({ conversationId }) {
     [persistFeedback],
   );
 
+  const handlePromote = useCallback(
+    async (message) => {
+      if (!message?.id || !conversationId) return;
+      const title = (message.content || '').slice(0, 80).trim() || 'AI Artifact';
+      const artifactType =
+        (message.metadata_json?.type || message.metadata?.type) === 'dq_suggestions' ? 'rule_set'
+        : (message.metadata_json?.type || message.metadata?.type) === 'nl_query_result' ? 'query'
+        : (message.metadata_json?.type || message.metadata?.type) === 'anomalies' ? 'analysis'
+        : 'report';
+      try {
+        await createArtifact(token, {
+          conversation_id: conversationId,
+          message_id: message.id,
+          title,
+          artifact_type: artifactType,
+          content_json: message.metadata_json || message.metadata || { content: message.content },
+        });
+        notify({ message: 'Promoted to artifact', type: 'success' });
+      } catch (err) {
+        notifyFromError(err, 'Could not promote artifact');
+      }
+    },
+    [token, conversationId, notify, notifyFromError],
+  );
+
   const handleExportMenuOpen = useCallback((event) => {
     setExportAnchorEl(event.currentTarget);
   }, []);
@@ -600,6 +626,7 @@ function AIConversationView({ conversationId }) {
             onReject={handleRejectFeedback}
             onCorrect={handleCorrectFeedback}
             onFollowUp={handleFollowUp}
+            onPromote={handlePromote}
             conversationType={conversationType}
             appIdentifier={conversation.app_identifier}
             scopeJson={conversation.scope_json}

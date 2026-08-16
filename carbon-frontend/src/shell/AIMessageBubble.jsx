@@ -141,6 +141,7 @@ function AIMessageBubble({
   onReject,
   onCorrect,
   onFollowUp,
+  onPromote,
   conversationType,
   appIdentifier,
   scopeJson,
@@ -201,7 +202,7 @@ function AIMessageBubble({
   const outcomeLabel = OUTCOME_LABELS[message.outcome] || message.outcome;
   const outcomeColor =
     message.outcome === 'accepted' ? 'success' : message.outcome === 'rejected' ? 'error' : 'default';
-  const showFeedback = !isUser && (message.outcome || onAccept || onReject || onCorrect);
+  const showFeedback = !isUser && (message.outcome || onAccept || onReject || onCorrect || onPromote);
 
   const renderStructuredContent = () => {
     if (isUser || !metadata?.type) return null;
@@ -456,7 +457,7 @@ function AIMessageBubble({
                 </Stack>
               </>
             ) : (
-              <Stack direction="row" spacing={0.5}>
+              <Stack direction="row" spacing={0.5} flexWrap="wrap">
                 <Button
                   size="small"
                   variant="outlined"
@@ -480,6 +481,16 @@ function AIMessageBubble({
                 >
                   Correct
                 </Button>
+                {onPromote && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="secondary"
+                    onClick={() => onPromote(message)}
+                  >
+                    Promote
+                  </Button>
+                )}
               </Stack>
             )}
           </Box>
@@ -556,6 +567,7 @@ AIMessageBubble.propTypes = {
   onReject: PropTypes.func,
   onCorrect: PropTypes.func,
   onFollowUp: PropTypes.func,
+  onPromote: PropTypes.func,
   conversationType: PropTypes.string,
   appIdentifier: PropTypes.string,
   scopeJson: PropTypes.object,
