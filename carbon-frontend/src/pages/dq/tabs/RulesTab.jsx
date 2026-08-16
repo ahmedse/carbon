@@ -149,7 +149,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
         type: 'not_null',
         severity: 'error',
         active: true,
-        bindings: [{ table: '', field: '' }],
+        bindings: [],
         params: {},
         enforcement: { on_write: false },
       },
@@ -181,10 +181,9 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
         setServerErrors(errors);
         return;
       }
-      await createDQRule(token, {
-        definition: parsed,
-        field_assignments_write: assignments,
-      });
+      const body = { definition: parsed };
+      if (assignments.length > 0) body.field_assignments_write = assignments;
+      await createDQRule(token, body);
       notify({ message: 'Rule created', type: 'success' });
       setCreateOpen(false);
       load();

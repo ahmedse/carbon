@@ -54,12 +54,5 @@ export async function resolveBindings(definition, tables, token) {
     }
     assignments.push({ data_table: table.data_table, data_field });
   }
-  if (bindings.length === 0) {
-    errors.push({
-      field: 'bindings',
-      code: 'empty',
-      message: 'definition.bindings must list at least one {table, field?} binding.',
-    });
-  }
   return { assignments, errors };
 }

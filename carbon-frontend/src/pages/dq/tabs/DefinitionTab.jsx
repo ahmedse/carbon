@@ -134,13 +134,14 @@ function DefinitionTab({ rule, onChanged }) {
         setServerErrors(errors);
         return;
       }
-      await updateDQRule(token, rule.id, {
+      const body = {
         definition: parsed,
         name: name.trim() || parsed.name,
         description,
         tag_ids: selectedTags,
-        field_assignments_write: assignments,
-      });
+      };
+      if (assignments.length > 0) body.field_assignments_write = assignments;
+      await updateDQRule(token, rule.id, body);
       notify({ message: `Rule updated — new version saved`, type: 'success' });
       onChanged?.();
     } catch (err) {
