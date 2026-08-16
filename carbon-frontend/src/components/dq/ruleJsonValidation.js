@@ -65,21 +65,89 @@ export function validateDefinitionClient(d) {
 }
 
 /**
- * Format server-side rule_schema errors (DRF returns {definition: [errors]}).
+ * Normalize server-side error envelopes into [{field, code, message}] rows.
+ *
+ * Handles three shapes:
+ *   1. DRF envelope (catalog.exceptions.data_trust_exception_handler):
+ *      { error, message, timestamp, path, details?, suggested_action? }
+ *      where `details` = exc.detail (a dict) — so field-level errors live under
+ *      `payload.details` (details.definition, details.field_assignments_write, …),
+ *      NOT `payload.definition`.
+ *   2. AppFeedback envelope (core.feedback.AppFeedback):
+ *      { code, severity, title, detail, reasons[], remediation[], context }
+ *   3. Legacy direct fields: payload.definition / payload.error.
  */
 export function normalizeServerErrors(payload) {
   const list = [];
-  const raw = payload?.definition;
-  if (Array.isArray(raw)) {
-    raw.forEach((e) => {
-      if (typeof e === 'string') list.push({ field: 'definition', code: 'server', message: e });
-      else if (e && typeof e === 'object') list.push({ field: e.field || 'definition', code: e.code || 'server', message: e.message || JSON.stringify(e) });
+
+  // Coerce a single server error value (string | array | nested object) into rows.
+  const pushValue = (value, defaultField) => {
+    if (Array.isArray(value)) {
+      value.forEach((e) => {
+        if (typeof e === 'string') {
+          list.push({ field: defaultField, code: 'server', message: e });
+        } else if (e && typeof e === 'object') {
+          list.push({
+            field: e.field || defaultField,
+            code: e.code || 'server',
+            message: e.message || JSON.stringify(e),
+          });
+        }
+      });
+    } else if (typeof value === 'string' && value.trim()) {
+      list.push({ field: defaultField, code: 'server', message: value });
+    } else if (value && typeof value === 'object') {
+      // DRF nested: { field: [errors] } or { field: "error" }.
+      Object.entries(value).forEach(([k, v]) => pushValue(v, k));
+    }
+  };
+
+  // 1. DRF envelope — field errors live under payload.details (NOT payload.definition).
+  const details = payload?.details;
+  if (Array.isArray(details)) {
+    pushValue(details, '_root');
+  } else if (details && typeof details === 'object') {
+    pushValue(details.definition, 'definition');
+    // Drift guard / silent binding-drop rejection → actionable row.
+    pushValue(details.field_assignments_write, 'field_assignments_write');
+    Object.entries(details).forEach(([k, v]) => {
+      if (k === 'definition' || k === 'field_assignments_write') return;
+      pushValue(v, k);
     });
-  } else if (typeof raw === 'string') {
-    list.push({ field: 'definition', code: 'server', message: raw });
-  } else if (typeof payload?.error === 'string') {
+  } else {
+    // 2. Legacy direct definition field (no details envelope).
+    pushValue(payload?.definition, 'definition');
+  }
+
+  // 3. AppFeedback shape: { code, severity, title, detail, reasons[], ... }.
+  if (typeof payload?.detail === 'string' || Array.isArray(payload?.reasons)) {
+    if (typeof payload?.detail === 'string' && payload.detail.trim()) {
+      list.push({ field: '_root', code: payload.code || 'server', message: payload.detail });
+    }
+    if (Array.isArray(payload?.reasons)) {
+      payload.reasons.forEach((r) => {
+        if (typeof r === 'string') {
+          list.push({ field: '_root', code: payload.code || 'server', message: r });
+        } else if (r && typeof r === 'object') {
+          list.push({
+            field: r.field || '_root',
+            code: r.code || payload.code || 'server',
+            message: r.message || r.detail || JSON.stringify(r),
+          });
+        }
+      });
+    }
+    if (list.length === 0) {
+      const fallback = payload?.title || payload?.message || payload?.detail;
+      if (fallback) list.push({ field: '_root', code: payload.code || 'server', message: fallback });
+    }
+  }
+
+  // 4. Final catch-all: legacy payload.error string.
+  if (list.length === 0 && typeof payload?.error === 'string') {
     list.push({ field: '_root', code: 'server', message: payload.error });
   }
+
   return list;
 }
 
