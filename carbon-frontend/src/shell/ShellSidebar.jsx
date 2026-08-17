@@ -144,7 +144,7 @@ function getSidebarItems(studioId) {
     case 'ai-admin':
       return [
         { label: 'Overview', path: '/admin/ai', icon: AutoAwesomeIcon, role: 'admin' },
-        { label: 'AI Workspace', path: '/admin/ai/workspace', icon: ChatIcon, role: 'admin' },
+        { label: 'Pulse', path: '/admin/ai/workspace', icon: ChatIcon, role: 'admin' },
         { label: 'Conversations', path: '/admin/ai/conversations', icon: ForumIcon, role: 'admin' },
         { type: 'group', label: 'Intelligence Core' },
         { label: 'Knowledge Base', path: '/admin/ai/knowledge', icon: PsychologyIcon, role: 'admin' },

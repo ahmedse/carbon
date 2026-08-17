@@ -597,3 +597,94 @@ npm run lint             # → 0 new errors
 npm run build            # → clean
 ```
 Commit with `feat(ai-workspace): Phase 12 — Shared threads read-only collaboration`.
+
+---
+
+## Phase 13 — E2E Simulation: Carbon AI as generalist chat + DQ coworker/expert
+
+**Status:** PENDING
+**Role:** qa-validator (DeepSeek-V3)
+**Kind:** Pure validation + E2E authoring. No product code is built or fixed here — only a new Playwright journey spec + live-browser evidence. If a defect is found, record it with severity + repro; the Debugger/Fixer applies the fix (with a regression test, RULE_11).
+
+### Objective (user directive, verbatim intent)
+Drive Carbon AI **in-browser as a real user** (Playwright clicks/typing, not raw API), in **two distinct personas**:
+1. **Regular chat** — a generalist assistant (platform overview, GHG methodology, follow-up questions, feedback, edit/regenerate, export, rename).
+2. **DQ processes coworker/expert** — the AI acting as a data-quality teammate on real seeded tables: **Validate DQ**, **Suggest Rules** (then accept one), **NL rule test** (then save with Execute Mode), **Investigate anomalies**, and **NL query**.
+
+### Ground truth (verified — trust, do not re-derive)
+- E2E lives in `carbon-frontend/e2e/`. Config `e2e/playwright.config.ts` (chromium, 1440×900, baseURL `http://127.0.0.1:5179`, apiURL `:8009`, serial). Fixtures `e2e/fixtures/users.ts` export `PERSONAS`, `login(page, persona)`, `getAuthHeaders`, `navigateTo`.
+- Existing `journey-10-ai-workspace.spec.ts` is **API-heavy**. Phase 13 must be **UI-first** — reuse only `login`/`navigateTo`/`PERSONAS`; do NOT copy its API matrix.
+- **Personas** (`PERSONAS`): `admin` (admin/admin123, global admin), `alamien_dataowner` (data123, can enter data + see DQ), `alamien_viewer` (viewer123, read-only, NO `dq:manage_rules`).
+- **Table detail page** = `/catalog/tables/{tableId}` (`SchemaDetailPage`). **Module detail** = `/catalog/products/{moduleId}` (`DataProductDetailPage`). Both render `AIDomainEntryPoints` with these buttons:
+  - table: **"Validate DQ"** (`dq_validate`), **"Suggest Rules"** (`dq_suggest`), **"Investigate"** (`investigate`), **"Ask about this"** (`chat`).
+  - module: **"Draft Report"** (`report_draft`), **"Ask about this"** (`chat`).
+- **AI Workspace** full page = `/admin/ai/workspace` (capability `ai:view_console`). Also opens as a copilot overlay via the StatusBar AI toggle.
+- **Key selectors** (from source): message input `getByLabel('Message input')`; send `getByLabel('Send message')`; send-mode `getByLabel('Send mode')`; "New chat" `getByLabel('New chat')` (AIConversationTabs). Verify each selector against the live DOM before relying on it (see Step 0).
+- **DQ accept flow** (`AIConversationView`): when a `dq_suggest` turn completes, a "needs-input" area renders per-suggestion **Accept**/**Reject** buttons. Accept calls `acceptSuggestion(token, suggestionId)` (`src/api/aiWorkspace.js`) → creates a DQ rule. Gated by `canManageRules` = global-admin OR `dq:manage_rules` capability; otherwise the UI shows "Requires DQ manage permission…" instead of buttons.
+- **NL rule test** (`nl_rule_test`) renders `NLRuleTestCard` (pass-rate + violations + "Save" gated by Execute Mode).
+- **Investigate** (`investigate`) renders the Investigate tab + `InvestigationCard` (read-only pipeline).
+- **Seed data** (already loaded): modules "Medicine Carbon", "Finance Carbon", "Transport Carbon", "Hotels Carbon", "Hospital Carbon"; tables "Electricity", "Fuel", "Fleet", "Travel", "Chilled Water", "HVAC", etc. Real DQ rules exist (e.g. "Electricity consumption_kwh > 0"). **Discover the actual `tableId`/`moduleId` at runtime** — do not hardcode UUIDs; resolve them from `/catalog/products` + a table's detail link, or via the DQ/Catalog list API.
+- API base `http://127.0.0.1:8009/carbon-api`; AI workspace endpoints under `/ai/workspace/`.
+
+### Preconditions (verify before authoring)
+1. `./manage.sh start` → backend (8009) + frontend (5179) up; `./manage.sh status` shows both healthy.
+2. Seed data present (the 5 modules + 15 tables). If empty, re-run `alamein-campus/seed_tables.py` + `seed_trust_core.py` (see `alamein-campus/README.md`).
+3. Confirm `admin` and `alamien_dataowner` can log in and reach `/catalog/products` and `/admin/ai/workspace`.
+
+### Step 0 — Selector recon (do FIRST, before writing any test)
+Open `/admin/ai/workspace` and one table detail page as `admin` and record (in the TASK-RESULTS recon section) the **exact accessible name/label/role** for: the workspace open/toggle control, "New chat", the message input, the send button, the conversation tab, the entry-point buttons ("Validate DQ"/"Suggest Rules"/"Investigate"/"Ask about this"), the DQ Accept/Reject buttons, and the NLRuleTestCard "Save" button. Use Playwright's UI-mode `--debug` or `codegen` if helpful. Quote each selector you end up using.
+
+### Deliverable — new `carbon-frontend/e2e/journeys/journey-11-ai-coworker-dq.spec.ts`
+Use `test.describe.serial` + one-time `login` (rate-limit: 5 logins/min). Structure in three parts. Every assertion must be **in-browser** (Playwright locators), not raw `fetch`.
+
+**Part A — Regular chat (generalist assistant)** as `alamien_dataowner`:
+- A1. Open AI Workspace, click "New chat".
+- A2. Type `Summarize the purpose of this carbon data platform in one sentence.` → send → assert an assistant message bubble appears (streaming resolves to a terminal; wait up to 120s). Assert NO "ScopeGuard"/"empty user_identifier" error text is visible (regression from §1 P0).
+- A3. If follow-up question chips render, click the first → assert a second assistant turn is produced.
+- A4. Feedback: on the latest assistant message, exercise accept or reject via the feedback control (assert the control exists and is clickable; a success/ack state follows).
+- A5. Edit: locate a user message, edit its content, assert the edited text persists in the UI; then regenerate (if a regenerate affordance exists) and assert a new assistant turn.
+- A6. Export: open the "Export" menu → "Markdown (.md)" → assert a download is triggered or an export completion signal (read-only; must work for any role).
+- A7. Rename: rename the conversation to a known title and assert the tab updates.
+
+**Part B — DQ coworker/expert** as `admin` (has `dq:manage_rules`):
+- B1. From `/catalog/products`, navigate into a real module (e.g. "Transport Carbon") → its detail page. Assert the module entry points ("Draft Report", "Ask about this") render.
+- B2. Open a real table (e.g. "Fleet" or "Electricity") at `/catalog/tables/{id}`. Assert the table entry points ("Validate DQ", "Suggest Rules", "Investigate", "Ask about this") render.
+- B3. Click **"Validate DQ"** → assert the AI Workspace opens with a typed conversation (`dq_validate`) whose title is `Validate DQ: <table>` → assert a response streams to a terminal frame and DQ findings are surfaced (look for pass/fail/violation text or a structured result card). Record evidence.
+- B4. Click **"Suggest Rules"** → `dq_suggest` → assert suggested rules render (Accept/Reject present). **Accept the first rule** → assert the Accept action succeeds (button disables / success notification / rule name appears), proving the "coworker writes the rule only on my approval" contract.
+- B5. **NL rule test**: start an `nl_rule_test` turn with a natural-language rule (e.g. "reject rows where fuel liters is negative") → assert `NLRuleTestCard` renders pass-rate + violations. Toggle Execute Mode ON → click **Save** → assert a rule is created (success signal). This proves the "expert drafts, I confirm" Execute-Mode gate.
+- B6. **Investigate**: click **"Investigate"** → assert the Investigate tab renders an `InvestigationCard` (read-only findings) with no mutation buttons.
+- B7. **NL query**: from the module detail, use "Ask about this" (or a chat turn) asking `How many rows are in <table>?` (or "Why did emissions change?" starter) → assert a data-grounded answer returns (mentions table/field/row counts).
+
+**Part C — RBAC negative (DQ expert respects permissions)** as `alamien_viewer` (NO `dq:manage_rules`):
+- C1. Open the same DQ-suggestion surface; assert Accept/Reject are **absent** and "Requires DQ manage permission" (or equivalent) is shown instead.
+
+**Part D — UX audit on the DQ flow** (W1 render, W3 empty vs tabs, W4 no offline banner, W10 no 404) — condensed, on the table-detail + workspace surfaces.
+
+### Assertion & robustness rules
+- Prefer `getByRole`/`getByLabel`/`getByText` over brittle CSS/XPath. No `.Mui*` class selectors.
+- Never `expect` a specific LLM token — assert structural signals (a bubble rendered, terminal state reached, a card title present, a button disabled).
+- Set generous timeouts on AI turns (`test.setTimeout(180_000)`; `expect(..., { timeout: 120_000 })` on streaming completion).
+- Resolve table/module ids dynamically; tolerate seeded-title variations (use substring/`hasText`).
+
+### Verification Gate (run ALL, paste FULL output in TASK-RESULTS)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx playwright test e2e/journeys/journey-11-ai-coworker-dq.spec.ts --config e2e/playwright.config.ts --reporter=list
+```
+Plus a **regression sweep** confirming no breakage:
+```bash
+npm test -- --run          # unit suite still green
+npm run lint               # 0 new errors
+npm run build              # clean
+```
+
+### Output contract
+- File: `carbon-frontend/e2e/journeys/journey-11-ai-coworker-dq.spec.ts` (the authored journey).
+- Evidence: `TASK-RESULTS-13.md` at repo root — Executive Summary → Step-0 selector recon → Part A/B/C/D results (✅/❌/⚠ per scenario) → Findings table (ID, severity P0–P3, symptom, repro, suggested fix owner) → Gate verdict (PASSED / PASSED WITH FINDINGS / FAILED).
+
+### DO NOT TOUCH
+- Any `backend/**` file. Any existing `e2e/journeys/*.spec.ts` (add a NEW file only). No product source files. Do NOT commit to git (Master Architect commits).
+
+### Notes for the Master
+- This phase produces evidence, not product code. A "FAILED" verdict is a valid outcome — findings go to Debugger/Fixer as separate phases.
+- Dispatch with the qa-validator activation prompt; worker confirms "Ready as QA/Validator for Carbon."

@@ -16,11 +16,17 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Tab,
-  Tabs,
-  TextField,
+  IconButton,
+  Tooltip,
   Typography,
 } from '@mui/material';
+import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
+import ManageSearchIcon from '@mui/icons-material/ManageSearch';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
@@ -31,6 +37,7 @@ import {
   deleteConversation as apiDeleteConversation,
 } from '../api/aiWorkspace';
 import { listDomainManifests } from '../api/aiPulse';
+import AIContextPanel from './AIContextPanel';
 import AIWorkspaceHeader from './AIWorkspaceHeader';
 import AIConversationTabs from './AIConversationTabs';
 import AIConversationView from './AIConversationView';
@@ -60,13 +67,14 @@ export function AIWorkspace({ onClose }) {
       return null;
     }
   });
-  const [query, setQuery] = useState('');
+  const [query] = useState('');
+  const [activePanel, setActivePanel] = useState('sessions');
+  const [drawerWidth, setDrawerWidth] = useState(200);
+  const dragRef = useRef(null);
   const [showArchived, setShowArchived] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [loading, setLoading] = useState(true);
   const [providerOffline, setProviderOffline] = useState(false);
-  // Fixed mode tabs: 'chat' | 'investigate' | 'artifacts'
-  const [mode, setMode] = useState('chat');
   const [manifests, setManifests] = useState([]);
 
   const activeRef = useRef(activeId);
@@ -247,7 +255,7 @@ export function AIWorkspace({ onClose }) {
       setOrder((prev) => [conv.id, ...prev]);
       setActiveId(conv.id);
       setShowArchived(false);
-      setMode('chat');
+      setActivePanel('sessions');
     } catch (err) {
       notifyFromError(err, 'Could not create investigation');
     }
@@ -256,7 +264,7 @@ export function AIWorkspace({ onClose }) {
   // Phase 9-B — open an investigate conversation's thread (rendered in chat mode).
   const handleOpenInvestigation = useCallback((convId) => {
     setActiveId(convId);
-    setMode('chat');
+    setActivePanel('sessions');
   }, []);
 
   // Archive (persistent close). Reversible via restore.
@@ -374,16 +382,6 @@ export function AIWorkspace({ onClose }) {
     [byId, handleRestore],
   );
 
-  // Search submit → refetch with ?q=.
-  const handleSearchSubmit = useCallback(async () => {
-    try {
-      const data = await apiListConversations(token, { q: query.trim(), limit: 200 });
-      indexList(data);
-    } catch (err) {
-      notifyFromError(err, 'Could not search conversations');
-    }
-  }, [token, query, indexList, notifyFromError]);
-
   // Keyboard: Ctrl+W archives active tab; Ctrl+Shift+T restores last-archived.
   useEffect(() => {
     const handler = (e) => {
@@ -409,6 +407,21 @@ export function AIWorkspace({ onClose }) {
   );
 
   // Edge: loading.
+  const startDrawerResize = useCallback((e) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startW: drawerWidth };
+    const onMove = (ev) => {
+      const delta = dragRef.current.startX - ev.clientX;
+      setDrawerWidth(Math.min(360, Math.max(140, dragRef.current.startW + delta)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [drawerWidth]);
+
   if (loading) {
     return (
       <Box
@@ -438,131 +451,155 @@ export function AIWorkspace({ onClose }) {
 
   const hasAny = order.length > 0 || archivedIds.length > 0;
 
+  const togglePanel = (panel) => setActivePanel((prev) => (prev === panel ? null : panel));
+
   return (
     <ExecuteModeProvider>
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-          bgcolor: 'background.default',
-        }}
-      >
-      <AIWorkspaceHeader onClose={onClose} />
+      <Box sx={{ display: 'flex', height: '100%', bgcolor: 'background.default' }}>
 
-      {/* Fixed mode tabs — never dynamic per conversation */}
-      <Tabs
-        value={mode}
-        onChange={(_, v) => setMode(v)}
-        sx={{ minHeight: 36, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { minHeight: 36, py: 0, px: 2, fontSize: '0.8125rem', textTransform: 'none' } }}
-      >
-        <Tab label="Chat" value="chat" />
-        <Tab label="Investigate" value="investigate" />
-        <Tab label="Artifacts" value="artifacts" />
-      </Tabs>
+        {/* Main content — leftmost, flex:1 */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+          <AIWorkspaceHeader onClose={onClose} />
+          {providerOffline && <AIOfflineBanner />}
+          {activePanel === 'investigate' ? (
+            <InvestigateTab conversations={investigateConversations} onSelect={handleOpenInvestigation} onNew={handleNewInvestigation} />
+          ) : activePanel === 'artifacts' ? (
+            <AIArtifactBrowser />
+          ) : !hasAny ? (
+            <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
+          ) : activeConversation ? (
+            <AIConversationView key={activeConversation.id} conversationId={activeConversation.id} showContextPanel={false} />
+          ) : (
+            <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
+          )}
+        </Box>
 
-      {providerOffline && <AIOfflineBanner />}
+        {/* Drawer — sessions or context; pushes chat area, never overlays */}
+        {(activePanel === 'sessions' || activePanel === 'context') && (
+          <Box sx={{ width: drawerWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: 1, borderColor: 'divider', overflow: 'hidden', position: 'relative' }}>
+            {/* Drag handle */}
+            <Box onMouseDown={startDrawerResize} sx={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', zIndex: 10, '&:hover': { bgcolor: 'primary.main', opacity: 0.4 } }} />
 
-      {mode !== 'investigate' && hasAny && (
+            {activePanel === 'sessions' ? (
+              <>
+                <Box sx={{ display: 'flex', alignItems: 'center', px: 1.25, py: 0.625, borderBottom: 1, borderColor: 'divider' }}>
+                  <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'text.secondary' }}>
+                    Sessions
+                  </Typography>
+                  {archivedIds.length > 0 && (
+                    <Button size="small" variant={showArchived ? 'outlined' : 'text'} onClick={() => setShowArchived((v) => !v)} sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.75, py: 0 }}>
+                      {archivedIds.length} archived
+                    </Button>
+                  )}
+                  <Tooltip title="Collapse">
+                    <IconButton size="small" onClick={() => setActivePanel(null)} sx={{ p: 0.25, ml: 0.25 }} aria-label="Collapse sessions panel">
+                      <ChevronRightIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                {effectiveActiveId && <AISuggestionRail conversationId={effectiveActiveId} />}
+                <Box sx={{ flex: 1, overflowY: 'auto' }}>
+                  <AIConversationTabs
+                    compact
+                    conversations={visibleConversations}
+                    activeId={effectiveActiveId}
+                    onSelect={handleSelect}
+                    onNew={handleNewChat}
+                    onClose={handleArchive}
+                    onRename={handleRename}
+                    onPin={handlePin}
+                    onArchive={handleToggleArchive}
+                    onDelete={(id) => setDeleteTarget(id)}
+                  />
+                </Box>
+              </>
+            ) : (
+              /* Context drawer */
+              <Box sx={{ flex: 1, overflowY: 'auto' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', px: 1.25, py: 0.625, borderBottom: 1, borderColor: 'divider', position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                  <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'text.secondary' }}>
+                    Context
+                  </Typography>
+                  <Tooltip title="Collapse">
+                    <IconButton size="small" onClick={() => setActivePanel(null)} sx={{ p: 0.25 }} aria-label="Collapse context panel">
+                      <ChevronRightIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                {activeConversation ? (
+                  <AIContextPanel
+                    conversation={activeConversation}
+                    mentions={[]}
+                    onSummarized={(updated) => setById((prev) => ({ ...prev, [updated.id]: { ...prev[updated.id], ...updated } }))}
+                    defaultOpen
+                  />
+                ) : (
+                  <Typography variant="caption" color="text.disabled" sx={{ display: 'block', p: 1.5, fontSize: '0.75rem' }}>
+                    Open a conversation to see its context.
+                  </Typography>
+                )}
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {/* Activity bar — rightmost edge */}
         <Box
           sx={{
+            width: 32,
+            flexShrink: 0,
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
-            gap: 1,
-            px: 1,
-            py: 0.5,
-            borderBottom: 1,
+            borderLeft: 1,
             borderColor: 'divider',
+            bgcolor: 'background.paper',
+            py: 0.5,
           }}
         >
-          <TextField
-            size="small"
-            placeholder="Search conversations…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSearchSubmit();
-            }}
-            inputProps={{ 'aria-label': 'Search conversations' }}
-            sx={{ '& .MuiOutlinedInput-root': { fontSize: '0.8125rem' } }}
-          />
-          <Button
-            size="small"
-            variant={showArchived ? 'outlined' : 'text'}
-            onClick={() => setShowArchived((v) => !v)}
-          >
-            Archived ({archivedIds.length})
-          </Button>
+          {[
+            { id: 'sessions',    icon: <ForumOutlinedIcon sx={{ fontSize: 16 }} />,     label: 'Sessions'    },
+            { id: 'context',     icon: <InfoOutlinedIcon sx={{ fontSize: 16 }} />,       label: 'Context'     },
+            { id: 'investigate', icon: <ManageSearchIcon sx={{ fontSize: 16 }} />,       label: 'Investigate' },
+            { id: 'artifacts',   icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />, label: 'Artifacts'   },
+          ].map(({ id, icon, label }) => (
+            <Tooltip key={id} title={label} placement="left">
+              <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: activePanel === id ? 'primary.main' : 'transparent' }}>
+                <IconButton
+                  size="small"
+                  onClick={() => togglePanel(id)}
+                  color={activePanel === id ? 'primary' : 'default'}
+                  aria-label={label}
+                  aria-pressed={activePanel === id}
+                  sx={{ p: 0.875, borderRadius: 1 }}
+                >
+                  {icon}
+                </IconButton>
+              </Box>
+            </Tooltip>
+          ))}
+          <Box sx={{ flex: 1 }} />
+          <Tooltip title="New chat" placement="left">
+            <IconButton size="small" onClick={handleNewChat} aria-label="New chat" sx={{ p: 0.875 }}>
+              <AddCommentOutlinedIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
-      )}
 
-      {/* Phase 5B — proactive suggestions rail, pinned above the thread rail.
-          Only rendered when there is an effective active conversation. */}
-      {mode !== 'investigate' && hasAny && effectiveActiveId && (
-        <AISuggestionRail conversationId={effectiveActiveId} />
-      )}
-
-      {mode !== 'investigate' && hasAny && (
-        <AIConversationTabs
-          conversations={visibleConversations}
-          activeId={effectiveActiveId}
-          onSelect={handleSelect}
-          onNew={handleNewChat}
-          onClose={handleArchive}
-          onRename={handleRename}
-          onPin={handlePin}
-          onArchive={handleToggleArchive}
-          onDelete={(id) => setDeleteTarget(id)}
-        />
-      )}
-
-      {mode === 'artifacts' ? (
-        <AIArtifactBrowser />
-      ) : mode === 'investigate' ? (
-        <InvestigateTab
-          conversations={investigateConversations}
-          onSelect={handleOpenInvestigation}
-          onNew={handleNewInvestigation}
-        />
-      ) : !hasAny ? (
-        <AIEmptyState
-          onStartChat={handleNewChat}
-          manifests={manifests}
-          onStartStarter={handleStartStarter}
-        />
-      ) : activeConversation ? (
-        <AIConversationView
-          key={activeConversation.id}
-          conversationId={activeConversation.id}
-        />
-      ) : (
-        <AIEmptyState
-          onStartChat={handleNewChat}
-          manifests={manifests}
-          onStartStarter={handleStartStarter}
-        />
-      )}
-
-      {/* Delete confirmation */}
-      <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}>
-        <DialogTitle>Delete conversation?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            This permanently removes the conversation and its messages.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button size="small" onClick={() => setDeleteTarget(null)}>
-            Cancel
-          </Button>
-          <Button size="small" color="error" variant="contained" onClick={confirmDelete}>
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+        <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}>
+          <DialogTitle>Delete conversation?</DialogTitle>
+          <DialogContent>
+            <DialogContentText>This permanently removes the conversation and its messages.</DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button size="small" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button size="small" color="error" variant="contained" onClick={confirmDelete}>Delete</Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </ExecuteModeProvider>
   );
+
 }
 
 export default AIWorkspace;

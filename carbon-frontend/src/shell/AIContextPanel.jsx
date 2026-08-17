@@ -52,10 +52,10 @@ function parseBudget(snapshot) {
 
 const TIER_COLORS = ['primary', 'info', 'success', 'warning'];
 
-function AIContextPanel({ conversation, mentions, onSummarized }) {
+function AIContextPanel({ conversation, mentions, onSummarized, defaultOpen = false }) {
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [summarizing, setSummarizing] = useState(false);
 
   const scopeJson = conversation?.scope_json || {};

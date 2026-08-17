@@ -135,7 +135,7 @@ export default function AIConversationsPage() {
           <Box>
             <Typography variant="h5" fontWeight={700}>AI Conversations</Typography>
             <Typography variant="body2" color="text.secondary">
-              Browse and inspect AI Workspace conversations.
+              Browse and inspect Pulse conversations.
             </Typography>
           </Box>
 

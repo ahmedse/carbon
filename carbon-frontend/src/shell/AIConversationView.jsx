@@ -1,10 +1,10 @@
 // src/shell/AIConversationView.jsx
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Alert, Box, Button, Chip, Menu, MenuItem, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, IconButton, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import BoltIcon from '@mui/icons-material/Bolt';
 import DownloadIcon from '@mui/icons-material/Download';
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import HistoryIcon from '@mui/icons-material/History';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import GroupIcon from '@mui/icons-material/Group';
@@ -33,6 +33,8 @@ import { useAITaskTransfer } from './useAITaskTransfer';
 import { useExecuteMode } from './useExecuteMode';
 import { DQ_MANAGE_RULES } from '../capabilities';
 
+const DQ_CONTEXT_TYPES = ['dq_validate', 'dq_suggest', 'nl_rule_test', 'nl_query', 'anomaly', 'investigate', 'report_draft'];
+
 function normalizeConversationShape(payload) {
   const candidate = payload?.conversation || payload;
   if (!candidate || typeof candidate !== 'object') {
@@ -47,13 +49,14 @@ function normalizeConversationShape(payload) {
 function AIConversationView({ conversationId }) {
   const { token, user, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
-  const { executeMode } = useExecuteMode();
+  const { executeMode, setExecuteMode } = useExecuteMode();
   const { transferTask } = useAITaskTransfer();
   // CBAC: accepting/rejecting DQ suggestions writes rules → requires dq:manage_rules.
   const canManageRules = isGlobalAdminFlag || (userCapabilities || []).some(
     (c) => (typeof c === 'string' ? c : c?.key) === DQ_MANAGE_RULES
   );
   const [conversation, setConversation] = useState(null);
+  const isDQContext = DQ_CONTEXT_TYPES.includes(conversation?.conversation_type);
   const [messages, setMessages] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -61,7 +64,7 @@ function AIConversationView({ conversationId }) {
   const [sending, setSending] = useState(false);
   const [stopped, setStopped] = useState(false);
   const [workingStage, setWorkingStage] = useState(null);
-  const [sendMode, setSendMode] = useState('queue');
+  const [sendMode] = useState('queue');
   const [actionBusyId, setActionBusyId] = useState(null);
   const [workingStartedAt, setWorkingStartedAt] = useState(null);
   const [providerOffline, setProviderOffline] = useState(false);
@@ -276,13 +279,6 @@ function AIConversationView({ conversationId }) {
     },
     [streamSend],
   );
-
-  // Called when the conversation is refreshed after a summarize action.
-  const handleSummarized = useCallback((updated) => {
-    if (!updated) return;
-    const canonical = normalizeConversationShape(updated);
-    if (canonical) setConversation((prev) => ({ ...prev, ...canonical }));
-  }, []);
 
   const handleFollowUp = useCallback(
     (question) => {
@@ -692,6 +688,15 @@ function AIConversationView({ conversationId }) {
     [token, conversationId, conversation, notify, notifyFromError],
   );
 
+  const handleToggleExecuteMode = useCallback(() => {
+    const next = !executeMode;
+    setExecuteMode(next);
+    notify({
+      message: next ? 'Execute Mode enabled — AI may now propose data changes.' : 'Execute Mode disabled.',
+      type: next ? 'warning' : 'info',
+    });
+  }, [executeMode, setExecuteMode, notify]);
+
   // Phase 12 — toggle shared visibility for an owned thread.
   const handleToggleShare = useCallback(async () => {
     if (!conversation || sharing) return;
@@ -775,56 +780,6 @@ function AIConversationView({ conversationId }) {
       }}
     >
       {providerOffline && <AIOfflineBanner />}
-
-      {/* Export / provenance header action */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          px: 1.5,
-          py: 0.5,
-          borderBottom: 1,
-          borderColor: 'divider',
-        }}
-      >
-        {isOwner && (
-          <Button
-            size="small"
-            variant={conversation.visibility === 'shared' ? 'contained' : 'outlined'}
-            startIcon={<GroupIcon />}
-            onClick={handleToggleShare}
-            disabled={sharing}
-            sx={{ mr: 1 }}
-          >
-            {conversation.visibility === 'shared' ? 'Shared' : 'Share'}
-          </Button>
-        )}
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<DownloadIcon />}
-          endIcon={<ArrowDropDownIcon />}
-          onClick={handleExportMenuOpen}
-          aria-label="Export conversation"
-        >
-          Export
-        </Button>
-        <Menu
-          anchorEl={exportAnchorEl}
-          open={Boolean(exportAnchorEl)}
-          onClose={handleExportMenuClose}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        >
-          <MenuItem onClick={() => handleExport('markdown')} sx={{ fontSize: '0.8125rem' }}>
-            Markdown (.md)
-          </MenuItem>
-          <MenuItem onClick={() => handleExport('json')} sx={{ fontSize: '0.8125rem' }}>
-            JSON (.json)
-          </MenuItem>
-        </Menu>
-      </Box>
 
       {/* Messages area */}
       <Box
@@ -1084,8 +1039,6 @@ function AIConversationView({ conversationId }) {
         <AIInputBar
           onSend={handleInputSend}
           working={isWorking}
-          sendMode={sendMode}
-          onModeChange={setSendMode}
           onStop={handleStop}
           conversationStatus={convStatus}
           onMentionsChange={setMentions}
@@ -1095,14 +1048,50 @@ function AIConversationView({ conversationId }) {
           You have read-only access to this shared thread.
         </Alert>
       )}
-    </Box>
 
-    {/* Context panel — collapsible right rail */}
-    <AIContextPanel
-      conversation={conversation}
-      mentions={mentions}
-      onSummarized={handleSummarized}
-    />
+      {/* Footer toolbar: status + execute + share + export */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          px: 1.25,
+          minHeight: 28,
+          borderTop: 1,
+          borderColor: 'divider',
+          bgcolor: executeMode ? 'warning.50' : 'background.default',
+        }}
+      >
+        <Typography variant="caption" sx={{ flex: 1, fontSize: '0.7rem', color: 'text.disabled' }}>
+          {isWorking ? ((workingStage || 'Working') + '…') : convStatus === 'needs_input' ? 'Needs input' : 'Ready'}
+        </Typography>
+        {isDQContext && (
+          <Tooltip title={executeMode ? 'Execute Mode ON' : 'Execute Mode OFF'}>
+            <IconButton size="small" onClick={handleToggleExecuteMode} color={executeMode ? 'warning' : 'default'} aria-pressed={executeMode} aria-label="Toggle Execute Mode" sx={{ p: 0.25 }}>
+              <BoltIcon sx={{ fontSize: 13 }} />
+            </IconButton>
+          </Tooltip>
+        )}
+        {isOwner && (
+          <Tooltip title={conversation.visibility === 'shared' ? 'Unshare' : 'Share'}>
+            <span>
+              <IconButton size="small" onClick={handleToggleShare} disabled={sharing} color={conversation.visibility === 'shared' ? 'primary' : 'default'} aria-label={conversation.visibility === 'shared' ? 'Unshare conversation' : 'Share conversation'} sx={{ p: 0.25 }}>
+                <GroupIcon sx={{ fontSize: 13 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
+        <Tooltip title="Export">
+          <IconButton size="small" onClick={handleExportMenuOpen} aria-label="Export conversation" sx={{ p: 0.25 }}>
+            <DownloadIcon sx={{ fontSize: 13 }} />
+          </IconButton>
+        </Tooltip>
+        <Menu anchorEl={exportAnchorEl} open={Boolean(exportAnchorEl)} onClose={handleExportMenuClose} anchorOrigin={{ vertical: 'top', horizontal: 'right' }} transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+          <MenuItem onClick={() => handleExport('markdown')} sx={{ fontSize: '0.8125rem' }}>Markdown (.md)</MenuItem>
+          <MenuItem onClick={() => handleExport('json')} sx={{ fontSize: '0.8125rem' }}>JSON (.json)</MenuItem>
+        </Menu>
+      </Box>
+      </Box>  {/* inner column */}
     </Box>
   );
 }

@@ -158,7 +158,7 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
 
         return conv.id;
       } catch (err) {
-        notifyFromError(err, 'Could not transfer task to AI Workspace');
+        notifyFromError(err, 'Could not transfer task to Pulse');
         return null;
       }
     },

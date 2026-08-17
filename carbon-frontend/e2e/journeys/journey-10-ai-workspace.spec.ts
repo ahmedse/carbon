@@ -1,9 +1,9 @@
 /**
- * JOURNEY 10: AI Workspace — extensive-use simulation (Sprints 13–17, v1.3).
+ * JOURNEY 10: Pulse — extensive-use simulation (Sprints 13–17, v1.3).
  *
  * Task ID: QA-AI-WORKSPACE-SIMULATION. Pure validation — no product code is
  * built or fixed here. This spec proves, with Playwright + live HTTP evidence,
- * that every implemented AI Workspace feature works end-to-end:
+ * that every implemented Pulse feature works end-to-end:
  *
  *   Layer 2 (SEC1–SEC7)  — RBAC / cross-user isolation matrix (API).
  *   Layer 3 (S1–S20)     — scenario map (API + in-browser).
@@ -76,7 +76,7 @@ function terminalFrame(frames: any[]): any | undefined {
   return frames.find((f) => ['done', 'stopped', 'error'].includes(f?.type));
 }
 
-test.describe.serial('Journey 10: AI Workspace — extensive-use simulation', () => {
+test.describe.serial('Journey 10: Pulse — extensive-use simulation', () => {
   const tokens: Record<string, string> = {};
   let page: Page | undefined;
 
@@ -181,10 +181,10 @@ test.describe.serial('Journey 10: AI Workspace — extensive-use simulation', ()
   test('S1. /admin/ai/workspace renders for admin', async () => {
     const p = page!;
     await navigateTo(p, UI_PATH);
-    await expect(p.getByText('AI Workspace').first()).toBeVisible({ timeout: 10000 });
+    await expect(p.getByText('Pulse').first()).toBeVisible({ timeout: 10000 });
     // No hard "Not authorized" fallback.
     await expect(p.getByText(/not authorized/i).first()).not.toBeVisible({ timeout: 5000 });
-    console.log('  ✅ S1: workspace route renders (AI Workspace heading visible)');
+    console.log('  ✅ S1: workspace route renders (Pulse heading visible)');
   });
 
   test('S2. Create a chat conversation via API → 201 with id/title/status', async ({ request }) => {
@@ -556,10 +556,10 @@ test.describe.serial('Journey 10: AI Workspace — extensive-use simulation', ()
   test('S19. Transparency tooltip on the workspace header (keyboard focus reveals)', async () => {
     const p = page!;
     await navigateTo(p, UI_PATH);
-    const closeBtn = p.getByLabel('Close AI Workspace');
+    const closeBtn = p.getByLabel('Close Pulse');
     await closeBtn.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
     await closeBtn.hover({ timeout: 5000 }).catch(() => {});
-    await expect(p.getByText(/Close AI Workspace \(Ctrl/i).first()).toBeVisible({ timeout: 5000 });
+    await expect(p.getByText(/Close Pulse \(Ctrl/i).first()).toBeVisible({ timeout: 5000 });
     console.log('  ✅ S19: transparency tooltip visible on header close button');
   });
 
@@ -583,7 +583,7 @@ test.describe.serial('Journey 10: AI Workspace — extensive-use simulation', ()
     await navigateTo(p, UI_PATH);
 
     // W1 render + W7 title
-    await expect(p.getByText('AI Workspace').first()).toBeVisible({ timeout: 10000 });
+    await expect(p.getByText('Pulse').first()).toBeVisible({ timeout: 10000 });
 
     // W2 loading state: a spinner/skeleton must appear during load (transient —
     // assert the load completes with content rather than a perpetual spinner).
@@ -594,7 +594,7 @@ test.describe.serial('Journey 10: AI Workspace — extensive-use simulation', ()
     // W3 empty state — appears when there are no conversations; with seeded data
     // the list is non-empty, so assert the workspace renders one of the two
     // legitimate states (empty state OR conversation tabs).
-    const emptyState = p.getByText('AI Workspace Ready');
+    const emptyState = p.getByText('Pulse Ready');
     const hasEmpty = await emptyState.isVisible({ timeout: 3000 }).catch(() => false);
     const hasTabs = (await p.locator('[role="tab"]').count().catch(() => 0)) > 0;
     expect(hasEmpty || hasTabs).toBe(true);
@@ -610,13 +610,13 @@ test.describe.serial('Journey 10: AI Workspace — extensive-use simulation', ()
     console.log(`    W5: body background token=${bodyBg}`);
 
     // W6 breadcrumb — the sidebar/header indicates the AI admin section.
-    const breadcrumb = p.getByText(/AI Workspace/i).first();
+    const breadcrumb = p.getByText(/Pulse/i).first();
     await expect(breadcrumb).toBeVisible();
 
     // W8 responsive at 768px — page still renders the heading (no layout crash).
     await p.setViewportSize({ width: 768, height: 900 });
     await p.waitForTimeout(500);
-    await expect(p.getByText('AI Workspace').first()).toBeVisible({ timeout: 5000 });
+    await expect(p.getByText('Pulse').first()).toBeVisible({ timeout: 5000 });
     await p.setViewportSize({ width: 1440, height: 900 });
 
     // W9 keyboard — Escape does not navigate away / no uncaught error.

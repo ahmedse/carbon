@@ -1,9 +1,9 @@
 // src/shell/AIWorkspaceHeader.jsx
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Box, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, IconButton, Tooltip } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
+import PulseLogo from './PulseLogo';
 
 function AIWorkspaceHeader({ onClose }) {
   return (
@@ -19,18 +19,12 @@ function AIWorkspaceHeader({ onClose }) {
         minHeight: 40,
       }}
     >
-      <SmartToyIcon sx={{ fontSize: 18, color: 'primary.light', mr: 1 }} />
-      <Typography
-        variant="subtitle2"
-        sx={{ fontWeight: 600, flex: 1, userSelect: 'none' }}
-      >
-        AI Workspace
-      </Typography>
-      <Tooltip title="Close AI Workspace (Ctrl+\)">
+      <PulseLogo size={20} showWordmark sx={{ flex: 1 }} />
+      <Tooltip title="Close Pulse (Ctrl+\)">
         <IconButton
           size="small"
           onClick={onClose}
-          aria-label="Close AI Workspace"
+          aria-label="Close Pulse"
         >
           <CloseIcon fontSize="small" />
         </IconButton>

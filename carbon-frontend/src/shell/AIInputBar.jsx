@@ -3,23 +3,18 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types';
 import {
   Box,
-  Button,
   CircularProgress,
   IconButton,
   List,
   ListItemButton,
-  MenuItem,
   Paper,
-  Select,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
-import BoltIcon from '@mui/icons-material/Bolt';
-import LockIcon from '@mui/icons-material/Lock';
+import StopCircleIcon from '@mui/icons-material/StopCircle';
 import { useAuth } from '../auth/AuthContext';
-import { useNotification } from '../components/NotificationProvider';
 import { apiFetch } from '../api/api';
 import { API_ROUTES } from '../config';
 import { useExecuteMode } from './useExecuteMode';
@@ -30,15 +25,7 @@ const PLACEHOLDER_MAP = {
   default: 'Ask a question or give directions…',
 };
 
-const SEND_MODE_OPTIONS = [
-  { value: 'queue', label: 'Send on done' },
-  { value: 'steer', label: 'Interrupt & send' },
-  { value: 'stop', label: 'Stop' },
-];
 
-const EXECUTE_MODE_OFF_TOOLTIP =
-  'Execute Mode off — AI can suggest actions but cannot apply them. Turn on to allow AI to create rules, fix data, and run queries.';
-const EXECUTE_MODE_ON_TOOLTIP = 'Execute Mode on — AI may apply data changes.';
 
 const MENTION_KINDS = ['table', 'rule', 'field', 'module'];
 
@@ -75,15 +62,12 @@ function replaceEntityTrigger(text, kind, displayName) {
 function AIInputBar({
   onSend,
   working,
-  sendMode,
-  onModeChange,
   onStop,
   conversationStatus,
   onMentionsChange,
 }) {
   const { token } = useAuth();
-  const { notify } = useNotification();
-  const { executeMode, setExecuteMode } = useExecuteMode();
+  const { executeMode } = useExecuteMode();
   const inputRef = useRef(null);
   const [value, setValue] = useState('');
   // Stage: null | 'kind' | 'entity'
@@ -188,25 +172,12 @@ function AIInputBar({
   const handleSubmit = useCallback(() => {
     const val = value.trim();
     if (!val) return;
-    if (working && sendMode === 'stop') {
-      onStop?.();
-      return;
-    }
     onSend(val, resolvedMentions);
     setValue('');
     setResolvedMentions([]);
-  }, [value, working, sendMode, onSend, onStop, resolvedMentions]);
+  }, [value, onSend, resolvedMentions]);
 
-  const handleToggleExecuteMode = useCallback(() => {
-    const next = !executeMode;
-    setExecuteMode(next);
-    notify({
-      message: next
-        ? 'Execute Mode enabled — AI may now propose data changes.'
-        : 'Execute Mode disabled.',
-      type: next ? 'warning' : 'info',
-    });
-  }, [executeMode, setExecuteMode, notify]);
+
 
   const handleKeyDown = useCallback(
     (event) => {
@@ -245,43 +216,7 @@ function AIInputBar({
         bgcolor: 'background.paper',
       }}
     >
-      {/* Execute Mode toggle (Phase 8-B §5.3) */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          alignItems: 'center',
-          px: 1.5,
-          pt: 0.5,
-        }}
-      >
-        <Tooltip
-          title={executeMode ? EXECUTE_MODE_ON_TOOLTIP : EXECUTE_MODE_OFF_TOOLTIP}
-          arrow
-        >
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={handleToggleExecuteMode}
-            startIcon={
-              executeMode ? (
-                <BoltIcon fontSize="small" />
-              ) : (
-                <LockIcon fontSize="small" />
-              )
-            }
-            aria-pressed={executeMode}
-            sx={{
-              fontSize: '0.75rem',
-              textTransform: 'none',
-              borderColor: executeMode ? 'warning.main' : 'divider',
-              color: executeMode ? 'warning.main' : 'text.secondary',
-            }}
-          >
-            Execute Mode {executeMode ? 'ON' : 'OFF'}
-          </Button>
-        </Tooltip>
-      </Box>
+
 
       <Box
         sx={{
@@ -298,7 +233,7 @@ function AIInputBar({
           fullWidth
           multiline
           minRows={1}
-          maxRows={4}
+          maxRows={8}
           size="small"
           value={value}
           onChange={handleChange}
@@ -403,19 +338,11 @@ function AIInputBar({
       </Box>
 
       {working && (
-        <Select
-          size="small"
-          value={sendMode}
-          onChange={(e) => onModeChange?.(e.target.value)}
-          inputProps={{ 'aria-label': 'Send mode' }}
-          sx={{ fontSize: '0.75rem' }}
-        >
-          {SEND_MODE_OPTIONS.map((opt) => (
-            <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '0.75rem' }}>
-              {opt.label}
-            </MenuItem>
-          ))}
-        </Select>
+        <Tooltip title="Stop generation">
+          <IconButton size="small" color="warning" onClick={onStop} aria-label="Stop generation">
+            <StopCircleIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       )}
       <Tooltip title="Send message (Enter)">
         <span>
@@ -437,8 +364,6 @@ function AIInputBar({
 AIInputBar.propTypes = {
   onSend: PropTypes.func.isRequired,
   working: PropTypes.bool,
-  sendMode: PropTypes.oneOf(['queue', 'steer', 'stop']),
-  onModeChange: PropTypes.func,
   onStop: PropTypes.func,
   conversationStatus: PropTypes.string,
   onMentionsChange: PropTypes.func,

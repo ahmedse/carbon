@@ -1,5 +1,5 @@
 // src/pages/admin/ai/AIWorkspacePage.jsx
-// Pulse AI Workspace — embeds the existing AI workspace conversation surface.
+// Pulse — embeds the existing Pulse conversation surface.
 // Reuses src/shell/AIWorkspace (RULE: reuse, don't refactor). Route /admin/ai/workspace.
 import React from 'react';
 import { Box } from '@mui/material';
@@ -9,7 +9,7 @@ import PageContainer from '../../../components/layout/PageContainer';
 import { AIWorkspace } from '../../../shell/AIWorkspace';
 
 export default function AIWorkspacePage() {
-  useDocumentTitle('AI Workspace');
+  useDocumentTitle('Pulse');
   const navigate = useNavigate();
 
   return (

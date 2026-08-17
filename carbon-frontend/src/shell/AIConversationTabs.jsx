@@ -1,30 +1,25 @@
-// src/shell/AIConversationTabs.jsx
+// src/shell/AIConversationTabs.jsx  (sessions list — replaces horizontal tabs)
 import React, { useCallback, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
   Button,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   IconButton,
   Menu,
   MenuItem,
-  Tab,
-  Tabs,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import CloseIcon from '@mui/icons-material/Close';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { useAuth } from '../auth/AuthContext';
 
-const STATUS_DOT_COLORS = {
+const STATUS_COLORS = {
   completed: 'success.main',
   needs_input: 'warning.main',
   working: 'primary.main',
@@ -32,26 +27,53 @@ const STATUS_DOT_COLORS = {
   failed: 'error.main',
 };
 
-const CONVERSATION_TYPE_LABELS = {
+const TYPE_LABELS = {
   chat: 'Chat',
-  dq_validate: 'DQ Check',
-  dq_suggest: 'DQ Suggest',
-  nl_query: 'NL Query',
-  anomaly: 'Anomaly',
-  investigate: 'Investigate',
+  dq_validate: 'DQ',
+  dq_suggest: 'DQ',
+  nl_query: 'NL',
+  nl_rule_test: 'Rule',
+  anomaly: 'Alert',
+  investigate: 'Inv.',
   report_draft: 'Report',
 };
+
+function ageLabel(conv) {
+  const raw = conv.updated_at || conv.created_at;
+  if (!raw) return '';
+  const diff = Date.now() - new Date(raw).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'now';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
+function getGroup(conv) {
+  const raw = conv.updated_at || conv.created_at;
+  if (!raw) return 'Older';
+  const diff = Date.now() - new Date(raw).getTime();
+  const days = diff / 86400000;
+  if (days < 1) return 'Today';
+  if (days < 2) return 'Yesterday';
+  if (days < 7) return 'Previous 7 days';
+  return 'Older';
+}
+
+const GROUP_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Older'];
 
 function AIConversationTabs({
   conversations,
   activeId,
   onSelect,
   onNew,
-  onClose,
+  onClose: _onClose,
   onRename,
   onPin,
   onArchive,
   onDelete,
+  compact = false,
 }) {
   const { user } = useAuth();
   const [menuConvId, setMenuConvId] = useState(null);
@@ -64,8 +86,15 @@ function AIConversationTabs({
     [user],
   );
 
-  const owned = useMemo(() => conversations.filter(isOwned), [conversations, isOwned]);
-  const shared = useMemo(() => conversations.filter((c) => !isOwned(c)), [conversations, isOwned]);
+  const grouped = useMemo(() => {
+    const map = {};
+    for (const conv of conversations) {
+      const g = getGroup(conv);
+      if (!map[g]) map[g] = [];
+      map[g].push(conv);
+    }
+    return map;
+  }, [conversations]);
 
   const menuConv = useMemo(
     () => conversations.find((c) => c.id === menuConvId) || null,
@@ -83,248 +112,132 @@ function AIConversationTabs({
     setMenuConvId(conv.id);
   }, []);
 
-  const openRename = useCallback((conv) => {
-    setRenameConvId(conv.id);
-    setRenameValue(conv.title || '');
-    closeMenu();
-  }, [closeMenu]);
-
   const commitRename = useCallback(() => {
-    if (renameConvId && renameValue.trim()) {
-      onRename?.(renameConvId, renameValue.trim());
-    }
+    if (renameConvId && renameValue.trim()) onRename?.(renameConvId, renameValue.trim());
     setRenameConvId(null);
     setRenameValue('');
   }, [renameConvId, renameValue, onRename]);
 
-  const label = useCallback(
-    (conv) => {
-      const typeLabel = CONVERSATION_TYPE_LABELS[conv.conversation_type] || 'Chat';
-      const title = conv.title || `${typeLabel} #${conv.id?.slice(0, 6)}`;
-      const truncated = title.length > 20 ? title.slice(0, 18) + '…' : title;
-      const isShared = !isOwned(conv);
-      return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <Box
-            sx={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              bgcolor: STATUS_DOT_COLORS[conv.status] || 'grey.400',
-              flexShrink: 0,
-            }}
-          />
-          <Typography
-            variant="caption"
-            noWrap
-            sx={{ maxWidth: 110, fontSize: '0.75rem' }}
-          >
-            {truncated}
-          </Typography>
-          {isShared && <Chip size="small" label="Shared" />}
-          <IconButton
-            size="small"
-            component="span"
-            onClick={(e) => openMenu(e, conv)}
-            sx={{ p: 0.25, ml: 0.25 }}
-            aria-label={`Conversation actions for ${title}`}
-          >
-            <MoreVertIcon sx={{ fontSize: 12 }} />
-          </IconButton>
-        </Box>
-      );
-    },
-    [openMenu, isOwned],
-  );
+  const renderItem = useCallback((conv) => {
+    const active = conv.id === activeId;
+    const owned = isOwned(conv);
+    const type = TYPE_LABELS[conv.conversation_type] || 'Chat';
+    const title = conv.title || `${type} #${String(conv.id).slice(0, 6)}`;
+    const age = ageLabel(conv);
 
-  if (!conversations.length) {
     return (
       <Box
+        key={conv.id}
+        role="option"
+        aria-selected={active}
+        onClick={() => onSelect(conv.id)}
         sx={{
           display: 'flex',
           alignItems: 'center',
-          px: 1,
-          minHeight: 36,
-          borderBottom: 1,
-          borderColor: 'divider',
+          gap: 0.75,
+          px: 1.25,
+          height: 26,
+          cursor: 'pointer',
+          userSelect: 'none',
+          borderLeft: 3,
+          borderColor: active ? 'primary.main' : 'transparent',
+          bgcolor: active ? 'action.selected' : 'transparent',
+          '&:hover': { bgcolor: active ? 'action.selected' : 'action.hover' },
+          '&:hover .sess-menu': { opacity: 1 },
+          '.sess-menu': { opacity: 0, transition: 'opacity 0.1s' },
         }}
       >
-        <Tooltip title="New chat">
-          <IconButton size="small" onClick={onNew} aria-label="New chat">
-            <AddIcon fontSize="small" />
+        <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: STATUS_COLORS[conv.status] || 'grey.400', flexShrink: 0 }} />
+        <Typography variant="caption" noWrap sx={{ flex: 1, fontSize: '0.8rem', fontWeight: active ? 600 : 400 }}>
+          {title}
+        </Typography>
+        <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'text.disabled', flexShrink: 0, minWidth: 24, textAlign: 'right' }}>
+          {type}
+        </Typography>
+        <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'text.disabled', flexShrink: 0, minWidth: 18, textAlign: 'right' }}>
+          {age}
+        </Typography>
+        {owned && (
+          <IconButton
+            size="small"
+            className="sess-menu"
+            onClick={(e) => openMenu(e, conv)}
+            aria-label={`Session options for ${title}`}
+            sx={{ p: 0.25, flexShrink: 0, ml: -0.5 }}
+          >
+            <MoreVertIcon sx={{ fontSize: 12 }} />
           </IconButton>
-        </Tooltip>
+        )}
       </Box>
     );
-  }
-
-  const renderTab = (conv) => {
-    const ownedTab = isOwned(conv);
-    return (
-      <Tab
-        key={conv.id}
-        label={label(conv)}
-        value={conv.id}
-        iconPosition="end"
-        icon={
-          ownedTab ? (
-            <IconButton
-              size="small"
-              component="span"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose(conv.id);
-              }}
-              sx={{ ml: 0.25, p: 0.25 }}
-              aria-label={`Close conversation ${conv.title || conv.id}`}
-            >
-              <CloseIcon sx={{ fontSize: 12 }} />
-            </IconButton>
-          ) : null
-        }
-      />
-    );
-  };
+  }, [activeId, isOwned, onSelect, openMenu]);
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        borderBottom: 1,
-        borderColor: 'divider',
-        minHeight: 36,
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
-        <Tabs
-          value={activeId}
-          onChange={(_, id) => {
-            if (id) onSelect(id);
-          }}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            minHeight: 36,
-            flex: 1,
-            '& .MuiTab-root': {
-              minHeight: 36,
-              py: 0,
-              px: 1.25,
-              fontSize: '0.75rem',
-              textTransform: 'none',
-            },
-          }}
-        >
-          {owned.map(renderTab)}
-        </Tabs>
-        {owned.length > 0 && shared.length > 0 && (
-          <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-        )}
-        {shared.length > 0 && (
-          <Tabs
-            value={activeId}
-            onChange={(_, id) => {
-              if (id) onSelect(id);
-            }}
-            variant="scrollable"
-            scrollButtons="auto"
-            sx={{
-              minHeight: 36,
-              flex: 1,
-              '& .MuiTab-root': {
-                minHeight: 36,
-                py: 0,
-                px: 1.25,
-                fontSize: '0.75rem',
-                textTransform: 'none',
-              },
-            }}
-          >
-            {shared.map(renderTab)}
-          </Tabs>
+    <>
+      {!compact && (
+        <Box sx={{ display: 'flex', alignItems: 'center', px: 1.25, py: 0.375, borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="caption" sx={{ fontSize: '0.7rem', color: 'text.secondary', fontWeight: 600, flex: 1, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Sessions
+          </Typography>
+          <Tooltip title="New chat">
+            <IconButton size="small" onClick={onNew} aria-label="New chat" sx={{ p: 0.25 }}>
+              <AddIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      )}
+
+      <Box role="listbox" aria-label="Conversation sessions" sx={{ overflowY: 'auto', maxHeight: 160, borderBottom: 1, borderColor: 'divider' }}>
+        {conversations.length === 0 ? (
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', px: 1.5, py: 1, fontSize: '0.75rem' }}>
+            No sessions yet
+          </Typography>
+        ) : (
+          GROUP_ORDER.filter((g) => grouped[g]?.length).map((group) => (
+            <Box key={group}>
+              <Typography variant="caption" sx={{ display: 'block', px: 1.25, py: 0.25, fontSize: '0.65rem', color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.05em', bgcolor: 'background.default' }}>
+                {group}
+              </Typography>
+              {grouped[group].map(renderItem)}
+            </Box>
+          ))
         )}
       </Box>
-      <Tooltip title="New chat">
-        <IconButton
-          size="small"
-          onClick={onNew}
-          sx={{ mr: 0.5, flexShrink: 0 }}
-          aria-label="New chat"
-        >
-          <AddIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
 
-      {/* Per-tab context menu */}
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
-        {menuConv && isOwned(menuConv) && (
-          <MenuItem
-            onClick={() => {
-              if (menuConv) onPin?.(menuConv.id);
-              closeMenu();
-            }}
-          >
-            {menuConv?.is_pinned ? 'Unpin' : 'Pin'}
-          </MenuItem>
-        )}
-        {menuConv && isOwned(menuConv) && (
-          <MenuItem
-            onClick={() => {
-              if (menuConv) openRename(menuConv);
-            }}
-          >
+        {menuConv && isOwned(menuConv) && [
+          <MenuItem key="pin" onClick={() => { onPin?.(menuConv.id); closeMenu(); }} sx={{ fontSize: '0.8125rem' }}>
+            {menuConv.is_pinned ? 'Unpin' : 'Pin'}
+          </MenuItem>,
+          <MenuItem key="rename" onClick={() => { setRenameConvId(menuConv.id); setRenameValue(menuConv.title || ''); closeMenu(); }} sx={{ fontSize: '0.8125rem' }}>
             Rename
-          </MenuItem>
-        )}
-        {menuConv && isOwned(menuConv) && (
-          <MenuItem
-            onClick={() => {
-              if (menuConv) onArchive?.(menuConv.id);
-              closeMenu();
-            }}
-          >
-            {menuConv?.is_archived ? 'Restore' : 'Archive'}
-          </MenuItem>
-        )}
-        <MenuItem
-          onClick={() => {
-            if (menuConv) onDelete?.(menuConv.id);
-            closeMenu();
-          }}
-          disabled={!!menuConv && !isOwned(menuConv)}
-        >
+          </MenuItem>,
+          <MenuItem key="archive" onClick={() => { onArchive?.(menuConv.id); closeMenu(); }} sx={{ fontSize: '0.8125rem' }}>
+            {menuConv.is_archived ? 'Restore' : 'Archive'}
+          </MenuItem>,
+        ]}
+        <MenuItem onClick={() => { onDelete?.(menuConv?.id); closeMenu(); }} disabled={!!menuConv && !isOwned(menuConv)} sx={{ fontSize: '0.8125rem', color: 'error.main' }}>
           Delete
         </MenuItem>
       </Menu>
 
-      {/* Rename dialog */}
       <Dialog open={Boolean(renameConvId)} onClose={() => setRenameConvId(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>Rename conversation</DialogTitle>
+        <DialogTitle sx={{ fontSize: '0.9375rem' }}>Rename session</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
-            fullWidth
-            size="small"
+            autoFocus fullWidth size="small"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commitRename();
-              else if (e.key === 'Escape') setRenameConvId(null);
-            }}
-            inputProps={{ 'aria-label': 'Conversation title' }}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); else if (e.key === 'Escape') setRenameConvId(null); }}
+            inputProps={{ 'aria-label': 'Session title' }}
           />
         </DialogContent>
         <DialogActions>
-          <Button size="small" onClick={() => setRenameConvId(null)}>
-            Cancel
-          </Button>
-          <Button size="small" variant="contained" onClick={commitRename} disabled={!renameValue.trim()}>
-            Save
-          </Button>
+          <Button size="small" onClick={() => setRenameConvId(null)}>Cancel</Button>
+          <Button size="small" variant="contained" onClick={commitRename} disabled={!renameValue.trim()}>Save</Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }
 

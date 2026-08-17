@@ -227,7 +227,7 @@ export function StatusBar({
           </IconButton>
         </Tooltip>
 
-        <Tooltip title={`${copilotVisible ? 'Hide' : 'Show'} AI Workspace (Ctrl+\\)`} placement="top">
+        <Tooltip title={`${copilotVisible ? 'Hide' : 'Show'} Pulse (Ctrl+\\)`} placement="top">
           <Badge
             badgeContent={copilotVisible ? 0 : suggestionCount}
             color="error"
@@ -238,7 +238,7 @@ export function StatusBar({
             <IconButton
               size="small"
               onClick={onToggleCopilot}
-              aria-label={`${copilotVisible ? 'Hide' : 'Show'} AI Workspace`}
+              aria-label={`${copilotVisible ? 'Hide' : 'Show'} Pulse`}
               aria-pressed={copilotVisible}
               sx={{
                 p: 0.25,

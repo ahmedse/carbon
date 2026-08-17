@@ -1,41 +1,37 @@
 // src/shell/AIMessageBubble.jsx
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Button, Chip, Paper, Stack, TextField, Tooltip, Typography } from '@mui/material';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
-import PersonIcon from '@mui/icons-material/Person';
+import { Box, Button, Chip, IconButton, Menu, MenuItem, Paper, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import CheckIcon from '@mui/icons-material/Check';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import ThumbDownAltOutlinedIcon from '@mui/icons-material/ThumbDownAltOutlined';
+import ThumbUpAltOutlinedIcon from '@mui/icons-material/ThumbUpAltOutlined';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
 import { formatContextLines } from '../utils/aiProvenance';
+import MarkdownMessage from './MarkdownMessage';
 import NLRuleTestCard from './NLRuleTestCard';
 import InvestigationCard from './InvestigationCard';
 import ReportDraftCard from './ReportDraftCard';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
 
+// User: flat right-aligned row, no bubble border
 const USER_BUBBLE_SX = {
   alignSelf: 'flex-end',
-  maxWidth: '85%',
-  py: 1,
-  px: 1.5,
-  borderRadius: 2,
-  borderBottomRightRadius: 1,
-  bgcolor: 'action.selected',
-  border: 1,
-  borderColor: 'primary.main',
+  maxWidth: '88%',
+  px: 1.25, py: 0.625,
+  borderRadius: 1,
+  bgcolor: 'action.hover',
 };
 
+// AI: full-width, no background, no border
 const AI_BUBBLE_SX = {
   alignSelf: 'flex-start',
-  maxWidth: '85%',
-  py: 1,
-  px: 1.5,
-  borderRadius: 2,
-  borderBottomLeftRadius: 1,
-  bgcolor: 'background.paper',
-  border: 1,
-  borderColor: 'divider',
+  width: '100%',
+  px: 0, py: 0,
 };
 
 const META_SX = {
@@ -160,8 +156,17 @@ function AIMessageBubble({
   onRedraftReport,
 }) {
   const [showTimestamp, setShowTimestamp] = useState(false);
+  const [showActions, setShowActions] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [moreMenuAnchor, setMoreMenuAnchor] = useState(null);
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [correctionText, setCorrectionText] = useState('');
+
+  const handleCopyMessage = useCallback(() => {
+    navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [message.content]);
   const isUser = message.role === 'user';
   const metadata = normalizeMetadata(message);
   const followUps = metadata.follow_up_questions || [];
@@ -206,7 +211,6 @@ function AIMessageBubble({
   const showProvenance = !isUser && (hasStructured || hasScope);
 
   const bubbleSx = isUser ? USER_BUBBLE_SX : AI_BUBBLE_SX;
-  const Icon = isUser ? PersonIcon : SmartToyIcon;
 
   const outcomeLabel = OUTCOME_LABELS[message.outcome] || message.outcome;
   const outcomeColor =
@@ -430,142 +434,101 @@ function AIMessageBubble({
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        px: 1.5,
-        py: 0.5,
+        px: 1, py: 0.25,
+        position: 'relative',
       }}
-      onMouseEnter={() => setShowTimestamp(true)}
-      onMouseLeave={() => setShowTimestamp(false)}
+      onMouseEnter={() => { setShowTimestamp(true); setShowActions(true); }}
+      onMouseLeave={() => { setShowTimestamp(false); setShowActions(false); }}
     >
-      <Box sx={bubbleSx}>
-        <Box sx={META_SX}>
-          <Icon sx={{ fontSize: 13 }} />
-          <Typography variant="caption" fontWeight={600}>
-            {isUser ? 'You' : 'AI'}
-          </Typography>
-          {statusLabel && (
-            <Chip size="small" color={statusColor} label={statusLabel} sx={{ height: 16, '& .MuiChip-label': { px: 0.5, fontSize: '0.625rem' } }} />
-          )}
-          {showProvenance && (
-            <Tooltip title={<TooltipLines lines={provenanceLines} />} arrow>
-              <InfoOutlinedIcon
-                sx={{ fontSize: 13, color: 'text.secondary', cursor: 'help' }}
-                aria-label="Why this answer"
-              />
-            </Tooltip>
-          )}
-        </Box>
+      {/* ⓘ provenance — floats at top-right, zero layout impact */}
+      {!isUser && showProvenance && (
+        <Tooltip title={<TooltipLines lines={provenanceLines} />} arrow>
+          <InfoOutlinedIcon
+            sx={{ position: 'absolute', top: 4, right: 2, fontSize: 11, color: 'text.disabled', cursor: 'help', opacity: 0.45, '&:hover': { opacity: 1 } }}
+            aria-label="Why this answer"
+          />
+        </Tooltip>
+      )}
 
-        <Typography
-          variant="body2"
-          sx={{
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            lineHeight: 1.5,
-          }}
-        >
-          {message.content}
-        </Typography>
+      <Box sx={bubbleSx}>
+        {/* status chip only on error/interrupted — inline, no row */}
+        {!isUser && statusLabel && (
+          <Chip size="small" color={statusColor} label={statusLabel} sx={{ height: 14, mb: 0.5, '& .MuiChip-label': { px: 0.5, fontSize: '0.6rem' } }} />
+        )}
+
+        {/* NEW: markdown for AI, pre-wrap plain text for user */}
+        {isUser ? (
+          <Typography
+            variant="body2"
+            sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}
+          >
+            {message.content}
+          </Typography>
+        ) : (
+          <MarkdownMessage content={message.content} />
+        )}
 
         {structuredContent}
 
-        {showFeedback && (
-          <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {message.outcome ? (
-              <>
-                <Chip size="small" color={outcomeColor} label={outcomeLabel} />
-                {message.correction_text ? (
-                  <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                    {message.correction_text}
-                  </Typography>
-                ) : null}
-              </>
-            ) : correctionOpen ? (
-              <>
-                <TextField
-                  size="small"
-                  fullWidth
-                  multiline
-                  minRows={2}
-                  label="Correction"
-                  value={correctionText}
-                  onChange={(event) => setCorrectionText(event.target.value)}
-                  placeholder="Describe what the answer should have said…"
-                />
-                <Stack direction="row" spacing={0.5}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    disabled={!correctionText.trim()}
-                    onClick={() => onCorrect?.(message, correctionText.trim())}
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => {
-                      setCorrectionOpen(false);
-                      setCorrectionText('');
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </Stack>
-              </>
-            ) : (
-              <Stack direction="row" spacing={0.5} flexWrap="wrap">
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="success"
-                  onClick={() => onAccept?.(message)}
-                >
-                  Accept
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="error"
-                  onClick={() => onReject?.(message)}
-                >
-                  Reject
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => setCorrectionOpen(true)}
-                >
-                  Correct
-                </Button>
-                {onPromote && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="secondary"
-                    onClick={() => onPromote(message)}
-                  >
-                    Promote
-                  </Button>
-                )}
-              </Stack>
+        {/* A3: outcome chip stays always-visible once set */}
+        {!isUser && message.outcome && (
+          <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Chip size="small" color={outcomeColor} label={outcomeLabel} />
+            {message.correction_text && (
+              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                {message.correction_text}
+              </Typography>
             )}
           </Box>
         )}
 
-        {usageLabel && (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
-            <Tooltip
-              title={<TooltipLines lines={(usageBreakdown || usageLabel).split('\n')} />}
-              arrow
-            >
-              <Chip
+        {/* Correction form (opened from hover toolbar) */}
+        {correctionOpen && (
+          <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <TextField
+              size="small"
+              fullWidth
+              multiline
+              minRows={2}
+              label="Correction"
+              value={correctionText}
+              onChange={(event) => setCorrectionText(event.target.value)}
+              placeholder="Describe what the answer should have said…"
+            />
+            <Stack direction="row" spacing={0.5}>
+              <Button
                 size="small"
                 variant="outlined"
-                label={usageLabel}
-                sx={{ color: 'text.secondary' }}
-              />
-            </Tooltip>
+                disabled={!correctionText.trim()}
+                onClick={() => onCorrect?.(message, correctionText.trim())}
+              >
+                Save
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  setCorrectionOpen(false);
+                  setCorrectionText('');
+                }}
+              >
+                Cancel
+              </Button>
+            </Stack>
           </Box>
+        )}
+
+        {/* A4: usage chip only on hover */}
+        {!isUser && usageLabel && showActions && (
+          <Tooltip title={<TooltipLines lines={(usageBreakdown || usageLabel).split('\n')} />} arrow>
+            <Typography
+              variant="caption"
+              color="text.disabled"
+              sx={{ display: 'block', mt: 0.5, cursor: 'help', fontSize: '0.7rem' }}
+            >
+              {usageLabel}
+            </Typography>
+          </Tooltip>
         )}
 
         {followUps.length > 0 && (
@@ -585,20 +548,77 @@ function AIMessageBubble({
         )}
       </Box>
 
-      {showTimestamp && message.created_at && (
-        <Tooltip title={new Date(message.created_at).toLocaleString()}>
-          <Typography
-            variant="caption"
-            color="text.disabled"
-            sx={{
-              alignSelf: isUser ? 'flex-end' : 'flex-start',
-              mt: 0.25,
-              mx: 0.5,
-            }}
-          >
-            {formatDistanceToNow(new Date(message.created_at))}
-          </Typography>
-        </Tooltip>
+      {/* A3: fixed-height action row — always reserves 20px, no layout shift */}
+      {!isUser && (
+        <Box
+          sx={{
+            height: 20,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.25,
+            alignSelf: 'flex-start',
+            opacity: (showFeedback && !correctionOpen && !message.outcome && showActions) ? 1 : 0,
+            transition: 'opacity 0.12s ease',
+            pointerEvents: (showFeedback && !correctionOpen && !message.outcome && showActions) ? 'auto' : 'none',
+          }}
+        >
+          {onAccept && (
+            <Tooltip title="Accept">
+              <IconButton size="small" onClick={() => onAccept?.(message)} aria-label="Accept response" sx={{ p: 0.5 }}>
+                <ThumbUpAltOutlinedIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+          {onReject && (
+            <Tooltip title="Reject">
+              <IconButton size="small" onClick={() => onReject?.(message)} aria-label="Reject response" sx={{ p: 0.5 }}>
+                <ThumbDownAltOutlinedIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+          <Tooltip title={copied ? 'Copied!' : 'Copy'}>
+            <IconButton size="small" onClick={handleCopyMessage} aria-label="Copy message" sx={{ p: 0.5 }}>
+              {copied ? <CheckIcon sx={{ fontSize: 14 }} /> : <ContentCopyIcon sx={{ fontSize: 14 }} />}
+            </IconButton>
+          </Tooltip>
+          {(onCorrect || onPromote) && (
+            <>
+              <Tooltip title="More actions">
+                <IconButton size="small" onClick={(e) => setMoreMenuAnchor(e.currentTarget)} aria-label="More message actions" sx={{ p: 0.5 }}>
+                  <MoreVertIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Tooltip>
+              <Menu anchorEl={moreMenuAnchor} open={Boolean(moreMenuAnchor)} onClose={() => setMoreMenuAnchor(null)}>
+                {onCorrect && (
+                  <MenuItem onClick={() => { setCorrectionOpen(true); setMoreMenuAnchor(null); }} sx={{ fontSize: '0.8125rem' }}>
+                    Correct
+                  </MenuItem>
+                )}
+                {onPromote && (
+                  <MenuItem onClick={() => { onPromote(message); setMoreMenuAnchor(null); }} sx={{ fontSize: '0.8125rem' }}>
+                    Promote
+                  </MenuItem>
+                )}
+              </Menu>
+            </>
+          )}
+        </Box>
+      )}
+      {message.created_at && (
+        <Typography
+          variant="caption"
+          color="text.disabled"
+          sx={{
+            alignSelf: isUser ? 'flex-end' : 'flex-start',
+            fontSize: '0.68rem',
+            opacity: showTimestamp ? 1 : 0,
+            transition: 'opacity 0.12s ease',
+            height: 16,
+            lineHeight: '16px',
+          }}
+        >
+          {formatDistanceToNow(new Date(message.created_at))}
+        </Typography>
       )}
     </Box>
   );

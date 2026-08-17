@@ -63,7 +63,7 @@ export function Shell() {
 
   const [copilotPaneSize, setCopilotPaneSize] = useState(() => {
     const stored = Number(localStorage.getItem('carbon-copilot-pane-size'));
-    return Number.isFinite(stored) && stored >= 280 ? stored : 360;
+    return Number.isFinite(stored) && stored >= 280 ? stored : 400;
   });
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -347,7 +347,7 @@ export function Shell() {
                   key="copilot"
                   minSize={280}
                   preferredSize={copilotPaneSize}
-                  maxSize={520}
+                  maxSize={Math.floor(window.innerWidth / 2)}
                 >
                   <ErrorBoundary>
                     <AIWorkspace onClose={toggleCopilot} />

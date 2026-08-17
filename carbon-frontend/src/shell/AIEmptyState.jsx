@@ -3,7 +3,7 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { Box, Button, Chip, Typography } from '@mui/material';
 import ChatIcon from '@mui/icons-material/Chat';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
+import PulseLogo from './PulseLogo';
 
 const ILLUSTRATION_SIZE = 56;
 
@@ -28,24 +28,11 @@ function AIEmptyState({ onStartChat, manifests = [], onStartStarter }) {
         color: 'text.secondary',
       }}
     >
-      <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-        <SmartToyIcon
-          sx={{ fontSize: ILLUSTRATION_SIZE, color: 'primary.light', opacity: 0.5 }}
-        />
-        <ChatIcon
-          sx={{
-            fontSize: 22,
-            color: 'primary.main',
-            position: 'absolute',
-            bottom: -2,
-            right: -6,
-          }}
-        />
-      </Box>
+      <PulseLogo size={ILLUSTRATION_SIZE} />
 
       <Box>
         <Typography variant="subtitle2" color="text.primary" gutterBottom>
-          AI Workspace Ready
+          Pulse Ready
         </Typography>
         <Typography variant="caption" color="text.disabled">
           Start a chat or transfer a task from the main workspace.
