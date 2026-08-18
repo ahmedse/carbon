@@ -141,6 +141,9 @@ RULE_20=NO DATA LEAKAGE — AI provider MUST NOT use data from App A when proces
 RULE_21=NO AUTO-MUTATION — AI suggests, Carbon executes. NEVER auto-apply AI-suggested fixes. Fix suggestions ALWAYS have requires_confirmation=True. AI MUST NOT execute INSERT/UPDATE/DELETE/DROP. MutationGuard validates provider responses.
 RULE_22=NO DANGLING ROUTES — every top-level route namespace MUST register an index route at its bare root (e.g. /carbon→/carbon/console, /admin→/admin/users, /settings/profile→/settings), so a bare namespace path or deployment mount path never 404s. Every navigate()/Navigate/Link/to=/href=/path: target MUST resolve to a <Route> in App.jsx. Enforce with .ai-toolkit/scripts/audit-routes.py (wired into verify.sh frontend/all/full).
 RULE_23=NO IMPLEMENTATION LEAKAGE — user-facing text (UI labels, status/progress copy, empty states, error messages, AI assistant replies, docs) MUST describe OUTCOMES (WHAT the user gets / WHAT is happening), NEVER internals (HOW). Forbidden in user-facing copy: engine/pipeline mechanics ("translating to SQL", "analyzing table profile"), internal component names (Pulse, dispatch, runner), internal status codes (provider_unavailable, pulse_unavailable, skipped_unavailable), and provider/vendor jargon UNLESS a model selector is an explicit user-facing feature. Prefer "Working on your answer…" over "Translating question to SQL…"; "I couldn't reach the AI service" over "AI provider is currently unavailable".
+RULE_24=DEEPSEEK MODEL TIERING — default to V4-Flash for routine work (edits, tests, classification, regex/rule synthesis, nl_check, JSON generation). Use V4-Pro ONLY for hard reasoning (architecture, report.draft, suggest, anomaly.explain, multi-step debugging). Flash is ~3x cheaper than Pro.
+RULE_25=MAXIMIZE CACHE HITS (biggest lever) — keep a STABLE, long-lived system prompt + tool definitions at the FRONT of every LLM call; never rotate them between calls. DeepSeek prefix-cache: hit ≈ $0.007/M vs miss ≈ $0.22/M (~30x). Append new context AFTER the stable prefix, never reorder the prefix.
+RULE_26=OFF-PEAK + TOKEN DISCIPLINE — run batch/async generations outside DeepSeek peak. Egypt (UTC+3): peak = 04:00-07:00 and 09:00-13:00 Cairo; off-peak = 13:00-04:00 Cairo (half price). Cap output tokens; prefer concise structured JSON; retrieve-don't-stuff.
 
 ## KEY ARCHITECTURE FILES
 # Workers should read these files first when working in related areas.
@@ -173,9 +176,15 @@ FRONTEND_API=carbon-frontend/src/api/api.js
 FRONTEND_THEME=carbon-frontend/src/theme/carbonTheme.js
 FRONTEND_MANIFEST=carbon-frontend/src/apps/carbon/manifest.js
 
-## WORKER MODEL POLICY (budget directive, 2026-08-02)
-WORKER_MODEL_POLICY=ALL worker roles (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer)=DeepSeek-V3; researcher+curator=DeepSeek-R1; master-architect=DeepSeek V4 Pro; Kimi models OFF roster (cost).
+## WORKER MODEL POLICY (budget directive, updated 2026-08-18 — DeepSeek V3/R1 RETIRED)
+WORKER_MODEL_POLICY=ALL worker roles (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer)=DeepSeek V4-Flash; researcher+curator+master-architect=DeepSeek V4-Pro; Kimi models OFF roster (cost). V3/R1 are RETIRED on the provider — never reference them.
 WORKER_MODEL_RUNTIME=Workers run on DeepSeek via VSCode Copilot custom models.
+
+## DEEPSEEK PRICING (effective 2026-08-16, per 1M tokens — the post-hike schedule)
+DEEPSEEK_V4_FLASH=cache-hit $0.007 off / $0.014 peak · cache-miss $0.22 off / $0.44 peak · output $0.66 off / $1.32 peak
+DEEPSEEK_V4_PRO=cache-hit $0.022 off / $0.044 peak · cache-miss $0.66 off / $1.32 peak · output $1.98 off / $3.96 peak
+DEEPSEEK_PEAK_UTC=01:00-04:00 and 06:00-10:00 UTC (all else off-peak = half price). Peak = 04:00-07:00 and 09:00-13:00 Cairo.
+DEEPSEEK_CONTEXT=1M context, 384K max output. Cache hit is ~30x cheaper than miss — RULE_25 is the #1 cost lever.
 
 ## TESTING (see .ai-toolkit/shared/testing.md for strategy)
 # NOTE: use python -m pytest (NOT ./manage.sh test) — manage.py test hits a

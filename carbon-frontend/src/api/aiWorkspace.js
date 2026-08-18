@@ -213,6 +213,36 @@ export function summarizeConversation(token, conversationId, force = false) {
 }
 
 /**
+ * Confirm a staged tool execution (e.g. a proposed create_dq_rule) so it
+ * actually runs as the current user. The response carries the created
+ * entity + a navigate action the UI can follow.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} executionId - staged ToolExecution id
+ * @returns {Promise<object>} { status, rule_id?, rule_name?, action? }
+ */
+export function confirmToolExecution(token, conversationId, executionId) {
+  return apiFetch(
+    `${BASE}conversations/${conversationId}/tool-executions/confirm/`,
+    { token, method: 'POST', body: { execution_id: executionId } },
+  );
+}
+
+/**
+ * Decline a staged tool execution — nothing is written.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} executionId - staged ToolExecution id
+ * @returns {Promise<object>} { status: 'declined' }
+ */
+export function declineToolExecution(token, conversationId, executionId) {
+  return apiFetch(
+    `${BASE}conversations/${conversationId}/tool-executions/decline/`,
+    { token, method: 'POST', body: { execution_id: executionId } },
+  );
+}
+
+/**
  * List the selectable chat models for the model picker.
  * @param {string} token - JWT access token
  * @returns {Promise<object>} { models: [{ id, label, description, input_cost_per_1m, output_cost_per_1m, is_default }] }

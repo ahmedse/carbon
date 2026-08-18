@@ -483,3 +483,11 @@ AI_STORE_BACKEND = os.environ.get("AI_STORE_BACKEND", "inmemory")
 AI_CACHE_TTL_SECONDS = int(os.environ.get("AI_CACHE_TTL_SECONDS", 300))
 AI_MAX_CHAT_HISTORY = int(os.environ.get("AI_MAX_CHAT_HISTORY", 50))
 AI_RATE_LIMIT_PER_MINUTE = int(os.environ.get("AI_RATE_LIMIT_PER_MINUTE", 30))
+
+# Phase 21-A — per-user monthly token quota (soft warning at 80%, hard stop at 100%).
+AI_DEFAULT_MONTHLY_TOKEN_LIMIT = int(
+    os.environ.get("AI_DEFAULT_MONTHLY_TOKEN_LIMIT", 1_000_000)
+)
+AI_QUOTA_SOFT_WARNING_PCT = int(
+    os.environ.get("AI_QUOTA_SOFT_WARNING_PCT", 80)
+)

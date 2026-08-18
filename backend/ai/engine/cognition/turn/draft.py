@@ -37,11 +37,15 @@ class DraftWitness:
         user_info: dict | None = None,
         budget_tracker=None,  # P3.4: BudgetTracker for per-run token limits
         model: str | None = None,
+        tools: list[dict] | None = None,
     ) -> DraftResult:
         """Single LLM call to plan and draft a response.
 
         No tool-use loop — the loop stays in ReActLoop. This produces
         draft text and optional tool_calls that S5 will execute in parallel.
+
+        ``tools`` — optional OpenAI tool definitions; when provided the
+        planner can emit tool_calls for S5 to execute (e.g. create_dq_rule).
         """
         # P3.4: Check budget before LLM call — graceful fallback if exceeded
         if budget_tracker is not None and budget_tracker.exceeded:
@@ -72,13 +76,16 @@ class DraftWitness:
             messages=messages,
             temperature=0.3,
             model=model,
+            tools=tools,
         )
         draft_latency = (time.monotonic() - t0) * 1000
 
         text = result.get("content") or ""
         tool_calls = result.get("tool_calls") or []
         model_used = result.get("model", "")
-        tokens_used = result.get("input_tokens", 0) + result.get("output_tokens", 0)
+        prompt_tokens = result.get("input_tokens", 0) or 0
+        completion_tokens = result.get("output_tokens", 0) or 0
+        tokens_used = prompt_tokens + completion_tokens
 
         # Extract inline citations from the text
         claimed_citations = _extract_citations(text)
@@ -95,6 +102,8 @@ class DraftWitness:
             confidence=0.8,
             model_used=model_used,
             tokens_used=tokens_used,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
         )
 
 

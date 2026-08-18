@@ -28,6 +28,7 @@ from ai.intelligence import (
     NotAssistantMessageError,
     NotUserMessageError,
 )
+from ai.usage_service import QuotaExceededError
 from ai.serializers import (
     ArtifactCreateSerializer,
     ArtifactSerializer,
@@ -40,7 +41,12 @@ from ai.serializers import (
     MessageListSerializer,
     RetryMessageSerializer,
     SendMessageSerializer,
+    ToolExecutionActionSerializer,
 )
+
+import logging
+
+logger = logging.getLogger("carbon.ai.workspace_api")
 
 
 class WorkspaceConversationViewSet(viewsets.GenericViewSet):
@@ -166,6 +172,11 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 model=serializer.validated_data.get("model") or None,
             )
             return Response(result)
+        except QuotaExceededError as e:
+            return Response(
+                {"error": str(e), "error_code": "quota", "quota": e.quota},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
         except ValueError as e:
             return Response(
                 {"error": str(e)},
@@ -376,6 +387,216 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 {"error": str(e)},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="tool-executions/confirm",
+        url_name="confirm-tool-execution",
+    )
+    def confirm_tool_execution(self, request, pk=None):
+        """Confirm a staged tool execution (e.g. create_dq_rule proposal).
+
+        Executes the staged mutation in-process as the requesting user and
+        appends a grounded assistant message carrying the navigate action —
+        so the UI can "fly" to the created entity.  Only executions staged
+        inside this conversation and owned by the requesting user can be
+        confirmed (defense-in-depth: the executor re-checks ownership too).
+        """
+        from asgiref.sync import async_to_sync
+
+        from ai.engine_runtime import _carbon_instance_config
+        from ai.engine.core.database import get_session_factory
+        from ai.host_executor import CarbonHostExecutor
+        from ai.serializers import ToolExecutionActionSerializer
+
+        serializer = ToolExecutionActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        execution_id = serializer.validated_data["execution_id"]
+
+        conversation = self.intelligence._get_accessible_conversation(request.user, pk)
+        if conversation is None:
+            return Response(
+                {"error": f"Conversation {pk} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from ai.models import ToolExecution as ToolExecutionModel
+
+        try:
+            execution = ToolExecutionModel.objects.get(
+                id=execution_id, conversation_id=str(conversation.id)
+            )
+        except ToolExecutionModel.DoesNotExist:
+            return Response(
+                {"error": "Execution not found in this conversation."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        user_pk = str(request.user.pk)
+        if execution.host_user_id and execution.host_user_id != user_pk:
+            return Response(
+                {"error": "This execution belongs to another user."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if execution.status != "pending_confirmation":
+            return Response(
+                {"error": f"Execution is not pending confirmation (status: {execution.status})."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        instance_config = _carbon_instance_config(user_pk)
+        factory = get_session_factory("carbon")
+
+        def _run():
+            async def _confirm():
+                async with factory() as db:
+                    executor = CarbonHostExecutor(
+                        db=db,
+                        instance_config=instance_config,
+                        user_token=f"inproc:carbon:{user_pk}",
+                        host_user_id=user_pk,
+                    )
+                    return await executor.confirm_execution(
+                        execution_id, expected_host_user_id=user_pk
+                    )
+
+            return async_to_sync(_confirm)()
+
+        try:
+            result = _run()
+        except Exception as exc:  # noqa: BLE001 - fail-visible with detail
+            logger.warning("Tool execution confirm failed: %s", exc, exc_info=True)
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Persist the created-rule outcome as a grounded assistant message so
+        # the confirmation survives reloads and carries the navigate action to
+        # the frontend.  Runs in the sync view context (no event loop), so
+        # direct ORM writes are safe here.
+        data = (result or {}).get("data") or result or {}
+        rule_id = data.get("id") or ""
+        rule_name = data.get("name") or "rule"
+        if rule_id:
+            self.intelligence._save_assistant_message(
+                conversation,
+                f"✅ DQ rule '{rule_name}' created.",
+                metadata={
+                    "action": {
+                        "type": "navigate",
+                        "route": f"/dq/rules/{rule_id}",
+                        "label": "View rule",
+                        "summary": (
+                            f"Rule '{rule_name}' created — opened its detail page."
+                        ),
+                    }
+                },
+                status="completed",
+            )
+        return Response(
+            {
+                "status": "confirmed",
+                "rule_id": rule_id,
+                "rule_name": rule_name,
+                "action": (
+                    {
+                        "type": "navigate",
+                        "route": f"/dq/rules/{rule_id}",
+                        "label": "View rule",
+                        "summary": f"Rule '{rule_name}' created.",
+                    }
+                    if rule_id
+                    else None
+                ),
+            }
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="tool-executions/decline",
+        url_name="decline-tool-execution",
+    )
+    def decline_tool_execution(self, request, pk=None):
+        """Decline a staged tool execution — nothing is written."""
+        from asgiref.sync import async_to_sync
+
+        from ai.engine_runtime import _carbon_instance_config
+        from ai.engine.core.database import get_session_factory
+        from ai.host_executor import CarbonHostExecutor
+        from ai.serializers import ToolExecutionActionSerializer
+
+        serializer = ToolExecutionActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        execution_id = serializer.validated_data["execution_id"]
+
+        conversation = self.intelligence._get_accessible_conversation(request.user, pk)
+        if conversation is None:
+            return Response(
+                {"error": f"Conversation {pk} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from ai.models import ToolExecution as ToolExecutionModel
+
+        try:
+            execution = ToolExecutionModel.objects.get(
+                id=execution_id, conversation_id=str(conversation.id)
+            )
+        except ToolExecutionModel.DoesNotExist:
+            return Response(
+                {"error": "Execution not found in this conversation."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        user_pk = str(request.user.pk)
+        if execution.host_user_id and execution.host_user_id != user_pk:
+            return Response(
+                {"error": "This execution belongs to another user."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if execution.status != "pending_confirmation":
+            return Response(
+                {"error": f"Execution is not pending confirmation (status: {execution.status})."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        factory = get_session_factory("carbon")
+
+        def _run():
+            async def _decline():
+                async with factory() as db:
+                    executor = CarbonHostExecutor(
+                        db=db,
+                        instance_config=_carbon_instance_config(user_pk),
+                        user_token=f"inproc:carbon:{user_pk}",
+                        host_user_id=user_pk,
+                    )
+                    await executor.decline_execution(
+                        execution_id, expected_host_user_id=user_pk
+                    )
+
+            return async_to_sync(_decline)()
+
+        try:
+            _run()
+        except Exception as exc:  # noqa: BLE001 - fail-visible with detail
+            logger.warning("Tool execution decline failed: %s", exc, exc_info=True)
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Sync context (no event loop) — safe for direct ORM writes.
+        self.intelligence._save_assistant_message(
+            conversation,
+            "❌ Declined — nothing was created.",
+            metadata={},
+            status="completed",
+        )
+        return Response({"status": "declined"})
 
     @action(detail=True, methods=["get"], url_path="export", url_name="export")
     def export(self, request, pk=None):

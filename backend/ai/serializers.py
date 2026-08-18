@@ -138,3 +138,9 @@ class MessageFeedbackSerializer(serializers.Serializer):
                 {"correction_text": "A correction is required when outcome is 'corrected'."}
             )
         return attrs
+
+
+class ToolExecutionActionSerializer(serializers.Serializer):
+    """Body for confirming/declining a staged tool execution (Sprint fly-to-rule)."""
+
+    execution_id = serializers.CharField(required=True, allow_blank=False)

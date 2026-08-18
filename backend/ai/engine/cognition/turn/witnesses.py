@@ -40,6 +40,8 @@ class DraftResult:
     confidence: float = 0.8
     model_used: str = ""
     tokens_used: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
 
 
 # ── S4 — Critic ────────────────────────────────────────────────────────────────
@@ -83,6 +85,10 @@ class TurnLedger:
     total_latency_ms: float = 0.0
     total_tokens: int = 0
     total_llm_calls: int = 0
+    # Phase 21-A: prompt/completion split + resolved model for usage attribution.
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    model_used: str = ""
     created_at: str = ""
     # P3.2: Fan-out fields
     fan_out_used: bool = False

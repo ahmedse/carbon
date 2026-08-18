@@ -28,6 +28,7 @@ import ThumbUpAltOutlinedIcon from '@mui/icons-material/ThumbUpAltOutlined';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
 import { formatContextLines } from '../utils/aiProvenance';
+import { isSafeInternalRoute } from '../utils/navigation';
 import MarkdownMessage from './MarkdownMessage';
 import NLRuleTestCard from './NLRuleTestCard';
 import InvestigationCard from './InvestigationCard';
@@ -174,6 +175,8 @@ function AIMessageBubble({
   onRetry,
   onEdit,
   onDelete,
+  onConfirmExecution,
+  onDeclineExecution,
 }) {
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [showActions, setShowActions] = useState(false);
@@ -466,6 +469,65 @@ function AIMessageBubble({
 
   const structuredContent = renderStructuredContent();
 
+  // ── AI-driven action buttons (Sprint "fly to rule detail") ────────────
+  // The engine surfaces machine-readable outcomes on assistant messages:
+  //   * navigate action  → a Link the user can follow to the created/found entity
+  //   * pending_actions  → staged tool executions (e.g. create_dq_rule proposal)
+  //                        awaiting explicit user confirmation
+  // These are deterministic (never LLM prose), so a button only renders when a
+  // tool actually produced it.
+  const navigateAction = metadata.action || null;
+  const pendingActions = Array.isArray(metadata.pending_actions) ? metadata.pending_actions : [];
+  const showActionRow = Boolean(
+    !isUser && (navigateAction?.type === 'navigate' || pendingActions.length > 0),
+  );
+
+  const actionButtons = showActionRow ? (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+      {pendingActions.map((pending) => {
+        const executionId = pending.execution_id;
+        if (!executionId) return null;
+        const proposedName =
+          pending.proposed_rule?.name || pending.confirmation_message || 'this proposal';
+        return (
+          <React.Fragment key={executionId}>
+            <Button
+              size="small"
+              color="success"
+              variant="outlined"
+              disabled={!onConfirmExecution}
+              onClick={() => onConfirmExecution?.(executionId, pending)}
+              aria-label={`Confirm and create ${proposedName}`}
+            >
+              Confirm &amp; create
+            </Button>
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              disabled={!onDeclineExecution}
+              onClick={() => onDeclineExecution?.(executionId, pending)}
+              aria-label={`Decline ${proposedName}`}
+            >
+              Decline
+            </Button>
+          </React.Fragment>
+        );
+      })}
+      {navigateAction?.type === 'navigate' && isSafeInternalRoute(navigateAction.route) && (
+        <Button
+          size="small"
+          variant="contained"
+          component={Link}
+          to={navigateAction.route}
+          aria-label={navigateAction.label || 'Open'}
+        >
+          {navigateAction.label || 'Open'}
+        </Button>
+      )}
+    </Box>
+  ) : null;
+
   return (
     <Box
       sx={{
@@ -543,6 +605,8 @@ function AIMessageBubble({
         )}
 
         {structuredContent}
+
+        {actionButtons}
 
         {/* A3: outcome chip stays always-visible once set */}
         {!isUser && message.outcome && (
@@ -820,6 +884,8 @@ AIMessageBubble.propTypes = {
   onRerun: PropTypes.func,
   onChatAbout: PropTypes.func,
   onCreateRule: PropTypes.func,
+  onConfirmExecution: PropTypes.func,
+  onDeclineExecution: PropTypes.func,
 };
 
 export default AIMessageBubble;

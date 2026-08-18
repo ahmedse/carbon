@@ -49,6 +49,7 @@ from ai.domain import water  # noqa: F401  (registers the water domain)
 from ai.context_assembler import assemble_context
 from ai.engine.llm.provider import classify_llm_error
 from ai.generation_registry import GENERATIONS
+from ai.usage_service import QuotaExceededError
 from accounts.capabilities import has_capability
 from accounts.constants import VISIBILITY_ROLES
 from accounts.rbac_utils import get_allowed_org_unit_ids, user_is_global_admin
@@ -286,6 +287,17 @@ class CarbonIntelligence:
 
         return _serialize_conversation(conversation)
 
+    def _enforce_quota(self, user) -> dict[str, Any]:
+        """Request-time quota gate (Phase 21-A).
+
+        Returns the quota snapshot when the user is within budget; raises
+        :class:`QuotaExceededError` (``.code == "quota"``) when the monthly
+        token budget is exhausted.  Never mutates state.
+        """
+        from ai.usage_service import AIUsage
+
+        return AIUsage(user).check_quota()
+
     def send_message(
         self,
         user,
@@ -310,6 +322,9 @@ class CarbonIntelligence:
             )
         except AIConversation.DoesNotExist:
             raise ValueError(f"Conversation {conversation_id} not found.")
+
+        # Phase 21-A — request-time quota gate (before any user message is saved).
+        self._enforce_quota(user)
 
         # Auto-title from the first user message while the title is still default.
         self._maybe_autotitle(conversation, content)
@@ -404,6 +419,19 @@ class CarbonIntelligence:
         except AIConversation.DoesNotExist:
             raise ValueError(f"Conversation {conversation_id} not found.")
 
+        # Phase 21-A — request-time quota gate.  Emit a "quota" error frame
+        # before any user message is persisted or a generation is created.
+        try:
+            self._enforce_quota(user)
+        except QuotaExceededError as exc:
+            yield {
+                "type": "error",
+                "error": str(exc),
+                "error_code": "quota",
+                "quota": exc.quota,
+            }
+            return
+
         conv_id = str(conversation.id)
         GENERATIONS.start(conv_id)
         generation = AIGeneration.objects.create(
@@ -412,12 +440,18 @@ class CarbonIntelligence:
             status="running",
         )
 
-        def _finalize_generation(final_status: str) -> None:
+        def _finalize_generation(
+            final_status: str, usage: dict[str, Any] | None = None
+        ) -> None:
             generation.status = final_status
             update_fields = ["status"]
             if final_status == "cancelled":
                 generation.cancelled_at = timezone.now()
                 update_fields.append("cancelled_at")
+            if final_status == "completed":
+                generation.completed_at = timezone.now()
+                update_fields.append("completed_at")
+                update_fields += self._populate_generation_usage(generation, usage)
             generation.save(update_fields=update_fields)
 
         conv_type = conversation.conversation_type
@@ -546,8 +580,10 @@ class CarbonIntelligence:
                             res.get("content"),
                             res.get("follow_up_questions", []),
                             usage=usage,
+                            actions=res.get("actions"),
+                            pending_actions=res.get("pending_actions"),
                         )
-                        _finalize_generation("completed")
+                        _finalize_generation("completed", usage)
                         done_frame = {
                             "type": "done",
                             "conversation": self.get_conversation(user, conv_id),
@@ -1633,6 +1669,18 @@ class CarbonIntelligence:
         except AIConversation.DoesNotExist:
             raise ValueError(f"Conversation {conversation_id} not found.")
 
+        # Phase 21-A — request-time quota gate.
+        try:
+            self._enforce_quota(user)
+        except QuotaExceededError as exc:
+            yield {
+                "type": "error",
+                "error": str(exc),
+                "error_code": "quota",
+                "quota": exc.quota,
+            }
+            return
+
         turn = self._resolve_message(conversation, user_message_id)
         if turn.role != "user":
             raise NotUserMessageError("Only user messages can be retried.")
@@ -1678,12 +1726,18 @@ class CarbonIntelligence:
             status="running",
         )
 
-        def _finalize_generation(final_status: str) -> None:
+        def _finalize_generation(
+            final_status: str, usage: dict[str, Any] | None = None
+        ) -> None:
             generation.status = final_status
             update_fields = ["status"]
             if final_status == "cancelled":
                 generation.cancelled_at = timezone.now()
                 update_fields.append("cancelled_at")
+            if final_status == "completed":
+                generation.completed_at = timezone.now()
+                update_fields.append("completed_at")
+                update_fields += self._populate_generation_usage(generation, usage)
             generation.save(update_fields=update_fields)
 
         try:
@@ -1774,8 +1828,10 @@ class CarbonIntelligence:
                             res.get("content"),
                             res.get("follow_up_questions", []),
                             usage=usage,
+                            actions=res.get("actions"),
+                            pending_actions=res.get("pending_actions"),
                         )
-                        _finalize_generation("completed")
+                        _finalize_generation("completed", usage)
                         done_frame = {
                             "type": "done",
                             "conversation": self.get_conversation(user, conv_id),
@@ -2864,6 +2920,8 @@ class CarbonIntelligence:
             chat_response.status,
             chat_response.content,
             chat_response.follow_up_questions,
+            actions=chat_response.actions,
+            pending_actions=chat_response.pending_actions,
         )
 
     def _prepend_workspace_context(
@@ -3027,6 +3085,39 @@ class CarbonIntelligence:
             conversation=conv_ctx,
         ), None
 
+    @staticmethod
+    def _populate_generation_usage(generation, usage: dict[str, Any] | None) -> list[str]:
+        """Populate Phase 21-A usage fields on a generation, return field names.
+
+        Mutates ``generation`` in place (no save).  Cost is computed from the
+        Phase 20-A ``ModelCatalog`` rates — never ad hoc.  Returns the list of
+        field names that were changed so the caller can pass ``update_fields``.
+        """
+        from ai.models import ModelCatalog
+
+        if not usage:
+            return []
+        model_id = ModelCatalog.resolve_model_id(usage.get("model"))
+        prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+        completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+        total_tokens = int(usage.get("total_tokens", 0) or 0)
+        if not total_tokens:
+            total_tokens = prompt_tokens + completion_tokens
+        generation.model_id = model_id
+        generation.prompt_tokens = prompt_tokens
+        generation.completion_tokens = completion_tokens
+        generation.total_tokens = total_tokens
+        generation.cost = ModelCatalog.compute_cost(
+            model_id, prompt_tokens, completion_tokens
+        )
+        return [
+            "model_id",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "cost",
+        ]
+
     def _save_assistant_message(
         self,
         conversation,
@@ -3089,19 +3180,29 @@ class CarbonIntelligence:
         content: str | None,
         follow_up_questions: list[str],
         usage: dict[str, Any] | None = None,
+        actions: list[dict] | None = None,
+        pending_actions: list[dict] | None = None,
     ) -> dict[str, Any]:
         """Save AI response message and update conversation status."""
         if status == "provider_unavailable":
             return self._save_provider_unavailable_message(conversation)
 
         has_follow_ups = bool(follow_up_questions)
+        metadata: dict[str, Any] = {}
+        if has_follow_ups:
+            metadata["follow_up_questions"] = follow_up_questions
+        # Sprint "fly to rule detail": machine-readable tool outcomes drive
+        # the UI buttons (navigate → "View rule", staged → confirm). Only real
+        # tool results ever populate these — never LLM prose.
+        if actions:
+            metadata["action"] = actions[-1]
+        if pending_actions:
+            metadata["pending_actions"] = pending_actions
 
         return self._save_assistant_message(
             conversation,
             content or "",
-            metadata={
-                "follow_up_questions": follow_up_questions,
-            } if has_follow_ups else {},
+            metadata=metadata,
             status="needs_input" if has_follow_ups else "completed",
             usage=usage,
         )

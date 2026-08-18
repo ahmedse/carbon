@@ -55,6 +55,23 @@ class TurnPipelineRunner:
         self.memory_manager = memory_manager
         self.executor = executor
         self.db = db
+        # Curated tool set exposed to the S3 planner when an executor is
+        # wired. Mutation/confirmation tools (create_dq_rule) plus read tools
+        # that ground answers; host-API/misc tools are excluded so the planner
+        # never wastes turns on endpoints it cannot reach from chat.
+        self._draft_tools: list[dict] | None = None
+        if executor is not None:
+            try:
+                from ai.engine.agent.tools import get_tool_definitions
+
+                allow = {"create_dq_rule", "search_knowledge", "get_entity_details"}
+                self._draft_tools = [
+                    d for d in get_tool_definitions()
+                    if d.get("function", {}).get("name") in allow
+                ]
+            except Exception:  # noqa: BLE001 - tools are best-effort, never fatal
+                logger.warning("Could not load draft tool definitions", exc_info=True)
+                self._draft_tools = None
 
     async def run(
         self,
@@ -385,6 +402,24 @@ class TurnPipelineRunner:
             conversation_id=conversation_id,
             instance_id=instance_id,
         )
+
+        # Tool-aware drafting: when an executor is wired, expose the curated
+        # tool set to the LLM and append the anti-fabrication grounding rules.
+        draft_tools = self._draft_tools if self.executor is not None else None
+        if draft_tools:
+            system_prompt = (
+                f"{system_prompt}\n\n"
+                "GROUNDING RULES — follow them exactly:\n"
+                "- You have tools available. Use them to do real work instead "
+                "of guessing.\n"
+                "- NEVER claim an action succeeded (e.g. 'rule created') unless "
+                "a tool result confirms it.\n"
+                "- The create_dq_rule tool only STAGES a proposal — it returns "
+                "a confirmation execution. Nothing is written until the user "
+                "confirms. Tell the user a confirmation button appeared; do "
+                "NOT say the rule was created.\n"
+                "- If a tool errors, report the error plainly."
+            )
         draft = await draft_witness.draft(
             instance_id=instance_id,
             conversation_id=conversation_id,
@@ -395,10 +430,17 @@ class TurnPipelineRunner:
             user_info=user_info,
             budget_tracker=budget,
             model=model,
+            tools=draft_tools,
         )
         ledger.draft = draft
         total_tokens += draft.tokens_used
         total_llm_calls += 1  # S3 is one direct route_chat() call
+
+        # Phase 21-A: carry the prompt/completion split + resolved model for
+        # per-generation usage attribution (written once at completion).
+        ledger.prompt_tokens += draft.prompt_tokens
+        ledger.completion_tokens += draft.completion_tokens
+        ledger.model_used = draft.model_used or ledger.model_used
 
         # P3.4: Consume budget for S3 draft LLM call
         if budget is not None:

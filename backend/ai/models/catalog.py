@@ -106,3 +106,62 @@ class ModelCatalog(models.Model):
     def __str__(self):
         flag = " (deprecated)" if self.deprecated else ""
         return f"{self.display_name} [{self.tier}]{flag}"
+
+    # ── Phase 21-A: cost + attribution resolution ────────────────────────
+    # The catalog is the single source of truth for pricing.  Cost is read
+    # from here, never recomputed ad hoc from the router's LLM_COST_MODELS
+    # JSON.  ``resolve_model_id`` maps a concrete provider model string
+    # (e.g. "anthropic/claude-haiku-4.5") to its stable catalog slug.
+
+    @classmethod
+    def resolve_model_id(cls, model: str | None) -> str:
+        """Map a concrete provider model string → stable ``model_id`` slug.
+
+        Matches ``model_id`` or ``version`` case-insensitively, then falls
+        back to the trailing slug (the part after the last ``/``).  Unknown
+        models are returned verbatim so attribution never loses the raw id.
+        """
+        if not model:
+            return ""
+        key = (model or "").strip()
+        if not key:
+            return ""
+        row = cls.objects.filter(
+            models.Q(model_id__iexact=key) | models.Q(version__iexact=key)
+        ).first()
+        if row is not None:
+            return row.model_id
+        slug = key.rsplit("/", 1)[-1]
+        row = cls.objects.filter(model_id__iexact=slug).first()
+        if row is not None:
+            return row.model_id
+        return key
+
+    @classmethod
+    def compute_cost(
+        cls,
+        model_id: str | None,
+        prompt_tokens: int,
+        completion_tokens: int,
+    ) -> Decimal:
+        """Compute USD cost from catalog input/output rates.
+
+        Returns ``Decimal("0.0")`` when the model is unknown.  This is the
+        ONLY cost computation path for persisted usage.
+        """
+        if not model_id:
+            return Decimal("0.0")
+        row = cls.objects.filter(model_id__iexact=model_id).first()
+        if row is None:
+            return Decimal("0.0")
+        in_cost = (Decimal(int(prompt_tokens or 0)) / Decimal("1000000")) * row.input_cost_per_1m
+        out_cost = (Decimal(int(completion_tokens or 0)) / Decimal("1000000")) * row.output_cost_per_1m
+        return (in_cost + out_cost).quantize(Decimal("0.000001"))
+
+    @classmethod
+    def resolve_tier(cls, model_id: str | None) -> str:
+        """Return the catalog tier for a model slug, or ``"unknown"``."""
+        if not model_id:
+            return "unknown"
+        row = cls.objects.filter(model_id__iexact=model_id).first()
+        return row.tier if row is not None else "unknown"

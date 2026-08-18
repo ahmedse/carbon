@@ -474,6 +474,13 @@ class ChatResponse:
     follow_up_questions: list[str] = field(default_factory=list)
     error: dict[str, str] | None = None
     execution_ms: int = 0
+    # Machine-readable tool outcomes (Sprint "fly to rule detail"):
+    #  * actions — navigate-style actions derived from executed tools, e.g.
+    #    [{"type": "navigate", "route": "/dq/rules/1271", "label": ..., "summary": ...}]
+    #  * pending_actions — staged, confirmation-gated proposals awaiting the
+    #    user, e.g. [{"execution_id": ..., "tool": "create_dq_rule", ...}]
+    actions: list[dict] = field(default_factory=list)
+    pending_actions: list[dict] = field(default_factory=list)
 
 
 # ── AIProvider ABC ──────────────────────────────────────────────────────

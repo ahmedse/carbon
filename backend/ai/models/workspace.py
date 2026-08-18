@@ -8,9 +8,17 @@ These models predate Phase 2 and live alongside the 49 vendored engine tables.
 """
 
 import uuid
+from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+
+# Per-user monthly token budget default. Overridable via settings
+# ``AI_DEFAULT_MONTHLY_TOKEN_LIMIT`` (see config/settings.py).
+DEFAULT_MONTHLY_TOKEN_LIMIT = getattr(
+    settings, "AI_DEFAULT_MONTHLY_TOKEN_LIMIT", 1_000_000
+)
 
 
 class AIConversation(models.Model):
@@ -323,6 +331,12 @@ class AIGeneration(models.Model):
     token = models.CharField(max_length=64, blank=True, default="")
     started_at = models.DateTimeField(auto_now_add=True)
     cancelled_at = models.DateTimeField(null=True, blank=True, default=None)
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Set once at completion; the aggregation window key (period).",
+    )
     status = models.CharField(
         max_length=20,
         default="running",
@@ -334,8 +348,118 @@ class AIGeneration(models.Model):
         ],
     )
 
+    # ── Phase 21-A: usage is a first-class generation attribute ──────────
+    # Written once at completion; never recomputed from prompt text later.
+    model_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Stable ModelCatalog.model_id slug (usage attribution).",
+    )
+    prompt_tokens = models.PositiveIntegerField(default=0)
+    completion_tokens = models.PositiveIntegerField(default=0)
+    total_tokens = models.PositiveIntegerField(default=0)
+    cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=6,
+        default=Decimal("0.0"),
+        help_text="USD cost computed from ModelCatalog rates (never ad hoc).",
+    )
+
     class Meta:
         app_label = "ai"
+        indexes = [
+            models.Index(
+                fields=["conversation", "status", "completed_at"],
+                name="ai_gen_conv_status_done_idx",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.conversation_id} [{self.status}]"
+
+
+class AIUserProfile(models.Model):
+    """Per-user AI settings — quota budget + reset rule (Phase 21-A).
+
+    A durable 1:1 extension of the auth user.  Phase 15 introduced profile
+    *injection* (``_user_profile_message``) but never a durable model; this
+    closes that gap and is the target Phase 22-A extends with preferences.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ai_profile",
+    )
+    monthly_token_limit = models.BigIntegerField(
+        default=DEFAULT_MONTHLY_TOKEN_LIMIT,
+        help_text="Monthly token budget (soft warning at 80%, hard stop at 100%).",
+    )
+    quota_reset_day = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(28)],
+        help_text="Day of month (1-28) the monthly token quota resets.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "ai"
+        verbose_name = "AI User Profile"
+        verbose_name_plural = "AI User Profiles"
+
+    def __str__(self):
+        return f"{self.user_id} (limit={self.monthly_token_limit})"
+
+    def quota_reset_at(self, now=None) -> "datetime":
+        """Return the next reset datetime (day ``quota_reset_day`` of month).
+
+        If the reset day has already passed this month, returns next month.
+        Day is clamped to 28 to stay valid in every month.
+        """
+        from django.utils import timezone
+
+        now = now or timezone.now()
+        day = max(1, min(int(self.quota_reset_day), 28))
+        year, month = now.year, now.month
+        try:
+            reset = now.replace(
+                year=year, month=month, day=day, hour=0, minute=0,
+                second=0, microsecond=0,
+            )
+        except ValueError:  # pragma: no cover - day clamped to <=28
+            reset = now.replace(
+                year=year, month=month, day=28, hour=0, minute=0,
+                second=0, microsecond=0,
+            )
+        if reset <= now:
+            # Next month's reset day.
+            if month == 12:
+                year, month = year + 1, 1
+            else:
+                month += 1
+            reset = reset.replace(year=year, month=month, day=day)
+        return reset
+
+    def quota_window_start(self, now=None) -> "datetime":
+        """Return the start of the current billing window (most recent reset)."""
+        from django.utils import timezone
+
+        now = now or timezone.now()
+        day = max(1, min(int(self.quota_reset_day), 28))
+        try:
+            candidate = now.replace(
+                day=day, hour=0, minute=0, second=0, microsecond=0,
+            )
+        except ValueError:  # pragma: no cover - day clamped to <=28
+            candidate = now.replace(
+                day=28, hour=0, minute=0, second=0, microsecond=0,
+            )
+        if candidate > now:
+            # This month's reset is still ahead → window started last month.
+            if now.month == 1:
+                candidate = candidate.replace(year=now.year - 1, month=12)
+            else:
+                candidate = candidate.replace(month=now.month - 1)
+        return candidate

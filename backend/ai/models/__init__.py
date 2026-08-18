@@ -6,7 +6,13 @@ Re-exports the existing workspace models plus the 49 vendored engine tables
 
 from .base import AppScopeMixin, generate_uuid
 from .catalog import ModelCatalog
-from .workspace import AIArtifact, AIConversation, AIGeneration, AIMessage
+from .workspace import (
+    AIArtifact,
+    AIConversation,
+    AIGeneration,
+    AIMessage,
+    AIUserProfile,
+)
 from .core import (
     Agent,
     AgentHandoff,
@@ -67,6 +73,7 @@ __all__ = [
     "AIConversation",
     "AIGeneration",
     "AIMessage",
+    "AIUserProfile",
     "AppScopeMixin",
     "generate_uuid",
     "ModelCatalog",

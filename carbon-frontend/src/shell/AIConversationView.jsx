@@ -1,6 +1,7 @@
 // src/shell/AIConversationView.jsx
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
+import { Navigate } from 'react-router-dom';
 import { Alert, Box, Button, Chip, IconButton, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import BoltIcon from '@mui/icons-material/Bolt';
@@ -12,7 +13,9 @@ import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
   acceptSuggestion,
+  confirmToolExecution,
   createArtifact,
+  declineToolExecution,
   deleteMessage,
   exportConversation,
   getConversation,
@@ -26,6 +29,7 @@ import {
   updateConversation,
 } from '../api/aiWorkspace';
 import { createDQRule } from '../api/dq';
+import { isSafeInternalRoute } from '../utils/navigation';
 import AIMessageBubble from './AIMessageBubble';
 import AIContextPanel from './AIContextPanel';
 import AIInputBar from './AIInputBar';
@@ -55,6 +59,7 @@ function AIConversationView({ conversationId }) {
   const { notify, notifyFromError } = useNotification();
   const { executeMode, setExecuteMode } = useExecuteMode();
   const { transferTask } = useAITaskTransfer();
+  const [pendingRoute, setPendingRoute] = useState(null);
   // CBAC: accepting/rejecting DQ suggestions writes rules → requires dq:manage_rules.
   const canManageRules = isGlobalAdminFlag || (userCapabilities || []).some(
     (c) => (typeof c === 'string' ? c : c?.key) === DQ_MANAGE_RULES
@@ -733,6 +738,50 @@ function AIConversationView({ conversationId }) {
     [token, conversationId, messages, notifyFromError],
   );
 
+  // Sprint "fly to rule detail" — confirm a staged tool execution (e.g. the
+  // create_dq_rule proposal). The endpoint runs the mutation in-process as the
+  // current user, appends a grounded assistant message, and returns the
+  // created entity + navigate action; we reload so the new message + button
+  // appear, then fly to the entity.
+  const handleConfirmExecution = useCallback(
+    async (executionId) => {
+      if (!conversationId || !executionId) return;
+      setActionBusyId(`confirm-${executionId}`);
+      try {
+        const result = await confirmToolExecution(token, conversationId, executionId);
+        // Reload so the grounded assistant confirmation message shows up.
+        await load();
+        const route = result?.action?.route;
+        if (route && isSafeInternalRoute(route)) {
+          setPendingRoute(route);
+        } else if (result?.rule_id) {
+          setPendingRoute(`/dq/rules/${result.rule_id}`);
+        }
+      } catch (err) {
+        notifyFromError(err, 'Could not confirm the action');
+      } finally {
+        setActionBusyId(null);
+      }
+    },
+    [token, conversationId, load, notifyFromError],
+  );
+
+  const handleDeclineExecution = useCallback(
+    async (executionId) => {
+      if (!conversationId || !executionId) return;
+      setActionBusyId(`decline-${executionId}`);
+      try {
+        await declineToolExecution(token, conversationId, executionId);
+        await load();
+      } catch (err) {
+        notifyFromError(err, 'Could not decline the action');
+      } finally {
+        setActionBusyId(null);
+      }
+    },
+    [token, conversationId, load, notifyFromError],
+  );
+
   const updateMessageInState = useCallback((updatedMessage) => {
     if (!updatedMessage?.id) return;
     setMessages((prev) =>
@@ -947,6 +996,8 @@ function AIConversationView({ conversationId }) {
           : null;
 
   return (
+    <>
+      {pendingRoute && <Navigate to={pendingRoute} replace />}
     <Box sx={{ display: 'flex', flexDirection: 'row', height: '100%', overflow: 'hidden' }}>
     <Box
       sx={{
@@ -1061,6 +1112,8 @@ function AIConversationView({ conversationId }) {
             onSaveReportArtifact={handleSaveReportArtifact}
             onExportReport={handleExportReport}
             onRedraftReport={handleRedraftReport}
+            onConfirmExecution={handleConfirmExecution}
+            onDeclineExecution={handleDeclineExecution}
             onRetry={isOwner ? handleRetryMessage : undefined}
             onEdit={isOwner ? handleEditMessage : undefined}
             onDelete={isOwner ? handleDeleteMessage : undefined}
@@ -1274,6 +1327,7 @@ function AIConversationView({ conversationId }) {
       </Box>
       </Box>  {/* inner column */}
     </Box>
+    </>
   );
 }
 

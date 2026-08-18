@@ -78,12 +78,24 @@ async def _run_chat(
     task calls ``TurnPipelineRunner.run`` directly (no HTTP), writing
     durable ``TurnLedgerRow`` / ``LLMCallLog`` rows through the configured
     ``ai.store`` backend (DjangoStore in production).
+
+    Since Sprint "fly to rule detail", the chat turn also carries the
+    authenticated user + a Carbon instance config so the engine's tool layer
+    (``create_dq_rule`` plugin, navigation) runs with real context:
+      * ``host_user_id`` — Django user PK (from the chat Scope); the in-process
+        host executor stages + confirms mutations as this user.
+      * ``instance_config`` — display/persona/navigation_routes for the system
+        prompt, and the executor's route table.
+    Tool outcomes are surfaced deterministically as ``actions`` (navigate) and
+    ``pending_actions`` (staged confirmations) — never as LLM prose.
     """
     from ai.engine.cognition.turn.runner import TurnPipelineRunner
     from ai.engine.core.database import get_session_factory
+    from ai.host_executor import CarbonHostExecutor
 
     message = payload.get("message") or ""
     model = payload.get("model")
+    host_user_id = payload.get("host_user_id") or None
     conversation = payload.get("conversation_history") or {}
     conversation_id = (
         conversation.get("conversation_id")
@@ -91,26 +103,197 @@ async def _run_chat(
     )
     history_messages = conversation.get("messages") or []
 
+    instance_config = _carbon_instance_config(host_user_id)
+
     factory = get_session_factory(instance_id)
     async with factory() as db:
-        runner = TurnPipelineRunner(db=db)
+        executor = CarbonHostExecutor(
+            db=db,
+            instance_config=instance_config,
+            user_token=f"inproc:carbon:{host_user_id}" if host_user_id else None,
+            host_user_id=host_user_id,
+        )
+        runner = TurnPipelineRunner(db=db, executor=executor)
         response, ledger = await runner.run(
             instance_id=instance_id,
             conversation_id=conversation_id,
             user_message=message,
+            host_user_id=host_user_id,
             conversation_history=history_messages,
+            instance_config=instance_config,
             stream_callback=stream_callback,
             model=model,
         )
+
+        # Deterministic, tool-grounded outcome surfacing — the assistant text
+        # is LLM prose, so success/failure claims ride here, not in prose.
+        completed_tools = getattr(getattr(ledger, "execution", None), "completed_tools", None) or []
+        actions, pending_actions = _extract_tool_actions(completed_tools)
+        grounded_note = _grounded_outcome_note(completed_tools)
+        content = response.text
+        if grounded_note:
+            content = f"{content}\n\n{grounded_note}" if content else grounded_note
+
         return {
             "status": "completed",
             "task_id": task_id,
             "result": {
-                "content": response.text,
+                "content": content,
                 "follow_up_questions": list(response.follow_ups or []),
                 "execution_ms": int(ledger.total_latency_ms or 0),
+                "actions": actions,
+                "pending_actions": pending_actions,
+                # Phase 21-A: surface per-turn usage so the workspace layer
+                # can persist it on the generation at completion (cost is
+                # computed from the ModelCatalog, never here).
+                "usage": {
+                    "prompt_tokens": int(ledger.prompt_tokens or 0),
+                    "completion_tokens": int(ledger.completion_tokens or 0),
+                    "total_tokens": int(ledger.total_tokens or 0),
+                    "model": ledger.model_used or "",
+                },
             },
         }
+
+
+# ── Chat tool-action surfacing (Sprint "fly to rule detail") ──────────────
+
+
+def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
+    """Carbon defaults the engine consumes for the chat turn.
+
+    Loaded from ``instances/carbon/instance.yaml`` when present, else a
+    built-in Carbon defaults dict.  Supplies the system prompt's
+    display/persona/navigation knowledge and the executor's route table.
+    """
+    config: dict[str, Any] = {
+        "display_name": "Carbon Data Trust Platform",
+        "description": (
+            "Data trust platform for catalogs, data quality, emissions and "
+            "data-sharing workflows."
+        ),
+        "persona": (
+            "A precise, grounded data-platform assistant. Never claim an action "
+            "succeeded unless a tool result confirmed it."
+        ),
+        "api_catalog": [],
+        "navigation_routes": [
+            {
+                "name": "dq_rule_detail",
+                "path": "/dq/rules/{id}",
+                "description": "Data-quality rule detail page.",
+            },
+            {
+                "name": "dq_rule_results",
+                "path": "/dq/rules/{id}/results",
+                "description": "Data-quality rule results page.",
+            },
+        ],
+        "domain_topics": ["data quality", "data catalog", "emissions", "governance"],
+        "host_user_id": host_user_id,
+    }
+    try:
+        from ai.engine.core.archetypes import load_instance_config
+
+        loaded = load_instance_config("carbon")
+        if isinstance(loaded, dict) and loaded.get("display_name"):
+            config.update(loaded)
+    except Exception:  # noqa: BLE001 - fall back to Carbon defaults
+        pass
+    return config
+
+
+def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Derive machine-readable actions from the turn's executed tools.
+
+    Returns ``(actions, pending_actions)``:
+      * ``actions`` — navigate-style actions (``{"action": "navigate"}`` in a
+        tool result); deduped by route, last occurrence wins.
+      * ``pending_actions`` — staged, confirmation-gated proposals
+        (``requires_confirmation`` + ``execution_id``) awaiting the user.
+    """
+    actions: list[dict] = []
+    pending_actions: list[dict] = []
+    seen_routes: set[str] = set()
+
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+
+        if data.get("action") == "navigate":
+            route = str(data.get("route") or "").strip()
+            if not route or route in seen_routes:
+                continue
+            seen_routes.add(route)
+            actions.append({
+                "type": "navigate",
+                "route": route,
+                "label": str(data.get("label") or "Open"),
+                "summary": str(data.get("summary") or ""),
+            })
+
+        if data.get("requires_confirmation") and data.get("execution_id"):
+            proposed = data.get("proposed_rule") or {}
+            name = str(proposed.get("name") or "").strip() or "rule"
+            rtype = str(proposed.get("type") or "").strip()
+            pending_actions.append({
+                "execution_id": str(data["execution_id"]),
+                "tool": str(item.get("tool_name") or ""),
+                "confirmation_message": (
+                    str(data.get("confirmation_message") or "")
+                    or f"Create DQ rule '{name}' ({rtype})?"
+                ),
+                "proposed_rule": proposed,
+                "validation": data.get("validation"),
+            })
+
+    return actions, pending_actions
+
+
+def _grounded_outcome_note(completed_tools: list[dict]) -> str:
+    """Deterministic summary of what the tools actually did (anti-fabrication).
+
+    The LLM drafts text before tools run; without this patch a hallucinated
+    "created successfully" could stand.  This note only reports real tool
+    outcomes — staging proposals and failures — appended to the assistant text.
+    """
+    lines: list[str] = []
+    for item in completed_tools or []:
+        if not isinstance(item, dict):
+            continue
+        tool = str(item.get("tool_name") or "tool")
+        if item.get("error"):
+            lines.append(f"⚠️ {tool}: {item['error']}")
+            continue
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("error"):
+            lines.append(f"⚠️ {tool}: {data['error']}")
+            continue
+        if data.get("requires_confirmation"):
+            proposed = data.get("proposed_rule") or {}
+            name = str(proposed.get("name") or "").strip() or "rule"
+            lines.append(
+                f"✅ Proposed DQ rule '{name}' validated and staged — nothing "
+                "was created yet. Confirm with the button below to create it."
+            )
+        elif data.get("action") == "navigate":
+            summary = str(data.get("summary") or data.get("label") or "").strip()
+            if summary:
+                lines.append(f"✅ {summary}")
+    return "\n\n".join(lines)
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────

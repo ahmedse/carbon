@@ -458,22 +458,33 @@ class PulseProvider(AIProvider):
 
     # ── 10. chat (multi-turn workspace) ───────────────────────────────
 
-    def chat(self, request: ChatRequest) -> ChatResponse:
-        """Send a chat message with full conversation history.
+    def _chat_payload(self, request: ChatRequest) -> dict[str, Any]:
+        """Build the engine payload for a chat turn (shared by chat/chat_stream).
 
-        AI CONTRACT §10: Conversations are multi-turn; Carbon sends
-        full history on every request. Provider is stateless.
+        Carries the authenticated user's identifier so the engine's in-process
+        host executor stages + confirms mutations as that user.
         """
         payload: dict[str, Any] = {
             "message": request.message,
         }
         if request.model:
             payload["model"] = request.model
+        if request.scope is not None and request.scope.user_identifier:
+            payload["host_user_id"] = str(request.scope.user_identifier)
         if request.conversation is not None:
             payload["conversation_history"] = {
                 "conversation_id": request.conversation.conversation_id,
                 "messages": request.conversation.messages,
             }
+        return payload
+
+    def chat(self, request: ChatRequest) -> ChatResponse:
+        """Send a chat message with full conversation history.
+
+        AI CONTRACT §10: Conversations are multi-turn; Carbon sends
+        full history on every request. Provider is stateless.
+        """
+        payload = self._chat_payload(request)
 
         data = dispatch_task(T_CHAT, payload, timeout=15)
 
@@ -484,6 +495,8 @@ class PulseProvider(AIProvider):
                 content=result.get("content"),
                 follow_up_questions=result.get("follow_up_questions", []),
                 execution_ms=result.get("execution_ms", 0),
+                actions=result.get("actions") or [],
+                pending_actions=result.get("pending_actions") or [],
             )
 
         return ChatResponse(
@@ -501,16 +514,7 @@ class PulseProvider(AIProvider):
           ("done", result)   — terminal success (same dict shape ``chat()`` reads)
           ("error", message) — terminal failure
         """
-        payload: dict[str, Any] = {
-            "message": request.message,
-        }
-        if request.model:
-            payload["model"] = request.model
-        if request.conversation is not None:
-            payload["conversation_history"] = {
-                "conversation_id": request.conversation.conversation_id,
-                "messages": request.conversation.messages,
-            }
+        payload = self._chat_payload(request)
 
         yield from dispatch_task_stream(T_CHAT, payload)
 
