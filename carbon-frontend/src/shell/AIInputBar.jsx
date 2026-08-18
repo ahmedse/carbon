@@ -3,17 +3,23 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types';
 import {
   Box,
+  Button,
+  Chip,
   CircularProgress,
   IconButton,
   List,
   ListItemButton,
   Paper,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import StopCircleIcon from '@mui/icons-material/StopCircle';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../api/api';
 import { API_ROUTES } from '../config';
@@ -65,6 +71,8 @@ function AIInputBar({
   onStop,
   conversationStatus,
   onMentionsChange,
+  mode = 'ask',
+  onModeChange,
 }) {
   const { token } = useAuth();
   const { executeMode } = useExecuteMode();
@@ -174,8 +182,21 @@ function AIInputBar({
     if (!val) return;
     onSend(val, resolvedMentions);
     setValue('');
-    setResolvedMentions([]);
+    // Context persists across turns (VS Code Copilot-style) — the composer
+    // keeps attached mentions until the user clears them, so "restore
+    // context" keeps working for follow-up questions.
   }, [value, onSend, resolvedMentions]);
+
+  const removeMention = useCallback((kind, id) => {
+    setResolvedMentions((prev) => prev.filter((m) => !(m.kind === kind && m.id === id)));
+  }, []);
+
+  const handleModeChange = useCallback(
+    (event, nextMode) => {
+      if (nextMode) onModeChange?.(nextMode);
+    },
+    [onModeChange],
+  );
 
 
 
@@ -195,7 +216,9 @@ function AIInputBar({
   );
 
   const placeholder = working
-    ? PLACEHOLDER_MAP.working
+    ? mode === 'agent'
+      ? 'Agent mode — new directions interrupt the current run (Enter)…'
+      : PLACEHOLDER_MAP.working
     : conversationStatus === 'needs_input'
       ? PLACEHOLDER_MAP.needs_input
       : PLACEHOLDER_MAP.default;
@@ -217,6 +240,75 @@ function AIInputBar({
       }}
     >
 
+
+      {/* Composer chrome: Ask/Agent mode selector + keyboard hint (Copilot-style) */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+          px: 1.5,
+          pt: 1,
+        }}
+      >
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={mode}
+          onChange={handleModeChange}
+          aria-label="Composer mode"
+        >
+          <ToggleButton value="ask" aria-label="Ask mode" sx={{ fontSize: '0.6875rem', px: 1, py: 0.25 }}>
+            <AutoAwesomeIcon sx={{ fontSize: 12, mr: 0.5 }} />
+            Ask
+          </ToggleButton>
+          <ToggleButton value="agent" aria-label="Agent mode" sx={{ fontSize: '0.6875rem', px: 1, py: 0.25 }}>
+            <AutoFixHighIcon sx={{ fontSize: 12, mr: 0.5 }} />
+            Agent
+          </ToggleButton>
+        </ToggleButtonGroup>
+        <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.625rem' }}>
+          Enter to send · Shift+Enter for new line
+        </Typography>
+      </Box>
+
+      {/* Persistent context chips — attached mentions survive across turns
+          until explicitly removed (restore context). */}
+      {resolvedMentions.length > 0 && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            flexWrap: 'wrap',
+            px: 1.5,
+            pt: 0.75,
+          }}
+        >
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
+            Context
+          </Typography>
+          {resolvedMentions.map((m) => (
+            <Chip
+              key={`${m.kind}-${m.id}`}
+              size="small"
+              variant="outlined"
+              label={`#${m.kind} ${m.name}`}
+              onDelete={() => removeMention(m.kind, m.id)}
+              aria-label={`Remove context ${m.kind} ${m.name}`}
+            />
+          ))}
+          <Button
+            size="small"
+            onClick={() => setResolvedMentions([])}
+            aria-label="Clear all context"
+            sx={{ fontSize: '0.625rem', minHeight: 20, p: 0.5 }}
+          >
+            Clear
+          </Button>
+        </Box>
+      )}
 
       <Box
         sx={{
@@ -367,6 +459,8 @@ AIInputBar.propTypes = {
   onStop: PropTypes.func,
   conversationStatus: PropTypes.string,
   onMentionsChange: PropTypes.func,
+  mode: PropTypes.oneOf(['ask', 'agent']),
+  onModeChange: PropTypes.func,
 };
 
 export default AIInputBar;

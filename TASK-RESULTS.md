@@ -929,3 +929,57 @@ Applying ai.0016_aiuserprofile_auto_title_and_more... OK
 - **Duplicate-method anchor (append difficulty):** `workspace_api.py` has byte-identical `export`/`summarize` blocks in two viewsets; the append anchored on the artifact viewset's `summarize`+`export` tail (unique because the artifact viewset has no `suggestions`/`resume` actions), so `UserProfileView` landed after the artifact viewset without touching the conversation viewset.
 - **Stale per-worker test DBs:** the full suite initially failed with `column ai_aiuserprofile.default_model_id_id does not exist` on workers gw1..gw7 (pre-migration schema); dropped `test_carbon_dev_gw0..7` and reran — 447 passed on the fresh schema.
 - **Resolution-order rule must stay explicit:** the profile NEVER overrides a per-message override (per-message is the highest tier). Future workers touching `_resolve_preferred_model` or the model-picker wiring must preserve that order — swapping profile and per-message is a correctness bug. The rule is written into the code comments at `workspace.py` (field block) and `intelligence.py` (`_resolve_preferred_model`).
+
+---
+
+## [2026-08-18] Frontend Worker — Phase 21-C: VS Code Copilot-Style Chat UX
+
+### Summary
+All gates passed. 2 files modified, 2 test files created. 10 new tests added; full suite 510 passed, 12 pre-existing failures (unchanged baseline — AIArtifacts 2 / AIMessageBubble.feedback 5 / transparency 1 / AISharedThreads 4), build OK. The AI chat now mirrors VS Code Copilot Chat UX: **Ask/Agent composer mode selector** (Agent = steer: interrupt + redirect via the existing `handleSteer` path; Ask = queue while working), **persistent context chips** above the composer (attached `#mentions` survive across turns until explicitly removed — "restore context"), **older-messages collapse** on long threads (threads > 14 messages open at the recent messages behind a "Show N older messages" toggle, infinite scroll still pages into the collapsed region), and a **Session divider** at the top of the thread.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Composer mode selector (Ask/Agent) | ✅ | `AIInputBar` — `ToggleButtonGroup` (Ask=AutoAwesome / Agent=AutoFixHigh), keyboard hint ("Enter to send · Shift+Enter for new line"), Agent-mode working placeholder ("new directions interrupt the current run") |
+| 2 | Steering wiring | ✅ | `AIConversationView` — `sendMode` promoted from const to state; `mode='agent'` ↔ `sendMode='steer'` (stop + send), `mode='ask'` ↔ `'queue'`; `handleInputSend`/`handleSteer` untouched (already mode-aware) |
+| 3 | Restore context (persistent mention chips) | ✅ | `handleSubmit` no longer clears `resolvedMentions`; chip row with per-chip delete + Clear-all; `onSend` carries mentions forward |
+| 4 | Older-messages expand/collapse | ✅ | `OLDER_MESSAGES_COLLAPSE_AT = 14`; `showOlder` toggle + MUI `Collapse`; session divider "Session" at thread top; `loadOlder` prepend still works |
+| 5 | Tests | ✅ | `AIInputBar.mode.test.jsx` (7) + `AIConversationView.collapse.test.jsx` (3); existing AIInputBar/AIConversationView suites untouched and green (25/25 targeted) |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `carbon-frontend/src/shell/AIInputBar.jsx` | Composer chrome: mode selector, keyboard hint, persistent context chip row, Agent placeholder, `mode`/`onModeChange` props |
+| MODIFY | `carbon-frontend/src/shell/AIConversationView.jsx` | `sendMode` state, `showOlder` state + `Collapse` region + toggle button, Session divider, mode props to `AIInputBar` |
+| CREATE | `carbon-frontend/src/__tests__/AIInputBar.mode.test.jsx` | 7 tests: mode selector default/press, agent placeholder, chip persistence across send, single-chip remove, clear-all, plain send |
+| CREATE | `carbon-frontend/src/__tests__/AIConversationView.collapse.test.jsx` | 3 tests: Session divider, long-thread collapse toggle (18 msgs → "Show 4 older messages"), short-thread no-toggle |
+
+### Verification Output
+```
+$ npx eslint src/shell/AIInputBar.jsx src/shell/AIConversationView.jsx <new tests>
+(exit 0 — clean)
+
+$ npx vitest run src/__tests__/AIInputBar.mode.test.jsx \
+  src/__tests__/AIInputBar.mentions.test.jsx \
+  src/__tests__/AIInputBar.entityResolve.test.jsx \
+  src/__tests__/AIConversationView.collapse.test.jsx \
+  src/__tests__/AIConversationView.operations.test.jsx
+ Test Files  5 passed (5)
+      Tests  25 passed (25)
+
+$ npx vitest run
+ Test Files  32 passed | 5 failed (37)
+      Tests  510 passed | 12 failed (522)   # 12 = pre-existing baseline only
+
+$ npx vite build
+✓ built in 14.19s
+```
+
+### Deviations
+- `AIMessageBubble.jsx` intentionally **not** restructured (avatar/label rows) — its three test suites (AIArtifacts, feedback, transparency) already carry 8 pre-existing failures; touching the bubble DOM risked widening drift. The Copilot look is delivered via composer + thread chrome; bubble-level branding can follow in a dedicated phase.
+- No backend changes (frontend-worker scope only).
+
+### Issues Found
+- **Chip delete test trap:** MUI attaches `onDelete` to the chip's trailing delete icon, not the chip body — tests must `fireEvent.click(screen.getByTestId('CancelIcon'))`.
+- **Accessible-name override:** the collapse toggle's `aria-label` overrides its visible text for AT queries; tests query by `aria-label` ("Show older messages") and assert the count text separately.
+- **Flake observed once:** one full-suite run reported 13 failures (12 baseline + 1 transient in a pre-existing suite); consecutive reruns are stable at 12/510.

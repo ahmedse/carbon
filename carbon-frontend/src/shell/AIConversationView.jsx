@@ -2,13 +2,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Navigate } from 'react-router-dom';
-import { Alert, Box, Button, Chip, IconButton, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Collapse, IconButton, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import BoltIcon from '@mui/icons-material/Bolt';
 import DownloadIcon from '@mui/icons-material/Download';
 import HistoryIcon from '@mui/icons-material/History';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import GroupIcon from '@mui/icons-material/Group';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
@@ -43,6 +45,10 @@ import { DQ_MANAGE_RULES } from '../capabilities';
 
 const DQ_CONTEXT_TYPES = ['dq_validate', 'dq_suggest', 'nl_rule_test', 'nl_query', 'anomaly', 'investigate', 'report_draft'];
 
+// Phase 21-C — long threads open at the most recent messages; older messages
+// collapse behind a "Show N older messages" toggle (Copilot-style density).
+const OLDER_MESSAGES_COLLAPSE_AT = 14;
+
 function normalizeConversationShape(payload) {
   const candidate = payload?.conversation || payload;
   if (!candidate || typeof candidate !== 'object') {
@@ -73,7 +79,9 @@ function AIConversationView({ conversationId }) {
   const [sending, setSending] = useState(false);
   const [stopped, setStopped] = useState(false);
   const [workingStage, setWorkingStage] = useState(null);
-  const [sendMode] = useState('queue');
+  const [sendMode, setSendMode] = useState('queue');
+  // Phase 21-C — collapsed "older messages" region toggle.
+  const [showOlder, setShowOlder] = useState(false);
   const [actionBusyId, setActionBusyId] = useState(null);
   const [workingStartedAt, setWorkingStartedAt] = useState(null);
   const [providerOffline, setProviderOffline] = useState(false);
@@ -976,6 +984,15 @@ function AIConversationView({ conversationId }) {
     lastMetadata?.type === 'anomalies' ? (lastMetadata.anomalies || []) : [];
   const followUpQuestions = lastMetadata?.follow_up_questions || [];
 
+  // Phase 21-C — collapse the older half of a long thread behind a toggle;
+  // infinite scroll still pages older messages into the collapsed region.
+  const olderMessages =
+    messages.length > OLDER_MESSAGES_COLLAPSE_AT
+      ? messages.slice(0, messages.length - OLDER_MESSAGES_COLLAPSE_AT)
+      : [];
+  const recentMessages =
+    olderMessages.length > 0 ? messages.slice(-OLDER_MESSAGES_COLLAPSE_AT) : messages;
+
   const needsInputHint =
     convStatus === 'needs_input'
       ? conversationType === 'dq_suggest'
@@ -1088,7 +1105,66 @@ function AIConversationView({ conversationId }) {
           </Box>
         )}
 
-        {messages.map((msg) => (
+        {/* Session start divider (Copilot-style thread chrome) */}
+        {messages.length > 0 && (
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, pt: 0.5, pb: 0.25 }}>
+            <Box sx={{ flex: 1, height: 1, bgcolor: 'divider' }} />
+            <Typography variant="caption" color="text.disabled">
+              Session
+            </Typography>
+            <Box sx={{ flex: 1, height: 1, bgcolor: 'divider' }} />
+          </Stack>
+        )}
+
+        {/* Older-message collapse toggle (only when the thread exceeds the cap) */}
+        {olderMessages.length > 0 && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.5 }}>
+            <Button
+              size="small"
+              startIcon={showOlder ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              onClick={() => setShowOlder((v) => !v)}
+              aria-expanded={showOlder}
+              aria-label={showOlder ? 'Hide older messages' : 'Show older messages'}
+              sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+            >
+              {showOlder ? 'Hide older messages' : `Show ${olderMessages.length} older messages`}
+            </Button>
+          </Box>
+        )}
+        <Collapse in={showOlder}>
+          {olderMessages.map((msg) => (
+            <AIMessageBubble
+              key={msg.id}
+              message={msg}
+              onAcceptSuggestion={handleAcceptSuggestion}
+              onRejectSuggestion={handleRejectSuggestion}
+              canManageRules={canManageRules}
+              onAccept={handleAcceptFeedback}
+              onReject={handleRejectFeedback}
+              onCorrect={handleCorrectFeedback}
+              onFollowUp={handleFollowUp}
+              onPromote={handlePromote}
+              conversationType={conversationType}
+              appIdentifier={conversation.app_identifier}
+              scopeJson={conversation.scope_json}
+              executeMode={executeMode}
+              onTestLive={handleTestLive}
+              onSave={handleSaveRule}
+              onRerun={handleRerunInvestigation}
+              onChatAbout={handleChatAboutFinding}
+              onCreateRule={handleCreateRuleFromFinding}
+              onSaveReportArtifact={handleSaveReportArtifact}
+              onExportReport={handleExportReport}
+              onRedraftReport={handleRedraftReport}
+              onConfirmExecution={handleConfirmExecution}
+              onDeclineExecution={handleDeclineExecution}
+              onRetry={isOwner ? handleRetryMessage : undefined}
+              onEdit={isOwner ? handleEditMessage : undefined}
+              onDelete={isOwner ? handleDeleteMessage : undefined}
+            />
+          ))}
+        </Collapse>
+        {recentMessages.map((msg) => (
           <AIMessageBubble
             key={msg.id}
             message={msg}
@@ -1277,6 +1353,8 @@ function AIConversationView({ conversationId }) {
           onStop={handleStop}
           conversationStatus={convStatus}
           onMentionsChange={setMentions}
+          mode={sendMode === 'steer' ? 'agent' : 'ask'}
+          onModeChange={(nextMode) => setSendMode(nextMode === 'agent' ? 'steer' : 'queue')}
         />
       ) : (
         <Alert severity="info" sx={{ m: 1.5 }}>

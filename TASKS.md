@@ -1503,7 +1503,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-18
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** IN PROGRESS
 **Kind:** Frontend-only. Small.
 **Depends on:** Phase 22-A (GET/PATCH /ai/profile/).
 
