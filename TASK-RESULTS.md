@@ -1090,3 +1090,55 @@ $ /home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q
 
 ### Issues Found
 - `ModelCatalog.resolve_tier` uses `model_id__iexact` (case-insensitive) while the batch `tier_map` uses `model_id__in` (case-sensitive); generation `model_id` values are always persisted from `resolve_model_id()` (canonical slug), so exact-match is safe — noted in the helper docstring.
+
+---
+
+## [2026-08-18] Backend Worker — Phase 23-A: Memory & learnt facts (backend)
+
+### Summary
+All gates passed. 4 files changed (3 created, 1 modified). 15 new tests added; full AI suite 463 passed, 0 failed. New read + forget surface over the existing durable memory tables (no schema change — `MemoryLongTerm`, `MemoryEpisodic`, `AuditLog` all pre-existed): `GET /carbon-api/ai/memory/facts/` (learnt facts + confidence + provenance), `GET /carbon-api/ai/memory/episodes/` (raw episodic memory), `GET /carbon-api/ai/memory/relationship/` (computed on read from memory + usage + profile — **never persisted**, RULE_21), and `DELETE /carbon-api/ai/memory/facts/{pk}/` (forget = hard delete + cascade to derived facts + `AuditLog` on every forget — never soft-delete, GDPR right to erasure). Every query is scoped through `accounts.ai_scoping.scope_ai_queryset` (app + visibility global/shared/private-owned + org-subtree expansion at the query boundary) — no cross-user or cross-org fact ever leaks.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `GET /ai/memory/facts/` | ✅ | `MemoryFactsView` — active facts (`archived=False`, `superseded_by__isnull=True`), ordered newest-first; each row exposes `confidence` + `provenance` (`source` + `created_at`/`last_used`); `?category=` filter + `?limit=` (default 100, cap 500) |
+| 2 | `GET /ai/memory/episodes/` | ✅ | `MemoryEpisodesView` — non-archived `MemoryEpisodic` rows (event_type, summary, details, causal chain, relevance_score, occurred_at, learned_at); `?event_type=` filter + `?limit=` |
+| 3 | `GET /ai/memory/relationship/` | ✅ | `MemoryRelationshipView` — computed on read: `memory_enabled` (Phase 22-A flag), fact/episode counts, top categories, avg confidence, total uses, 30-day usage summary + quota, profile prefs; assembled per request, **never persisted** |
+| 4 | `DELETE /ai/memory/facts/{pk}/` | ✅ | `MemoryFactDeleteView` — owner forget → 204; hard delete + cascade (`superseded_by=pk` lineage + `source="superseded:{pk}"` derived rows) inside `transaction.atomic`; `AuditLog(actor=user.pk, actor_type="user", action="memory.forget", target=pk, detail={model/category/content/confidence/cascade/rows_deleted})` on every forget |
+| 5 | Scoping / privacy | ✅ | All queries through `scope_ai_queryset`; other users' private facts → 404 (invisible); visible-but-not-owned shared/global facts → 403 for regular users; superuser/global-admin may forget anything visible |
+| 6 | `memory_enabled=false` respect | ✅ | Read + forget never gated (GDPR visibility/erasure always works); the flag is surfaced in relationship (`memory_enabled`) and continues to gate engine *writes* via the Phase 22-A T4 gate |
+| 7 | Routes | ✅ | `ai/memory_urls.py` mounted at `{api_prefix}/ai/memory/` in `config/urls.py`; names `ai-memory-facts/episodes/relationship/fact-delete` |
+| 8 | Tests + verification gate | ✅ | `ai/tests/test_memory_api.py` — 15 tests; `manage.py check` clean; `makemigrations --check --dry-run` → "No changes detected"; `pytest ai -q` → 463 passed |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `backend/ai/memory_api.py` | 4 APIViews (`_MemoryBaseView` base with `IsAuthenticated` + `_scoped`), `_limit`, `_can_forget`, `_cascade_fact_qs`, relationship aggregation, forget + audit |
+| CREATE | `backend/ai/memory_urls.py` | `facts/`, `episodes/`, `relationship/`, `facts/<str:pk>/` routes (follows `usage_urls.py` pattern) |
+| CREATE | `backend/ai/tests/test_memory_api.py` | 15 tests: auth (all 4 routes 401), facts/episodes scoping (own private + shared + global, excludes others' private/archived/superseded), confidence + provenance shape, category/event_type filters + limit, newest-first order, relationship computed shape + `memory_enabled=false` flag, forget (204, hard delete, cascade, audit row, 404/403 paths, admin bypass, unknown id 404, never gated by `memory_enabled`) |
+| MODIFY | `backend/config/urls.py` | mounted `ai/memory/` include between profile and pulse routes |
+
+### Verification Output
+```
+$ /home/ahmed/aast/carbon/.venv/bin/python manage.py check
+System check identified no issues (0 silenced).
+
+$ /home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+No changes detected
+
+$ /home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_memory_api.py -q
+15 passed in 6.63s
+
+$ /home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q
+463 passed in 15.43s
+```
+
+### Deviations
+- **Episodic cascade is a no-op by design:** `MemoryEpisodic` rows carry no FK to `MemoryLongTerm` facts (episodes link only to each other via `causal_chain`/`caused_by_episode_id`), so the "where derivable" episodic-source cascade from the spec cannot be expressed deterministically. The derived-fact lineage (`superseded_by=pk` + `source="superseded:{pk}"`) is the complete, deterministic cascade set — documented in `_cascade_fact_qs`.
+- **403 vs 404 split:** other users' private facts are invisible → 404 (no existence leak); shared/global facts the requester *can* see but does not own → 403 with a clear message. Matches api-contract (`404 not found` vs `403 not authorized`) and RULE_20 (no cross-user mutation).
+- No KG/memory write-path internals touched (engine/memory, engine/knowledge_graph untouched) — read + forget only, per spec. No frontend files (23-B).
+- No migration: `MemoryLongTerm`/`MemoryEpisodic`/`AuditLog` models pre-existed (Phase 2 vendored schema); `makemigrations --check --dry-run` confirms "No changes detected".
+
+### Issues Found
+- **AuditLog lacks an org partition in practice:** `AuditLog` inherits `AppScopeMixin` (app/org/host/visibility columns) but the engine's SQLAlchemy twin writes only `instance_id`/`actor`/`action`/`detail`. Our forget entries set `instance_id="carbon"`, `host_user_id`, `visibility="private"` so they are fully scoped; consumers should filter by `action="memory.forget"` + `target` (see test assertions).
+- **`get_or_create(user=user)` in relationship is a benign read-path write** (RULE_21 exception already established by `AIUsage.profile`); it creates the profile row on first read so `memory_enabled` defaults resolve correctly without a separate profile call.

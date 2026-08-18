@@ -80,6 +80,7 @@ urlpatterns = [
     path(f'{api_prefix}/ai/workspace/', include('ai.workspace_urls')),
     path(f'{api_prefix}/ai/usage/', include('ai.usage_urls')),
     path(f'{api_prefix}/ai/profile/', ai_workspace_views.UserProfileView.as_view(), name='ai-user-profile'),
+    path(f'{api_prefix}/ai/memory/', include('ai.memory_urls')),
     path(f'{api_prefix}/ai/pulse/', include('ai.ops_urls')),
     path(f'{api_prefix}/', include('evidence.urls')),
 ]
