@@ -440,6 +440,84 @@ AI_MANAGE_CONSOLE = Capability(
     category="admin",
 )
 
+# ── Dataset Hub capabilities (Phase P1 — trust core) ──────────────
+
+DATAHUB_VIEW = Capability(
+    key="datahub:view",
+    domain="datahub",
+    action="view",
+    label="View Datasets",
+    description="Browse dataset catalog, versions, health scores, contracts",
+    category="data",
+)
+
+DATAHUB_INGEST = Capability(
+    key="datahub:ingest",
+    domain="datahub",
+    action="ingest",
+    label="Ingest Data",
+    description="Upload files, trigger ERP snapshots, create dataset versions",
+    category="data",
+)
+
+DATAHUB_APPROVE = Capability(
+    key="datahub:approve",
+    domain="datahub",
+    action="approve",
+    label="Approve Dataset Versions",
+    description="Approve or reject a dataset version after DQ review",
+    category="data",
+)
+
+DATAHUB_MANAGE = Capability(
+    key="datahub:manage",
+    domain="datahub",
+    action="manage",
+    label="Manage Datasets",
+    description="Create/edit/archive datasets and their contracts",
+    category="admin",
+)
+
+# ── TurnKey Bridge capabilities (Phase P2) ─────────────────────
+
+TURNKEY_VIEW = Capability(
+    key="turnkey:view",
+    domain="turnkey",
+    action="view",
+    label="View TurnKey Links",
+    description="Browse TurnKey model links, predictions, drift alerts, and submit prediction feedback",
+    category="data",
+)
+
+TURNKEY_MANAGE = Capability(
+    key="turnkey:manage",
+    domain="turnkey",
+    action="manage",
+    label="Manage TurnKey Integration",
+    description="Configure TurnKey connection, register/promote models, manage model links",
+    category="admin",
+)
+
+# ── App Registry capabilities (Phase P3 — control plane) ─────────
+
+APPREGISTRY_VIEW = Capability(
+    key="appregistry:view",
+    domain="appregistry",
+    action="view",
+    label="View App Registry",
+    description="See available domain apps and their activation status",
+    category="platform",
+)
+
+APPREGISTRY_MANAGE = Capability(
+    key="appregistry:manage",
+    domain="appregistry",
+    action="manage",
+    label="Manage App Registry",
+    description="Activate/deactivate domain apps, edit manifests",
+    category="platform",
+)
+
 
 # ═══════════════════════════════════════════════════════════════════
 # ALL CAPABILITIES — master registry
@@ -498,6 +576,17 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     # AI (Pulse)
     AI_VIEW_CONSOLE.key: AI_VIEW_CONSOLE,
     AI_MANAGE_CONSOLE.key: AI_MANAGE_CONSOLE,
+    # Dataset Hub
+    DATAHUB_VIEW.key: DATAHUB_VIEW,
+    DATAHUB_INGEST.key: DATAHUB_INGEST,
+    DATAHUB_APPROVE.key: DATAHUB_APPROVE,
+    DATAHUB_MANAGE.key: DATAHUB_MANAGE,
+    # TurnKey Bridge
+    TURNKEY_VIEW.key: TURNKEY_VIEW,
+    TURNKEY_MANAGE.key: TURNKEY_MANAGE,
+    # App Registry
+    APPREGISTRY_VIEW.key: APPREGISTRY_VIEW,
+    APPREGISTRY_MANAGE.key: APPREGISTRY_MANAGE,
 }
 
 
@@ -565,6 +654,17 @@ IMPLIES: Dict[str, Set[str]] = {
     # ── Evidence admin → view ──
     EVIDENCE_MANAGE.key: {EVIDENCE_VIEW.key},
 
+    # ── Dataset Hub manage/ingest/approve → view ──
+    DATAHUB_MANAGE.key: {DATAHUB_VIEW.key},
+    DATAHUB_INGEST.key: {DATAHUB_VIEW.key},
+    DATAHUB_APPROVE.key: {DATAHUB_VIEW.key},
+
+    # ── TurnKey Bridge manage → view ──
+    TURNKEY_MANAGE.key: {TURNKEY_VIEW.key},
+
+    # ── App Registry manage → view ──
+    APPREGISTRY_MANAGE.key: {APPREGISTRY_VIEW.key},
+
     # ── AI admin → view ──
     AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key},
 }
@@ -616,6 +716,16 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         DQ_MANAGE_RULES.key,
     },
 
+    "datahub_lead": {
+        DATAHUB_MANAGE.key,
+        DATAHUB_INGEST.key,
+        DATAHUB_APPROVE.key,
+    },
+
+    "turnkey_lead": {
+        TURNKEY_MANAGE.key,
+    },
+
     # ── Data Owners (org-scoped write) ──
     "dataowners_group": {
         CARBON_ENTER_DATA.key,
@@ -631,6 +741,9 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         IMPORTEXPORT_VIEW.key,
         DATASCHEMA_VIEW.key,
         EVIDENCE_VIEW.key,
+        DATAHUB_VIEW.key,
+        TURNKEY_VIEW.key,
+        APPREGISTRY_VIEW.key,
     },
 
     # ── Analysts (cross-org read + reporting) ──
@@ -651,6 +764,9 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         IMPORTEXPORT_VIEW.key,
         DATASCHEMA_VIEW.key,
         EVIDENCE_VIEW.key,
+        DATAHUB_VIEW.key,
+        TURNKEY_VIEW.key,
+        APPREGISTRY_VIEW.key,
     },
 
     # ── Viewers (org-scoped read-only) ──
@@ -667,6 +783,9 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         IMPORTEXPORT_VIEW.key,
         DATASCHEMA_VIEW.key,
         EVIDENCE_VIEW.key,
+        DATAHUB_VIEW.key,
+        TURNKEY_VIEW.key,
+        APPREGISTRY_VIEW.key,
     },
 
     # ── Auditors (org-scoped read + audit) ──
@@ -685,6 +804,9 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         IMPORTEXPORT_VIEW.key,
         DATASCHEMA_VIEW.key,
         EVIDENCE_VIEW.key,
+        DATAHUB_VIEW.key,
+        TURNKEY_VIEW.key,
+        APPREGISTRY_VIEW.key,
     },
 }
 

@@ -415,6 +415,7 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
         serializer = ToolExecutionActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         execution_id = serializer.validated_data["execution_id"]
+        modified_body = serializer.validated_data.get("body")
 
         conversation = self.intelligence._get_accessible_conversation(request.user, pk)
         if conversation is None:
@@ -446,6 +447,23 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 {"error": f"Execution is not pending confirmation (status: {execution.status})."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Optional "modify before confirm": the user edited the proposed rule in
+        # the JSON editor — replace the staged POST body so confirm_execution
+        # (which re-reads the row fresh from the DB) executes the edited body.
+        # Atomic: either the edited rule is created or nothing happens.
+        if modified_body is not None:
+            if not isinstance(modified_body, dict):
+                return Response(
+                    {"error": "Modified rule body must be a JSON object."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            input_params = (
+                json.loads(execution.input_params) if execution.input_params else {}
+            )
+            input_params["body"] = modified_body
+            execution.input_params = json.dumps(input_params)
+            execution.save(update_fields=["input_params"])
 
         instance_config = _carbon_instance_config(user_pk)
         factory = get_session_factory("carbon")

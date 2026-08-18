@@ -20,7 +20,8 @@ from accounts.constants import (
     ADMIN_GROUP, ADMINS_GROUP, DATAOWNERS_GROUP, ANALYSTS_GROUP,
     VIEWERS_GROUP, AUDITORS_GROUP, CARBON_DATA_OWNERS_GROUP,
     CARBON_ANALYSTS_GROUP, CARBON_LEAD_GROUP, CATALOG_LEAD_GROUP,
-    MDM_LEAD_GROUP, DQ_LEAD_GROUP, PROTECTED_GROUPS,
+    MDM_LEAD_GROUP, DQ_LEAD_GROUP, DATAHUB_LEAD_GROUP, TURNKEY_LEAD_GROUP,
+    PROTECTED_GROUPS,
     DOMAIN_LEAD_GROUPS,
 )
 from accounts.models import GroupMetadata, PlatformAppConfig
@@ -59,6 +60,16 @@ GROUP_DEFS = {
     DQ_LEAD_GROUP: (
         "app",
         "DQ domain lead — manage data quality rules and monitor DQ within org scope",
+        True, True,
+    ),
+    DATAHUB_LEAD_GROUP: (
+        "app",
+        "Data Hub domain lead — manage datasets, versions, contracts, and ingest approvals within org scope",
+        True, True,
+    ),
+    TURNKEY_LEAD_GROUP: (
+        "app",
+        "TurnKey domain lead — manage model links, predictions, and drift alerts within org scope",
         True, True,
     ),
 

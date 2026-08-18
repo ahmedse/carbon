@@ -1660,6 +1660,53 @@ Append to `TASK-RESULTS.md`.
 
 ---
 
+## Phase 23-C — Copilot-style composer + collapsed sessions drawer + grouped Memory surface
+
+**Date:** 2026-08-18
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE
+**Kind:** Frontend-only. Small-medium UX polish.
+**Depends on:** Phase 23-B (three memory tabs exist).
+
+### Files to Read First
+- `carbon-frontend/src/shell/AIInputBar.jsx` — composer (multiline behavior)
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — activity bar + drawer state
+- `.ai-toolkit/shared/ux-patterns.md` — Copilot density + nav model rules
+
+### Files to Change
+- `carbon-frontend/src/shell/AIInputBar.jsx` — MODIFY (grow-to-fit + internal scroll)
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — MODIFY (drawer default, grouped Memory panel, 7-icon bar)
+- `carbon-frontend/src/__tests__/AIWorkspace.shell.test.jsx` — MODIFY (drawer-open sync + grouped Memory tests)
+- `carbon-frontend/src/__tests__/AIInputBar.growth.test.jsx` — ADD (growth behavior, 4 tests)
+
+### Implementation
+1. Composer grows with content up to ~55% of pane height (clamped 6–18 rows),
+   then scrolls internally; Enter=send / Shift+Enter=newline preserved.
+2. Sessions drawer starts collapsed; opens on demand from the activity bar.
+3. Activity bar 9 → 7 icons: Memory/Learnt/Relationship consolidate under one
+   Memory icon (Psychology) opening internal MUI `<Tabs>` Episodes/Facts/
+   Relationship persisted via `carbon-ai-memory-tab` (RULE_17).
+
+### DO NOT TOUCH
+- Backend files.
+- The three memory tab components themselves (AIMemoryTab/AILearntTab/AIRelationshipTab).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/AIMemoryTabs.test.jsx src/__tests__/AIWorkspace.shell.test.jsx \
+  src/__tests__/AIInputBar.growth.test.jsx src/__tests__/AIInputBar.mode.test.jsx \
+  src/__tests__/AIInputBar.mentions.test.jsx src/__tests__/AIInputBar.entityResolve.test.jsx
+npm run build
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+---
+
 ## Phase 24 — Adaptive Learning DQ Core (PROPOSAL — pending owner ratification)
 
 **Status:** ⚠️ PROPOSAL, NOT RATIFIED. This is a pointer, not active work. Do
@@ -1700,9 +1747,9 @@ duplicate it here; these entries are dispatch contracts that point at the spec.
 
 ### Phase P1 — Dataset Hub (`datahub/`)
 
-**Status:** Not started
+**Status:** DONE — ACCEPTED (43 datahub tests; 373 combined `datahub accounts` passing; gates re-run independently by Master Architect)
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek-V3
+**Recommended Model:** DeepSeek V4-Flash
 **Spec:** `docs/DESIGN-PLATFORM.md` §5
 **Kind:** New Django app. Large.
 
@@ -1719,7 +1766,7 @@ duplicate it here; these entries are dispatch contracts that point at the spec.
 
 ### Implementation (summary — read §5 for the contract)
 1. Models `Dataset`, `DatasetVersion`, `DataContract`, `DataContractViolation`, `DatasetAccessPolicy`.
-2. API `/api/v1/datahub/` (datasets CRUD, versions, approve/reject, contract, violations, ingest erp/upload) gated by `HasCBACCapability`.
+2. API `/carbon-api/datahub/` (datasets CRUD, versions, approve/reject, contract, violations, ingest erp/upload) gated by `ReadAnyWriteAdmin`/`AdminOrSuperuserOnly`.
 3. Ingest service (`ingest.py`): ERP/CSV → DataTable+DataRows, schema_snapshot, health_score, contract checks.
 4. Health score = 0.4·completeness + 0.4·validity + 0.2·freshness.
 5. DQ via existing `dq/jobs.py` (no duplicate DQ logic).
@@ -1744,9 +1791,9 @@ Append to `TASK-RESULTS.md`.
 
 ### Phase P2 — TurnKey Bridge (`integrations/turnkey/`)
 
-**Status:** Not started
+**Status:** DONE — ACCEPTED (14 integrations tests; 373 combined `datahub accounts` passing; `manage.py check` + `makemigrations --check --dry-run` clean; gates re-run independently by Master Architect on 2026-08-18)
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek-V3
+**Recommended Model:** DeepSeek V4-Flash
 **Spec:** `docs/DESIGN-PLATFORM.md` §6
 **Kind:** New integration app. Medium. (DevOps touches settings/keys at the end.)
 
@@ -1781,14 +1828,49 @@ Append to `TASK-RESULTS.md`.
 
 ### Notes for the Master
 - HMAC secret + Fernet key MUST be env-provided (project.config RULE); never commit real values.
+- **Carry-forward gap (verified 2026-08-18):** `accounts/constants.py` gained `DATAHUB_LEAD_GROUP` (P1) and `capabilities.py` gained `turnkey_lead` (P2), but `bootstrap_platform.py` `GROUP_DEFS` was NOT updated — on a fresh bootstrap the `datahub_lead` / `turnkey_lead` Django Groups are never created, so those roles can't be assigned. Tracked as **Phase P2-F** below.
+
+---
+
+### Phase P2-F — Bootstrap group parity (`datahub_lead` + `turnkey_lead`)
+
+**Status:** READY
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Kind:** Small bugfix (~15 min). Closes the gap left by P1 + P2.
+
+### Files to Read First
+- `backend/accounts/constants.py` (note `DATAHUB_LEAD_GROUP` exists, `TURNKEY_LEAD_GROUP` does NOT)
+- `backend/accounts/capabilities.py` (`GROUP_CAPABILITIES` already declares `datahub_lead` + `turnkey_lead`)
+- `backend/accounts/management/commands/bootstrap_platform.py` (`GROUP_DEFS`, `_app_id_for_group`)
+
+### Files to Change
+- `backend/accounts/constants.py` — add `TURNKEY_LEAD_GROUP = "turnkey_lead"`; add it to `DOMAIN_LEAD_GROUPS`
+- `backend/accounts/management/commands/bootstrap_platform.py` — add `datahub_lead` + `turnkey_lead` to `GROUP_DEFS` (category `"app"`, `is_protected=True`, `is_scoped=True`, same shape as `dq_lead`); update the import line to include `DATAHUB_LEAD_GROUP, TURNKEY_LEAD_GROUP`
+
+### Implementation
+- `_app_id_for_group` already derives `datahub_lead → datahub` and `turnkey_lead → turnkey` via its `split("_")[0]` fallback — no change needed there. Only `GROUP_DEFS` + constants need updating.
+- Idempotent: bootstrap is INSERT-OR-UPDATE, safe to re-run.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest accounts -q
+# Manual: PGPASSWORD=AdminPa_132 PGUSER=ahmed /home/ahmed/aast/carbon/.venv/bin/python manage.py bootstrap_platform
+#   → output lists datahub_lead + turnkey_lead among groups (created or up-to-date)
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
 
 ---
 
 ### Phase P3 — App Registry (`appregistry/`)
 
-**Status:** Not started
+**Status:** READY — dispatchable (P2 accepted; spec §7 complete; may run in parallel with P2 — now done)
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek-V3
+**Recommended Model:** DeepSeek V4-Flash
 **Spec:** `docs/DESIGN-PLATFORM.md` §7
 **Kind:** New Django app. Small-medium. **May run in parallel with P2.**
 
@@ -1830,7 +1912,7 @@ Append to `TASK-RESULTS.md`.
 
 **Status:** Not started
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek-V3
+**Recommended Model:** DeepSeek V4-Flash
 **Spec:** `docs/DESIGN-PLATFORM.md` §8
 **Kind:** New Django app. Large.
 **Depends on:** P1 (dataset hub), P3 (app registry).
@@ -1872,7 +1954,7 @@ Append to `TASK-RESULTS.md`.
 
 **Status:** Not started
 **Worker Role:** frontend-worker
-**Recommended Model:** DeepSeek-V3
+**Recommended Model:** DeepSeek V4-Flash
 **Spec:** `docs/DESIGN-PLATFORM.md` §11
 **Kind:** Frontend-only. Medium-large.
 **Depends on:** P4-A (endpoints).

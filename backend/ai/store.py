@@ -434,7 +434,12 @@ class _DjangoSession(Session):
     async def refresh(self, obj: Any) -> None:
         from asgiref.sync import sync_to_async
 
-        await sync_to_async(obj.refresh_from_db, thread_sensitive=True)()
+        # Resolve engine (SQLAlchemy) instances to their Django mirror first —
+        # `refresh_from_db` only exists on the Django layer. This matches the
+        # `add` / `select` / `get` invariant (QA F1: create_dq_rule runtime
+        # crash was the only Store method missing this conversion).
+        dj_obj = _to_django_instance(obj)
+        await sync_to_async(dj_obj.refresh_from_db, thread_sensitive=True)()
 
     async def flush(self) -> None:
         await self.commit()

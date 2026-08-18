@@ -752,11 +752,12 @@ function AIConversationView({ conversationId }) {
   // created entity + navigate action; we reload so the new message + button
   // appear, then fly to the entity.
   const handleConfirmExecution = useCallback(
-    async (executionId) => {
+    async (executionId, pending, body) => {
       if (!conversationId || !executionId) return;
       setActionBusyId(`confirm-${executionId}`);
       try {
-        const result = await confirmToolExecution(token, conversationId, executionId);
+        // ``body`` = optional edited version of the staged rule (JSON editor).
+        const result = await confirmToolExecution(token, conversationId, executionId, body);
         // Reload so the grounded assistant confirmation message shows up.
         await load();
         const route = result?.action?.route;

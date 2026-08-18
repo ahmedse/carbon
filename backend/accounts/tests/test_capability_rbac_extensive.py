@@ -314,7 +314,8 @@ class TestGroupCapabilityMappings:
         """Every group name used in GROUP_CAPABILITIES should be documented."""
         expected_groups = {
             "admin", "admins_group",
-            "carbon_lead", "catalog_lead", "mdm_lead", "dq_lead",
+            "carbon_lead", "catalog_lead", "mdm_lead", "dq_lead", "datahub_lead",
+            "turnkey_lead",
             "dataowners_group", "analysts_group", "viewers_group", "auditors_group",
         }
         assert set(GROUP_CAPABILITIES.keys()) == expected_groups, \

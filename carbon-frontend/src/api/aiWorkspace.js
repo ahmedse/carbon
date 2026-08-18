@@ -216,15 +216,22 @@ export function summarizeConversation(token, conversationId, force = false) {
  * Confirm a staged tool execution (e.g. a proposed create_dq_rule) so it
  * actually runs as the current user. The response carries the created
  * entity + a navigate action the UI can follow.
+ *
+ * Pass ``body`` to confirm an EDITED version of the proposal: the backend
+ * replaces the staged POST body with it before executing, so "modify then
+ * confirm" is one atomic call.
  * @param {string} token - JWT access token
  * @param {string} conversationId - UUID
  * @param {string} executionId - staged ToolExecution id
+ * @param {object} [body] - optional replacement for the staged host POST body
  * @returns {Promise<object>} { status, rule_id?, rule_name?, action? }
  */
-export function confirmToolExecution(token, conversationId, executionId) {
+export function confirmToolExecution(token, conversationId, executionId, body) {
+  const payload = { execution_id: executionId };
+  if (body && typeof body === 'object') payload.body = body;
   return apiFetch(
     `${BASE}conversations/${conversationId}/tool-executions/confirm/`,
-    { token, method: 'POST', body: { execution_id: executionId } },
+    { token, method: 'POST', body: payload },
   );
 }
 

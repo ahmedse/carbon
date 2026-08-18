@@ -497,8 +497,8 @@ class DatasetAccessPolicy(models.Model):
 
 ### 5.4 API Surface
 
-All endpoints under `/api/v1/datahub/`. Auth: same JWT/session as rest of platform.
-Permission class: `HasCBACCapability` (same pattern as existing DQ/catalog endpoints).
+All endpoints under `/carbon-api/datahub/`. Auth: same JWT/session as rest of platform.
+Permission class: `AdminOrSuperuserOnly` (write+read gate) / `ReadAnyWriteAdmin` (read-any, write-gated) — same pattern as existing DQ/catalog endpoints. See `backend/accounts/permissions.py`.
 
 | Method | Path | Capability | Description |
 |--------|------|-----------|-------------|
@@ -769,8 +769,8 @@ TurnKey pushes events to Carbon via signed HTTP POST. Carbon exposes:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/integrations/turnkey/callback/predictions/` | Receive prediction result |
-| POST | `/api/v1/integrations/turnkey/callback/drift-alerts/` | Receive drift alert |
+| POST | `/carbon-api/integrations/turnkey/callback/predictions/` | Receive prediction result |
+| POST | `/carbon-api/integrations/turnkey/callback/drift-alerts/` | Receive drift alert |
 
 **Security**: callbacks are signed with a shared HMAC-SHA256 secret
 (`TURNKEY_CALLBACK_SECRET` in settings). Validate signature before processing.
@@ -789,14 +789,14 @@ to a `DataRow` (via `input_hash` lookup), sets `input_data_row`.
 
 | Method | Path | Capability | Description |
 |--------|------|-----------|-------------|
-| GET | `/api/v1/integrations/turnkey/configs/` | `turnkey:manage` | List TurnKey configs |
-| POST | `/api/v1/integrations/turnkey/configs/` | `turnkey:manage` | Add config (API key via `set_api_key()`) |
-| GET | `/api/v1/integrations/turnkey/links/` | `turnkey:view` | List model links |
-| POST | `/api/v1/integrations/turnkey/links/` | `turnkey:manage` | Create link + register model |
-| POST | `/api/v1/integrations/turnkey/links/{id}/promote/` | `turnkey:manage` | Promote to production |
-| GET | `/api/v1/integrations/turnkey/links/{id}/predictions/` | `turnkey:view` | List predictions for this link |
-| POST | `/api/v1/integrations/turnkey/links/{id}/predictions/{pid}/feedback/` | `turnkey:view` | Submit actual outcome |
-| GET | `/api/v1/integrations/turnkey/links/{id}/drift-alerts/` | `turnkey:view` | List drift alerts |
+| GET | `/carbon-api/integrations/turnkey/configs/` | `turnkey:manage` | List TurnKey configs |
+| POST | `/carbon-api/integrations/turnkey/configs/` | `turnkey:manage` | Add config (API key via `set_api_key()`) |
+| GET | `/carbon-api/integrations/turnkey/links/` | `turnkey:view` | List model links |
+| POST | `/carbon-api/integrations/turnkey/links/` | `turnkey:manage` | Create link + register model |
+| POST | `/carbon-api/integrations/turnkey/links/{id}/promote/` | `turnkey:manage` | Promote to production |
+| GET | `/carbon-api/integrations/turnkey/links/{id}/predictions/` | `turnkey:view` | List predictions for this link |
+| POST | `/carbon-api/integrations/turnkey/links/{id}/predictions/{pid}/feedback/` | `turnkey:view` | Submit actual outcome |
+| GET | `/carbon-api/integrations/turnkey/links/{id}/drift-alerts/` | `turnkey:view` | List drift alerts |
 
 ### 6.7 Settings
 
@@ -912,10 +912,10 @@ class AppActivation(models.Model):
 
 | Method | Path | Capability | Description |
 |--------|------|-----------|-------------|
-| GET | `/api/v1/apps/` | `appregistry:view` | List all apps with activation state |
-| GET | `/api/v1/apps/{slug}/` | `appregistry:view` | App detail + health status |
-| POST | `/api/v1/apps/{slug}/activate/` | `appregistry:manage` | Activate app |
-| POST | `/api/v1/apps/{slug}/deactivate/` | `appregistry:manage` | Deactivate (non-system only) |
+| GET | `/carbon-api/apps/` | `appregistry:view` | List all apps with activation state |
+| GET | `/carbon-api/apps/{slug}/` | `appregistry:view` | App detail + health status |
+| POST | `/carbon-api/apps/{slug}/activate/` | `appregistry:manage` | Activate app |
+| POST | `/carbon-api/apps/{slug}/deactivate/` | `appregistry:manage` | Deactivate (non-system only) |
 
 ### 7.4 App self-registration
 
@@ -1201,7 +1201,7 @@ class RepHealthCard(models.Model):
 
 ### 8.5 API Surface
 
-All under `/api/v1/healthy/`. Capability: `healthy:view` for reads, `healthy:manage`
+All under `/carbon-api/healthy/`. Capability: `healthy:view` for reads, `healthy:manage`
 for write/trigger actions.
 
 | Method | Path | Description |
@@ -1278,7 +1278,7 @@ Step 5: SERVE
   Predictions logged in TurnKey's PredictionLog
 
 Step 6: FEEDBACK
-  TurnKey pushes PredictionCallback → /api/v1/integrations/turnkey/callback/predictions/
+  TurnKey pushes PredictionCallback → /carbon-api/integrations/turnkey/callback/predictions/
   Carbon creates PredictionRecord (input_hash, prediction, model_link)
   Optionally traced back to DataRow via input_hash
 
@@ -1288,7 +1288,7 @@ Step 7: ACTUALS
   TurnKey accuracy monitoring uses this for MAPE/accuracy snapshots
 
 Step 8: DRIFT RESPONSE
-  TurnKey fires drift alert → /api/v1/integrations/turnkey/callback/drift-alerts/
+  TurnKey fires drift alert → /carbon-api/integrations/turnkey/callback/drift-alerts/
   DriftAlert created in Carbon
   DQ anomaly job triggered on the source DataTable
   DataContractViolation(type='quality') created if threshold breached

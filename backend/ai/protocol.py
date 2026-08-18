@@ -34,6 +34,8 @@ class Scope:
     user_identifier: str = ""         # For audit trail
     app_identifier: str | None = None  # Domain app scope (e.g. "emissions", "water")
                                        # None = platform-level call (e.g. health check)
+    active_apps: list[str] = field(default_factory=list)   # App slugs the user can reach
+                                       # (App Registry §7.5 — activated AND capability-gated)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize scope for audit trail logging (§7 of ai-contract.md)."""
@@ -44,6 +46,7 @@ class Scope:
             "is_superuser": self.is_superuser,
             "user_identifier": self.user_identifier,
             "app_identifier": self.app_identifier,
+            "active_apps": self.active_apps,
         }
 
 

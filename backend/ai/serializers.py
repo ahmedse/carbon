@@ -141,9 +141,16 @@ class MessageFeedbackSerializer(serializers.Serializer):
 
 
 class ToolExecutionActionSerializer(serializers.Serializer):
-    """Body for confirming/declining a staged tool execution (Sprint fly-to-rule)."""
+    """Body for confirming/declining a staged tool execution (Sprint fly-to-rule).
+
+    ``body`` is optional and only meaningful on confirm: when present it
+    REPLACES the staged host POST body before execution, so a user can modify
+    the proposed rule (e.g. tweak params / severity in the JSON editor) and
+    confirm the edited version in one atomic call.
+    """
 
     execution_id = serializers.CharField(required=True, allow_blank=False)
+    body = serializers.JSONField(required=False, allow_null=True)
 
 
 class UserProfileSerializer(serializers.Serializer):

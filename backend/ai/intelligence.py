@@ -90,6 +90,7 @@ def build_scope(user) -> Scope:
             is_superuser=True,
             org_unit_ids=["*"],
             user_identifier=str(user.pk),
+            active_apps=_active_apps_for_user(user),
         )
 
     if user.is_staff:
@@ -114,7 +115,35 @@ def build_scope(user) -> Scope:
         module_ids=module_ids,
         is_read_only=is_read_only,
         user_identifier=str(user.pk),
+        active_apps=_active_apps_for_user(user),
     )
+
+
+def _active_apps_for_user(user) -> list[str]:
+    """App Registry §7.5 — active apps the user can reach.
+
+    Returns slugs of AppManifests that are BOTH runtime-activated AND
+    capability-gated for this user. Superusers pass every capability via
+    the "*" wildcard, so they see every activated app.
+    """
+    from appregistry.models import AppActivation, AppManifest
+
+    activated = (
+        AppActivation.objects.filter(is_active=True)
+        .select_related("app")
+        .values_list("app__slug", "app__required_capabilities")
+    )
+    if user.is_superuser:
+        return [slug for slug, _ in activated]
+
+    result: list[str] = []
+    for slug, required_capabilities in activated:
+        # No capability gate → any authenticated user can reach the app.
+        if not required_capabilities or has_capability(
+            user, required_capabilities[0]
+        ):
+            result.append(slug)
+    return result
 
 
 # ── CarbonIntelligence ───────────────────────────────────────────────────

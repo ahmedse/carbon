@@ -371,6 +371,10 @@ class CreateDQRule(ToolPlugin):
             "requires_confirmation": True,
             "execution_id": execution.id,
             "proposed_rule": definition,
+            # The exact denormalized body that will be POSTed to
+            # /carbon-api/dq/rules/ on confirmation — lets the UI show the
+            # full JSON and lets the user modify it before confirming.
+            "proposed_body": body,
             "validation": preview,
         }
 

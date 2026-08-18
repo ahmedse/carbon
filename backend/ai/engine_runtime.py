@@ -255,10 +255,21 @@ def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list
                     or f"Create DQ rule '{name}' ({rtype})?"
                 ),
                 "proposed_rule": proposed,
+                # Exact host POST body (what ``confirm_execution`` will send) —
+                # lets the UI render the JSON and edit it before confirming.
+                "proposed_body": data.get("proposed_body"),
                 "validation": data.get("validation"),
             })
 
     return actions, pending_actions
+
+
+#: Outcome-oriented copy for a failed tool action (RULE_23 — never leak raw
+#: internal exception text into user-facing chat; QA F2).
+_FAILED_ACTION_COPY = (
+    "⚠️ That action didn't complete — nothing was created or changed. "
+    "Please try again in a moment."
+)
 
 
 def _grounded_outcome_note(completed_tools: list[dict]) -> str:
@@ -272,9 +283,8 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
     for item in completed_tools or []:
         if not isinstance(item, dict):
             continue
-        tool = str(item.get("tool_name") or "tool")
         if item.get("error"):
-            lines.append(f"⚠️ {tool}: {item['error']}")
+            lines.append(_FAILED_ACTION_COPY)
             continue
         raw = item.get("result")
         try:
@@ -284,7 +294,7 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
         if not isinstance(data, dict):
             continue
         if data.get("error"):
-            lines.append(f"⚠️ {tool}: {data['error']}")
+            lines.append(_FAILED_ACTION_COPY)
             continue
         if data.get("requires_confirmation"):
             proposed = data.get("proposed_rule") or {}

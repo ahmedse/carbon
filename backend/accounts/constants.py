@@ -23,8 +23,10 @@ CARBON_LEAD_GROUP = "carbon_lead"
 CATALOG_LEAD_GROUP = "catalog_lead"
 MDM_LEAD_GROUP = "mdm_lead"
 DQ_LEAD_GROUP = "dq_lead"
+DATAHUB_LEAD_GROUP = "datahub_lead"
+TURNKEY_LEAD_GROUP = "turnkey_lead"
 
-DOMAIN_LEAD_GROUPS = {CARBON_LEAD_GROUP, CATALOG_LEAD_GROUP, MDM_LEAD_GROUP, DQ_LEAD_GROUP}
+DOMAIN_LEAD_GROUPS = {CARBON_LEAD_GROUP, CATALOG_LEAD_GROUP, MDM_LEAD_GROUP, DQ_LEAD_GROUP, DATAHUB_LEAD_GROUP, TURNKEY_LEAD_GROUP}
 
 # ── Role classification sets ───────────────────────────────────────
 # Roles that confer full platform administration (global only).
@@ -57,6 +59,8 @@ PROTECTED_GROUPS = {
     CATALOG_LEAD_GROUP,
     MDM_LEAD_GROUP,
     DQ_LEAD_GROUP,
+    DATAHUB_LEAD_GROUP,
+    TURNKEY_LEAD_GROUP,
 }
 
 # ── Convenience: all canonical group names as a flat set ───────────

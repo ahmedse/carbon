@@ -21,6 +21,7 @@ import {
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import EditIcon from '@mui/icons-material/Edit';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ThumbDownAltOutlinedIcon from '@mui/icons-material/ThumbDownAltOutlined';
@@ -214,6 +215,11 @@ function AIMessageBubble({
   const [editOpen, setEditOpen] = useState(false);
   const [editText, setEditText] = useState('');
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  // Pending-action proposal review (details + modify before confirm).
+  const [detailsOpenId, setDetailsOpenId] = useState(null); // execution_id expanded
+  const [editAction, setEditAction] = useState(null);       // pending action being edited
+  const [editJson, setEditJson] = useState('');
+  const [editJsonError, setEditJsonError] = useState('');
 
   const handleCopyMessage = useCallback(() => {
     navigator.clipboard.writeText(message.content);
@@ -509,50 +515,171 @@ function AIMessageBubble({
     !isUser && (navigateAction?.type === 'navigate' || pendingActions.length > 0),
   );
 
+  // ── Pending-action proposal review ────────────────────────────────────
+  // Each staged execution renders as a card: Confirm & create / Edit & confirm
+  // / Decline plus an expandable "Details & JSON" section showing the proposed
+  // rule definition and the exact body that will be POSTed. Editing validates
+  // the JSON, then confirms the edited version in one atomic call.
+  const jsonBlock = (label, value) => (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+        {label}
+      </Typography>
+      <Box
+        component="pre"
+        sx={{
+          m: 0, mt: 0.25, p: 1, borderRadius: 1,
+          bgcolor: 'background.paper', border: 1, borderColor: 'divider',
+          fontFamily: '"Roboto Mono", Consolas, monospace',
+          fontSize: '0.7rem', lineHeight: 1.45,
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          maxHeight: 220, overflow: 'auto',
+        }}
+      >
+        {value}
+      </Box>
+    </Box>
+  );
+
+  const openEditAction = (pending) => {
+    const body =
+      pending.proposed_body && typeof pending.proposed_body === 'object'
+        ? pending.proposed_body
+        : {};
+    setEditAction(pending);
+    setEditJson(JSON.stringify(body, null, 2));
+    setEditJsonError('');
+  };
+
+  const saveEditAction = () => {
+    if (!editAction) return;
+    let parsed;
+    try {
+      parsed = JSON.parse(editJson);
+    } catch (err) {
+      setEditJsonError(`Invalid JSON — ${err.message}`);
+      return;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      setEditJsonError('The rule body must be a JSON object.');
+      return;
+    }
+    if (!parsed.name || !parsed.rule_type) {
+      setEditJsonError('The rule body must include "name" and "rule_type".');
+      return;
+    }
+    onConfirmExecution?.(editAction.execution_id, editAction, parsed);
+    setEditAction(null);
+  };
+
   const actionButtons = showActionRow ? (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+    <Stack spacing={1} sx={{ mt: 1 }}>
       {pendingActions.map((pending) => {
         const executionId = pending.execution_id;
         if (!executionId) return null;
-        const proposedName =
-          pending.proposed_rule?.name || pending.confirmation_message || 'this proposal';
+        const proposed = pending.proposed_rule || {};
+        const proposedName = proposed.name || pending.confirmation_message || 'this proposal';
+        const detailsOpen = detailsOpenId === executionId;
+        const validation = pending.validation;
+        const validationLabel =
+          validation?.passed === true
+            ? 'Preview passed'
+            : validation?.passed === false
+              ? 'Preview failed'
+              : 'Structural validation only';
+        const validationColor =
+          validation?.passed === true
+            ? 'success'
+            : validation?.passed === false
+              ? 'error'
+              : 'default';
         return (
-          <React.Fragment key={executionId}>
-            <Button
-              size="small"
-              color="success"
-              variant="outlined"
-              disabled={!onConfirmExecution}
-              onClick={() => onConfirmExecution?.(executionId, pending)}
-              aria-label={`Confirm and create ${proposedName}`}
-            >
-              Confirm &amp; create
-            </Button>
-            <Button
-              size="small"
-              color="error"
-              variant="outlined"
-              disabled={!onDeclineExecution}
-              onClick={() => onDeclineExecution?.(executionId, pending)}
-              aria-label={`Decline ${proposedName}`}
-            >
-              Decline
-            </Button>
-          </React.Fragment>
+          <Paper key={executionId} variant="outlined" sx={{ p: 1.25 }}>
+            <Stack spacing={1}>
+              <Stack direction="row" flexWrap="wrap" gap={0.5}>
+                <Button
+                  size="small"
+                  color="success"
+                  variant="outlined"
+                  disabled={!onConfirmExecution}
+                  onClick={() => onConfirmExecution?.(executionId, pending)}
+                  aria-label={`Confirm and create ${proposedName}`}
+                >
+                  Confirm &amp; create
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<EditIcon sx={{ fontSize: 16 }} />}
+                  disabled={!onConfirmExecution}
+                  onClick={() => openEditAction(pending)}
+                  aria-label={`Edit and confirm ${proposedName}`}
+                >
+                  Edit &amp; confirm
+                </Button>
+                <Button
+                  size="small"
+                  color="error"
+                  variant="outlined"
+                  disabled={!onDeclineExecution}
+                  onClick={() => onDeclineExecution?.(executionId, pending)}
+                  aria-label={`Decline ${proposedName}`}
+                >
+                  Decline
+                </Button>
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={() => setDetailsOpenId(detailsOpen ? null : executionId)}
+                  aria-expanded={detailsOpen}
+                  aria-label={`${detailsOpen ? 'Hide' : 'Show'} details for ${proposedName}`}
+                >
+                  {detailsOpen ? 'Hide details' : 'Details & JSON'}
+                </Button>
+              </Stack>
+
+              {detailsOpen && (
+                <Stack spacing={1} sx={{ pt: 0.5 }}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    {pending.confirmation_message || `Create DQ rule "${proposedName}"?`}
+                  </Typography>
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    color={validationColor}
+                    label={validationLabel}
+                    sx={{ alignSelf: 'flex-start' }}
+                  />
+                  {validation?.passed === false && Array.isArray(validation.errors) && (
+                    <Typography variant="caption" color="error">
+                      {validation.errors.join(' · ')}
+                    </Typography>
+                  )}
+                  {jsonBlock('Proposed rule (definition JSON)', JSON.stringify(proposed, null, 2))}
+                  {jsonBlock(
+                    'Body that will be POSTed',
+                    JSON.stringify(pending.proposed_body || {}, null, 2),
+                  )}
+                </Stack>
+              )}
+            </Stack>
+          </Paper>
         );
       })}
       {navigateAction?.type === 'navigate' && isSafeInternalRoute(navigateAction.route) && (
-        <Button
-          size="small"
-          variant="contained"
-          component={Link}
-          to={navigateAction.route}
-          aria-label={navigateAction.label || 'Open'}
-        >
-          {navigateAction.label || 'Open'}
-        </Button>
+        <Box sx={{ display: 'flex' }}>
+          <Button
+            size="small"
+            variant="contained"
+            component={Link}
+            to={navigateAction.route}
+            aria-label={navigateAction.label || 'Open'}
+          >
+            {navigateAction.label || 'Open'}
+          </Button>
+        </Box>
       )}
-    </Box>
+    </Stack>
   ) : null;
 
   return (
@@ -869,6 +996,69 @@ function AIMessageBubble({
             }}
           >
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit & confirm dialog — modify the staged rule body before creating.
+          Save validates the JSON, then confirms the edited version atomically. */}
+      <Dialog
+        open={Boolean(editAction)}
+        onClose={() => setEditAction(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontSize: '0.9375rem' }}>
+          Edit proposed rule{editAction?.proposed_rule?.name ? ` — ${editAction.proposed_rule.name}` : ''}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ fontSize: '0.8125rem', mb: 1.25 }}>
+            Edit the JSON body that will be sent to create the rule, then confirm.
+            Nothing is created until you save — you can also cancel or decline.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={12}
+            maxRows={26}
+            value={editJson}
+            onChange={(event) => {
+              setEditJson(event.target.value);
+              if (editJsonError) setEditJsonError('');
+            }}
+            error={Boolean(editJsonError)}
+            helperText={editJsonError || 'Must be a JSON object with "name" and "rule_type".'}
+            slotProps={{
+              input: {
+                sx: {
+                  fontFamily: '"Roboto Mono", Consolas, monospace',
+                  fontSize: '0.78rem',
+                },
+              },
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => openEditAction(editAction)}
+            disabled={!editAction}
+          >
+            Reset
+          </Button>
+          <Button size="small" variant="outlined" onClick={() => setEditAction(null)}>
+            Cancel
+          </Button>
+          <Button
+            size="small"
+            variant="contained"
+            color="success"
+            disabled={!editAction}
+            onClick={saveEditAction}
+          >
+            Save &amp; confirm
           </Button>
         </DialogActions>
       </Dialog>

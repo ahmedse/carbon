@@ -60,6 +60,16 @@ logger.debug("DEBUG = %s", repr(DEBUG))
 # Path for API (configurable, e.g. /api/v1/, /carbon/api/)
 API_PREFIX = get_env("DJANGO_API_PREFIX", "/api/v1/")
 
+# ── TurnKey Bridge (Phase P2) ─────────────────────────────────
+# Never hardcode these — they come from the environment (.env / .env.production).
+# FERNET_KEY: 44-char Fernet key for encrypting TurnKey API keys at rest.
+#   Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# TURNKEY_CALLBACK_SECRET: 64-char hex shared secret used to HMAC-SHA256 sign
+#   TurnKey → Carbon callbacks (verified before processing).
+#   Generate: python -c "import secrets; print(secrets.token_hex(32))"
+FERNET_KEY = get_env("FERNET_KEY", required=True)
+TURNKEY_CALLBACK_SECRET = get_env("TURNKEY_CALLBACK_SECRET", required=True)
+
 # File upload path for dataschema files
 DATASCHEMA_UPLOAD_PATH = get_env("DATASCHEMA_UPLOAD_PATH", "dataschema_uploads/")
 
@@ -141,6 +151,9 @@ INSTALLED_APPS = [
     'catalog',
     'mdm',
     'dq',
+    'datahub',
+    'integrations.turnkey',
+    'appregistry',
     'connections',
     'importexport',
     'evidence',

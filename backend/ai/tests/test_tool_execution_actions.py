@@ -49,6 +49,17 @@ def test_extract_tool_actions_pending_confirmation():
                 "requires_confirmation": True,
                 "execution_id": "ex-9",
                 "proposed_rule": {"name": "employee-number", "type": "range"},
+                "proposed_body": {
+                    "name": "employee-number",
+                    "rule_type": "range",
+                    "rule_level": "field_validation",
+                    "definition": {
+                        "schema_version": 1,
+                        "name": "employee-number",
+                        "type": "range",
+                        "params": {"min": 1000, "max": 9999},
+                    },
+                },
                 "validation": {"passed": True},
             }),
         },
@@ -59,6 +70,10 @@ def test_extract_tool_actions_pending_confirmation():
     assert pending[0]["execution_id"] == "ex-9"
     assert pending[0]["tool"] == "create_dq_rule"
     assert pending[0]["proposed_rule"]["name"] == "employee-number"
+    # The exact POST body travels with the proposal so the UI can render and
+    # edit the JSON before confirming.
+    assert pending[0]["proposed_body"]["rule_level"] == "field_validation"
+    assert pending[0]["proposed_body"]["definition"]["params"] == {"min": 1000, "max": 9999}
 
 
 def test_extract_tool_actions_dedupes_navigate_routes():
@@ -105,11 +120,26 @@ def test_grounded_note_staged_not_created():
     assert "Confirm" in note
 
 
-def test_grounded_note_error_line():
-    tools = [{"tool_name": "create_dq_rule", "error": "Rule validation failed"}]
+def test_grounded_note_error_is_outcome_oriented():
+    # RULE_23 (QA F2): raw tool exception text must never reach the user; the
+    # note reports the outcome, never the internal error. Covers both the
+    # top-level ``error`` key (make_executor catch-all) and an error embedded
+    # in the tool result JSON.
+    tools = [
+        {
+            "tool_name": "create_dq_rule",
+            "error": "'ToolExecution' object has no attribute 'refresh_from_db'",
+        },
+        {
+            "tool_name": "search_knowledge",
+            "result": json.dumps({"error": "internal traceback leaked"}),
+        },
+    ]
     note = _grounded_outcome_note(tools)
     assert "⚠️" in note
-    assert "Rule validation failed" in note
+    assert "nothing was created or changed" in note
+    assert "refresh_from_db" not in note
+    assert "internal traceback" not in note
 
 
 def test_grounded_note_navigate_summary():
@@ -289,6 +319,80 @@ def test_decline_marks_execution_declined_and_appends_message(user, conversation
 
 
 @pytest.mark.django_db
+def test_confirm_with_modified_body_creates_edited_rule(user, conversation):
+    """Modify-then-confirm: an optional ``body`` on the confirm call replaces
+    the staged POST body, so the user's JSON edits are what actually get
+    created — atomically, in one call."""
+    from rest_framework.test import APIClient
+
+    from ai.models import ToolExecution
+    from dq.models import DQRule
+
+    execution = _stage_execution(conversation, user)
+    original = json.loads(execution.input_params)["body"]
+
+    modified = {
+        **original,
+        "name": "employee-number-edited",
+        "severity": "warn",
+        "definition": {
+            **original["definition"],
+            "name": "employee-number-edited",
+            # definition is the source of truth for denormalized columns on
+            # create (DQRule.save()), so a user edit must land here.
+            "severity": "warn",
+            "params": {"min": 1000, "max": 50000},
+        },
+    }
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    response = client.post(
+        _confirm_url(conversation),
+        {"execution_id": execution.id, "body": modified},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.data
+    assert response.data["rule_name"] == "employee-number-edited"
+
+    rule = DQRule.objects.get(pk=response.data["rule_id"])
+    assert rule.name == "employee-number-edited"
+    assert rule.severity == "warn"
+
+    # The staged envelope now carries the edited body (what was actually sent).
+    execution.refresh_from_db()
+    sent_body = json.loads(execution.input_params)["body"]
+    assert sent_body["name"] == "employee-number-edited"
+    assert sent_body["definition"]["params"] == {"min": 1000, "max": 50000}
+    assert execution.status == "confirmed"
+
+
+@pytest.mark.django_db
+def test_confirm_rejects_non_object_modified_body(user, conversation):
+    from rest_framework.test import APIClient
+
+    execution = _stage_execution(conversation, user)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    response = client.post(
+        _confirm_url(conversation),
+        {"execution_id": execution.id, "body": "not-an-object"},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "JSON object" in response.data["error"]
+
+    # Nothing was created and the staged row is untouched.
+    execution.refresh_from_db()
+    assert execution.status == "pending_confirmation"
+
+
+@pytest.mark.django_db
 def test_confirm_rejects_other_users_execution(user, conversation):
     from accounts.models import User
     from rest_framework.test import APIClient
@@ -351,3 +455,77 @@ def test_confirm_404_when_execution_not_in_conversation(user, conversation):
     )
 
     assert response.status_code == 404
+
+
+# ── Regression (QA F1/F3): runtime path through the DjangoStore ─────────
+
+
+@pytest.mark.django_db
+def test_create_pending_execution_stages_via_django_store(user, conversation):
+    """QA F1 regression: the real runtime path — ``create_dq_rule`` plugin →
+    ``CarbonHostExecutor.create_pending_execution`` → DjangoStore session —
+    must stage a ``pending_confirmation`` row without crashing.
+
+    The sprint tests staged ``ToolExecution`` rows directly on the Django
+    mirror (``_stage_execution`` above), so ``_DjangoSession.refresh()`` — the
+    only Store method that never resolved engine → Django mirror — was never
+    exercised.  This test drives the exact runtime call chain and fails with
+    ``AttributeError: 'ToolExecution' object has no attribute
+    'refresh_from_db'`` before the fix.
+    """
+    import asyncio
+
+    from django.test import override_settings
+
+    from ai.engine.core.database import get_session_factory
+    from ai.host_executor import CarbonHostExecutor
+    from ai.models import ToolExecution as DjangoToolExecution
+    from ai.store import reset_store
+
+    with override_settings(AI_STORE_BACKEND="django"):
+        reset_store()
+
+        async def _stage() -> str:
+            factory = get_session_factory("carbon")
+            async with factory() as db:
+                executor = CarbonHostExecutor(
+                    db=db,
+                    instance_config={},
+                    user_token="inproc:carbon:1",
+                    host_user_id=str(user.pk),
+                )
+                execution = await executor.create_pending_execution(
+                    conversation_id=str(conversation.id),
+                    tool_name="create_dq_rule",
+                    method="POST",
+                    endpoint="/carbon-api/dq/rules/",
+                    body={
+                        "name": "employee-number",
+                        "rule_type": "range",
+                        "rule_level": "field_validation",
+                        "definition": {
+                            "schema_version": 1,
+                            "type": "range",
+                            "params": {"min": 1000, "max": 9999},
+                        },
+                    },
+                )
+                return execution.id
+
+        execution_id = asyncio.run(_stage())
+
+        reset_store()
+
+    row = DjangoToolExecution.objects.get(pk=execution_id)
+    assert row.status == "pending_confirmation"
+    assert row.tool_name == "create_dq_rule"
+    assert row.host_user_id == str(user.pk)
+    # The engine contract stores ``input_params`` as a JSON string (parsed by
+    # ``confirm_execution`` via ``json.loads``).
+    input_params = json.loads(row.input_params)
+    assert input_params["method"] == "POST"
+    assert input_params["endpoint"] == "/carbon-api/dq/rules/"
+
+    # Store writes commit on their own connection; remove the staged row so
+    # the --reuse-db test database stays clean across runs.
+    DjangoToolExecution.objects.filter(pk=execution_id).delete()

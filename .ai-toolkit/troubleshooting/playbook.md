@@ -400,3 +400,29 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: a domain-agnostic core (Catalog/MDM/DQ/schema) must never expose a hosted app's enum in its shared model or UI — same leak class as PB-29 (`level` field/business vs `rule_level`). When a "generic" surface has a filter only one domain understands, it's a boundary violation, not a feature.
 - Regression guard: assert `Module`/Data Product serializer and list page expose only generic dimensions (org_unit, domain, classification, tags, quality) — no `scope` unless the active domain app is carbon.
 - First seen: 2026-08-16.
+
+### PB-39 — AI tool execution crashes: `'ToolExecution' object has no attribute 'refresh_from_db'`
+- Symptom: `create_dq_rule` (Pulse tool) fails at runtime with
+  `AttributeError: 'ToolExecution' object has no attribute 'refresh_from_db'`
+  at `store.py:437` (called from `host_executor.py:185`). The pending execution row
+  IS committed before the crash, so each failed attempt leaves an orphaned
+  `pending_confirmation` row. No rule is created; user gets an error note.
+- Layer: backend (AI Store two-layer model bridge)
+- Root cause: the Store has a two-layer model system — engine (SQLAlchemy `DeclarativeBase`)
+  classes in `ai/engine/core/models.py` are plain Python objects, and Django mirrors live in
+  `ai/models/`. Every Store method that touches objects (`add`, `select`, `get`) first resolves
+  engine→Django mirror via `_to_django_instance()` / `resolve_model()` — but `_DjangoSession.refresh()`
+  was the ONLY method that called `obj.refresh_from_db()` on the raw engine instance (which has no
+  such method), instead of on its Django mirror. `create_pending_execution()` instantiates the engine
+  `ToolExecution`, so the crash was guaranteed.
+- Fix: in `_DjangoSession.refresh()` (backend/ai/store.py), resolve the mirror first:
+  `dj_obj = _to_django_instance(obj)` then `await sync_to_async(dj_obj.refresh_from_db, thread_sensitive=True)()`.
+  Chosen over dropping the post-commit refresh (QA recommendation) — it fixes ALL 6 `refresh()` call
+  sites (tool executions, agents, skills, registry) with the same invariant the other methods follow.
+- Best practice note: any new Store method that accepts engine instances must run them through
+  `_to_django_instance()` before touching Django-ORM-only behavior. Audit `refresh()`-style helpers
+  when adding a new model layer. Also keep error paths in `create_pending_execution` atomic (delete
+  the staged row on failure) so a crash can't orphan rows.
+- Regression guard: `backend/ai/tests/test_tool_execution_actions.py::test_create_pending_execution_stages_via_django_store`
+  (drives `CarbonHostExecutor.create_pending_execution()` end-to-end through the Django store).
+- First seen: 2026-08-18.

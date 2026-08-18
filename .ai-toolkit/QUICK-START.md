@@ -49,15 +49,15 @@ echo 'Read `.ai-toolkit/ONBOARDING.md`' > /path/to/newproject/.github/copilot-in
 | Role | When to Use | Model | Mode |
 |------|-------------|-------|------|
 | **Master Architect** | Planning, decomposition, TASKS.md specs | DeepSeek V4 Pro | Plan |
-| **Scientific Researcher** | Design & run experiments, analyze results | DeepSeek-R1 | Experiment |
-| **Backend Worker** | Python, Django, API, services, DB | DeepSeek-V3 | Execute |
-| **Frontend Worker** | React, MUI, hooks, UI | DeepSeek-V3 | Execute |
-| **DevOps Worker** | Docker, deploy, VPS, cron | DeepSeek-V3 | Execute |
-| **Data/ML Worker** | Experiments, forecasting, analysis | DeepSeek-V3 | Execute |
-| **Debugger/Fixer** | Prod hotfixes, regression tests | DeepSeek-V3 | Fix |
-| **QA Validator** | Verification, test planning, validation gates | DeepSeek-V3 | Validate |
-| **Product Designer** | UX design, design system, wireframes | DeepSeek-V3 | Design |
-| **Curator** | Monthly retro, evolve contracts | DeepSeek-R1 | Evolve |
+| **Scientific Researcher** | Design & run experiments, analyze results | DeepSeek V4-Pro | Experiment |
+| **Backend Worker** | Python, Django, API, services, DB | DeepSeek V4-Flash | Execute |
+| **Frontend Worker** | React, MUI, hooks, UI | DeepSeek V4-Flash | Execute |
+| **DevOps Worker** | Docker, deploy, VPS, cron | DeepSeek V4-Flash | Execute |
+| **Data/ML Worker** | Experiments, forecasting, analysis | DeepSeek V4-Flash | Execute |
+| **Debugger/Fixer** | Prod hotfixes, regression tests | DeepSeek V4-Flash | Fix |
+| **QA Validator** | Verification, test planning, validation gates | DeepSeek V4-Flash | Validate |
+| **Product Designer** | UX design, design system, wireframes | DeepSeek V4-Flash | Design |
+| **Curator** | Monthly retro, evolve contracts | DeepSeek V4-Pro | Evolve |
 
 ---
 

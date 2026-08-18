@@ -2,10 +2,49 @@
 // Sprint "fly to rule detail" — AI-driven action buttons on assistant bubbles:
 //   * navigate action  → in-app Link to the created/found entity
 //   * pending_actions  → staged tool executions (Confirm & create / Decline)
+//   * proposal review  → expandable Details & JSON + Edit & confirm (modify
+//     the staged body before creating)
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import AIMessageBubble from '../shell/AIMessageBubble';
+
+const RULE_BODY = {
+  name: 'employee-number',
+  rule_type: 'range',
+  rule_level: 'field_validation',
+  severity: 'error',
+  dimension: 'validity',
+  is_active: true,
+  definition: {
+    schema_version: 1,
+    name: 'employee-number',
+    level: 'field',
+    dimension: 'validity',
+    type: 'range',
+    severity: 'error',
+    active: true,
+    params: { min: 1000, max: 9999 },
+  },
+};
+
+const pendingAction = {
+  execution_id: 'exec-1',
+  tool: 'create_dq_rule',
+  confirmation_message: 'Create DQ rule "employee-number" (range)?',
+  proposed_rule: RULE_BODY.definition,
+  proposed_body: RULE_BODY,
+  validation: { passed: true, evaluable: true, explanation: 'all sample rows satisfy the rule' },
+};
+
+const pendingMessage = {
+  id: 'msg-1',
+  role: 'assistant',
+  content: 'Here is the answer.',
+  created_at: '2026-08-15T10:00:00Z',
+  outcome: null,
+  metadata: { pending_actions: [pendingAction] },
+};
 
 const assistantMessage = {
   id: 'msg-1',
@@ -123,5 +162,110 @@ describe('AIMessageBubble AI-driven actions', () => {
     renderBubble(assistantMessage);
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Confirm and create/i })).not.toBeInTheDocument();
+  });
+
+  // ── Proposal review: details + JSON + modify ─────────────────────────
+
+  it('expands Details & JSON showing definition and POST body', () => {
+    renderBubble(pendingMessage, {
+      onConfirmExecution: vi.fn(),
+      onDeclineExecution: vi.fn(),
+    });
+
+    // Hidden until expanded.
+    expect(screen.queryByText('Proposed rule (definition JSON)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Body that will be POSTed')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Show details/i }));
+
+    expect(screen.getByText('Proposed rule (definition JSON)')).toBeInTheDocument();
+    expect(screen.getByText('Body that will be POSTed')).toBeInTheDocument();
+    // The definition JSON is rendered (params visible — appears in both blocks).
+    expect(screen.getAllByText(/"min": 1000/).length).toBeGreaterThanOrEqual(1);
+    // The exact POST body is rendered (only the body carries rule_level).
+    expect(screen.getByText(/"rule_level": "field_validation"/)).toBeInTheDocument();
+    // Validation outcome surfaces.
+    expect(screen.getByText('Preview passed')).toBeInTheDocument();
+  });
+
+  it('opens Edit & confirm with the staged body and confirms the edited version', () => {
+    const onConfirmExecution = vi.fn();
+    renderBubble(pendingMessage, {
+      onConfirmExecution,
+      onDeclineExecution: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Edit and confirm/i }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Edit proposed rule — employee-number')).toBeInTheDocument();
+    const editor = within(dialog).getByRole('textbox');
+    expect(editor.value).toContain('"min": 1000');
+
+    // Modify the max bound and save.
+    fireEvent.change(editor, {
+      target: { value: editor.value.replace('"max": 9999', '"max": 50000') },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Save & confirm/i }));
+
+    expect(onConfirmExecution).toHaveBeenCalledTimes(1);
+    const [executionId, pending, editedBody] = onConfirmExecution.mock.calls[0];
+    expect(executionId).toBe('exec-1');
+    expect(pending.execution_id).toBe('exec-1');
+    expect(editedBody.definition.params.max).toBe(50000);
+    expect(editedBody.name).toBe('employee-number');
+  });
+
+  it('shows a JSON error and does not confirm on invalid edits', () => {
+    const onConfirmExecution = vi.fn();
+    renderBubble(pendingMessage, {
+      onConfirmExecution,
+      onDeclineExecution: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Edit and confirm/i }));
+    const dialog = screen.getByRole('dialog');
+    const editor = within(dialog).getByRole('textbox');
+
+    fireEvent.change(editor, { target: { value: '{ not valid json' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Save & confirm/i }));
+
+    expect(within(dialog).getByText(/Invalid JSON/)).toBeInTheDocument();
+    expect(onConfirmExecution).not.toHaveBeenCalled();
+    // Dialog stays open so the user can fix the JSON.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('rejects a body missing required fields even when JSON is valid', () => {
+    const onConfirmExecution = vi.fn();
+    renderBubble(pendingMessage, {
+      onConfirmExecution,
+      onDeclineExecution: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Edit and confirm/i }));
+    const dialog = screen.getByRole('dialog');
+    const editor = within(dialog).getByRole('textbox');
+
+    fireEvent.change(editor, { target: { value: '{"name": "x"}' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Save & confirm/i }));
+
+    expect(within(dialog).getByText(/"rule_type"/)).toBeInTheDocument();
+    expect(onConfirmExecution).not.toHaveBeenCalled();
+  });
+
+  it('cancels the edit dialog without confirming', async () => {
+    const onConfirmExecution = vi.fn();
+    renderBubble(pendingMessage, {
+      onConfirmExecution,
+      onDeclineExecution: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Edit and confirm/i }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^Cancel$/ }));
+
+    expect(onConfirmExecution).not.toHaveBeenCalled();
+    // MUI Dialog animates out — wait for it to unmount.
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });

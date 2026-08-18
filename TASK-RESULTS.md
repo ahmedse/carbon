@@ -1199,3 +1199,391 @@ $ npm run build
 ### Issues Found
 - **Pre-existing full-suite failures (unrelated):** 9 failures in AIArtifacts/AIMessageBubble.feedback/AISharedThreads tests — reproduced on clean `main` (9ecadfb) with changes stashed; not introduced by 23-B.
 - **MUI Tooltip clones accessible buttons:** forgetting per-row buttons renders duplicate accessible names; handled in tests via exact-name queries (see Deviations).
+
+---
+
+## [2026-08-18] Backend Worker — Phase P1: Dataset Hub (datahub/)
+
+### Summary
+All gates passed. 17 files changed (12 created, 5 modified). 43 new tests added; full `datahub` suite **43 passed, 0 failed**; `accounts` regression **330 passed**; `manage.py check` clean; `makemigrations --check --dry-run` → "No changes detected". The Dataset Hub trust core is built and mounted at `/carbon-api/datahub/` per the Master's corrections: Dataset/DatasetVersion lifecycle (draft → pending → approved/rejected with `current_version` promotion), DataContract + violation evaluation (schema/quality/freshness), DatasetAccessPolicy (per-user/per-group grants), dual ingest paths (ERP JSON + CSV upload), health-score computation (0.4·completeness + 0.4·validity + 0.2·freshness), DQ `profile` job seam, AssetProfile mirroring, soft-archive DELETE, and CBAC gating end-to-end.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `datahub` app skeleton (apps.py, INSTALLED_APPS) | ✅ | `DatahubConfig`; registered between `dq` and `connections` |
+| 2 | Models: Dataset, DatasetVersion, DataContract, DataContractViolation, DatasetAccessPolicy | ✅ | UUID pks; `module` FK PROTECT (CBAC anchor); `current_version` OneToOne SET_NULL; `unique_together ("dataset","version_number")`; XOR clean() on access policy |
+| 3 | Capabilities: `datahub:view/ingest/approve/manage` + `datahub_lead` group | ✅ | `ALL_CAPABILITIES` + IMPLIES (`manage/ingest/approve` → `view`); `datahub_lead` = manage+ingest+approve; `DATAHUB_VIEW` added to the 4 trust-core blocks (dataowners/analysts/viewers/auditors) |
+| 4 | Serializers (lean list + full detail + contract + violation + policy) | ✅ | list uses `DatasetListSerializer` with `current_version=VersionList`; contract/version detail read-only |
+| 5 | Ingest pipeline (`ingest.py`) | ✅ | rows → DataTable `{slug}_v{n}` + DataFields + DataRows → schema_snapshot → compute_health → DQ `create_job('profile')` + `execute_job` → pending DatasetVersion → mirror AssetProfile → contract violations → optional auto-approve |
+| 6 | Services: `get_dataset_access`, `check_contract`, `approve_version`, `reject_version`, `mirror_health_to_catalog`, `gate_validity` | ✅ | access = explicit policy wins, else module visibility; contract evaluation creates violations; mirror thresholds passing ≥0.9 / warning ≥0.7 / failing <0.7 |
+| 7 | Views + URLs (10 endpoints) | ✅ | see endpoint list below; explicit uuid paths before router |
+| 8 | Admin (5 registrations) + migration 0001 | ✅ | `migrate datahub` OK; `makemigrations --check --dry-run` → no drift |
+| 9 | Tests (43) | ✅ | 6 models + 11 cbac + 21 api + 5 services |
+| 10 | Verification gates | ✅ | `check` clean · `makemigrations --check --dry-run` clean · `pytest datahub` 43 passed · `pytest accounts` 330 passed |
+
+### Endpoints (mounted at `/carbon-api/datahub/`)
+| Method | Path | Permission | Notes |
+|--------|------|-----------|-------|
+| GET/POST | `datasets/` | `ReadAnyWriteAdmin` + `datahub:manage` on write | list = lean serializer, filters module/domain/status/classification, archived hidden unless `?include_archived=true` |
+| GET/PATCH/PUT/DELETE | `datasets/{id}/` | same | DELETE = soft archive (status='archived', 204) |
+| GET/POST | `datasets/{id}/versions/` | `datahub:manage` on write | POST takes `data_table`, validates same module, runs ingest pipeline |
+| GET | `datasets/{id}/versions/{vid}/` | any authenticated | adds `contract_violations` |
+| POST | `datasets/{id}/versions/{vid}/approve/` | `AdminOrSuperuserOnly` + `datahub:approve` | pending-only (400 otherwise) → sets current_version |
+| POST | `datasets/{id}/versions/{vid}/reject/` | `AdminOrSuperuserOnly` + `datahub:approve` | pending-only; reason recorded |
+| GET/PUT | `datasets/{id}/contract/` | `datahub:manage` on write | get_or_create active contract |
+| GET | `datasets/{id}/contract/violations/` | any authenticated | open-only by default |
+| POST | `datasets/{id}/ingest/erp/` | `datahub:ingest` | JSON `{rows: [...]}`; empty → 400 |
+| POST | `datasets/{id}/ingest/upload/` | `datahub:ingest` | multipart CSV (utf-8-sig), `csv.DictReader`; missing file → 400 |
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| CREATE | `backend/datahub/models.py` | 237 | 5 models (Dataset, DatasetVersion, DataContract, DataContractViolation, DatasetAccessPolicy) |
+| CREATE | `backend/datahub/serializers.py` | 109 | lean list + full detail + contract + violation + access-policy serializers |
+| CREATE | `backend/datahub/services.py` | 230 | access, contract evaluation, approve/reject, AssetProfile mirror, gate wrapper |
+| CREATE | `backend/datahub/ingest.py` | 297 | health formula, table/version creation, ERP + CSV ingest, DQ job seam |
+| CREATE | `backend/datahub/views.py` | 319 | ViewSet + 8 nested views, CBAC wiring, soft archive |
+| CREATE | `backend/datahub/urls.py` | 37 | 8 explicit paths + router |
+| CREATE | `backend/datahub/admin.py` | 41 | 5 admins |
+| CREATE | `backend/datahub/apps.py` | 7 | `DatahubConfig` |
+| CREATE | `backend/datahub/migrations/0001_initial.py` | — | generated + applied |
+| CREATE | `backend/datahub/tests/conftest.py` | 52 | module/domain/make_dataset/auth_client fixtures |
+| CREATE | `backend/datahub/tests/test_models.py` | 80 | 6 tests |
+| CREATE | `backend/datahub/tests/test_cbac.py` | 205 | 11 tests (isolation, capability gating, policy override) |
+| CREATE | `backend/datahub/tests/test_api.py` | 430 | 21 tests (CRUD, lifecycle, contract, ingest, filters) |
+| CREATE | `backend/datahub/tests/test_services.py` | 85 | 5 tests (mirror, contract, approve/reject) |
+| MODIFY | `backend/accounts/capabilities.py` | +58 | 4 capability constants + IMPLIES + `datahub_lead` mapping + trust-core blocks |
+| MODIFY | `backend/accounts/constants.py` | +4 | `DATAHUB_LEAD_GROUP` in `DOMAIN_LEAD_GROUPS` + `PROTECTED_GROUPS` |
+| MODIFY | `backend/config/settings.py` | +1 | `'datahub'` in `INSTALLED_APPS` |
+| MODIFY | `backend/config/urls.py` | +1 | `path(f'{api_prefix}/datahub/', include('datahub.urls'))` |
+| MODIFY | `backend/accounts/tests/test_capability_rbac_extensive.py` | +1 | declared-group audit set gains `datahub_lead` |
+
+### Verification Output
+```
+$ PGPASSWORD=... /home/ahmed/aast/carbon/.venv/bin/python manage.py check
+System check identified no issues (0 silenced).
+
+$ PGPASSWORD=... /home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+No changes detected
+
+$ PGPASSWORD=... /home/ahmed/aast/carbon/.venv/bin/python -m pytest datahub -q
+43 passed in 8.43s
+
+$ PGPASSWORD=... /home/ahmed/aast/carbon/.venv/bin/python -m pytest accounts -q
+330 passed in 15.98s
+```
+
+### Health-Score Formula (as built)
+- `health_score = 0.4·completeness + 0.4·validity + 0.2·freshness`
+- `completeness = 1 − null_cells / total_cells` (null = `None` or `''` per row dict)
+- `validity` = DQ gate pass rate (`dq.gate.check_rows(rows, mode='import')`; 1.0 when no rows)
+- `freshness` = 1.0 normally; 0.0 when the contract's `freshness_hours` is exceeded by the latest row's `created_at` vs now
+- stored on the version as `health_score` (float) + `health_detail` (JSON: per-dimension + null_cells/total_cells)
+
+### Ingest Pipeline (as built)
+rows (raw dicts) → `create_data_table` (`{slug}_v{n}` + DataFields) → `write_rows` (bulk DataRow, keys lowercased) → `schema_snapshot_from_table` → `compute_health` (raw rows) → `gate_validity` → DQ `create_job('profile', table=..., user=...)` + `execute_job` (job pk stored in `dq_job_id`) → pending `DatasetVersion` (`version_number = max+1`, lineage `{source:{type,ref}}`) → `mirror_health_to_catalog` (AssetProfile quality_status/score) → `check_contract` (violations) → optional auto-approve (`auto_approve` truthy AND no violations AND authenticated user).
+
+### CBAC Gating Approach (as built)
+- Reads: `IsAuthenticated` + `ReadAnyWriteAdmin`; queryset scoped by `get_visible_module_ids(user)` (None = unrestricted) ∪ explicit `can_view` access policies, `.distinct()`.
+- Writes (create/update/contract): `required_write_capability='datahub:manage'`; ingest: `'datahub:ingest'`; module boundary enforced in `perform_create`/`perform_update` via `_check_module_visible` (PermissionDenied 403 outside visible modules).
+- Approve/reject: `IsAuthenticated` + `AdminOrSuperuserOnly` with `required_capability='datahub:approve'`.
+- DELETE = soft archive (status='archived'), never a hard delete.
+
+### Deviations
+- **Mount point:** `/carbon-api/datahub/` (per Master correction) — not the DESIGN doc's `/api/v1/datahub/`.
+- **No `HasCBACCapability`:** per Master correction, uses `ReadAnyWriteAdmin` + `AdminOrSuperuserOnly` with view-level `required_write_capability`/`required_capability` (the `_check_write_capability` contract in `accounts/permissions.py`).
+- **Group model:** the doc's `data-steward`/`data-analyst`/`data-entry` groups don't exist → added `datahub_lead` group + `DATAHUB_VIEW` into the 4 existing trust-core blocks (per Master).
+- **DQ seam:** doc's `run_rule_job` doesn't exist → uses `create_job('profile')` + `execute_job` (deterministic inline run), pk stored in `DatasetVersion.dq_job_id`.
+- **Auto-approve defaults to manual** (`auto_approve` opt-in); ERP ingest exercised via mock payloads (no real ERP connection in dev).
+- **List responses are unpaginated in tests** — the platform's `CarbonPageNumberPagination` deliberately skips pagination under pytest (returns raw list) to keep 750+ existing tests stable; dataset list tests assert `resp.json()` as a list (matches sibling apps dq/catalog). In production the same view returns the paginated envelope.
+- **Test-runner note:** `manage.py test` aborts with the known "Conflicting models" error under the unittest loader; `python -m pytest` (canonical runner per project.config.md) used throughout.
+
+### Issues Found
+- **`auto_now` fields cannot appear in `save(update_fields=...)`:** `approve_version`/`reject_version` originally included `'updated_at'` (auto_now on DatasetVersion/Dataset) → `ValueError` → 500 on approve. Removed `updated_at` from both `update_fields` lists (auto_now updates it implicitly). Fixed + covered by lifecycle tests.
+- **`perform_create` field-name bug:** module-scoped write enforcement read `validated_data.get('module_id')`, but the serializer field is `module` (instance) → the module boundary was silently skipped (201 instead of 403). Now reads `validated_data['module']` and checks `.pk`. Fixed + covered by `test_module_scoped_write_denied_outside_scope`.
+- **Duplicate DataTable name in mirror test:** `_version_with_health` created two tables with the same name on one dataset → `unique_together("module","name")` IntegrityError. Table names now unique per version.
+- **Quality-SLA test data:** completeness is 1.0 for fully-populated rows, so a `min_completeness=1.0` contract with complete rows produces no violation; the test now ingests a row with a null cell to exercise the breach deterministically.
+- **Declared-group audit:** `test_all_groups_in_mapping_are_declared` asserts an exact group set; `datahub_lead` added to the expected set (it is a declared group per this phase).
+- **Uncommitted working tree (pre-existing, unresolved):** `git status` shows interleaved uncommitted changes from prior phases; no commit was made — awaiting direction on commit/push scope.
+
+---
+
+## [2026-08-18] Frontend Worker — Phase 23-C: Copilot-style composer + collapsed sessions drawer + grouped Memory surface
+
+### Summary
+All gates passed. 4 files changed (2 shell components modified, 1 test suite synced, 1 new test file). The AI workspace now matches VS Code Copilot density per the enterprise layout recommendation: (1) the composer is a true multi-line input that grows with content up to ~55% of the pane height (clamped 6–18 rows) then scrolls internally instead of clipping — Enter=send, Shift+Enter=newline preserved; (2) the sessions drawer starts collapsed and opens on demand from the activity bar; (3) the nine activity-bar icons were consolidated to seven — Memory/Learnt/Relationship are now one Memory icon (Psychology) that opens a grouped panel with internal MUI `<Tabs>` (Episodes/Facts/Relationship) persisted to `localStorage` (RULE_17), matching how Copilot Chat groups its secondary surfaces under one icon.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Composer growth (VS Code Copilot-style) in `AIInputBar.jsx` | ✅ | ResizeObserver on parent pane → `maxRows` = clamp(6–18, round(55% pane height / 20px)); `overflowY: auto` on input so it scrolls once capped |
+| 2 | Sessions drawer collapsed by default in `AIWorkspace.jsx` | ✅ | `activePanel` initial state `null`; activity-bar Sessions icon opens it on demand |
+| 3 | Activity bar consolidated 9 → 7 icons | ✅ | Memory/Learnt/Relationship → one Memory icon (PsychologyOutlined); sessions/context/investigate/artifacts/usage/settings retained; New chat stays at bottom |
+| 4 | Grouped Memory panel with internal tabs | ✅ | MUI `<Tabs>` Episodes/Facts/Relationship (compact, RULE_17); selection persisted via `carbon-ai-memory-tab`; `AIRelationshipTab` cross-links now switch internal tabs |
+| 5 | Shell tests synced | ✅ | Drawer-collapsed test opens Sessions first; new grouped-Memory + persistence tests; memory-tab components mocked with testids |
+| 6 | Growth behavior covered | ✅ | New `AIInputBar.growth.test.jsx` (4 tests): ResizeObserver wiring, long-input send, Shift+Enter newline, zero-height fallback |
+
+### Verification Output
+```console
+$ npm run lint
+> eslint .          # clean
+
+$ npx vitest run src/__tests__/AIMemoryTabs.test.jsx src/__tests__/AIWorkspace.shell.test.jsx \
+    src/__tests__/AIInputBar.growth.test.jsx src/__tests__/AIInputBar.mode.test.jsx \
+    src/__tests__/AIInputBar.mentions.test.jsx src/__tests__/AIInputBar.entityResolve.test.jsx
+Test Files  6 passed (6)
+     Tests  47 passed (47)
+
+$ npm run build
+✓ built in 13.47s
+
+$ npx vitest run   # full suite
+Test Files  3 failed | 37 passed (40)
+     Tests  9 failed | 545 passed (554)   # 9 pre-existing unrelated failures only
+```
+
+### Files Changed
+- `carbon-frontend/src/shell/AIInputBar.jsx` — MODIFY (growth-to-fit + internal scroll)
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — MODIFY (drawer default, grouped Memory panel, 7-icon bar)
+- `carbon-frontend/src/__tests__/AIWorkspace.shell.test.jsx` — MODIFY (drawer-open sync + grouped Memory tests)
+- `carbon-frontend/src/__tests__/AIInputBar.growth.test.jsx` — ADD (growth behavior, 4 tests)
+
+### Deviations
+- The three memory tabs keep their own internal `p:2/height:100%/overflow:auto` roots, so the grouped wrapper uses `overflow:hidden` + bounded flex height to avoid double scrollbars.
+- Tab labels are compact per the compact-ui tokens (`0.6875rem`, minHeight 34) while staying MUI `Tabs` per RULE_17.
+- Browser verification of the live composer was blocked by the backend rate limiter (429, ~50 min cooldown on AI endpoints); growth behavior is covered by the new unit tests instead.
+
+### Issues Found
+- **Pre-existing full-suite failures (unrelated):** 9 failures in AIArtifacts/AIMessageBubble.feedback/AISharedThreads tests — same set as 23-B; not introduced by 23-C.
+- **Uncommitted P1 backend changes (unrelated, not touched):** `backend/datahub/`, `backend/accounts/*`, `.ai-toolkit/*`, `docs/DESIGN-PLATFORM.md`, plus the P1 TASK-RESULTS.md/TASKS.md entries remain uncommitted awaiting Master direction; this commit scopes to the frontend files only.
+
+---
+
+## [2026-08-18] Backend Worker — Phase P2: TurnKey Bridge (HTTP-only integration)
+
+### Summary
+3/3 verification gates green. 17 files changed (14 created, 3 modified). 14 new tests (all passing); related regression suites 373 passed (accounts + datahub), full turnkey suite 14 passed.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | App scaffolding: `integrations/turnkey/` (`__init__.py`, `apps.py` TurnkeyConfig) | ✅ | INSTALLED_APPS `integrations.turnkey` after `datahub`; `config/urls.py` include at `/{api_prefix}/integrations/turnkey/` |
+| 2 | Models: `TurnKeyConfig`, `TurnKeyModelLink`, `PredictionRecord`, `DriftAlert` | ✅ | Fernet-encrypted API key at rest (`FERNET_KEY` env); UUID pks; related_names mirroring datahub P1 patterns; migration `0001_initial` (deps: datahub 0001, dataschema 0005) |
+| 3 | Django-free TurnKey client (copied from Gigacast reference) | ✅ | `client.py` — register/list/get model, push/promote versions, metrics; `sha256_file`; `register_or_get_model` handles `items` key or bare list |
+| 4 | Services layer: trace/register/promote/feedback + HMAC-callback handlers | ✅ | `services.py` — `trace_data_row` canonical-values matching with hash fallback; idempotent drift via `get_or_create(turnkey_alert_id)`; DQ anomaly job trigger + contract violation on drift; `@transaction.atomic` |
+| 5 | HMAC-signed inbound callbacks | ✅ | `views.py` — `_verify_signature` (SHA-256 HMAC over `request.body` with `TURNKEY_CALLBACK_SECRET`, `compare_digest`); AllowAny + `authentication_classes=[]`; 401 on bad signature, 400 on unknown link |
+| 6 | CBAC link management API | ✅ | `permissions.py` `TurnKeyReadViewWriteManage` reuses `accounts.permissions._check_write_capability` via capability shim; `turnkey:view` / `turnkey:manage` caps; `turnkey_lead` group; viewers_group now includes `TURNKEY_VIEW` |
+| 7 | Serializers + admin | ✅ | API key never serialized; write-only `api_key` on create; all 4 models registered in admin |
+| 8 | Verification gates | ✅ | `manage.py check` (no issues), `makemigrations --check --dry-run` (no changes), `pytest integrations` 14 passed |
+| 9 | Report appended | ✅ | This entry |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `backend/integrations/turnkey/__init__.py`, `apps.py` | AppConfig `TurnkeyConfig` |
+| CREATE | `backend/integrations/turnkey/models.py` | 4 models + `canonical_json` / `input_hash_of` helpers |
+| CREATE | `backend/integrations/turnkey/client.py` | Django-free HTTP client (Gigacast reference) |
+| CREATE | `backend/integrations/turnkey/services.py` | Trace/register/promote/feedback + callback handlers |
+| CREATE | `backend/integrations/turnkey/permissions.py` | `TurnKeyReadViewWriteManage` |
+| CREATE | `backend/integrations/turnkey/serializers.py` | 5 serializers (incl. write-only `api_key`) |
+| CREATE | `backend/integrations/turnkey/views.py` | Config/link CRUD, promote, predictions, feedback, drift-alerts, 2 HMAC callbacks |
+| CREATE | `backend/integrations/turnkey/urls.py` | 9 routes |
+| CREATE | `backend/integrations/turnkey/admin.py` | All models registered |
+| CREATE | `backend/integrations/turnkey/migrations/0001_initial.py` | Initial schema |
+| CREATE | `backend/integrations/turnkey/tests/conftest.py` | Fixtures + `sign_body`/`signed_post` helpers |
+| CREATE | `backend/integrations/turnkey/tests/test_callbacks.py` | 5 tests |
+| CREATE | `backend/integrations/turnkey/tests/test_api.py` | 9 tests |
+| MODIFY | `backend/accounts/capabilities.py` | TURNKEY_VIEW/MANAGE caps, IMPLIES, `turnkey_lead` group, TURNKEY_VIEW in viewers_group |
+| MODIFY | `backend/config/settings.py` | FERNET_KEY + TURNKEY_CALLBACK_SECRET (fail-loud env), INSTALLED_APPS |
+| MODIFY | `backend/config/urls.py` | turnkey include |
+| MODIFY | `backend/accounts/tests/test_capability_rbac_extensive.py` | `turnkey_lead` added to documented groups set |
+
+### Verification Output
+```
+$ cd backend && .venv/bin/python manage.py check
+System check identified no issues (0 silenced).
+
+$ .venv/bin/python manage.py makemigrations --check --dry-run
+No changes detected
+
+$ .venv/bin/python -m pytest integrations -q
+14 passed in 7.26s
+
+$ .venv/bin/python -m pytest accounts datahub -q   # regression after viewers_group change
+373 passed in 25.40s
+```
+
+### Deviations
+- **No §6 prefix-route deviations.** The only `/api/v1/` paths live inside the client's internal TurnKey API contract (TurnKey's own server routes), not Carbon routes — required for the bridge to speak TurnKey's protocol.
+- **`dq/permissions.py` re-export:** `ReadAnyWriteAdmin` continues to be re-exported from `accounts.permissions` (the real class); no duplicate definition introduced.
+- **Test runner:** `python -m pytest` (project canonical) — `manage.py test` is documented as broken under the unittest loader (Conflicting models error).
+- **API key encrypted at rest:** plaintext key exists only in the request body → `TurnKeyConfigCreateSerializer` → `set_api_key()`; never serialized back. Round-trip verified by `get_api_key()` in tests.
+
+### Issues Found
+- **Pre-existing (not in scope):** uncommitted working tree from prior phases remains uncommitted — no commit made, awaiting direction on commit/push scope.
+- **Capability test update:** `test_all_groups_in_mapping_are_declared` asserts an exact group set; adding `turnkey_lead` required updating that expected set (mechanical, not a behavior change).
+## [2026-08-18] Debugger/Fixer — create_dq_rule runtime crash (ToolExecution.refresh_from_db) + raw-error leak
+
+Verdict from `docs/TASK-RESULT-QA-CREATE-DQ-RULE.md`: **FAILED (P1 core-feature defect)** — F1/F2/F3 fixed per QA handoff. All verification gates green.
+
+### Root Cause
+- **F1 (P1)** — `CarbonHostExecutor.create_pending_execution()` stages **engine**-model `ToolExecution` instances (plain SQLAlchemy-declared classes in `ai/engine/core/models.py`) through the Store. Every Store method that touches objects (`add`, `select`, `get`) first resolves engine→Django mirror via `_to_django_instance()` / `resolve_model()` — but `_DjangoSession.refresh()` was the **only** method that called `obj.refresh_from_db()` on the raw engine instance (no such method) → `AttributeError: 'ToolExecution' object has no attribute 'refresh_from_db'` at `store.py:437`, called from `host_executor.py:185`. The row **is** committed before the crash → each failed attempt orphaned a `pending_confirmation` row.
+- **F2 (P3)** — `make_executor` catch-all returns `{"error": str(exc)}`; `_grounded_outcome_note()` rendered it verbatim into the assistant note → raw internal exception text to the user (violates RULE_23: user-facing copy describes outcomes, never internals).
+
+### Regression Test
+- `backend/ai/tests/test_tool_execution_actions.py::test_create_pending_execution_stages_via_django_store` — drives the exact runtime path (`CarbonHostExecutor(db=DjangoStore session, user_token="inproc:carbon:1", host_user_id=str(user.pk))` → `create_pending_execution({"name": "employee-number", "rule_type": "range", ...})`), asserts the staged row (`status=="pending_confirmation"`, `tool_name=="create_dq_rule"`, `input_params` JSON-parses). **Red before fix** (byte-for-byte production traceback), **green after**.
+- `test_grounded_note_error_is_outcome_oriented` — locks F2 copy (both error paths): asserts `⚠️` + "nothing was created or changed", asserts `refresh_from_db`/internal text absent.
+
+### Fix Applied
+- `backend/ai/store.py` L436 — `_DjangoSession.refresh()` now resolves `dj_obj = _to_django_instance(obj)` **before** `await sync_to_async(dj_obj.refresh_from_db, thread_sensitive=True)()`. QA-recommended invariant fix (matches `add`/`select`/`get`); fixes **all 6** `refresh()` call sites (tool executions, agents, skills, registry), not just `create_pending_execution`. Chosen over dropping the post-commit refresh.
+- `backend/ai/engine_runtime.py` ~L264 — new `_FAILED_ACTION_COPY` ("⚠️ That action didn't complete — nothing was created or changed. Please try again in a moment.") replaces raw `f"⚠️ {tool}: {item['error']}"` in both error paths (top-level `item["error"]` and result-JSON `data["error"]`).
+
+### Before/After Evidence
+Before (production `backend/logs/carbon.log` L21000, 2026-08-18 17:46:13):
+```
+ERROR pulse.agent.plugins: Plugin create_dq_rule failed: 'ToolExecution' object has no attribute 'refresh_from_db'
+  File "backend/ai/plugins/create_dq_rule.py", line 360, in execute
+    execution = await host_api.create_pending_execution(...)
+  File "backend/ai/host_executor.py", line 185, in create_pending_execution
+    await self.db.refresh(execution)
+  File "backend/ai/store.py", line 437, in refresh
+    await sync_to_async(obj.refresh_from_db, thread_sensitive=True)()
+AttributeError: 'ToolExecution' object has no attribute 'refresh_from_db'
+```
+After (regression test driving the identical path):
+```
+$ .venv/bin/python -m pytest ai/tests/test_tool_execution_actions.py -q
+16 passed in 4.56s
+```
+Full gates:
+```
+$ .venv/bin/python -m pytest ai -q
+464 passed in 20.19s
+
+$ ./.ai-toolkit/scripts/verify.sh backend
+✓ django check
+GATE PASSED
+```
+
+### Follow-up Needed
+- **NONE** for the store fix (general invariant fix, not a hotfix).
+- Adjacent issues found (not in scope, logged for future): a crash between `commit()` and `refresh()` in `create_pending_execution` can still orphan a `pending_confirmation` row — consider wrapping in a transaction/cleanup-on-failure. Also `emissions/views.py` `?format=` param collision noted in PB-35 remains open.
+
+---
+
+## [2026-08-18] Backend Worker — Phase P2-F: Bootstrap group parity (`datahub_lead` + `turnkey_lead`)
+
+**Role:** backend-worker · **Model:** DeepSeek V4-Flash · **Kind:** Small bugfix
+
+### Summary
+Closed the carry-forward gap: `accounts/constants.py` had gained `DATAHUB_LEAD_GROUP` (P1) and `capabilities.py` had gained `turnkey_lead` (P2), but `bootstrap_platform.py` `GROUP_DEFS` was never updated — fresh bootstraps silently skipped creating the `datahub_lead` / `turnkey_lead` Django Groups, so those roles couldn't be assigned via ScopedRole.
+
+### Task Results
+| # | Task | Result |
+|---|------|--------|
+| 1 | Add `TURNKEY_LEAD_GROUP = "turnkey_lead"` to `accounts/constants.py` + `DOMAIN_LEAD_GROUPS` | ✅ |
+| 2 | Add `TURNKEY_LEAD_GROUP` to `PROTECTED_GROUPS` (parity with `datahub_lead`; GroupViewSet delete-protection) | ✅ |
+| 3 | Add `datahub_lead` + `turnkey_lead` to `GROUP_DEFS` (category `app`, `is_protected=True`, `is_scoped=True`, same shape as `dq_lead`) | ✅ |
+| 4 | Update import line in `bootstrap_platform.py` to include `DATAHUB_LEAD_GROUP, TURNKEY_LEAD_GROUP` | ✅ |
+| 5 | Verify idempotent re-run + GroupMetadata correctness | ✅ |
+
+### Files Changed
+- MODIFY `backend/accounts/constants.py` — `TURNKEY_LEAD_GROUP` constant; added to `DOMAIN_LEAD_GROUPS` + `PROTECTED_GROUPS`
+- MODIFY `backend/accounts/management/commands/bootstrap_platform.py` — import line + 2 new `GROUP_DEFS` entries
+
+### Verification Output
+```bash
+$ python manage.py check
+System check identified no issues (0 silenced).
+
+$ python -m pytest accounts -q
+330 passed in 18.26s
+
+$ python -m pytest datahub accounts -q   # combined regression
+373 passed in 17.75s
+
+$ python manage.py bootstrap_platform
+  Groups: 2 created, 12 up-to-date (14 total)
+  Apps:   0 created, 8 up-to-date (8 total)
+✓ Platform bootstrap complete — groups, apps, superuser assignment ready.
+
+$ shell -c "...GroupMetadata lookup..."
+datahub_lead: app_id=datahub category=app is_protected=True is_scoped=True
+turnkey_lead: app_id=turnkey category=app is_protected=True is_scoped=True
+
+$ ./.ai-toolkit/scripts/verify.sh backend  → GATE PASSED
+$ ./.ai-toolkit/scripts/verify.sh antipatterns → GATE PASSED (pre-existing print() warnings only)
+```
+
+### Notes
+- `_app_id_for_group` needed no change — its `split("_")[0]` fallback already derives `datahub_lead → datahub` and `turnkey_lead → turnkey` (verified in DB).
+- Idempotent: re-running `bootstrap_platform` is INSERT-OR-UPDATE; the two groups now report "up-to-date".
+- `ALL_CANONICAL_GROUPS` picks up the new group automatically via `*DOMAIN_LEAD_GROUPS`; exact-set audit test `test_all_groups_in_mapping_are_declared` already included `turnkey_lead` (P2).
+
+## [2026-08-18] Frontend + Backend Worker — Pending-action review: details + JSON + modify/confirm for `create_dq_rule`
+
+**Role:** full-stack-worker · **Model:** DeepSeek V4-Flash · **Kind:** Feature enhancement (proposal-review UX for staged tool executions)
+
+### Summary
+The "fly to rule detail" sprint's staged-rule flow previously rendered only `Confirm & create` / `Decline` buttons with no proposal content. Now every pending `create_dq_rule` action shows an expandable **Details & JSON** section (proposed `definition` + the exact POST body + validation outcome) and an **Edit & confirm** dialog where the user can modify the staged body JSON before creation — or cancel/decline. Editing is one atomic call: the backend replaces `input_params["body"]` on the staged row, then `confirm_execution` re-reads the row fresh (via `_DjangoSession.select`) and POSTs the edited body. Nothing is created until the user confirms.
+
+### Task Results
+| # | Task | Result |
+|---|------|--------|
+| 1 | Backend: expose exact POST body as `proposed_body` in plugin result + `_extract_tool_actions` | ✅ |
+| 2 | Backend: `ToolExecutionActionSerializer` accepts optional `body` | ✅ |
+| 3 | Backend: `confirm_tool_execution` accepts a modified body (JSON object only) and persists it before executing | ✅ |
+| 4 | Backend tests: extraction carries `proposed_body`; modified-body create; non-object body → 400 | ✅ |
+| 5 | Frontend: `confirmToolExecution(token, conversationId, executionId, body?)` optional body param | ✅ |
+| 6 | Frontend: proposal cards with Confirm / Edit & confirm / Decline / Details & JSON toggle | ✅ |
+| 7 | Frontend: Edit dialog (JSON editor, validation, Reset / Cancel / Save & confirm) | ✅ |
+| 8 | Frontend tests: details toggle, edit-and-confirm, invalid-JSON guard, missing-required-field guard, cancel | ✅ |
+| 9 | Verification: backend AI suite, frontend suite, lint, `verify.sh backend` GATE | ✅ |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `backend/ai/plugins/create_dq_rule.py` | Return `"proposed_body": body` (exact denormalized POST body) |
+| MODIFY | `backend/ai/engine_runtime.py` | Forward `proposed_body` into `pending_actions` |
+| MODIFY | `backend/ai/serializers.py` | `ToolExecutionActionSerializer` gains `body = serializers.JSONField(required=False, allow_null=True)` |
+| MODIFY | `backend/ai/workspace_api.py` | `confirm_tool_execution`: validate + persist modified `body` (dict only) into `input_params` before executing |
+| MODIFY | `backend/ai/tests/test_tool_execution_actions.py` | Updated extraction test + 2 new endpoint tests (`_stage_execution` helper) |
+| MODIFY | `carbon-frontend/src/api/aiWorkspace.js` | `confirmToolExecution` 4th optional `body` param |
+| MODIFY | `carbon-frontend/src/shell/AIConversationView.jsx` | `handleConfirmExecution(executionId, pending, body)` passes body through |
+| MODIFY | `carbon-frontend/src/shell/AIMessageBubble.jsx` | Proposal cards (details + JSON + validation chip), Edit dialog, `jsonBlock`, `openEditAction`/`saveEditAction`, `editJson`/`editJsonError` state |
+| MODIFY | `carbon-frontend/src/__tests__/AIMessageBubble.actions.test.jsx` | 5 new tests (11 total in file) |
+
+### Verification Output
+```bash
+$ python -m pytest ai -q --no-header
+466 passed in 17.91s
+
+$ python -m pytest ai/tests/test_tool_execution_actions.py -q
+18 passed in 7.02s
+
+$ npx vitest run src/__tests__/AIMessageBubble.actions.test.jsx
+Test Files  1 passed (1)
+     Tests  11 passed (11)
+
+$ npm test -- --run
+Test Files  37 passed | 3 failed (40)      # 9 failures pre-existing (stash-verified, untouched by this work)
+     Tests  550 passed | 9 failed (559)
+
+$ npx eslint src/shell/AIMessageBubble.jsx src/shell/AIConversationView.jsx src/api/aiWorkspace.js src/__tests__/AIMessageBubble.actions.test.jsx
+(exit 0 — clean)
+
+$ ./.ai-toolkit/scripts/verify.sh backend
+Verification gate: backend
+✓ django check
+GATE PASSED
+```
+
+### Design Decisions
+- **Edit-then-confirm is one atomic call** — no second endpoint. The backend swaps `input_params["body"]` on the staged row, then `confirm_execution` re-reads via `_DjangoSession.select()` (which re-queries the DB fresh), so the edited body is what gets POSTed.
+- **`definition` is the source of truth on create** — `DQRule.save()` re-derives `name`/`rule_level`/`rule_type`/`severity`/`is_active`/`dimension` from `definition`. Tests therefore edit both the top-level field and its `definition` counterpart; the dialog help text documents this for users.
+- **Non-object body → 400** before any execution (`"Modified rule body must be a JSON object."`); the staged row is left untouched on invalid input.
+- **Validation chip** distinguishes `Preview passed` / `Preview failed` / `Structural validation only` from the plugin's `validation` payload.
+
+### Notes
+- The 9 frontend failures (`AIMessageBubble.feedback`, `AIArtifacts`, `AISharedThreads`) were confirmed pre-existing by `git stash` + re-run — identical failure count before and after this work.
+- No playbook entry needed (feature work, not a bug fix).

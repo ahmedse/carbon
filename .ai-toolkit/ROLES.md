@@ -20,20 +20,20 @@ Tell the agent:
 
 ## Role Reference
 
-**Model policy (budget directive, 2026-08-02):** all worker roles run **DeepSeek-V3** (via VSCode Copilot custom models); researcher + curator run **DeepSeek-R1**; Master Architect runs **DeepSeek V4 Pro**. Kimi models are off the roster (cost).
+**Model policy (budget directive, 2026-08-18):** all worker roles (backend, frontend, devops, data-ml, debugger-fixer, qa-validator, product-designer) run **DeepSeek V4-Flash**; researcher + curator + Master Architect run **DeepSeek V4-Pro**. Kimi / V3 / R1 are RETIRED on the provider — never reference them.
 
 | Role | File | Recommended Model | Cognitive Mode | Tools |
 |------|------|-------------------|---------------|-------|
 | **Master Architect** | `roles/master-architect.md` | DeepSeek V4 Pro | Plan + Decompose | read, search, edit, todo |
-| **Scientific Researcher** | `roles/researcher.md` | DeepSeek-R1 | Experiment + Analyze | read, search, edit, terminal |
-| **Backend Worker** | `roles/backend-worker.md` | DeepSeek-V3 | Execute (Python/Django) | read, edit, terminal |
-| **Frontend Worker** | `roles/frontend-worker.md` | DeepSeek-V3 | Execute (React/MUI) | read, edit, terminal |
-| **DevOps Worker** | `roles/devops-worker.md` | DeepSeek-V3 | Execute (Docker/VPS) | read, edit, terminal |
-| **Data/ML Worker** | `roles/data-ml-worker.md` | DeepSeek-V3 | Execute (Data/ETL) | read, edit, terminal |
-| **Debugger/Fixer** | `roles/debugger-fixer.md` | DeepSeek-V3 | Diagnose + Hotfix | read, edit, terminal |
-| **QA/Validator** | `roles/qa-validator.md` | DeepSeek-V3 | Validate + Evidence (4-layer) | read, search, browser, terminal |
-| **Product/UX Designer** | `roles/product-designer.md` | DeepSeek-V3 | Discover + Design (story/journey/acceptance) | read, search, edit |
-| **Curator** | `roles/curator.md` | DeepSeek-R1 | Evolve + Reason | read, search, edit (contracts) |
+| **Scientific Researcher** | `roles/researcher.md` | DeepSeek V4-Pro | Experiment + Analyze | read, search, edit, terminal |
+| **Backend Worker** | `roles/backend-worker.md` | DeepSeek V4-Flash | Execute (Python/Django) | read, edit, terminal |
+| **Frontend Worker** | `roles/frontend-worker.md` | DeepSeek V4-Flash | Execute (React/MUI) | read, edit, terminal |
+| **DevOps Worker** | `roles/devops-worker.md` | DeepSeek V4-Flash | Execute (Docker/VPS) | read, edit, terminal |
+| **Data/ML Worker** | `roles/data-ml-worker.md` | DeepSeek V4-Flash | Execute (Data/ETL) | read, edit, terminal |
+| **Debugger/Fixer** | `roles/debugger-fixer.md` | DeepSeek V4-Flash | Diagnose + Hotfix | read, edit, terminal |
+| **QA/Validator** | `roles/qa-validator.md` | DeepSeek V4-Flash | Validate + Evidence (4-layer) | read, search, browser, terminal |
+| **Product/UX Designer** | `roles/product-designer.md` | DeepSeek V4-Flash | Discover + Design (story/journey/acceptance) | read, search, edit |
+| **Curator** | `roles/curator.md` | DeepSeek V4-Pro | Evolve + Reason | read, search, edit (contracts) |
 
 ---
 
