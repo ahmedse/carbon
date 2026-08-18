@@ -320,6 +320,8 @@ class CarbonIntelligence:
             role="user",
             content=content,
         )
+        # Phase 19-A — thread linkage + context signature for this turn.
+        conversation._turn_parent_id = user_msg.id
 
         # Build fresh scope (NOT frozen — user's permissions may have changed)
         scope = build_scope(user)
@@ -329,10 +331,11 @@ class CarbonIntelligence:
         # Assemble tiered, budgeted context from history (Sprint 15).
         history = list(
             conversation.messages.order_by("created_at").values(
-                "role", "content", "created_at",
+                "id", "role", "content", "created_at", "is_deleted",
             )
         )
-        assembled = assemble_context(conversation, history, scope)
+        assembled = assemble_context(conversation, history, scope, model=model)
+        conversation._turn_context_signature = assembled["context_signature"]
         conv_ctx = ConversationContext(
             conversation_id=str(conversation.id),
             messages=assembled["messages"],
@@ -422,11 +425,13 @@ class CarbonIntelligence:
         try:
             # Save user message (identical to send_message).
             self._maybe_autotitle(conversation, content)
-            AIMessage.objects.create(
+            user_msg = AIMessage.objects.create(
                 conversation=conversation,
                 role="user",
                 content=content,
             )
+            # Phase 19-A — thread linkage + context signature for this turn.
+            conversation._turn_parent_id = user_msg.id
 
             # Build fresh scope (NOT frozen — user's permissions may have changed).
             scope = build_scope(user)
@@ -436,10 +441,13 @@ class CarbonIntelligence:
             # Assemble tiered, budgeted context from history (Sprint 15).
             history = list(
                 conversation.messages.order_by("created_at").values(
-                    "role", "content", "created_at",
+                    "id", "role", "content", "created_at", "is_deleted",
                 )
             )
-            assembled = assemble_context(conversation, history, scope)
+            assembled = assemble_context(
+                conversation, history, scope, model=model,
+            )
+            conversation._turn_context_signature = assembled["context_signature"]
             conv_ctx = ConversationContext(
                 conversation_id=conv_id,
                 messages=assembled["messages"],
@@ -1447,12 +1455,14 @@ class CarbonIntelligence:
         conversation_id: str,
         message_id: str,
         content: str,
+        regenerate: bool = True,
     ) -> dict[str, Any]:
-        """Edit a user message's content, then regenerate the reply.
+        """Edit a user message's content and, by default, regenerate the reply.
 
-        Only user messages are editable.  Raises ``NotUserMessageError`` (a
-        ``ValueError`` subclass) for non-user messages so the API can map it
-        to a 400.
+        Phase 19-A: ``regenerate=False`` only edits the stored text (no new
+        assistant message).  Only user messages are editable.  Raises
+        ``NotUserMessageError`` (a ``ValueError`` subclass) for non-user
+        messages so the API can map it to a 400.
         """
         from ai.models import AIConversation
 
@@ -1470,7 +1480,447 @@ class CarbonIntelligence:
         message.content = content
         message.save(update_fields=["content"])
 
-        self.send_message(user, conversation_id, content)
+        if regenerate:
+            self.send_message(user, conversation_id, content)
+        return self.get_conversation(user, conversation_id)
+
+    def _abort_inflight_generations(self, conversation) -> int:
+        """Cancel every in-flight generation for a conversation.
+
+        Cancels both the in-process registry (``GENERATIONS``) and any
+        still-``running`` ``AIGeneration`` rows.  Returns the number of DB rows
+        transitioned to ``cancelled`` (idempotent)."""
+        from ai.models import AIGeneration
+
+        GENERATIONS.cancel(str(conversation.id))
+        updated = 0
+        for gen in conversation.generations.filter(status="running"):
+            gen.status = "cancelled"
+            gen.cancelled_at = timezone.now()
+            gen.save(update_fields=["status", "cancelled_at"])
+            updated += 1
+        return updated
+
+    def _latest_reply_to_turn(self, conversation, user_message):
+        """Return the latest assistant reply to a user turn (or ``None``).
+
+        Prefers ``parent_id`` lineage (Phase 19-A); falls back to the
+        immediately-following assistant message by creation order when lineage
+        is absent (pre-migration rows)."""
+        from ai.models import AIMessage
+
+        reply = (
+            conversation.messages.filter(
+                role="assistant", parent_id=user_message.id,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if reply is not None:
+            return reply
+        return (
+            conversation.messages.filter(
+                role="assistant", created_at__gt=user_message.created_at,
+            )
+            .order_by("created_at")
+            .first()
+        )
+
+    def retry_message(
+        self,
+        user,
+        conversation_id: str,
+        user_message_id: str,
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        """Retry a user turn == regenerate: re-run the pipeline for that turn.
+
+        Phase 19-A: aborts any in-flight generation first, reuses the context
+        *snapshot* (not the live tail), and produces a fresh assistant reply
+        linked to the original turn (``parent_id``) and the replaced reply
+        (``parent_message_id``)."""
+        from ai.models import AIConversation, AIMessage
+
+        try:
+            conversation = AIConversation.objects.get(
+                id=conversation_id, user=user,
+            )
+        except AIConversation.DoesNotExist:
+            raise ValueError(f"Conversation {conversation_id} not found.")
+
+        turn = self._resolve_message(conversation, user_message_id)
+        if turn.role != "user":
+            raise NotUserMessageError("Only user messages can be retried.")
+
+        self._abort_inflight_generations(conversation)
+        replaced = self._latest_reply_to_turn(conversation, turn)
+
+        conversation._turn_parent_id = turn.id
+        if replaced is not None:
+            conversation._turn_replaced_message_id = replaced.id
+        else:
+            conversation._turn_replaced_message_id = None
+
+        scope = build_scope(user)
+        if conversation.app_identifier:
+            scope.app_identifier = conversation.app_identifier
+
+        # Rebuild the *snapshot* of that turn: everything up to and including
+        # the user message, excluding soft-deleted and later messages.
+        history = list(
+            conversation.messages.filter(
+                created_at__lte=turn.created_at,
+            )
+            .order_by("created_at")
+            .values("id", "role", "content", "created_at", "is_deleted")
+        )
+        assembled = assemble_context(
+            conversation, history, scope, model=model,
+        )
+        conversation._turn_context_signature = assembled["context_signature"]
+        conv_ctx = ConversationContext(
+            conversation_id=str(conversation.id),
+            messages=assembled["messages"],
+        )
+
+        # Persist the context budget telemetry snapshot + retrieved KG entities.
+        conversation.context_snapshot_json = {
+            **assembled["budget"],
+            "kg_entities": assembled["kg_entities"],
+        }
+        conversation.save(update_fields=["context_snapshot_json"])
+
+        conversation.status = "working"
+        conversation.save(update_fields=["status"])
+
+        try:
+            response = self._route_typed_message(
+                conversation, turn.content, conv_ctx, scope, model,
+            )
+        except (PermissionError, ValueError) as exc:
+            response = self._save_assistant_message(
+                conversation,
+                str(exc),
+                metadata={},
+                status="failed",
+            )
+            raise
+
+        return {
+            "conversation": _serialize_conversation(conversation),
+            "assistant_message": response,
+        }
+
+    def retry_message_stream(
+        self,
+        user,
+        conversation_id: str,
+        user_message_id: str,
+        model: str | None = None,
+    ):
+        """Streaming variant of :meth:`retry_message` (SSE path).
+
+        Aborts any in-flight generation first, re-runs the pipeline for the
+        user turn using its context snapshot, and streams a fresh assistant
+        reply.  Yields the same frame shapes as :meth:`send_message_stream`.
+        """
+        from ai.models import AIConversation, AIMessage, AIGeneration
+
+        try:
+            conversation = AIConversation.objects.get(
+                id=conversation_id, user=user,
+            )
+        except AIConversation.DoesNotExist:
+            raise ValueError(f"Conversation {conversation_id} not found.")
+
+        turn = self._resolve_message(conversation, user_message_id)
+        if turn.role != "user":
+            raise NotUserMessageError("Only user messages can be retried.")
+
+        self._abort_inflight_generations(conversation)
+        replaced = self._latest_reply_to_turn(conversation, turn)
+
+        conversation._turn_parent_id = turn.id
+        conversation._turn_replaced_message_id = (
+            replaced.id if replaced is not None else None
+        )
+
+        scope = build_scope(user)
+        if conversation.app_identifier:
+            scope.app_identifier = conversation.app_identifier
+
+        # Rebuild the *snapshot* of that turn (up to and including the user
+        # message, excluding soft-deleted and later messages).
+        history = list(
+            conversation.messages.filter(created_at__lte=turn.created_at)
+            .order_by("created_at")
+            .values("id", "role", "content", "created_at", "is_deleted")
+        )
+        assembled = assemble_context(conversation, history, scope, model=model)
+        conversation._turn_context_signature = assembled["context_signature"]
+        conv_ctx = ConversationContext(
+            conversation_id=str(conversation.id),
+            messages=assembled["messages"],
+        )
+
+        conversation.context_snapshot_json = {
+            **assembled["budget"],
+            "kg_entities": assembled["kg_entities"],
+        }
+        conversation.save(update_fields=["context_snapshot_json"])
+
+        conv_id = str(conversation.id)
+        conv_type = conversation.conversation_type
+        GENERATIONS.start(conv_id)
+        generation = AIGeneration.objects.create(
+            conversation=conversation,
+            token=uuid.uuid4().hex,
+            status="running",
+        )
+
+        def _finalize_generation(final_status: str) -> None:
+            generation.status = final_status
+            update_fields = ["status"]
+            if final_status == "cancelled":
+                generation.cancelled_at = timezone.now()
+                update_fields.append("cancelled_at")
+            generation.save(update_fields=update_fields)
+
+        try:
+            conversation.status = "working"
+            conversation.save(update_fields=["status"])
+
+            if conv_type == "chat":
+                started_at = time.perf_counter()
+                guard_chain, operation = self._guard_workspace_operation(
+                    scope,
+                    "workspace_chat",
+                    conversation.task_payload_json or {},
+                )
+                message = self._prepend_workspace_context(
+                    conversation, turn.content,
+                )
+                message = self._prepend_domain_context(scope, message)
+                chat_request = ChatRequest(
+                    message=message,
+                    conversation=conv_ctx,
+                    scope=scope,
+                    model=model,
+                )
+
+                partial_parts: list[str] = []
+                for frame in self.provider.chat_stream(chat_request):
+                    kind = frame[0]
+                    value = frame[1] if len(frame) > 1 else None
+                    meta = frame[2] if len(frame) > 2 else {}
+                    if GENERATIONS.is_cancelled(conv_id):
+                        self._save_assistant_message(
+                            conversation,
+                            "".join(partial_parts),
+                            metadata={},
+                            status="completed",
+                            message_status="stopped",
+                        )
+                        _finalize_generation("cancelled")
+                        yield {
+                            "type": "stopped",
+                            "conversation": self.get_conversation(user, conv_id),
+                        }
+                        return
+                    if kind == "chunk":
+                        partial_parts.append(value)
+                        yield {"type": "chunk", "content": value}
+                        continue
+                    if kind == "error":
+                        latency_ms = int((time.perf_counter() - started_at) * 1000)
+                        guard_chain.audit_trail.log(
+                            scope,
+                            operation,
+                            self.provider.provider_name,
+                            latency_ms,
+                            "failed",
+                            error_message=value,
+                        )
+                        user_message = "I couldn't reach the AI service — try again in a moment."
+                        self._save_assistant_message(
+                            conversation,
+                            user_message,
+                            metadata={},
+                            status="failed",
+                            message_status="failed",
+                        )
+                        _finalize_generation("failed")
+                        yield {
+                            "type": "error",
+                            "error": user_message,
+                            "error_kind": meta.get("error_kind", "permanent"),
+                        }
+                        return
+                    if kind == "done":
+                        latency_ms = int((time.perf_counter() - started_at) * 1000)
+                        result = value or {}
+                        res = result.get("result") or {}
+                        guard_chain.audit_trail.log(
+                            scope,
+                            operation,
+                            self.provider.provider_name,
+                            latency_ms,
+                            result.get("status", "completed"),
+                        )
+                        usage = self._extract_chat_usage(res, latency_ms)
+                        self._build_ai_message(
+                            conversation,
+                            "completed",
+                            res.get("content"),
+                            res.get("follow_up_questions", []),
+                            usage=usage,
+                        )
+                        _finalize_generation("completed")
+                        done_frame = {
+                            "type": "done",
+                            "conversation": self.get_conversation(user, conv_id),
+                        }
+                        if usage:
+                            done_frame["usage"] = usage
+                        yield done_frame
+                        return
+            else:
+                yield {
+                    "type": "progress",
+                    "stage": "start",
+                    "message": self._progress_stage_label(conv_type),
+                }
+
+                if GENERATIONS.is_cancelled(conv_id):
+                    self._save_assistant_message(
+                        conversation,
+                        "Interrupted by user.",
+                        metadata={},
+                        status="completed",
+                        message_status="stopped",
+                    )
+                    _finalize_generation("cancelled")
+                    yield {
+                        "type": "stopped",
+                        "conversation": self.get_conversation(user, conv_id),
+                    }
+                    return
+
+                self._route_typed_message(
+                    conversation, turn.content, conv_ctx, scope, model,
+                )
+
+                if GENERATIONS.is_cancelled(conv_id):
+                    self._save_assistant_message(
+                        conversation,
+                        "Interrupted by user.",
+                        metadata={},
+                        status="completed",
+                        message_status="stopped",
+                    )
+                    _finalize_generation("cancelled")
+                    yield {
+                        "type": "stopped",
+                        "conversation": self.get_conversation(user, conv_id),
+                    }
+                    return
+
+                yield {"type": "progress", "stage": "done", "message": "Done"}
+                _finalize_generation("completed")
+                yield {
+                    "type": "done",
+                    "conversation": self.get_conversation(user, conv_id),
+                }
+                return
+        except (PermissionError, ValueError) as exc:
+            self._save_assistant_message(
+                conversation,
+                str(exc),
+                metadata={},
+                status="failed",
+                message_status="failed",
+            )
+            _finalize_generation("failed")
+            raise
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("retry failed for conversation=%s", conv_id)
+            user_message = "I couldn't reach the AI service — try again in a moment."
+            self._save_assistant_message(
+                conversation,
+                user_message,
+                metadata={},
+                status="failed",
+                message_status="failed",
+            )
+            _finalize_generation("failed")
+            yield {
+                "type": "error",
+                "error": user_message,
+                "error_kind": classify_llm_error(exc),
+            }
+            return
+        finally:
+            GENERATIONS.finish(conv_id)
+
+    def delete_message(
+        self,
+        user,
+        conversation_id: str,
+        message_id: str,
+    ) -> dict[str, Any]:
+        """Soft-delete a message (Phase 19-A).
+
+        Deleting a *user* turn soft-deletes the turn plus all its descendant
+        replies (thread-cut).  Deleting an *assistant* reply soft-deletes only
+        that reply (orphans are tolerated and rendered dimmed).  In-flight
+        generations are aborted first so no orphaned stream writes a reply.
+        """
+        from ai.models import AIConversation, AIMessage
+
+        try:
+            conversation = AIConversation.objects.get(
+                id=conversation_id, user=user,
+            )
+        except AIConversation.DoesNotExist:
+            raise ValueError(f"Conversation {conversation_id} not found.")
+
+        message = self._resolve_message(conversation, message_id)
+        self._abort_inflight_generations(conversation)
+
+        ids = [message.id]
+        if message.role == "user":
+            # Direct lineage replies first; fall back to the created_at "turn"
+            # span for pre-migration rows that have no parent_id.
+            direct = list(
+                conversation.messages.filter(
+                    role="assistant", parent_id=message.id,
+                )
+            )
+            if direct:
+                ids.extend(m.id for m in direct)
+            else:
+                next_user = (
+                    conversation.messages.filter(
+                        role="user", created_at__gt=message.created_at,
+                    )
+                    .order_by("created_at")
+                    .first()
+                )
+                qs = conversation.messages.filter(
+                    role="assistant", created_at__gt=message.created_at,
+                )
+                if next_user is not None:
+                    qs = qs.filter(created_at__lt=next_user.created_at)
+                ids.extend(qs.values_list("id", flat=True))
+
+        AIMessage.objects.filter(
+            id__in=ids, conversation=conversation,
+        ).update(is_deleted=True)
+
+        if conversation.status == "working":
+            conversation.status = "completed"
+            conversation.save(update_fields=["status"])
+
         return self.get_conversation(user, conversation_id)
 
     def _maybe_autotitle(self, conversation, content: str) -> None:
@@ -2600,6 +3050,14 @@ class CarbonIntelligence:
             getattr(conversation, "context_snapshot_json", None) or {},
         )
 
+        # Phase 19-A — persist thread linkage + the opaque context signature
+        # (set as transient attrs by send_message / retry_* before routing).
+        parent_id = getattr(conversation, "_turn_parent_id", None)
+        context_signature = getattr(conversation, "_turn_context_signature", "")
+        replaced_message_id = getattr(
+            conversation, "_turn_replaced_message_id", None
+        )
+
         ai_msg = AIMessage.objects.create(
             conversation=conversation,
             role="assistant",
@@ -2607,6 +3065,9 @@ class CarbonIntelligence:
             metadata_json=snapshot,
             token_usage_json=usage or {},
             status=message_status,
+            parent_id=parent_id,
+            context_signature=context_signature,
+            parent_message_id=replaced_message_id,
         )
         conversation.status = status
         conversation.save(update_fields=["status"])
@@ -2741,6 +3202,11 @@ def _serialize_message(message) -> dict[str, Any]:
             if message.parent_message_id
             else None
         ),
+        "parent_id": (
+            str(message.parent_id) if message.parent_id else None
+        ),
+        "is_deleted": bool(message.is_deleted),
+        "context_signature": message.context_signature,
         "status": message.status,
         "provider_model": message.provider_model,
         "outcome": message.outcome,

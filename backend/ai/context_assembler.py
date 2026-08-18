@@ -19,6 +19,30 @@ def _estimate_tokens(text: str) -> int:
     return max(0, len(text or "") // 4)
 
 
+def _compute_context_signature(
+    message_ids: list[str],
+    model: str | None,
+    profile_content: str | None,
+) -> str:
+    """Return an opaque, short SHA-256 hash of the assembled context window.
+
+    The signature captures the *identity* of the window (message-id vector),
+    the requested model, and the user-profile content — never any message text
+    (Phase 19-A).  It lets a retry/regenerate detect context drift and rebuild
+    the exact window even after later messages are added or deleted.
+    """
+    import hashlib
+
+    payload = "\x1f".join(
+        [
+            "\x00".join(message_ids),
+            model or "",
+            profile_content or "",
+        ]
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def _resolve_mention_descriptors(mentions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Resolve mention ids into compact entity descriptors."""
     if not mentions:
@@ -417,6 +441,7 @@ def assemble_context(
     summary_budget: int = 1500,
     retrieval_budget: int = 2000,
     memory_budget: int = 1000,
+    model: str | None = None,
 ) -> dict[str, Any]:
     """Assemble tiered, budgeted context for a conversation turn.
 
@@ -437,10 +462,12 @@ def assemble_context(
     not gate on ``scope``.  ``summary_budget`` gates summary inclusion.
     Cross-user/cross-org reads never happen (memory is visibility + org scoped).
 
-    Returns ``{"messages": [...], "budget": {tier: token_estimate}}``.  The
-    ``messages`` list is the verbatim history actually sent to the provider; the
-    ``budget`` dict records token telemetry for every tier.  T3 and T4 report
-    the tokens actually injected.
+    Returns ``{"messages": [...], "budget": {tier: token_estimate},
+    "kg_entities": [...], "context_signature": sha256hex}``.  The ``messages``
+    list is the verbatim history actually sent to the provider; the ``budget``
+    dict records token telemetry for every tier.  T3 and T4 report the tokens
+    actually injected.  ``context_signature`` (Phase 19-A) is an opaque hash of
+    the message-id vector + model + profile — no message text is stored.
     """
     tiered: list[dict[str, Any]] = []
 
@@ -450,6 +477,7 @@ def assemble_context(
     )
     if profile_message:
         tiered.append(profile_message)
+    profile_content = profile_message["content"] if profile_message else None
 
     workspace_message = _workspace_context_message(conversation)
     if workspace_message:
@@ -506,8 +534,12 @@ def assemble_context(
             }
         )
 
+    # Phase 19-A — soft-deleted messages never consume budget; filter them out
+    # BEFORE the recent-turns window is truncated.
+    live_messages = [m for m in messages if not m.get("is_deleted")]
+
     # T2 — most recent turns verbatim; anything older is NOT sent.
-    recent = list(messages[-recent_turns:])
+    recent = list(live_messages[-recent_turns:])
     for message in recent:
         created_at = message.get("created_at")
         tiered.append(
@@ -527,8 +559,15 @@ def assemble_context(
         "T4_memory": memory_tokens,
     }
 
+    # Phase 19-A — opaque context signature of the window actually sent.
+    message_ids = [str(m["id"]) for m in recent if m.get("id") is not None]
+    context_signature = _compute_context_signature(
+        message_ids, model, profile_content
+    )
+
     return {
         "messages": tiered,
         "budget": budget,
         "kg_entities": kg_entries,
+        "context_signature": context_signature,
     }

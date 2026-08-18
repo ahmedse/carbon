@@ -1064,7 +1064,15 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-18
 **Worker Role:** backend-worker (19-A), frontend-worker (19-B)
 **Recommended Model:** DeepSeek-V3
-**Status:** PLANNED
+**Status:** DONE — 19-A (backend: `is_deleted`/`context_signature`/`parent` on
+AIMessage + migration 0012, `retry_message[_stream]`/`delete_message`/
+`edit_message(regenerate)` in intelligence.py, `POST …/retry` + `PATCH|DELETE
+…/messages/{id}` in workspace_api.py, retry/regenerate serializers, 7 tests) ✅;
+19-B (frontend: `retryMessageStream`/`editMessage(regenerate)`/`deleteMessage`
+in aiWorkspace.js, AIMessageBubble hover menu Copy/Retry/Edit/Delete + inline
+edit + confirm, AIConversationView optimistic delete + thread-cut + filter
+`is_deleted` on load, 16 new tests) ✅. Verified: check 0 issues, migrations
+clean, 393 passed (backend), 7/7 retry tests, lint+build clean.
 **Kind:** Backend + frontend. Medium-large.
 
 ### Problem

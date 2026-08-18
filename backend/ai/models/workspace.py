@@ -172,6 +172,27 @@ class AIMessage(models.Model):
         default=None,
         help_text="Which message this edited/regenerated/replaced.",
     )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        default=None,
+        related_name="replies",
+        help_text="User turn this reply answers (thread structure for delete-descendants).",
+    )
+    is_deleted = models.BooleanField(
+        default=False,
+        help_text="Soft-delete flag. Deleted messages are excluded from context "
+                  "assembly but rendered dimmed in the thread.",
+    )
+    context_signature = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Opaque hash of the context window (message-id vector + model "
+                  "+ profile) at generation time. Never stores message text.",
+    )
     status = models.CharField(
         max_length=20,
         choices=[

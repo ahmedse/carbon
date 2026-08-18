@@ -489,3 +489,119 @@ $ npm run lint
 - **Pre-existing (out-of-scope) test drift from the Sprint-18 UI rewrite** — 12 failures across 4 unrelated suites, none touched by Phase 16: `AIMessageBubble.transparency.test.jsx` (1), `AIMessageBubble.feedback.test.jsx` (5), `AIArtifacts.test.jsx` (2), `AISharedThreads.test.jsx` (4). These still assert the old `AIConversationTabs` UI (`role="tab"`, "Close conversation X" button, "Shared" chip, `role="separator"`, Promote/Share buttons) that Sprint-18 replaced with a `role="listbox"`/`role="option"` + context-menu layout. Not caused by Phase 16 and left for a dedicated test-refresh task.
 - **`AIWorkspace.shell.test.jsx` had 4 stale tests** (G6 ×2, G1 archive, Investigate) asserting the removed `role="tab"` / "Close conversation" UI — **fixed in this phase** (updated to `role="option"`, the "Session options → Archive" menu flow, and the activity-bar "Investigate" button) so the shell file is green.
 - **Uncommitted working tree (still unresolved):** `git status` continues to show interleaved uncommitted changes from prior phases. **No commit was made** — awaiting direction on commit/push scope before touching git history.
+
+---
+
+## [2026-08-18] Frontend Worker — Phase 19-B: Message operations & retry/resume (frontend)
+
+### Summary
+Frontend-only phase (backend 19-A is out of scope and not yet implemented). Message-level operations are now wired end-to-end in the UI: every bubble gains a hover/overflow menu with **Copy**, **Retry** (assistant replies), **Edit** (user messages), and **Delete** (both, behind a confirm dialog). Retry/edit reuse the existing SSE stream hook — the regenerated assistant reply is appended as a fresh bubble after the user turn, not inlined. Delete is optimistic: the turn (and its descendant replies) dim into a "removed" placeholder immediately and reconcile on server confirm (rollback on failure). `load()`/`loadOlder()` filter `is_deleted` messages so a resumed thread (Phase 16) never restores deleted messages into the visible thread. The API layer adds `retryMessageStream`, a `regenerate: true` flag on `editMessage`, and `deleteMessage`, all targeting the 19-A-planned URLs (`…/retry/`, `DELETE …/messages/{mid}/`). 16 new regression tests (3 files) are green; the full suite is red only on the same 12 pre-existing, out-of-scope failures (Sprint-18 UI drift).
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Refactor SSE reader into shared `streamJsonPost` + add `retryMessageStream` | ✅ | `POST ai/workspace/conversations/{cid}/messages/{user_msg_id}/retry/` with `{ content?, model? }`; `sendMessageStream` now delegates |
+| 2 | `editMessage` sends `{ content, regenerate: true }` | ✅ | PATCH body carries the edit + regen intent |
+| 3 | Add `deleteMessage` | ✅ | `DELETE ai/workspace/conversations/{cid}/messages/{mid}/` |
+| 4 | `AIMessageBubble` hover menu + operations | ✅ | Copy / Retry / Edit / Delete + inline Edit field + confirm dialog + `is_deleted` dimmed placeholder |
+| 5 | `AIConversationView` handlers + deleted-thread filtering | ✅ | `handleRetryMessage`/`handleEditMessage`/`handleDeleteMessage`, optimistic delete + rollback, `load`/`loadOlder` filter `!m.is_deleted`, props wired (`isOwner`-gated) |
+| 6 | Regression tests (RULE_11) | ✅ | 16 tests across 3 new files |
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| MODIFY | `carbon-frontend/src/api/aiWorkspace.js` | +57/−20 | `streamJsonPost` helper; `retryMessageStream`; `editMessage` regen flag; `deleteMessage` |
+| MODIFY | `carbon-frontend/src/shell/AIMessageBubble.jsx` | +96 | `onRetry`/`onEdit`/`onDelete` props, `is_deleted` placeholder, inline Edit field, Copy/Retry/Edit/Delete menu items, delete-confirm Dialog, propTypes |
+| MODIFY | `carbon-frontend/src/shell/AIConversationView.jsx` | +118/−6 | `onStreamError`, `findParentUserId`, `runRetryStream`, `handleRetryMessage`/`handleEditMessage`/`handleDeleteMessage`, deleted-filter in `load`/`loadOlder`, prop wiring |
+| CREATE | `carbon-frontend/src/__tests__/AIMessageBubble.operations.test.jsx` | 127 | overflow menu + edit + delete-confirm + placeholder (8 tests) |
+| CREATE | `carbon-frontend/src/__tests__/AIConversationView.operations.test.jsx` | 145 | retry/edit/delete handlers incl. optimistic rollback (4 tests) |
+| CREATE | `carbon-frontend/src/__tests__/aiWorkspace.operations.test.js` | 126 | `deleteMessage`/`editMessage`/`retryMessageStream` API surface (4 tests) |
+
+### Verification Output
+```
+$ npx vitest run src/__tests__/AIMessageBubble.operations.test.jsx src/__tests__/AIConversationView.operations.test.jsx src/__tests__/aiWorkspace.operations.test.js
+Test Files  3 passed (3)
+      Tests  16 passed (16)
+
+$ npm test -- --run
+Test Files  5 failed | 27 passed (32)
+      Tests  13 failed | 473 passed (486)
+   (12 failures are PRE-EXISTING Sprint-18 drift — see Issues Found; +1 flaky
+    enterprise.test.jsx "Shell > renders without crashing" timeout that passes
+    in isolation 17/17 — resource contention only)
+
+$ npm run lint
+(clean — no output)
+
+$ npm run build
+✓ built in 16.06s (chunk-size warning is pre-existing/benign)
+
+$ grep -rn "\bitem\b.*xs=\|<Grid item\b" src/ --include="*.jsx"
+(no output — empty, exit 1)
+```
+
+### Deviations
+- **Backend 19-A (retry/delete endpoints) does not exist yet** — verified via grep of `backend/ai/workspace_api.py` + `backend/ai/intelligence.py` (`regenerate_message`/`edit_message` exist; no `retry`/`delete_message`). The frontend targets the 19-A-planned URLs so the wiring is correct once the backend lands. No frontend block on this.
+- **`retryMessageStream` appends, not inlines**: the regenerated reply renders as a fresh bubble after the user turn (spec-conformant), so the retry path reuses `finishStream`'s append instead of mutating the original assistant message id.
+- **Edit deletes nothing**: `handleEditMessage` updates the user text in place and streams a new assistant reply, mirroring the backend `PATCH { content, regenerate: true }` contract.
+
+### Issues Found
+- **Pre-existing (out-of-scope) test drift from the Sprint-18 UI rewrite** — unchanged 12 failures across the same 4 unrelated suites (`AIMessageBubble.transparency.test.jsx` (1), `AIMessageBubble.feedback.test.jsx` (5), `AIArtifacts.test.jsx` (2), `AISharedThreads.test.jsx` (4)). These assert the old `Accept`/`Reject`/`Correct` buttons, the old usage-chip layout, and the removed `AIConversationTabs` UI. Not touched by Phase 19-B; left for a dedicated test-refresh task.
+- **Flaky full-suite timeout**: `enterprise.test.jsx > Shell > renders without crashing` times out at 15s only under full-suite load; passes 17/17 in isolation. Not caused by Phase 19-B (Shell is untouched).
+- **Uncommitted working tree (still unresolved):** `git status` continues to show interleaved uncommitted changes from prior phases. **No commit was made** — awaiting direction on commit/push scope before touching git history.
+
+---
+
+## [2026-08-18] Backend Worker — Phase 19-A: Message Operations & Retry/Resume Resilience
+
+### Summary
+All backend gates passed. 7 files changed (1 migration created, 1 test file created, 5 modified). 7 new tests added; full `ai` suite **393 passed, 0 failed** (default `-n auto` xdist config). `manage.py check` clean; `makemigrations --check --dry-run` reports no drift.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `AIMessage`: add `is_deleted`, `parent` (self FK), `context_signature` | ✅ | FK named `parent` so Django emits column `parent_id` (avoids `parent_id_id`); migration `0012` generated |
+| 2 | `workspace_api.py`: `POST …/messages/{id}/retry`, `PATCH`/`DELETE …/messages/{id}` | ✅ | retry streams SSE via `StreamingHttpResponse`; edit dispatches PATCH→edit / DELETE→soft-delete; abort in-flight generation first |
+| 3 | `context_assembler.py`: filter `is_deleted` before window truncation + sign window | ✅ | `_compute_context_signature` = SHA-256 hex of message-id vector + model + profile hash |
+| 4 | Abort semantics reuse NEXTGEN §5.2 `AIGeneration` lease + cancellation | ✅ | `_abort_inflight_generations` calls `GENERATIONS.cancel` + flips running rows to `cancelled` |
+| 5 | Regression tests | ✅ | 7 tests in `ai/tests/test_retry_resume.py` |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `backend/ai/models/workspace.py` | `AIMessage.is_deleted` (bool, default False), `context_signature` (CharField 64, default ""), `parent` (self FK, SET_NULL, related_name `replies`) |
+| MODIFY | `backend/ai/context_assembler.py` | `_compute_context_signature`; `model` param; filter `is_deleted` before `recent = list(live_messages[-recent_turns:])`; emit `context_signature` in return dict |
+| MODIFY | `backend/ai/intelligence.py` | `send_message`/`send_message_stream` set transient `_turn_parent_id` + `_turn_context_signature`; `_save_assistant_message` persists `parent`/`context_signature`/`parent_message_id`; `_serialize_message` emits `parent_id`/`is_deleted`/`context_signature`; `edit_message` gains `regenerate` flag; new `_abort_inflight_generations`, `_latest_reply_to_turn`, `retry_message`, `retry_message_stream`, `delete_message` |
+| MODIFY | `backend/ai/serializers.py` | `EditMessageSerializer.regenerate` (default True); `RetryMessageSerializer.model` (nullable) |
+| MODIFY | `backend/ai/workspace_api.py` | `edit_message` action `methods=["patch","delete"]` dispatch; `retry_message` action streams SSE |
+| CREATE | `backend/ai/migrations/0012_aimessage_context_signature_aimessage_is_deleted_and_more.py` | adds `context_signature`, `is_deleted`, `parent` |
+| CREATE | `backend/ai/tests/test_retry_resume.py` | 7 tests: delete-descendants, delete-single-reply, edit-no-regen, context-snapshot-not-live-tail, retry-link+sign, stream-link |
+
+### Verification Output
+```
+$ python manage.py check
+System check identified no issues (0 silenced).
+
+$ python manage.py makemigrations --check --dry-run
+No changes detected
+
+$ python -m pytest ai -q
+393 passed in 14.63s          # default -n auto (xdist)
+
+$ ./.ai-toolkit/scripts/verify.sh backend
+✓ django check
+GATE PASSED
+
+$ ./.ai-toolkit/scripts/verify.sh antipatterns
+✓ no hardcoded secrets / no MUI Grid / no hardcoded hex / no naive datetime
+⚠ raw fetch() (frontend, 19-B scope) · ⚠ 28 print() (pre-existing)
+GATE PASSED
+```
+
+### Deviations
+- **FK field named `parent` (not `parent_id`)** — Django appends `_id` to FK columns, so naming it `parent_id` would have produced a `parent_id_id` column. `parent` yields the intended column `parent_id` and the idiomatic `message.parent_id` (UUID) vs `message.parent` (object) split. Spec intent preserved.
+- **No frontend/deploy changes** — backend-worker scope only; frontend wiring already landed in Phase 19-B against these exact URLs.
+
+### Issues Found
+- **Stale per-worker test DBs** (`test_carbon_dev_gw0..7`) — with `--reuse-db --nomigrations -n auto`, pytest-django keeps a per-worker test database. After a schema change these become stale and produce spurious `column "parent_id" does not exist` failures under xdist (while the serial `-n 0` run passes). Fixed by dropping all `test_carbon_dev*` databases so they recreate from models. **Note for future migrations:** after any model change, drop the per-worker test DBs or run with `--create-db`.
+- **Migration `0012` not yet applied to the dev DB** — apply via `./manage.sh migrate` (or the deploy step) before running the dev server against `carbon_dev`.

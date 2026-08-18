@@ -1,7 +1,24 @@
 // src/shell/AIMessageBubble.jsx
 import React, { Suspense, lazy, useCallback, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Button, Chip, IconButton, Menu, MenuItem, Paper, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  IconButton,
+  Menu,
+  MenuItem,
+  Paper,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -154,6 +171,9 @@ function AIMessageBubble({
   onSaveReportArtifact,
   onExportReport,
   onRedraftReport,
+  onRetry,
+  onEdit,
+  onDelete,
 }) {
   const [showTimestamp, setShowTimestamp] = useState(false);
   const [showActions, setShowActions] = useState(false);
@@ -161,6 +181,9 @@ function AIMessageBubble({
   const [moreMenuAnchor, setMoreMenuAnchor] = useState(null);
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [correctionText, setCorrectionText] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const handleCopyMessage = useCallback(() => {
     navigator.clipboard.writeText(message.content);
@@ -168,6 +191,19 @@ function AIMessageBubble({
     setTimeout(() => setCopied(false), 2000);
   }, [message.content]);
   const isUser = message.role === 'user';
+  const isDeleted = !!message.is_deleted;
+
+  // Soft-deleted turns render as a dimmed placeholder — no content, no actions.
+  if (isDeleted) {
+    return (
+      <Box sx={{ px: 1, py: 0.5, display: 'flex', alignItems: 'center', opacity: 0.6 }}>
+        <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+          {isUser ? 'Your message was removed.' : 'This reply was removed.'}
+        </Typography>
+      </Box>
+    );
+  }
+
   const metadata = normalizeMetadata(message);
   const followUps = metadata.follow_up_questions || [];
   const usageLabel = buildUsageLabel(message.token_usage_json);
@@ -215,7 +251,8 @@ function AIMessageBubble({
   const outcomeLabel = OUTCOME_LABELS[message.outcome] || message.outcome;
   const outcomeColor =
     message.outcome === 'accepted' ? 'success' : message.outcome === 'rejected' ? 'error' : 'default';
-  const showFeedback = !isUser && (message.outcome || onAccept || onReject || onCorrect || onPromote);
+  const showFeedback =
+    !isUser && (message.outcome || onAccept || onReject || onCorrect || onPromote || onRetry || onDelete);
 
   const renderStructuredContent = () => {
     if (isUser || !metadata?.type) return null;
@@ -458,12 +495,49 @@ function AIMessageBubble({
 
         {/* NEW: markdown for AI, pre-wrap plain text for user */}
         {isUser ? (
-          <Typography
-            variant="body2"
-            sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}
-          >
-            {message.content}
-          </Typography>
+          editOpen ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <TextField
+                size="small"
+                fullWidth
+                multiline
+                minRows={2}
+                label="Edit message"
+                value={editText}
+                onChange={(event) => setEditText(event.target.value)}
+              />
+              <Stack direction="row" spacing={0.5}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={!editText.trim()}
+                  onClick={() => {
+                    setEditOpen(false);
+                    onEdit?.(message, editText.trim());
+                  }}
+                >
+                  Save
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    setEditOpen(false);
+                    setEditText('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </Stack>
+            </Box>
+          ) : (
+            <Typography
+              variant="body2"
+              sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}
+            >
+              {message.content}
+            </Typography>
+          )
         ) : (
           <MarkdownMessage content={message.content} />
         )}
@@ -581,7 +655,7 @@ function AIMessageBubble({
               {copied ? <CheckIcon sx={{ fontSize: 14 }} /> : <ContentCopyIcon sx={{ fontSize: 14 }} />}
             </IconButton>
           </Tooltip>
-          {(onCorrect || onPromote) && (
+          {(onCorrect || onPromote || onRetry || onDelete) && (
             <>
               <Tooltip title="More actions">
                 <IconButton size="small" onClick={(e) => setMoreMenuAnchor(e.currentTarget)} aria-label="More message actions" sx={{ p: 0.5 }}>
@@ -599,11 +673,96 @@ function AIMessageBubble({
                     Promote
                   </MenuItem>
                 )}
+                {onRetry && (
+                  <MenuItem onClick={() => { onRetry(message); setMoreMenuAnchor(null); }} sx={{ fontSize: '0.8125rem' }}>
+                    Retry
+                  </MenuItem>
+                )}
+                {onDelete && (
+                  <MenuItem onClick={() => { setDeleteConfirmOpen(true); setMoreMenuAnchor(null); }} sx={{ fontSize: '0.8125rem' }}>
+                    Delete
+                  </MenuItem>
+                )}
               </Menu>
             </>
           )}
         </Box>
       )}
+
+      {/* User message actions: copy + overflow (edit/delete) */}
+      {isUser && (
+        <Box
+          sx={{
+            height: 20,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.25,
+            alignSelf: 'flex-end',
+            opacity: showActions ? 1 : 0,
+            transition: 'opacity 0.12s ease',
+            pointerEvents: showActions ? 'auto' : 'none',
+          }}
+        >
+          <Tooltip title={copied ? 'Copied!' : 'Copy'}>
+            <IconButton size="small" onClick={handleCopyMessage} aria-label="Copy message" sx={{ p: 0.5 }}>
+              {copied ? <CheckIcon sx={{ fontSize: 14 }} /> : <ContentCopyIcon sx={{ fontSize: 14 }} />}
+            </IconButton>
+          </Tooltip>
+          {(onEdit || onDelete) && (
+            <>
+              <Tooltip title="More actions">
+                <IconButton size="small" onClick={(e) => setMoreMenuAnchor(e.currentTarget)} aria-label="More message actions" sx={{ p: 0.5 }}>
+                  <MoreVertIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Tooltip>
+              <Menu anchorEl={moreMenuAnchor} open={Boolean(moreMenuAnchor)} onClose={() => setMoreMenuAnchor(null)}>
+                {onEdit && (
+                  <MenuItem
+                    onClick={() => { setEditOpen(true); setEditText(message.content || ''); setMoreMenuAnchor(null); }}
+                    sx={{ fontSize: '0.8125rem' }}
+                  >
+                    Edit
+                  </MenuItem>
+                )}
+                {onDelete && (
+                  <MenuItem onClick={() => { setDeleteConfirmOpen(true); setMoreMenuAnchor(null); }} sx={{ fontSize: '0.8125rem' }}>
+                    Delete
+                  </MenuItem>
+                )}
+              </Menu>
+            </>
+          )}
+        </Box>
+      )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+        <DialogTitle sx={{ fontSize: '0.9375rem' }}>Delete message?</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ fontSize: '0.8125rem' }}>
+            {isUser
+              ? 'This removes your message and the assistant reply that follows.'
+              : 'This removes this reply. The conversation will continue without it.'}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button size="small" variant="outlined" onClick={() => setDeleteConfirmOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            size="small"
+            variant="contained"
+            color="error"
+            onClick={() => {
+              setDeleteConfirmOpen(false);
+              onDelete?.(message);
+            }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {message.created_at && (
         <Typography
           variant="caption"
@@ -635,6 +794,8 @@ AIMessageBubble.propTypes = {
     status: PropTypes.string,
     outcome: PropTypes.string,
     correction_text: PropTypes.string,
+    is_deleted: PropTypes.bool,
+    parent_id: PropTypes.string,
   }).isRequired,
   onAcceptSuggestion: PropTypes.func,
   onRejectSuggestion: PropTypes.func,
@@ -647,6 +808,9 @@ AIMessageBubble.propTypes = {
   onCorrect: PropTypes.func,
   onFollowUp: PropTypes.func,
   onPromote: PropTypes.func,
+  onRetry: PropTypes.func,
+  onEdit: PropTypes.func,
+  onDelete: PropTypes.func,
   conversationType: PropTypes.string,
   appIdentifier: PropTypes.string,
   scopeJson: PropTypes.object,

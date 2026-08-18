@@ -38,6 +38,7 @@ from ai.serializers import (
     EditMessageSerializer,
     MessageFeedbackSerializer,
     MessageListSerializer,
+    RetryMessageSerializer,
     SendMessageSerializer,
 )
 
@@ -277,16 +278,35 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
 
     @action(
         detail=True,
-        methods=["patch"],
+        methods=["patch", "delete"],
         # `(?!stream/)` keeps the literal `messages/stream/` SSE route from
         # being shadowed by this parameterized route: DRF registers extra
         # actions alphabetically, so `edit_message` would otherwise match
-        # "stream" as a message_id and reject POST with 405.
+        # "stream" as a message_id and reject POST with 405.  PATCH + DELETE
+        # share this route to avoid two identical-regex routes (the first would
+        # swallow the other's method with a 405).
         url_path="messages/(?P<message_id>(?!stream/)[^/.]+)",
         url_name="edit-message",
     )
     def edit_message(self, request, pk=None, message_id=None):
-        """Edit a user message's content and regenerate the reply."""
+        """PATCH: edit a user message (optional ``regenerate``).
+
+        DELETE: soft-delete a message (and its descendants for a user turn).
+        """
+        if request.method == "DELETE":
+            try:
+                conversation = self.intelligence.delete_message(
+                    user=request.user,
+                    conversation_id=pk,
+                    message_id=message_id,
+                )
+                return Response(conversation)
+            except ValueError as e:
+                return Response(
+                    {"error": str(e)},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
         serializer = EditMessageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -296,6 +316,7 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 conversation_id=pk,
                 message_id=message_id,
                 content=serializer.validated_data["content"],
+                regenerate=serializer.validated_data.get("regenerate", True),
             )
             return Response(conversation)
         except NotUserMessageError as e:
@@ -305,6 +326,38 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 {"error": str(e)},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="messages/(?P<user_message_id>[^/.]+)/retry",
+        url_name="retry-message",
+    )
+    def retry_message(self, request, pk=None, user_message_id=None):
+        """Retry a user turn (regenerate) as Server-Sent Events.
+
+        Aborts any in-flight generation, re-runs the pipeline for that turn
+        using its context snapshot, and streams a fresh assistant reply.
+        """
+        serializer = RetryMessageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        def event_stream():
+            try:
+                for frame in self.intelligence.retry_message_stream(
+                    user=request.user,
+                    conversation_id=pk,
+                    user_message_id=user_message_id,
+                    model=serializer.validated_data.get("model") or None,
+                ):
+                    yield f"data: {json.dumps(frame)}\n\n"
+            except ValueError as e:
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+        return StreamingHttpResponse(
+            event_stream(),
+            content_type="text/event-stream",
+        )
 
     @action(detail=True, methods=["post"], url_path="summary", url_name="summarize")
     def summarize(self, request, pk=None):

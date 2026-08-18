@@ -13,12 +13,14 @@ import { useNotification } from '../components/NotificationProvider';
 import {
   acceptSuggestion,
   createArtifact,
+  deleteMessage,
   exportConversation,
   getConversation,
   listMessages,
   recordFeedback,
   rejectSuggestion,
   resumeConversation,
+  retryMessageStream,
   sendMessageStream,
   stopGeneration,
   updateConversation,
@@ -102,7 +104,8 @@ function AIConversationView({ conversationId }) {
       const data = await getConversation(token, conversationId);
       const canonical = normalizeConversationShape(data);
       setConversation(canonical);
-      const initial = canonical?.messages || [];
+      // Phase 19-B — skip soft-deleted turns when restoring the visible thread.
+      const initial = (canonical?.messages || []).filter((m) => !m.is_deleted);
       setMessages(initial);
       setHasMore(initial.length >= 50);
     } catch (err) {
@@ -200,6 +203,28 @@ function AIConversationView({ conversationId }) {
     setSelectedModel(modelId);
   }, []);
 
+  // Shared SSE error handling for normal sends and retry/edit regeneration.
+  const onStreamError = useCallback(
+    (genId, message, errorKind, fallback = 'Could not send message') => {
+      if (genId !== generationRef.current) return;
+      streamingActiveRef.current = false;
+      setStreamingText(null);
+      setWorkingStage(null);
+      setSending(false);
+      if (errorKind === 'transient') {
+        setTransientError(true);
+      } else if (
+        errorKind === 'permanent' ||
+        message?.includes('unavailable') ||
+        message?.includes('offline')
+      ) {
+        setProviderOffline(true);
+      }
+      notifyFromError(new Error(message || fallback), fallback);
+    },
+    [notifyFromError],
+  );
+
   // Core streaming send — every conversation type goes through SSE now.
   const streamSend = useCallback(
     async (content, mentions = []) => {
@@ -261,23 +286,7 @@ function AIConversationView({ conversationId }) {
           setStopped(true);
           finishStream(conv);
         },
-        onError: (message, errorKind) => {
-          if (genId !== generationRef.current) return;
-          streamingActiveRef.current = false;
-          setStreamingText(null);
-          setWorkingStage(null);
-          setSending(false);
-          if (errorKind === 'transient') {
-            setTransientError(true);
-          } else if (
-            errorKind === 'permanent' ||
-            message?.includes('unavailable') ||
-            message?.includes('offline')
-          ) {
-            setProviderOffline(true);
-          }
-          notifyFromError(new Error(message || 'Could not send message'), 'Could not send message');
-        },
+        onError: (message, errorKind) => onStreamError(genId, message, errorKind),
       });
 
       // Safety net: if the stream ended without a terminal frame, release the UI.
@@ -288,7 +297,7 @@ function AIConversationView({ conversationId }) {
         setSending(false);
       }
     },
-    [token, conversationId, finishStream, notifyFromError, selectedModel],
+    [token, conversationId, finishStream, onStreamError, selectedModel],
   );
 
   const handleSend = useCallback(
@@ -370,7 +379,8 @@ function AIConversationView({ conversationId }) {
     setLoadingMore(true);
     try {
       const data = await listMessages(token, conversationId, { limit: 50, before: oldest.id });
-      const older = data?.messages || [];
+      // Phase 19-B — skip soft-deleted turns when paging older messages.
+      const older = (data?.messages || []).filter((m) => !m.is_deleted);
       setMessages((prev) => {
         const seen = new Set(prev.map((m) => m.id));
         const unique = older.filter((m) => !seen.has(m.id));
@@ -594,6 +604,134 @@ function AIConversationView({ conversationId }) {
   const handleRedraftReport = useCallback(() => {
     handleSend('Draft this report');
   }, [handleSend]);
+
+  // Phase 19-B — resolve the USER message a given assistant reply answers.
+  // Prefer the persisted parent_id; fall back to the nearest preceding user turn.
+  const findParentUserId = useCallback(
+    (message) => {
+      if (!message) return null;
+      if (message.parent_id) return message.parent_id;
+      const idx = messages.findIndex((m) => m.id === message.id);
+      for (let i = idx - 1; i >= 0; i -= 1) {
+        if (messages[i]?.role === 'user') return messages[i].id;
+      }
+      return null;
+    },
+    [messages],
+  );
+
+  // Phase 19-B — shared retry/regenerate stream. Re-runs a user turn and
+  // appends the fresh assistant reply, reusing the same SSE machinery as send.
+  const runRetryStream = useCallback(
+    async (userMessageId, { content, errorFallback = 'Could not retry message' } = {}) => {
+      if (!conversationId || !userMessageId) return;
+      const type =
+        conversationRef.current?.conversation_type ||
+        conversationRef.current?.task_payload_json?.type ||
+        'chat';
+      const genId = ++generationRef.current;
+      streamingActiveRef.current = true;
+      setSending(true);
+      setStopped(false);
+      setProviderOffline(false);
+      setTransientError(false);
+      if (type === 'chat') {
+        setStreamingText('');
+      } else {
+        setWorkingStage('Regenerating…');
+      }
+
+      await retryMessageStream(token, conversationId, userMessageId, {
+        content,
+        model: selectedModel || undefined,
+        onChunk: (delta) => {
+          if (genId !== generationRef.current) return;
+          setStreamingText((prev) => (prev ?? '') + delta);
+        },
+        onProgress: (stage, message) => {
+          if (genId !== generationRef.current) return;
+          setWorkingStage(message || stage);
+        },
+        onDone: (conv) => {
+          if (genId !== generationRef.current) return;
+          streamingActiveRef.current = false;
+          finishStream(conv);
+        },
+        onStopped: (conv) => {
+          if (genId !== generationRef.current) return;
+          streamingActiveRef.current = false;
+          setStopped(true);
+          finishStream(conv);
+        },
+        onError: (message, errorKind) => onStreamError(genId, message, errorKind, errorFallback),
+      });
+
+      if (genId === generationRef.current && streamingActiveRef.current) {
+        streamingActiveRef.current = false;
+        setStreamingText(null);
+        setWorkingStage(null);
+        setSending(false);
+      }
+    },
+    [token, conversationId, finishStream, onStreamError, selectedModel],
+  );
+
+  // Phase 19-B — "Retry" on an assistant reply: re-run its parent user turn.
+  const handleRetryMessage = useCallback(
+    (message) => {
+      const parentId = findParentUserId(message);
+      if (parentId) runRetryStream(parentId, { errorFallback: 'Could not retry message' });
+    },
+    [findParentUserId, runRetryStream],
+  );
+
+  // Phase 19-B — "Edit" a user message: update the text optimistically, then
+  // regenerate the reply in place (the retry stream carries the new content).
+  const handleEditMessage = useCallback(
+    (message, newContent) => {
+      const text = (newContent || '').trim();
+      if (!text || !message?.id) return;
+      setMessages((prev) =>
+        prev.map((m) => (m.id === message.id ? { ...m, content: text } : m)),
+      );
+      lastUserContentRef.current = text;
+      runRetryStream(message.id, { content: text, errorFallback: 'Could not edit message' });
+    },
+    [runRetryStream],
+  );
+
+  // Phase 19-B — "Delete" a message: optimistic placeholder, then reconcile.
+  const handleDeleteMessage = useCallback(
+    async (message) => {
+      if (!conversationId || !message?.id) return;
+      // Deleting a user turn also removes its descendant replies (thread-cut).
+      const deletedIds = [message.id];
+      if (message.role === 'user') {
+        const idx = messages.findIndex((m) => m.id === message.id);
+        for (let i = idx + 1; i < messages.length; i += 1) {
+          if (messages[i]?.role === 'user') break;
+          deletedIds.push(messages[i].id);
+        }
+      }
+      // Optimistic: flag the turn so the bubble renders a dimmed "removed" placeholder.
+      setMessages((prev) =>
+        prev.map((m) => (deletedIds.includes(m.id) ? { ...m, is_deleted: true } : m)),
+      );
+      try {
+        await deleteMessage(token, conversationId, message.id);
+        // Reconcile on server confirm: drop the soft-deleted turn from the
+        // visible thread (mirrors the restore-skip rule in load/loadOlder).
+        setMessages((prev) => prev.filter((m) => !deletedIds.includes(m.id)));
+      } catch (err) {
+        // Roll back the optimistic flag on failure.
+        setMessages((prev) =>
+          prev.map((m) => (deletedIds.includes(m.id) ? { ...m, is_deleted: false } : m)),
+        );
+        notifyFromError(err, 'Could not delete message');
+      }
+    },
+    [token, conversationId, messages, notifyFromError],
+  );
 
   const updateMessageInState = useCallback((updatedMessage) => {
     if (!updatedMessage?.id) return;
@@ -923,6 +1061,9 @@ function AIConversationView({ conversationId }) {
             onSaveReportArtifact={handleSaveReportArtifact}
             onExportReport={handleExportReport}
             onRedraftReport={handleRedraftReport}
+            onRetry={isOwner ? handleRetryMessage : undefined}
+            onEdit={isOwner ? handleEditMessage : undefined}
+            onDelete={isOwner ? handleDeleteMessage : undefined}
           />
         ))}
 

@@ -69,6 +69,13 @@ class SendMessageSerializer(serializers.Serializer):
 
 class EditMessageSerializer(serializers.Serializer):
     content = serializers.CharField(required=True, allow_blank=False)
+    # Phase 19-A — when false, only the stored text is edited (no regenerate).
+    regenerate = serializers.BooleanField(required=False, default=True)
+
+
+class RetryMessageSerializer(serializers.Serializer):
+    # Optional model override (Phase 18 reuse) for the retry/regenerate path.
+    model = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
 
 
 class ConversationListSerializer(serializers.Serializer):

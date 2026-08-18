@@ -151,7 +151,9 @@ export function regenerateMessage(token, conversationId, messageId) {
 }
 
 /**
- * Edit a user message's content and regenerate the reply.
+ * Edit a user message's content and flag regeneration (REST parity with 19-A).
+ * The streaming UI uses `retryMessageStream` with `content` instead, so the new
+ * reply is streamed; this PATCH remains the non-streaming REST surface.
  * @param {string} token - JWT access token
  * @param {string} conversationId - UUID
  * @param {string} messageId - UUID of the user message
@@ -161,7 +163,22 @@ export function regenerateMessage(token, conversationId, messageId) {
 export function editMessage(token, conversationId, messageId, content) {
   return apiFetch(
     `${BASE}conversations/${conversationId}/messages/${messageId}/`,
-    { token, method: 'PATCH', body: { content } },
+    { token, method: 'PATCH', body: { content, regenerate: true } },
+  );
+}
+
+/**
+ * Soft-delete a message. Deleting a user turn also soft-deletes its descendant
+ * replies (thread-cut); deleting an assistant reply deletes just that reply.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} messageId - UUID
+ * @returns {Promise<object>} { deleted: messageId } or serialized AIConversation
+ */
+export function deleteMessage(token, conversationId, messageId) {
+  return apiFetch(
+    `${BASE}conversations/${conversationId}/messages/${messageId}/`,
+    { token, method: 'DELETE' },
   );
 }
 
@@ -232,12 +249,17 @@ export function sendMessage(token, conversationId, content, model) {
  * @param {string} content - user message text
  * @param {object} handlers - { onChunk(delta), onProgress(stage, message), onDone(conversation), onStopped(conversation), onError(message, errorKind), workspaceContext, model }
  */
-export async function sendMessageStream(
-  token,
-  conversationId,
-  content,
-  { onChunk, onProgress, onDone, onStopped, onError, workspaceContext, model },
-) {
+/**
+ * Shared SSE POST: authenticate, POST JSON, then parse `data:` frames into
+ * callbacks. Used by both normal sends and retry/regenerate so they share one
+ * streaming path.
+ *
+ * @param {string} token - JWT access token
+ * @param {string} path - API path relative to API_BASE_URL (no leading slash)
+ * @param {object} body - JSON body
+ * @param {object} handlers - { onChunk, onProgress, onDone, onStopped, onError }
+ */
+async function streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError }) {
   // Replicate apiFetch's auth: supplied token (or stored access token),
   // refreshing it first if expired.
   let accessToken = token || localStorage.getItem('access');
@@ -251,16 +273,11 @@ export async function sendMessageStream(
   }
 
   const base = API_BASE_URL.replace(/\/+$/, '');
-  const path = `${BASE}conversations/${conversationId}/messages/stream/`.replace(/^\/+/, '');
-  const url = `${base}/${path}`;
+  const url = `${base}/${path.replace(/^\/+/, '')}`;
   const headers = {
     'Content-Type': 'application/json',
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
-
-  const body = { content };
-  if (workspaceContext) body.workspace_context = workspaceContext;
-  if (model) body.model = model;
 
   let response;
   try {
@@ -343,6 +360,42 @@ export async function sendMessageStream(
   } catch (err) {
     onError?.(err?.message || 'Stream interrupted');
   }
+}
+
+export async function sendMessageStream(
+  token,
+  conversationId,
+  content,
+  { onChunk, onProgress, onDone, onStopped, onError, workspaceContext, model },
+) {
+  const path = `${BASE}conversations/${conversationId}/messages/stream/`;
+  const body = { content };
+  if (workspaceContext) body.workspace_context = workspaceContext;
+  if (model) body.model = model;
+  await streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError });
+}
+
+/**
+ * Retry/regenerate the assistant reply for a user turn over SSE (Phase 19-B).
+ * Mirrors sendMessageStream; when `content` is supplied, the backend updates
+ * the user message text before re-running the pipeline (edit + regenerate).
+ *
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} userMessageId - UUID of the USER message whose reply to regenerate
+ * @param {object} handlers - { onChunk, onProgress, onDone, onStopped, onError, content, model }
+ */
+export async function retryMessageStream(
+  token,
+  conversationId,
+  userMessageId,
+  { onChunk, onProgress, onDone, onStopped, onError, content, model },
+) {
+  const path = `${BASE}conversations/${conversationId}/messages/${userMessageId}/retry/`;
+  const body = {};
+  if (content) body.content = content;
+  if (model) body.model = model;
+  await streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError });
 }
 
 /**
