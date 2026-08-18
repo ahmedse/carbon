@@ -252,6 +252,33 @@ export function listModels(token) {
 }
 
 /**
+ * Fetch the current user's AI preferences (Phase 22-A).
+ * Endpoint lives under /carbon-api/ai/profile/ (not the workspace BASE).
+ * @param {string} token - JWT access token
+ * @returns {Promise<object>} { default_model_id, resolved_model_id, temperature,
+ *   auto_title, memory_enabled, usage_alert_threshold }
+ */
+export function getProfile(token) {
+  return apiFetch('ai/profile/', { token });
+}
+
+/**
+ * Update the current user's AI preferences (Phase 22-A).
+ * `default_model_id` accepts a catalog slug, or null/'' to clear the override.
+ * @param {string} token - JWT access token
+ * @param {object} [fields] - { default_model_id?, temperature?, auto_title?,
+ *   memory_enabled?, usage_alert_threshold? }
+ * @returns {Promise<object>} Updated profile
+ */
+export function patchProfile(token, fields = {}) {
+  const body = { ...fields };
+  // '' from a cleared Select means "no override" — normalize to null so the
+  // backend clears the FK instead of trying to resolve an empty slug.
+  if (body.default_model_id === '') body.default_model_id = null;
+  return apiFetch('ai/profile/', { token, method: 'PATCH', body });
+}
+
+/**
  * Usage & cost summary for the current project over a period.
  * Endpoint lives under /carbon-api/ai/usage/ (not the workspace BASE).
  * @param {string} token - JWT access token

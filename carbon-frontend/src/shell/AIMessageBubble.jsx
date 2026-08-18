@@ -103,19 +103,44 @@ function confidenceLabel(confidence) {
   return `${pct}%`;
 }
 
-// Build a compact usage chip label from token_usage_json. Defensive: any
-// missing field is simply omitted, so a partial usage block still renders.
+// Humanize a duration given in milliseconds: sub-second stays "950ms", seconds
+// become "2.7s"/"45s", minutes "1m 12s", hours "1h 5m". Returns null for junk.
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatDuration(ms) {
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n < 0) return null;
+  if (n < 1000) return `${Math.round(n)}ms`;
+  const totalSeconds = n / 1000;
+  if (totalSeconds < 60) {
+    return `${totalSeconds >= 10 ? Math.round(totalSeconds) : totalSeconds.toFixed(1)}s`;
+  }
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const remSeconds = Math.round(totalSeconds % 60);
+  if (totalMinutes < 60) {
+    return remSeconds ? `${totalMinutes}m ${remSeconds}s` : `${totalMinutes}m`;
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const remMinutes = totalMinutes % 60;
+  return remMinutes ? `${hours}h ${remMinutes}m` : `${hours}h`;
+}
+
+// Build a compact usage label from token_usage_json. Defensive: any missing
+// field is simply omitted, so a partial usage block still renders. Latency is
+// humanized (ms → s / m) so raw millisecond dumps never reach the UI.
 function buildUsageLabel(usage) {
   if (!usage || typeof usage !== 'object') return null;
   const parts = [];
   if (usage.model) parts.push(String(usage.model));
   if (usage.total_tokens != null) parts.push(`${usage.total_tokens} tok`);
   if (usage.cost_usd != null) parts.push(`$${usage.cost_usd}`);
-  if (usage.latency_ms != null) parts.push(`${usage.latency_ms}ms`);
+  if (usage.latency_ms != null) {
+    const duration = formatDuration(usage.latency_ms);
+    if (duration) parts.push(duration);
+  }
   return parts.length ? parts.join(' · ') : null;
 }
 
-// Build a multi-line breakdown for the usage chip Tooltip.
+// Build a multi-line breakdown for the usage Tooltip.
 function buildUsageBreakdown(usage) {
   if (!usage || typeof usage !== 'object') return null;
   const lines = [];
@@ -124,7 +149,10 @@ function buildUsageBreakdown(usage) {
   if (usage.completion_tokens != null) lines.push(`Completion tokens: ${usage.completion_tokens}`);
   if (usage.total_tokens != null) lines.push(`Total tokens: ${usage.total_tokens}`);
   if (usage.cost_usd != null) lines.push(`Cost: $${usage.cost_usd}`);
-  if (usage.latency_ms != null) lines.push(`Latency: ${usage.latency_ms}ms`);
+  if (usage.latency_ms != null) {
+    const duration = formatDuration(usage.latency_ms);
+    if (duration) lines.push(`Latency: ${duration}`);
+  }
   return lines.length ? lines.join('\n') : null;
 }
 
@@ -178,7 +206,6 @@ function AIMessageBubble({
   onConfirmExecution,
   onDeclineExecution,
 }) {
-  const [showTimestamp, setShowTimestamp] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [copied, setCopied] = useState(false);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState(null);
@@ -536,8 +563,8 @@ function AIMessageBubble({
         px: 1, py: 0.25,
         position: 'relative',
       }}
-      onMouseEnter={() => { setShowTimestamp(true); setShowActions(true); }}
-      onMouseLeave={() => { setShowTimestamp(false); setShowActions(false); }}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
     >
       {/* ⓘ provenance — floats at top-right, zero layout impact */}
       {!isUser && showProvenance && (
@@ -656,18 +683,7 @@ function AIMessageBubble({
           </Box>
         )}
 
-        {/* A4: usage chip only on hover */}
-        {!isUser && usageLabel && showActions && (
-          <Tooltip title={<TooltipLines lines={(usageBreakdown || usageLabel).split('\n')} />} arrow>
-            <Typography
-              variant="caption"
-              color="text.disabled"
-              sx={{ display: 'block', mt: 0.5, cursor: 'help', fontSize: '0.7rem' }}
-            >
-              {usageLabel}
-            </Typography>
-          </Tooltip>
-        )}
+        {/* Usage + time-ago metadata now live on the hover action row below. */}
 
         {followUps.length > 0 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
@@ -686,7 +702,9 @@ function AIMessageBubble({
         )}
       </Box>
 
-      {/* A3: fixed-height action row — always reserves 20px, no layout shift */}
+      {/* A3: fixed-height action row — always reserves 20px, no layout shift.
+          Usage + time-ago meta share this line (right-aligned) so latency and
+          timestamps read inline with the feedback actions. */}
       {!isUser && (
         <Box
           sx={{
@@ -694,6 +712,8 @@ function AIMessageBubble({
             display: 'flex',
             alignItems: 'center',
             gap: 0.25,
+            width: '100%',
+            minWidth: 0,
             alignSelf: 'flex-start',
             opacity: (showFeedback && !correctionOpen && !message.outcome && showActions) ? 1 : 0,
             transition: 'opacity 0.12s ease',
@@ -750,6 +770,26 @@ function AIMessageBubble({
               </Menu>
             </>
           )}
+          {/* Usage + time-ago, right-aligned on the same hover line */}
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, pl: 1 }}>
+            {usageLabel && (
+              <Tooltip title={<TooltipLines lines={(usageBreakdown || usageLabel).split('\n')} />} arrow>
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  noWrap
+                  sx={{ fontSize: '0.68rem', cursor: 'help', maxWidth: 240 }}
+                >
+                  {usageLabel}
+                </Typography>
+              </Tooltip>
+            )}
+            {message.created_at && (
+              <Typography variant="caption" color="text.disabled" noWrap sx={{ fontSize: '0.68rem' }}>
+                {formatDistanceToNow(new Date(message.created_at))}
+              </Typography>
+            )}
+          </Box>
         </Box>
       )}
 
@@ -796,6 +836,12 @@ function AIMessageBubble({
               </Menu>
             </>
           )}
+          {/* Time-ago on the same hover line */}
+          {message.created_at && (
+            <Typography variant="caption" color="text.disabled" noWrap sx={{ fontSize: '0.68rem', ml: 0.75 }}>
+              {formatDistanceToNow(new Date(message.created_at))}
+            </Typography>
+          )}
         </Box>
       )}
 
@@ -827,22 +873,7 @@ function AIMessageBubble({
         </DialogActions>
       </Dialog>
 
-      {message.created_at && (
-        <Typography
-          variant="caption"
-          color="text.disabled"
-          sx={{
-            alignSelf: isUser ? 'flex-end' : 'flex-start',
-            fontSize: '0.68rem',
-            opacity: showTimestamp ? 1 : 0,
-            transition: 'opacity 0.12s ease',
-            height: 16,
-            lineHeight: '16px',
-          }}
-        >
-          {formatDistanceToNow(new Date(message.created_at))}
-        </Typography>
-      )}
+      {/* Timestamp moved onto the hover action rows above (shared line). */}
     </Box>
   );
 }

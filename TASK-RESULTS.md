@@ -983,3 +983,64 @@ $ npx vite build
 - **Chip delete test trap:** MUI attaches `onDelete` to the chip's trailing delete icon, not the chip body — tests must `fireEvent.click(screen.getByTestId('CancelIcon'))`.
 - **Accessible-name override:** the collapse toggle's `aria-label` overrides its visible text for AT queries; tests query by `aria-label` ("Show older messages") and assert the count text separately.
 - **Flake observed once:** one full-suite run reported 13 failures (12 baseline + 1 transient in a pre-existing suite); consecutive reruns are stable at 12/510.
+
+## [2026-08-18] Frontend Worker — Phase 22-B: User Preferences (Settings tab) + usage-chip latency/hover merge
+
+### Summary
+All gates passed. 3 source files modified, 2 created (component + test), 1 test file extended; 12 new tests added; full suite **524 passed, 9 pre-existing failures** (down from 12 — the 3 hover-gated usage-chip tests now pass), build OK. Delivered in one pass with the follow-up UI fix the user requested alongside the Phase 22-B spec:
+
+- **Settings tab** — new `AISettingsTab` registered beside **Usage** in the right activity bar. Self-fetching sibling of `AIUsageTab` (same loading / error + Retry / loaded states, theme tokens only, `apiFetch` via the workspace api module). Reads `GET /ai/profile/` and writes `PATCH /ai/profile/` through new `getProfile` / `patchProfile` helpers. Fields: **Default model** (catalog dropdown grouped ⚡/⚖/🧠 with a "System default" clear option → PATCH `null`), **Temperature** (0–2 slider), **Auto-title** toggle, **Long-term memory** toggle, **Usage alert threshold** (1–100% slider). Save is dirty-gated, optimistic (form re-syncs to the PATCH response), with `notify`/`notifyFromError` feedback; Reset restores the loaded profile.
+- **Usage-chip latency fix** — `AIMessageBubble` no longer dumps raw `2702ms`. New exported `formatDuration` humanizes to `950ms` / `2.7s` / `45s` / `1m 12s` / `1h 5m` in both the chip label and its breakdown Tooltip. The hover-only timestamp line and the hover-only usage chip were merged **into the same 20px hover action row as the feedback buttons** (usage + time-ago right-aligned via `ml: auto`; user messages get time-ago on their own hover row). Because the meta now lives in the always-rendered action row, the 3 previously hover-gated usage-chip assertions resolve without any hover simulation.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `getProfile` / `patchProfile` api helpers | ✅ | `api/aiWorkspace.js` — `GET/PATCH ai/profile/`; `''` normalized to `null` so clearing the Select clears the FK override |
+| 2 | `AISettingsTab` component | ✅ | `shell/AISettingsTab.jsx` — self-fetching (`Promise.all` profile + catalog), dirty-gated Save, optimistic re-sync, Reset, `notify`/`notifyFromError` |
+| 3 | Register Settings tab | ✅ | `shell/AIWorkspace.jsx` — `{ id: 'settings', label: 'Settings' }` activity-bar item (SettingsOutlined icon) + `activePanel === 'settings'` render branch; Usage untouched |
+| 4 | Latency humanization + meta merge | ✅ | `shell/AIMessageBubble.jsx` — `formatDuration` (exported), used in `buildUsageLabel` + `buildUsageBreakdown`; A4 chip and trailing timestamp removed; usage + time-ago moved into the A3 hover action row (AI) and the user action row |
+| 5 | Tests | ✅ | `AISettingsTab.test.jsx` (7: load, error+Retry, tier dropdown + deprecated exclusion, PATCH + notify, System default → null, optimistic sync, Reset, PATCH failure notify) + shell Settings-tab test + 2 new bubble tests (2.7s humanization, merged meta row) |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `carbon-frontend/src/api/aiWorkspace.js` | Added `getProfile(token)` + `patchProfile(token, fields)` (`ai/profile/` endpoint, `''`→`null` normalization) |
+| CREATE | `carbon-frontend/src/shell/AISettingsTab.jsx` | Preferences form (model Select with tier groups + System default, temperature slider, 2 switches, threshold slider, Save/Reset) |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | Settings activity-bar item + render branch (Usage untouched) |
+| MODIFY | `carbon-frontend/src/shell/AIMessageBubble.jsx` | `formatDuration` helper; humanized latency in label/breakdown; usage + time-ago merged into hover action rows; removed hover-only timestamp line |
+| CREATE | `carbon-frontend/src/__tests__/AISettingsTab.test.jsx` | 7 tests covering load, error+Retry, dropdown, save semantics, clear-model, optimistic sync, Reset, failure notify |
+| MODIFY | `carbon-frontend/src/__tests__/AIWorkspace.shell.test.jsx` | `AISettingsTab` mock (`data-testid="settings-tab"`), api mocks, Settings panel test |
+| MODIFY | `carbon-frontend/src/__tests__/AIMessageBubble.feedback.test.jsx` | +2 tests: `2702ms → 2.7s`, merged meta row (usage + `5m ago` on the same line) |
+
+### Verification Output
+```
+$ npm run lint
+(exit 0 — clean)
+
+$ npx vitest run src/__tests__/AISettingsTab.test.jsx \
+  src/__tests__/AIWorkspace.shell.test.jsx
+ Test Files  2 passed (2)
+      Tests  16 passed (16)
+
+$ npx vitest run src/__tests__/AIMessageBubble.feedback.test.jsx \
+  src/__tests__/AIMessageBubble.transparency.test.jsx
+ Test Files  1 failed | 1 passed (2)
+      Tests  3 failed | 23 passed (26)   # 3 = pre-existing Accept/Reject/Correct name mismatches
+
+$ npx vitest run
+ Test Files  3 failed | 35 passed (38)
+      Tests  9 failed | 524 passed (533)   # 9 = pre-existing baseline only
+                                            # (was 12 — usage-chip hover-gated tests now pass)
+
+$ npx vite build
+✓ built in 12.67s
+```
+
+### Deviations
+- Per the user's follow-up ("remove those or make them with the same line with feedback. and make ms to s or minutes"), the hover-only usage chip and hover-only timestamp were **not** removed wholesale — they were merged into the existing fixed-height action row so latency and age read inline with the feedback buttons, and latency is humanized. Sub-second latencies still show `ms` (e.g. `950ms`) by design.
+- No backend files touched (frontend-worker scope). The Usage tab was not modified.
+
+### Issues Found
+- **MUI Select + `ListSubheader`:** children are cloned with `role="option"`, so tier headers must be rendered as a flat array (no `Fragment` wrappers) — copied from the proven `AIModelSelect` pattern.
+- **Slider value reads** via `aria-valuenow`; keyboard `ArrowRight` moves by `step` (0.1) — used for the optimistic-sync test.
+- **Pre-existing failures unchanged** (AIArtifacts 2 / feedback 3 / AISharedThreads 4) — the 3 former usage-chip failures (hover-gated `getByText`) are now green because the meta row always renders.

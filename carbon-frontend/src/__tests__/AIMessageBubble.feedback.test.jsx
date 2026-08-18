@@ -141,6 +141,36 @@ describe('AIMessageBubble usage + status chips', () => {
     expect(screen.getByText('512 tok')).toBeInTheDocument();
   });
 
+  it('humanizes latency to seconds / minutes instead of raw ms', () => {
+    renderBubble({
+      ...assistantMessage,
+      token_usage_json: {
+        model: 'gpt-4o',
+        total_tokens: 1234,
+        cost_usd: 0.0042,
+        latency_ms: 2702,
+      },
+    });
+
+    expect(screen.getByText('gpt-4o · 1234 tok · $0.0042 · 2.7s')).toBeInTheDocument();
+
+    // Over a minute → "m s" instead of a giant ms dump.
+    expect(screen.queryByText(/2702ms/)).not.toBeInTheDocument();
+  });
+
+  it('shares the usage chip line with the time-ago timestamp (merged meta)', () => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    renderBubble({
+      ...assistantMessage,
+      created_at: fiveMinutesAgo,
+      token_usage_json: { total_tokens: 1234, latency_ms: 950 },
+    });
+
+    // Both meta snippets live inside the same hover action row.
+    expect(screen.getByText('1234 tok · 950ms')).toBeInTheDocument();
+    expect(screen.getByText(/^[45]m ago$/)).toBeInTheDocument();
+  });
+
   it('renders an "Interrupted" chip when status is stopped', () => {
     renderBubble({ ...assistantMessage, status: 'stopped' });
 

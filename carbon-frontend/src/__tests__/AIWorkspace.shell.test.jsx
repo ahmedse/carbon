@@ -23,6 +23,7 @@ vi.mock('../shell/AIEmptyState', () => ({ default: () => null }));
 vi.mock('../shell/AIOfflineBanner', () => ({ default: () => null }));
 vi.mock('../shell/InvestigateTab', () => ({ default: () => <div data-testid="investigate-tab" /> }));
 vi.mock('../shell/AIUsageTab', () => ({ default: () => <div data-testid="usage-tab" /> }));
+vi.mock('../shell/AISettingsTab', () => ({ default: () => <div data-testid="settings-tab" /> }));
 
 vi.mock('../api/aiPulse', () => ({
   listDomainManifests: vi.fn().mockResolvedValue({ apps: [] }),
@@ -37,6 +38,9 @@ vi.mock('../api/aiWorkspace', () => ({
   findOpenConversation: vi.fn(),
   getUsageSummary: vi.fn(),
   getUsageByConversation: vi.fn(),
+  getProfile: vi.fn(),
+  patchProfile: vi.fn(),
+  listModels: vi.fn(),
 }));
 
 import { AIWorkspace } from '../shell/AIWorkspace';
@@ -131,6 +135,18 @@ describe('AIWorkspace Usage tab (Phase 21-B)', () => {
 
     expect(await screen.findByTestId('usage-tab')).toBeInTheDocument();
     expect(usageButton).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+describe('AIWorkspace Settings tab (Phase 22-B)', () => {
+  it('renders the Settings panel when Settings is selected from the activity bar', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const settingsButton = await screen.findByRole('button', { name: 'Settings' });
+    fireEvent.click(settingsButton);
+
+    expect(await screen.findByTestId('settings-tab')).toBeInTheDocument();
+    expect(settingsButton).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
