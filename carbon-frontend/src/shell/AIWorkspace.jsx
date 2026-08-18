@@ -24,9 +24,12 @@ import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DataUsageIcon from '@mui/icons-material/DataUsage';
+import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
+import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import ManageSearchIcon from '@mui/icons-material/ManageSearch';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useAuth } from '../auth/AuthContext';
@@ -50,6 +53,9 @@ import AIArtifactBrowser from './AIArtifactBrowser';
 import AISuggestionRail from './AISuggestionRail';
 import AIUsageTab from './AIUsageTab';
 import AISettingsTab from './AISettingsTab';
+import AIMemoryTab from './AIMemoryTab';
+import AILearntTab from './AILearntTab';
+import AIRelationshipTab from './AIRelationshipTab';
 import InvestigateTab from './InvestigateTab';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { ExecuteModeProvider } from './ExecuteModeContext';
@@ -480,6 +486,16 @@ export function AIWorkspace({ onClose }) {
             <AIUsageTab />
           ) : activePanel === 'settings' ? (
             <AISettingsTab />
+          ) : activePanel === 'memory' ? (
+            <AIMemoryTab />
+          ) : activePanel === 'learnt' ? (
+            <AILearntTab />
+          ) : activePanel === 'relationship' ? (
+            <AIRelationshipTab
+              onShowFacts={() => setActivePanel('learnt')}
+              onShowEpisodes={() => setActivePanel('memory')}
+              onShowUsage={() => setActivePanel('usage')}
+            />
           ) : activePanel === 'investigate' ? (
             <InvestigateTab conversations={investigateConversations} onSelect={handleOpenInvestigation} onNew={handleNewInvestigation} />
           ) : activePanel === 'artifacts' ? (
@@ -577,10 +593,16 @@ export function AIWorkspace({ onClose }) {
           }}
         >
           {[
-            { id: 'sessions',    icon: <ForumOutlinedIcon sx={{ fontSize: 16 }} />,     label: 'Sessions'    },
-            { id: 'context',     icon: <InfoOutlinedIcon sx={{ fontSize: 16 }} />,       label: 'Context'     },
-            { id: 'investigate', icon: <ManageSearchIcon sx={{ fontSize: 16 }} />,       label: 'Investigate' },
-            { id: 'artifacts',   icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />, label: 'Artifacts'   },            { id: 'usage',       icon: <DataUsageIcon sx={{ fontSize: 16 }} />,         label: 'Usage'       },            { id: 'settings',    icon: <SettingsOutlinedIcon sx={{ fontSize: 16 }} />,      label: 'Settings'    },          ].map(({ id, icon, label }) => (
+            { id: 'sessions',     icon: <ForumOutlinedIcon sx={{ fontSize: 16 }} />,             label: 'Sessions'     },
+            { id: 'context',      icon: <InfoOutlinedIcon sx={{ fontSize: 16 }} />,               label: 'Context'      },
+            { id: 'investigate',  icon: <ManageSearchIcon sx={{ fontSize: 16 }} />,               label: 'Investigate'  },
+            { id: 'artifacts',    icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />,         label: 'Artifacts'    },
+            { id: 'usage',        icon: <DataUsageIcon sx={{ fontSize: 16 }} />,                  label: 'Usage'        },
+            { id: 'settings',     icon: <SettingsOutlinedIcon sx={{ fontSize: 16 }} />,           label: 'Settings'     },
+            { id: 'memory',       icon: <HistoryOutlinedIcon sx={{ fontSize: 16 }} />,            label: 'Memory'       },
+            { id: 'learnt',       icon: <LightbulbOutlinedIcon sx={{ fontSize: 16 }} />,          label: 'Learnt'       },
+            { id: 'relationship', icon: <FavoriteBorderOutlinedIcon sx={{ fontSize: 16 }} />,     label: 'Relationship' },
+          ].map(({ id, icon, label }) => (
             <Tooltip key={id} title={label} placement="left">
               <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: activePanel === id ? 'primary.main' : 'transparent' }}>
                 <IconButton

@@ -1614,7 +1614,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-18
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE
 **Kind:** Frontend-only. Medium-large. **Do last.**
 **Depends on:** Phase 23-A (endpoints).
 

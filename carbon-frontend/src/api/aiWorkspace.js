@@ -620,3 +620,64 @@ export function listWorkspaceSuggestions(token, limit = 50) {
   params.append('limit', String(limit));
   return apiFetch(`${BASE}conversations/suggestions/?${params.toString()}`, { token });
 }
+
+// ── Phase 23-A — Memory & learnt facts ──────────────────────────────────
+// Endpoints live under /carbon-api/ai/memory/ (NOT the workspace BASE).
+
+/**
+ * List durable learnt facts (long-term memory) — newest first.
+ * @param {string} token - JWT access token
+ * @param {object} [opts] - { category?, limit? (cap 500) }
+ * @returns {Promise<object>} { count, results: [{ id, category, content,
+ *   confidence, provenance: { source, created_at, last_used }, use_count,
+ *   visibility, valid_from, valid_to }] }
+ */
+export function listFacts(token, { category, limit } = {}) {
+  const params = new URLSearchParams();
+  if (category) params.append('category', category);
+  if (limit) params.append('limit', String(limit));
+  const qs = params.toString();
+  return apiFetch(`ai/memory/facts/${qs ? `?${qs}` : ''}`, { token });
+}
+
+/**
+ * List episodic memory rows (events/milestones from past work) — newest first.
+ * @param {string} token - JWT access token
+ * @param {object} [opts] - { event_type?, limit? (cap 500) }
+ * @returns {Promise<object>} { count, results: [{ id, event_type, summary,
+ *   details, caused_by_episode_id, relevance_score, occurred_at, learned_at,
+ *   visibility }] }
+ */
+export function listEpisodes(token, { event_type, limit } = {}) {
+  const params = new URLSearchParams();
+  if (event_type) params.append('event_type', event_type);
+  if (limit) params.append('limit', String(limit));
+  const qs = params.toString();
+  return apiFetch(`ai/memory/episodes/${qs ? `?${qs}` : ''}`, { token });
+}
+
+/**
+ * Relationship summary — what the assistant remembers about this user,
+ * computed per request (never persisted server-side).
+ * @param {string} token - JWT access token
+ * @returns {Promise<object>} { memory_enabled, memory: { fact_count,
+ *   episode_count, top_categories: [{ category, count }], avg_confidence,
+ *   total_uses }, usage: {...}, profile: {...}, computed_at }
+ */
+export function getRelationship(token) {
+  return apiFetch('ai/memory/relationship/', { token });
+}
+
+/**
+ * Forget a learnt fact (owner-only). Hard delete + cascade to derived facts;
+ * the backend audits every forget. Resolves on 204.
+ * @param {string} token - JWT access token
+ * @param {string} id - fact id (UUID)
+ * @returns {Promise<void>}
+ */
+export function forgetFact(token, id) {
+  return apiFetch(`ai/memory/facts/${encodeURIComponent(id)}/`, {
+    token,
+    method: 'DELETE',
+  });
+}

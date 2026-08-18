@@ -1142,3 +1142,60 @@ $ /home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q
 ### Issues Found
 - **AuditLog lacks an org partition in practice:** `AuditLog` inherits `AppScopeMixin` (app/org/host/visibility columns) but the engine's SQLAlchemy twin writes only `instance_id`/`actor`/`action`/`detail`. Our forget entries set `instance_id="carbon"`, `host_user_id`, `visibility="private"` so they are fully scoped; consumers should filter by `action="memory.forget"` + `target` (see test assertions).
 - **`get_or_create(user=user)` in relationship is a benign read-path write** (RULE_21 exception already established by `AIUsage.profile`); it creates the profile row on first read so `memory_enabled` defaults resolve correctly without a separate profile call.
+
+## [2026-08-18] Frontend Worker — Phase 23-B: Memory & learnt facts frontend (three fixed tabs)
+
+### Summary
+All gates passed. 6 files changed (4 created, 2 modified). 14 new tests added, all passing; build clean. Three fixed right-bar tabs wired to the Phase 23-A read+forget API (LIVE at `/carbon-api/ai/memory/`): **Memory** (episodes — what happened, when, why relevant), **Learnt** (facts + per-fact Forget with explicit confirm), **Relationship** (empathy surface — every claim paired with a "why" and a "forget" affordance, with an explicit non-creepy empty state). No backend files touched. All four API helpers use `apiFetch` only (RULE_10), paths under `ai/memory/` (NOT the workspace BASE), and follow the `AIUsageTab`/`AISettingsTab` self-fetch + `useNotification` + compact-density pattern. Theme tokens only (RULE_8); no implementation leakage in copy (RULE_23) — the UI speaks of facts/events/preferences, never model names or endpoints.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `listFacts` / `listEpisodes` / `getRelationship` / `forgetFact` in `aiWorkspace.js` | ✅ | `apiFetch` only; paths `ai/memory/facts/`, `ai/memory/episodes/`, `ai/memory/relationship/`, `ai/memory/facts/{id}/` (DELETE → 204); URLSearchParams for `?category=`/`?event_type=`/`?limit=`; `encodeURIComponent` on fact id |
+| 2 | `AIMemoryTab.jsx` (episodes) | ✅ | Self-fetch + 4 states; event card: type Chip (error → `error` color), time (dayjs `Africa/Cairo`), relevance %, summary + details (object/string/null-safe), recorded-at; client-side event-type Select (rendered only when >1 type); empty state "No events recorded yet." |
+| 3 | `AILearntTab.jsx` (facts + forget) | ✅ | Fact card: category Chip, provenance copy ("from your feedback" / "built on an earlier fact" / "from a past conversation"), confidence `LinearProgress` + %, `used N×`, per-fact Forget (Tooltip + DeleteOutlineIcon, error color); confirm Dialog ("This cannot be undone.") → DELETE → row removed + success toast; failure → `notifyFromError`, fact stays; client-side category Select |
+| 4 | `AIRelationshipTab.jsx` (empathy surface) | ✅ | Every claim = title + "why" + action: facts count → "Review & forget" → Learnt; episodes count → "Review" → Memory; avg confidence → "Review & forget"; Topics paper with chips `category · count` + "Forget any"; usage claim → "Open usage" → Usage; `memory_enabled=false` banner keeps data visible; empty state "Nothing stored yet." + explicit "I don't keep anything from our chats on my own…" |
+| 5 | Registration in `AIWorkspace.jsx` | ✅ | 3 fixed right-bar entries (`memory`/`learnt`/`relationship`) with `HistoryOutlined`/`LightbulbOutlined`/`FavoriteBorderOutlined` icons; render branches with `onShowFacts`/`onShowEpisodes`/`onShowUsage` cross-links |
+| 6 | Tests + verification gate | ✅ | `__tests__/AIMemoryTabs.test.jsx` — 14 tests (4 episodes / 6 facts incl. forget-confirm cancel+confirm paths and failure path / 4 relationship incl. empty state + memory-off banner); `npm run lint` clean; `npx vitest run src/__tests__/AIMemoryTabs.test.jsx` → 14 passed; `npm run build` → ✓ built |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `carbon-frontend/src/shell/AIMemoryTab.jsx` | Episodes tab: self-fetch, 4 states, event cards, event-type Select (conditional), empty/error states with Retry |
+| CREATE | `carbon-frontend/src/shell/AILearntTab.jsx` | Facts tab: self-fetch, category Select (conditional), confidence bar, per-fact Forget + confirm Dialog (Cancel/Forget, "Forgetting…" while saving), success/failure notify |
+| CREATE | `carbon-frontend/src/shell/AIRelationshipTab.jsx` | Relationship tab: claim cards each with "why" caption + action button, topics chips, usage claim, memory-off banner, explicit empty state; cross-tab callbacks via props |
+| CREATE | `carbon-frontend/src/__tests__/AIMemoryTabs.test.jsx` | 14 tests: episodes render/empty/error/retry/event-type refetch; facts render/empty/error/retry/forget-confirm (cancel no-op + confirm deletes + row removed + toast)/forget-failure (fact stays)/category refetch; relationship empty state (no claims)/pairs-claims (why + affordance per claim)/memory-off banner/error+retry |
+| MODIFY | `carbon-frontend/src/api/aiWorkspace.js` | Appended Phase 23-A memory helpers section: `listFacts`, `listEpisodes`, `getRelationship`, `forgetFact` |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | Registered 3 fixed tabs: imports, activity-bar entries, render branches with cross-tab handlers |
+| MODIFY | `TASKS.md` | Phase 23-B status flipped IN PROGRESS → DONE |
+
+### Verification Output
+```
+$ cd /home/ahmed/aast/carbon/carbon-frontend
+
+$ npm run lint
+> carbon-frontend@0.0.0 lint
+> eslint .
+(clean — no errors)
+
+$ npx vitest run src/__tests__/AIMemoryTabs.test.jsx
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  19:59:18
+   Duration  2.38s
+
+$ npm run build
+✓ built in 13.44s
+(only pre-existing chunk-size warning >500 kB)
+```
+
+### Deviations
+- **Gate scoped to the new test file** (per task spec): `npx vitest run src/__tests__/AIMemoryTabs.test.jsx`. Full suite has 9 pre-existing failures in `AIArtifacts.test.jsx` (2), `AIMessageBubble.feedback.test.jsx` (3), `AISharedThreads.test.jsx` (4) — verified by `git stash` baseline run (same 9 failures WITHOUT 23-B changes); untouched and out of scope.
+- **Row forget buttons carry `aria-label="Forget this fact"`** (MUI Tooltip clones the button), so tests target `getAllByRole('button', { name: 'Forget this fact' })` for row actions and the exact `'Forget'` for the dialog confirm — avoids the Tooltip-clone ambiguity.
+- **Event-type / category Selects are conditional** (rendered only when >1 distinct value from loaded data) to keep compact density; filters refetch via query params.
+- `formatTokens` reused from `AIUsageTab` (already exported for cross-tab reuse).
+- No backend files touched (DO NOT TOUCH respected).
+
+### Issues Found
+- **Pre-existing full-suite failures (unrelated):** 9 failures in AIArtifacts/AIMessageBubble.feedback/AISharedThreads tests — reproduced on clean `main` (9ecadfb) with changes stashed; not introduced by 23-B.
+- **MUI Tooltip clones accessible buttons:** forgetting per-row buttons renders duplicate accessible names; handled in tests via exact-name queries (see Deviations).
