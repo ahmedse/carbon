@@ -113,11 +113,14 @@ class AIUsage:
             cost=Sum("cost"),
             n=Count("id"),
         )
+        # Phase 21-A perf follow-up: resolve ALL tiers in ONE query instead of
+        # calling ModelCatalog.resolve_tier per row (N+1 on a user-scoped agg).
+        tier_map = ModelCatalog.tier_map(row["model_id"] for row in tier_rows)
         by_tier: dict[str, dict[str, Any]] = {}
         by_model: dict[str, dict[str, Any]] = {}
         for row in tier_rows:
             model_id = row["model_id"] or "unknown"
-            tier = ModelCatalog.resolve_tier(model_id)
+            tier = tier_map.get(model_id, "unknown")
             tokens = int(row["tokens"] or 0)
             cost = row["cost"] or Decimal("0.0")
             bucket = by_tier.setdefault(

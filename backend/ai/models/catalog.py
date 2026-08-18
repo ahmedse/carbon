@@ -18,6 +18,7 @@ Design intent:
 """
 
 from decimal import Decimal
+from typing import Iterable
 
 from django.db import models
 
@@ -165,3 +166,19 @@ class ModelCatalog(models.Model):
             return "unknown"
         row = cls.objects.filter(model_id__iexact=model_id).first()
         return row.tier if row is not None else "unknown"
+
+    @classmethod
+    def tier_map(cls, model_ids: Iterable[str | None]) -> dict[str, str]:
+        """Resolve tiers for many slugs in ONE query.
+
+        The batch counterpart to :meth:`resolve_tier` — usage aggregation
+        (``AIUsage.summary``) buckets per model, and calling ``resolve_tier``
+        per row is an N+1.  Returns ``{model_id: tier}`` for known slugs;
+        unknown/empty ids are omitted (callers default to ``"unknown"``).
+        """
+        ids = {m for m in model_ids if m}
+        if not ids:
+            return {}
+        return dict(
+            cls.objects.filter(model_id__in=ids).values_list("model_id", "tier")
+        )

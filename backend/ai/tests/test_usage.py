@@ -183,6 +183,27 @@ def test_summary_scopes_to_own_user(user, other_user, catalog):
     assert summary["total_tokens"] == 300  # only mine, never theirs
 
 
+@pytest.mark.django_db
+def test_summary_resolves_all_tiers_in_one_query(user, catalog):
+    """Regression: tier buckets must not N+1 over the model catalog."""
+    from django.test.utils import CaptureQueriesContext
+    from django.db import connection
+
+    conv = _conversation(user)
+    for model_id in ("claude-haiku-4.5", "gpt-4o", "unknown-model"):
+        _generation(conv, model_id=model_id, prompt=100, completion=100)
+
+    with CaptureQueriesContext(connection) as ctx:
+        summary = AIUsage(user).summary(period_days=30)
+
+    catalog_queries = [
+        q for q in ctx.captured_queries
+        if "modelcatalog" in q["sql"].lower()
+    ]
+    assert len(catalog_queries) == 1  # one prefetch, never per-model
+    assert set(summary["by_tier"].keys()) == {"fast", "brain", "unknown"}
+
+
 # ── by-conversation aggregation ─────────────────────────────────────────
 
 

@@ -1044,3 +1044,49 @@ $ npx vite build
 - **MUI Select + `ListSubheader`:** children are cloned with `role="option"`, so tier headers must be rendered as a flat array (no `Fragment` wrappers) — copied from the proven `AIModelSelect` pattern.
 - **Slider value reads** via `aria-valuenow`; keyboard `ArrowRight` moves by `step` (0.1) — used for the optimistic-sync test.
 - **Pre-existing failures unchanged** (AIArtifacts 2 / feedback 3 / AISharedThreads 4) — the 3 former usage-chip failures (hover-gated `getByText`) are now green because the meta row always renders.
+
+---
+
+## [2026-08-18] Backend Worker — Usage endpoint latency fix (3168ms) + controller neatness
+
+### Summary
+All gates passed. 3 files modified, 1 regression test added. Full AI suite 448 passed, 0 failed. The `GET /carbon-api/ai/usage/summary/` endpoint's 3168ms latency is fixed by killing the N+1 in `AIUsage.summary()`: tier bucketing previously called `ModelCatalog.resolve_tier(model_id)` once per distinct model (one DB query per row); it now resolves all tiers in a single prefetch via the new `ModelCatalog.tier_map()` batch helper, then does in-memory lookups. The `ai_gen_conv_status_done_idx` index on `(conversation, status, completed_at)` already covers the user-scoped aggregation join — no new migration needed (`makemigrations --check --dry-run` → "No changes detected"). Controller neatness verified: `usage_views.py` is already thin (51 lines, aggregate-only), and `parse_period`/`QuotaExceededError` already live in the service layer — no restructuring required.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Kill the N+1 in `AIUsage.summary()` tier bucketing | ✅ | Per-row `ModelCatalog.resolve_tier(model_id)` → single `ModelCatalog.tier_map(ids)` prefetch + dict lookup; `resolve_tier` retained as the single-slug helper |
+| 2 | Add `ModelCatalog.tier_map()` batch helper | ✅ | One query: `filter(model_id__in=ids).values_list("model_id", "tier")`; unknown/empty ids omitted, callers default to `"unknown"` |
+| 3 | Confirm AIGeneration index coverage | ✅ | `ai_gen_conv_status_done_idx` `(conversation, status, completed_at)` already serves `conversation__user` join + status + window filter; no migration |
+| 4 | Regression test: tiers resolve in exactly one catalog query | ✅ | `CaptureQueriesContext` asserts 1 `modelcatalog` query for 3 models incl. an unknown one; `by_tier` keys `{fast, brain, unknown}` |
+| 5 | Controller neatness (usage_views) | ✅ | `usage_views.py` = 51 lines; `parse_period`/`QuotaExceededError` in service layer; no bulky controller found — verified-done |
+| 6 | Backend gates | ✅ | `manage.py check` clean; `makemigrations --check --dry-run` → "No changes detected"; `pytest ai -q` → 448 passed |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `backend/ai/models/catalog.py` | Added `ModelCatalog.tier_map()` batch tier resolver (single-query) |
+| MODIFY | `backend/ai/usage_service.py` | `AIUsage.summary()` uses prefetched `tier_map` instead of per-row `resolve_tier` |
+| MODIFY | `backend/ai/tests/test_usage.py` | Added `test_summary_resolves_all_tiers_in_one_query` regression test |
+
+### Verification Output
+```
+$ /home/ahmed/aast/carbon/.venv/bin/python manage.py check
+System check identified no issues (0 silenced).
+
+$ /home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+No changes detected
+
+$ /home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_usage.py -k "one_query or summary" -q
+5 passed in 5.17s
+
+$ /home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q
+448 passed in 15.73s
+```
+
+### Deviations
+- The observed 3168ms was dominated by the tier-resolution N+1 (one catalog query per distinct model row on a user-scoped aggregate); the second full aggregation in `quota_snapshot()` (different window) was left as-is since the existing index covers it.
+- No restructuring of `workspace_api.py` (1088 lines) — out of scope for this backlog item; controller neatness applies to the usage controllers, which were already thin.
+
+### Issues Found
+- `ModelCatalog.resolve_tier` uses `model_id__iexact` (case-insensitive) while the batch `tier_map` uses `model_id__in` (case-sensitive); generation `model_id` values are always persisted from `resolve_model_id()` (canonical slug), so exact-match is safe — noted in the helper docstring.
