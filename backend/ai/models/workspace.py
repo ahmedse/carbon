@@ -401,6 +401,50 @@ class AIUserProfile(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(28)],
         help_text="Day of month (1-28) the monthly token quota resets.",
     )
+
+    # ── Phase 22-A: per-user preferences ──────────────────────────────────
+    # RESOLUTION ORDER (low → high), applied at turn time in
+    # CarbonIntelligence (ai/intelligence.py):
+    #
+    #     system default → domain manifest → user profile → per-message override
+    #
+    # The user profile NEVER overrides a per-message override, and the domain
+    # manifest NEVER overrides the profile.  Per-message wins because the
+    # frontend model picker is a deliberate per-turn choice; the profile is a
+    # durable default; the manifest is a per-domain recommendation; the
+    # settings are the platform floor.  Future workers: keep this order in the
+    # resolution helper — swapping profile and per-message would be a
+    # correctness bug.
+    default_model_id = models.ForeignKey(
+        "ai.ModelCatalog",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Durable per-user default model (Phase 20-A catalog FK). "
+            "Resolved AFTER the domain manifest default and BEFORE any "
+            "per-message override."
+        ),
+    )
+    temperature = models.FloatField(
+        default=0.3,
+        validators=[MinValueValidator(0.0), MaxValueValidator(2.0)],
+        help_text="Default chat sampling temperature (0.0-2.0).",
+    )
+    auto_title = models.BooleanField(
+        default=True,
+        help_text="Auto-title conversations from the first user message.",
+    )
+    memory_enabled = models.BooleanField(
+        default=True,
+        help_text="Inject the user's long-term memory tier (T4) into turns.",
+    )
+    usage_alert_threshold = models.PositiveSmallIntegerField(
+        default=int(getattr(settings, "AI_QUOTA_SOFT_WARNING_PCT", 80)),
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="Soft-warning percent of the monthly token limit (1-100).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -432,6 +432,27 @@ def _user_profile_message(scope, user) -> dict[str, Any] | None:
     }
 
 
+def _user_memory_enabled(conversation) -> bool:
+    """Phase 22-A — whether the conversation owner enables the T4 memory tier.
+
+    Defaults to True when there is no profile row or the conversation carries
+    no real user (anonymous).  A False ``memory_enabled`` skips long-term
+    memory injection for this turn (the profile preference — never the
+    per-message path — decides memory gating).
+    """
+    user = getattr(conversation, "user", None)
+    if user is None or getattr(user, "pk", None) is None:
+        return True
+    from ai.models import AIUserProfile
+
+    try:
+        return AIUserProfile.objects.values_list(
+            "memory_enabled", flat=True,
+        ).get(user=user)
+    except AIUserProfile.DoesNotExist:
+        return True
+
+
 def assemble_context(
     conversation,
     messages,
@@ -497,7 +518,11 @@ def assemble_context(
         )
 
     # T4 — durable long-term memory facts as a compact system note.
-    memory_facts, memory_tokens = _retrieve_long_term_memory(scope, memory_budget)
+    # Phase 22-A: gated by the user's ``memory_enabled`` preference — a user
+    # who turns personal memory off gets no T4 tier this turn.
+    memory_facts, memory_tokens = [], 0
+    if _user_memory_enabled(conversation):
+        memory_facts, memory_tokens = _retrieve_long_term_memory(scope, memory_budget)
     if memory_facts:
         lines = ["[Long-Term Memory]"]
         for fact in memory_facts:

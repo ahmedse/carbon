@@ -117,6 +117,17 @@ class DomainAIOperations(ABC):
     # Use to give domain vocabulary, units, and business rules.
     system_prompt_extension: str = ""
 
+    # Phase 22-A — optional per-domain default model (stable ModelCatalog
+    # ``model_id`` slug, e.g. "gpt-4o-mini").  This is the "domain manifest"
+    # tier of the turn-time model resolution order:
+    #
+    #     system default → domain manifest → user profile → per-message override
+    #
+    # Empty string = "no opinion" → the next tier (user profile / system
+    # default) decides.  Never overrides the user's profile default or a
+    # per-message model pick.
+    default_model_id: str = ""
+
     # ── Manifest instance methods ─────────────────────────────────────────
 
     def build_workspace_context(

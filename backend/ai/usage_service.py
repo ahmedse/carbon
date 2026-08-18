@@ -195,7 +195,11 @@ class AIUsage:
         remaining = max(0, limit - used)
         pct = round((used / limit) * 100.0, 1) if limit > 0 else 0.0
         hard_exceeded = limit > 0 and used >= limit
-        soft_warning = not hard_exceeded and limit > 0 and pct >= SOFT_WARNING_PCT
+        # Phase 22-A — the soft-warning percent is a per-user preference
+        # (usage_alert_threshold, default 80); the settings constant is only
+        # the fallback for legacy profiles without the field.
+        soft_warning_pct = int(profile.usage_alert_threshold or SOFT_WARNING_PCT)
+        soft_warning = not hard_exceeded and limit > 0 and pct >= soft_warning_pct
         return {
             "limit": limit,
             "used": used,
@@ -204,6 +208,7 @@ class AIUsage:
             "window_start": window_start.isoformat(),
             "pct": pct,
             "soft_warning": soft_warning,
+            "soft_warning_pct": soft_warning_pct,
             "hard_exceeded": hard_exceeded,
         }
 

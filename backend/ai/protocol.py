@@ -465,6 +465,10 @@ class ChatRequest:
     conversation: ConversationContext | None = None
     scope: Scope | None = None
     model: str | None = None
+    # Phase 22-A — optional per-user chat sampling temperature (0.0-2.0).
+    # Resolved by CarbonIntelligence from the user profile (or a per-message
+    # override); None lets the engine keep its built-in default.
+    temperature: float | None = None
 
 
 @dataclass

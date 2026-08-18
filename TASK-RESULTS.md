@@ -859,3 +859,73 @@ NONE — implemented exactly per spec. Notes:
 - `AIUsageTab.jsx` exports three pure helpers; `react-refresh/only-export-components` suppressed per-line, matching the existing `AuthContext.jsx` pattern.
 - MUI `LinearProgress` rounds `aria-valuenow` to an integer (asserted `62` for 61.725%).
 - `AIConversationView` / streaming path / `App.jsx` / `Shell.jsx` untouched; backend untouched.
+
+---
+
+## [2026-08-18] Backend Worker — Phase 22-A: User Preferences (backend)
+
+### Summary
+All gates passed. 13 files changed (2 created, 11 modified). 19 new tests added; full AI suite 447 passed, 0 failed. Extended the existing Phase 15 `AIUserProfile` (no new table) with `default_model_id`, `temperature`, `auto_title`, `memory_enabled`, `usage_alert_threshold`, and served them via `GET/PATCH /carbon-api/ai/profile/`. Resolution order — **system default → domain manifest → user profile → per-message override** — is enforced and documented in code: the profile NEVER overrides a per-message override. Wired `default_model_id` + `temperature` into the chat message creation/router resolution, `auto_title` into conversation titling, `memory_enabled` into the T4 memory-tier gate, and `usage_alert_threshold` into the per-user quota soft-warning percent.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Extend `AIUserProfile` with 5 preference fields | ✅ | `default_model_id` FK→`ModelCatalog` (SET_NULL, related_name `+`), `temperature` 0.0–2.0 (default 0.3), `auto_title` (True), `memory_enabled` (True), `usage_alert_threshold` 1–100 (default `AI_QUOTA_SOFT_WARNING_PCT`=80); BIG resolution-order comment block above the fields |
+| 2 | Domain manifest tier: `default_model_id` on `DomainAIOperations` | ✅ | Class attr `""` = no opinion; never overrides profile/per-message |
+| 3 | Thread `temperature` through chat pipeline | ✅ | `ChatRequest.temperature` → Pulse `_chat_payload` → `_run_chat` → `runner.run(temperature=)` → `draft()` → `route_chat` (falls back to 0.3 engine default when None) |
+| 4 | Wire resolution into `CarbonIntelligence` | ✅ | `_user_preferences` / `_resolve_preferred_model` (per-message > profile > domain manifest > None) / `_resolve_preferred_temperature`; applied in `send_message`, `send_message_stream`, `retry_message`, `retry_message_stream` (both ChatRequest sites + non-chat route calls) |
+| 5 | `auto_title` gating | ✅ | `_maybe_autotitle(..., enabled=profile.auto_title)`; still never overwrites explicit user renames |
+| 6 | `memory_enabled` gates T4 | ✅ | `context_assembler._user_memory_enabled(conversation)` short-circuits `_retrieve_long_term_memory`; `_user_profile_message` untouched |
+| 7 | `usage_alert_threshold` override | ✅ | `AIUsage.quota_snapshot()` now honors `profile.usage_alert_threshold` and reports `soft_warning_pct` |
+| 8 | `UserProfileSerializer` + `GET/PATCH /ai/profile/` | ✅ | `UserProfileView(APIView)`, `IsAuthenticated`; GET returns stored prefs + resolved effective defaults (incl. inherited system model); PATCH upserts (get_or_create), validates bounds, rejects unknown catalog models, `null`/blank clears |
+| 9 | Migration `0016_aiuserprofile_auto_title_and_more` | ✅ | Generated; `makemigrations --check --dry-run` → "No changes detected"; applied to dev DB |
+| 10 | Tests + verification gate | ✅ | `ai/tests/test_profile_prefs.py` — 19 tests; full AI suite 447 passed |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `backend/ai/tests/test_profile_prefs.py` | 19 tests: field defaults, GET auth + resolved defaults, PATCH upsert/validation/clears, resolution order (per-message > profile > manifest > system), send_message resolution integration, auto_title gating, T4 memory gating, alert-threshold override |
+| CREATE | `backend/ai/migrations/0016_aiuserprofile_auto_title_and_more.py` | migration (generated) |
+| MODIFY | `backend/ai/models/workspace.py` | `AIUserProfile` + 5 fields + resolution-order comment |
+| MODIFY | `backend/ai/domain_protocol.py` | `DomainAIOperations.default_model_id` manifest tier |
+| MODIFY | `backend/ai/protocol.py` | `ChatRequest.temperature` |
+| MODIFY | `backend/ai/providers/pulse.py` | `_chat_payload` temperature passthrough |
+| MODIFY | `backend/ai/engine_runtime.py` | `_run_chat` temperature passthrough |
+| MODIFY | `backend/ai/engine/cognition/turn/runner.py` | `run(temperature=)` → draft witness |
+| MODIFY | `backend/ai/engine/cognition/turn/draft.py` | `draft(temperature=)` → `route_chat` |
+| MODIFY | `backend/ai/intelligence.py` | resolution helpers + wiring in all 4 send/retry paths; auto_title gating |
+| MODIFY | `backend/ai/context_assembler.py` | `_user_memory_enabled` T4 gate (`_user_profile_message` untouched) |
+| MODIFY | `backend/ai/usage_service.py` | per-user `soft_warning_pct` in `quota_snapshot()` |
+| MODIFY | `backend/ai/serializers.py` | `UserProfileSerializer` |
+| MODIFY | `backend/ai/workspace_api.py` | `UserProfileView` (GET/PATCH `/ai/profile/`) |
+| MODIFY | `backend/config/urls.py` | route `ai/profile/` → `UserProfileView` |
+| MODIFY | `backend/ai/tests/test_retry_resume.py` | `_fake_route` test doubles accept new `temperature` positional (Phase 22-A signature) |
+
+### Verification Output
+```
+$ manage.py check
+System check identified no issues (0 silenced).
+
+$ manage.py makemigrations --check --dry-run
+No changes detected
+
+$ pytest ai/tests/test_profile_prefs.py -q
+19 passed in 6.25s
+
+$ pytest ai -q
+447 passed in 17.93s
+
+$ manage.py migrate ai
+Applying ai.0015_aiuserprofile_aigeneration_completed_at_and_more... OK
+Applying ai.0016_aiuserprofile_auto_title_and_more... OK
+```
+
+### Deviations
+- **Test-double signature update (required, not a spec deviation):** `retry_message` now calls `_route_typed_message(conv, content, ctx, scope, model, temperature)`; the two `_fake_route` doubles in `test_retry_resume.py` gained `temperature=None` to match. The `*args/**kwargs` double in `test_chat_stream.py`/`test_workspace_stream.py` needed no change.
+- No frontend / deploy / docker changes made (backend-worker scope only).
+- `_user_profile_message` (context_assembler.py) and all Phase 15 profile-injection logic untouched.
+
+### Issues Found
+- **Duplicate-method anchor (append difficulty):** `workspace_api.py` has byte-identical `export`/`summarize` blocks in two viewsets; the append anchored on the artifact viewset's `summarize`+`export` tail (unique because the artifact viewset has no `suggestions`/`resume` actions), so `UserProfileView` landed after the artifact viewset without touching the conversation viewset.
+- **Stale per-worker test DBs:** the full suite initially failed with `column ai_aiuserprofile.default_model_id_id does not exist` on workers gw1..gw7 (pre-migration schema); dropped `test_carbon_dev_gw0..7` and reran — 447 passed on the fresh schema.
+- **Resolution-order rule must stay explicit:** the profile NEVER overrides a per-message override (per-message is the highest tier). Future workers touching `_resolve_preferred_model` or the model-picker wiring must preserve that order — swapping profile and per-message is a correctness bug. The rule is written into the code comments at `workspace.py` (field block) and `intelligence.py` (`_resolve_preferred_model`).

@@ -9,6 +9,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from accounts.views import ThrottledTokenObtainPairView
 from accounts.password_reset_signals import NotifyingPasswordResetView
 from .health_views import health_check, metrics_view
+from ai import workspace_api as ai_workspace_views
 
 # API prefix, e.g. '/api/v1/' or '/carbon/api/'
 api_prefix = getattr(settings, "API_PREFIX", "/api/v1/").strip("/")
@@ -78,6 +79,7 @@ urlpatterns = [
     path(f'{api_prefix}/dq/', include('dq.urls')),
     path(f'{api_prefix}/ai/workspace/', include('ai.workspace_urls')),
     path(f'{api_prefix}/ai/usage/', include('ai.usage_urls')),
+    path(f'{api_prefix}/ai/profile/', ai_workspace_views.UserProfileView.as_view(), name='ai-user-profile'),
     path(f'{api_prefix}/ai/pulse/', include('ai.ops_urls')),
     path(f'{api_prefix}/', include('evidence.urls')),
 ]

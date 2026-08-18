@@ -86,6 +86,9 @@ class TurnPipelineRunner:
         progress_callback=None,
         stream_callback=None,
         model: str | None = None,
+        # Phase 22-A — per-user default chat temperature (0.0-2.0); None
+        # keeps the draft witness's built-in default (0.3).
+        temperature: float | None = None,
     ) -> tuple:
         """Execute one turn. Returns (AgentResponse, TurnLedger)."""
         from ai.engine.agent.reasoning import AgentResponse
@@ -431,6 +434,7 @@ class TurnPipelineRunner:
             budget_tracker=budget,
             model=model,
             tools=draft_tools,
+            temperature=temperature,
         )
         ledger.draft = draft
         total_tokens += draft.tokens_used

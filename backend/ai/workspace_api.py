@@ -16,8 +16,9 @@ _repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
+from django.conf import settings
 from django.http import StreamingHttpResponse
-from rest_framework import status, viewsets
+from rest_framework import status, views, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
@@ -42,6 +43,7 @@ from ai.serializers import (
     RetryMessageSerializer,
     SendMessageSerializer,
     ToolExecutionActionSerializer,
+    UserProfileSerializer,
 )
 
 import logging
@@ -985,3 +987,102 @@ class WorkspaceArtifactViewSet(viewsets.GenericViewSet):
                 {"error": str(e)},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+
+class UserProfileView(views.APIView):
+    """GET/PATCH ``/carbon-api/ai/profile/`` — Phase 22-A user AI preferences.
+
+    GET returns the stored preferences PLUS the resolved effective defaults
+    (user profile → domain manifest → system default) so the UI can render
+    inherited values.  PATCH upserts the profile row (get_or_create) with the
+    validated preference fields.
+
+    Resolution order note (kept in code for future workers):
+
+        system default → domain manifest → user profile → per-message override
+
+    The profile NEVER overrides a per-message override.  Domain manifests are
+    per-conversation (resolved at turn time in CarbonIntelligence); the global
+    GET resolves profile → system default and reports the manifest tier
+    implicitly (a domain default only applies inside that domain's
+    conversations).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    _DEFAULT_TEMPERATURE = 0.3
+    _DEFAULT_ALERT_THRESHOLD = int(
+        getattr(settings, "AI_QUOTA_SOFT_WARNING_PCT", 80)
+    )
+
+    @staticmethod
+    def _system_default_model() -> str | None:
+        """Lowest-tier fallback: the platform default chat model."""
+        from ai.engine.llm.router import get_model_for_task
+
+        return get_model_for_task("chat")
+
+    @classmethod
+    def _profile_payload(cls, profile, user) -> dict:
+        """Stored preferences + resolved effective defaults (UI render shape)."""
+        resolved_model = None
+        if profile is not None and profile.default_model_id_id is not None:
+            resolved_model = profile.default_model_id.model_id
+        if not resolved_model:
+            resolved_model = cls._system_default_model()
+        if profile is None:
+            return {
+                "default_model_id": None,
+                "temperature": cls._DEFAULT_TEMPERATURE,
+                "auto_title": True,
+                "memory_enabled": True,
+                "usage_alert_threshold": cls._DEFAULT_ALERT_THRESHOLD,
+                "monthly_token_limit": int(
+                    getattr(settings, "AI_DEFAULT_MONTHLY_TOKEN_LIMIT", 1_000_000)
+                ),
+                "quota_reset_day": 1,
+                "resolved_model_id": resolved_model,
+            }
+        return {
+            "default_model_id": (
+                profile.default_model_id.model_id
+                if profile.default_model_id_id is not None else None
+            ),
+            "temperature": profile.temperature,
+            "auto_title": profile.auto_title,
+            "memory_enabled": profile.memory_enabled,
+            "usage_alert_threshold": profile.usage_alert_threshold,
+            "monthly_token_limit": profile.monthly_token_limit,
+            "quota_reset_day": profile.quota_reset_day,
+            "resolved_model_id": resolved_model,
+        }
+
+    def get(self, request):
+        """Return stored preferences + resolved effective defaults."""
+        from ai.models import AIUserProfile
+
+        profile = (
+            AIUserProfile.objects.select_related("default_model_id")
+            .filter(user=request.user)
+            .first()
+        )
+        return Response(self._profile_payload(profile, request.user))
+
+    def patch(self, request):
+        """Upsert the profile with validated preference fields (PATCH)."""
+        from ai.models import AIUserProfile
+
+        serializer = UserProfileSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile, _ = AIUserProfile.objects.get_or_create(user=request.user)
+        for field in (
+            "default_model_id",
+            "temperature",
+            "auto_title",
+            "memory_enabled",
+            "usage_alert_threshold",
+        ):
+            if field in serializer.validated_data:
+                setattr(profile, field, serializer.validated_data[field])
+        profile.save()
+        return Response(self._profile_payload(profile, request.user))

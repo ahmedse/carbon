@@ -180,7 +180,7 @@ def test_retry_message_uses_context_snapshot_not_live_tail(user):
 
     ci = CarbonIntelligence()
 
-    def _fake_route(conv, content, conv_ctx, scope, model=None):
+    def _fake_route(conv, content, conv_ctx, scope, model=None, temperature=None):
         captured["messages"] = conv_ctx.messages
         return ci._save_assistant_message(
             conv, "fresh", metadata={}, status="completed",
@@ -212,7 +212,7 @@ def test_retry_message_links_and_signs_reply(user):
 
     ci = CarbonIntelligence()
 
-    def _fake_route(conv, content, conv_ctx, scope, model=None):
+    def _fake_route(conv, content, conv_ctx, scope, model=None, temperature=None):
         return ci._save_assistant_message(
             conv, "fresh", metadata={}, status="completed",
         )

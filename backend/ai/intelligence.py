@@ -326,8 +326,20 @@ class CarbonIntelligence:
         # Phase 21-A — request-time quota gate (before any user message is saved).
         self._enforce_quota(user)
 
+        # Phase 22-A — resolve durable preferences (profile → domain manifest)
+        # for this turn.  The per-message ``model`` param still wins: it is the
+        # highest tier of the resolution order.
+        profile = self._user_preferences(user)
+        resolved_model = self._resolve_preferred_model(
+            user, model, conversation.app_identifier,
+        )
+        resolved_temperature = self._resolve_preferred_temperature(user)
+
         # Auto-title from the first user message while the title is still default.
-        self._maybe_autotitle(conversation, content)
+        self._maybe_autotitle(
+            conversation, content,
+            enabled=profile.auto_title if profile is not None else True,
+        )
 
         # Save user message
         user_msg = AIMessage.objects.create(
@@ -349,7 +361,9 @@ class CarbonIntelligence:
                 "id", "role", "content", "created_at", "is_deleted",
             )
         )
-        assembled = assemble_context(conversation, history, scope, model=model)
+        assembled = assemble_context(
+            conversation, history, scope, model=resolved_model,
+        )
         conversation._turn_context_signature = assembled["context_signature"]
         conv_ctx = ConversationContext(
             conversation_id=str(conversation.id),
@@ -370,7 +384,8 @@ class CarbonIntelligence:
         # Route to provider based on conversation type.
         try:
             response = self._route_typed_message(
-                conversation, content, conv_ctx, scope, model,
+                conversation, content, conv_ctx, scope,
+                resolved_model, resolved_temperature,
             )
         except (PermissionError, ValueError) as exc:
             response = self._save_assistant_message(
@@ -457,8 +472,19 @@ class CarbonIntelligence:
         conv_type = conversation.conversation_type
 
         try:
+            # Phase 22-A — resolve durable preferences (profile → domain
+            # manifest) for this turn; the per-message ``model`` param wins.
+            profile = self._user_preferences(user)
+            resolved_model = self._resolve_preferred_model(
+                user, model, conversation.app_identifier,
+            )
+            resolved_temperature = self._resolve_preferred_temperature(user)
+
             # Save user message (identical to send_message).
-            self._maybe_autotitle(conversation, content)
+            self._maybe_autotitle(
+                conversation, content,
+                enabled=profile.auto_title if profile is not None else True,
+            )
             user_msg = AIMessage.objects.create(
                 conversation=conversation,
                 role="user",
@@ -479,7 +505,7 @@ class CarbonIntelligence:
                 )
             )
             assembled = assemble_context(
-                conversation, history, scope, model=model,
+                conversation, history, scope, model=resolved_model,
             )
             conversation._turn_context_signature = assembled["context_signature"]
             conv_ctx = ConversationContext(
@@ -511,7 +537,8 @@ class CarbonIntelligence:
                     message=message,
                     conversation=conv_ctx,
                     scope=scope,
-                    model=model,
+                    model=resolved_model,
+                    temperature=resolved_temperature,
                 )
 
                 partial_parts: list[str] = []
@@ -616,7 +643,10 @@ class CarbonIntelligence:
                     }
                     return
 
-                self._route_typed_message(conversation, content, conv_ctx, scope)
+                self._route_typed_message(
+                    conversation, content, conv_ctx, scope,
+                    resolved_model, resolved_temperature,
+                )
 
                 if GENERATIONS.is_cancelled(conv_id):
                     self._save_assistant_message(
@@ -1601,6 +1631,13 @@ class CarbonIntelligence:
         if conversation.app_identifier:
             scope.app_identifier = conversation.app_identifier
 
+        # Phase 22-A — resolve durable preferences (profile → domain manifest)
+        # for this regeneration; the per-message ``model`` param still wins.
+        resolved_model = self._resolve_preferred_model(
+            user, model, conversation.app_identifier,
+        )
+        resolved_temperature = self._resolve_preferred_temperature(user)
+
         # Rebuild the *snapshot* of that turn: everything up to and including
         # the user message, excluding soft-deleted and later messages.
         history = list(
@@ -1611,7 +1648,7 @@ class CarbonIntelligence:
             .values("id", "role", "content", "created_at", "is_deleted")
         )
         assembled = assemble_context(
-            conversation, history, scope, model=model,
+            conversation, history, scope, model=resolved_model,
         )
         conversation._turn_context_signature = assembled["context_signature"]
         conv_ctx = ConversationContext(
@@ -1631,7 +1668,8 @@ class CarbonIntelligence:
 
         try:
             response = self._route_typed_message(
-                conversation, turn.content, conv_ctx, scope, model,
+                conversation, turn.content, conv_ctx, scope,
+                resolved_model, resolved_temperature,
             )
         except (PermissionError, ValueError) as exc:
             response = self._save_assistant_message(
@@ -1697,6 +1735,13 @@ class CarbonIntelligence:
         if conversation.app_identifier:
             scope.app_identifier = conversation.app_identifier
 
+        # Phase 22-A — resolve durable preferences (profile → domain manifest)
+        # for this regeneration; the per-message ``model`` param still wins.
+        resolved_model = self._resolve_preferred_model(
+            user, model, conversation.app_identifier,
+        )
+        resolved_temperature = self._resolve_preferred_temperature(user)
+
         # Rebuild the *snapshot* of that turn (up to and including the user
         # message, excluding soft-deleted and later messages).
         history = list(
@@ -1704,7 +1749,9 @@ class CarbonIntelligence:
             .order_by("created_at")
             .values("id", "role", "content", "created_at", "is_deleted")
         )
-        assembled = assemble_context(conversation, history, scope, model=model)
+        assembled = assemble_context(
+            conversation, history, scope, model=resolved_model,
+        )
         conversation._turn_context_signature = assembled["context_signature"]
         conv_ctx = ConversationContext(
             conversation_id=str(conversation.id),
@@ -1759,7 +1806,8 @@ class CarbonIntelligence:
                     message=message,
                     conversation=conv_ctx,
                     scope=scope,
-                    model=model,
+                    model=resolved_model,
+                    temperature=resolved_temperature,
                 )
 
                 partial_parts: list[str] = []
@@ -1863,7 +1911,8 @@ class CarbonIntelligence:
                     return
 
                 self._route_typed_message(
-                    conversation, turn.content, conv_ctx, scope, model,
+                    conversation, turn.content, conv_ctx, scope,
+                    resolved_model, resolved_temperature,
                 )
 
                 if GENERATIONS.is_cancelled(conv_id):
@@ -1979,14 +2028,77 @@ class CarbonIntelligence:
 
         return self.get_conversation(user, conversation_id)
 
-    def _maybe_autotitle(self, conversation, content: str) -> None:
+    # ── Phase 22-A: preference resolution ─────────────────────────────────
+    # RESOLUTION ORDER (low → high), applied at turn time:
+    #
+    #     system default → domain manifest → user profile → per-message override
+    #
+    # * system default  — settings-driven (``get_model_for_task`` in the
+    #                     engine router).  Lowest tier.
+    # * domain manifest — optional ``default_model_id`` class attribute on a
+    #                     registered ``DomainAIOperations`` subclass.
+    # * user profile    — ``AIUserProfile`` (Phase 22-A durable prefs).
+    # * per-message     — the ``model`` parameter the caller (frontend model
+    #                     picker / retry) passes for THIS turn.  Highest tier.
+    #
+    # The user profile NEVER overrides a per-message override, and the domain
+    # manifest NEVER overrides the profile.  Future workers: keep this order —
+    # swapping profile and per-message is a correctness bug.
+    def _user_preferences(self, user) -> "AIUserProfile | None":
+        """Return the user's AIUserProfile row (or None when never saved)."""
+        from ai.models import AIUserProfile
+
+        try:
+            return AIUserProfile.objects.select_related(
+                "default_model_id"
+            ).get(user=user)
+        except AIUserProfile.DoesNotExist:
+            return None
+
+    def _resolve_preferred_model(
+        self,
+        user,
+        per_message_model: str | None,
+        app_identifier: str | None = None,
+    ) -> str | None:
+        """Resolve the model for a turn following the Phase 22-A order.
+
+        Returns the highest-priority model slug available; ``None`` means "no
+        preference" and the engine falls back to its system default
+        (``get_model_for_task``).  The per-message override always wins.
+        """
+        if per_message_model:
+            return per_message_model
+        profile = self._user_preferences(user)
+        if profile is not None and profile.default_model_id_id is not None:
+            return profile.default_model_id.model_id
+        if app_identifier:
+            from ai.domain_protocol import get_domain, has_domain
+
+            if has_domain(app_identifier):
+                domain_default = get_domain(app_identifier).default_model_id
+                if domain_default:
+                    return domain_default
+        return None
+
+    def _resolve_preferred_temperature(self, user) -> float | None:
+        """User's default chat temperature (0.0-2.0) or None → engine default."""
+        profile = self._user_preferences(user)
+        if profile is not None:
+            return profile.temperature
+        return None
+
+    def _maybe_autotitle(
+        self, conversation, content: str, *, enabled: bool = True
+    ) -> None:
         """Set the conversation title from the first user message.
 
         Only fires while the title is still a default title (from
         ``_default_title``) and no prior user message exists, so an explicit
-        user rename is never overwritten.
+        user rename is never overwritten.  ``enabled`` (Phase 22-A) is the
+        user's ``auto_title`` preference — False skips auto-titling entirely.
         """
-        if not content:
+        if not content or not enabled:
             return
 
         default_titles = {
@@ -2012,6 +2124,8 @@ class CarbonIntelligence:
         conv_ctx: ConversationContext,
         scope: Scope,
         model: str | None = None,
+        # Phase 22-A — user's default chat temperature; chat-only.
+        temperature: float | None = None,
     ) -> dict[str, Any]:
         """Dispatch a turn to the per-type ``_send_*`` handler.
 
@@ -2033,7 +2147,9 @@ class CarbonIntelligence:
             return self._send_investigate_message(conversation, content, conv_ctx, scope)
         if conv_type == "report_draft":
             return self._send_report_draft_message(conversation, content, conv_ctx, scope)
-        return self._send_chat_message(conversation, content, conv_ctx, scope, model)
+        return self._send_chat_message(
+            conversation, content, conv_ctx, scope, model, temperature,
+        )
 
     def _send_report_draft_message(
         self,
@@ -2889,6 +3005,8 @@ class CarbonIntelligence:
         conv_ctx: ConversationContext,
         scope: Scope,
         model: str | None = None,
+        # Phase 22-A — user's default chat temperature; None → engine default.
+        temperature: float | None = None,
     ) -> dict[str, Any]:
         """Handle generic chat conversation messages."""
         guard_chain, operation = self._guard_workspace_operation(
@@ -2903,6 +3021,7 @@ class CarbonIntelligence:
             conversation=conv_ctx,
             scope=scope,
             model=model,
+            temperature=temperature,
         )
         started_at = time.perf_counter()
         chat_response = self.provider.chat(chat_request)

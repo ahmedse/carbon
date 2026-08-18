@@ -144,3 +144,44 @@ class ToolExecutionActionSerializer(serializers.Serializer):
     """Body for confirming/declining a staged tool execution (Sprint fly-to-rule)."""
 
     execution_id = serializers.CharField(required=True, allow_blank=False)
+
+
+class UserProfileSerializer(serializers.Serializer):
+    """GET/PATCH body for ``/ai/profile/`` (Phase 22-A).
+
+    GET returns the stored preferences plus resolved effective defaults so the
+    UI can render inherited values; PATCH accepts only the writable preference
+    fields and upserts the profile row.
+    """
+
+    # ── Writable preferences (PATCH) ─────────────────────────────────────
+    # Stable ModelCatalog ``model_id`` slug; null/"" clears the preference.
+    default_model_id = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, default=None,
+    )
+    temperature = serializers.FloatField(
+        required=False, min_value=0.0, max_value=2.0,
+    )
+    auto_title = serializers.BooleanField(required=False)
+    memory_enabled = serializers.BooleanField(required=False)
+    usage_alert_threshold = serializers.IntegerField(
+        required=False, min_value=1, max_value=100,
+    )
+
+    # ── Resolved / read-only (GET) ───────────────────────────────────────
+    resolved_model_id = serializers.CharField(read_only=True, allow_null=True)
+    monthly_token_limit = serializers.IntegerField(read_only=True)
+    quota_reset_day = serializers.IntegerField(read_only=True)
+
+    def validate_default_model_id(self, value):
+        """Map the catalog slug to a ModelCatalog row (or None to clear)."""
+        if not value:
+            return None
+        from ai.models import ModelCatalog
+
+        model = ModelCatalog.objects.filter(model_id=value).first()
+        if model is None:
+            raise serializers.ValidationError(
+                f"Unknown model '{value}' — not in the model catalog."
+            )
+        return model

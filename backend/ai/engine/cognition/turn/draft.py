@@ -38,6 +38,9 @@ class DraftWitness:
         budget_tracker=None,  # P3.4: BudgetTracker for per-run token limits
         model: str | None = None,
         tools: list[dict] | None = None,
+        # Phase 22-A — per-user default chat temperature (0.0-2.0); None
+        # keeps this witness's built-in default (0.3).
+        temperature: float | None = None,
     ) -> DraftResult:
         """Single LLM call to plan and draft a response.
 
@@ -74,7 +77,7 @@ class DraftWitness:
             instance_id=instance_id,
             conversation_id=f"draft-{conversation_id}",
             messages=messages,
-            temperature=0.3,
+            temperature=temperature if temperature is not None else 0.3,
             model=model,
             tools=tools,
         )

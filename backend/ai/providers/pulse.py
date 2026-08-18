@@ -469,6 +469,10 @@ class PulseProvider(AIProvider):
         }
         if request.model:
             payload["model"] = request.model
+        # Phase 22-A — carry the user's default chat temperature (0.0-2.0)
+        # when set; the engine keeps its built-in default otherwise.
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
         if request.scope is not None and request.scope.user_identifier:
             payload["host_user_id"] = str(request.scope.user_identifier)
         if request.conversation is not None:

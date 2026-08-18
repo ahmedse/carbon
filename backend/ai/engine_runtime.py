@@ -95,6 +95,9 @@ async def _run_chat(
 
     message = payload.get("message") or ""
     model = payload.get("model")
+    # Phase 22-A — per-user default chat temperature (0.0-2.0); None keeps the
+    # engine's built-in draft default (0.3).
+    temperature = payload.get("temperature")
     host_user_id = payload.get("host_user_id") or None
     conversation = payload.get("conversation_history") or {}
     conversation_id = (
@@ -123,6 +126,7 @@ async def _run_chat(
             instance_config=instance_config,
             stream_callback=stream_callback,
             model=model,
+            temperature=temperature,
         )
 
         # Deterministic, tool-grounded outcome surfacing — the assistant text

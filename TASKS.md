@@ -1434,8 +1434,8 @@ Append to `TASK-RESULTS.md`.
 
 **Date:** 2026-08-18
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek-V3
-**Status:** PLANNED
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** IN PROGRESS
 **Kind:** Backend-only. Small-medium.
 **Depends on:** Phase 15 (AIUserProfile), Phase 20-A (catalog FK target).
 
@@ -1502,7 +1502,7 @@ Append to `TASK-RESULTS.md`.
 
 **Date:** 2026-08-18
 **Worker Role:** frontend-worker
-**Recommended Model:** DeepSeek-V3
+**Recommended Model:** DeepSeek V4-Flash
 **Status:** PLANNED
 **Kind:** Frontend-only. Small.
 **Depends on:** Phase 22-A (GET/PATCH /ai/profile/).
@@ -1549,7 +1549,7 @@ Append to `TASK-RESULTS.md`.
 
 **Date:** 2026-08-18
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek-V3
+**Recommended Model:** DeepSeek V4-Flash
 **Status:** PLANNED
 **Kind:** Backend-only. Medium-large. **Do last.**
 **Depends on:** Phase 19 (delete/forget), Phase 20-A (cost/model attribution), Phase 21-A (usage → relationship signals), Phase 22-A (memory_enabled gate).
@@ -1613,7 +1613,7 @@ Append to `TASK-RESULTS.md`.
 
 **Date:** 2026-08-18
 **Worker Role:** frontend-worker
-**Recommended Model:** DeepSeek-V3
+**Recommended Model:** DeepSeek V4-Flash
 **Status:** PLANNED
 **Kind:** Frontend-only. Medium-large. **Do last.**
 **Depends on:** Phase 23-A (endpoints).
