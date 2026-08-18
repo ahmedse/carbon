@@ -63,6 +63,15 @@ def test_from_dict_missing_workspace_returns_none():
     assert WorkspaceContext.from_dict({"intent_signal": "explore"}) is None
 
 
+def test_from_dict_missing_current_view_defaults_to_empty():
+    # F1 regression: a context with "workspace" but no "current_view" must not
+    # raise TypeError (previously crashed assemble_context -> edit/regenerate).
+    ctx = WorkspaceContext.from_dict({"workspace": "dq", "entity_type": "table"})
+    assert ctx is not None
+    assert ctx.workspace == "dq"
+    assert ctx.current_view == ""
+
+
 def test_from_dict_valid_populates_fields():
     ctx = WorkspaceContext.from_dict(
         {

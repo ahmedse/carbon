@@ -84,9 +84,9 @@ def send_test_email(to_email: str) -> dict:
 
     try:
         count = send_mail(
-            subject='[Carbon] Email Configuration Test',
+            subject='[Data Trust] Email Configuration Test',
             message=(
-                'This is a test email from the Carbon Data Trust Platform.\n\n'
+                'This is a test email from the Data Trust Platform.\n\n'
                 f'Backend: {cfg.backend}\n'
                 f'From: {cfg.from_email}\n'
                 'If you received this, email delivery is working correctly.\n'

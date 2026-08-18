@@ -1,0 +1,8 @@
+# Carbon Data Trust Platform — Data Trust Platform
+User-agent: *
+Disallow: /carbon-api/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /static/
+Disallow: /media/
+Allow: /

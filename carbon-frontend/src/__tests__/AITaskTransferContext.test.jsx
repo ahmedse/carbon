@@ -14,12 +14,19 @@ vi.mock('../components/NotificationProvider', () => ({
 
 vi.mock('../api/aiWorkspace', () => ({
   createConversation: vi.fn(),
+  findOpenConversation: vi.fn(),
   sendMessage: vi.fn(),
+}));
+
+vi.mock('../api/aiPulse', () => ({
+  listDomainManifests: vi.fn(),
 }));
 
 import { AITaskTransferProvider } from '../shell/AITaskTransferContext';
 import { useAITaskTransfer } from '../shell/useAITaskTransfer';
-import { createConversation, sendMessage } from '../api/aiWorkspace';
+import { createConversation, findOpenConversation, sendMessage } from '../api/aiWorkspace';
+import { listDomainManifests } from '../api/aiPulse';
+import { __resetAppIdentifierCache } from '../shell/aiTaskTransferUtils';
 
 let transferTask;
 
@@ -30,7 +37,12 @@ function Capture() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __resetAppIdentifierCache();
   createConversation.mockResolvedValue({ id: 'conv-1' });
+  findOpenConversation.mockResolvedValue(null);
+  listDomainManifests.mockResolvedValue({
+    apps: [{ app_identifier: 'emissions' }, { app_identifier: 'water' }],
+  });
   transferTask = null;
 });
 
@@ -167,5 +179,67 @@ describe('AITaskTransferContext enrichPayload (Phase 7C)', () => {
     await dispatch('report_draft', {}, { app_identifier: 'emissions' });
 
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  // Manifest-driven app resolution (replaces the hard-coded Set(['emissions'])).
+  it('resolves a newly-installed app id from the manifest registry (water)', async () => {
+    const body = await dispatch('chat', {}, { app_identifier: 'water' });
+
+    expect(body.app_identifier).toBe('water');
+  });
+
+  it('drops an unknown app id to platform scope (null)', async () => {
+    const body = await dispatch('chat', {}, { app_identifier: 'bogus-app' });
+
+    expect(body.app_identifier).toBeNull();
+  });
+
+  it('derives app_identifier from a source_page slug naming a registered app', async () => {
+    const body = await dispatch('chat', {}, { source_page: 'emissions-report-generator' });
+
+    expect(body.app_identifier).toBe('emissions');
+  });
+
+  // Phase 16 — resume the most recent open thread of the same kind.
+  it('resumes an existing open thread instead of creating a new one', async () => {
+    findOpenConversation.mockResolvedValue({
+      id: 'existing-1',
+      conversation_type: 'investigate',
+      app_identifier: 'emissions',
+    });
+
+    render(
+      <AITaskTransferProvider>
+        <Capture />
+      </AITaskTransferProvider>,
+    );
+    await act(async () => {
+      await transferTask(
+        'investigate',
+        { table_id: 't1', table_name: 'Emissions' },
+        { app_identifier: 'emissions' },
+      );
+    });
+
+    expect(createConversation).not.toHaveBeenCalled();
+    expect(findOpenConversation).toHaveBeenCalledWith('test-token', {
+      conversation_type: 'investigate',
+      app_identifier: 'emissions',
+    });
+    // Auto-send still fires into the resumed thread.
+    expect(sendMessage).toHaveBeenCalledWith(
+      'test-token',
+      'existing-1',
+      'Investigate this table',
+    );
+  });
+
+  it('creates a new conversation when no open thread exists', async () => {
+    findOpenConversation.mockResolvedValue(null);
+
+    const body = await dispatch('investigate', {}, { app_identifier: 'emissions' });
+
+    expect(createConversation).toHaveBeenCalledTimes(1);
+    expect(body.conversation_type).toBe('investigate');
   });
 });

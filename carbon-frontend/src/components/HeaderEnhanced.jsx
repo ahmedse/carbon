@@ -5,11 +5,7 @@ import React, { useState } from "react";
 import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Tooltip, Box, Avatar, Divider, Popover, Tabs, Tab, useTheme } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { 
-  INSTANCE_LOGO, 
-  INSTANCE_NAME, 
-  PLATFORM_NAME 
-} from "../config/branding";
+import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
 import { 
   KeyboardArrowDown, 
   Notifications, 
@@ -107,7 +103,7 @@ export default function HeaderEnhanced() {
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
           <img src={INSTANCE_LOGO} alt="Logo" style={{ height: 32, borderRadius: 6 }} />
           <Typography fontWeight={600} fontSize="1rem" color="text.primary">
-            {INSTANCE_NAME ? `${INSTANCE_NAME} · ${PLATFORM_NAME}` : PLATFORM_NAME}
+            {PLATFORM_TITLE}
           </Typography>
         </Box>
 

@@ -35,6 +35,10 @@ urlpatterns = [
             email_template_name='accounts/password_reset_email.html',
             subject_template_name='accounts/password_reset_subject.txt',
             html_email_template_name='accounts/password_reset_email.html',
+            extra_email_context={
+                'platform_name': getattr(settings, 'PLATFORM_TITLE', 'Data Trust Platform'),
+                'platform_short': getattr(settings, 'PLATFORM_SHORT', 'Data Trust'),
+            },
         ),
         name='password_reset',
     ),
@@ -88,7 +92,7 @@ if IS_DEVELOPMENT:
 
     schema_view = get_schema_view(
         openapi.Info(
-            title="Carbon Data Trust Core API",
+            title=f"{getattr(settings, 'PLATFORM_TITLE', 'Data Trust Platform')} Core API",
             default_version='v1',
             description=(
                 "**Data Trust Core Platform APIs**\n\n"

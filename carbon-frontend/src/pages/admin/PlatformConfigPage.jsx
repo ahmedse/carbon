@@ -8,6 +8,7 @@ import {
 import { Save as SaveIcon, Visibility, VisibilityOff } from "@mui/icons-material";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 import { apiFetch } from "../../api/api";
+import { PLATFORM_TITLE } from "../../config/branding";
 
 const TAB_LABELS = ["Email", "Backup", "Logging", "API"];
 
@@ -196,7 +197,7 @@ function EmailTab({ config, updateField, showPassword, setShowPassword }) {
         <TextField fullWidth label="From Email" value={config.from_email || ""} onChange={e => updateField("from_email", e.target.value)} placeholder="noreply@example.com" />
       </Grid>
       <Grid size={{ xs: 12, sm: 6 }}>
-        <TextField fullWidth label="From Name" value={config.from_name || ""} onChange={e => updateField("from_name", e.target.value)} placeholder="Carbon Data Trust" />
+        <TextField fullWidth label="From Name" value={config.from_name || ""} onChange={e => updateField("from_name", e.target.value)} placeholder={PLATFORM_TITLE} />
       </Grid>
     </Grid>
   );

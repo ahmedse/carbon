@@ -320,6 +320,94 @@ def _retrieve_knowledge_graph(
     return entries, used_tokens
 
 
+_PROFILE_MAX_CHARS = 300
+
+
+def _user_profile_message(scope, user) -> dict[str, Any] | None:
+    """Build a compact ``[User Profile]`` system message (Phase 15).
+
+    Derived server-side from the passed ``user`` (``conversation.user`` /
+    ``request.user``) and the already-computed ``scope`` (``build_scope``) —
+    never from client-sent identity (RULE_20). The numeric ``user_identifier``
+    is deliberately omitted: it stays on the audit/scoping side only and never
+    leaks into semantic context (RULE_23).
+
+    Returns ``None`` (message skipped) when ``scope`` carries no
+    ``user_identifier`` (anonymous/empty scope).
+    """
+    if scope is None or not getattr(scope, "user_identifier", ""):
+        return None
+
+    from accounts.models import ScopedRole
+    from core.models import Module
+    from mdm.models import OrgUnit
+
+    parts: list[str] = []
+
+    # Name: first/last, fall back to username.
+    if user is not None:
+        first = (getattr(user, "first_name", "") or "").strip()
+        last = (getattr(user, "last_name", "") or "").strip()
+        name = " ".join(part for part in (first, last) if part).strip()
+        name = name or (getattr(user, "username", "") or "").strip()
+        if name:
+            parts.append(f"name={name}")
+
+    # Active role names (deduped, order-preserving).
+    role_names: list[str] = []
+    if user is not None and getattr(user, "pk", None) is not None:
+        for group_name in (
+            ScopedRole.objects.filter(user=user, is_active=True)
+            .select_related("group")
+            .values_list("group__name", flat=True)
+        ):
+            if group_name and group_name not in role_names:
+                role_names.append(group_name)
+    if role_names:
+        parts.append(f"roles={', '.join(role_names)}")
+
+    # Org-unit names (scope ids, skip the "*" wildcard).
+    org_ids = [
+        o for o in (getattr(scope, "org_unit_ids", None) or []) if str(o) != "*"
+    ]
+    if org_ids:
+        org_names = list(
+            OrgUnit.objects.filter(id__in=org_ids).values_list("name", flat=True)
+        )
+        if org_names:
+            parts.append(f"org_units={', '.join(org_names)}")
+
+    # Module names (scope ids).
+    module_ids = [
+        m for m in (getattr(scope, "module_ids", None) or []) if str(m) != "*"
+    ]
+    if module_ids:
+        module_names = list(
+            Module.objects.filter(id__in=module_ids).values_list("name", flat=True)
+        )
+        if module_names:
+            parts.append(f"modules={', '.join(module_names)}")
+
+    # Access flags.
+    parts.append(
+        "read-only" if getattr(scope, "is_read_only", False) else "can write"
+    )
+    if getattr(scope, "is_superuser", False):
+        parts.append("superuser")
+
+    content = "[User Profile]\n" + "; ".join(parts)
+
+    # Budget: cap at ~300 chars (~75 tokens) via the shared token estimator.
+    if _estimate_tokens(content) > _PROFILE_MAX_CHARS // 4:
+        content = content[: _PROFILE_MAX_CHARS - 1].rstrip() + "…"
+
+    return {
+        "role": "system",
+        "content": content,
+        "timestamp": None,
+    }
+
+
 def assemble_context(
     conversation,
     messages,
@@ -355,6 +443,13 @@ def assemble_context(
     the tokens actually injected.
     """
     tiered: list[dict[str, Any]] = []
+
+    # Phase 15 — user profile (server-derived; skipped when anonymous).
+    profile_message = _user_profile_message(
+        scope, getattr(conversation, "user", None)
+    )
+    if profile_message:
+        tiered.append(profile_message)
 
     workspace_message = _workspace_context_message(conversation)
     if workspace_message:

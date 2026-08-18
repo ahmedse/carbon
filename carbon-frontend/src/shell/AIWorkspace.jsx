@@ -31,6 +31,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
   createConversation as apiCreateConversation,
+  findOpenConversation,
   listConversations as apiListConversations,
   sendMessage as apiSendMessage,
   updateConversation as apiUpdateConversation,
@@ -205,6 +206,16 @@ export function AIWorkspace({ onClose }) {
   // Handle new chat.
   const handleNewChat = useCallback(async () => {
     try {
+      // Phase 16 — reuse the most recent open chat thread instead of always
+      // creating a new one.
+      const existing = await findOpenConversation(token, {
+        conversation_type: 'chat',
+      });
+      if (existing) {
+        setActiveId(existing.id);
+        setShowArchived(false);
+        return;
+      }
       const conv = await apiCreateConversation(token, {
         conversation_type: 'chat',
         title: 'New Chat',

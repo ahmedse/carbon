@@ -20,6 +20,7 @@ vi.mock('../shell/AIContextPanel', () => ({ default: () => null }));
 vi.mock('../shell/AIInputBar', () => ({ default: () => null }));
 vi.mock('../shell/AIWorkingIndicator', () => ({ default: () => null }));
 vi.mock('../shell/AIOfflineBanner', () => ({ default: () => null }));
+vi.mock('../shell/AIModelSelect', () => ({ default: () => null }));
 
 vi.mock('../api/aiWorkspace', () => ({
   getSuggestions: vi.fn(),

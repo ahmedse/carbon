@@ -6,7 +6,7 @@ import {
 import { Navigate, useNavigate, Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
 import useDocumentTitle from "../hooks/useDocumentTitle";
-import { INSTANCE_LOGO, PLATFORM_NAME } from "../config/branding";
+import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
 
 
 export default function Login() {
@@ -110,7 +110,7 @@ export default function Login() {
             Welcome back
           </Typography>
           <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-            Sign in to {PLATFORM_NAME}
+            Sign in to {PLATFORM_TITLE}
           </Typography>
         </Box>
         {sessionExpired && (

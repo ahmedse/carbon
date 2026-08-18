@@ -64,6 +64,7 @@ class ArtifactUpdateSerializer(serializers.Serializer):
 
 class SendMessageSerializer(serializers.Serializer):
     content = serializers.CharField(required=True, allow_blank=False)
+    model = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
 
 
 class EditMessageSerializer(serializers.Serializer):

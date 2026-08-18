@@ -55,7 +55,7 @@ def test_non_chat_stream_yields_progress_then_done(user):
 
     assert [f["type"] for f in frames] == ["progress", "progress", "done"]
     assert frames[0]["stage"] == "start"
-    assert frames[0]["message"] == "Analyzing table profile…"
+    assert frames[0]["message"] == "Reading your table…"
     assert frames[1]["stage"] == "done"
     assert frames[1]["message"] == "Done"
     assert frames[2]["type"] == "done"

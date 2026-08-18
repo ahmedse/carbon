@@ -306,20 +306,18 @@ test.describe.serial('Journey 10: Pulse — extensive-use simulation', () => {
     await input.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
     await input.fill('What modules are available?');
     await input.press('Enter');
-    // While the turn is working, the send-mode selector appears.
-    const mode = p.getByLabel('Send mode');
-    const seen = await mode
+    // While the turn is working, the Stop/interrupt icon appears (Sprint-18 D2
+    // replaced the old queue/steer/stop Select with a single Stop icon).
+    const stop = p.getByRole('button', { name: 'Stop generation' });
+    const seen = await stop
       .waitFor({ state: 'visible', timeout: 8000 })
       .then(() => true)
       .catch(() => false);
     if (seen) {
-      await mode.click({ timeout: 5000 }).catch(() => {});
-      for (const opt of ['Send on done', 'Interrupt & send', 'Stop']) {
-        await expect(p.getByRole('option', { name: opt })).toBeVisible();
-      }
-      console.log('  ✅ S8: send modes (queue/steer/stop) visible while working');
+      await expect(stop).toBeVisible();
+      console.log('  ✅ S8: Stop generation icon visible while working');
     } else {
-      console.log('  ⚠️ S8: turn completed before send-mode selector could be observed');
+      console.log('  ⚠️ S8: turn completed before Stop icon could be observed');
     }
   });
 
@@ -592,13 +590,16 @@ test.describe.serial('Journey 10: Pulse — extensive-use simulation', () => {
     console.log(`    W2: loading affordance present=${hadLoading}`);
 
     // W3 empty state — appears when there are no conversations; with seeded data
-    // the list is non-empty, so assert the workspace renders one of the two
-    // legitimate states (empty state OR conversation tabs).
-    const emptyState = p.getByText('Pulse Ready');
-    const hasEmpty = await emptyState.isVisible({ timeout: 3000 }).catch(() => false);
-    const hasTabs = (await p.locator('[role="tab"]').count().catch(() => 0)) > 0;
-    expect(hasEmpty || hasTabs).toBe(true);
-    console.log(`    W3: empty state=${hasEmpty}, conversation tabs=${hasTabs}`);
+    // the list is non-empty, so assert the workspace renders one of its legitimate
+    // non-loading states: empty state ("Pulse Ready") OR an active conversation
+    // ("Message input" textbox). There are no [role="tab"] elements in this shell.
+    const hasEmpty = await p.getByText('Pulse Ready').isVisible({ timeout: 3000 }).catch(() => false);
+    const hasInput = await p
+      .getByRole('textbox', { name: 'Message input' })
+      .isVisible({ timeout: 3000 })
+      .catch(() => false);
+    expect(hasEmpty || hasInput).toBe(true);
+    console.log(`    W3: empty state=${hasEmpty}, conversation view=${hasInput}`);
 
     // W4 error/offline banner — must NOT be present on a healthy backend.
     await expect(p.getByText(/offline/i).first()).not.toBeVisible({ timeout: 3000 });

@@ -8,6 +8,7 @@ import ViewSidebarIcon from '@mui/icons-material/ViewSidebar';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { useAuth } from '../auth/AuthContext';
 import { listWorkspaceSuggestions } from '../api/aiWorkspace';
+import { PLATFORM_TITLE } from '../config/branding';
 
 export function StatusBar({
   sidebarMode,
@@ -158,7 +159,7 @@ export function StatusBar({
         userSelect: 'none',
         ml: contextInfo ? 2 : 1,
       }}>
-        © {new Date().getFullYear()} AASTMT Carbon Data Trust Platform
+        © {new Date().getFullYear()} {PLATFORM_TITLE}
       </Typography>
 
       <Box sx={{ display: 'flex', gap: 1, ml: 1 }}>

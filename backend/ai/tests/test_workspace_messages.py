@@ -216,7 +216,7 @@ def test_provider_unavailable_marks_conversation_failed(user, table_graph):
 
     conversation.refresh_from_db()
     assert conversation.status == "failed"
-    assert "unavailable" in result["assistant_message"]["content"].lower()
+    assert "couldn't reach the ai service" in result["assistant_message"]["content"].lower()
 
 
 @pytest.mark.django_db
@@ -271,7 +271,9 @@ def test_conversation_context_carries_full_history_each_turn(user, table_graph):
         ci.send_message(user, str(conversation.id), "First query")
         ci.send_message(user, str(conversation.id), "Second query")
 
-    assert seen_lengths == [1, 3]
+    # Phase 15 injects one ``[User Profile]`` system message into the prefix, so
+    # each turn carries one extra system message on top of the verbatim history.
+    assert seen_lengths == [2, 4]
 
 
 @pytest.mark.django_db

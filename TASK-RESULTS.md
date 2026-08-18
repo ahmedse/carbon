@@ -437,3 +437,55 @@ $ grep -rn "\bitem\b.*xs=\|<Grid item\b" src/ --include="*.jsx"
 - **Sentinel string is load-bearing:** `"Draft this report"` must stay consistent between `AITaskTransferContext` (trigger) and `AIConversationView` `handleRedraftReport` (re-draft).
 - **`get_errors` did not catch a JSX parse error**: a `multi_replace_string_in_file` on `AIMessageBubble.jsx` nested the report branch inside the investigation JSX; only `npm run lint` surfaced `356:8 Parsing error: Unexpected token (`. Fixed by rewriting the block and re-verifying with lint.
 - **Uncommitted working tree (still unresolved):** `git status` continues to show interleaved uncommitted changes from prior phases. **No commit was made** — awaiting direction on commit/push scope before touching git history.
+
+---
+
+## [2026-08-18] Frontend Worker — Phase 16: Conversation resume (stop new-session noise)
+
+### Summary
+Frontend-only phase. Clicking the same AI entry point now reopens the most recent open (non-archived) thread of that kind instead of spawning a fresh session on every click. A new `findOpenConversation(token, { conversation_type, app_identifier? })` helper in the API layer fetches open conversations, drops archived ones, optionally scopes to an app, sorts by `updated_at || last_message_at || created_at` descending, and returns the newest (or `null`). Both resume paths are wired: (1) `AITaskTransferContext.transferTask` reuses the open thread before falling back to `createConversation` (auto-send sentinels still fire into the resumed thread), and (2) `AIWorkspace.handleNewChat` reopens the newest open `chat` thread instead of always creating. One new unit-test file plus resume tests in the two existing suites. Phase-16 tests are green (24/24 across the three suites); the full suite remains red only on 12 pre-existing, out-of-scope failures in 4 unrelated suites (Sprint-18 UI-rewrite drift).
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Add `findOpenConversation` to `src/api/aiWorkspace.js` | ✅ | `listConversations` + filter archived/app + sort newest-first; returns newest or `null` |
+| 2 | Resume in `AITaskTransferContext.transferTask` | ✅ | reuses open thread; sentinels (`nl_rule_test`/`investigate`/`report_draft`) still send into the resumed id |
+| 3 | Resume in `AIWorkspace.handleNewChat` | ✅ | reuse newest open `chat`; else create as before |
+| 4 | Tests: transfer-resume + `findOpenConversation` unit | ✅ | 2 transfer tests (reuse / create) + 5 `findOpenConversation` unit tests |
+| 5 | Tests: `AIWorkspace` new-chat resume | ✅ | 2 new tests; also fixed 4 stale shell tests (see Issues) |
+
+(24 tests green across the 3 suites = 9 new Phase-16 tests + 15 regression tests for prior phases.)
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| MODIFY | `carbon-frontend/src/api/aiWorkspace.js` | +26 | `findOpenConversation(token, { conversation_type, app_identifier? })` |
+| MODIFY | `carbon-frontend/src/shell/AITaskTransferContext.jsx` | +43/−5 | import + resume-before-create in `transferTask`; deps updated |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | +13/−2 | import + resume-before-create in `handleNewChat` |
+| MODIFY | `carbon-frontend/src/__tests__/AITaskTransferContext.test.jsx` | +76 | `findOpenConversation` mock + reuse/create resume tests |
+| MODIFY | `carbon-frontend/src/__tests__/AIWorkspace.shell.test.jsx` | +72/−18 | `findOpenConversation` mock + 2 new-chat resume tests + fixed 4 stale selectors |
+| CREATE | `carbon-frontend/src/__tests__/findOpenConversation.test.js` | 76 | 5 unit tests (most-recent, app-scope, archived-only→null, empty→null, ordering fallback) |
+
+### Verification Output
+```
+$ npx vitest run src/__tests__/findOpenConversation.test.js src/__tests__/AITaskTransferContext.test.jsx src/__tests__/AIWorkspace.shell.test.jsx
+Test Files  3 passed (3)
+      Tests  24 passed (24)
+
+$ npm test -- --run
+Test Files  4 failed | 24 passed (28)
+      Tests  12 failed | 454 passed (466)
+   (the 12 failures are PRE-EXISTING — see Issues Found; 0 in Phase-16 files)
+
+$ npm run lint
+(clean — no output)
+```
+
+### Deviations
+- **`app_identifier: appIdentifier || undefined`** in `transferTask` (rather than always passing the id) so a null app scope is omitted cleanly — matches `findOpenConversation`'s "no app filter when undefined" semantics.
+- **`handleNewChat` resume does not re-index the store**: the resumed chat is already present in `order` from the mount `loadList` (same `limit: 200`), so `setActiveId(existing.id)` resolves through `effectiveActiveId`; no `indexList` re-run is needed.
+
+### Issues Found
+- **Pre-existing (out-of-scope) test drift from the Sprint-18 UI rewrite** — 12 failures across 4 unrelated suites, none touched by Phase 16: `AIMessageBubble.transparency.test.jsx` (1), `AIMessageBubble.feedback.test.jsx` (5), `AIArtifacts.test.jsx` (2), `AISharedThreads.test.jsx` (4). These still assert the old `AIConversationTabs` UI (`role="tab"`, "Close conversation X" button, "Shared" chip, `role="separator"`, Promote/Share buttons) that Sprint-18 replaced with a `role="listbox"`/`role="option"` + context-menu layout. Not caused by Phase 16 and left for a dedicated test-refresh task.
+- **`AIWorkspace.shell.test.jsx` had 4 stale tests** (G6 ×2, G1 archive, Investigate) asserting the removed `role="tab"` / "Close conversation" UI — **fixed in this phase** (updated to `role="option"`, the "Session options → Archive" menu flow, and the activity-bar "Investigate" button) so the shell file is green.
+- **Uncommitted working tree (still unresolved):** `git status` continues to show interleaved uncommitted changes from prior phases. **No commit was made** — awaiting direction on commit/push scope before touching git history.

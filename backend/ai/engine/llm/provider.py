@@ -34,13 +34,35 @@ _retry_decorator = retry(
 )
 
 
+def classify_llm_error(exc: Exception) -> str:
+    """Classify an LLM failure as ``transient`` (retryable) or ``permanent``.
+
+    Lets the frontend distinguish "tap to retry" (transient) from a
+    definitive offline/configuration state (permanent) without parsing
+    provider error strings.
+    """
+    if isinstance(exc, RETRYABLE_ERRORS):
+        return "transient"
+    return "permanent"
+
+
+@_retry_decorator
+async def create_completion(client: AsyncOpenAI, **kwargs):
+    """Create a completion with retry on transient errors.
+
+    The single retried seam used by ``router.route_chat`` — the user-facing
+    chat path previously bypassed retry by calling the raw client directly.
+    """
+    return await client.chat.completions.create(**kwargs)
+
+
 def get_llm_client() -> AsyncOpenAI:
     """Create an AsyncOpenAI client from settings."""
     settings = get_settings()
     return AsyncOpenAI(
         api_key=settings.LLM_API_KEY,
         base_url=settings.LLM_BASE_URL,
-        timeout=60.0,
+        timeout=30.0,
         max_retries=0,
     )
 

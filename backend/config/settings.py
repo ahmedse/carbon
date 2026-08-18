@@ -385,10 +385,21 @@ if SECURE_SSL_REDIRECT:
 # Trust the X-Forwarded-Proto header from nginx (SSL terminated at reverse proxy)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+# ── Branding (multi-entity reuse) ─────────────────────────────────────────
+# Mirrors the frontend VITE_* branding. Drive from the backend env so emails,
+# PDFs, and API docs use the same identity as the UI.
+PLATFORM_NAME = get_env("DJANGO_PLATFORM_NAME", "Data Trust Platform")
+PLATFORM_SHORT = get_env("DJANGO_PLATFORM_SHORT", "Data Trust")
+INSTANCE_NAME = get_env("DJANGO_INSTANCE_NAME", "AASTMT")
+PLATFORM_TITLE = f"{INSTANCE_NAME} · {PLATFORM_NAME}" if INSTANCE_NAME else PLATFORM_NAME
+
 # ── Phase 1.1: Email defaults (overridden at runtime by EmailConfig model) ─
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = 'Carbon Data Trust <noreply@carbon.clearturn.tech>'
-EMAIL_SUBJECT_PREFIX = '[Carbon] '
+DEFAULT_FROM_EMAIL = get_env(
+    "DJANGO_DEFAULT_FROM_EMAIL",
+    f"{PLATFORM_TITLE} <noreply@carbon.clearturn.tech>",
+)
+EMAIL_SUBJECT_PREFIX = get_env("DJANGO_EMAIL_SUBJECT_PREFIX", f"[{PLATFORM_SHORT}] ")
 ANYMAIL = {}
 
 # Password reset — token expiry read from PasswordPolicy at runtime

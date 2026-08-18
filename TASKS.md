@@ -602,7 +602,7 @@ Commit with `feat(ai-workspace): Phase 12 — Shared threads read-only collabora
 
 ## Phase 13 — E2E Simulation: Carbon AI as generalist chat + DQ coworker/expert
 
-**Status:** PENDING
+**Status:** IN PROGRESS — journey authored (`journey-11-ai-coworker-dq.spec.ts`); Journey-10 29/29 PASS; 3 defects found & fixed (F1 protocol `current_view`, A1 spec `newChat` race, B5 `nl_rule_test` auto-send gap); re-validation handed to Phase 14.
 **Role:** qa-validator (DeepSeek-V3)
 **Kind:** Pure validation + E2E authoring. No product code is built or fixed here — only a new Playwright journey spec + live-browser evidence. If a defect is found, record it with severity + repro; the Debugger/Fixer applies the fix (with a regression test, RULE_11).
 
@@ -688,3 +688,371 @@ npm run build              # clean
 ### Notes for the Master
 - This phase produces evidence, not product code. A "FAILED" verdict is a valid outcome — findings go to Debugger/Fixer as separate phases.
 - Dispatch with the qa-validator activation prompt; worker confirms "Ready as QA/Validator for Carbon."
+
+---
+
+## Phase 14 — QA Re-validation: Journey-11 after defect fixes (F1 / A1 / B5)
+
+**Date:** 2026-08-18
+**Worker Role:** qa-validator
+**Recommended Model:** DeepSeek-V3
+**Status:** READY (handoff)
+**Kind:** Pure validation. NO code changes. Evidence only. If a test still fails, record it (severity + repro + suggested owner) and STOP — do NOT fix (RULE_11 → Debugger/Fixer applies fixes).
+
+### Context (already done — trust, do NOT redo)
+Three defects were found during Phase 13 execution and are **ALREADY FIXED**. This phase only re-runs the suite to confirm the fixes and produce evidence.
+- **F1** — `WorkspaceContext.__init__()` missing `current_view` → 500 on "edit message + regenerate". FIXED in `backend/ai/protocol.py` (default/guard). Already validated: Journey-10 = 29/29 PASS.
+- **A1** — `journey-11` `newChat` helper race: `count()` returned 0 while the sessions list was still loading → test waited on an empty-state-only "Start a Chat" button that never appears for a user with existing threads. FIXED in `carbon-frontend/e2e/journeys/journey-11-ai-coworker-dq.spec.ts` (now waits for `getByRole('button', { name: 'New chat' }).first()` to be visible).
+- **B5** — `nl_rule_test` transfer created a conversation but did NOT auto-send the NL text, so `NLRuleTestCard` ("Pass rate") never rendered. FIXED in `carbon-frontend/src/shell/AITaskTransferContext.jsx` (auto-send when `type === 'nl_rule_test' && normalizedPayload.nl`). 2 new unit tests added in `carbon-frontend/src/__tests__/AITaskTransferContext.test.jsx` (10 total, all passing).
+
+### Files to Read First
+- `carbon-frontend/e2e/journeys/journey-11-ai-coworker-dq.spec.ts` — the suite under test; note the rewritten `newChat` helper and Part B "Pass rate"/Execute-Mode assertions.
+- `carbon-frontend/src/shell/AITaskTransferContext.jsx` — note the `nl_rule_test` auto-send block.
+- `carbon-frontend/src/__tests__/AITaskTransferContext.test.jsx` — 10 tests.
+- `.ai-toolkit/shared/qa-framework.md` — 4-layer validation model + evidence standards.
+- `.ai-toolkit/shared/security.md` — RBAC expectations (Part C negative test).
+
+### Preconditions (verify BEFORE running)
+1. `./manage.sh status` → backend (:8009) + frontend (:5179) both healthy. If not: `./manage.sh start`.
+2. `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8009/carbon-api/health/` → `200`.
+3. `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5179/` → `200`.
+
+### Tasks
+
+1. **UNIT GATE (fast — confirms B5 fix + no regressions)**
+   - `cd carbon-frontend && npx vitest run src/__tests__/AITaskTransferContext.test.jsx` → `10 passed`.
+   - `cd carbon-frontend && npm test -- --run` → all green (expected ~400+).
+
+2. **E2E GATE — re-run Journey-11**
+   - `cd carbon-frontend && npx playwright test --config e2e/playwright.config.ts journey-11-ai-coworker-dq` → expect ALL tests PASS.
+   - Confirm specifically: Part A `newChat` no longer times out (A1), and Part B "Pass rate" card + "Save Rule" + Execute-Mode steps pass (B5).
+
+3. **REGRESSION SWEEP — Journey-10 still green**
+   - `cd carbon-frontend && npx playwright test --config e2e/playwright.config.ts journey-10-ai-workspace` → 29/29 PASS (F1 regression guard).
+
+4. **ON FAILURE — record, do NOT fix**
+   - For each ❌, read `carbon-frontend/test-results/**/error-context.md`, capture the exact failing locator/assertion + screenshot path, classify severity P0–P3, and note the likely owner (frontend-worker / backend-worker / debugger-fixer). STOP after recording — no code edits.
+
+### DO NOT TOUCH
+- `backend/**` — no backend changes (F1 already fixed).
+- `carbon-frontend/src/**` — no product code changes (B5 already fixed).
+- `carbon-frontend/e2e/journeys/journey-11-ai-coworker-dq.spec.ts` — no spec edits (A1 already fixed). Re-run as-is.
+- Do NOT commit. Master Architect commits.
+
+### Verification Gate (paste FULL output into TASK-RESULTS)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/AITaskTransferContext.test.jsx   # → 10 passed
+npm test -- --run                                             # → all green
+npx playwright test --config e2e/playwright.config.ts journey-11-ai-coworker-dq   # → all PASS
+npx playwright test --config e2e/playwright.config.ts journey-10-ai-workspace     # → 29/29 PASS
+```
+
+### Output contract
+- Append to `TASK-RESULTS.md` (or new `TASK-RESULTS-14.md` at repo root) using the Part B handoff format: Executive Summary → Task results (1..4 with ✅/❌) → Files Changed (should be NONE) → Verification Output (full paste) → Deviations → Issues Found (findings table: ID, severity, symptom, repro, owner).
+- End with verdict: PASSED / PASSED WITH FINDINGS / FAILED.
+
+### Notes for the Master
+- Expected outcome: PASSED (all three fixes validated). If B5 still fails, the most likely cause is a suggestion whose `nl` resolves empty (falls back to `definition?.name`) → produces no card; the worker records that exact repro for the Debugger/Fixer.
+
+---
+
+## Phase 15 — AI User Profile Injection: the AI reasons *about* the user, not just gates by them
+
+**Date:** 2026-08-18
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek-V3
+**Status:** READY (handoff)
+**Kind:** Small, low-risk backend addition to prompt assembly. The `Scope` is already computed server-side on every AI call; this phase only *enriches the assembled prompt* with a compact user profile so the LLM can reason about the user. It does NOT change any security decision.
+
+### Context (verified — trust, do not re-derive)
+- `backend/ai/intelligence.py::build_scope(user)` already derives a full `Scope` (`user_identifier`, `org_unit_ids`, `module_ids`, `is_read_only`, `is_superuser`) from `ScopedRole`. This is authoritative and is NEVER sent to the LLM as free-form context — it stays on the security side only.
+- `backend/ai/context_assembler.py` is the prompt-assembly seam: it builds the `[Workspace Context]` system message from `WorkspaceContext` and retrieves scoped long-term memory. This is the correct place to add a `[User Profile]` system message.
+- `backend/ai/guards.py` guard chain is NOT touched. Guards keep using `Scope` for security decisions.
+- Frontend `AuthContext` already exposes `user.id`, `roles`, `org_units`, `userCapabilities` — but the AI must NOT trust client-sent identity; the profile is re-derived server-side from `request.user` + `build_scope(user)`.
+
+### Implementation (backend-only)
+1. **`backend/ai/context_assembler.py`** — add a `_user_profile_message(scope, user)` helper returning a compact `[User Profile]` system message dict:
+   - name (first_name/last_name, fall back to username)
+   - active role names (from ScopedRole group names, deduped)
+   - org-unit names (resolve `org_unit_ids` → `OrgUnit` display/name)
+   - module names (resolve `module_ids` → `Module.name`)
+   - `is_read_only` flag (phrase as "read-only" vs "can write")
+   - `is_superuser` flag
+   - NEVER include the numeric `user_identifier` as semantic context (it stays for audit/scoping only).
+   - Keep the message ≤ ~300 chars; budget it with the existing token-estimation helper like the other tiers.
+2. **Wire it in** — inject the message into the assembled system prefix next to `[Workspace Context]`, ordered: `[User Profile]` → `[Workspace Context]` → resolved mentions → retrieved memory. Skip entirely when `scope` has no `user_identifier` (anonymous/None).
+3. **No changes** to `build_scope`, `guards.py`, or the Scope security path.
+
+### Tests (new `backend/ai/tests/test_user_profile.py`)
+- (a) profile message includes username + role names + org-unit name + "read-only" flag.
+- (b) superuser profile includes the superuser marker.
+- (c) anonymous/empty scope → no `[User Profile]` message emitted.
+- (d) profile respects the token budget (truncates within budget).
+
+### DO NOT TOUCH
+- `backend/ai/guards.py`, `backend/ai/intelligence.py::build_scope` (security path).
+- Any `carbon-frontend/**` file.
+- `backend/ai/protocol.py` (no new dataclass needed).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_user_profile.py ai/tests/test_context_assembler.py -q
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q   # no regressions
+```
+
+### Output contract
+- Append to `TASK-RESULTS.md` (Part B handoff format): Summary → Task results → Files Changed → Verification Output (full paste) → Deviations → Issues Found.
+
+### Notes for the Master
+- Expected: PASSED. Low risk — additive prompt enrichment only; the guard chain is untouched.
+
+---
+
+## Phase 16 — Conversation resume: stop new-session noise on every AI click
+
+**Date:** 2026-08-18
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek-V3
+**Status:** READY (handoff)
+**Kind:** Frontend-only, small. No backend changes. No new API. Reuses existing `listConversations`.
+
+### Problem (verified)
+Every AI-button transfer calls `createConversation` unconditionally, and `handleNewChat` always spawns a fresh "New Chat". Clicking the same button repeatedly piles up near-identical threads.
+
+### The simple rule (do NOT over-engineer)
+**One open conversation per `(user, conversation_type, app_identifier)`.** That's the whole design:
+- `chat` → one "General" thread.
+- `investigate` → one investigation thread (per app).
+- `dq_validate` → one DQ-validate thread (per app). Etc.
+- No rule_id/table_id/module_id matching. No "fork to new session" (defer that to backlog). Just *resume the most recent open thread of the same kind*.
+
+### Implementation
+1. **`src/api/aiWorkspace.js`** — add `findOpenConversation(token, { conversation_type, app_identifier })`:
+   - call existing `listConversations(token, { conversation_type, limit: 200 })`
+   - filter client-side to `!is_archived` and (when `app_identifier` given) `c.app_identifier === app_identifier`
+   - return the first by `-updated_at`, or `null`.
+2. **`src/shell/AITaskTransferContext.jsx`** — in `transferTask`, before `createConversation`:
+   - `const existing = await findOpenConversation(...)`.
+   - if found: for auto-send types (`nl_rule_test`, `investigate`, `report_draft`) still `sendMessage(existing.id, <sentinel>)`; set `pendingTransferId(existing.id)`; return `existing.id`.
+   - else: current create path unchanged.
+3. **`src/shell/AIWorkspace.jsx`** — `handleNewChat`: first look up the most recent open `chat` conversation; if found `setActiveId(existing.id)` (no create), else create one.
+
+### Explicitly out of scope
+- No backend resume endpoint. No `get_or_create`. No task_payload diffing. No "move message to new session" UI.
+- Guard chain, audit trail, memory partitioning — all untouched (they stay per-conversation, which is exactly why we resume-by-kind instead of a single monolith).
+
+### Tests (frontend unit)
+- `src/__tests__/AITaskTransferContext.test.jsx`: (a) transfer of a type with an existing open thread does NOT call `createConversation` and instead sends into it; (b) transfer with no open thread creates one; (c) archived threads are skipped.
+- `src/__tests__/AIWorkspace.test.jsx` (or closest existing): "New chat" with an existing open `chat` thread reuses it; none → creates.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/AITaskTransferContext.test.jsx   # green
+npm test -- --run                                             # no regressions
+```
+
+### Output contract
+- Append to `TASK-RESULTS.md` (Part B handoff format): Summary → Task results → Files Changed → Verification Output → Deviations → Issues Found.
+
+### Notes for the Master
+- Expected: PASSED. Frontend-only; the single behavior change is "reuse the latest open thread of the same kind instead of always creating".
+
+---
+
+## Phase 17-A — Backend: Provider connection reliability + error taxonomy
+
+**Date:** 2026-08-18
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek-V3
+**Status:** READY
+**Kind:** Backend-only. Small, high-value. No schema change. No new dependency.
+**Hard rule context:** `RULE_23` (no implementation leakage) — error copy is de-leaked in Phase 17-B, not here.
+
+### Problem (verified)
+`router.route_chat()` — the path every user chat message hits — calls the raw OpenAI client directly with **no retry**:
+- `get_llm_client()` (`provider.py`) sets `max_retries=0, timeout=60`.
+- `route_chat()` calls `client.chat.completions.create(**kwargs)` directly (line ~203).
+- `@_retry_decorator` (3 attempts, exp backoff 1s/2s/4s) is only wired to `chat_completion()` / `chat_completion_with_tools()`, used by eval/optimizer/synthesizer — **NOT** the user's chat path.
+
+So one transient POE blip (timeout / rate-limit / connection reset / 5xx) → `engine_runtime._call_llm` swallows it (`except Exception → return None`) → `_save_provider_unavailable_message` → *"AI provider is currently unavailable."* A 60s hang also spins "thinking…" for a full minute before degrading.
+
+### Implementation
+1. **`backend/ai/engine/llm/provider.py`**
+   - Add a retried raw-completion helper reusing the existing decorator:
+     ```python
+     @_retry_decorator
+     async def create_completion(client, **kwargs):
+         return await client.chat.completions.create(**kwargs)
+     ```
+   - Lower `timeout=60.0` → `timeout=30.0` in `get_llm_client()` so a hang fails fast and retries instead of spinning.
+2. **`backend/ai/engine/llm/router.py`**
+   - Replace `response = await client.chat.completions.create(**kwargs)` with `response = await create_completion(client, **kwargs)`.
+   - Add `model: str | None = None` keyword to `route_chat`; when set, use it instead of `get_model_for_task(task)` (this is the seam Phase 18-A uses). Log the override.
+3. **Error taxonomy** — new `backend/ai/engine/llm/errors.py` (or inline in `provider.py`):
+   - `classify_llm_error(exc) -> "transient" | "permanent"`.
+   - transient: `APITimeoutError`, `APIConnectionError`, `RateLimitError`, `InternalServerError`, `ServiceUnavailableError`.
+   - permanent: `AuthenticationError`, `PermissionDeniedError`, `BadRequestError`, `NotFoundError`.
+4. **Surface the taxonomy on the chat SSE frame**:
+   - `intelligence.send_message_stream` currently yields `{"type": "error", "error": value}`. Add `"error_kind"` so the frontend can distinguish "tap to retry" vs "offline".
+   - Have the provider carry the kind (extend the `(kind, value)` error tuple to `(kind, value, meta)`), and pass it through. Do **not** re-classify by string in the frontend.
+
+### DO NOT TOUCH
+- Budget logic, `_TASK_MODEL_MAP`, `EVAL_*` policy.
+- `chat_completion()` / `chat_completion_with_tools()` signatures — other callers (eval/optimizer/synthesizer) depend on them.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+.venv/bin/python manage.py check                       # → "System check identified no issues"
+.venv/bin/python -m pytest ai/tests/test_chat_stream.py ai/tests/test_chat_wiring.py \
+  ai/tests/test_workspace_stream.py ai/tests/test_live_llm_activation.py -q
+.venv/bin/python -m pytest ai -q                        # → full AI suite, no regressions
+```
+Add one new test: monkeypatch the client to raise `APITimeoutError` once then succeed → assert the call is retried and returns.
+
+### Output contract
+Append to `TASK-RESULTS.md` (Summary → Task results → Files Changed → Verification Output → Deviations → Issues Found).
+
+### Notes for the Master
+- This is the root cause of the recurring "AI provider is currently unavailable" reports. Retry at `route_chat` FIRST; keep `engine_runtime._call_llm`'s deterministic fallback as a last resort, not the first line of defense.
+
+---
+
+## Phase 17-B — Frontend: Status bar under input + de-leak status copy
+
+**Date:** 2026-08-18
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek-V3
+**Status:** READY (depends on Phase 17-A for `error_kind`)
+**Kind:** Frontend-only (+ 2 one-line backend copy edits). Small.
+**Hard rule context:** `RULE_23` / `base-rules §16` — all copy below must be outcome-flavored, never internals.
+
+### Problem
+Status/progress copy lives inside the message thread (`AIWorkingIndicator` prints verbose stage labels like *"Translating question to SQL…"* / *"Analyzing table profile…"*), which leaks implementation (violates RULE_23). There is no persistent status signal under the input — the user only sees the offline banner after it has already failed.
+
+### Implementation
+1. **De-leak copy (RULE_23):**
+   - `carbon-frontend/src/shell/AIWorkingIndicator.jsx`: collapse `TYPE_MESSAGES` to a single generic `"AI is thinking…"` (the `nl_query` entry is already dead — `stage` always overrides).
+   - `backend/ai/intelligence.py` `_progress_stage_label` (one edit): `"Translating question to SQL…"` → `"Working on your query…"`, `"Analyzing table profile…"` → `"Reading your table…"`.
+   - `backend/ai/intelligence.py` `_save_provider_unavailable_message` (one edit): `"AI provider is currently unavailable. Please try again later."` → `"I couldn't reach the AI service — try again in a moment."`
+2. **New `carbon-frontend/src/shell/AIStatusBar.jsx`:**
+   - Slim footer row rendered inside `AIInputBar.jsx` below the input row.
+   - States: `idle` (subtle "Carbon AI is ready") → `working` ("Working…") → `streaming` ("Generating…") → `error-transient` ("Couldn't reach the AI service — tap to retry", clickable → `handleRetry`) → `error-permanent` ("AI service is offline" + link to admin console).
+   - Drive it from the existing `providerOffline` + `workingStage` state in `AIConversationView`; pass down to `AIInputBar` (reuse whatever context exists — do **not** add a new global store).
+   - Use `error_kind` from Phase 17-A to pick transient vs permanent.
+   - Every string passes RULE_23: no "provider", no "SQL", no internal stage names.
+
+### DO NOT TOUCH
+- `aria-label`s / roles E2E depends on: `Message input`, `Send message`, `New chat`.
+- The SSE parser; `AIOfflineBanner.jsx` (keep, but reconcile wording so it doesn't contradict the status bar).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npm run build
+npx vitest run src/__tests__/AIStatusBar.test.jsx   # NEW: each state renders expected copy
+npm test -- --run
+
+# De-leak grep (should return nothing user-facing):
+grep -rn "Translating question to SQL\|AI provider is currently unavailable\|provider_unavailable" src/ backend/ai/intelligence.py
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- This is where RULE_23 becomes user-visible. Keep each status string ≤ ~40 chars.
+
+---
+
+## Phase 18-A — Backend: Model catalog endpoint + model override threading
+
+**Date:** 2026-08-18
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek-V3
+**Status:** READY (depends on Phase 17-A for the `model` override param)
+**Kind:** Backend + API. Small-medium. Decision needed on persistence (see Notes).
+
+### Problem
+No user-facing way to pick a model. `_settings_llm()` returns raw config (admin-only), `LLM_COST_MODELS` holds the cost table, and `route_chat` hard-selects by task. The user wants a model dropdown with a short description + cost.
+
+### Implementation
+1. **New read-only endpoint `GET /carbon-api/ai/models/`** (in `activation_api.py` — it is already the read-only settings surface):
+   - Build the catalog from `LLM_COST_MODELS` (cost) + `_TASK_MODEL_MAP`/`get_settings()` (which models are wired) + a small static description map.
+   - Return:
+     ```json
+     { "models": [
+        {"id":"GPT-4o","name":"GPT-4o","description":"Best overall reasoning — smarter, higher cost","input_cost":2.5,"output_cost":10.0,"kind":"chat","recommended":true},
+        {"id":"GPT-4o-mini","name":"GPT-4o mini","description":"Fast and cheap — everyday questions","input_cost":0.15,"output_cost":0.6,"kind":"chat","recommended":false},
+        {"id":"Claude-Sonnet-4.5","name":"Claude Sonnet 4.5","description":"Balanced reasoning","input_cost":3.0,"output_cost":5.0,"kind":"chat","recommended":false}
+     ] }
+     ```
+   - List only models present in `LLM_COST_MODELS` (actually selectable); mark the configured `LLM_MODEL`/`LLM_NORMAL_MODEL` as `recommended`.
+   - Never return `LLM_API_KEY` or `base_url` (RULE_23 + security).
+2. **Thread the override** — `route_chat(..., model=None)` already added in 17-A:
+   - `workspace_api.send_message` / `send_message_stream` → `ChatRequest` → `provider.chat_stream` → `engine_runtime` → `route_chat`.
+   - Add `model` to `ChatRequest` (protocol) with `None` default.
+   - Persist the user's chosen model per conversation: **either** a new nullable column `AIConversation.model_override` (needs a migration) **or** `task_payload_json["model"]` (zero migration). See Notes — Master decides.
+3. **Audit:** `route_chat` already logs the model to `llm_call_logs`; no extra work.
+
+### DO NOT TOUCH
+- Cost-guardrail `_EXPENSIVE_MODEL_MARKERS`, budget enforcement, `EVAL_*` policy.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+.venv/bin/python manage.py check
+.venv/bin/python manage.py makemigrations --check --dry-run   # only if you add the column
+.venv/bin/python -m pytest ai -q
+# + curl the new endpoint and paste the JSON catalog
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- Decision: **column** (`model_override`) = cleaner audit but adds a migration; **task_payload_json** = zero migration but less queryable. I lean column. Flag your choice in TASK-RESULTS.
+
+---
+
+## Phase 18-B — Frontend: Model selector dropdown
+
+**Date:** 2026-08-18
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek-V3
+**Status:** READY (depends on Phase 18-A for endpoint + override)
+**Kind:** Frontend-only. Small-medium.
+
+### Problem
+No way to choose a model. The 18-A catalog has id/name/description/cost; surface it as a compact dropdown with a short description + cost hint — product metadata, not provider internals.
+
+### Implementation
+1. **`carbon-frontend/src/api/aiWorkspace.js`** (or `aiPulse.js`): add `listModels(token)` → `GET /carbon-api/ai/models/`.
+2. **New `carbon-frontend/src/shell/AIModelSelect.jsx`**: MUI `Select` (size small) rendered in the `AIStatusBar` footer row (left of the status text, or a small icon-button popover).
+   - Each option: name + one-line description + cost hint (`"🧠 Smarter · $$$ ~$2.50/$10 per 1M"` or `"⚡ Fast · $ ~$0.15/$0.60 per 1M"`). Theme tokens only, no raw hex.
+   - Button label = currently-selected model (truncated).
+3. **Persistence:** store selection in `localStorage` keyed per user (`carbon.ai.model.<userId>`); restore on mount.
+4. **Send:** pass `model` on the message payload so 18-A's override is exercised — add it to the transfer/message payload (or create/send request if 18-A chose the column).
+
+### DO NOT TOUCH
+- `AITaskTransferContext` contract beyond adding the `model` field.
+- E2E `aria-label`s.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npm run build
+npx vitest run src/__tests__/AIModelSelect.test.jsx   # NEW: renders options + persists selection
+npm test -- --run
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- This is the one sanctioned place where model names are user-visible (RULE_23 exception — a model selector is a product decision, not a leak). Cost is product metadata, not provider internals.

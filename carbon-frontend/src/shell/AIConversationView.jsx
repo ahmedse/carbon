@@ -29,6 +29,8 @@ import AIContextPanel from './AIContextPanel';
 import AIInputBar from './AIInputBar';
 import AIWorkingIndicator from './AIWorkingIndicator';
 import AIOfflineBanner from './AIOfflineBanner';
+import AIStatusBar from './AIStatusBar';
+import AIModelSelect from './AIModelSelect';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { useExecuteMode } from './useExecuteMode';
 import { DQ_MANAGE_RULES } from '../capabilities';
@@ -68,12 +70,15 @@ function AIConversationView({ conversationId }) {
   const [actionBusyId, setActionBusyId] = useState(null);
   const [workingStartedAt, setWorkingStartedAt] = useState(null);
   const [providerOffline, setProviderOffline] = useState(false);
+  const [transientError, setTransientError] = useState(false);
   const [exportAnchorEl, setExportAnchorEl] = useState(null);
   const [sharing, setSharing] = useState(false);
   // Resolved mention objects from the input bar: [{ kind, id, name }, …]
   const [mentions, setMentions] = useState([]);
   // Transient assistant text accumulated while a chat response streams in.
   const [streamingText, setStreamingText] = useState(null);
+  // Chat-model override chosen in the footer picker (Phase 18).
+  const [selectedModel, setSelectedModel] = useState(null);
   // Phase 5B — pinned "Since your last visit" catch-up summary (null = no banner).
   const [catchUp, setCatchUp] = useState(null);
   // Guard so `resume` fires exactly once per conversation open (idempotent).
@@ -188,6 +193,11 @@ function AIConversationView({ conversationId }) {
 
   const handleRetry = useCallback(() => {
     setProviderOffline(false);
+    setTransientError(false);
+  }, []);
+
+  const handleModelChange = useCallback((modelId) => {
+    setSelectedModel(modelId);
   }, []);
 
   // Core streaming send — every conversation type goes through SSE now.
@@ -204,6 +214,7 @@ function AIConversationView({ conversationId }) {
       setSending(true);
       setStopped(false);
       setProviderOffline(false);
+      setTransientError(false);
 
       if (type === 'chat') {
         setStreamingText('');
@@ -230,6 +241,7 @@ function AIConversationView({ conversationId }) {
 
       await sendMessageStream(token, conversationId, content, {
         workspaceContext,
+        model: selectedModel || undefined,
         onChunk: (delta) => {
           if (genId !== generationRef.current) return;
           setStreamingText((prev) => (prev ?? '') + delta);
@@ -249,13 +261,19 @@ function AIConversationView({ conversationId }) {
           setStopped(true);
           finishStream(conv);
         },
-        onError: (message) => {
+        onError: (message, errorKind) => {
           if (genId !== generationRef.current) return;
           streamingActiveRef.current = false;
           setStreamingText(null);
           setWorkingStage(null);
           setSending(false);
-          if (message?.includes('unavailable') || message?.includes('offline')) {
+          if (errorKind === 'transient') {
+            setTransientError(true);
+          } else if (
+            errorKind === 'permanent' ||
+            message?.includes('unavailable') ||
+            message?.includes('offline')
+          ) {
             setProviderOffline(true);
           }
           notifyFromError(new Error(message || 'Could not send message'), 'Could not send message');
@@ -270,7 +288,7 @@ function AIConversationView({ conversationId }) {
         setSending(false);
       }
     },
-    [token, conversationId, finishStream, notifyFromError],
+    [token, conversationId, finishStream, notifyFromError, selectedModel],
   );
 
   const handleSend = useCallback(
@@ -739,6 +757,29 @@ function AIConversationView({ conversationId }) {
   const isWorking = conversation.status === 'working' || sending;
   const isOwner = !conversation || conversation.visibility !== 'shared' || String(conversation.user_id) === String(user?.id);
   const convStatus = conversation.status;
+  const isStreaming = streamingText !== null;
+  const statusVariant = providerOffline
+    ? 'offline'
+    : transientError
+      ? 'transient'
+      : isStreaming
+        ? 'streaming'
+        : isWorking
+          ? 'working'
+          : convStatus === 'needs_input'
+            ? 'needs-input'
+            : 'ready';
+  const statusLabel = providerOffline
+    ? 'AI service is offline'
+    : transientError
+      ? "Couldn't reach the AI service — tap to retry"
+      : isStreaming
+        ? 'Generating…'
+        : isWorking
+          ? workingStage || 'Working…'
+          : convStatus === 'needs_input'
+            ? 'Needs input'
+            : 'Ready';
   const conversationType = conversation.conversation_type || conversation.task_payload_json?.type || 'chat';
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
   const lastMetadata = lastAssistant?.metadata || lastAssistant?.metadata_json || {};
@@ -1062,9 +1103,8 @@ function AIConversationView({ conversationId }) {
           bgcolor: executeMode ? 'warning.50' : 'background.default',
         }}
       >
-        <Typography variant="caption" sx={{ flex: 1, fontSize: '0.7rem', color: 'text.disabled' }}>
-          {isWorking ? ((workingStage || 'Working') + '…') : convStatus === 'needs_input' ? 'Needs input' : 'Ready'}
-        </Typography>
+        <AIStatusBar variant={statusVariant} label={statusLabel} onRetry={handleRetry} />
+        {isOwner && <AIModelSelect onChange={handleModelChange} />}
         {isDQContext && (
           <Tooltip title={executeMode ? 'Execute Mode ON' : 'Execute Mode OFF'}>
             <IconButton size="small" onClick={handleToggleExecuteMode} color={executeMode ? 'warning' : 'default'} aria-pressed={executeMode} aria-label="Toggle Execute Mode" sx={{ p: 0.25 }}>

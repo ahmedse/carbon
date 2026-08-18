@@ -33,11 +33,12 @@ vi.mock('../api/aiWorkspace', () => ({
   updateConversation: vi.fn(),
   deleteConversation: vi.fn(),
   sendMessage: vi.fn(),
+  findOpenConversation: vi.fn(),
 }));
 
 import { AIWorkspace } from '../shell/AIWorkspace';
 import AIConversationTabs from '../shell/AIConversationTabs';
-import { listConversations, updateConversation } from '../api/aiWorkspace';
+import { createConversation, findOpenConversation, listConversations, updateConversation } from '../api/aiWorkspace';
 
 const conversations = [
   { id: 'conv-1', title: 'Alpha', conversation_type: 'chat', status: 'completed' },
@@ -46,7 +47,10 @@ const conversations = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   listConversations.mockResolvedValue(conversations);
+  createConversation.mockResolvedValue({ id: 'conv-new', conversation_type: 'chat', title: 'New Chat' });
+  findOpenConversation.mockResolvedValue(null);
   updateConversation.mockResolvedValue({ id: 'conv-1', is_archived: true });
 });
 
@@ -62,9 +66,9 @@ describe('AIConversationTabs id-keyed value (G6)', () => {
       />,
     );
 
-    const tabs = screen.getAllByRole('tab');
-    expect(tabs[0]).toHaveAttribute('aria-selected', 'false');
-    expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+    const options = screen.getAllByRole('option');
+    expect(options[0]).toHaveAttribute('aria-selected', 'false');
+    expect(options[1]).toHaveAttribute('aria-selected', 'true');
   });
 
   it('calls onSelect with the conversation id when a tab is clicked', () => {
@@ -79,19 +83,22 @@ describe('AIConversationTabs id-keyed value (G6)', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: /Beta/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Beta/ }));
     expect(onSelect).toHaveBeenCalledWith('conv-2');
   });
 });
 
 describe('AIWorkspace durable archive on close (G1)', () => {
-  it('calls updateConversation with is_archived:true when a tab is closed', async () => {
+  it('calls updateConversation with is_archived:true when a session is archived', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);
 
-    const closeButtons = await screen.findAllByRole('button', {
-      name: /Close conversation/,
+    const menuButton = await screen.findByRole('button', {
+      name: 'Session options for Alpha',
     });
-    fireEvent.click(closeButtons[0]);
+    fireEvent.click(menuButton);
+
+    const archiveItem = await screen.findByRole('menuitem', { name: 'Archive' });
+    fireEvent.click(archiveItem);
 
     await waitFor(() => {
       expect(updateConversation).toHaveBeenCalledWith('test-token', 'conv-1', {
@@ -105,9 +112,52 @@ describe('AIWorkspace Investigate mode tab (Phase 9-B)', () => {
   it('renders the InvestigateTab when Investigate mode is selected', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);
 
-    const investigateTab = await screen.findByRole('tab', { name: 'Investigate' });
-    fireEvent.click(investigateTab);
+    const investigateButton = await screen.findByRole('button', { name: 'Investigate' });
+    fireEvent.click(investigateButton);
 
     expect(await screen.findByTestId('investigate-tab')).toBeInTheDocument();
+  });
+});
+
+describe('AIWorkspace new-chat resume (Phase 16)', () => {
+  it('reuses the most recent open chat thread instead of creating a new one', async () => {
+    findOpenConversation.mockResolvedValue({
+      id: 'conv-2',
+      conversation_type: 'chat',
+      title: 'Beta',
+    });
+
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const newChatButtons = await screen.findAllByRole('button', { name: 'New chat' });
+    fireEvent.click(newChatButtons[0]);
+
+    await waitFor(() => {
+      expect(createConversation).not.toHaveBeenCalled();
+    });
+
+    // The resumed thread (conv-2) becomes the active session.
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /Beta/ })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+    });
+  });
+
+  it('creates a new chat when no open thread exists', async () => {
+    findOpenConversation.mockResolvedValue(null);
+
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const newChatButtons = await screen.findAllByRole('button', { name: 'New chat' });
+    fireEvent.click(newChatButtons[0]);
+
+    await waitFor(() => {
+      expect(createConversation).toHaveBeenCalledWith('test-token', {
+        conversation_type: 'chat',
+        title: 'New Chat',
+      });
+    });
   });
 });

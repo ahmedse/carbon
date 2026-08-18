@@ -27,6 +27,7 @@ import logging
 from django.conf import settings as django_settings
 from django.db.models import Count, Sum
 from django.utils import timezone
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -383,3 +384,40 @@ class PulseSettingsView(APIView):
         payload["cache"] = _redact_secrets(payload["cache"])
         payload["mcp_servers"] = _redact_secrets(payload["mcp_servers"])
         return Response(payload)
+
+
+# ── Model catalog ─────────────────────────────────────────────────────────
+
+
+class AIModelsView(APIView):
+    """GET models/ — chat-model catalog for the frontend model picker.
+
+    Available to any authenticated user (the picker lives in the chat input
+    bar, not the admin console).  Response shape::
+
+        {
+            "models": [
+                {
+                    "id": str,
+                    "label": str,
+                    "description": str,
+                    "input_cost_per_1m": float,
+                    "output_cost_per_1m": float,
+                    "is_default": bool,
+                },
+                ...
+            ],
+        }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from ai.engine.llm.router import list_chat_models
+
+        try:
+            models = list_chat_models()
+        except Exception:
+            logger.exception("Failed to build chat-model catalog")
+            models = []
+        return Response({"models": models})

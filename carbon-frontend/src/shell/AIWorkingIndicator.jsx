@@ -12,9 +12,9 @@ const pulse = keyframes`
 const DOT_COUNT = 3;
 
 const TYPE_MESSAGES = {
-  dq_suggest: 'AI is analyzing your table profile and generating rule suggestions…',
+  dq_suggest: 'AI is analyzing your data and generating rule suggestions…',
   nl_query: 'AI is querying your data…',
-  anomaly: 'AI is scanning profile history for anomalies…',
+  anomaly: 'AI is scanning your data for anomalies…',
   chat: 'AI is thinking…',
 };
 

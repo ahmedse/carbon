@@ -36,6 +36,7 @@ class DraftWitness:
         instance_config: dict | None = None,
         user_info: dict | None = None,
         budget_tracker=None,  # P3.4: BudgetTracker for per-run token limits
+        model: str | None = None,
     ) -> DraftResult:
         """Single LLM call to plan and draft a response.
 
@@ -70,6 +71,7 @@ class DraftWitness:
             conversation_id=f"draft-{conversation_id}",
             messages=messages,
             temperature=0.3,
+            model=model,
         )
         draft_latency = (time.monotonic() - t0) * 1000
 

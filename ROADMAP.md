@@ -1,6 +1,6 @@
 # Carbon — Roadmap to Completion
 # Single source of truth for ALL outstanding work.
-# Updated: 2026-08-15 | Owner: Master Architect
+# Updated: 2026-08-17 | Owner: Master Architect
 #
 # North star: a fully functioning Carbon where AI knows what the user is doing,
 # helps them create DQ rules in natural language, fills forms live, tests them,
@@ -365,3 +365,98 @@ At this point:
 
 Each sprint spec names the exact files to touch and the verification gate.
 Workers NEVER touch files outside their sprint spec.
+
+---
+
+## Platform Expansion — Phases 1–4 (spec: docs/DESIGN-PLATFORM.md)
+
+Four new layers that turn Carbon into an AI-Driven Data Platform. Strict build order:
+Phase 1 → Phase 2 → Phase 4 (Phase 3 may run in parallel with Phase 2). Full model,
+API, and pipeline detail lives in `docs/DESIGN-PLATFORM.md` — do not duplicate it here.
+
+### Phase 1 — Dataset Hub (`datahub/`)
+
+**Status:** Not started
+
+**Goal:** The governed data product layer — a Dataset is the unit of trust: before data
+flows to a model or app, it must have an approved `DatasetVersion` with a passing DQ run.
+
+**Key deliverables** (§5):
+- Models `Dataset`, `DatasetVersion`, `DataContract`, `DataContractViolation`,
+  `DatasetAccessPolicy` (`backend/datahub/models.py`)
+- API under `/api/v1/datahub/` (datasets CRUD, versions, approve/reject, contract,
+  violations, ingest erp/upload) gated by `HasCBACCapability`
+- Ingest service `backend/datahub/ingest.py` (ERP/CSV → DataTable+DataRows,
+  schema_snapshot, health_score, contract checks)
+- Health score = 0.4·completeness + 0.4·validity + 0.2·freshness
+- DQ integration via existing `dq/jobs.py` (no duplicate DQ logic)
+
+**Gate:** ≥20 tests in `backend/datahub/tests/` (create, version lifecycle, 3 contract
+violation types, CBAC module isolation, access-policy override, ERP + CSV ingest).
+
+### Phase 2 — TurnKey Bridge (`integrations/turnkey/`)
+
+**Status:** Not started
+
+**Goal:** Bidirectional connector between Carbon's trusted data and TurnKey's ML serving
+tier — push/register/promote models out, receive predictions + drift alerts in.
+
+**Key deliverables** (§6):
+- Models `TurnKeyConfig` (Fernet-encrypted API key), `TurnKeyModelLink`,
+  `PredictionRecord`, `DriftAlert`
+- HTTP client `backend/integrations/turnkey/client.py` (`CarbonTurnKeyClient`, based on
+  Gigacast's `aihub/turnkey_client.py`)
+- Signed (HMAC-SHA256) callback endpoints: predictions + drift-alerts
+- Settings `FERNET_KEY` + `TURNKEY_CALLBACK_SECRET`
+
+**Gate:** ≥6 tests (signature 401, prediction record, drift→DQ+violation, key encrypted
+at rest, feedback loop, CBAC view).
+
+### Phase 3 — App Registry (`appregistry/`)
+
+**Status:** Not started
+
+**Goal:** The control plane for domain apps — declares which apps exist, their required
+modules/capabilities, and activation state.
+
+**Key deliverables** (§7):
+- Models `AppManifest` + `AppActivation`
+- API `/api/v1/apps/` (list/detail/activate/deactivate; non-system apps only)
+- Self-registration management command (e.g. `register_healthy_app`)
+- GuardChain integration: inject `active_apps` into Scope (`accounts/ai_scoping.py`)
+
+**Gate:** ≥5 tests.
+
+### Phase 4 — Healthy Domain App (`healthy/`)
+
+**Status:** Not started
+
+**Goal:** Healthy Foods Factory — fresh-food company on a legacy Arabic ERP (Azure
+PostgreSQL, 1,047 decoded views), built as 5 AI pipelines.
+
+**Key deliverables** (§8):
+- Read-only `DataSource` to Azure PostgreSQL
+- Modules: healthy-sales, healthy-returns, healthy-inventory, healthy-collections,
+  healthy-production (CBAC scope via ScopedRole)
+- 5 pipelines: returns/load-out forecast, churn/rep retention, demand forecast
+  (dead-stock), AR collections prioritization, transaction-type classifier
+- Models `ERPSnapshot`, `LoadoutSheet`, `RepHealthCard`
+- API `/api/v1/healthy/` + `HealthyDomainAI` (`backend/healthy/domain_ai.py`)
+- Frontend: loadout, rep health, AR queue, slow movers, dashboard
+
+**Gate:** ≥10 tests.
+
+---
+
+### Platform Expansion success criteria (§14)
+
+- 40+ new tests (≥20 datahub, ≥6 integrations, ≥5 appregistry, ≥10 healthy)
+- Total ≥ 1,231 passing (1,191 existing + 40 new)
+- Healthy returns dataset: create → DQ review → approve → `TurnKeyModelLink` verified
+  against live model
+- Drift alert → DQ job → `DataContractViolation`
+- Prediction actual → `PredictionRecord.actual` set
+- Loadout sheet generated + viewable
+- CBAC: `healthy:view` in `module=healthy-sales` cannot see `healthy-collections` datasets
+- All 5 pipelines' Datasets created, contracted, linked (links may be pending)
+- CarbonIntelligence answers dataset-health questions from `health_detail`

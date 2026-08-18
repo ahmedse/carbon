@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="dtp-bg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#122b4f"/>
+    </linearGradient>
+    <linearGradient id="dtp-grad" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#0ea5e9"/>
+    </linearGradient>
+    <linearGradient id="dtp-grad-soft" x1="22" y1="22" x2="106" y2="106" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="28" fill="url(#dtp-bg)"/>
+
+  <!-- Hexagonal ring -->
+  <polygon points="106,64 85,100 43,100 22,64 43,28 85,28" fill="none" stroke="url(#dtp-grad)" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- Spokes -->
+  <line x1="64" y1="64" x2="106" y2="64" stroke="url(#dtp-grad)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="64" y1="64" x2="85" y2="100" stroke="url(#dtp-grad)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="64" y1="64" x2="43" y2="100" stroke="url(#dtp-grad)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="64" y1="64" x2="22" y2="64" stroke="url(#dtp-grad)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="64" y1="64" x2="43" y2="28" stroke="url(#dtp-grad)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="64" y1="64" x2="85" y2="28" stroke="url(#dtp-grad)" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Central node -->
+  <circle cx="64" cy="64" r="13" fill="url(#dtp-grad-soft)"/>
+  <circle cx="64" cy="64" r="4.5" fill="#ffffff" opacity="0.9"/>
+
+  <!-- Vertex nodes -->
+  <circle cx="106" cy="64" r="6" fill="#0ea5e9"/>
+  <circle cx="85" cy="100" r="6" fill="#0ea5e9"/>
+  <circle cx="43" cy="100" r="6" fill="#0ea5e9"/>
+  <circle cx="22" cy="64" r="6" fill="#0ea5e9"/>
+  <circle cx="43" cy="28" r="6" fill="#0ea5e9"/>
+  <circle cx="85" cy="28" r="6" fill="#0ea5e9"/>
+</svg>

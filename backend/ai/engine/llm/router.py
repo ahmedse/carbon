@@ -76,14 +76,81 @@ def _get_cost_table() -> dict[str, dict[str, float]]:
     return _COST_CACHE
 
 
+def _find_rates(model: str) -> dict[str, float] | None:
+    """Look up a model's cost rates, matching the key case-insensitively.
+
+    Providers may return a different case than the ``LLM_COST_MODELS`` keys
+    (e.g. POE returns ``gpt-4o`` while the cost table uses ``GPT-4o``).
+    """
+    key = (model or "").strip().lower()
+    if not key:
+        return None
+    for name, rates in _get_cost_table().items():
+        if name.strip().lower() == key:
+            return rates
+    return None
+
+
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Estimate USD cost for token counts. Returns 0.0 if model rates unknown."""
-    rates = _get_cost_table().get(model)
+    rates = _find_rates(model)
     if not rates:
         return 0.0
     input_cost = (input_tokens / 1_000_000) * rates.get("input", 0)
     output_cost = (output_tokens / 1_000_000) * rates.get("output", 0)
     return round(input_cost + output_cost, 6)
+
+
+# ── Selectable chat models (user-facing model picker) ────────────────────────
+
+# Curated, provider-specific model IDs exposed in the AI workspace model picker.
+# ``id`` is the exact model name sent to the LLM provider; ``cost_key`` maps to
+# an ``LLM_COST_MODELS`` entry for pricing. Keep this list small and verified —
+# retired or budget-guardrailed models are intentionally excluded.
+_CHAT_MODEL_CATALOG: tuple[dict, ...] = (
+    {
+        "id": "gpt-4o",
+        "label": "GPT-4o",
+        "description": "High-quality general-purpose model for complex tasks.",
+        "cost_key": "GPT-4o",
+    },
+    {
+        "id": "gpt-4o-mini",
+        "label": "GPT-4o mini",
+        "description": "Fast and economical for everyday tasks.",
+        "cost_key": "GPT-4o-mini",
+    },
+    {
+        "id": "claude-3-5-sonnet",
+        "label": "Claude Sonnet",
+        "description": "Balanced reasoning and strong coding.",
+        "cost_key": "Claude-Sonnet-4.5",
+    },
+)
+
+
+def list_chat_models() -> list[dict]:
+    """Return the selectable chat models with resolved pricing.
+
+    Each entry carries ``id``, ``label``, ``description``, per-1M-token
+    ``input_cost_per_1m``/``output_cost_per_1m``, and ``is_default`` (True
+    when the model matches the configured default chat model).
+    """
+    default_key = (get_model_for_task("chat") or "").strip().lower()
+    models: list[dict] = []
+    for entry in _CHAT_MODEL_CATALOG:
+        rates = _find_rates(entry["cost_key"]) or {}
+        models.append(
+            {
+                "id": entry["id"],
+                "label": entry["label"],
+                "description": entry["description"],
+                "input_cost_per_1m": rates.get("input", 0.0),
+                "output_cost_per_1m": rates.get("output", 0.0),
+                "is_default": entry["id"].strip().lower() == default_key,
+            }
+        )
+    return models
 
 
 # ── Budget enforcement ───────────────────────────────────────────────────────
@@ -129,6 +196,7 @@ async def route_chat(
     tools: list[dict] | None = None,
     max_tokens: int | None = None,
     response_format: dict | None = None,
+    model: str | None = None,
     db=None,  # optional: if None, creates its own session
 ) -> dict:
     """Route an LLM call by task type, logging cost and enforcing budget.
@@ -141,6 +209,7 @@ async def route_chat(
         temperature:  Model temperature.
         tools:        Optional tool definitions.
         max_tokens:   Optional max output tokens.
+        model:        Optional model override (defaults to the task's model).
         db:           Optional async session. If None, a short-lived session is created.
 
     Returns:
@@ -154,10 +223,10 @@ async def route_chat(
             "cost_usd": float,
         }
     """
-    from ai.engine.llm.provider import get_llm_client
+    from ai.engine.llm.provider import create_completion, get_llm_client
 
     settings = get_settings()
-    model = get_model_for_task(task)
+    model = model or get_model_for_task(task)
 
     # Budget check
     need_own_db = db is None
@@ -200,7 +269,7 @@ async def route_chat(
         if response_format:
             kwargs["response_format"] = response_format
 
-        response = await client.chat.completions.create(**kwargs)
+        response = await create_completion(client, **kwargs)
         duration_ms = int((time.monotonic() - t0) * 1000)
 
         choice = response.choices[0]

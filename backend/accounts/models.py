@@ -157,7 +157,7 @@ class EmailConfig(models.Model):
     use_tls = models.BooleanField(default=True, help_text='Use STARTTLS')
     use_ssl = models.BooleanField(default=False, help_text='Use SSL (port 465)')
     from_email = models.EmailField(max_length=255, default='noreply@carbon.clearturn.tech', help_text='Default From: address')
-    from_name = models.CharField(max_length=100, blank=True, default='Carbon Data Trust', help_text='Display name for From: header')
+    from_name = models.CharField(max_length=100, blank=True, default='AASTMT · Data Trust Platform', help_text='Display name for From: header')
     enabled = models.BooleanField(default=True, help_text='Enable outgoing email')
     updated_at = models.DateTimeField(auto_now=True)
 

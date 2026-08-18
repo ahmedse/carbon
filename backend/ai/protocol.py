@@ -88,7 +88,7 @@ class WorkspaceContext:
     """
 
     workspace: str                      # "dq" | "catalog" | "emissions" | "dataschema" | ...
-    current_view: str                   # page or tab name, e.g. "rule_list", "table_detail"
+    current_view: str = ""              # page or tab name, e.g. "rule_list", "table_detail"
     entity_type: str | None = None      # "table" | "rule" | "calculation" | "asset" | ...
     entity_id: str | None = None        # PK or slug of the focused entity
     entity_name: str | None = None      # human-readable name
@@ -464,6 +464,7 @@ class ChatRequest:
     message: str
     conversation: ConversationContext | None = None
     scope: Scope | None = None
+    model: str | None = None
 
 
 @dataclass

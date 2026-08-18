@@ -47,6 +47,7 @@ from ai.domain_protocol import DomainContext, get_domain, has_domain
 from ai.domain import emissions  # noqa: F401  (registers the emissions domain)
 from ai.domain import water  # noqa: F401  (registers the water domain)
 from ai.context_assembler import assemble_context
+from ai.engine.llm.provider import classify_llm_error
 from ai.generation_registry import GENERATIONS
 from accounts.capabilities import has_capability
 from accounts.constants import VISIBILITY_ROLES
@@ -290,6 +291,7 @@ class CarbonIntelligence:
         user,
         conversation_id: str,
         content: str,
+        model: str | None = None,
     ) -> dict[str, Any]:
         """Send a user message and get AI response.
 
@@ -350,7 +352,7 @@ class CarbonIntelligence:
         # Route to provider based on conversation type.
         try:
             response = self._route_typed_message(
-                conversation, content, conv_ctx, scope,
+                conversation, content, conv_ctx, scope, model,
             )
         except (PermissionError, ValueError) as exc:
             response = self._save_assistant_message(
@@ -372,6 +374,7 @@ class CarbonIntelligence:
         user,
         conversation_id: str,
         content: str,
+        model: str | None = None,
     ):
         """Stream an answer as a generator of SSE-ready dict frames.
 
@@ -466,10 +469,14 @@ class CarbonIntelligence:
                     message=message,
                     conversation=conv_ctx,
                     scope=scope,
+                    model=model,
                 )
 
                 partial_parts: list[str] = []
-                for kind, value in self.provider.chat_stream(chat_request):
+                for frame in self.provider.chat_stream(chat_request):
+                    kind = frame[0]
+                    value = frame[1] if len(frame) > 1 else None
+                    meta = frame[2] if len(frame) > 2 else {}
                     if GENERATIONS.is_cancelled(conv_id):
                         self._save_assistant_message(
                             conversation,
@@ -498,15 +505,20 @@ class CarbonIntelligence:
                             "failed",
                             error_message=value,
                         )
+                        user_message = "I couldn't reach the AI service — try again in a moment."
                         self._save_assistant_message(
                             conversation,
-                            value,
+                            user_message,
                             metadata={},
                             status="failed",
                             message_status="failed",
                         )
                         _finalize_generation("failed")
-                        yield {"type": "error", "error": value}
+                        yield {
+                            "type": "error",
+                            "error": user_message,
+                            "error_kind": meta.get("error_kind", "permanent"),
+                        }
                         return
                     if kind == "done":
                         latency_ms = int((time.perf_counter() - started_at) * 1000)
@@ -595,16 +607,21 @@ class CarbonIntelligence:
             _finalize_generation("failed")
             raise
         except Exception as exc:  # noqa: BLE001 - fail-visible, never stuck in working
-            msg = f"{conv_type} failed: {exc}"
+            logger.exception("%s failed for conversation=%s", conv_type, conv_id)
+            user_message = "I couldn't reach the AI service — try again in a moment."
             self._save_assistant_message(
                 conversation,
-                msg,
+                user_message,
                 metadata={},
                 status="failed",
                 message_status="failed",
             )
             _finalize_generation("failed")
-            yield {"type": "error", "error": msg}
+            yield {
+                "type": "error",
+                "error": user_message,
+                "error_kind": classify_llm_error(exc),
+            }
             return
         finally:
             GENERATIONS.finish(conv_id)
@@ -1488,6 +1505,7 @@ class CarbonIntelligence:
         content: str,
         conv_ctx: ConversationContext,
         scope: Scope,
+        model: str | None = None,
     ) -> dict[str, Any]:
         """Dispatch a turn to the per-type ``_send_*`` handler.
 
@@ -1509,7 +1527,7 @@ class CarbonIntelligence:
             return self._send_investigate_message(conversation, content, conv_ctx, scope)
         if conv_type == "report_draft":
             return self._send_report_draft_message(conversation, content, conv_ctx, scope)
-        return self._send_chat_message(conversation, content, conv_ctx, scope)
+        return self._send_chat_message(conversation, content, conv_ctx, scope, model)
 
     def _send_report_draft_message(
         self,
@@ -1632,8 +1650,8 @@ class CarbonIntelligence:
         """Human label for the progress frame of a non-chat generation."""
         labels = {
             "dq_validate": "Validating rows…",
-            "dq_suggest": "Analyzing table profile…",
-            "nl_query": "Translating question to SQL…",
+            "dq_suggest": "Reading your table…",
+            "nl_query": "Working on your query…",
             "anomaly": "Detecting anomalies…",
             "investigate": "Investigating…",
             "nl_rule_test": "Testing rule…",
@@ -2364,6 +2382,7 @@ class CarbonIntelligence:
         content: str,
         conv_ctx: ConversationContext,
         scope: Scope,
+        model: str | None = None,
     ) -> dict[str, Any]:
         """Handle generic chat conversation messages."""
         guard_chain, operation = self._guard_workspace_operation(
@@ -2377,6 +2396,7 @@ class CarbonIntelligence:
             message=message,
             conversation=conv_ctx,
             scope=scope,
+            model=model,
         )
         started_at = time.perf_counter()
         chat_response = self.provider.chat(chat_request)
@@ -2425,6 +2445,12 @@ class CarbonIntelligence:
         """Inject domain context (GHG vocabulary, etc.) when scope.app_identifier
         maps to a registered domain. AI CONTRACT §8: platform-level injection.
 
+        Combines two static tiers into one domain prefix:
+          * ``get_domain_context()`` → structured ``[Domain: ...]`` prefix; and
+          * ``system_prompt_extension`` (ADR-0010) → verbatim domain vocabulary,
+            folded in as the trailing paragraph of the domain context. A domain
+            without an extension (e.g. ``water``) skips it via the ``""`` default.
+
         NEVER crashes on missing/unregistered/malformed domain — returns
         content unchanged in every failure path.
         """
@@ -2433,10 +2459,14 @@ class CarbonIntelligence:
         if not has_domain(scope.app_identifier):
             return content
         try:
-            ctx = get_domain(scope.app_identifier)().get_domain_context()
+            domain = get_domain(scope.app_identifier)()
+            ctx = domain.get_domain_context()
         except Exception:
             return content
         prefix = _domain_context_prompt_prefix(ctx)
+        extension = (getattr(domain, "system_prompt_extension", "") or "").strip()
+        if extension:
+            prefix = f"{prefix}\n\n{extension}" if prefix else extension
         if not prefix:
             return content
         return f"{prefix}\n\n{content}"
@@ -2585,7 +2615,7 @@ class CarbonIntelligence:
     def _save_provider_unavailable_message(self, conversation) -> dict[str, Any]:
         return self._save_assistant_message(
             conversation,
-            "AI provider is currently unavailable. Please try again later.",
+            "I couldn't reach the AI service — try again in a moment.",
             metadata={},
             status="failed",
             message_status="failed",

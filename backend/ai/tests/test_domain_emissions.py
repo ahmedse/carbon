@@ -119,6 +119,23 @@ def test_prepend_domain_context_emissions():
     assert result.endswith("hello")
 
 
+def test_prepend_domain_context_includes_system_prompt_extension():
+    """ADR-0010: the manifest's static T0 vocabulary is folded into the
+    domain-context prefix, after the structured ``[Domain: ...]`` block."""
+    ci = _make_ci()
+    result = ci._prepend_domain_context(
+        Scope(app_identifier="emissions"), "hello"
+    )
+    assert "AASTMT university campus" in result
+    assert "Always cite the specific table, field, and row counts" in result
+    # The structured prefix still leads; the extension trails it, before the
+    # user message.
+    assert result.index("[Domain: emissions]") < result.index(
+        "AASTMT university campus"
+    )
+    assert result.endswith("hello")
+
+
 def test_prepend_domain_context_no_app_identifier():
     ci = _make_ci()
     assert ci._prepend_domain_context(Scope(), "hello") == "hello"

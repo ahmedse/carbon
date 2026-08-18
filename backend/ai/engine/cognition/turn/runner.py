@@ -68,6 +68,7 @@ class TurnPipelineRunner:
         user_info: dict | None = None,
         progress_callback=None,
         stream_callback=None,
+        model: str | None = None,
     ) -> tuple:
         """Execute one turn. Returns (AgentResponse, TurnLedger)."""
         from ai.engine.agent.reasoning import AgentResponse
@@ -393,6 +394,7 @@ class TurnPipelineRunner:
             instance_config=instance_config,
             user_info=user_info,
             budget_tracker=budget,
+            model=model,
         )
         ledger.draft = draft
         total_tokens += draft.tokens_used

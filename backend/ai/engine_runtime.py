@@ -83,6 +83,7 @@ async def _run_chat(
     from ai.engine.core.database import get_session_factory
 
     message = payload.get("message") or ""
+    model = payload.get("model")
     conversation = payload.get("conversation_history") or {}
     conversation_id = (
         conversation.get("conversation_id")
@@ -99,6 +100,7 @@ async def _run_chat(
             user_message=message,
             conversation_history=history_messages,
             stream_callback=stream_callback,
+            model=model,
         )
         return {
             "status": "completed",
@@ -1944,7 +1946,7 @@ def dispatch_task_stream(task_type: str, payload: dict[str, Any], *, instance_id
     Yields:
         ("chunk", delta)  — one text delta (may repeat)
         ("done", result)  — terminal success (same dict shape ``chat()`` reads)
-        ("error", message) — terminal failure
+        ("error", message, {"error_kind": "transient"|"permanent"}) — terminal failure
     """
     if task_type != "chat":
         yield "error", f"streaming not supported for {task_type!r}"
@@ -1960,8 +1962,9 @@ def dispatch_task_stream(task_type: str, payload: dict[str, Any], *, instance_id
             result = await _run_chat(instance_id, payload, _new_task_id(), stream_callback=cb)
             q.put(("done", result))
         except Exception as exc:  # noqa: BLE001 - fail-visible
+            from ai.engine.llm.provider import classify_llm_error
             logger.exception("chat stream failed for instance=%s", instance_id)
-            q.put(("error", f"chat failed: {exc}"))
+            q.put(("error", f"chat failed: {exc}", {"error_kind": classify_llm_error(exc)}))
         finally:
             q.put(("eof", None))
 
@@ -1971,10 +1974,10 @@ def dispatch_task_stream(task_type: str, payload: dict[str, Any], *, instance_id
     threading.Thread(target=_thread_target, daemon=True).start()
 
     while True:
-        kind, value = q.get()
-        if kind == "eof":
+        frame = q.get()
+        if frame[0] == "eof":
             break
-        yield kind, value
+        yield frame
 
 
 def get_task(task_id: str, *, timeout: int | None = None) -> dict[str, Any]:

@@ -467,6 +467,8 @@ class PulseProvider(AIProvider):
         payload: dict[str, Any] = {
             "message": request.message,
         }
+        if request.model:
+            payload["model"] = request.model
         if request.conversation is not None:
             payload["conversation_history"] = {
                 "conversation_id": request.conversation.conversation_id,
@@ -502,6 +504,8 @@ class PulseProvider(AIProvider):
         payload: dict[str, Any] = {
             "message": request.message,
         }
+        if request.model:
+            payload["model"] = request.model
         if request.conversation is not None:
             payload["conversation_history"] = {
                 "conversation_id": request.conversation.conversation_id,

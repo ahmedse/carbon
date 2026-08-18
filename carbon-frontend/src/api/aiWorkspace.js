@@ -44,6 +44,32 @@ export function listConversations(
 }
 
 /**
+ * Find the most recent open (non-archived) conversation of a given type,
+ * optionally scoped to an app. Returns null when none exists. Used to resume
+ * an existing thread instead of always creating a new one.
+ * @param {string} token - JWT access token
+ * @param {object} params - { conversation_type, app_identifier? }
+ * @returns {Promise<object|null>}
+ */
+export async function findOpenConversation(
+  token,
+  { conversation_type, app_identifier } = {},
+) {
+  const list = await listConversations(token, { conversation_type, limit: 200 });
+  const matches = (list || []).filter((c) => {
+    if (!c || c.is_archived) return false;
+    if (app_identifier != null && c.app_identifier !== app_identifier) return false;
+    return true;
+  });
+  matches.sort((a, b) => {
+    const ta = a.updated_at || a.last_message_at || a.created_at || '';
+    const tb = b.updated_at || b.last_message_at || b.created_at || '';
+    return String(tb).localeCompare(String(ta));
+  });
+  return matches[0] || null;
+}
+
+/**
  * Get a single conversation with all its messages.
  * @param {string} token - JWT access token
  * @param {string} conversationId - UUID
@@ -170,17 +196,29 @@ export function summarizeConversation(token, conversationId, force = false) {
 }
 
 /**
+ * List the selectable chat models for the model picker.
+ * @param {string} token - JWT access token
+ * @returns {Promise<object>} { models: [{ id, label, description, input_cost_per_1m, output_cost_per_1m, is_default }] }
+ */
+export function listModels(token) {
+  return apiFetch(`${BASE}models/`, { token });
+}
+
+/**
  * Send a message in a conversation and get AI response.
  * @param {string} token - JWT access token
  * @param {string} conversationId - UUID
  * @param {string} content - User message text
+ * @param {string} [model] - Optional model override id
  * @returns {Promise<object>} Updated conversation + new messages
  */
-export function sendMessage(token, conversationId, content) {
+export function sendMessage(token, conversationId, content, model) {
+  const body = { content };
+  if (model) body.model = model;
   return apiFetch(`${BASE}conversations/${conversationId}/messages/`, {
     token,
     method: 'POST',
-    body: { content },
+    body,
   });
 }
 
@@ -192,13 +230,13 @@ export function sendMessage(token, conversationId, content) {
  * @param {string} token - JWT access token
  * @param {string} conversationId - UUID
  * @param {string} content - user message text
- * @param {object} handlers - { onChunk(delta), onProgress(stage, message), onDone(conversation), onStopped(conversation), onError(message) }
+ * @param {object} handlers - { onChunk(delta), onProgress(stage, message), onDone(conversation), onStopped(conversation), onError(message, errorKind), workspaceContext, model }
  */
 export async function sendMessageStream(
   token,
   conversationId,
   content,
-  { onChunk, onProgress, onDone, onStopped, onError, workspaceContext },
+  { onChunk, onProgress, onDone, onStopped, onError, workspaceContext, model },
 ) {
   // Replicate apiFetch's auth: supplied token (or stored access token),
   // refreshing it first if expired.
@@ -222,6 +260,7 @@ export async function sendMessageStream(
 
   const body = { content };
   if (workspaceContext) body.workspace_context = workspaceContext;
+  if (model) body.model = model;
 
   let response;
   try {
@@ -283,7 +322,7 @@ export async function sendMessageStream(
     } else if (frame.type === 'stopped') {
       onStopped?.(frame.conversation);
     } else if (frame.type === 'error') {
-      onError?.(frame.error || 'Stream failed');
+      onError?.(frame.error || 'Stream failed', frame.error_kind);
     }
   };
 

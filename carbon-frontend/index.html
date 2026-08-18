@@ -2,9 +2,42 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Carbon Data Trust</title>
+
+    <!-- Title / SEO (driven by VITE_* vars in .env) -->
+    <title>%VITE_INSTANCE_NAME% · %VITE_PLATFORM_NAME%</title>
+    <meta name="description" content="%VITE_PLATFORM_DESCRIPTION%" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="%VITE_CANONICAL_URL%/" />
+
+    <!-- Theme color -->
+    <meta name="theme-color" content="#2563eb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+
+    <!-- Icons / manifest -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="apple-mobile-web-app-title" content="%VITE_PLATFORM_SHORT%" />
+    <meta name="application-name" content="%VITE_PLATFORM_SHORT%" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="%VITE_INSTANCE_NAME% · %VITE_PLATFORM_NAME%" />
+    <meta property="og:title" content="%VITE_INSTANCE_NAME% · %VITE_PLATFORM_NAME%" />
+    <meta property="og:description" content="%VITE_PLATFORM_DESCRIPTION%" />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:url" content="%VITE_CANONICAL_URL%/" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="%VITE_INSTANCE_NAME% · %VITE_PLATFORM_NAME%" />
+    <meta name="twitter:description" content="%VITE_PLATFORM_DESCRIPTION%" />
+    <meta name="twitter:image" content="/og-image.png" />
+
     <style>
       html, body {
         margin: 0;

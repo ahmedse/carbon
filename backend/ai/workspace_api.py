@@ -162,6 +162,7 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 user=request.user,
                 conversation_id=pk,
                 content=serializer.validated_data["content"],
+                model=serializer.validated_data.get("model") or None,
             )
             return Response(result)
         except ValueError as e:
@@ -227,6 +228,7 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                     user=request.user,
                     conversation_id=pk,
                     content=serializer.validated_data["content"],
+                    model=serializer.validated_data.get("model") or None,
                 ):
                     yield f"data: {json.dumps(frame)}\n\n"
             except ValueError as e:
@@ -520,6 +522,7 @@ class WorkspaceArtifactViewSet(viewsets.GenericViewSet):
                 user=request.user,
                 conversation_id=pk,
                 content=serializer.validated_data["content"],
+                model=serializer.validated_data.get("model") or None,
             )
             return Response(result)
         except ValueError as e:
@@ -585,6 +588,7 @@ class WorkspaceArtifactViewSet(viewsets.GenericViewSet):
                     user=request.user,
                     conversation_id=pk,
                     content=serializer.validated_data["content"],
+                    model=serializer.validated_data.get("model") or None,
                 ):
                     yield f"data: {json.dumps(frame)}\n\n"
             except ValueError as e:

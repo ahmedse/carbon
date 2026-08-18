@@ -5,7 +5,7 @@ import {
 import { useParams, useNavigate, Link } from "react-router-dom";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { API_BASE_URL } from "../config";
-import { INSTANCE_LOGO, PLATFORM_NAME } from "../config/branding";
+import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
 
 function validatePassword(password) {
   const errors = [];
@@ -183,7 +183,7 @@ export default function ResetPasswordPage() {
             Reset Password
           </Typography>
           <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-            Choose a strong new password for your {PLATFORM_NAME} account
+            Choose a strong new password for your {PLATFORM_TITLE} account
           </Typography>
         </Box>
 

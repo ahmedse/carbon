@@ -58,6 +58,7 @@ vi.mock('../shell/AIMessageBubble', () => ({ default: () => null }));
 vi.mock('../shell/AIContextPanel', () => ({ default: () => null }));
 vi.mock('../shell/AIWorkingIndicator', () => ({ default: () => null }));
 vi.mock('../shell/AIOfflineBanner', () => ({ default: () => null }));
+vi.mock('../shell/AIModelSelect', () => ({ default: () => null }));
 vi.mock('../shell/AIInputBar', () => ({
   default: () => React.createElement('div', { 'data-testid': 'input-bar' }),
 }));

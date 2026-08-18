@@ -56,14 +56,16 @@ async function openCopilot(page: Page): Promise<void> {
   });
 }
 
-/** Start a new chat (empty state vs. tab bar), then wait for the input bar. */
+/** Start a new chat, then wait for the input bar. */
 async function newChat(page: Page): Promise<void> {
-  const newChatBtn = page.getByRole('button', { name: 'New chat' });
-  if (await newChatBtn.count()) {
-    await newChatBtn.first().click();
-  } else {
-    await page.getByRole('button', { name: /start a chat/i }).click();
-  }
+  // The workspace's activity bar always renders a "New chat" icon button once
+  // the conversation list finishes loading (empty or populated). The initial
+  // list load races the pane opening, so we must WAIT for it rather than check
+  // `count()` once and fall through to the empty-state-only "start a chat"
+  // button (which never appears for a user who already has conversations).
+  const newChatBtn = page.getByRole('button', { name: 'New chat' }).first();
+  await expect(newChatBtn).toBeVisible({ timeout: 15_000 });
+  await newChatBtn.click();
   await expect(page.getByLabel('Message input')).toBeVisible({ timeout: 15_000 });
 }
 
@@ -112,8 +114,8 @@ test('Part A: generalist chat, follow-up, feedback, export, rename (dataowner)',
   // A2 — generalist turn (no ScopeGuard / empty-user error)
   await test.step('A2: generalist overview turn', async () => {
     await sendMessage(page, 'What questions can you answer about the Carbon emissions data for AASTMT?');
-    // Assistant bubble present (feedback "Correct" control is assistant-only)
-    await expect(page.getByRole('button', { name: 'Correct' }).first()).toBeVisible({
+    // Assistant bubble present (hover-toolbar "Copy message" control is assistant-only)
+    await expect(page.getByRole('button', { name: 'Copy message' }).first()).toBeVisible({
       timeout: TURN_TIMEOUT,
     });
     await assertNoP0Error(page);
@@ -135,10 +137,11 @@ test('Part A: generalist chat, follow-up, feedback, export, rename (dataowner)',
     }
   });
 
-  // A4 — feedback Accept on the latest assistant message
+  // A4 — feedback Accept on the latest assistant message (hover-revealed toolbar)
   await test.step('A4: feedback Accept on latest assistant', async () => {
-    const accept = page.getByRole('button', { name: 'Accept', exact: true }).last();
+    const accept = page.getByRole('button', { name: 'Accept response' }).last();
     await expect(accept).toBeVisible({ timeout: 15_000 });
+    await accept.hover(); // reveal the hover toolbar (pointer-events toggle)
     await accept.click();
     await expect(page.getByText('Accepted', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
     console.log('  A4: feedback accepted → "Accepted" chip shown');
@@ -162,15 +165,15 @@ test('Part A: generalist chat, follow-up, feedback, export, rename (dataowner)',
     console.log(`  A6: exported → ${download.suggestedFilename()}`);
   });
 
-  // A7 — rename the active conversation → tab label updates
-  await test.step('A7: rename conversation via tab context menu', async () => {
-    await page.getByRole('button', { name: /Conversation actions for/ }).first().click();
+  // A7 — rename the active conversation → session label updates
+  await test.step('A7: rename conversation via session context menu', async () => {
+    await page.getByRole('button', { name: /Session options for/ }).first().click();
     await page.getByText('Rename', { exact: true }).click();
-    const titleField = page.getByLabel('Conversation title');
+    const titleField = page.getByLabel('Session title');
     await titleField.fill('QA Renamed');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('QA Renamed', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
-    console.log('  A7: conversation renamed → tab shows "QA Renamed"');
+    console.log('  A7: conversation renamed → session shows "QA Renamed"');
   });
 
   // Part D (folded) — W1 render, W4 no offline banner
@@ -212,7 +215,7 @@ test('Part B: DQ coworker entry points, suggest+accept, NL rule save, investigat
   await test.step('B3: "Validate DQ" entry point → turn settles', async () => {
     await clickEntryPoint(page, 'Validate DQ');
     await sendMessage(page, 'Validate the data quality of this table.');
-    await expect(page.getByRole('button', { name: 'Correct' }).first()).toBeVisible({
+    await expect(page.getByRole('button', { name: 'Copy message' }).first()).toBeVisible({
       timeout: TURN_TIMEOUT,
     });
     await assertNoP0Error(page);
@@ -251,7 +254,7 @@ test('Part B: DQ coworker entry points, suggest+accept, NL rule save, investigat
     // Save Rule is disabled until Execute Mode is enabled.
     await expect(saveRule).toBeDisabled();
     await page.getByRole('button', { name: /Execute Mode/i }).click();
-    await expect(page.getByRole('button', { name: /Execute Mode ON/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: /Execute Mode/i })).toHaveAttribute('aria-pressed', 'true');
     await expect(saveRule).toBeEnabled();
     await saveRule.click();
     // Success signal: "Saved ✓" chip OR a "Saved rule" toast.
@@ -276,7 +279,7 @@ test('Part B: DQ coworker entry points, suggest+accept, NL rule save, investigat
     await navigateTo(page, `/catalog/tables/${TABLE_ID}`);
     await clickEntryPoint(page, 'Ask about this');
     await sendMessage(page, 'How many rows are in this table?');
-    await expect(page.getByRole('button', { name: 'Correct' }).first()).toBeVisible({
+    await expect(page.getByRole('button', { name: 'Copy message' }).first()).toBeVisible({
       timeout: TURN_TIMEOUT,
     });
     await assertNoP0Error(page);

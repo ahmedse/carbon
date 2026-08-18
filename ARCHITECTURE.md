@@ -1,6 +1,6 @@
 # Carbon Data Trust Platform — Architecture
 # Single source of truth. Replaces all plans/*ARCHITECTURE*.md.
-# Updated: 2026-08-15 | Owner: Master Architect
+# Updated: 2026-08-17 | Owner: Master Architect
 
 ---
 
@@ -14,38 +14,53 @@ The philosophy: data products earn trust through governance (catalog, DQ, MDM, l
 AI is the platform's living intelligence — it knows the data, the rules, and the users,
 and it grows smarter with every interaction.
 
+Carbon is now an **AI-Driven Data Platform**. Beyond emissions accounting, the platform
+adds a **Data Trust Core** (Dataset Hub, data contracts, health scoring), a **TurnKey
+Bridge** (bidirectional ML-serving link), an **App Registry** (domain-app manifests and
+activation), and a growing set of **Domain Apps** (emissions, healthy, and future apps).
+The full specification is `docs/DESIGN-PLATFORM.md`.
+
 ---
 
 ## System Map
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Carbon Data Trust Platform                                         │
-│                                                                     │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │  AI  (backend/ai/)  — the living intelligence                │  │
-│  │                                                              │  │
-│  │  CarbonIntelligence  ←  ONLY entry point for all AI calls   │  │
-│  │  GuardChain: Scope → Access → DataIsolation → Mutation       │  │
-│  │  Memory: KnowledgeGraphStore, vector store, episodic, LTM    │  │
-│  │  Engine: TurnPipelineRunner (six-witness pipeline)            │  │
-│  │  Cognition loop: 18 scheduled tasks (learn, reflect, prune)   │  │
-│  │  Workspace: conversation CRUD, multi-turn, SSE (planned)      │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│                                                                     │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │  Platform Core                                               │  │
-│  │  accounts   catalog     mdm       dq        dataschema       │  │
-│  │  (RBAC)     (metadata)  (ref data)(quality) (schema engine)  │  │
-│  │  connections  evidence  importexport  core                   │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│                                                                     │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │  Domain Apps  (may import core; core NEVER imports domain)   │  │
-│  │  emissions  (GHG Protocol: calculations, factors, GWP, etc.) │  │
-│  │  (future: water, waste, supply chain)                        │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────┐
+│  Carbon (this repo) — Data Trust Core + AI + Domain Apps                      │
+│                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────┐  │
+│  │  Domain Apps  (may use core; core NEVER imports domain)                 │  │
+│  │  emissions/   healthy/   (future: energy_forecast/, supply_chain/, …)   │  │
+│  └──────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────┐  │
+│  │  New Platform Layers (this spec)                                        │  │
+│  │  datahub/              integrations/turnkey/    appregistry/            │  │
+│  │  Dataset versioning    Push artifacts           App manifests            │  │
+│  │  Health scoring        Receive predictions      Activation + CBAC        │  │
+│  │  Data contracts        Drift ↔ DQ link          Capability extension     │  │
+│  └──────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────┐  │
+│  │  Existing Platform Core (do not modify except where this doc says to)   │  │
+│  │  accounts  catalog   mdm    dq    dataschema  connections                │  │
+│  │  evidence  importexport  ai/  emissions  core                           │  │
+│  └──────────────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────────┘
+                              │ HTTP (async client)
+                              ▼
+┌────────────────────────────────────────────────────────────────────────────────┐
+│  TurnKey (separate repo/service) — ML Serving Tier                            │
+│  registry/  inference/  monitoring/  A-B testing  drift alerts  projects       │
+│  API keys   model versions   predictions   SHAP   accuracy snapshots           │
+└────────────────────────────────────────────────────────────────────────────────┘
+                              │ Azure PostgreSQL (read-only connection via DataSource)
+                              ▼
+┌────────────────────────────────────────────────────────────────────────────────┐
+│  Healthy ERP  (external, read-only)                                           │
+│  healthy_legacy_2026 on Azure PostgreSQL                                       │
+│  readable.* views — 1,047 decoded views over the legacy Arabic ERP            │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -60,6 +75,38 @@ and it grows smarter with every interaction.
 | Auth | JWT (SimpleJWT) + RBAC via ScopedRole (org-unit-scoped) |
 | Dev ops | `./manage.sh` for all ops; Docker for prod; `.venv` at repo root |
 | Ports | Backend :8009, Frontend :5179 |
+
+---
+
+## New Platform Layers (Phase 1–4)
+
+Specified in `docs/DESIGN-PLATFORM.md` (§2, §4–§9, §13–§14). Four additions turn Carbon
+from an emissions-accounting platform into a general AI-Driven Data Platform.
+
+| Layer | Django app | Purpose | Depends on | Spec |
+|---|---|---|---|---|
+| Dataset Hub | `datahub/` | Versioned, governed, contracted datasets — the trust anchor for all AI. | dataschema, catalog, dq, connections, mdm, core, accounts | §5 |
+| TurnKey Bridge | `integrations/turnkey/` | Bidirectional link to the TurnKey ML serving tier (push artifacts; receive predictions + drift). | datahub | §6 |
+| App Registry | `appregistry/` | Domain-app manifest, activation, and CBAC scoping. | catalog, accounts (parallel with Phase 2) | §7 |
+| First domain app | `healthy/` | Healthy Foods Factory — 5 AI pipelines on ERP data. | datahub, integrations, appregistry | §8 |
+
+**Dependency graph rule** (§13): build order is Phase 1 → Phase 2 → Phase 4, with
+Phase 3 runnable in parallel with Phase 2. Each layer imports only downward:
+`datahub/` imports core/dataschema/catalog/dq/connections/mdm/accounts and is imported
+by `integrations/turnkey/`, `appregistry/`, and `healthy/`. No new layer imports a
+domain app (`emissions/` or `healthy/`).
+
+**CBAC extension contract** (§4):
+- `Dataset.module` (FK → `core.Module`) is the scope anchor — the existing
+  `ScopedRole(module=…)` already applies; no new ScopedRole FK is needed.
+- New capabilities (datahub:view/ingest/approve/manage, turnkey:view/manage,
+  appregistry:view/manage, healthy:view/manage) live ONLY in
+  `backend/accounts/capabilities.py` plus `GROUP_CAPABILITIES`.
+- `DatasetAccessPolicy` (per-dataset override) takes precedence over module-level
+  ScopedRole: explicit policy > ScopedRole module-level > deny.
+
+**Closed loop** (§9) — the platform's core value, an 8-step cycle:
+Ingest → Govern → Approve → Model Link → Serve → Feedback → Actuals → Drift Response.
 
 ---
 

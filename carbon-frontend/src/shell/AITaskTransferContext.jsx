@@ -14,8 +14,8 @@ import React, {
 } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
-import { createConversation, sendMessage } from '../api/aiWorkspace';
-import { normalizeAppIdentifier } from './aiTaskTransferUtils';
+import { createConversation, findOpenConversation, sendMessage } from '../api/aiWorkspace';
+import { normalizeAppIdentifier, fetchKnownAppIdentifiers } from './aiTaskTransferUtils';
 import { AITaskTransferContext } from './aiTaskTransferContext';
 
 /**
@@ -106,6 +106,8 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
 
       // Build conversation title
       const normalizedPayload = enrichPayload(type, payload);
+      const appIds = await fetchKnownAppIdentifiers(token);
+      const appIdentifier = normalizeAppIdentifier(normalizedPayload, metadata, appIds);
       const title =
         metadata.title ||
         (type === 'dq_validate'
@@ -119,15 +121,38 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
                 : 'Chat');
 
       try {
-        const appIdentifier = normalizeAppIdentifier(normalizedPayload, metadata);
-        const conv = await createConversation(token, {
+        // Phase 16 — resume the most recent open thread of the same kind
+        // (one open conversation per type+app) instead of always creating.
+        const existing = await findOpenConversation(token, {
           conversation_type: type,
-          title,
-          app_identifier: appIdentifier,
-          task_payload: { type, ...normalizedPayload },
-          workspace_context: metadata.workspaceContext,
+          app_identifier: appIdentifier || undefined,
         });
+
+        let conv;
+        if (existing) {
+          conv = existing;
+        } else {
+          conv = await createConversation(token, {
+            conversation_type: type,
+            title,
+            app_identifier: appIdentifier,
+            task_payload: { type, ...normalizedPayload },
+            workspace_context: metadata.workspaceContext,
+          });
+        }
         setPendingTransferId(conv.id);
+
+        // Phase 8-B — one-click trigger: a nl_rule_test transfer with a candidate
+        // rule text kicks off the read-only dry-run immediately by sending the NL
+        // rule (mirrors the "Test live" button on a DQ suggestion card). The
+        // backend accepts the rule as message content or task_payload.nl.
+        if (type === 'nl_rule_test' && normalizedPayload.nl) {
+          try {
+            await sendMessage(token, conv.id, String(normalizedPayload.nl));
+          } catch {
+            // The conversation still exists; the user can re-trigger from the thread.
+          }
+        }
 
         // Phase 9-B — one-click trigger: an investigate transfer with a target
         // table kicks off the read-only pipeline immediately by sending the

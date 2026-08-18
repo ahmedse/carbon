@@ -236,7 +236,7 @@ def test_send_message_stream_non_chat_streams_progress(user):
     types = [f["type"] for f in frames]
     assert types == ["progress", "progress", "done"]
     assert frames[0]["stage"] == "start"
-    assert frames[0]["message"] == "Analyzing table profile…"
+    assert frames[0]["message"] == "Reading your table…"
     assert frames[1]["stage"] == "done"
     assert frames[2]["type"] == "done"
 

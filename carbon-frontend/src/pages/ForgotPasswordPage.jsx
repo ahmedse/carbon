@@ -5,7 +5,7 @@ import {
 import { Link } from "react-router-dom";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { API_BASE_URL } from "../config";
-import { INSTANCE_LOGO, PLATFORM_NAME } from "../config/branding";
+import { INSTANCE_LOGO } from "../config/branding";
 
 export default function ForgotPasswordPage() {
   useDocumentTitle("Forgot Password");
