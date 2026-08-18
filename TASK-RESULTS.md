@@ -809,3 +809,53 @@ $ npm run lint && npm run build
 - **User-reported fabrication (root cause, fixed):** "no rules created! despite pulse confirm" — `_run_chat` ran the engine with no executor/instance_config/host_user_id; S3 `DraftWitness.draft` never passed `tools` to `route_chat` (zero tool_calls → nothing to execute); the LLM's success prose was drafted before any tool result existed. Fixes: real executor wiring, curated tool definitions in S3, GROUNDING RULES prompt, deterministic `_grounded_outcome_note` appended to content, and machine-readable `actions`/`pending_actions` propagated end-to-end.
 - **`SynchronousOnlyOperation` on confirm** (see Deviations) — async `_save_assistant_message` inside the coroutine; moved to sync view context.
 - **`AISharedThreads` regression from top-level `useNavigate`** (see Deviations) — restored to pre-existing baseline 4 failures after the `<Navigate>` fix.
+
+## [2026-08-16] Frontend Worker — Phase 21-B: Usage & Cost Tab (frontend)
+
+### Summary
+6/6 gates passed (lint clean, targeted 17/17, full suite 500 passed / 12 failed — exactly the pre-existing drift, unchanged; build OK). 5 files changed (2 created, 3 modified). 11 new tests added.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Add `getUsageSummary` + `getUsageByConversation` to `src/api/aiWorkspace.js` | ✅ | Literal `ai/usage/…` paths (NOT workspace `BASE`), `?period=` via `encodeURIComponent`, default `30d` |
+| 2 | Create `src/shell/AIUsageTab.jsx` | ✅ | Self-fetch on mount; period Select (7d/30d/90d) + Refresh; quota LinearProgress + Chip (On track / Approaching limit / Limit reached); period totals; tier + model breakdown cards; per-conversation table; reset date via dayjs tz `Africa/Cairo` |
+| 3 | Register fixed "Usage" entry in `AIWorkspace.jsx` | ✅ | `DataUsageIcon` activity-bar entry (id `usage`, after artifacts) + `activePanel === 'usage' ? <AIUsageTab />` main-content branch; reuses existing `activePanel`/`togglePanel` |
+| 4 | Create `src/__tests__/AIUsageTab.test.jsx` | ✅ | 10 tests: quota bar, period totals, breakdowns, table, period-change refetch, refresh, error/Retry, empty state, formatter units |
+| 5 | Regression test for activity-bar registration | ✅ | `AIWorkspace.shell.test.jsx`: stubbed `AIUsageTab` + test clicking "Usage" renders the panel and sets `aria-pressed` |
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| MODIFY | `carbon-frontend/src/api/aiWorkspace.js` | +20 | `getUsageSummary` + `getUsageByConversation` → `GET ai/usage/summary|by-conversation/?period=` |
+| CREATE | `carbon-frontend/src/shell/AIUsageTab.jsx` | 266 | Usage & cost panel (quota, totals, tier/model breakdown, conversation table) + `formatTokens`/`formatCost`/`formatResetDate` helpers |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | +10 | `DataUsageIcon` + `AIUsageTab` imports, activity-bar entry, main-content branch |
+| CREATE | `carbon-frontend/src/__tests__/AIUsageTab.test.jsx` | 190 | 10 component/unit tests against the verified usage API contract |
+| MODIFY | `carbon-frontend/src/__tests__/AIWorkspace.shell.test.jsx` | +8 | `AIUsageTab` stub mock, `getUsageSummary`/`getUsageByConversation` in the aiWorkspace mock factory, Usage registration test |
+
+### Verification Output
+```
+$ npm run lint
+> eslint .
+(exit 0 — clean, 0 warnings)
+
+$ npx vitest run src/__tests__/AIUsageTab.test.jsx src/__tests__/AIWorkspace.shell.test.jsx
+Test Files  2 passed (2)      Tests  17 passed (17)
+
+$ npx vitest run   # full suite
+Test Files  4 failed | 31 passed (35)
+      Tests  12 failed | 500 passed (512)   # 12 failures == pre-existing drift
+(AIArtifacts 2, AIMessageBubble.feedback 5, transparency 1, AISharedThreads 4); 11 new tests all pass
+
+$ npm run build
+vite v6.3.5 building for production...
+✓ built in 13.49s   (chunk-size warnings pre-existing, unrelated)
+```
+
+### Deviations
+NONE — implemented exactly per spec. Notes:
+- Cost fields from the API are 6-dp strings → `Number()` + `.toFixed(2)` for display; token counts humanized (`1.2M`, `765.5K`).
+- Reset date rendered via `dayjs` utc + timezone plugins (`Africa/Cairo`), matching the project default.
+- `AIUsageTab.jsx` exports three pure helpers; `react-refresh/only-export-components` suppressed per-line, matching the existing `AuthContext.jsx` pattern.
+- MUI `LinearProgress` rounds `aria-valuenow` to an integer (asserted `62` for 61.725%).
+- `AIConversationView` / streaming path / `App.jsx` / `Shell.jsx` untouched; backend untouched.

@@ -1354,10 +1354,10 @@ Append to `TASK-RESULTS.md`.
 
 **Date:** 2026-08-18
 **Worker Role:** frontend-worker
-**Recommended Model:** DeepSeek-V3
-**Status:** PLANNED
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** ACTIVE
 **Kind:** Frontend-only. Medium.
-**Depends on:** Phase 21-A (endpoints).
+**Depends on:** Phase 21-A (endpoints) — ✅ DONE (bb91658).
 
 ### Recommendation (resolved)
 **Dedicated activity-bar tab at the right of the AI shell — NOT an icon popup.**
@@ -1371,6 +1371,22 @@ keyboard-accessible. A StatusBar sparkline may deep-link into the tab.
 - `carbon-frontend/src/api/aiWorkspace.js` — add usage fetch helpers
 - `.ai-toolkit/shared/design-system.md`
 
+### API contract (Phase 21-A — verified, do not guess field names)
+- `GET /carbon-api/ai/usage/summary/?period=30d` →
+  `{ period_days, total_tokens, prompt_tokens, completion_tokens, total_cost, total_generations, by_tier, by_model, quota }`.
+  `by_tier`/`by_model` entries: `{ tokens, cost, generations }`. `total_cost` and
+  bucket `cost` are **strings** (`"0.000000"`) — `Number()` before display.
+- `GET /carbon-api/ai/usage/by-conversation/?period=30d` →
+  `{ period_days, conversations: [{ conversation_id, title, total_tokens, total_cost, generation_count, message_count }] }`
+  (already sorted desc by tokens).
+- `quota` = `{ limit, used, remaining, reset_at, window_start, pct, soft_warning, hard_exceeded }`.
+  `reset_at`/`window_start` are ISO-8601 strings; render the reset date via dayjs
+  timezone (project default Africa/Cairo).
+- `apiFetch` takes `(endpoint, { token })` and joins `API_BASE_URL` (ends in
+  `/carbon-api/`), so the helpers are `apiFetch('ai/usage/summary/', { token })`
+  and `apiFetch('ai/usage/by-conversation/', { token })` — NOT under `ai/workspace/`.
+- Period param: `?period=30d` (also `7d`/`90d` accepted by backend).
+
 ### Files to Change
 - `carbon-frontend/src/api/aiWorkspace.js` — `getUsageSummary`, `getUsageByConversation`
 - `carbon-frontend/src/shell/AIUsageTab.jsx` (NEW) — the tab
@@ -1378,11 +1394,21 @@ keyboard-accessible. A StatusBar sparkline may deep-link into the tab.
 - `carbon-frontend/src/__tests__/AIUsageTab.test.jsx` (NEW)
 
 ### Implementation
-1. New right activity-bar tab **"Usage"** (fixed mode, id-based, keyboard navigable).
-2. `AIUsageTab.jsx`: quota progress bar (remaining vs limit + reset date),
-   current-period tokens/cost, tier/model breakdown, per-conversation table.
-3. Optional StatusBar sparkline/icon deep-links into the tab.
+1. New right activity-bar entry **"Usage"** (id `usage`, fixed mode, id-based,
+   keyboard navigable): add `{ id: 'usage', icon: <DataUsageIcon/>, label: 'Usage' }`
+   to the activity-bar array in `AIWorkspace.jsx` (currently sessions/context/investigate/artifacts,
+   ~line 568-575), and render it as a **main-content panel** by adding an
+   `activePanel === 'usage' ? <AIUsageTab /> :` branch in the leftmost `flex:1`
+   box (next to `investigate`/`artifacts`, ~line 475-479). `togglePanel`/`activePanel`
+   already exist — do NOT add new nav state.
+2. `AIUsageTab.jsx` (self-fetching, `useEffect` on mount + a `period` selector
+   30d/7d/90d + a manual Refresh): quota progress bar (remaining vs limit +
+   reset date), current-period tokens/cost, tier/model breakdown,
+   per-conversation table.
+3. Optional `StatusBar.jsx` sparkline/icon deep-links into the tab (skip if it
+   complicates the diff — it's optional).
 4. Theme tokens only (RULE_8); copy describes outcomes, not internals (RULE_23).
+   Cost shown as `$x.xx` (parse the string), token counts humanized (e.g. `1.2M`).
 
 ### DO NOT TOUCH
 - Backend files.

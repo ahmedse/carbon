@@ -23,6 +23,7 @@ import {
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import DataUsageIcon from '@mui/icons-material/DataUsage';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
@@ -46,6 +47,7 @@ import AIEmptyState from './AIEmptyState';
 import AIOfflineBanner from './AIOfflineBanner';
 import AIArtifactBrowser from './AIArtifactBrowser';
 import AISuggestionRail from './AISuggestionRail';
+import AIUsageTab from './AIUsageTab';
 import InvestigateTab from './InvestigateTab';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { ExecuteModeProvider } from './ExecuteModeContext';
@@ -472,7 +474,9 @@ export function AIWorkspace({ onClose }) {
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
           <AIWorkspaceHeader onClose={onClose} />
           {providerOffline && <AIOfflineBanner />}
-          {activePanel === 'investigate' ? (
+          {activePanel === 'usage' ? (
+            <AIUsageTab />
+          ) : activePanel === 'investigate' ? (
             <InvestigateTab conversations={investigateConversations} onSelect={handleOpenInvestigation} onNew={handleNewInvestigation} />
           ) : activePanel === 'artifacts' ? (
             <AIArtifactBrowser />
@@ -572,8 +576,7 @@ export function AIWorkspace({ onClose }) {
             { id: 'sessions',    icon: <ForumOutlinedIcon sx={{ fontSize: 16 }} />,     label: 'Sessions'    },
             { id: 'context',     icon: <InfoOutlinedIcon sx={{ fontSize: 16 }} />,       label: 'Context'     },
             { id: 'investigate', icon: <ManageSearchIcon sx={{ fontSize: 16 }} />,       label: 'Investigate' },
-            { id: 'artifacts',   icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />, label: 'Artifacts'   },
-          ].map(({ id, icon, label }) => (
+            { id: 'artifacts',   icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />, label: 'Artifacts'   },            { id: 'usage',       icon: <DataUsageIcon sx={{ fontSize: 16 }} />,         label: 'Usage'       },          ].map(({ id, icon, label }) => (
             <Tooltip key={id} title={label} placement="left">
               <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: activePanel === id ? 'primary.main' : 'transparent' }}>
                 <IconButton

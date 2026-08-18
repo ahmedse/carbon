@@ -252,6 +252,31 @@ export function listModels(token) {
 }
 
 /**
+ * Usage & cost summary for the current project over a period.
+ * Endpoint lives under /carbon-api/ai/usage/ (not the workspace BASE).
+ * @param {string} token - JWT access token
+ * @param {object} [opts]
+ * @param {string} [opts.period='30d'] - 7d | 30d | 90d | <n>w | plain days
+ * @returns {Promise<object>} { period_days, total_tokens, prompt_tokens,
+ *   completion_tokens, total_cost, total_generations, by_tier, by_model, quota }
+ */
+export function getUsageSummary(token, { period = '30d' } = {}) {
+  return apiFetch(`ai/usage/summary/?period=${encodeURIComponent(period)}`, { token });
+}
+
+/**
+ * Per-conversation usage for the current project over a period.
+ * @param {string} token - JWT access token
+ * @param {object} [opts]
+ * @param {string} [opts.period='30d'] - 7d | 30d | 90d | <n>w | plain days
+ * @returns {Promise<object>} { period_days, conversations: [{ conversation_id,
+ *   title, total_tokens, total_cost, generation_count, message_count }] }
+ */
+export function getUsageByConversation(token, { period = '30d' } = {}) {
+  return apiFetch(`ai/usage/by-conversation/?period=${encodeURIComponent(period)}`, { token });
+}
+
+/**
  * Send a message in a conversation and get AI response.
  * @param {string} token - JWT access token
  * @param {string} conversationId - UUID

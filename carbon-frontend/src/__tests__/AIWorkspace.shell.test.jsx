@@ -22,6 +22,7 @@ vi.mock('../shell/AISuggestionRail', () => ({ default: () => null }));
 vi.mock('../shell/AIEmptyState', () => ({ default: () => null }));
 vi.mock('../shell/AIOfflineBanner', () => ({ default: () => null }));
 vi.mock('../shell/InvestigateTab', () => ({ default: () => <div data-testid="investigate-tab" /> }));
+vi.mock('../shell/AIUsageTab', () => ({ default: () => <div data-testid="usage-tab" /> }));
 
 vi.mock('../api/aiPulse', () => ({
   listDomainManifests: vi.fn().mockResolvedValue({ apps: [] }),
@@ -34,6 +35,8 @@ vi.mock('../api/aiWorkspace', () => ({
   deleteConversation: vi.fn(),
   sendMessage: vi.fn(),
   findOpenConversation: vi.fn(),
+  getUsageSummary: vi.fn(),
+  getUsageByConversation: vi.fn(),
 }));
 
 import { AIWorkspace } from '../shell/AIWorkspace';
@@ -116,6 +119,18 @@ describe('AIWorkspace Investigate mode tab (Phase 9-B)', () => {
     fireEvent.click(investigateButton);
 
     expect(await screen.findByTestId('investigate-tab')).toBeInTheDocument();
+  });
+});
+
+describe('AIWorkspace Usage tab (Phase 21-B)', () => {
+  it('renders the Usage panel when Usage is selected from the activity bar', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const usageButton = await screen.findByRole('button', { name: 'Usage' });
+    fireEvent.click(usageButton);
+
+    expect(await screen.findByTestId('usage-tab')).toBeInTheDocument();
+    expect(usageButton).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
