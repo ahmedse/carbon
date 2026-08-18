@@ -1,5 +1,11 @@
 # Carbon — Roadmap to Completion
-# Single source of truth for ALL outstanding work.
+
+> ⚠️ **HISTORICAL ARCHIVE — Sprint 1–12 execution log only.**
+> The single source of truth for active + planned work is now **`TASKS.md`**.
+> Do NOT add new work here. Platform Expansion Phases 1–4 + the Future backlog
+> have been folded into `TASKS.md` (see "PLATFORM EXPANSION TRACK" and "BACKLOG").
+> The platform spec lives in `docs/DESIGN-PLATFORM.md` §5–§8.
+
 # Updated: 2026-08-17 | Owner: Master Architect
 #
 # North star: a fully functioning Carbon where AI knows what the user is doing,

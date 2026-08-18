@@ -33,6 +33,7 @@ from rest_framework.views import APIView
 
 from accounts.ai_scoping import scope_ai_queryset
 from accounts.permissions import AdminOrSuperuserOnly
+from ai.models import ModelCatalog
 from ai.observability_api import _redact_secrets
 
 logger = logging.getLogger("carbon.ai.activation_api")
@@ -389,11 +390,37 @@ class PulseSettingsView(APIView):
 # ── Model catalog ─────────────────────────────────────────────────────────
 
 
+def _is_default_model(row: ModelCatalog, default_key: str) -> bool:
+    """True when *row* is the configured default chat model.
+
+    *default_key* is pre-normalized (lowercased, provider prefix stripped) by
+    the caller.  Matches against the stable ``model_id`` slug and the bare
+    model name at the tail of the server-side ``version`` (e.g.
+    ``anthropic/claude-haiku-4.5`` → ``claude-haiku-4.5``), so raw provider
+    routing never leaks into the response while the configured default still
+    resolves to a catalog row.
+    """
+    if not default_key:
+        return False
+    candidates = {row.model_id.lower(), row.version.rsplit("/", 1)[-1].lower()}
+    return default_key in candidates
+
+
 class AIModelsView(APIView):
     """GET models/ — chat-model catalog for the frontend model picker.
 
     Available to any authenticated user (the picker lives in the chat input
-    bar, not the admin console).  Response shape::
+    bar, not the admin console).
+
+    Phase 20-A: the catalog is now sourced from the ``ModelCatalog`` table
+    (single source of truth for cost, tier, version, and retirement). The
+    response is a backward-compatible superset of the legacy router shape —
+    the legacy keys (``id``/``label``/``description``/costs/``is_default``)
+    are preserved so the existing picker keeps working, while new keys
+    (``display_name``, ``tier``, ``version``, ``context_window``,
+    ``deprecated``, ``superseded_by``, ``capabilities``) are appended.
+
+    Response shape::
 
         {
             "models": [
@@ -404,6 +431,14 @@ class AIModelsView(APIView):
                     "input_cost_per_1m": float,
                     "output_cost_per_1m": float,
                     "is_default": bool,
+                    # ── Phase 20-A superset ──
+                    "display_name": str,
+                    "tier": "fast" | "balanced" | "brain",
+                    "version": str,
+                    "context_window": int,
+                    "deprecated": bool,
+                    "superseded_by": str | None,
+                    "capabilities": [str, ...],
                 },
                 ...
             ],
@@ -413,10 +448,42 @@ class AIModelsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from ai.engine.llm.router import list_chat_models
+        from ai.engine.llm.router import get_model_for_task
 
         try:
-            models = list_chat_models()
+            # Normalize: lowercase and strip any leading "provider/" prefix so a
+            # configured default like "anthropic/claude-haiku-4.5" resolves to the
+            # bare "claude-haiku-4.5" catalog slug.
+            default_key = (get_model_for_task("chat") or "").strip().lower().rsplit("/", 1)[-1]
+        except Exception:
+            logger.exception("Failed to resolve default chat model")
+            default_key = ""
+
+        models = []
+        try:
+            rows = ModelCatalog.objects.all()
+            for row in rows:
+                models.append(
+                    {
+                        # Legacy keys — picker compatibility.
+                        "id": row.model_id,
+                        "label": row.display_name,
+                        "description": row.description,
+                        "input_cost_per_1m": float(row.input_cost_per_1m),
+                        "output_cost_per_1m": float(row.output_cost_per_1m),
+                        "is_default": _is_default_model(row, default_key),
+                        # Phase 20-A superset.
+                        "display_name": row.display_name,
+                        "tier": row.tier,
+                        "version": row.version,
+                        "context_window": row.context_window,
+                        "deprecated": row.deprecated,
+                        "superseded_by": (
+                            row.superseded_by.model_id if row.superseded_by else None
+                        ),
+                        "capabilities": row.capabilities or [],
+                    }
+                )
         except Exception:
             logger.exception("Failed to build chat-model catalog")
             models = []

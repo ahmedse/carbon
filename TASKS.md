@@ -1,4 +1,26 @@
 
+# TASKS — Carbon Master Task List
+
+**This is the SINGLE SOURCE OF TRUTH for all outstanding work.** One worker task =
+one `## Phase N-X` entry = one Worker Role. No phase spans both backend and frontend.
+
+**Canonical docs (no forks):**
+| Doc | Role |
+|-----|------|
+| `TASKS.md` (this file) | **Active + planned work.** Workers read "Phase N" here. |
+| `docs/DESIGN-PLATFORM.md` | Platform Expansion spec (§5–8 = P1–P4). Pointer only — never duplicate its models/APIs here. |
+| `docs/DESIGN-ADAPTIVE-LEARNING-DQ-CORE.md` | Unratified proposal (Phase 24 pointer). |
+| `docs/DESIGN_AI_WORKSPACE_NEXTGEN.md` | Target architecture for the AI shell (reference). |
+| `ROADMAP.md` | **HISTORICAL ARCHIVE** — Sprint 1–12 log. Do not add new work here. |
+
+**Status legend:** `DONE` = verified + shipped · `READY` = spec complete, dispatchable · `PLANNED` = sequenced, spec pending · `PROPOSAL` = unratified, do not dispatch.
+
+**Dispatch a task:** `./.ai-toolkit/scripts/activate.sh <role>` → paste into worker chat (model per `project.config.md` WORKER_MODEL_POLICY).
+
+---
+
+## AI WORKSPACE TRACK
+
 ---
 
 ## Phase 7C — Entity-Scoped Entry Points
@@ -762,7 +784,7 @@ npx playwright test --config e2e/playwright.config.ts journey-10-ai-workspace   
 **Date:** 2026-08-18
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek-V3
-**Status:** READY (handoff)
+**Status:** DONE — `_user_profile_message` + `[User Profile]` system message + `profile_content` in context signature (commit `177d662`).
 **Kind:** Small, low-risk backend addition to prompt assembly. The `Scope` is already computed server-side on every AI call; this phase only *enriches the assembled prompt* with a compact user profile so the LLM can reason about the user. It does NOT change any security decision.
 
 ### Context (verified — trust, do not re-derive)
@@ -815,7 +837,7 @@ cd /home/ahmed/aast/carbon/backend
 **Date:** 2026-08-18
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek-V3
-**Status:** READY (handoff)
+**Status:** DONE — `resume` action + `resume_conversation` in `workspace_api.py` (commit `177d662`).
 **Kind:** Frontend-only, small. No backend changes. No new API. Reuses existing `listConversations`.
 
 ### Problem (verified)
@@ -867,7 +889,7 @@ npm test -- --run                                             # no regressions
 **Date:** 2026-08-18
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek-V3
-**Status:** READY
+**Status:** DONE — `route_chat` retry + `provider_unavailable` taxonomy (`test_llm_retry.py`; commit `177d662`).
 **Kind:** Backend-only. Small, high-value. No schema change. No new dependency.
 **Hard rule context:** `RULE_23` (no implementation leakage) — error copy is de-leaked in Phase 17-B, not here.
 
@@ -926,7 +948,7 @@ Append to `TASK-RESULTS.md` (Summary → Task results → Files Changed → Veri
 **Date:** 2026-08-18
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek-V3
-**Status:** READY (depends on Phase 17-A for `error_kind`)
+**Status:** DONE — `AIStatusBar.jsx` + de-leaked status copy (commit `177d662`).
 **Kind:** Frontend-only (+ 2 one-line backend copy edits). Small.
 **Hard rule context:** `RULE_23` / `base-rules §16` — all copy below must be outcome-flavored, never internals.
 
@@ -974,7 +996,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-18
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek-V3
-**Status:** READY (depends on Phase 17-A for the `model` override param)
+**Status:** DONE — `_CHAT_MODEL_CATALOG` + `model_override` column + `route_chat` override (commit `177d662`).
 **Kind:** Backend + API. Small-medium. Decision needed on persistence (see Notes).
 
 ### Problem
@@ -1024,7 +1046,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-18
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek-V3
-**Status:** READY (depends on Phase 18-A for endpoint + override)
+**Status:** DONE — `AIModelSelect.jsx` + `listModels` (commit `177d662`).
 **Kind:** Frontend-only. Small-medium.
 
 ### Problem
@@ -1153,131 +1175,169 @@ Append to `TASK-RESULTS.md`.
 
 ---
 
-## Phase 20 — Model catalog v2 (versions + cheaper/better tiers)
+## Phase 20-A — Model catalog v2: backend (versions + tiers + cost fidelity)
 
 **Date:** 2026-08-18
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek-V3
-**Status:** PLANNED
-**Kind:** Backend + light frontend. Small-medium.
+**Status:** DONE — `ModelCatalog` model (`catalog.py`) + migrations `0013`/`0014` (8 seeds) + `AIModelsView` now catalog-backed. Gate: 5/5 new tests, 398 ai total, check + makemigrations clean.
+**Kind:** Backend-only. Small-medium.
+**Depends on:** Phase 18-A (model catalog endpoint).
 
-### Problem
-Phase 18 shipped a selector but the catalog is a thin, likely hardcoded list
-with no tiering, versioning, or cost fidelity. Users can't see "this is the
-cheap/fast one vs the smart/expensive one", and there's no path to retire a
-model without breaking historical usage attribution.
+### Files to Read First
+- `backend/ai/models/workspace.py` — existing AI models + how `AIMessage` carries model id
+- `backend/ai/workspace_api.py` — the Phase 18-A `GET /ai/models/` action (extend, don't fork)
+- `backend/ai/engine/llm/router.py` — where a model id is resolved today (read-only reference)
+- `.ai-toolkit/shared/data-layer.md` + `config.md` — model/field + env conventions
 
-### Design decisions (deep)
-- **Data-driven catalog, not code.** Move the model list to a single source —
-  settings/env or a `ModelCatalog` table — keyed by stable `model_id`. The
-  endpoint returns id + display name + `tier` + cost + `context_window` +
-  `deprecated` + `capabilities`.
-- **Tiers are the product language, not provider names.** Three tiers:
-  `fast` (cheap: ~$0.15/$0.60 per 1M), `balanced` (default), `brain` (best:
-  ~$2.50+/$10+ per 1M). Map each tier to concrete provider model ids; never
-  expose raw provider routing to the UI (RULE_23).
-- **Versioning.** Add `version` + `superseded_by`. When a model is retired, mark
-  `deprecated=true` and point `superseded_by` at its replacement; keep the row so
-  historical `usage.model_id` still resolves for cost/attribution queries.
-- **Cost fidelity.** Cost must come from one place and be applied consistently to
-  `usage` rows (Phase 21 depends on it). Store per-model `input_cost_per_1m` +
-  `output_cost_per_1m`; never compute cost ad hoc in the router.
+### Files to Change
+- `backend/ai/models/workspace.py` (or a new `backend/ai/models/catalog.py`) — new `ModelCatalog` model + migration
+- `backend/ai/workspace_api.py` — extend the models endpoint response shape
+- `backend/ai/tests/test_model_catalog.py` (NEW) — catalog + endpoint tests
+
+### Context
+Phase 18 shipped a selector but the catalog is a thin list with no tiering,
+versioning, or cost fidelity. Users can't tell "cheap/fast vs smart/expensive",
+and there's no path to retire a model without breaking historical usage
+attribution. Phase 21 (usage/cost) depends on this single-source cost table.
 
 ### Implementation
-1. New `backend/ai/models.py` `ModelCatalog` (or a frozen settings list) with the
-   fields above; seed ~6–9 entries covering all three tiers (at least 2 cheap +
-   2 balanced + 2 brain) with correct cost + context window.
-2. Extend `GET /ai/models/` (Phase 18-A) to return `tier`, `context_window`,
-   `deprecated`, `superseded_by`, `capabilities`. Keep the existing id/name/
-   description/cost shape as a compatible superset (don't break the selector).
-3. Update `AIModelSelect.jsx` to group options by tier with a header
-   (`⚡ Fast`, `⚖ Balanced`, `🧠 Brain`) and hide deprecated models from the picker
-   (still return them in the API for attribution).
+1. New `ModelCatalog` model — fields: `model_id` (unique, stable slug),
+   `display_name`, `tier` (choices `fast|balanced|brain`), `version`,
+   `context_window`, `input_cost_per_1m` (Decimal), `output_cost_per_1m` (Decimal),
+   `deprecated` (bool), `superseded_by` (self FK nullable), `capabilities` (JSON).
+   Use `django.utils.timezone.now()` for any timestamps (project.config RULE).
+2. Data migration / seed: 6–9 rows covering all three tiers (≥2 `fast`, ≥2
+   `balanced`, ≥2 `brain`) with correct per-1M cost + context window. Map tiers
+   to concrete provider ids server-side; never expose raw routing (RULE_23).
+3. Extend the Phase 18-A models endpoint to return `tier`, `context_window`,
+   `deprecated`, `superseded_by`, `capabilities`, and both cost fields — as a
+   compatible superset (keep the existing id/name/description/cost shape so the
+   current selector does not break). Deprecated rows still returned (attribution).
 
 ### DO NOT TOUCH
-- Provider routing internals in `engine/llm/router.py` beyond reading catalog
-  cost — routing stays provider-side.
+- Provider routing internals in `engine/llm/router.py` — routing stays provider-side; only read cost from the catalog.
+- Frontend files — `AIModelSelect.jsx` tier grouping is Phase 20-B.
 
 ### Verification Gate
 ```bash
 cd /home/ahmed/aast/carbon/backend
-/home/ahmed/aast/carbon/.venv/bin/python manage.py check
-/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q
-# curl the models endpoint and assert: 3 tiers present, no deprecated in picker
-cd /home/ahmed/aast/carbon/carbon-frontend
-npm run lint && npm run build && npm test -- --run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check                 # → "no issues"
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run  # → "No changes detected"
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q                 # → all green (393+ baseline)
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_model_catalog.py -q  # → new tests pass
+# curl GET /carbon-api/ai/models/ and assert: 3 tiers present; deprecated rows still returned
 ```
 
 ### Output contract
 Append to `TASK-RESULTS.md`.
 
 ### Notes for the Master
-- This is prerequisite work for Phase 21: you cannot show accurate cost without a
-  versioned, single-source cost table. Do 20 before 21.
+- Cost must come from ONE place and be applied consistently to usage rows (Phase
+  21). Never compute cost ad hoc in the router.
 
 ---
 
-## Phase 21 — Usage & cost surface (dedicated activity-bar tab)
+## Phase 20-B — Model catalog v2: frontend (tier grouping in selector)
 
 **Date:** 2026-08-18
-**Worker Role:** backend-worker (21-A), frontend-worker (21-B)
+**Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek-V3
 **Status:** PLANNED
-**Kind:** Backend + frontend. Medium.
+**Kind:** Frontend-only. Small.
+**Depends on:** Phase 20-A (endpoint returns `tier`/`deprecated`).
 
-### Recommendation (resolved)
-**Dedicated activity-bar tab at the right of the AI shell — NOT an icon popup.**
-Rationale: usage/cost/quota needs a *readable* surface (per-conversation
-breakdown, time series, quota progress bar, alerts), which an icon popover cannot
-hold. It also matches the NEXTGEN §8.3 "fixed mode tabs, never dynamic" rule and
-stays keyboard-accessible. A tiny sparkline icon in the StatusBar may *deep-link*
-into the tab, but the tab is the source of truth.
+### Files to Read First
+- `carbon-frontend/src/shell/AIModelSelect.jsx` — current selector
+- `carbon-frontend/src/api/aiWorkspace.js` — `listModels`
+- `.ai-toolkit/shared/design-system.md` — tokens only, no raw hex
 
-### Problem
-Users (and admins) cannot see how much they've used, what it cost, or how close
-they are to a quota. There is token accounting in the pipeline but no aggregation
-endpoint or UI, and no per-user quota/limit model to surface.
+### Files to Change
+- `carbon-frontend/src/shell/AIModelSelect.jsx` — group by tier
+- `carbon-frontend/src/__tests__/AIModelSelect.test.jsx` — extend for grouping + deprecated filtering
+
+### Implementation
+1. Group options by `tier` with headers: `⚡ Fast`, `⚖ Balanced`, `🧠 Brain`.
+2. Hide `deprecated=true` models from the picker (endpoint still returns them).
+3. Show cost hint from the catalog cost fields (product metadata, not internals).
+4. Theme tokens only — no raw hex/px (RULE_8).
+
+### DO NOT TOUCH
+- Backend files.
+- E2E `aria-label`s.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/AIModelSelect.test.jsx   # → passes
+npm run build
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- Prerequisite for Phase 21 (usage/cost). 20-A must land before this.
+
+---
+
+## Phase 21-A — Usage & cost: backend (aggregation + quota)
+
+**Date:** 2026-08-18
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek-V3
+**Status:** PLANNED
+**Kind:** Backend-only. Medium.
+**Depends on:** Phase 20-A (single-source cost table).
+
+### Files to Read First
+- `backend/ai/models/workspace.py` — where `AIMessage`/generation live; add usage fields
+- `backend/ai/engine/llm/router.py` — where generation completes (write usage here)
+- `backend/ai/models/workspace.py` `AIUserProfile` (Phase 15) — add quota fields
+- `backend/ai/workspace_api.py` — add usage viewsets here
+- `.ai-toolkit/shared/api-contract.md` + `data-layer.md`
+
+### Files to Change
+- `backend/ai/models/workspace.py` — usage + quota fields + migration
+- `backend/ai/engine/llm/router.py` (or the completion hook) — persist usage/cost at completion
+- `backend/ai/usage_service.py` (NEW) — aggregation service
+- `backend/ai/workspace_api.py` — two usage endpoints
+- `backend/ai/tests/test_usage.py` (NEW)
+
+### Context
+Users and admins cannot see usage, cost, or quota. Token accounting exists in the
+pipeline but is never persisted or aggregated, and there is no per-user limit
+model. Cost must read the Phase 20-A catalog (never recomputed ad hoc).
 
 ### Design decisions (deep)
-- **Usage is a first-class `AIMessage`/`AIGeneration` attribute.** Persist
-  `prompt_tokens`, `completion_tokens`, `total_tokens`, `model_id`, `cost` (derived
-  from Phase 20 cost table at write time) on each generation. Write it once at
-  generation completion; never recompute from prompt text later.
-- **Quota is a budget, not a hard kill switch (v1).** Per-user monthly token
-  budget with a soft warning threshold (e.g. 80%) and a hard limit. Hard limit
-  *can* block new generations but must show a clear "quota reached" state with
-  the reset date — never fail silently (ties to Phase 17 error taxonomy).
-- **Two endpoints, one source.** `GET /ai/usage/summary?period=30d` →
+- **Usage is a first-class generation attribute.** Persist `prompt_tokens`,
+  `completion_tokens`, `total_tokens`, `model_id`, `cost` on each generation.
+  Write once at completion; never recompute from prompt text later.
+- **Quota is a budget, not a kill switch (v1).** Per-user monthly token budget,
+  soft warning at 80%, hard limit with a clear "quota reached" + reset date.
+- **Two endpoints, one source:** `GET /ai/usage/summary?period=30d` →
   `{total_tokens, total_cost, by_tier, by_model, remaining, limit, reset_at}`;
   `GET /ai/usage/by-conversation?period=30d` → per-conversation tokens/cost.
 
-### 21-A Backend
-1. Add usage fields to the generation/message model (migration).
-2. Write usage + cost at generation completion (read cost from Phase 20 catalog).
-3. Add `AIUsage` aggregation service + the two endpoints above (DRF viewsets).
-4. Add `AIUserProfile` quota fields (`monthly_token_limit`, `reset_at`, or a
-   monthly-period rule) + a request-time check that attaches a `quota` error code
-   when exceeded.
-
-### 21-B Frontend
-1. New right activity-bar tab **"Usage"** in `AIWorkspace.jsx` (fixed mode tab,
-   id-based, keyboard navigable).
-2. `AIUsageTab.jsx`: quota progress bar (remaining vs limit + reset date),
-   current-period tokens/cost, tier/model breakdown, per-conversation table.
-3. StatusBar sparkline/icon deep-links into the tab (optional, nice-to-have).
+### Implementation
+1. Add usage fields to the generation/message model + migration.
+2. Persist usage + cost at generation completion (read cost from Phase 20-A catalog).
+3. Add `AIUsage` aggregation service + the two endpoints (DRF viewsets, CBAC-scoped).
+4. Add `AIUserProfile` quota fields (`monthly_token_limit`, reset rule) + a
+   request-time check that attaches a `quota` error code when exceeded.
 
 ### DO NOT TOUCH
 - The streaming path — usage write happens at completion, not mid-stream.
-- RULE_23: never show raw provider base_url/keys; only aggregate numbers.
+- Frontend files (Phase 21-B).
 
 ### Verification Gate
 ```bash
 cd /home/ahmed/aast/carbon/backend
-/home/ahmed/aast/carbon/.venv/bin/python manage.py check
-/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q
-/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
-cd /home/ahmed/aast/carbon/carbon-frontend
-npm run lint && npm run build && npm test -- --run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check                 # → "no issues"
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run  # → "No changes detected"
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q                 # → all green
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_usage.py -q        # → new tests pass
 ```
 
 ### Output contract
@@ -1286,19 +1346,87 @@ Append to `TASK-RESULTS.md`.
 ### Notes for the Master
 - Do NOT ship usage without quota surfacing in the same phase — a cost meter with
   no limit is a "surprise bill" generator. Always show remaining + reset.
-- Phase 20 cost table is a hard prerequisite.
+- RULE_23: endpoints return aggregate numbers only, never provider base_url/keys.
 
 ---
 
-## Phase 22 — User preferences (profile configs)
+## Phase 21-B — Usage & cost: frontend (dedicated activity-bar tab)
 
 **Date:** 2026-08-18
-**Worker Role:** backend-worker (22-A), frontend-worker (22-B)
+**Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek-V3
 **Status:** PLANNED
-**Kind:** Backend + frontend. Small-medium.
+**Kind:** Frontend-only. Medium.
+**Depends on:** Phase 21-A (endpoints).
 
-### Problem
+### Recommendation (resolved)
+**Dedicated activity-bar tab at the right of the AI shell — NOT an icon popup.**
+A popover cannot hold per-conversation breakdown + time series + quota progress +
+alerts. Matches NEXTGEN §8.3 "fixed mode tabs, never dynamic" and stays
+keyboard-accessible. A StatusBar sparkline may deep-link into the tab.
+
+### Files to Read First
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — where the right activity bar lives
+- `carbon-frontend/src/shell/StatusBar.jsx` — optional sparkline deep-link
+- `carbon-frontend/src/api/aiWorkspace.js` — add usage fetch helpers
+- `.ai-toolkit/shared/design-system.md`
+
+### Files to Change
+- `carbon-frontend/src/api/aiWorkspace.js` — `getUsageSummary`, `getUsageByConversation`
+- `carbon-frontend/src/shell/AIUsageTab.jsx` (NEW) — the tab
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — register the fixed "Usage" tab
+- `carbon-frontend/src/__tests__/AIUsageTab.test.jsx` (NEW)
+
+### Implementation
+1. New right activity-bar tab **"Usage"** (fixed mode, id-based, keyboard navigable).
+2. `AIUsageTab.jsx`: quota progress bar (remaining vs limit + reset date),
+   current-period tokens/cost, tier/model breakdown, per-conversation table.
+3. Optional StatusBar sparkline/icon deep-links into the tab.
+4. Theme tokens only (RULE_8); copy describes outcomes, not internals (RULE_23).
+
+### DO NOT TOUCH
+- Backend files.
+- The streaming UI path.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/AIUsageTab.test.jsx   # → passes
+npm run build
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- 21-A must land first. Always render remaining + reset date, never a bare cost number.
+
+---
+
+## Phase 22-A — User preferences: backend (profile config fields + wiring)
+
+**Date:** 2026-08-18
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek-V3
+**Status:** PLANNED
+**Kind:** Backend-only. Small-medium.
+**Depends on:** Phase 15 (AIUserProfile), Phase 20-A (catalog FK target).
+
+### Files to Read First
+- `backend/ai/models/workspace.py` — existing `AIUserProfile` (Phase 15)
+- `backend/ai/context_assembler.py` — where defaults/overrides resolve
+- `backend/ai/engine/llm/router.py` — model resolution (default_model_id)
+- `backend/ai/workspace_api.py` — profile endpoint location
+- `.ai-toolkit/shared/data-layer.md` + `api-contract.md`
+
+### Files to Change
+- `backend/ai/models/workspace.py` — add preference fields + migration
+- `backend/ai/workspace_api.py` — `GET/PATCH /ai/profile/`
+- `backend/ai/context_assembler.py` (or the creation path) — resolution wiring
+- `backend/ai/tests/test_profile_prefs.py` (NEW)
+
+### Context
 Every user gets the same defaults: default model, temperature, auto-titling,
 memory on/off, usage-alert threshold. There is no per-user config surface, so
 preferences can't persist across sessions.
@@ -1309,13 +1437,10 @@ preferences can't persist across sessions.
   (bounded 0.0–2.0), `auto_title` (bool), `memory_enabled` (bool),
   `usage_alert_threshold` (int percent, default 80).
 - **Resolution order** (low→high): system default → domain manifest →
-  user profile → per-message override. `context_assembler` and the router already
-  take an override; insert the profile read at the right layer so per-message
-  still wins.
-- **Settings surface lives in the same right activity bar** as Usage (Phase 21)
-  as a sibling fixed tab "Settings" — one consistent place for "me + my AI".
+  user profile → per-message override. Insert the profile read at the right
+  layer so per-message still wins.
 
-### 22-A Backend
+### Implementation
 1. Migration: add preference fields to `AIUserProfile`.
 2. `PATCH /ai/profile/` (upsert) + `GET /ai/profile/` returning resolved
    effective defaults (so the UI can render current values including inherited
@@ -1324,23 +1449,18 @@ preferences can't persist across sessions.
    resolution; `auto_title` into conversation titling; `memory_enabled` into
    memory write gating.
 
-### 22-B Frontend
-1. `AISettingsTab.jsx` (right activity bar): model default, temperature slider,
-   auto-title toggle, memory toggle, usage-alert threshold.
-2. Load via `GET /ai/profile/`, save via `PATCH`, optimistic UI.
-
 ### DO NOT TOUCH
 - Phase 15 profile *injection* logic (`_user_profile_message`) — this adds
   fields, not a new injection path.
+- Frontend files (Phase 22-B).
 
 ### Verification Gate
 ```bash
 cd /home/ahmed/aast/carbon/backend
-/home/ahmed/aast/carbon/.venv/bin/python manage.py check
-/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q
-/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
-cd /home/ahmed/aast/carbon/carbon-frontend
-npm run lint && npm run build && npm test -- --run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check                 # → "no issues"
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run  # → "No changes detected"
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q                 # → all green
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_profile_prefs.py -q  # → new tests pass
 ```
 
 ### Output contract
@@ -1352,68 +1472,164 @@ Append to `TASK-RESULTS.md`.
 
 ---
 
-## Phase 23 — Memory, learnt facts & the Pulse↔user relationship
+## Phase 22-B — User preferences: frontend (Settings tab)
 
 **Date:** 2026-08-18
-**Worker Role:** backend-worker (23-A), frontend-worker (23-B)
+**Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek-V3
 **Status:** PLANNED
-**Kind:** Backend + frontend. Medium-large. **Do last.**
+**Kind:** Frontend-only. Small.
+**Depends on:** Phase 22-A (GET/PATCH /ai/profile/).
 
-### Problem
-The AI already writes to a KG/memory tier (learnt facts, preferences, trust
-signals) but the user has no visibility into what the AI "knows" about them, and
-no way to correct or forget it. This is both a trust feature and a GDPR
-right-to-erasure requirement.
+### Files to Read First
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — right activity bar tab registration
+- `carbon-frontend/src/shell/AIUsageTab.jsx` — sibling fixed-tab pattern (Phase 21-B)
+- `carbon-frontend/src/api/aiWorkspace.js` — add profile helpers
+- `.ai-toolkit/shared/design-system.md`
 
-### Design decisions (deep)
-- **Three fixed tabs, one relationship model** (sibling to Usage/Settings in the
-  right bar):
-  1. **Memory** — raw memory entries (episodic) with timestamps + source.
-  2. **Learnt** — distilled facts/preferences (semantic KG nodes) with confidence.
-  3. **You & AI** — the *relationship* summary: how many interactions, dominant
-     topics, inferred preferences, trust score, and "why I think this".
-- **Every fact is inspectable + forgettable.** Each learnt fact exposes its
-  provenance (which conversation/turn produced it) and a **Forget** action that
-  removes it from the KG (and, where derivable, its episodic source). No
-  black-box "trust score" — always show the contributing signals.
-- **Relationship is computed, not stored.** Derive the summary on read from
-  memory + usage + profile; don't persist a second copy (single source of truth).
-- **Privacy-first.** Forget = hard delete of the fact node + cascade to derived
-  facts, audited. Respect `memory_enabled=false` from Phase 22 by gating writes.
+### Files to Change
+- `carbon-frontend/src/api/aiWorkspace.js` — `getProfile`, `patchProfile`
+- `carbon-frontend/src/shell/AISettingsTab.jsx` (NEW)
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — register "Settings" fixed tab
+- `carbon-frontend/src/__tests__/AISettingsTab.test.jsx` (NEW)
 
-### 23-A Backend
-1. `GET /ai/memory/facts` (learnt facts + confidence + provenance),
-   `GET /ai/memory/episodes` (raw memory), `GET /ai/memory/relationship`.
-2. `DELETE /ai/memory/facts/{id}` (forget, with audit trail).
-3. Audit log on every forget (who/when/what) — legal requirement.
-
-### 23-B Frontend
-1. `AIMemoryTab.jsx`, `AILearntTab.jsx`, `AIRelationshipTab.jsx` (right bar,
-   fixed mode).
-2. Forget action per fact with confirm; relationship tab renders signals →
-   summary (topics, preferences, trust) with an empty state when no data yet.
+### Implementation
+1. `AISettingsTab.jsx` (right activity bar): model default, temperature slider,
+   auto-title toggle, memory toggle, usage-alert threshold.
+2. Load via `GET /ai/profile/`, save via `PATCH`, optimistic UI.
+3. Fixed-mode, id-based, keyboard-navigable tab (NEXTGEN §8.3). Theme tokens only (RULE_8).
 
 ### DO NOT TOUCH
-- The KG/memory write path internals — this phase is read + forget only.
+- Backend files.
+- The Usage tab (Phase 21-B) — sibling, not replacement.
 
 ### Verification Gate
 ```bash
-cd /home/ahmed/aast/carbon/backend
-/home/ahmed/aast/carbon/.venv/bin/python manage.py check
-/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q
-/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
 cd /home/ahmed/aast/carbon/carbon-frontend
-npm run lint && npm run build && npm test -- --run
+npm run lint
+npx vitest run src/__tests__/AISettingsTab.test.jsx   # → passes
+npm run build
 ```
 
 ### Output contract
 Append to `TASK-RESULTS.md`.
 
 ### Notes for the Master
-- Ship this last. It depends on 19 (delete/forget), 20 (cost/model attribution),
-  21 (usage → relationship signals), and 22 (memory_enabled gate).
-- The relationship tab is the product's "empathy surface" — done wrong it reads
+- 22-A first. Settings lives beside Usage in the right bar — one "me + my AI" place.
+
+---
+
+## Phase 23-A — Memory & learnt facts: backend (read + forget + relationship)
+
+**Date:** 2026-08-18
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek-V3
+**Status:** PLANNED
+**Kind:** Backend-only. Medium-large. **Do last.**
+**Depends on:** Phase 19 (delete/forget), Phase 20-A (cost/model attribution), Phase 21-A (usage → relationship signals), Phase 22-A (memory_enabled gate).
+
+### Files to Read First
+- `backend/ai/engine/memory/` + `backend/ai/engine/knowledge_graph/` — where facts/episodes live
+- `backend/ai/workspace_api.py` — where memory endpoints live
+- `backend/ai/intelligence.py` — memory write gating (`memory_enabled`)
+- `.ai-toolkit/shared/api-contract.md` + `data-layer.md`
+
+### Files to Change
+- `backend/ai/memory_api.py` (NEW) — facts/episodes/relationship endpoints
+- `backend/ai/workspace_api.py` (or urls) — register routes
+- `backend/ai/tests/test_memory_api.py` (NEW)
+
+### Context
+The AI writes to a KG/memory tier (learnt facts, preferences, trust signals) but
+the user has no visibility into what the AI "knows" about them, and no way to
+correct or forget it. Both a trust feature and a GDPR right-to-erasure requirement.
+
+### Design decisions (deep)
+- **Three views, one relationship model:** Memory (episodic entries) · Learnt
+  (distilled facts/KG nodes + confidence) · You & AI (relationship summary).
+- **Every fact is inspectable + forgettable.** Each learnt fact exposes its
+  provenance (which conversation/turn produced it) and a **Forget** action that
+  removes it from the KG (and, where derivable, its episodic source).
+- **Relationship is computed, not stored.** Derive the summary on read from
+  memory + usage + profile; don't persist a second copy.
+- **Privacy-first.** Forget = hard delete of the fact node + cascade to derived
+  facts, audited. Respect `memory_enabled=false` (Phase 22) by gating writes.
+
+### Implementation
+1. `GET /ai/memory/facts` (learnt facts + confidence + provenance),
+   `GET /ai/memory/episodes` (raw memory), `GET /ai/memory/relationship`.
+2. `DELETE /ai/memory/facts/{id}` (forget, with audit trail).
+3. Audit log on every forget (who/when/what) — legal requirement.
+
+### DO NOT TOUCH
+- The KG/memory write path internals — this phase is read + forget only.
+- Frontend files (Phase 23-B).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check                 # → "no issues"
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run  # → "No changes detected"
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q                 # → all green
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_memory_api.py -q   # → new tests pass
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- Forget must hard-delete + cascade + audit — soft-delete leaves a GDPR hole.
+- 23-A must land before 23-B (endpoints first).
+
+---
+
+## Phase 23-B — Memory & learnt facts: frontend (three fixed tabs)
+
+**Date:** 2026-08-18
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek-V3
+**Status:** PLANNED
+**Kind:** Frontend-only. Medium-large. **Do last.**
+**Depends on:** Phase 23-A (endpoints).
+
+### Files to Read First
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — right bar tab registration
+- `carbon-frontend/src/shell/AIUsageTab.jsx` + `AISettingsTab.jsx` — sibling tab patterns
+- `carbon-frontend/src/api/aiWorkspace.js` — add memory helpers
+- `.ai-toolkit/shared/design-system.md`
+
+### Files to Change
+- `carbon-frontend/src/api/aiWorkspace.js` — `listFacts`, `listEpisodes`, `getRelationship`, `forgetFact`
+- `carbon-frontend/src/shell/AIMemoryTab.jsx` (NEW)
+- `carbon-frontend/src/shell/AILearntTab.jsx` (NEW)
+- `carbon-frontend/src/shell/AIRelationshipTab.jsx` (NEW)
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — register three fixed tabs
+- `carbon-frontend/src/__tests__/AIMemoryTabs.test.jsx` (NEW)
+
+### Implementation
+1. `AIMemoryTab.jsx`, `AILearntTab.jsx`, `AIRelationshipTab.jsx` (right bar,
+   fixed mode, id-based, keyboard navigable).
+2. Forget action per fact with confirm; relationship tab renders signals →
+   summary (topics, preferences, trust) with an empty state when no data yet.
+3. Theme tokens only (RULE_8).
+
+### DO NOT TOUCH
+- Backend files.
+- Pair every relationship claim with a "why" and a "forget" affordance (trust/UX).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/AIMemoryTabs.test.jsx   # → passes
+npm run build
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- Ship last. The relationship tab is the "empathy surface" — done wrong it reads
   as creepy. Always pair every claim with a "why" and a "forget" affordance.
 
 ---
@@ -1445,3 +1661,231 @@ Phase 24+ entries with full `Files to Read/Change`, `Implementation`, and
 verification gates, and hand out backend-worker activation prompts. Until then,
 this pointer is the single source of truth so the two plans cannot silently
 diverge.
+
+---
+
+## PLATFORM EXPANSION TRACK
+
+Strict build order: **P1 → P2 → P4** (P3 may run in parallel with P2). Full
+model, API, and pipeline detail lives in `docs/DESIGN-PLATFORM.md` §5–§8 — do not
+duplicate it here; these entries are dispatch contracts that point at the spec.
+
+---
+
+### Phase P1 — Dataset Hub (`datahub/`)
+
+**Status:** Not started
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek-V3
+**Spec:** `docs/DESIGN-PLATFORM.md` §5
+**Kind:** New Django app. Large.
+
+### Files to Read First
+- `docs/DESIGN-PLATFORM.md` §5 (full models/API/pipeline spec)
+- `backend/dq/jobs.py` — DQ integration seam (reuse, do not duplicate)
+- `backend/catalog/` + `backend/mdm/` — existing table/data-row conventions
+- `.ai-toolkit/shared/data-layer.md`, `api-contract.md`, `cbac.md`
+
+### Files to Change
+- `backend/datahub/models.py`, `backend/datahub/views.py`, `backend/datahub/serializers.py`, `backend/datahub/ingest.py`, `backend/datahub/urls.py`
+- `backend/config/settings.py` + `urls.py` — register the app
+- `backend/datahub/tests/` (≥20 tests)
+
+### Implementation (summary — read §5 for the contract)
+1. Models `Dataset`, `DatasetVersion`, `DataContract`, `DataContractViolation`, `DatasetAccessPolicy`.
+2. API `/api/v1/datahub/` (datasets CRUD, versions, approve/reject, contract, violations, ingest erp/upload) gated by `HasCBACCapability`.
+3. Ingest service (`ingest.py`): ERP/CSV → DataTable+DataRows, schema_snapshot, health_score, contract checks.
+4. Health score = 0.4·completeness + 0.4·validity + 0.2·freshness.
+5. DQ via existing `dq/jobs.py` (no duplicate DQ logic).
+
+### DO NOT TOUCH
+- `backend/dq/` job internals — call them, don't fork.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest datahub -q   # ≥20 tests: create, version lifecycle, 3 contract-violation types, CBAC module isolation, access-policy override, ERP + CSV ingest
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- A Dataset is the unit of trust: no data flows to a model/app without an approved `DatasetVersion` + passing DQ run.
+
+---
+
+### Phase P2 — TurnKey Bridge (`integrations/turnkey/`)
+
+**Status:** Not started
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek-V3
+**Spec:** `docs/DESIGN-PLATFORM.md` §6
+**Kind:** New integration app. Medium. (DevOps touches settings/keys at the end.)
+
+### Files to Read First
+- `docs/DESIGN-PLATFORM.md` §6
+- Gigacast's `aihub/turnkey_client.py` (reference implementation — in sibling project)
+- `.ai-toolkit/shared/api-contract.md`, `security.md` (Fernet + HMAC)
+
+### Files to Change
+- `backend/integrations/turnkey/models.py`, `client.py`, `views.py`, `urls.py`
+- `backend/config/settings.py` — `FERNET_KEY` + `TURNKEY_CALLBACK_SECRET`
+- `backend/integrations/turnkey/tests/` (≥6 tests)
+
+### Implementation (summary — read §6 for the contract)
+1. Models `TurnKeyConfig` (Fernet-encrypted API key), `TurnKeyModelLink`, `PredictionRecord`, `DriftAlert`.
+2. `CarbonTurnKeyClient` (based on Gigacast `turnkey_client.py`).
+3. Signed (HMAC-SHA256) callback endpoints: predictions + drift-alerts.
+4. Settings `FERNET_KEY` + `TURNKEY_CALLBACK_SECRET` (env, never hardcoded).
+
+### DO NOT TOUCH
+- TurnKey's own serving code — this is a client/bridge only.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest integrations -q   # ≥6: signature 401, prediction record, drift→DQ+violation, key encrypted at rest, feedback loop, CBAC view
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- HMAC secret + Fernet key MUST be env-provided (project.config RULE); never commit real values.
+
+---
+
+### Phase P3 — App Registry (`appregistry/`)
+
+**Status:** Not started
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek-V3
+**Spec:** `docs/DESIGN-PLATFORM.md` §7
+**Kind:** New Django app. Small-medium. **May run in parallel with P2.**
+
+### Files to Read First
+- `docs/DESIGN-PLATFORM.md` §7
+- `backend/accounts/ai_scoping.py` — GuardChain `Scope` injection point
+- `.ai-toolkit/shared/cbac.md`
+
+### Files to Change
+- `backend/appregistry/models.py`, `views.py`, `urls.py`, management command
+- `backend/accounts/ai_scoping.py` — inject `active_apps` into Scope
+- `backend/appregistry/tests/` (≥5 tests)
+
+### Implementation (summary — read §7 for the contract)
+1. Models `AppManifest` + `AppActivation`.
+2. API `/api/v1/apps/` (list/detail/activate/deactivate; non-system apps only).
+3. Self-registration management command (e.g. `register_healthy_app`).
+4. GuardChain integration: inject `active_apps` into Scope (`accounts/ai_scoping.py`).
+
+### DO NOT TOUCH
+- CBAC enforcement boundaries in `accounts/` — add a source, don't weaken the rail (ADR-0007).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest appregistry -q   # ≥5 tests
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- The control plane for domain apps: declares apps, required modules/capabilities, activation state.
+
+---
+
+### Phase P4-A — Healthy Domain App: backend (`healthy/`)
+
+**Status:** Not started
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek-V3
+**Spec:** `docs/DESIGN-PLATFORM.md` §8
+**Kind:** New Django app. Large.
+**Depends on:** P1 (dataset hub), P3 (app registry).
+
+### Files to Read First
+- `docs/DESIGN-PLATFORM.md` §8
+- `backend/datahub/` (P1) + `backend/appregistry/` (P3) — the seams Healthy uses
+- `backend/ai/protocol.py` + `ai/domain/` — `DomainAIOperations` ABC pattern
+- `.ai-toolkit/shared/data-layer.md`, `cbac.md`
+
+### Files to Change
+- `backend/healthy/models.py` (`ERPSnapshot`, `LoadoutSheet`, `RepHealthCard`), read-only `DataSource` to Azure PostgreSQL, 5 modules (healthy-sales/returns/inventory/collections/production, CBAC via ScopedRole), 5 pipelines, `domain_ai.py` (`HealthyDomainAI`), `views.py`, `urls.py`
+- `backend/healthy/tests/` (≥10 tests)
+
+### Implementation (summary — read §8 for the contract)
+1. Read-only `DataSource` to Azure PostgreSQL (legacy Arabic ERP, 1,047 decoded views).
+2. Modules + 5 pipelines: returns/load-out forecast, churn/rep retention, demand forecast (dead-stock), AR collections prioritization, transaction-type classifier.
+3. `HealthyDomainAI` via the `DomainAIOperations` ABC; API `/api/v1/healthy/`.
+
+### DO NOT TOUCH
+- Azure PostgreSQL source is **read-only** — no writes to the ERP.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest healthy -q   # ≥10 tests
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- P4-A before P4-B. ERP stays read-only; writes only to Carbon models.
+
+---
+
+### Phase P4-B — Healthy Domain App: frontend
+
+**Status:** Not started
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek-V3
+**Spec:** `docs/DESIGN-PLATFORM.md` §11
+**Kind:** Frontend-only. Medium-large.
+**Depends on:** P4-A (endpoints).
+
+### Files to Read First
+- `docs/DESIGN-PLATFORM.md` §8 + §11
+- `carbon-frontend/src/` — existing DataGrid/table + dashboard patterns
+- `.ai-toolkit/shared/design-system.md`
+
+### Files to Change
+- `carbon-frontend/src/` healthy screens: loadout, rep health, AR queue, slow movers, dashboard
+- API helpers + tests
+
+### Implementation
+1. Screens: loadout sheet, rep health cards, AR collections queue, slow movers, dashboard.
+2. Theme tokens only (RULE_8); route + sidebar entries.
+
+### DO NOT TOUCH
+- Backend files.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run   # healthy-screen tests pass
+npm run build
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- P4-A first. Healthy is the end-to-end proof: dataset → DQ review → approve → TurnKeyModelLink → prediction → drift → violation.
+
+---
+
+## BACKLOG (unsequenced)
+
+| Item | Worker | Notes |
+|---|---|---|
+| DQ rule contradiction detection | backend-worker | Detect two *different* rules on the same field that can't both pass (disjoint `range`/`allowed_values` intervals); warn on redundant overlap (duplicate `not_null`, `unique`+`not_null`); emit a composite "conflict" verdict at runtime for semantically-undecidable overlaps (e.g. `nl_check` vs `regex`). Semantic layer on top of the existing rule-type ↔ field-type applicability check. |
+| Production v1.3 tag + deploy | devops-worker | After final QA gate. Tag + deploy per `docs/DEPLOYMENT_PLAN_AASTMT_CARBON.md`. |
