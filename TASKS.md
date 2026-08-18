@@ -1243,7 +1243,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-18
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek-V3
-**Status:** PLANNED
+**Status:** DONE — `AIModelSelect.jsx` tier grouping (⚡/⚖/🧠 via `TIER_ORDER.flatMap`), deprecated hidden, cost hint (`formatContextWindow`). Gate: 8/8 vitest, lint clean, build ✓.
 **Kind:** Frontend-only. Small.
 **Depends on:** Phase 20-A (endpoint returns `tier`/`deprecated`).
 

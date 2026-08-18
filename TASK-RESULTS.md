@@ -605,3 +605,63 @@ GATE PASSED
 ### Issues Found
 - **Stale per-worker test DBs** (`test_carbon_dev_gw0..7`) — with `--reuse-db --nomigrations -n auto`, pytest-django keeps a per-worker test database. After a schema change these become stale and produce spurious `column "parent_id" does not exist` failures under xdist (while the serial `-n 0` run passes). Fixed by dropping all `test_carbon_dev*` databases so they recreate from models. **Note for future migrations:** after any model change, drop the per-worker test DBs or run with `--create-db`.
 - **Migration `0012` not yet applied to the dev DB** — apply via `./manage.sh migrate` (or the deploy step) before running the dev server against `carbon_dev`.
+
+---
+
+## [2026-08-18] Frontend Worker — Phase 20-B: Model Catalog v2 (tier grouping in selector)
+
+### Summary
+All frontend gates passed. 2 files changed (1 modified, 1 modified with 4 new tests). The chat-model picker in the AI Workspace footer now groups options by tier (⚡ Fast / ⚖ Balanced / 🧠 Brain), hides deprecated models from the picker (the endpoint still returns them; they remain visible in catalog/attribution surfaces elsewhere), and shows a cost + context-window hint read from the Phase 20-A catalog fields. Existing picker behavior (persist/restore via `localStorage`, default fallback, notify-on-change) is unchanged and covered by the 4 original tests, all still green.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Group `AIModelSelect` options by tier (⚡ Fast / ⚖ Balanced / 🧠 Brain) | ✅ | `TIER_ORDER` + `TIER_META` maps; `ListSubheader` headers with theme tokens only; order Fast → Balanced → Brain |
+| 2 | Hide deprecated models from the picker | ✅ | `activeModels = models.filter((m) => !m.deprecated)` drives resolution + render; stored deprecated id resolves back to the active default |
+| 3 | Show cost hint from catalog fields | ✅ | `$x.xx in · $y.yy out / 1M tokens · NNNK context` row from `input_cost_per_1m` / `output_cost_per_1m` / `context_window` |
+| 4 | Don't break the existing picker | ✅ | 4 original tests still pass; `role="option"` semantics restored (see Issues Found) |
+| 5 | Regression tests | ✅ | 4 new tests in `AIModelSelect.test.jsx`; suite 8/8 green |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `carbon-frontend/src/shell/AIModelSelect.jsx` | `TIER_ORDER`/`TIER_META` tier buckets; `activeModels` deprecated filter (resolution + render); `ListSubheader` tier headers; cost/context hint row via `formatCost` + new `formatContextWindow`; flat-array grouped children |
+| MODIFY | `carbon-frontend/src/__tests__/AIModelSelect.test.jsx` | fixture upgraded to Phase 20-A superset shape (tier/deprecated/superseded_by/context_window); +4 tests: groups by tier with header order, hides deprecated, resolves stored deprecated id → active default, shows context-window hint |
+
+### Verification Output
+```
+$ npx vitest run src/__tests__/AIModelSelect.test.jsx
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+
+$ npm run lint
+(no output — exit 0)
+
+$ npm run build
+✓ built in 14.33s        # chunk-size warning pre-existing/benign
+
+$ grep -rn "\bitem\b.*xs=\|<Grid item\b" src/ --include="*.jsx"   # MUI v6 Grid check
+(no output — exit 1)
+
+$ ./.ai-toolkit/scripts/verify.sh frontend
+✓ lint
+✓ build
+✓ route audit clean: 72 referenced path(s) resolve, 16 namespace root(s) covered
+✓ route/URL audit
+GATE PASSED
+
+$ npm test -- --run
+ Test Files  4 failed | 28 passed (32)
+      Tests  12 failed | 478 passed (490)   # exactly the pre-existing drift (unchanged)
+```
+
+### Deviations
+- **Explicit `role="option"` not needed — flat-array children instead.** MUI Select clones every child with `role="option"`, but wrapping grouped children in `<Fragment>` swallowed that clone (`React.Children.toArray` does not unwrap fragments), leaving MenuItems at MUI's default `role="menuitem"` and breaking the Phase 18 test's `findByRole('option')`. Fix: emit a flat array from `TIER_ORDER.flatMap(...)` (the documented MUI grouped-select pattern) so every MenuItem receives the `role="option"` clone. Test selectors unchanged — component ARIA semantics restored rather than weakening the test.
+- **Tier labels are user-facing buckets** (`Fast`/`Balanced`/`Brain`) per RULE_23 — no provider internals in the UI.
+- **No backend/E2E changes** — frontend-worker scope only; Phase 20-A endpoint consumed as-is.
+
+### Issues Found
+- **Pre-existing (out-of-scope) test drift from the Sprint-18 UI rewrite** — unchanged 12 failures across the same 4 unrelated suites (`AIMessageBubble.transparency.test.jsx` (1), `AIMessageBubble.feedback.test.jsx` (5), `AIArtifacts.test.jsx` (2), `AISharedThreads.test.jsx` (4)). Not touched by Phase 20-B; left for a dedicated test-refresh task.
+- **Flaky full-suite timeout**: `enterprise.test.jsx > Shell > renders without crashing` times out at 15s only under full-suite load; passes 17/17 in isolation. Not caused by Phase 20-B (Shell is untouched).
+- **Pre-existing raw font sizes in `AIModelSelect.jsx`** (`0.7rem`, `18px !important`) ship from Phase 18 and predate this phase; kept consistent rather than churned (Phase 20-B additions use theme tokens + `rem`).
+- **Uncommitted working tree (still unresolved):** interleaved uncommitted changes from prior phases remain. **No commit was made** — awaiting direction on commit/push scope.

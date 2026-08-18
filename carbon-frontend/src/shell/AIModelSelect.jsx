@@ -1,20 +1,43 @@
 // src/shell/AIModelSelect.jsx
 // Phase 18 — chat-model picker for the AI Workspace footer.
-// Fetches the provider's selectable models, shows a short description and
-// per-1M-token pricing for each, and persists the choice in localStorage.
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+// Phase 20-B — catalog v2: options grouped by tier (⚡ Fast / ⚖ Balanced /
+// 🧠 Brain), deprecated models hidden from the picker (endpoint still returns
+// them for attribution), cost + context hint read from the catalog fields.
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, CircularProgress, MenuItem, Select, Tooltip, Typography } from '@mui/material';
+import {
+  Box,
+  CircularProgress,
+  ListSubheader,
+  MenuItem,
+  Select,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { useAuth } from '../auth/AuthContext';
 import { listModels } from '../api/aiWorkspace';
 
 export const AI_MODEL_STORAGE_KEY = 'ai.selectedModel';
 
+// Tier order + header labels (user-facing buckets — never provider internals).
+const TIER_ORDER = ['fast', 'balanced', 'brain'];
+const TIER_META = {
+  fast: { icon: '⚡', label: 'Fast' },
+  balanced: { icon: '⚖', label: 'Balanced' },
+  brain: { icon: '🧠', label: 'Brain' },
+};
+
 function formatCost(v) {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) return '—';
   return `$${n.toFixed(2)}`;
+}
+
+function formatContextWindow(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `${Math.round(n / 1000)}K context`;
 }
 
 function AIModelSelect({ onChange }) {
@@ -54,6 +77,10 @@ function AIModelSelect({ onChange }) {
     };
   }, [token]);
 
+  // Deprecated models stay in the endpoint response (attribution) but are not
+  // selectable — exclude them from every resolution path below.
+  const activeModels = useMemo(() => models.filter((m) => !m.deprecated), [models]);
+
   const commit = useCallback((next) => {
     if (!next) return;
     setValue(next);
@@ -69,13 +96,15 @@ function AIModelSelect({ onChange }) {
   }, []);
 
   // Resolve the initial selection: a stale/empty stored id falls back to the
-  // catalog default (or first model), then notifies the parent once.
+  // catalog default (or first active model), then notifies the parent once.
   useEffect(() => {
-    if (!models.length) return;
-    const valid = models.some((m) => m.id === value);
-    const next = valid ? value : (models.find((m) => m.is_default) || models[0])?.id;
+    if (!activeModels.length) return;
+    const valid = activeModels.some((m) => m.id === value);
+    const next = valid
+      ? value
+      : (activeModels.find((m) => m.is_default) || activeModels[0])?.id;
     commit(next);
-  }, [models, value, commit]);
+  }, [activeModels, value, commit]);
 
   const handleChange = useCallback(
     (event) => commit(event.target.value),
@@ -93,7 +122,7 @@ function AIModelSelect({ onChange }) {
     );
   }
 
-  if (!models.length) return null;
+  if (!activeModels.length) return null;
 
   return (
     <Tooltip title="Choose AI model">
@@ -110,7 +139,7 @@ function AIModelSelect({ onChange }) {
             variant="caption"
             sx={{ fontSize: '0.7rem', color: 'text.secondary', whiteSpace: 'nowrap' }}
           >
-            {models.find((m) => m.id === selectedId)?.label || selectedId}
+            {activeModels.find((m) => m.id === selectedId)?.label || selectedId}
           </Typography>
         )}
         sx={{
@@ -125,24 +154,57 @@ function AIModelSelect({ onChange }) {
           },
         }}
       >
-        {models.map((m) => (
-          <MenuItem
-            key={m.id}
-            value={m.id}
-            sx={{ flexDirection: 'column', alignItems: 'flex-start', py: 0.75 }}
-          >
-            <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
-              {m.label}
-              {m.is_default ? ' · default' : ''}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
-              {m.description}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
-              {formatCost(m.input_cost_per_1m)} in · {formatCost(m.output_cost_per_1m)} out / 1M tokens
-            </Typography>
-          </MenuItem>
-        ))}
+        {/* Flat array (no Fragment wrappers) — MUI Select clones every child
+            with role="option"; Fragments would swallow that clone. */}
+        {TIER_ORDER.flatMap((tierKey) => {
+          const tier = TIER_META[tierKey];
+          const group = activeModels.filter((m) => (m.tier || 'balanced') === tierKey);
+          if (!group.length) return [];
+          return [
+            <ListSubheader
+              key={`tier-${tierKey}`}
+              disableSticky
+              sx={{
+                bgcolor: 'transparent',
+                color: 'text.secondary',
+                lineHeight: 1.8,
+                py: 0.5,
+                fontSize: '0.68rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {tier.icon} {tier.label}
+            </ListSubheader>,
+            ...group.map((m) => {
+              const costHint = [
+                `${formatCost(m.input_cost_per_1m)} in · ${formatCost(m.output_cost_per_1m)} out / 1M tokens`,
+                formatContextWindow(m.context_window),
+              ]
+                .filter(Boolean)
+                .join(' · ');
+              return (
+                <MenuItem
+                  key={m.id}
+                  value={m.id}
+                  sx={{ flexDirection: 'column', alignItems: 'flex-start', py: 0.75 }}
+                >
+                  <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
+                    {m.label}
+                    {m.is_default ? ' · default' : ''}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+                    {m.description}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+                    {costHint}
+                  </Typography>
+                </MenuItem>
+              );
+            }),
+          ];
+        })}
       </Select>
     </Tooltip>
   );
