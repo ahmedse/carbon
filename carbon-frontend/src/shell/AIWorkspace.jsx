@@ -17,6 +17,8 @@ import {
   DialogContentText,
   DialogTitle,
   IconButton,
+  Tab,
+  Tabs,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -24,13 +26,11 @@ import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DataUsageIcon from '@mui/icons-material/DataUsage';
-import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlined';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
-import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
-import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import ManageSearchIcon from '@mui/icons-material/ManageSearch';
+import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
@@ -62,6 +62,9 @@ import { ExecuteModeProvider } from './ExecuteModeContext';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
 
+// RULE_17: grouped Memory surface persists its internal tab selection.
+const MEMORY_TAB_KEY = 'carbon-ai-memory-tab';
+
 export function AIWorkspace({ onClose }) {
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
@@ -79,7 +82,18 @@ export function AIWorkspace({ onClose }) {
     }
   });
   const [query] = useState('');
-  const [activePanel, setActivePanel] = useState('sessions');
+  // Sessions drawer starts collapsed (VS Code Copilot-style) — the user opens
+  // it via the Sessions activity-bar icon when needed.
+  const [activePanel, setActivePanel] = useState(null);
+  // Grouped Memory surface: episodes (memory) / facts (learnt) / relationship
+  // are one domain — one activity icon, internal MUI Tabs (RULE_17).
+  const [memoryTab, setMemoryTab] = useState(() => {
+    try {
+      return localStorage.getItem(MEMORY_TAB_KEY) || 'episodes';
+    } catch {
+      return 'episodes';
+    }
+  });
   const [drawerWidth, setDrawerWidth] = useState(200);
   const dragRef = useRef(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -169,6 +183,15 @@ export function AIWorkspace({ onClose }) {
       /* ignore */
     }
   }, [activeId]);
+
+  // Persist the grouped Memory tab (RULE_17).
+  useEffect(() => {
+    try {
+      localStorage.setItem(MEMORY_TAB_KEY, memoryTab);
+    } catch {
+      /* ignore */
+    }
+  }, [memoryTab]);
 
   // Visible ids after archived-filter + client-side title search.
   const visibleIds = useMemo(() => {
@@ -487,15 +510,39 @@ export function AIWorkspace({ onClose }) {
           ) : activePanel === 'settings' ? (
             <AISettingsTab />
           ) : activePanel === 'memory' ? (
-            <AIMemoryTab />
-          ) : activePanel === 'learnt' ? (
-            <AILearntTab />
-          ) : activePanel === 'relationship' ? (
-            <AIRelationshipTab
-              onShowFacts={() => setActivePanel('learnt')}
-              onShowEpisodes={() => setActivePanel('memory')}
-              onShowUsage={() => setActivePanel('usage')}
-            />
+            /* Grouped Memory surface: episodes / facts / relationship are one
+               domain — internal MUI Tabs (RULE_17), like Copilot's grouped views. */
+            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+              <Box sx={{ px: 1, pt: 0.5, borderBottom: 1, borderColor: 'divider' }}>
+                <Tabs
+                  value={memoryTab}
+                  onChange={(e, v) => setMemoryTab(v)}
+                  variant="fullWidth"
+                  aria-label="Memory views"
+                  sx={{
+                    minHeight: 34,
+                    '& .MuiTab-root': { minHeight: 34, fontSize: '0.6875rem', py: 0.5 },
+                  }}
+                >
+                  <Tab value="episodes" label="Episodes" />
+                  <Tab value="facts" label="Facts" />
+                  <Tab value="relationship" label="Relationship" />
+                </Tabs>
+              </Box>
+              <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                {memoryTab === 'episodes' ? (
+                  <AIMemoryTab />
+                ) : memoryTab === 'facts' ? (
+                  <AILearntTab />
+                ) : (
+                  <AIRelationshipTab
+                    onShowFacts={() => setMemoryTab('facts')}
+                    onShowEpisodes={() => setMemoryTab('episodes')}
+                    onShowUsage={() => setActivePanel('usage')}
+                  />
+                )}
+              </Box>
+            </Box>
           ) : activePanel === 'investigate' ? (
             <InvestigateTab conversations={investigateConversations} onSelect={handleOpenInvestigation} onNew={handleNewInvestigation} />
           ) : activePanel === 'artifacts' ? (
@@ -598,10 +645,8 @@ export function AIWorkspace({ onClose }) {
             { id: 'investigate',  icon: <ManageSearchIcon sx={{ fontSize: 16 }} />,               label: 'Investigate'  },
             { id: 'artifacts',    icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />,         label: 'Artifacts'    },
             { id: 'usage',        icon: <DataUsageIcon sx={{ fontSize: 16 }} />,                  label: 'Usage'        },
+            { id: 'memory',       icon: <PsychologyOutlinedIcon sx={{ fontSize: 16 }} />,         label: 'Memory'       },
             { id: 'settings',     icon: <SettingsOutlinedIcon sx={{ fontSize: 16 }} />,           label: 'Settings'     },
-            { id: 'memory',       icon: <HistoryOutlinedIcon sx={{ fontSize: 16 }} />,            label: 'Memory'       },
-            { id: 'learnt',       icon: <LightbulbOutlinedIcon sx={{ fontSize: 16 }} />,          label: 'Learnt'       },
-            { id: 'relationship', icon: <FavoriteBorderOutlinedIcon sx={{ fontSize: 16 }} />,     label: 'Relationship' },
           ].map(({ id, icon, label }) => (
             <Tooltip key={id} title={label} placement="left">
               <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: activePanel === id ? 'primary.main' : 'transparent' }}>

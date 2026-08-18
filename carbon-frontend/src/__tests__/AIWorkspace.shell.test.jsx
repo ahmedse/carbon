@@ -24,6 +24,9 @@ vi.mock('../shell/AIOfflineBanner', () => ({ default: () => null }));
 vi.mock('../shell/InvestigateTab', () => ({ default: () => <div data-testid="investigate-tab" /> }));
 vi.mock('../shell/AIUsageTab', () => ({ default: () => <div data-testid="usage-tab" /> }));
 vi.mock('../shell/AISettingsTab', () => ({ default: () => <div data-testid="settings-tab" /> }));
+vi.mock('../shell/AIMemoryTab', () => ({ default: () => <div data-testid="memory-episodes-tab" /> }));
+vi.mock('../shell/AILearntTab', () => ({ default: () => <div data-testid="memory-facts-tab" /> }));
+vi.mock('../shell/AIRelationshipTab', () => ({ default: () => <div data-testid="memory-relationship-tab" /> }));
 
 vi.mock('../api/aiPulse', () => ({
   listDomainManifests: vi.fn().mockResolvedValue({ apps: [] }),
@@ -41,6 +44,10 @@ vi.mock('../api/aiWorkspace', () => ({
   getProfile: vi.fn(),
   patchProfile: vi.fn(),
   listModels: vi.fn(),
+  listFacts: vi.fn(),
+  listEpisodes: vi.fn(),
+  getRelationship: vi.fn(),
+  forgetFact: vi.fn(),
 }));
 
 import { AIWorkspace } from '../shell/AIWorkspace';
@@ -99,6 +106,10 @@ describe('AIWorkspace durable archive on close (G1)', () => {
   it('calls updateConversation with is_archived:true when a session is archived', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);
 
+    // Sessions drawer is collapsed by default — open it via the activity bar.
+    const sessionsButton = await screen.findByRole('button', { name: 'Sessions' });
+    fireEvent.click(sessionsButton);
+
     const menuButton = await screen.findByRole('button', {
       name: 'Session options for Alpha',
     });
@@ -112,6 +123,50 @@ describe('AIWorkspace durable archive on close (G1)', () => {
         is_archived: true,
       });
     });
+  });
+});
+
+describe('AIWorkspace sessions drawer starts collapsed (Phase 23-C)', () => {
+  it('does not render the sessions panel until the Sessions icon is clicked', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    expect(screen.queryByRole('listbox', { name: 'Conversation sessions' })).not.toBeInTheDocument();
+
+    const sessionsButton = await screen.findByRole('button', { name: 'Sessions' });
+    fireEvent.click(sessionsButton);
+
+    expect(await screen.findByRole('listbox', { name: 'Conversation sessions' })).toBeInTheDocument();
+  });
+});
+
+describe('AIWorkspace grouped Memory panel (Phase 23-C)', () => {
+  it('groups Episodes/Facts/Relationship under one Memory icon with internal tabs', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const memoryButton = await screen.findByRole('button', { name: 'Memory' });
+    fireEvent.click(memoryButton);
+
+    // Default tab is Episodes (memory).
+    expect(await screen.findByTestId('memory-episodes-tab')).toBeInTheDocument();
+    expect(memoryButton).toHaveAttribute('aria-pressed', 'true');
+
+    // Internal MUI Tabs switch between the three surfaces (RULE_17).
+    fireEvent.click(screen.getByRole('tab', { name: 'Facts' }));
+    expect(await screen.findByTestId('memory-facts-tab')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Relationship' }));
+    expect(await screen.findByTestId('memory-relationship-tab')).toBeInTheDocument();
+  });
+
+  it('persists the selected memory tab to localStorage (RULE_17)', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const memoryButton = await screen.findByRole('button', { name: 'Memory' });
+    fireEvent.click(memoryButton);
+    fireEvent.click(screen.getByRole('tab', { name: 'Facts' }));
+    expect(await screen.findByTestId('memory-facts-tab')).toBeInTheDocument();
+
+    expect(localStorage.getItem('carbon-ai-memory-tab')).toBe('facts');
   });
 });
 
@@ -167,7 +222,10 @@ describe('AIWorkspace new-chat resume (Phase 16)', () => {
       expect(createConversation).not.toHaveBeenCalled();
     });
 
-    // The resumed thread (conv-2) becomes the active session.
+    // Open the sessions drawer to surface the resumed thread as the active tab.
+    const sessionsButton = await screen.findByRole('button', { name: 'Sessions' });
+    fireEvent.click(sessionsButton);
+
     await waitFor(() => {
       expect(screen.getByRole('option', { name: /Beta/ })).toHaveAttribute(
         'aria-selected',

@@ -77,6 +77,12 @@ function AIInputBar({
   const { token } = useAuth();
   const { executeMode } = useExecuteMode();
   const inputRef = useRef(null);
+  const rootRef = useRef(null);
+  // VS Code Copilot-style growth: the composer expands up to ~55% of the
+  // available pane height (row ≈ 20px), then scrolls internally instead of
+  // clipping. Measured from the parent (fixed-height flex column), so there
+  // is no feedback loop between growth and measurement.
+  const [maxRows, setMaxRows] = useState(10);
   const [value, setValue] = useState('');
   // Stage: null | 'kind' | 'entity'
   const [stage, setStage] = useState(null);
@@ -97,6 +103,25 @@ function AIInputBar({
   useEffect(() => {
     onMentionsChange?.(resolvedMentions);
   }, [resolvedMentions, onMentionsChange]);
+
+  // Grow-to-fit: watch the parent height and derive the max textarea rows.
+  useEffect(() => {
+    const el = rootRef.current?.parentElement;
+    if (!el) return undefined;
+    const compute = () => {
+      const h = el.clientHeight || 600;
+      const rows = Math.max(6, Math.min(18, Math.round((h * 0.55) / 20)));
+      setMaxRows(rows);
+    };
+    compute();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', compute);
+      return () => window.removeEventListener('resize', compute);
+    }
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Fetch entities when the entity query changes (debounced via useEffect cleanup).
   useEffect(() => {
@@ -230,6 +255,7 @@ function AIInputBar({
 
   return (
     <Box
+      ref={rootRef}
       sx={{
         borderTop: 1,
         borderLeft: executeMode ? 1 : 0,
@@ -325,7 +351,7 @@ function AIInputBar({
           fullWidth
           multiline
           minRows={1}
-          maxRows={8}
+          maxRows={maxRows}
           size="small"
           value={value}
           onChange={handleChange}
@@ -335,6 +361,10 @@ function AIInputBar({
             '& .MuiOutlinedInput-root': {
               fontSize: '0.8125rem',
               bgcolor: 'action.hover',
+            },
+            // Scroll within the composer once it reaches maxRows (Copilot-style)
+            '& .MuiOutlinedInput-input': {
+              overflowY: 'auto',
             },
           }}
           inputProps={{ 'aria-label': 'Message input' }}
