@@ -1415,3 +1415,33 @@ Append to `TASK-RESULTS.md`.
   21 (usage → relationship signals), and 22 (memory_enabled gate).
 - The relationship tab is the product's "empathy surface" — done wrong it reads
   as creepy. Always pair every claim with a "why" and a "forget" affordance.
+
+---
+
+## Phase 24 — Adaptive Learning DQ Core (PROPOSAL — pending owner ratification)
+
+**Status:** ⚠️ PROPOSAL, NOT RATIFIED. This is a pointer, not active work. Do
+not dispatch a worker until the owner ratifies (or reorders/rejects) it. The
+proposal's own phase sequence lives in `docs/DESIGN-ADAPTIVE-LEARNING-DQ-CORE.md`
+and is owned by the other Master session — keep the two from forking by *not*
+copying its G–K phase details here.
+
+**Proposal sequence (for reference only):** Phase A (deterministic substrate +
+eval harness) → Phase B (KG + memory substrate) → emissions (first Category B
+domain op) → **admin/ops cluster G–K** (G domain registration, H access/CBAC
+assistance, I lineage & impact, J governance & policy, K MDM & data product) →
+remaining domains (mdm, data product) via the same `DomainAIOperations` ABC.
+
+**Hard constraints (non-negotiable, already in the proposal §6):**
+- Admin surfaces are **suggest/draft only** — never auto-mutate grants, users,
+  groups, policies, or master records (`requires_confirmation`, RULE_21).
+- **CBAC stays a correctness rail** — making it a coworker *surface* never
+  weakens the request/context/write enforcement boundaries (ADR-0007).
+- No new Django apps (ADR-0008); no learning inside the engine (RULE_6).
+
+**On ratification:** the owner's verdict ("ratify / reorder / reject") triggers
+the real phase split — then I fold the ratified subset into this file as proper
+Phase 24+ entries with full `Files to Read/Change`, `Implementation`, and
+verification gates, and hand out backend-worker activation prompts. Until then,
+this pointer is the single source of truth so the two plans cannot silently
+diverge.
