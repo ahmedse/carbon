@@ -148,7 +148,7 @@ describe('AIMessageBubble nl_rule_test rendering', () => {
           ],
         },
       },
-      { onTestLive: vi.fn(), canManageRules: true },
+      { onTestLive: vi.fn(), canManageRules: true, executeMode: true },
     );
 
     expect(screen.getByRole('button', { name: 'Test live' })).toBeInTheDocument();

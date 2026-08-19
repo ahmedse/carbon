@@ -64,7 +64,10 @@ class TurnPipelineRunner:
             try:
                 from ai.engine.agent.tools import get_tool_definitions
 
-                allow = {"create_dq_rule", "search_knowledge", "get_entity_details"}
+                allow = {
+                    "create_dq_rule", "search_knowledge", "get_entity_details",
+                    "list_my_capabilities",
+                }
                 self._draft_tools = [
                     d for d in get_tool_definitions()
                     if d.get("function", {}).get("name") in allow
@@ -421,7 +424,10 @@ class TurnPipelineRunner:
                 "a confirmation execution. Nothing is written until the user "
                 "confirms. Tell the user a confirmation button appeared; do "
                 "NOT say the rule was created.\n"
-                "- If a tool errors, report the error plainly."
+                "- If a tool errors, report the error plainly.\n"
+                "- When the user asks what you can do, use the capability-list "
+                "tool so the app can attach the matching page links as small "
+                "buttons under your reply."
             )
         draft = await draft_witness.draft(
             instance_id=instance_id,

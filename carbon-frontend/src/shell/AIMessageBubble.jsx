@@ -1,5 +1,5 @@
 // src/shell/AIMessageBubble.jsx
-import React, { Suspense, lazy, useCallback, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Divider,
   IconButton,
   Menu,
   MenuItem,
@@ -22,15 +23,30 @@ import {
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import EditIcon from '@mui/icons-material/Edit';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import ThumbDownAltIcon from '@mui/icons-material/ThumbDownAlt';
 import ThumbDownAltOutlinedIcon from '@mui/icons-material/ThumbDownAltOutlined';
+import ThumbUpAltIcon from '@mui/icons-material/ThumbUpAlt';
 import ThumbUpAltOutlinedIcon from '@mui/icons-material/ThumbUpAltOutlined';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
 import { formatContextLines } from '../utils/aiProvenance';
 import { isSafeInternalRoute } from '../utils/navigation';
+import {
+  cleanPlainText,
+  collectMediaItems,
+  copyRich,
+  downloadBlob,
+  downloadMediaItem,
+  downloadZip,
+  handleRichCopyEvent,
+  slugify,
+} from '../utils/exportUtils';
+import { buildMessageDocx, buildMessageHtml } from '../utils/exportDocuments';
 import MarkdownMessage from './MarkdownMessage';
+import LongContent from './LongContent';
 import NLRuleTestCard from './NLRuleTestCard';
 import InvestigationCard from './InvestigationCard';
 import ReportDraftCard from './ReportDraftCard';
@@ -59,13 +75,6 @@ const META_SX = {
   gap: 0.5,
   mb: 0.5,
   opacity: 0.7,
-};
-
-const OUTCOME_LABELS = {
-  accepted: 'Accepted',
-  rejected: 'Rejected',
-  corrected: 'Corrected',
-  ignored: 'Ignored',
 };
 
 function normalizeMetadata(message) {
@@ -206,10 +215,16 @@ function AIMessageBubble({
   onDelete,
   onConfirmExecution,
   onDeclineExecution,
+  onNotify,
 }) {
   const [showActions, setShowActions] = useState(false);
   const [copied, setCopied] = useState(false);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState(null);
+  const [exportSubAnchor, setExportSubAnchor] = useState(null);
+  const [mediaMenuAnchor, setMediaMenuAnchor] = useState(null);
+  const [mediaItems, setMediaItems] = useState([]);
+  const [hasMedia, setHasMedia] = useState(false);
+  const [savingImage, setSavingImage] = useState(false);
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [correctionText, setCorrectionText] = useState('');
   const [editOpen, setEditOpen] = useState(false);
@@ -221,13 +236,133 @@ function AIMessageBubble({
   const [editJson, setEditJson] = useState('');
   const [editJsonError, setEditJsonError] = useState('');
 
-  const handleCopyMessage = useCallback(() => {
-    navigator.clipboard.writeText(message.content);
+  const contentRef = useRef(null);
+  const isUser = message.role === 'user';
+  const isDeleted = !!message.is_deleted;
+
+  // ── Rich copy / export (Phase 4C) ─────────────────────────────────────────
+
+  /** Copy the whole message with formatting (dual-MIME: rich + plain). */
+  const handleCopyWithFormatting = useCallback(async () => {
+    const node = contentRef.current;
+    if (node) {
+      try {
+        await copyRich(node, { plainText: cleanPlainText(message.content) });
+      } catch {
+        await navigator.clipboard.writeText(message.content);
+      }
+    } else {
+      await navigator.clipboard.writeText(message.content);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [message.content]);
-  const isUser = message.role === 'user';
-  const isDeleted = !!message.is_deleted;
+
+  /** Plain-text copy of the rendered message (existing behavior). */
+  const handleCopyPlain = useCallback(async () => {
+    const text = cleanPlainText(contentRef.current?.textContent || message.content);
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [message.content]);
+
+  /** Copy the raw markdown source. */
+  const handleCopyMarkdown = useCallback(async () => {
+    await navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [message.content]);
+
+  /** Track whether the message renders any diagrams/figures (mutation-aware). */
+  useEffect(() => {
+    const node = contentRef.current;
+    if (!node || isUser) return undefined;
+    const update = () => setHasMedia(collectMediaItems(node).length > 0);
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(node, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [isUser, message.content]);
+
+  const handleOpenMediaMenu = useCallback((event) => {
+    setMediaItems(collectMediaItems(contentRef.current));
+    setMediaMenuAnchor(event.currentTarget);
+  }, []);
+
+  const handleSaveMedia = useCallback(
+    async (item, format) => {
+      setMediaMenuAnchor(null);
+      setSavingImage(true);
+      try {
+        await downloadMediaItem(item, format);
+        onNotify?.({ message: `Saved ${item.label} as ${format.toUpperCase()}`, type: 'success' });
+      } catch {
+        onNotify?.({ message: `Could not save ${item.label}`, type: 'error' });
+      } finally {
+        setSavingImage(false);
+      }
+    },
+    [onNotify],
+  );
+
+  const handleSaveAllMedia = useCallback(async () => {
+    setMediaMenuAnchor(null);
+    if (mediaItems.length === 1) {
+      await handleSaveMedia(mediaItems[0], 'png');
+      return;
+    }
+    setSavingImage(true);
+    try {
+      await downloadZip(mediaItems, 'images.zip');
+      onNotify?.({ message: `Saved ${mediaItems.length} images`, type: 'success' });
+    } catch {
+      onNotify?.({ message: 'Could not save images', type: 'error' });
+    } finally {
+      setSavingImage(false);
+    }
+  }, [mediaItems, handleSaveMedia, onNotify]);
+
+  /** Native Ctrl+C on a selection inside the message → rich HTML + plain text. */
+  const handleContainerCopy = useCallback((event) => {
+    const handled = handleRichCopyEvent(event, { contentNode: contentRef.current });
+    if (!handled) {
+      event.preventDefault();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, []);
+
+  /** Phase 4C-B — export this message as Markdown / self-contained HTML / .docx. */
+  const handleExportMessage = useCallback(
+    async (format) => {
+      setExportSubAnchor(null);
+      setMoreMenuAnchor(null);
+      const stamp = (message.created_at || new Date().toISOString()).slice(0, 10);
+      const stem = `${stamp}-${message.role}-message`;
+      try {
+        if (format === 'markdown') {
+          const blob = new Blob([message.content], { type: 'text/markdown;charset=utf-8' });
+          downloadBlob(blob, `${slugify(stem)}.md`);
+        } else if (format === 'html') {
+          const html = await buildMessageHtml(message.content, {
+            title: 'AI Message',
+            meta: `${message.role} · ${message.created_at || ''}`,
+          });
+          downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${slugify(stem)}.html`);
+        } else {
+          const blob = await buildMessageDocx(message.content, {
+            title: 'AI Message',
+            meta: message.created_at || '',
+          });
+          downloadBlob(blob, `${slugify(stem)}.docx`);
+        }
+        onNotify?.({ message: `Exported as ${format.toUpperCase()}`, type: 'success' });
+      } catch {
+        onNotify?.({ message: 'Could not export message', type: 'error' });
+      }
+    },
+    [message.content, message.created_at, message.role, onNotify],
+  );
 
   // Soft-deleted turns render as a dimmed placeholder — no content, no actions.
   if (isDeleted) {
@@ -284,9 +419,12 @@ function AIMessageBubble({
 
   const bubbleSx = isUser ? USER_BUBBLE_SX : AI_BUBBLE_SX;
 
-  const outcomeLabel = OUTCOME_LABELS[message.outcome] || message.outcome;
-  const outcomeColor =
-    message.outcome === 'accepted' ? 'success' : message.outcome === 'rejected' ? 'error' : 'default';
+  // When feedback is given, the clicked thumb gets a light color: green up
+  // for accepted, red down for rejected. No text, no extra row.
+  const outcomeTint =
+    message.outcome === 'accepted' ? 'rgba(46, 125, 50, 0.10)' : message.outcome === 'rejected' ? 'rgba(211, 47, 47, 0.10)' : undefined;
+  const outcomeFg =
+    message.outcome === 'accepted' ? 'success.main' : message.outcome === 'rejected' ? 'error.main' : undefined;
   const showFeedback =
     !isUser && (message.outcome || onAccept || onReject || onCorrect || onPromote || onRetry || onDelete);
 
@@ -318,7 +456,7 @@ function AIMessageBubble({
                     )}
                   </Box>
                   <Stack direction="row" spacing={0.5}>
-                    {canManageRules ? (
+                    {canManageRules && executeMode ? (
                       <>
                         {onTestLive && (
                           <Button
@@ -346,6 +484,10 @@ function AIMessageBubble({
                           Reject
                         </Button>
                       </>
+                    ) : canManageRules ? (
+                      <Typography variant="caption" color="text.disabled">
+                        Agent mode is OFF — switch to Agent to apply these suggestions
+                      </Typography>
                     ) : (
                       <Typography variant="caption" color="text.disabled">
                         Requires DQ manage permission
@@ -508,11 +650,21 @@ function AIMessageBubble({
   //   * pending_actions  → staged tool executions (e.g. create_dq_rule proposal)
   //                        awaiting explicit user confirmation
   // These are deterministic (never LLM prose), so a button only renders when a
-  // tool actually produced it.
-  const navigateAction = metadata.action || null;
+  // tool actually produced it. Capability listings may carry several navigate
+  // actions at once (metadata.actions); legacy messages carry a single
+  // metadata.action.
+  const rawActions =
+    Array.isArray(metadata.actions) && metadata.actions.length > 0
+      ? metadata.actions
+      : metadata.action
+        ? [metadata.action]
+        : [];
+  const navigateActions = rawActions.filter(
+    (a) => a?.type === 'navigate' && isSafeInternalRoute(a.route),
+  );
   const pendingActions = Array.isArray(metadata.pending_actions) ? metadata.pending_actions : [];
   const showActionRow = Boolean(
-    !isUser && (navigateAction?.type === 'navigate' || pendingActions.length > 0),
+    !isUser && (navigateActions.length > 0 || pendingActions.length > 0),
   );
 
   // ── Pending-action proposal review ────────────────────────────────────
@@ -597,36 +749,44 @@ function AIMessageBubble({
           <Paper key={executionId} variant="outlined" sx={{ p: 1.25 }}>
             <Stack spacing={1}>
               <Stack direction="row" flexWrap="wrap" gap={0.5}>
-                <Button
-                  size="small"
-                  color="success"
-                  variant="outlined"
-                  disabled={!onConfirmExecution}
-                  onClick={() => onConfirmExecution?.(executionId, pending)}
-                  aria-label={`Confirm and create ${proposedName}`}
-                >
-                  Confirm &amp; create
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<EditIcon sx={{ fontSize: 16 }} />}
-                  disabled={!onConfirmExecution}
-                  onClick={() => openEditAction(pending)}
-                  aria-label={`Edit and confirm ${proposedName}`}
-                >
-                  Edit &amp; confirm
-                </Button>
-                <Button
-                  size="small"
-                  color="error"
-                  variant="outlined"
-                  disabled={!onDeclineExecution}
-                  onClick={() => onDeclineExecution?.(executionId, pending)}
-                  aria-label={`Decline ${proposedName}`}
-                >
-                  Decline
-                </Button>
+                {executeMode ? (
+                  <>
+                    <Button
+                      size="small"
+                      color="success"
+                      variant="outlined"
+                      disabled={!onConfirmExecution}
+                      onClick={() => onConfirmExecution?.(executionId, pending)}
+                      aria-label={`Confirm and create ${proposedName}`}
+                    >
+                      Confirm &amp; create
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<EditIcon sx={{ fontSize: 16 }} />}
+                      disabled={!onConfirmExecution}
+                      onClick={() => openEditAction(pending)}
+                      aria-label={`Edit and confirm ${proposedName}`}
+                    >
+                      Edit &amp; confirm
+                    </Button>
+                    <Button
+                      size="small"
+                      color="error"
+                      variant="outlined"
+                      disabled={!onDeclineExecution}
+                      onClick={() => onDeclineExecution?.(executionId, pending)}
+                      aria-label={`Decline ${proposedName}`}
+                    >
+                      Decline
+                    </Button>
+                  </>
+                ) : (
+                  <Typography variant="caption" color="text.disabled" sx={{ alignSelf: 'center' }}>
+                    Agent mode is OFF — switch to Agent to confirm this action
+                  </Typography>
+                )}
                 <Button
                   size="small"
                   variant="text"
@@ -666,17 +826,20 @@ function AIMessageBubble({
           </Paper>
         );
       })}
-      {navigateAction?.type === 'navigate' && isSafeInternalRoute(navigateAction.route) && (
-        <Box sx={{ display: 'flex' }}>
-          <Button
-            size="small"
-            variant="contained"
-            component={Link}
-            to={navigateAction.route}
-            aria-label={navigateAction.label || 'Open'}
-          >
-            {navigateAction.label || 'Open'}
-          </Button>
+      {navigateActions.length > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+          {navigateActions.map((nav, idx) => (
+            <Button
+              key={`${nav.route}-${idx}`}
+              size="small"
+              variant={navigateActions.length === 1 ? 'contained' : 'outlined'}
+              component={Link}
+              to={nav.route}
+              aria-label={nav.label || 'Open'}
+            >
+              {nav.label || 'Open'}
+            </Button>
+          ))}
         </Box>
       )}
     </Stack>
@@ -692,6 +855,7 @@ function AIMessageBubble({
       }}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
+      onCopy={handleContainerCopy}
     >
       {/* ⓘ provenance — floats at top-right, zero layout impact */}
       {!isUser && showProvenance && (
@@ -755,23 +919,22 @@ function AIMessageBubble({
             </Typography>
           )
         ) : (
-          <MarkdownMessage content={message.content} />
+          <LongContent content={message.content}>
+            <Box ref={contentRef} data-testid="message-content">
+              <MarkdownMessage content={message.content} />
+            </Box>
+          </LongContent>
         )}
 
         {structuredContent}
 
         {actionButtons}
 
-        {/* A3: outcome chip stays always-visible once set */}
-        {!isUser && message.outcome && (
-          <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <Chip size="small" color={outcomeColor} label={outcomeLabel} />
-            {message.correction_text && (
-              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                {message.correction_text}
-              </Typography>
-            )}
-          </Box>
+        {/* Correction note stays inline if the user submitted a correction. */}
+        {!isUser && message.outcome && message.correction_text && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic', display: 'block' }}>
+            {message.correction_text}
+          </Typography>
         )}
 
         {/* Correction form (opened from hover toolbar) */}
@@ -834,6 +997,7 @@ function AIMessageBubble({
           timestamps read inline with the feedback actions. */}
       {!isUser && (
         <Box
+          data-testid="message-actions-row"
           sx={{
             height: 20,
             display: 'flex',
@@ -842,30 +1006,98 @@ function AIMessageBubble({
             width: '100%',
             minWidth: 0,
             alignSelf: 'flex-start',
-            opacity: (showFeedback && !correctionOpen && !message.outcome && showActions) ? 1 : 0,
+            opacity: (showFeedback && !correctionOpen && showActions) ? 1 : 0,
             transition: 'opacity 0.12s ease',
-            pointerEvents: (showFeedback && !correctionOpen && !message.outcome && showActions) ? 'auto' : 'none',
+            pointerEvents: (showFeedback && !correctionOpen && showActions) ? 'auto' : 'none',
           }}
         >
+          {/* Feedback just colors the thumb the user clicked (green up / red
+              down) — all other tools stay exactly as they were. */}
           {onAccept && (
-            <Tooltip title="Accept">
-              <IconButton size="small" onClick={() => onAccept?.(message)} aria-label="Accept response" sx={{ p: 0.5 }}>
-                <ThumbUpAltOutlinedIcon sx={{ fontSize: 14 }} />
+            <Tooltip title={message.outcome === 'accepted' ? 'Accepted' : 'Accept'}>
+              <IconButton
+                size="small"
+                onClick={() => onAccept?.(message)}
+                aria-label="Accept response"
+                data-testid={message.outcome === 'accepted' ? 'message-outcome-accepted' : 'accept-response'}
+                sx={{
+                  p: 0.5,
+                  ...(message.outcome === 'accepted'
+                    ? {
+                        bgcolor: outcomeTint,
+                        color: outcomeFg,
+                        '&:hover': { bgcolor: outcomeTint, color: outcomeFg },
+                      }
+                    : {}),
+                }}
+              >
+                {message.outcome === 'accepted' ? (
+                  <ThumbUpAltIcon sx={{ fontSize: 14 }} />
+                ) : (
+                  <ThumbUpAltOutlinedIcon sx={{ fontSize: 14 }} />
+                )}
               </IconButton>
             </Tooltip>
           )}
           {onReject && (
-            <Tooltip title="Reject">
-              <IconButton size="small" onClick={() => onReject?.(message)} aria-label="Reject response" sx={{ p: 0.5 }}>
-                <ThumbDownAltOutlinedIcon sx={{ fontSize: 14 }} />
+            <Tooltip title={message.outcome === 'rejected' ? 'Rejected' : 'Reject'}>
+              <IconButton
+                size="small"
+                onClick={() => onReject?.(message)}
+                aria-label="Reject response"
+                data-testid={message.outcome === 'rejected' ? 'message-outcome-rejected' : 'reject-response'}
+                sx={{
+                  p: 0.5,
+                  ...(message.outcome === 'rejected'
+                    ? {
+                        bgcolor: outcomeTint,
+                        color: outcomeFg,
+                        '&:hover': { bgcolor: outcomeTint, color: outcomeFg },
+                      }
+                    : {}),
+                }}
+              >
+                {message.outcome === 'rejected' ? (
+                  <ThumbDownAltIcon sx={{ fontSize: 14 }} />
+                ) : (
+                  <ThumbDownAltOutlinedIcon sx={{ fontSize: 14 }} />
+                )}
               </IconButton>
             </Tooltip>
           )}
-          <Tooltip title={copied ? 'Copied!' : 'Copy'}>
-            <IconButton size="small" onClick={handleCopyMessage} aria-label="Copy message" sx={{ p: 0.5 }}>
+          <Tooltip title={copied ? 'Copied with formatting' : 'Copy with formatting'}>
+            <IconButton size="small" onClick={handleCopyWithFormatting} aria-label="Copy message" sx={{ p: 0.5 }}>
               {copied ? <CheckIcon sx={{ fontSize: 14 }} /> : <ContentCopyIcon sx={{ fontSize: 14 }} />}
             </IconButton>
           </Tooltip>
+          {hasMedia && (
+            <>
+              <Tooltip title="Save images">
+                <IconButton size="small" onClick={handleOpenMediaMenu} aria-label="Save images" disabled={savingImage} sx={{ p: 0.5 }}>
+                  <ImageOutlinedIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Tooltip>
+              <Menu anchorEl={mediaMenuAnchor} open={Boolean(mediaMenuAnchor)} onClose={() => setMediaMenuAnchor(null)}>
+                {mediaItems.map((item, idx) => (
+                  <React.Fragment key={`${item.nameBase}-${idx}`}>
+                    <MenuItem onClick={() => handleSaveMedia(item, 'png')} disabled={savingImage} sx={{ fontSize: '0.8125rem' }}>
+                      {item.label} — PNG
+                    </MenuItem>
+                    {item.svg && (
+                      <MenuItem onClick={() => handleSaveMedia(item, 'svg')} disabled={savingImage} sx={{ fontSize: '0.8125rem' }}>
+                        {item.label} — SVG
+                      </MenuItem>
+                    )}
+                  </React.Fragment>
+                ))}
+                {mediaItems.length > 1 && (
+                  <MenuItem onClick={handleSaveAllMedia} disabled={savingImage} sx={{ fontSize: '0.8125rem' }}>
+                    Save all ({mediaItems.length})
+                  </MenuItem>
+                )}
+              </Menu>
+            </>
+          )}
           {(onCorrect || onPromote || onRetry || onDelete) && (
             <>
               <Tooltip title="More actions">
@@ -874,6 +1106,36 @@ function AIMessageBubble({
                 </IconButton>
               </Tooltip>
               <Menu anchorEl={moreMenuAnchor} open={Boolean(moreMenuAnchor)} onClose={() => setMoreMenuAnchor(null)}>
+                <MenuItem onClick={() => { handleCopyPlain(); setMoreMenuAnchor(null); }} sx={{ fontSize: '0.8125rem' }}>
+                  Copy plain text
+                </MenuItem>
+                <MenuItem onClick={() => { handleCopyMarkdown(); setMoreMenuAnchor(null); }} sx={{ fontSize: '0.8125rem' }}>
+                  Copy markdown
+                </MenuItem>
+                <MenuItem
+                  onClick={(e) => setExportSubAnchor(e.currentTarget)}
+                  sx={{ fontSize: '0.8125rem' }}
+                >
+                  Export message
+                </MenuItem>
+                <Menu
+                  anchorEl={exportSubAnchor}
+                  open={Boolean(exportSubAnchor)}
+                  onClose={() => setExportSubAnchor(null)}
+                  anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                >
+                  <MenuItem onClick={() => handleExportMessage('markdown')} sx={{ fontSize: '0.8125rem' }}>
+                    Markdown (.md)
+                  </MenuItem>
+                  <MenuItem onClick={() => handleExportMessage('html')} sx={{ fontSize: '0.8125rem' }}>
+                    HTML (.html)
+                  </MenuItem>
+                  <MenuItem onClick={() => handleExportMessage('docx')} sx={{ fontSize: '0.8125rem' }}>
+                    Word (.docx)
+                  </MenuItem>
+                </Menu>
+                <Divider sx={{ my: 0.5 }} />
                 {onCorrect && (
                   <MenuItem onClick={() => { setCorrectionOpen(true); setMoreMenuAnchor(null); }} sx={{ fontSize: '0.8125rem' }}>
                     Correct
@@ -935,7 +1197,7 @@ function AIMessageBubble({
           }}
         >
           <Tooltip title={copied ? 'Copied!' : 'Copy'}>
-            <IconButton size="small" onClick={handleCopyMessage} aria-label="Copy message" sx={{ p: 0.5 }}>
+            <IconButton size="small" onClick={handleCopyPlain} aria-label="Copy message" sx={{ p: 0.5 }}>
               {copied ? <CheckIcon sx={{ fontSize: 14 }} /> : <ContentCopyIcon sx={{ fontSize: 14 }} />}
             </IconButton>
           </Tooltip>
@@ -1107,6 +1369,7 @@ AIMessageBubble.propTypes = {
   onCreateRule: PropTypes.func,
   onConfirmExecution: PropTypes.func,
   onDeclineExecution: PropTypes.func,
+  onNotify: PropTypes.func,
 };
 
 export default AIMessageBubble;

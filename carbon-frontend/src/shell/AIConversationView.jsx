@@ -4,7 +4,6 @@ import PropTypes from 'prop-types';
 import { Navigate } from 'react-router-dom';
 import { Alert, Box, Button, Chip, Collapse, IconButton, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import BoltIcon from '@mui/icons-material/Bolt';
 import DownloadIcon from '@mui/icons-material/Download';
 import HistoryIcon from '@mui/icons-material/History';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
@@ -32,6 +31,8 @@ import {
 } from '../api/aiWorkspace';
 import { createDQRule } from '../api/dq';
 import { isSafeInternalRoute } from '../utils/navigation';
+import { downloadBlob } from '../utils/exportUtils';
+import { buildConversationDocx, buildConversationHtml } from '../utils/exportDocuments';
 import AIMessageBubble from './AIMessageBubble';
 import AIContextPanel from './AIContextPanel';
 import AIInputBar from './AIInputBar';
@@ -42,8 +43,6 @@ import AIModelSelect from './AIModelSelect';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { useExecuteMode } from './useExecuteMode';
 import { DQ_MANAGE_RULES } from '../capabilities';
-
-const DQ_CONTEXT_TYPES = ['dq_validate', 'dq_suggest', 'nl_rule_test', 'nl_query', 'anomaly', 'investigate', 'report_draft'];
 
 // Phase 21-C — long threads open at the most recent messages; older messages
 // collapse behind a "Show N older messages" toggle (Copilot-style density).
@@ -71,7 +70,6 @@ function AIConversationView({ conversationId }) {
     (c) => (typeof c === 'string' ? c : c?.key) === DQ_MANAGE_RULES
   );
   const [conversation, setConversation] = useState(null);
-  const isDQContext = DQ_CONTEXT_TYPES.includes(conversation?.conversation_type);
   const [messages, setMessages] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -865,6 +863,37 @@ function AIConversationView({ conversationId }) {
     setExportAnchorEl(null);
   }, []);
 
+  // Phase 4C-B — client-side rich export of the full transcript (self-contained
+  // HTML with embedded images, or a .docx built from the same markdown AST).
+  const handleExportRich = useCallback(
+    async (format) => {
+      setExportAnchorEl(null);
+      const exportable = (messages || []).filter((m) => m.content && !m.is_deleted);
+      const safeTitle =
+        (conversation?.title || 'conversation')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'conversation';
+      try {
+        if (format === 'html') {
+          const html = await buildConversationHtml(exportable, {
+            title: conversation?.title || 'Conversation',
+          });
+          downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${safeTitle}.html`);
+        } else {
+          const blob = await buildConversationDocx(exportable, {
+            title: conversation?.title || 'Conversation',
+          });
+          downloadBlob(blob, `${safeTitle}.docx`);
+        }
+        notify({ message: `Exported as ${format === 'html' ? 'HTML' : 'Word'}`, type: 'success' });
+      } catch (err) {
+        notifyFromError(err, `Could not export ${format.toUpperCase()}`);
+      }
+    },
+    [messages, conversation, notify, notifyFromError],
+  );
+
   const handleExport = useCallback(
     async (format) => {
       setExportAnchorEl(null);
@@ -902,14 +931,8 @@ function AIConversationView({ conversationId }) {
     [token, conversationId, conversation, notify, notifyFromError],
   );
 
-  const handleToggleExecuteMode = useCallback(() => {
-    const next = !executeMode;
-    setExecuteMode(next);
-    notify({
-      message: next ? 'Execute Mode enabled — AI may now propose data changes.' : 'Execute Mode disabled.',
-      type: next ? 'warning' : 'info',
-    });
-  }, [executeMode, setExecuteMode, notify]);
+  // Ask/Agent owns execution now — the bolt toggle was removed in Phase 24.
+  // Execute Mode is driven by the composer mode: Ask = OFF, Agent = ON.
 
   // Phase 12 — toggle shared visibility for an owned thread.
   const handleToggleShare = useCallback(async () => {
@@ -1137,6 +1160,7 @@ function AIConversationView({ conversationId }) {
             <AIMessageBubble
               key={msg.id}
               message={msg}
+              onNotify={notify}
               onAcceptSuggestion={handleAcceptSuggestion}
               onRejectSuggestion={handleRejectSuggestion}
               canManageRules={canManageRules}
@@ -1169,6 +1193,7 @@ function AIConversationView({ conversationId }) {
           <AIMessageBubble
             key={msg.id}
             message={msg}
+            onNotify={notify}
             onAcceptSuggestion={handleAcceptSuggestion}
             onRejectSuggestion={handleRejectSuggestion}
             canManageRules={canManageRules}
@@ -1355,7 +1380,12 @@ function AIConversationView({ conversationId }) {
           conversationStatus={convStatus}
           onMentionsChange={setMentions}
           mode={sendMode === 'steer' ? 'agent' : 'ask'}
-          onModeChange={(nextMode) => setSendMode(nextMode === 'agent' ? 'steer' : 'queue')}
+          onModeChange={(nextMode) => {
+            setSendMode(nextMode === 'agent' ? 'steer' : 'queue');
+            // Ask = execution OFF (answers/advice only, nothing applied).
+            // Agent = execution ON (plan runs, actions confirmed before they execute).
+            setExecuteMode(nextMode === 'agent');
+          }}
         />
       ) : (
         <Alert severity="info" sx={{ m: 1.5 }}>
@@ -1378,13 +1408,6 @@ function AIConversationView({ conversationId }) {
       >
         <AIStatusBar variant={statusVariant} label={statusLabel} onRetry={handleRetry} />
         {isOwner && <AIModelSelect onChange={handleModelChange} />}
-        {isDQContext && (
-          <Tooltip title={executeMode ? 'Execute Mode ON' : 'Execute Mode OFF'}>
-            <IconButton size="small" onClick={handleToggleExecuteMode} color={executeMode ? 'warning' : 'default'} aria-pressed={executeMode} aria-label="Toggle Execute Mode" sx={{ p: 0.25 }}>
-              <BoltIcon sx={{ fontSize: 13 }} />
-            </IconButton>
-          </Tooltip>
-        )}
         {isOwner && (
           <Tooltip title={conversation.visibility === 'shared' ? 'Unshare' : 'Share'}>
             <span>
@@ -1401,6 +1424,8 @@ function AIConversationView({ conversationId }) {
         </Tooltip>
         <Menu anchorEl={exportAnchorEl} open={Boolean(exportAnchorEl)} onClose={handleExportMenuClose} anchorOrigin={{ vertical: 'top', horizontal: 'right' }} transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
           <MenuItem onClick={() => handleExport('markdown')} sx={{ fontSize: '0.8125rem' }}>Markdown (.md)</MenuItem>
+          <MenuItem onClick={() => handleExportRich('html')} sx={{ fontSize: '0.8125rem' }}>Rich HTML (.html)</MenuItem>
+          <MenuItem onClick={() => handleExportRich('docx')} sx={{ fontSize: '0.8125rem' }}>Word (.docx)</MenuItem>
           <MenuItem onClick={() => handleExport('json')} sx={{ fontSize: '0.8125rem' }}>JSON (.json)</MenuItem>
         </Menu>
       </Box>

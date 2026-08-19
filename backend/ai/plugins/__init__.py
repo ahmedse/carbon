@@ -21,5 +21,7 @@ def register_builtin_plugins() -> None:
     from ai.engine.agent.plugins import register_plugin
 
     from .create_dq_rule import CreateDQRule
+    from .list_capabilities import ListCapabilities
 
     register_plugin(CreateDQRule())
+    register_plugin(ListCapabilities())

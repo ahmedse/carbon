@@ -1587,3 +1587,198 @@ GATE PASSED
 ### Notes
 - The 9 frontend failures (`AIMessageBubble.feedback`, `AIArtifacts`, `AISharedThreads`) were confirmed pre-existing by `git stash` + re-run — identical failure count before and after this work.
 - No playbook entry needed (feature work, not a bug fix).
+
+---
+
+## [2026-08-18] Backend Worker — Phase P3: App Registry (`appregistry/`)
+
+**Role:** backend-worker · **Model:** DeepSeek V4-Flash · **Kind:** New Django app (control plane)
+
+### Summary
+Implemented the Phase P3 App Registry per `docs/DESIGN-PLATFORM.md` §7: a new `appregistry` Django app holding `AppManifest` + `AppActivation`, served at `/carbon-api/apps/`, gated by the new `appregistry:view` / `appregistry:manage` capabilities through the existing CBAC rail (superuser / global admin always pass; everyone else must hold the capability). `Scope` (AI protocol) gained an `active_apps` field (§7.5) injected by `build_scope()` — every AI call now carries the list of activated, capability-gated app slugs.
+
+### Task Results
+| # | Task | Result |
+|---|------|--------|
+| 1 | App skeleton: `__init__`, `apps.py`, `models.py` (`AppManifest` + `AppActivation`), `admin.py` | ✅ |
+| 2 | `serializers.py` (manifest + activation state), `services.py` (activation lifecycle), thin `views.py` + `urls.py` | ✅ |
+| 3 | `register_app` management command (§7.4) — idempotent INSERT-OR-UPDATE on slug | ✅ |
+| 4 | Capabilities `APPREGISTRY_VIEW` / `APPREGISTRY_MANAGE` in `accounts/capabilities.py` (ALL_CAPABILITIES, IMPLIES manage→view, trust-core view blocks ×4 groups) | ✅ |
+| 5 | Register app: `INSTALLED_APPS` + root route `/carbon-api/apps/` in `config/urls.py` | ✅ |
+| 6 | Scope injection: `active_apps` on `Scope` dataclass + `_active_apps_for_user()` in `build_scope()` | ✅ |
+| 7 | Migration `0001_initial` created + applied | ✅ |
+| 8 | Tests (18 total: API, CBAC, services, command, scope injection) | ✅ |
+| 9 | Verification gate: check / pytest / verify.sh — ALL GREEN | ✅ |
+
+### API Surface (§7.3)
+| Method | Path | Capability |
+|--------|------|------------|
+| GET | `/carbon-api/apps/` | `appregistry:view` |
+| GET | `/carbon-api/apps/{slug}/` | `appregistry:view` |
+| POST | `/carbon-api/apps/{slug}/activate/` | `appregistry:manage` |
+| POST | `/carbon-api/apps/{slug}/deactivate/` | `appregistry:manage` (system apps → 400) |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `backend/appregistry/` (init, apps, models, serializers, services, views, urls, admin, management/commands/register_app.py, tests/, migrations/0001_initial.py) | Full new app |
+| MODIFY | `backend/accounts/capabilities.py` | +2 capabilities; IMPLIES manage→view; APPREGISTRY_VIEW added to dataowners/analysts/viewers/auditors trust-core blocks |
+| MODIFY | `backend/ai/protocol.py` | `Scope.active_apps` field + `to_dict()` serialization |
+| MODIFY | `backend/ai/intelligence.py` | `_active_apps_for_user()` + injection into `build_scope()` (lazy imports, superuser → all) |
+| MODIFY | `backend/config/settings.py` | `'appregistry'` in INSTALLED_APPS |
+| MODIFY | `backend/config/urls.py` | `path(f'{api_prefix}/apps/', include('appregistry.urls'))` |
+| MODIFY | `backend/ai/tests/test_intelligence.py` | 3 build_scope tests now `django_db`-marked + assert `active_apps == []` (build_scope reads the registry) |
+
+### Verification Output
+```bash
+$ python manage.py check
+System check identified no issues (0 silenced).
+
+$ python -m pytest appregistry -q
+18 passed in 6.98s
+
+$ python -m pytest accounts -q
+330 passed in 14.68s
+
+$ python -m pytest datahub -q
+43 passed in 8.71s
+
+$ python -m pytest ai -q
+466 passed in 17.58s
+
+$ python -m pytest appregistry accounts datahub -q
+391 passed in 14.99s
+
+$ ./.ai-toolkit/scripts/verify.sh backend   → GATE PASSED
+$ ./.ai-toolkit/scripts/verify.sh antipatterns → GATE PASSED (pre-existing print()/raw-fetch warnings only)
+```
+
+### Design Decisions
+- **Capability rail untouched** — appregistry only *adds* two capability keys consumed by `AdminOrSuperuserOnly` (which already resolves superuser → global admin → capability → legacy). No new permission classes, no weakening of `_check_write_capability`.
+- **`--app-version` flag, not `--version`** — `--version` collides with Django's built-in argparse action; renamed to avoid the conflict (argparse raises otherwise).
+- **Runtime activation wins over manifest default** — `AppActivation` row is source of truth at runtime; `get_activation` merges both; deactivating a system app (`is_system=True`) is rejected with 400.
+- **URLs are relative to the `apps/` root mount** — the router's prefix duplicated the `carbon-api/apps/` mount (would produce `apps/apps/`); rewrote as explicit `path()` entries (list/detail/activate/deactivate).
+- **Scope query is capability-gated, not just activation** — an app only enters `active_apps` if the user holds its first `required_capability` (or the app declares none). Superusers get every activated slug via `"*"`.
+
+### Notes
+- 3 pre-existing `TestBuildScope` unit tests used `MagicMock` users with no DB access; `build_scope` now queries the App Registry, so they were marked `@pytest.mark.django_db` and extended to assert `active_apps == []` — behavior unchanged, test harness aligned.
+- No playbook entry needed (feature work, not a bug fix).
+
+---
+
+## [2026-08-19] Phase 3 — Three User-Reported Fixes: AI-Service Reachability, New Chat, Ask/Agent Clarity
+
+### Summary
+3/3 user-reported issues fixed and verified. Backend AI suite **492 passed** (490 prior + 2 new regression tests), frontend suite **552 passed / 9 pre-existing failures** (unrelated), lint clean, `verify.sh backend` **GATE PASSED**, services restarted and healthy. A live smoke test against the DjangoStore confirmed every previously-crashing engine path (agent fan-out, skill search, tool-execution DML, raw vector SQL) now works end-to-end.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Fix "couldn't reach the AI service" — `_DjangoSession.execute()` missing | ✅ | ~500-line SQLAlchemy→Django statement translator in `backend/ai/store.py` (select/update/text). Removed the silent `AttributeError` that degraded agent fan-out + skill search on every chat turn. |
+| 2 | Fix "new chat button don't create one" | ✅ | `handleNewChat` reuses an open thread **only when it's empty** (`last_message_at == null`); otherwise creates a real new chat (`{conversation_type: 'chat', title: 'New Chat'}`). |
+| 3 | Ask/Agent toggle clarity | ✅ | Redesigned as two standalone ToggleButtons with tooltips ("Ask — follow-ups queue…", "Agent — new directions interrupt…"), distinct pill styling, dynamic mode hint text, `role="group"` + aria-labels. |
+| 4 | Smoke-verification of the live engine paths | ✅ | Real `AgentRegistry.seed_defaults/get_workers_for/can_handoff`, `SkillRegistry.search`, `ToolExecution` UPDATE, raw `text()` SQL — all pass on DjangoStore. **Caught 2 extra bugs**: engine-instance PK back-fill after `commit()` and `rollback()` outside `atomic` blocks. |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `backend/ai/store.py` | `execute()` translator (select/update/text), `_run_django_select/update/text`, `_ExecRow/_ExecResult`, `get_bind`/`rollback`; **new**: `_backfill_engine_attrs()` (back-fills DB-generated PK/defaults onto engine instances at commit — fixes `register_agent`→`refresh()`), `rollback()` now no-ops outside `atomic` |
+| CREATE | `backend/ai/tests/test_store_execute.py` | 11 tests (9 original + **2 new**: `test_execute_register_agent_commit_backfills_pk`, `test_execute_rollback_outside_atomic_noop`) |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | `handleNewChat`: reuse open thread only when empty, else create new |
+| MODIFY | `carbon-frontend/src/shell/AIInputBar.jsx` | Ask/Agent segmented control: tooltips, hint text, aria-labels, pill styling |
+| MODIFY | `carbon-frontend/src/__tests__/AIInputBar.mode.test.jsx` | 8 tests (added dynamic mode-hint test) |
+| MODIFY | `carbon-frontend/src/__tests__/AIWorkspace.shell.test.jsx` | 12 tests (empty-thread reuse + new-chat-when-nonempty) |
+
+### Verification Output
+```
+$ pytest ai -q --no-header            # full AI suite
+492 passed in 18.21s
+
+$ pytest ai/tests/test_store_execute.py -q --no-header
+11 passed in 7.02s
+
+$ npx vitest run                     # full frontend suite
+552 passed / 9 failed (pre-existing: AIArtifacts 2, AIMessageBubble.feedback 3, AISharedThreads 4)
+
+$ npm run lint                       # clean
+
+$ ./.ai-toolkit/scripts/verify.sh backend
+✓ django check
+GATE PASSED
+
+$ ./manage.sh health
+Backend API:      HEALTHY (HTTP 200)
+Frontend:         HEALTHY (HTTP 200)
+PostgreSQL:       HEALTHY
+
+$ python /tmp/smoke_execute_fix.py   # live DjangoStore smoke (real engine code)
+[1] seed_defaults: 5 agents registered
+[2] get_workers_for: 3 worker pairs
+[3] can_handoff orchestrator→researcher: True
+[4] list_agents: 5 agents
+[5] skills search 'employee': 0 results
+[6] update() ToolExecution status: declined
+[7] text() scalar probe: smoke-e1
+[8] get_bind dialect: postgresql
+SMOKE OK — all engine execute() paths work on DjangoStore (exit 0)
+```
+
+### Notes / Troubleshooting
+- **Root cause of "couldn't reach the AI service"**: `_DjangoSession` (prod store) had no `execute()`. Every `await db.execute(stmt)` raised `AttributeError`; callers swallowed it, logging "Fan-out attempt failed; falling back to single-pass" — silent degradation on every chat turn. The translator maps: `select().where(or_/ilike/is_(True)/joins/order_by/limit)` → Django ORM; `update().values()` → `QuerySet.update`; `text()` → raw cursor with engine-tablename→`ai_*` db_table mapping and `:name`→`%(name)s` bind conversion (`::vector`, `->>`, `<=>` untouched).
+- **Smoke-test catch 1**: engine objects never received their DB-generated PK. SQLAlchemy applies Python-side `default=` at flush; the Django store generated its own UUID at `save()`, leaving `agent.id = None` → post-commit `refresh()` raised `DoesNotExist` and `seed_defaults` couldn't wire handoff edges. Fixed via `_backfill_engine_attrs()` in `commit()`.
+- **Smoke-test catch 2**: `transaction.set_rollback(True)` outside an `atomic` block raised `TransactionManagementError`; now guarded by `connection.in_atomic_block` (no-op in Django autocommit mode).
+- **`RuntimeError: no running event loop` at `engine_runtime.py:62`** (Sprint-18 F1): already hardened — `_run_async` detects a running loop and executes the coroutine on a `ThreadPoolExecutor` worker thread. No change needed.
+- **New Chat**: reusing any open thread via `findOpenConversation` was expected Phase 16 behavior; now limited to empty threads only. Backend `_serialize_conversation` returns `last_message_at: null` for empty threads.
+- **Test harness**: `execute()` tests require `@pytest.mark.django_db(transaction=True)` — rows created in the pytest thread must be committed to be visible to the async session's thread-sensitive connection.
+
+---
+
+## [2026-08-20] Frontend — Phase 24: New Chat Fix + Ask/Agent Semantic Redesign
+
+### Summary
+Two user-reported issues fixed: (1) **"new chat not working"** — clicking New Chat silently reused a stale empty thread, so nothing new appeared; (2) **Ask/Agent buttons bulky, tooltips incomprehensible** — redesigned as a compact segmented control with plain-language tooltips, and the semantics now match the user's definition: **Ask = chat where Pulse does NOT execute (no rule creation, no data edits)** · **Agent = Pulse plans a job and one or more agents execute concrete actions in a workflow (user confirms before each runs)**. Verified live in the browser: 2 fresh "New Chat" threads created on 2 clicks, mode switch + hint + tooltip render correctly, bolt toggle removed.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `handleNewChat` always creates a fresh conversation | ✅ | Removed `findOpenConversation` reuse path — empty placeholder threads (`b8953e22…`, `last_message_at: null`) are never silently reused again |
+| 2 | Ask/Agent compact segmented control | ✅ | `AIInputBar.jsx`: inline-flex pill group (p:2px, borderRadius 1, minHeight 24, 0.75rem) replacing the two bulky half-pill ToggleButtons |
+| 3 | Plain-language tooltips per user's model | ✅ | Ask: "…Nothing is created or changed: no rule creation, no data edits. The AI may suggest, but you apply it manually." Agent: "Pulse plans the job and one or more agents execute concrete actions (create DQ rules, fix data, run queries) as a workflow. You confirm each action before it runs." |
+| 4 | Mode hint updated | ✅ | Ask: "Answers & advice only — no rules created, no data changed" · Agent: "Agents execute actions — you confirm before they run" |
+| 5 | Mode → execution wiring | ✅ | `AIConversationView.onModeChange` now also `setExecuteMode(nextMode === 'agent')` (Ask = OFF, Agent = ON); removed the redundant DQ-only bolt toggle + `handleToggleExecuteMode` + `isDQContext` |
+| 6 | Execution UI gated on mode | ✅ | `AIMessageBubble`: DQ suggestion Accept/Reject/Test-live and pending-action Confirm/Edit/Decline hidden when Agent mode is OFF, with hint "Agent mode is OFF — switch to Agent to …" (Details & JSON + navigation always available) |
+| 7 | Tests updated | ✅ | `AIWorkspace.shell.test.jsx` (always-create, 2 tests), `AIInputBar.mode.test.jsx` (new labels/hint, 5 tests), `AIMessageBubble.actions.test.jsx` (+1 gating test, executeMode:true on exec tests), `AIMessageBubble.transparency.test.jsx` (+executeMode:true) |
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | −15 | `handleNewChat` always creates; dropped `findOpenConversation` import/use |
+| MODIFY | `carbon-frontend/src/shell/AIInputBar.jsx` | ±40 | Segmented Ask/Agent control + new tooltips/hint + agent working placeholder |
+| MODIFY | `carbon-frontend/src/shell/AIConversationView.jsx` | −30 | `onModeChange` sets executeMode; removed bolt toggle, `handleToggleExecuteMode`, `BoltIcon`, `isDQContext`, `DQ_CONTEXT_TYPES` |
+| MODIFY | `carbon-frontend/src/shell/AIMessageBubble.jsx` | +30 | Execution buttons gated on `executeMode` (suggestions + pending actions) |
+| MODIFY | `carbon-frontend/src/__tests__/AIWorkspace.shell.test.jsx` | −30 | 3 new-chat tests → 2 always-create tests |
+| MODIFY | `carbon-frontend/src/__tests__/AIInputBar.mode.test.jsx` | ±12 | Labels `/answers and advice only…/` `/plan and execute actions…/`, new hint copy |
+| MODIFY | `carbon-frontend/src/__tests__/AIMessageBubble.actions.test.jsx` | +35 | `executeMode: true` on exec tests + new "Agent mode is OFF" gating test |
+| MODIFY | `carbon-frontend/src/__tests__/AIMessageBubble.transparency.test.jsx` | +1 | `executeMode: true` for Test-live test |
+
+### Verification Output
+```
+$ npx vitest run src/__tests__/AIInputBar.mode.test.jsx src/__tests__/AIWorkspace.shell.test.jsx \
+    src/__tests__/AIMessageBubble.actions.test.jsx src/__tests__/AIMessageBubble.transparency.test.jsx
+ Test Files  4 passed (4)
+      Tests  44 passed (44)
+
+$ npm run lint
+> eslint .
+(exit 0 — clean)
+
+Browser (live): http://localhost:5179/carbon/ (ahmed / AdminPa_132)
+✓ "New chat" ×2 → 2 fresh "New Chat" threads under Today (stale Yesterday thread no longer reused)
+✓ Composer: group "Composer mode", Ask pressed by default, hint "Answers & advice only…"
+✓ Agent switch → pressed, hint "Agents execute actions — you confirm before they run", tooltip renders
+✓ Footer: Ready + model select + Share + Export — bolt toggle gone
+```
+
+### Deviations
+- **Pre-existing failures (not mine)**: `AISharedThreads.test.jsx` has 4 failing tests on clean `main` (verified via `git stash` + rerun) — unchanged by this phase.
+- The queue-vs-steer streaming behavior behind `sendMode` is preserved; the Ask/Agent labels now communicate execution semantics per the user's definition.

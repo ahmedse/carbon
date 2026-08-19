@@ -3344,6 +3344,9 @@ class CarbonIntelligence:
         # tool results ever populate these — never LLM prose.
         if actions:
             metadata["action"] = actions[-1]
+            # Capability listings may surface several links at once — persist
+            # the full list so the UI can render one small button per item.
+            metadata["actions"] = actions
         if pending_actions:
             metadata["pending_actions"] = pending_actions
 

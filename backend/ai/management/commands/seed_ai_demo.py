@@ -238,11 +238,18 @@ class Command(BaseCommand):
         self._seed_llm_logs(instance)
 
     def _seed_instance(self):
+        from django.conf import settings as dj_settings
+
+        platform_name = (
+            getattr(dj_settings, "PLATFORM_TITLE", "")
+            or getattr(dj_settings, "PLATFORM_NAME", "")
+            or "Data Trust Platform"
+        )
         return self._upsert(
             Instance,
             "Instance",
             defaults={
-                "display_name": "Carbon Data Trust Platform",
+                "display_name": platform_name,
                 "host_db_url": "postgresql://carbon:****@localhost:5432/carbon",
                 "host_api_url": "http://127.0.0.1:8009",
                 "status": "active",
@@ -494,8 +501,15 @@ class Command(BaseCommand):
             )
 
     def _seed_prompts(self, instance):
+        from django.conf import settings as dj_settings
+
+        platform_name = (
+            getattr(dj_settings, "PLATFORM_TITLE", "")
+            or getattr(dj_settings, "PLATFORM_NAME", "")
+            or "Data Trust Platform"
+        )
         prompts = [
-            ("You are a carbon accounting assistant for the Carbon Data Trust Platform. Answer using only the knowledge graph and catalog schema.", "demo-hash-000001"),
+            (f"You are a data assistant for {platform_name}. Answer using only the knowledge graph and catalog schema.", "demo-hash-000001"),
             ("Given a user question about emissions, decompose it into data queries and explain each step.", "demo-hash-000002"),
         ]
         for prompt_text, content_hash in prompts:

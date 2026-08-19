@@ -1,12 +1,37 @@
 // src/shell/MarkdownMessage.jsx
-// Rich GFM markdown renderer for AI assistant messages.
-// Uses react-markdown + remark-gfm (already in deps). No extra packages needed.
-import React, { useCallback, useState } from 'react';
+// ────────────────────────────────────────────────────────────────────────────
+// GENERIC RICH MARKDOWN RENDERER for AI assistant messages.
+//
+// One renderer, driven purely by the markdown content — nothing here is
+// crafted for a single feature or use case. Any assistant reply (capability
+// listings, query results, explanations, reports) renders the same formal,
+// Copilot-style document:
+//
+//   * GFM tables            — MUI Table (striped, scrollable)
+//   * syntax highlighting   — rehype-highlight (One Dark theme)
+//   * code snippets         — dark fenced block + language badge + copy
+//   * diagrams              — ```mermaid fenced blocks → rendered SVG
+//   * math                  — $$...$$ / $...$ via KaTeX
+//   * figures               — images with optional title → caption
+//   * smart links           — internal safe routes → SPA <Link>; else new tab
+//   * task lists, blockquotes, hr — GFM
+//
+// Dependencies: react-markdown, remark-gfm, remark-math, rehype-highlight,
+// rehype-katex, katex, mermaid (dynamic import — not in the main bundle).
+// ────────────────────────────────────────────────────────────────────────────
+import React, { useCallback, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeHighlight from 'rehype-highlight';
+import rehypeKatex from 'rehype-katex';
+import { Link as RouterLink } from 'react-router-dom';
+import 'highlight.js/styles/atom-one-dark.css';
+import 'katex/dist/katex.min.css';
 import {
   Box,
   Checkbox,
+  Chip,
   Divider,
   IconButton,
   Link,
@@ -20,13 +45,102 @@ import {
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { isSafeInternalRoute } from '../utils/navigation';
 
-// ── Fenced code block: dark bg + language badge + copy button ─────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+/** Flatten React children (incl. hljs span elements) to plain text. */
+function flattenText(node) {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(flattenText).join('');
+  if (React.isValidElement(node)) return flattenText(node.props?.children);
+  return '';
+}
+
+// ── Mermaid diagram (```mermaid) — lazily imports the heavy lib ──────────
+
+const mermaidIdRef = { current: 0 };
+
+function MermaidBlock({ code }) {
+  const [svg, setSvg] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const mermaid = (await import('mermaid')).default;
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'loose',
+          theme: 'default',
+          fontFamily: 'inherit',
+        });
+        mermaidIdRef.current += 1;
+        const id = `mmd-${mermaidIdRef.current}-${Date.now()}`;
+        const { svg: rendered } = await mermaid.render(id, code);
+        if (!cancelled) setSvg(rendered);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err?.message ? String(err.message) : 'Diagram render failed');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
+
+  if (error) {
+    return (
+      <Box sx={{ my: 1.5, borderRadius: 1, border: 1, borderColor: 'warning.main', overflow: 'hidden' }}>
+        <Chip
+          size="small"
+          color="warning"
+          variant="outlined"
+          label="Diagram could not be rendered"
+          sx={{ m: 0.75 }}
+        />
+        <Box component="pre" sx={{ m: 0, p: 1.5, bgcolor: '#282c34', overflowX: 'auto', fontSize: '0.8125rem', color: '#abb2bf' }}>
+          <code>{code}</code>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (!svg) {
+    return (
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', my: 1 }}>
+        Rendering diagram…
+      </Typography>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        my: 1.5,
+        overflowX: 'auto',
+        bgcolor: 'background.paper',
+        borderRadius: 1,
+        border: 1,
+        borderColor: 'divider',
+        p: 1.5,
+        '& svg': { maxWidth: '100%', height: 'auto' },
+        '& a': { color: 'primary.main' },
+      }}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
+}
+
+// ── Fenced code block: dark bg + language badge + copy button ────────────
 
 function CodeBlock({ children, className }) {
   const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
-  const code = String(children).replace(/\n$/, '');
+  const code = flattenText(children).replace(/\n$/, '');
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(code);
@@ -54,6 +168,11 @@ function CodeBlock({ children, className }) {
     );
   }
 
+  // ```mermaid → live diagram (the generic renderer, not a bespoke card)
+  if (match[1] === 'mermaid') {
+    return <MermaidBlock code={code} />;
+  }
+
   return (
     <Box sx={{ position: 'relative', my: 1.5, borderRadius: 1, overflow: 'hidden', border: 1, borderColor: 'divider' }}>
       {/* header bar */}
@@ -76,7 +195,7 @@ function CodeBlock({ children, className }) {
           </IconButton>
         </Tooltip>
       </Box>
-      {/* code body */}
+      {/* code body — children preserve rehype-highlight spans (syntax colors) */}
       <Box
         component="pre"
         sx={{
@@ -91,7 +210,7 @@ function CodeBlock({ children, className }) {
           '& code': { fontFamily: 'inherit', fontSize: 'inherit', bgcolor: 'transparent', p: 0 },
         }}
       >
-        <code>{code}</code>
+        <code className={className}>{children}</code>
       </Box>
     </Box>
   );
@@ -144,7 +263,7 @@ const components = {
   ),
   thead: ({ children }) => <TableHead sx={{ bgcolor: 'action.hover' }}>{children}</TableHead>,
   tbody: ({ children }) => <TableBody>{children}</TableBody>,
-  tr: ({ children }) => <TableRow>{children}</TableRow>,
+  tr: ({ children }) => <TableRow sx={{ '&:nth-of-type(even)': { bgcolor: 'action.hover' } }}>{children}</TableRow>,
   th: ({ children }) => (
     <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', whiteSpace: 'nowrap', py: 0.75 }}>
       {children}
@@ -177,21 +296,38 @@ const components = {
   em: ({ children }) => <Typography component="em" variant="inherit" sx={{ fontStyle: 'italic' }}>{children}</Typography>,
   del: ({ children }) => <Typography component="del" variant="inherit" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>{children}</Typography>,
 
-  // links — safe new-tab
-  a: ({ href, children }) => (
-    <Link href={href} target="_blank" rel="noopener noreferrer" underline="hover">
-      {children}
-    </Link>
-  ),
+  // links — SPA <Link> for safe internal routes, new tab otherwise
+  a: ({ href, children }) => {
+    if (href && href.startsWith('/') && isSafeInternalRoute(href)) {
+      return (
+        <Link component={RouterLink} to={href} underline="hover" sx={{ fontWeight: 500 }}>
+          {children}
+        </Link>
+      );
+    }
+    return (
+      <Link href={href} target="_blank" rel="noopener noreferrer" underline="hover">
+        {children}
+      </Link>
+    );
+  },
 
-  // images
-  img: ({ src, alt }) => (
-    <Box
-      component="img"
-      src={src}
-      alt={alt || ''}
-      sx={{ maxWidth: '100%', borderRadius: 1, my: 1, display: 'block' }}
-    />
+  // figures — image with optional title → caption
+  img: ({ src, alt, title }) => (
+    <Box sx={{ my: 1 }}>
+      <Box
+        component="img"
+        src={src}
+        alt={alt || ''}
+        title={title}
+        sx={{ maxWidth: '100%', borderRadius: 1, display: 'block' }}
+      />
+      {title && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}>
+          {title}
+        </Typography>
+      )}
+    </Box>
   ),
 
   // horizontal rule
@@ -203,7 +339,11 @@ const components = {
 export default function MarkdownMessage({ content }) {
   return (
     <Box sx={{ '& > *:first-of-type': { mt: 0 }, '& > *:last-of-type': { mb: 0 } }}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeHighlight, rehypeKatex]}
+        components={components}
+      >
         {content}
       </ReactMarkdown>
     </Box>

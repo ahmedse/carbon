@@ -107,6 +107,7 @@ async def _run_chat(
     history_messages = conversation.get("messages") or []
 
     instance_config = _carbon_instance_config(host_user_id)
+    user_info = _build_chat_user_info(host_user_id)
 
     factory = get_session_factory(instance_id)
     async with factory() as db:
@@ -124,6 +125,7 @@ async def _run_chat(
             host_user_id=host_user_id,
             conversation_history=history_messages,
             instance_config=instance_config,
+            user_info=user_info,
             stream_callback=stream_callback,
             model=model,
             temperature=temperature,
@@ -137,6 +139,11 @@ async def _run_chat(
         content = response.text
         if grounded_note:
             content = f"{content}\n\n{grounded_note}" if content else grounded_note
+        # Capability listing → unified rich "Your Access" document (GFM table
+        # with page links), appended deterministically — never LLM prose.
+        access_table = _grounded_access_table(completed_tools)
+        if access_table:
+            content = f"{content}\n\n{access_table}" if content else access_table
 
         return {
             "status": "completed",
@@ -169,16 +176,52 @@ def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
     Loaded from ``instances/carbon/instance.yaml`` when present, else a
     built-in Carbon defaults dict.  Supplies the system prompt's
     display/persona/navigation knowledge and the executor's route table.
+
+    UX/security audit: the platform name is config-driven (Django
+    ``settings.PLATFORM_TITLE``/``PLATFORM_NAME`` — ``DJANGO_PLATFORM_NAME``),
+    never hardcoded, and ``user_access`` carries the *capability-scoped*
+    inventory for ``host_user_id`` so the assistant can only ever mention what
+    the user can actually reach.
+
+    The manifest read touches the ORM, so it is resolved through
+    ``_run_async(sync_to_async(...))`` — safe from both the async chat turn
+    (``_run_chat``, confirm/decline views) and sync unit tests.
     """
+    from asgiref.sync import sync_to_async
+
+    def _resolve_user_access() -> dict:
+        from ai.access_manifest import build_user_access_manifest
+
+        return build_user_access_manifest(host_user_id)
+
+    try:
+        user_access = _run_async(sync_to_async(_resolve_user_access, thread_sensitive=True)())
+    except Exception:  # noqa: BLE001 - inventory is best-effort; never fatal
+        logger.exception("Could not resolve user access manifest; using empty inventory")
+        user_access = {
+            "platform_name": _platform_display_name(),
+            "access_level": "unknown",
+            "platform_wide": False,
+            "is_read_only": True,
+            "apps": [],
+            "capabilities": [],
+            "modules": [],
+            "routes": [],
+        }
+
     config: dict[str, Any] = {
-        "display_name": "Carbon Data Trust Platform",
+        # Config-driven, not hardcoded — settings.PLATFORM_TITLE when set.
+        "display_name": _platform_display_name(),
         "description": (
-            "Data trust platform for catalogs, data quality, emissions and "
-            "data-sharing workflows."
+            "A data trust platform for the organization's data workflows — "
+            "the assistant helps with the data areas the user can access."
         ),
         "persona": (
             "A precise, grounded data-platform assistant. Never claim an action "
-            "succeeded unless a tool result confirmed it."
+            "succeeded unless a tool result confirmed it. Never mention anything "
+            "outside the user's access inventory, and never describe platform "
+            "internals (components, databases, technologies, or how the assistant "
+            "works)."
         ),
         "api_catalog": [],
         "navigation_routes": [
@@ -193,8 +236,11 @@ def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
                 "description": "Data-quality rule results page.",
             },
         ],
-        "domain_topics": ["data quality", "data catalog", "emissions", "governance"],
+        "domain_topics": ["data quality", "data catalog", "governance"],
         "host_user_id": host_user_id,
+        # Capability-scoped inventory for this user (empty manifest when the
+        # user cannot be resolved — nothing may be listed).
+        "user_access": user_access,
     }
     try:
         from ai.engine.core.archetypes import load_instance_config
@@ -205,6 +251,63 @@ def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
     except Exception:  # noqa: BLE001 - fall back to Carbon defaults
         pass
     return config
+
+
+def _platform_display_name() -> str:
+    """Config-driven platform name (settings, never hardcoded)."""
+    from django.conf import settings as dj_settings
+
+    title = getattr(dj_settings, "PLATFORM_TITLE", "") or ""
+    name = getattr(dj_settings, "PLATFORM_NAME", "") or ""
+    return title or name or "Data Trust Platform"
+
+
+def _build_chat_user_info(host_user_id: str | None) -> dict | None:
+    """Resolve user-facing identity for the chat system prompt.
+
+    Returns ``None`` for anonymous/unresolvable users so the engine's default
+    "anonymous" context applies (which itself never fabricates identity).
+    Only user-facing fields travel here (name/roles) — never internal ids or
+    secrets (RULE_23).
+    """
+    if not host_user_id:
+        return None
+
+    from asgiref.sync import sync_to_async
+    from django.contrib.auth import get_user_model
+
+    def _resolve() -> dict | None:
+        User = get_user_model()
+        try:
+            user = User.objects.get(pk=host_user_id)
+        except (User.DoesNotExist, ValueError, TypeError):
+            return None
+        roles: list[str] = []
+        try:
+            from accounts.models import ScopedRole
+
+            roles = list(
+                ScopedRole.objects.filter(user=user, is_active=True)
+                .values_list("group__name", flat=True)
+                .distinct()
+            )
+        except Exception:  # noqa: BLE001 - roles are best-effort decoration
+            pass
+        display_name = (
+            getattr(user, "display_name", "") or user.get_full_name() or user.username
+        )
+        return {
+            "username": user.username,
+            "display_name": display_name,
+            "email": user.email or "",
+            "roles": roles,
+        }
+
+    try:
+        return _run_async(sync_to_async(_resolve, thread_sensitive=True)())
+    except Exception:  # noqa: BLE001 - identity is best-effort, never fatal
+        logger.exception("Could not resolve chat user_info; using anonymous")
+        return None
 
 
 def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -243,6 +346,24 @@ def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list
                 "summary": str(data.get("summary") or ""),
             })
 
+        # Capability listing (list_my_capabilities): emit one navigate action
+        # per scoped page link — the UI renders these as small buttons under
+        # the listing reply.
+        if isinstance(data.get("routes"), list):
+            for link in data["routes"]:
+                if not isinstance(link, dict):
+                    continue
+                route = str(link.get("route") or "").strip()
+                if not route or route in seen_routes:
+                    continue
+                seen_routes.add(route)
+                actions.append({
+                    "type": "navigate",
+                    "route": route,
+                    "label": str(link.get("label") or "Open"),
+                    "summary": str(link.get("summary") or ""),
+                })
+
         if data.get("requires_confirmation") and data.get("execution_id"):
             proposed = data.get("proposed_rule") or {}
             name = str(proposed.get("name") or "").strip() or "rule"
@@ -270,6 +391,98 @@ _FAILED_ACTION_COPY = (
     "⚠️ That action didn't complete — nothing was created or changed. "
     "Please try again in a moment."
 )
+
+
+def _md_escape(text: str) -> str:
+    """Escape GFM table-cell metacharacters (``|`` and newlines)."""
+    return str(text or "").replace("|", "\\|").replace("\n", " ")
+
+
+def _md_link(label: str, route: str) -> str:
+    """Internal page link for a table cell; '—' when no route exists."""
+    route = str(route or "").strip()
+    if not route:
+        return "—"
+    return f"[{label}]({route})"
+
+
+def _grounded_access_table(completed_tools: list[dict]) -> str:
+    """Deterministic, capability-scoped ``## Your Access`` document.
+
+    When ``list_my_capabilities`` ran this turn, render its machine-readable
+    inventory as a rich GFM table (work areas / apps / modules with page
+    links).  The generic markdown renderer turns it into a formal table with
+    links — the format is platform-owned and unified, never improvised by the
+    LLM (no ad-hoc, per-use-case presentation).
+
+    Returns ``""`` when the tool did not run or had nothing to show, so the
+    assistant text is the only content in those turns.
+    """
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict) or data.get("error"):
+            continue
+        if data.get("action") != "list_capabilities":
+            continue
+
+        sections: list[str] = []
+
+        work_areas = [wa for wa in data.get("capabilities") or [] if isinstance(wa, dict)]
+        rows = "\n".join(
+            f"| {_md_escape(wa.get('label') or wa.get('key') or '')}"
+            f" | {_md_escape(wa.get('description') or '')}"
+            f" | {_md_link('Open', wa.get('route') or '')} |"
+            for wa in work_areas
+            if wa.get("route")
+        )
+        if rows:
+            sections.append(
+                "### Work areas\n\n"
+                "| Work area | Description | Open |\n"
+                "|---|---|---|\n" + rows
+            )
+
+        apps = [a for a in data.get("apps") or [] if isinstance(a, dict)]
+        rows = "\n".join(
+            f"| {_md_escape(a.get('name') or a.get('key') or '')}"
+            f" | {_md_escape(a.get('description') or '')}"
+            f" | {_md_link('Open', a.get('route') or '')} |"
+            for a in apps
+            if a.get("route")
+        )
+        if rows:
+            sections.append(
+                "### Apps you can open\n\n"
+                "| App | Description | Open |\n"
+                "|---|---|---|\n" + rows
+            )
+
+        modules = [m for m in data.get("modules") or [] if isinstance(m, dict)]
+        rows = "\n".join(
+            f"| {_md_escape(m.get('name') or m.get('key') or '')}"
+            f" | {_md_link('Open', m.get('route') or '')} |"
+            for m in modules
+            if m.get("route")
+        )
+        if rows:
+            sections.append(
+                "### Data areas (modules)\n\n"
+                "| Data area | Open |\n"
+                "|---|---|\n" + rows
+            )
+
+        if not sections:
+            return ""
+
+        return "## Your Access\n\n" + "\n\n".join(sections)
+
+    return ""
 
 
 def _grounded_outcome_note(completed_tools: list[dict]) -> str:

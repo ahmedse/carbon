@@ -26,18 +26,22 @@ beforeEach(() => {
   apiFetch.mockResolvedValue({ results: TABLES });
 });
 
-describe('AIInputBar composer mode (Copilot-style)', () => {
+describe('AIInputBar composer mode (Ask = answers only / Agent = executes)', () => {
   it('renders Ask/Agent mode selector with Ask selected by default', () => {
     renderBar();
     expect(screen.getByRole('group', { name: 'Composer mode' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /ask mode/i })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /agent mode/i })).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      screen.getByRole('button', { name: /answers and advice only, nothing executed/i }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.getByRole('button', { name: /plan and execute actions in a workflow/i }),
+    ).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('notifies the parent when the mode switches to Agent', () => {
     const onModeChange = vi.fn();
     renderBar({ onModeChange });
-    fireEvent.click(screen.getByRole('button', { name: /agent mode/i }));
+    fireEvent.click(screen.getByRole('button', { name: /plan and execute actions in a workflow/i }));
     expect(onModeChange).toHaveBeenCalledWith('agent');
   });
 
@@ -47,6 +51,15 @@ describe('AIInputBar composer mode (Copilot-style)', () => {
       'placeholder',
       expect.stringContaining('interrupt'),
     );
+  });
+
+  it('shows a dynamic mode hint that switches with the selected mode', () => {
+    renderBar();
+    // Default Ask mode → answers-only hint (nothing is executed).
+    expect(screen.getByText(/no rules created, no data changed/i)).toBeInTheDocument();
+    // Agent mode → execution hint (agents run actions, user confirms first).
+    renderBar({ mode: 'agent' });
+    expect(screen.getByText(/Agents execute actions — you confirm before they run/i)).toBeInTheDocument();
   });
 
   it('shows a context chip for a resolved mention and keeps it after sending', async () => {

@@ -21,6 +21,7 @@ import logging
 from typing import Optional
 
 from ai.engine.core.models import BLOCK_KINDS, PlaybookBlock, generate_uuid
+from ai.engine.llm.prompts import RENDERING_CAPABILITIES
 from ai.store import first
 
 logger = logging.getLogger("pulse.llm.playbook")
@@ -271,7 +272,7 @@ def _build_runtime_header(ctx: dict) -> str:
     """
     lines = []
     if ctx.get("instance_name"):
-        lines.append(f"# Pulse AI Copilot — {ctx['instance_name']}")
+        lines.append(f"# {ctx['instance_name']}")
     if ctx.get("current_datetime"):
         lines.append(f"\n**Current time**: {ctx['current_datetime']}")
     if ctx.get("user_context"):
@@ -301,25 +302,21 @@ def _fallback_prompt(ctx: dict) -> str:
     header = _build_runtime_header(ctx)
     body = (
         f"## Identity & Role\n\n"
-        f"You are Pulse, an AI operations copilot for {instance_name}. "
+        f"You are the assistant for {instance_name}. "
         f"You help users understand their platform, answer questions about its data, "
-        f"and perform operational tasks.\n\n"
+        f"and perform operational tasks within their access scope.\n\n"
         f"## Communication Rules\n\n"
         f"- Lead with the answer — no preamble.\n"
         f"- Use the platform's domain language.\n"
         f"- Never mention table names, SQL, or software internals.\n"
-        f"- Never fabricate data — if a tool returns nothing, say so.\n\n"
-        f"## Tools\n\n"
-        f"- Use `call_host_api` for operational data.\n"
-        f"- Use `query_host_db` for analytical queries.\n"
-        f"- Use `search_knowledge` to understand concepts.\n\n"
+        f"- Never fabricate data — if a tool returns nothing, say so.\n"
+        f"- Never mention how the assistant works (no AI/ML/component/technology details).\n\n"
         f"## Operational Rules\n\n"
         f"- Always be time-aware — flag stale data.\n"
-        f"- Never explain AI/ML internals.\n"
-        f"- Ask for confirmation before mutations.\n"
-        f"- Learn from corrections using `learn_fact`."
+        f"- Ask for confirmation before any change.\n"
+        f"- Stay within the user's access inventory — never hint at anything outside it."
     )
-    parts = [header, body] if header else [body]
+    parts = [header, body, RENDERING_CAPABILITIES] if header else [body, RENDERING_CAPABILITIES]
     return "\n\n".join(parts)
 
 

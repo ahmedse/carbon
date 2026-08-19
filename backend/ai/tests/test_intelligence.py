@@ -7,6 +7,8 @@ CarbonIntelligence class itself (sync + async submission).
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from backend.ai.protocol import (
     AIProvider,
     DqValidateRequest,
@@ -95,6 +97,7 @@ class TestBuildScope:
         assert scope.org_unit_ids == []
         assert scope.is_superuser is False
 
+    @pytest.mark.django_db
     def test_superuser_returns_wildcard_scope(self):
         user = MagicMock(is_superuser=True, is_staff=False, is_authenticated=True)
         user.pk = 13
@@ -105,7 +108,10 @@ class TestBuildScope:
         # including superusers (admin). Empty here used to reject every AI call
         # from a superuser with "Scope with empty user_identifier".
         assert scope.user_identifier == "13"
+        # App Registry §7.5: active_apps is part of every scope (empty DB → []).
+        assert scope.active_apps == []
 
+    @pytest.mark.django_db
     def test_authenticated_user_with_roles(self):
         user = MagicMock(is_superuser=False, is_staff=False, is_authenticated=True)
         user.pk = 99
@@ -125,7 +131,9 @@ class TestBuildScope:
             assert "10" in scope.module_ids
             assert scope.is_read_only is False
             assert scope.user_identifier == "99"
+            assert scope.active_apps == []  # empty registry
 
+    @pytest.mark.django_db
     def test_read_only_only_roles_stay_read_only(self):
         user = MagicMock(is_superuser=False, is_staff=False, is_authenticated=True)
         user.pk = 100
@@ -143,6 +151,7 @@ class TestBuildScope:
             assert "1" in scope.org_unit_ids
             assert scope.is_read_only is True
             assert scope.user_identifier == "100"
+            assert scope.active_apps == []  # empty registry
 
 
 # ── CarbonIntelligence tests ──────────────────────────────────────────────

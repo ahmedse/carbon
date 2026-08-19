@@ -113,6 +113,7 @@ describe('AIMessageBubble AI-driven actions', () => {
     renderBubble(message, {
       onConfirmExecution: vi.fn(),
       onDeclineExecution: vi.fn(),
+      executeMode: true,
     });
     expect(screen.getByRole('button', { name: /Confirm and create/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Decline/i })).toBeInTheDocument();
@@ -133,7 +134,7 @@ describe('AIMessageBubble AI-driven actions', () => {
         ],
       },
     };
-    renderBubble(message, { onConfirmExecution, onDeclineExecution: vi.fn() });
+    renderBubble(message, { onConfirmExecution, onDeclineExecution: vi.fn(), executeMode: true });
     fireEvent.click(screen.getByRole('button', { name: /Confirm and create/i }));
     expect(onConfirmExecution).toHaveBeenCalledWith('exec-1', expect.any(Object));
   });
@@ -153,7 +154,7 @@ describe('AIMessageBubble AI-driven actions', () => {
         ],
       },
     };
-    renderBubble(message, { onConfirmExecution: vi.fn(), onDeclineExecution });
+    renderBubble(message, { onConfirmExecution: vi.fn(), onDeclineExecution, executeMode: true });
     fireEvent.click(screen.getByRole('button', { name: /Decline/i }));
     expect(onDeclineExecution).toHaveBeenCalledWith('exec-1', expect.any(Object));
   });
@@ -162,6 +163,32 @@ describe('AIMessageBubble AI-driven actions', () => {
     renderBubble(assistantMessage);
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Confirm and create/i })).not.toBeInTheDocument();
+  });
+
+  it('hides execution buttons and shows a hint when Agent mode is OFF (Ask mode)', () => {
+    const message = {
+      ...assistantMessage,
+      metadata: {
+        pending_actions: [
+          {
+            execution_id: 'exec-1',
+            tool: 'create_dq_rule',
+            confirmation_message: 'Create DQ rule "employee-number" (range)?',
+            proposed_rule: { name: 'employee-number' },
+          },
+        ],
+      },
+    };
+    // executeMode defaults to false in renderBubble → Ask mode.
+    renderBubble(message, {
+      onConfirmExecution: vi.fn(),
+      onDeclineExecution: vi.fn(),
+    });
+    expect(screen.queryByRole('button', { name: /Confirm and create/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Decline/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Agent mode is OFF/i)).toBeInTheDocument();
+    // Details & JSON stays available for review.
+    expect(screen.getByRole('button', { name: /Show details/i })).toBeInTheDocument();
   });
 
   // ── Proposal review: details + JSON + modify ─────────────────────────
@@ -193,6 +220,7 @@ describe('AIMessageBubble AI-driven actions', () => {
     renderBubble(pendingMessage, {
       onConfirmExecution,
       onDeclineExecution: vi.fn(),
+      executeMode: true,
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Edit and confirm/i }));
@@ -221,6 +249,7 @@ describe('AIMessageBubble AI-driven actions', () => {
     renderBubble(pendingMessage, {
       onConfirmExecution,
       onDeclineExecution: vi.fn(),
+      executeMode: true,
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Edit and confirm/i }));
@@ -241,6 +270,7 @@ describe('AIMessageBubble AI-driven actions', () => {
     renderBubble(pendingMessage, {
       onConfirmExecution,
       onDeclineExecution: vi.fn(),
+      executeMode: true,
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Edit and confirm/i }));
@@ -259,6 +289,7 @@ describe('AIMessageBubble AI-driven actions', () => {
     renderBubble(pendingMessage, {
       onConfirmExecution,
       onDeclineExecution: vi.fn(),
+      executeMode: true,
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Edit and confirm/i }));

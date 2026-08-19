@@ -97,17 +97,7 @@ class PulseAgent:
         config = instance_config or {}
         persona = config.get("persona", {})
         platform = config.get('display_name', 'the platform')
-        domain_noun = persona.get("domain_noun", "the connected host system")
-        audience = persona.get("audience", "platform users")
-        system_prompt = (
-            f"You are Pulse, the AI operations copilot for {platform}. "
-            "Be warm, professional, and concise (2-4 sentences). "
-            "Never mention technical details (SQL, APIs, models, libraries, algorithms, features, SHAP values). "
-            f"You ONLY discuss {platform} and {domain_noun} operations. "
-            "If the user asks anything off-topic (general knowledge, coding, etc.), "
-            f"give a friendly one-liner redirecting them to {platform} topics. "
-            f"You help {audience} with {domain_noun} on {platform}."
-        )
+        system_prompt = self._fast_respond_system_prompt(platform, persona)
         messages = [{"role": "system", "content": system_prompt}]
         if conversation_history:
             messages.extend(conversation_history[-4:])  # light history window
@@ -135,7 +125,7 @@ class PulseAgent:
                 model = router_result["model"]
         except Exception as e:
             logger.error(f"Fast respond failed: {e}")
-            text = "Hello! I'm Pulse, your AI operations copilot. How can I help you today?"
+            text = "Hello! How can I help you today?"
             _tokens = 0
 
         logger.info(f"Fast respond  conv={conversation_id[:8]}  chars={len(text)}")
@@ -164,6 +154,30 @@ class PulseAgent:
             model=model,
             response_type="inferred",
             confidence_label="high",
+        )
+
+    @staticmethod
+    def _fast_respond_system_prompt(platform: str, persona: dict | None) -> str:
+        """System prompt for the fast conversational path.
+
+        Includes the rich-rendering note: the model must know it can emit
+        ```mermaid diagrams, tables and code snippets — the frontend renders
+        them (it must never answer "I cannot draw diagrams").
+        """
+        persona = persona or {}
+        domain_noun = persona.get("domain_noun", "the connected host system")
+        audience = persona.get("audience", "platform users")
+        return (
+            f"You are the assistant for {platform}. "
+            "Be warm, professional, and concise (2-4 sentences). "
+            "Never mention technical details (SQL, APIs, models, libraries, algorithms, features, SHAP values). "
+            f"You ONLY discuss {platform} and {domain_noun} operations. "
+            "If the user asks anything off-topic (general knowledge, coding, etc.), "
+            f"give a friendly one-liner redirecting them to {platform} topics. "
+            f"You help {audience} with {domain_noun} on {platform}. "
+            "Your replies render as rich Markdown — when a diagram would help, "
+            "emit a ```mermaid block (flowchart, sequenceDiagram); tables and code "
+            "snippets render with full formatting. Never say you cannot draw a diagram."
         )
 
     @staticmethod

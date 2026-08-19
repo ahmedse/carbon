@@ -205,12 +205,15 @@ describe('AIWorkspace Settings tab (Phase 22-B)', () => {
   });
 });
 
-describe('AIWorkspace new-chat resume (Phase 16)', () => {
-  it('reuses the most recent open chat thread instead of creating a new one', async () => {
+describe('AIWorkspace new-chat (Phase 24 — always creates a fresh thread)', () => {
+  it('always creates a NEW chat even when an empty open thread exists (Phase 24 fix)', async () => {
+    // Regression: reusing the empty "New Chat" placeholder thread made the
+    // button look broken — clicking it showed nothing new.
     findOpenConversation.mockResolvedValue({
       id: 'conv-2',
       conversation_type: 'chat',
       title: 'Beta',
+      last_message_at: null,
     });
 
     render(<AIWorkspace onClose={vi.fn()} />);
@@ -219,18 +222,10 @@ describe('AIWorkspace new-chat resume (Phase 16)', () => {
     fireEvent.click(newChatButtons[0]);
 
     await waitFor(() => {
-      expect(createConversation).not.toHaveBeenCalled();
-    });
-
-    // Open the sessions drawer to surface the resumed thread as the active tab.
-    const sessionsButton = await screen.findByRole('button', { name: 'Sessions' });
-    fireEvent.click(sessionsButton);
-
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: /Beta/ })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      );
+      expect(createConversation).toHaveBeenCalledWith('test-token', {
+        conversation_type: 'chat',
+        title: 'New Chat',
+      });
     });
   });
 

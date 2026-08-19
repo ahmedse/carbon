@@ -158,16 +158,24 @@ def test_grounded_note_empty():
 # ── Unit: Carbon instance config ────────────────────────────────────────
 
 
-def test_carbon_instance_config_includes_host_user_id():
-    config = _carbon_instance_config("7")
-    assert config["host_user_id"] == "7"
+@pytest.mark.django_db
+def test_carbon_instance_config_includes_host_user_id(user):
+    config = _carbon_instance_config(str(user.pk))
+    assert config["host_user_id"] == str(user.pk)
     assert config["display_name"]
     assert any(r["name"] == "dq_rule_detail" for r in config["navigation_routes"])
+    # The capability-scoped inventory is attached and never leaks for a
+    # plain user (no scoped roles → empty capability list).
+    assert config["user_access"]["capabilities"] == []
 
 
 def test_carbon_instance_config_no_user():
     config = _carbon_instance_config(None)
     assert config["host_user_id"] is None
+    # Anonymous users get an EMPTY inventory — nothing may be listed.
+    assert config["user_access"]["apps"] == []
+    assert config["user_access"]["capabilities"] == []
+    assert config["user_access"]["routes"] == []
 
 
 # ── Endpoint: confirm / decline tool executions ─────────────────────────
@@ -316,6 +324,38 @@ def test_decline_marks_execution_declined_and_appends_message(user, conversation
     messages = AIMessage.objects.filter(conversation=conversation, role="assistant")
     assert messages.exists()
     assert "nothing was created" in messages.order_by("-created_at").first().content
+
+
+@pytest.mark.django_db
+def test_ai_message_persists_full_actions_list(user, conversation):
+    """Capability listings surface several links at once: the message metadata
+    must keep the FULL ``actions`` list (plus the legacy single ``action``
+    field = last action) so the UI can render one small button per item."""
+    from ai.intelligence import CarbonIntelligence
+    from ai.models import AIMessage
+
+    actions = [
+        {"type": "navigate", "route": "/dq", "label": "Data Quality",
+         "summary": "Inspect and manage data quality rules."},
+        {"type": "navigate", "route": "/catalog", "label": "Data Catalog & Governance",
+         "summary": "Discover data products."},
+    ]
+
+    intelligence = CarbonIntelligence()
+    intelligence._build_ai_message(
+        conversation,
+        "completed",
+        "Here is what you can use:",
+        follow_up_questions=[],
+        actions=actions,
+    )
+
+    message = AIMessage.objects.filter(conversation=conversation, role="assistant").get()
+    metadata = message.metadata_json
+    assert metadata["action"]["route"] == "/catalog"          # backward-compat = last
+    assert len(metadata["actions"]) == 2                       # full list for the UI
+    assert metadata["actions"][0]["route"] == "/dq"
+    assert metadata["actions"][1]["route"] == "/catalog"
 
 
 @pytest.mark.django_db

@@ -81,13 +81,52 @@ describe('AIMessageBubble feedback controls', () => {
     expect(onCorrect).toHaveBeenCalledWith(assistantMessage, 'The correct answer is 42.');
   });
 
-  it('renders an Accepted chip and hides feedback buttons when outcome is set', () => {
-    renderBubble({ ...assistantMessage, outcome: 'accepted' });
+  it('colors the thumb-up green but keeps the other tools when outcome is accepted', () => {
+    renderBubble({ ...assistantMessage, outcome: 'accepted' }, {
+      onAccept: vi.fn(),
+      onReject: vi.fn(),
+      onCorrect: vi.fn(),
+    });
 
-    expect(screen.getByText('Accepted')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Correct' })).not.toBeInTheDocument();
+    // No text label anywhere.
+    expect(screen.queryByText('Accepted')).not.toBeInTheDocument();
+    // The up thumb is filled + light green.
+    expect(screen.getByTestId('message-outcome-accepted')).toBeInTheDocument();
+    expect(screen.getByTestId('ThumbUpAltIcon')).toBeInTheDocument();
+    expect(screen.queryByTestId('ThumbDownAltIcon')).not.toBeInTheDocument();
+    expect(screen.getByTestId('message-outcome-accepted')).toHaveStyle({
+      backgroundColor: 'rgba(46, 125, 50, 0.1)',
+    });
+    // The down thumb stays outlined (not colored).
+    expect(screen.getByTestId('ThumbDownAltOutlinedIcon')).toBeInTheDocument();
+    // Other tools are still there.
+    expect(screen.getByRole('button', { name: 'Reject response' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy message' })).toBeInTheDocument();
+  });
+});
+
+describe('AIMessageBubble outcome indicator (light thumbs)', () => {
+  it('shows a light green thumb-up for accepted feedback', () => {
+    renderBubble({ ...assistantMessage, outcome: 'accepted' }, { onAccept: vi.fn(), onReject: vi.fn() });
+
+    expect(screen.getByTestId('message-outcome-accepted')).toBeInTheDocument();
+    expect(screen.getByTestId('ThumbUpAltIcon')).toBeInTheDocument();
+    expect(screen.queryByTestId('ThumbDownAltIcon')).not.toBeInTheDocument();
+    expect(screen.queryByText('Accepted')).not.toBeInTheDocument();
+    // Other buttons remain visible.
+    expect(screen.getByRole('button', { name: 'Reject response' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy message' })).toBeInTheDocument();
+  });
+
+  it('shows a light red thumb-down for rejected feedback', () => {
+    renderBubble({ ...assistantMessage, outcome: 'rejected' }, { onAccept: vi.fn(), onReject: vi.fn() });
+
+    expect(screen.getByTestId('message-outcome-rejected')).toBeInTheDocument();
+    expect(screen.getByTestId('ThumbDownAltIcon')).toBeInTheDocument();
+    expect(screen.queryByTestId('ThumbUpAltIcon')).not.toBeInTheDocument();
+    expect(screen.queryByText('Rejected')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Accept response' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy message' })).toBeInTheDocument();
   });
 });
 

@@ -1834,7 +1834,7 @@ Append to `TASK-RESULTS.md`.
 
 ### Phase P2-F — Bootstrap group parity (`datahub_lead` + `turnkey_lead`)
 
-**Status:** READY
+**Status:** DONE — ACCEPTED (bootstrap parity verified; `manage.py check` clean; `pytest accounts -q` + `pytest datahub accounts -q` green; `manage.py bootstrap_platform` reports groups up-to-date)
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
 **Kind:** Small bugfix (~15 min). Closes the gap left by P1 + P2.
@@ -1868,7 +1868,7 @@ Append to `TASK-RESULTS.md`.
 
 ### Phase P3 — App Registry (`appregistry/`)
 
-**Status:** READY — dispatchable (P2 accepted; spec §7 complete; may run in parallel with P2 — now done)
+**Status:** DONE — ACCEPTED (appregistry + accounts + datahub + ai regression suites verified; `manage.py check` clean)
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
 **Spec:** `docs/DESIGN-PLATFORM.md` §7

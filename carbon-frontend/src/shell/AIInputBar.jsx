@@ -12,7 +12,6 @@ import {
   Paper,
   TextField,
   ToggleButton,
-  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -216,15 +215,6 @@ function AIInputBar({
     setResolvedMentions((prev) => prev.filter((m) => !(m.kind === kind && m.id === id)));
   }, []);
 
-  const handleModeChange = useCallback(
-    (event, nextMode) => {
-      if (nextMode) onModeChange?.(nextMode);
-    },
-    [onModeChange],
-  );
-
-
-
   const handleKeyDown = useCallback(
     (event) => {
       if (event.key === 'Escape' && stage) {
@@ -242,7 +232,7 @@ function AIInputBar({
 
   const placeholder = working
     ? mode === 'agent'
-      ? 'Agent mode — new directions interrupt the current run (Enter)…'
+      ? 'Agent running — new directions interrupt and steer the run (Enter)…'
       : PLACEHOLDER_MAP.working
     : conversationStatus === 'needs_input'
       ? PLACEHOLDER_MAP.needs_input
@@ -267,7 +257,10 @@ function AIInputBar({
     >
 
 
-      {/* Composer chrome: Ask/Agent mode selector + keyboard hint (Copilot-style) */}
+      {/* Composer chrome: Ask/Agent mode selector + dynamic mode hint.
+          Ask = answer & advice only — nothing is executed (no rule creation,
+          no data changes). Agent = run a plan where one or more agents execute
+          concrete actions in a workflow (user confirms each action first). */}
       <Box
         sx={{
           display: 'flex',
@@ -278,24 +271,75 @@ function AIInputBar({
           pt: 1,
         }}
       >
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={mode}
-          onChange={handleModeChange}
+        <Box
+          role="group"
           aria-label="Composer mode"
+          sx={{
+            display: 'inline-flex',
+            p: '2px',
+            bgcolor: 'action.hover',
+            borderRadius: 1,
+          }}
         >
-          <ToggleButton value="ask" aria-label="Ask mode" sx={{ fontSize: '0.6875rem', px: 1, py: 0.25 }}>
-            <AutoAwesomeIcon sx={{ fontSize: 12, mr: 0.5 }} />
-            Ask
-          </ToggleButton>
-          <ToggleButton value="agent" aria-label="Agent mode" sx={{ fontSize: '0.6875rem', px: 1, py: 0.25 }}>
-            <AutoFixHighIcon sx={{ fontSize: 12, mr: 0.5 }} />
-            Agent
-          </ToggleButton>
-        </ToggleButtonGroup>
+          <Tooltip
+            title="Ask the AI — get answers and advice. Nothing is created or changed: no rule creation, no data edits. The AI may suggest, but you apply it manually."
+            placement="top"
+          >
+            <span>
+              <ToggleButton
+                value="ask"
+                aria-label="Ask — answers and advice only, nothing executed"
+                onClick={() => mode !== 'ask' && onModeChange?.('ask')}
+                selected={mode === 'ask'}
+                sx={{
+                  fontSize: '0.75rem',
+                  lineHeight: 1.1,
+                  minHeight: 24,
+                  px: 1.25,
+                  py: '2px',
+                  borderRadius: 0.75,
+                  border: 0,
+                  textTransform: 'none',
+                  ...(mode === 'ask' && { bgcolor: 'action.selected' }),
+                }}
+              >
+                <AutoAwesomeIcon sx={{ fontSize: 13, mr: 0.5 }} />
+                Ask
+              </ToggleButton>
+            </span>
+          </Tooltip>
+          <Tooltip
+            title="Run an agent — Pulse plans the job and one or more agents execute concrete actions (create DQ rules, fix data, run queries) as a workflow. You confirm each action before it runs."
+            placement="top"
+          >
+            <span>
+              <ToggleButton
+                value="agent"
+                aria-label="Agent — plan and execute actions in a workflow"
+                onClick={() => mode !== 'agent' && onModeChange?.('agent')}
+                selected={mode === 'agent'}
+                sx={{
+                  fontSize: '0.75rem',
+                  lineHeight: 1.1,
+                  minHeight: 24,
+                  px: 1.25,
+                  py: '2px',
+                  borderRadius: 0.75,
+                  border: 0,
+                  textTransform: 'none',
+                  ...(mode === 'agent' && { bgcolor: 'action.selected' }),
+                }}
+              >
+                <AutoFixHighIcon sx={{ fontSize: 13, mr: 0.5 }} />
+                Agent
+              </ToggleButton>
+            </span>
+          </Tooltip>
+        </Box>
         <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.625rem' }}>
-          Enter to send · Shift+Enter for new line
+          {mode === 'ask'
+            ? 'Answers & advice only — no rules created, no data changed'
+            : 'Agents execute actions — you confirm before they run'}
         </Typography>
       </Box>
 
