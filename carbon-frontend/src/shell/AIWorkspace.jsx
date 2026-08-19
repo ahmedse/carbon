@@ -337,6 +337,24 @@ export function AIWorkspace({ onClose }) {
     [token, notifyFromError],
   );
 
+  // W2-C — a fork returns a NEW conversation id. Adopt it into the workspace
+  // and navigate to it (the source conversation is untouched).
+  const handleForked = useCallback((forked) => {
+    if (!forked?.id) return;
+    setById((prev) => ({ ...prev, [forked.id]: forked }));
+    setOrder((prev) => [forked.id, ...prev]);
+    setActiveId(forked.id);
+    setShowArchived(false);
+  }, []);
+
+  // W2-C — restore / clear-context return the *same* conversation with an
+  // updated working context (summary + snapshot); merge so the context panel
+  // telemetry refreshes in place.
+  const handleConversationUpdated = useCallback((updated) => {
+    if (!updated?.id) return;
+    setById((prev) => ({ ...prev, [updated.id]: { ...prev[updated.id], ...updated } }));
+  }, []);
+
   // Context-menu archive/restore toggle.
   const handleToggleArchive = useCallback(
     (convId) => {
@@ -468,7 +486,7 @@ export function AIWorkspace({ onClose }) {
           bgcolor: 'background.default',
         }}
       >
-        <AIWorkspaceHeader onClose={onClose} />
+        <AIWorkspaceHeader onClose={onClose} conversationId={null} />
         <Box
           sx={{
             flex: 1,
@@ -495,7 +513,12 @@ export function AIWorkspace({ onClose }) {
 
         {/* Main content — leftmost, flex:1 */}
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-          <AIWorkspaceHeader onClose={onClose} />
+          <AIWorkspaceHeader
+            onClose={onClose}
+            conversationId={activeConversation?.id ?? null}
+            onConversationUpdated={handleConversationUpdated}
+            onForked={handleForked}
+          />
           {providerOffline && <AIOfflineBanner />}
           {activePanel === 'usage' ? (
             <AIUsageTab />

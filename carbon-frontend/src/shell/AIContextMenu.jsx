@@ -142,6 +142,7 @@ function CheckpointPickerDialog({ open, mode, conversationId, onClose, onPick })
                       </Typography>
                     </Stack>
                   }
+                  secondaryTypographyProps={{ component: 'div' }}
                 />
               </ListItemButton>
             ))}

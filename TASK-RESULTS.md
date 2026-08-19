@@ -1782,3 +1782,124 @@ Browser (live): http://localhost:5179/carbon/ (ahmed / AdminPa_132)
 ### Deviations
 - **Pre-existing failures (not mine)**: `AISharedThreads.test.jsx` has 4 failing tests on clean `main` (verified via `git stash` + rerun) — unchanged by this phase.
 - The queue-vs-steer streaming behavior behind `sendMode` is preserved; the Ask/Agent labels now communicate execution semantics per the user's definition.
+# Sprint 23 — W2-C: Context clear/restore + checkpoint/fork UI (frontend-worker)
+
+**Worker Role:** frontend-worker · **Task:** `tasks/SPRINT-23-W2C-CONTEXT-UI.md` · **Date:** 2026-02-25
+
+## Summary
+Exposed the W1-B context-lifecycle actions in the workstation header via a single kebab menu:
+**Clear context** (confirm), **Save checkpoint** (name + note), **Restore** (4-state checkpoint
+picker), **Fork from here** (picker → confirm → navigates to the NEW conversation id). All five
+API wrappers were added to `aiWorkspace.js` per the W1-B contract (verified live against
+`backend/ai/workspace_api.py` + `serializers.py`). Copy everywhere makes visible that fork/clear
+never delete the durable conversation — the message log and learned facts are kept. The existing
+`aria-label="Close Pulse"` on the close button was left verbatim (e2e journey-10 depends on it);
+the kebab sits between the logo and the Close button and is disabled when no conversation is active.
+
+## Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | API wrappers (`aiWorkspace.js`) | ✅ | `listCheckpoints` (GET `checkpoints/`), `checkpointConversation` (POST `checkpoint/` `{name, note?}`), `restoreConversation` (POST `restore/` `{checkpoint_id}`), `forkConversation` (POST `fork/` `{checkpoint_id}`), `clearContext` (POST `clear-context/`) — all via `apiFetch`, `${BASE}conversations/{id}/...` pattern (RULE_10). Purely additive (5 new exports, no existing signature touched). |
+| 2 | Header kebab → Context menu | ✅ | `AIContextMenu.jsx` — kebab `aria-label="Context actions"` (disabled when no conversation), MUI `Menu` + 4 `MenuItem`s (`0.8125rem`), `Menu` anchored bottom-right under the kebab. Mounted in `AIWorkspaceHeader.jsx` between logo and Close; `Tooltip title="Close Pulse (Ctrl+\)"` + `aria-label="Close Pulse"` verbatim. |
+| 3 | Clear/fork confirm dialogs | ✅ | `ConfirmDialog` (destructive). Clear: "Clear working context?" — "Your conversation history and learned facts are kept — nothing is deleted." Fork: "Fork a new chat?" — "Your current chat stays exactly as it is — nothing is deleted." Fork navigates to the new id via `onForked` → `handleForked` in `AIWorkspace.jsx` (adopts conv into `byId`/`order`, sets `activeId`, `setShowArchived(false)`). |
+| 4 | Restore refreshes context telemetry | ✅ | `onConversationUpdated` → `handleConversationUpdated` merges the returned conversation into `byId` (same pattern as `onSummarized`) so `AIContextPanel` budget/KG telemetry refreshes in place. |
+| 5 | Save checkpoint form | ✅ | `Dialog maxWidth="xs" fullWidth`, "Checkpoint name" (required — Save disabled when empty) + "Note (optional)" multiline; Enter commits, success toast `Checkpoint “{name}” saved`. |
+| 6 | Checkpoint picker 4-state | ✅ | `CheckpointPickerDialog`: loading (CircularProgress) / error (message + Retry) / empty ("No checkpoints saved yet…") / loaded (selectable list: name, note, `snapshot.message_count`, `formatDisplayDate(created_at)`; action button disabled until selection). Shared by Restore and Fork-from-here. |
+| 7 | Tests | ✅ | `AIContextMenu.test.jsx` — 10 tests: 4 items render, kebab disabled without conversation, clear confirm → `clearContext` + notify + `onConversationUpdated`, save (name required → `checkpointConversation`), picker loading / error+Retry / empty / loaded-list restore → `restoreConversation` + `onConversationUpdated`, fork picker → confirm → `forkConversation` + `onForked`, failure path → `notifyFromError`. |
+| 8 | Verification gate | ✅ | See Verification Output. Full suite: 635 passed, 9 failed — identical to clean-baseline (stash-verified, see Issues Found). |
+
+## Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|-------|
+| MODIFY | `carbon-frontend/src/api/aiWorkspace.js` | +131 | 5 wrappers: `listCheckpoints`, `checkpointConversation`, `restoreConversation`, `forkConversation`, `clearContext` (POST/GET per W1-B contract; `checkpoint_id` body key). |
+| CREATE | `carbon-frontend/src/shell/AIContextMenu.jsx` | ~420 | Kebab menu (4 items), clear/fork `ConfirmDialog`s, save-checkpoint dialog, 4-state `CheckpointPickerDialog`, all success/failure notification wiring. Theme tokens only (RULE_8); no "Pulse" in copy (uses "AI"/"working context"). |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspaceHeader.jsx` | +12 | Mounts `AIContextMenu` (kebab) between `PulseLogo` and Close; new optional props `conversationId`, `onConversationUpdated`, `onForked`; `aria-label="Close Pulse"` + tooltip verbatim. |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | +30 | `handleForked` (adopt new conv + navigate), `handleConversationUpdated` (merge into `byId`), header props wired at both render sites (loading branch passes `conversationId={null}`). *Not in task's Files to Change — minimal wiring required for the header to receive the active conversation; see Deviations.* |
+| CREATE | `carbon-frontend/src/__tests__/AIContextMenu.test.jsx` | ~230 | 10 tests (menu render, disabled state, clear, save, picker 4-states, restore, fork, error path). |
+
+## Verification Output
+```
+$ npm run lint
+> eslint .
+(exit 0 — clean)
+
+$ npx vitest run src/__tests__/AIContextMenu.test.jsx
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+
+$ npx vitest run
+ Test Files  3 failed | 45 passed (48)
+      Tests  9 failed | 635 passed (644)
+ (the 9 failures are the pre-existing AIArtifacts ×2 / AIMessageBubble.feedback ×3 /
+  AISharedThreads ×4 — stash-verified identical on clean baseline; +10 new passing tests
+  vs W2-B's 625)
+
+$ npx vitest run src/__tests__/AIArtifacts.test.jsx src/__tests__/AIMessageBubble.feedback.test.jsx src/__tests__/AISharedThreads.test.jsx
+ Test Files  3 failed (3)
+      Tests  9 failed | 24 passed (33)
+ (baseline check: all tracked changes stashed — SAME 9 failures → not caused by W2-C)
+
+$ npm run build
+✓ built in 36.02s (chunk-size warnings pre-existing)
+
+Role-gate extras:
+$ grep -rn "\bitem\b.*xs=\|<Grid item\b" src/ --include="*.jsx"
+(0 results — no legacy MUI v6 Grid usage)
+```
+
+## Deviations
+- **`AIWorkspace.jsx` wiring (not in task's Files to Change)**: the header kebab needs the active
+  conversation id + navigation/refresh callbacks, so two handlers (`handleForked`,
+  `handleConversationUpdated`) were added and the header props wired at both render sites. This is
+  the minimal edit required to satisfy Task 2–4; no message-stream or state-shape changes.
+- **No dedicated `restore` vs `fork` pickers**: one shared `CheckpointPickerDialog` (mode prop)
+  serves both — identical 4-state logic, different title/action label, avoids duplicated loading/
+  error/empty code.
+- **Disabled kebab instead of hidden**: when no conversation is active (loading branch), the kebab
+  renders disabled rather than being conditionally mounted — keeps the header layout stable and
+  gives e2e a deterministic `aria-label="Context actions"` target.
+- **Checkpoint timestamp uses `formatDisplayDate`** (dateUtils) with a validity guard instead of
+  adding a new distance formatter — avoids `Intl` RangeError on malformed ISO strings in jsdom.
+
+## Issues Found
+- **Pre-existing (not mine — stash-verified)**: 9 failures reproduce on clean baseline with all
+  tracked changes stashed: `AISharedThreads.test.jsx` ×4 (stale Phase-12 shared-chip/close/role +
+  'Share' vs 'Share conversation' aria-label), `AIArtifacts.test.jsx` ×2 (Promote button),
+  `AIMessageBubble.feedback.test.jsx` ×3 (feedback controls). Files untouched by W2-C.
+- **Concurrent-worker note**: during the stash-baseline check a parallel worker committed
+  `TASKS.md` locally (blob identical to the working-tree version); verified no data loss — the
+  stashed W2-C files were restored intact and the gate re-passed after restore.
+- **`SystemDialog`/`ConfirmDialog` in jsdom**: fine — fixed `PaperProps` position absolute renders
+  normally; no `window.confirm` used anywhere (all flows go through the confirm dialog component).
+
+## Addendum — Nesting fix re-gate + live browser verification (all flows)
+
+Applied after the original report: `ListItemText` `secondaryTypographyProps={{ component: 'div' }}`
+in the checkpoint picker to fix the React hydration warning (`<p>` cannot contain nested `<div>`
+from the metadata Stack). Verified **zero console errors** in the browser after HMR.
+
+**Final verification gate re-run** (after the fix touched `AIContextMenu.jsx`):
+```
+npm run lint            → clean
+npx vitest run AIContextMenu.test.jsx → 10/10 passed
+npm run build           → ✓ built in 27.17s (chunk-size warnings pre-existing)
+```
+`get_errors` on all 5 edited files: none.
+
+**Live browser verification (logged in as `ahmed`, http://localhost:5179)** — all four
+flows exercised end-to-end, zero console errors throughout:
+1. **Kebab** → `aria-label="Context actions"` renders; menu shows exactly 4 items:
+   Clear context / Save checkpoint / Restore / Fork from here.
+2. **Save checkpoint** — dialog validates name (Save disabled when empty), saved
+   "W2C browser check" → toast `Checkpoint "W2C browser check" saved`.
+3. **Restore** — picker lists the checkpoint ("8 messages · Aug 20, 2026" + note);
+   selection → restore → toast `Working context restored from checkpoint`, dialog closes.
+4. **Fork** — picker ("Fork from here") → select → confirm "Fork a new chat?" with the
+   "current chat stays exactly as it is — nothing is deleted" copy → confirm →
+   **new conversation "Main — fork" appears in the Sessions rail** and opens with the
+   checkpoint's message history intact; original chat untouched.
+5. **Clear context** — confirm "Clear working context?" (copy: "nothing is deleted") →
+   toast `Working context cleared — chat history kept`, dialog closes.
+
+Fork/clear leave the durable conversation intact — visible in the confirm-dialog copy,
+and verified: after the fork, "Main" still exists unchanged alongside "Main — fork".

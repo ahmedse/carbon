@@ -4,8 +4,9 @@ import PropTypes from 'prop-types';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import PulseLogo from './PulseLogo';
+import AIContextMenu from './AIContextMenu';
 
-function AIWorkspaceHeader({ onClose }) {
+function AIWorkspaceHeader({ onClose, conversationId, onConversationUpdated, onForked }) {
   return (
     <Box
       sx={{
@@ -20,6 +21,11 @@ function AIWorkspaceHeader({ onClose }) {
       }}
     >
       <PulseLogo size={20} showWordmark sx={{ flex: 1 }} />
+      <AIContextMenu
+        conversationId={conversationId}
+        onConversationUpdated={onConversationUpdated}
+        onForked={onForked}
+      />
       <Tooltip title="Close Pulse (Ctrl+\)">
         <IconButton
           size="small"
@@ -35,6 +41,9 @@ function AIWorkspaceHeader({ onClose }) {
 
 AIWorkspaceHeader.propTypes = {
   onClose: PropTypes.func.isRequired,
+  conversationId: PropTypes.string,
+  onConversationUpdated: PropTypes.func,
+  onForked: PropTypes.func,
 };
 
 export default AIWorkspaceHeader;

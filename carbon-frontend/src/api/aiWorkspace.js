@@ -213,6 +213,80 @@ export function summarizeConversation(token, conversationId, force = false) {
 }
 
 /**
+ * List a conversation's named checkpoints, newest first (checkpoint picker).
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @returns {Promise<object>} { checkpoints: [{ id, name, note, snapshot, created_at, updated_at }] }
+ */
+export function listCheckpoints(token, conversationId) {
+  return apiFetch(`${BASE}conversations/${conversationId}/checkpoints/`, {
+    token,
+  });
+}
+
+/**
+ * Save a named snapshot of the conversation's working context. Idempotent:
+ * re-saving the same ``name`` overwrites that checkpoint.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {object} params - { name, note? }
+ * @returns {Promise<object>} Serialized checkpoint
+ */
+export function checkpointConversation(token, conversationId, { name, note = '' } = {}) {
+  return apiFetch(`${BASE}conversations/${conversationId}/checkpoint/`, {
+    token,
+    method: 'POST',
+    body: { name, note },
+  });
+}
+
+/**
+ * Re-seed a conversation's *working* context from a saved checkpoint.
+ * The durable message log is NOT overwritten.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} checkpointId - UUID
+ * @returns {Promise<object>} Serialized AIConversation
+ */
+export function restoreConversation(token, conversationId, checkpointId) {
+  return apiFetch(`${BASE}conversations/${conversationId}/restore/`, {
+    token,
+    method: 'POST',
+    body: { checkpoint_id: checkpointId },
+  });
+}
+
+/**
+ * Clone the conversation into a NEW conversation seeded from a checkpoint.
+ * Returns the new conversation's id — never aliases the source row.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {string} checkpointId - UUID
+ * @returns {Promise<object>} Serialized AIConversation (the fork)
+ */
+export function forkConversation(token, conversationId, checkpointId) {
+  return apiFetch(`${BASE}conversations/${conversationId}/fork/`, {
+    token,
+    method: 'POST',
+    body: { checkpoint_id: checkpointId },
+  });
+}
+
+/**
+ * Reset a conversation's working context (summary + context snapshot). The
+ * conversation row, its message log, and learned facts are all kept.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @returns {Promise<object>} Serialized AIConversation
+ */
+export function clearContext(token, conversationId) {
+  return apiFetch(`${BASE}conversations/${conversationId}/clear-context/`, {
+    token,
+    method: 'POST',
+  });
+}
+
+/**
  * Confirm a staged tool execution (e.g. a proposed create_dq_rule) so it
  * actually runs as the current user. The response carries the created
  * entity + a navigate action the UI can follow.
