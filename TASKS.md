@@ -1737,6 +1737,445 @@ diverge.
 
 ---
 
+## AI WORKSTATION TRACK
+
+Turns the Pulse AI Workspace into a *workstation*: run agent actions / MCP
+commands / tools with verbosity + clean abort, manage conversation context
+(clear / restore / checkpoint / fork), accordion past chats, and scroll large
+content. Design + research rationale: `docs/DESIGN_AI_WORKSTATION.md`.
+
+Dispatch order: **W1-A → W2-A** (execution surface) and **W1-B → W2-C**
+(context lifecycle) are two independent chains; **W2-B** is standalone polish.
+Backend and frontend never share a phase.
+
+---
+
+### Phase W1-A — Agent/Tool/MCP execution seam + streamed events + verbosity + abort
+
+**Date:** 2026-08-19
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Kind:** Backend-only. Medium.
+**Depends on:** chat SSE (`dispatch_task_stream` + `workspace_api` messages/stream) and `generation_registry`.
+
+### Files to Read First
+- `backend/ai/engine/agent/executor.py` — `HostAPIExecutor` (confirm/decline/direct call; RULE_21 gating)
+- `backend/ai/engine/agent/registry.py` + `tools.py` + `mcp_client.py` — agent/tool/MCP catalogs
+- `backend/ai/generation_registry.py` — per-conversation `threading.Event` (abort primitive)
+- `backend/ai/engine_runtime.py` — `dispatch_task_stream` bridge (chunk/done/error frames)
+- `backend/ai/workspace_api.py` — SSE `messages/stream` action (frame shape)
+- `backend/ai/models/core.py:188 ToolExecution` — durable tool-execution log
+
+### Files to Change
+- `backend/ai/engine_runtime.py` — MODIFY: add an agent/tool run path that yields **clustered** frames keyed by `turn_id`/`step_id` — `turn_start` → (`tool_start`/`tool_arg`/`tool_result`/`tool_end`)* → `turn_end` — honours `verbosity`, and checks `generation_registry.is_cancelled()` between steps
+- `backend/ai/providers/pulse.py` — MODIFY: expose a `run_tool_stream` (or extend `chat_stream`) passthrough
+- `backend/ai/intelligence.py` — MODIFY: `run_agent_action_stream(...)` generator + guard chain (scope/mutation/rate)
+- `backend/ai/workspace_api.py` — MODIFY: new action under the existing conversation router, e.g. `POST .../conversations/{id}/actions/stream/` (SSE)
+- `backend/ai/tests/test_agent_action_stream.py` — ADD
+
+### Implementation
+1. **Clustered frame protocol** (see `docs/DESIGN_AI_WORKSTATION.md` §2.5):
+   every action run opens with `turn_start {turn_id,label,verbosity}`, then for
+   each step emits `tool_start {turn_id,step_id,tool,category}` → optional
+   `tool_arg {step_id,args}` → `tool_result {step_id,result}` → `tool_end
+   {step_id,status}`, and closes with `turn_end {turn_id,status,summary}`.
+   `category` ∈ `agent|mcp|tool`. Frontend nests frames under the ids.
+2. Reuse `generation_registry.start/cancel/is_cancelled` for the action run.
+   A cancel between tool steps must emit `tool_end {status:"stopped"}` then a
+   `turn_end {status:"stopped"}` (never `error`, never leaves the conversation
+   in `working`).
+3. `verbosity` ∈ {`concise`, `full`}: `concise` emits `tool_start`+`tool_end`
+   (name + status) only; `full` additionally emits `tool_arg` + `tool_result`
+   payloads (redacted via `_redact_secrets`).
+4. Every step writes a `ToolExecution` row (already exists) — status
+   `running` → `completed|failed|stopped`. No auto-mutation: host-mutating
+   actions stay `requires_confirmation=True` (RULE_21).
+5. Agent/tool/MCP catalog reads must be read-only GET endpoints under
+   `/carbon-api/ai/…`, CBAC `ai:view_console`.
+
+### DO NOT TOUCH
+- Frontend files.
+- `engine/agent/executor.py` confirmation semantics (call them, don't fork).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- Abort correctness is the acceptance bar: `cancel()` mid-run must yield a
+  `stopped` final frame, a completed `ToolExecution(status="stopped")`, and no
+  stuck `working` message. Test this explicitly.
+
+---
+
+### Phase W1-B — Conversation checkpoint / restore / fork / clear-context (backend)
+
+**Date:** 2026-08-19
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Kind:** Backend-only. Medium.
+**Depends on:** W1-A (fork reuses the abort/stop seam).
+
+### Files to Read First
+- `backend/ai/workspace_api.py` — conversation router (where actions mount)
+- `backend/ai/context_assembler.py` — `assemble_context` (the snapshot bundle)
+- `backend/ai/models/workspace.py` — `AIConversation` / `AIMessage` (`context_snapshot_json`)
+- `backend/ai/intelligence.py` — `send_message_stream` (how context is built/injected)
+
+### Files to Change
+- `backend/ai/models/workspace.py` — ADD `ConversationCheckpoint` (or core.py) + migration
+- `backend/ai/intelligence.py` — MODIFY: `checkpoint_conversation`, `restore_conversation`, `fork_conversation`, `clear_context`
+- `backend/ai/workspace_api.py` — MODIFY: `checkpoint/`, `restore/`, `fork/`, `clear-context/` actions
+- `backend/ai/serializers.py` — MODIFY: checkpoint serializer
+- `backend/ai/tests/test_context_lifecycle.py` — ADD
+
+### Implementation
+1. `checkpoint` snapshots the current context bundle (messages + budget +
+   `kg_entities` + memory) under a user name + optional note; idempotent
+   (same name → overwrite, or reject if `--strict`).
+2. `restore` re-seeds a conversation's working context from a checkpoint;
+   it does NOT overwrite the durable message log.
+3. `fork` clones a conversation (title `"{old} — fork"`) seeded from a
+   checkpoint at a chosen message boundary — new conversation id.
+4. `clear-context` resets the *working* context (history/summary/KG/memory
+   injection) without deleting the conversation row or learned facts.
+5. All mutating actions require `ai:manage_console`; reads `ai:view_console`.
+
+### DO NOT TOUCH
+- Frontend files.
+- `learning.py` / durable memory writes (clearing context must not trigger forgetting).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- Fork must produce a NEW conversation id (no aliasing the old row). Clear
+  must leave `context_snapshot_json` on existing messages untouched.
+
+---
+
+### Phase W2-A — Agent/MCP/Tools/Logs surface + execution panel + verbosity + abort
+
+**Date:** 2026-08-19
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Kind:** Frontend-only. Medium-large.
+**Depends on:** W1-A (execution SSE + catalog endpoints).
+
+### Files to Read First
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — activity bar + `activePanel` branches
+- `carbon-frontend/src/api/aiWorkspace.js` — `streamJsonPost` (reuse for action frames)
+- `carbon-frontend/src/shell/AIMemoryTab.jsx` — grouped-surface internal-Tabs precedent (RULE_17)
+- `.ai-toolkit/shared/ux-patterns.md` + `docs/DESIGN_AI_WORKSTATION.md` §2
+
+### Files to Change
+- `carbon-frontend/src/shell/AIAgentPanel.jsx` — ADD (Agents/MCP/Tools/Logs internal `<Tabs>`, persisted `carbon-ai-agent-tab`)
+- `carbon-frontend/src/shell/AIActionRunner.jsx` — ADD (clustered streaming timeline: turn cluster → collapsible step cards, verbosity Select, Stop button)
+- `carbon-frontend/src/api/aiWorkspace.js` — MODIFY: `runActionStream(...)` wrapper
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — MODIFY: one "Agent" activity-bar icon (hub icon) opening `AIAgentPanel`; do NOT add 4 flat icons
+- `carbon-frontend/src/__tests__/AIAgentPanel.test.jsx` — ADD
+
+### Implementation
+1. **One icon, four tabs** (RULE_17): Agents (list + select + run) / MCP
+   (servers + tools, read-only from catalog) / Tools (built-in tools) / Logs
+   (`ToolExecution` + `LLMCallLog` timeline, expandable JSON).
+2. **Clustered timeline** (RULE: no flat wall — see design §2.5): frames are
+   nested by `turn_id`/`step_id`. A *turn cluster* renders as one collapsible
+   group header — "Working…" → "Finished · N tools" (or "Stopped by you") —
+   that collapses the whole group to one line. Inside, each step is its own
+   collapsible card (status icon + tool name + status chip; expandable args /
+   result body). Append frames incrementally without re-rendering the whole
+   transcript. `verbosity` (Concise/Full) controls default expansion only —
+   every card stays individually toggleable.
+3. **Stop** button → `stopGeneration`; run flips to `stopped`, shows
+   "Stopped by you" *inside the turn/step card* (not an error banner), and
+   re-enables the composer.
+4. Host-mutating actions render a confirm gate (RULE_21), never a silent run.
+5. Failed/stopped step details live inside the card body; wide output
+   (JSON/terminal/tables) scrolls on X inside its card; theme tokens only
+   (RULE_8). Collapse state is per-run in-memory (not persisted).
+
+### DO NOT TOUCH
+- Backend files.
+- `AIConversationView.jsx` / `AIMessageBubble.jsx` chat rendering (separate surface).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/AIAgentPanel.test.jsx src/__tests__/AIWorkspace.shell.test.jsx
+npm run build
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- Copy must be outcomes, not internals (RULE_23): "Running…", "Finished",
+  "Stopped" — never engine class names. Verify the stop-path test exists.
+- Acceptance for clustering: a 3-tool run collapses to a single
+  "Finished · 3 tools" summary line, each tool toggles independently, and a
+  stopped run shows "Stopped by you" inside the card — never a stuck working
+  spinner, never a red banner.
+
+---
+
+### Phase W2-B — Past-chat accordion + scroll containment
+
+**Date:** 2026-08-19
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Kind:** Frontend-only. Small-medium.
+**Depends on:** (independent).
+
+### Files to Read First
+- `carbon-frontend/src/shell/AIConversationTabs.jsx` — grouped session list (Today/7d/Older)
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — drawer + pane layout
+- `carbon-frontend/src/shell/LongContent.jsx` — existing long-output container
+
+### Files to Change
+- `carbon-frontend/src/shell/AIConversationTabs.jsx` — MODIFY: collapsible accordion groups (header toggle, per-item inline expand)
+- `carbon-frontend/src/shell/AIConversationView.jsx` — MODIFY: message list gets its own vertical scroll container (independent of header/input)
+- `carbon-frontend/src/shell/LongContent.jsx` — MODIFY: `overflow:auto` X for wide JSON/terminal/table content
+- `carbon-frontend/src/__tests__/AIConversationTabs.accordion.test.jsx` — ADD
+
+### Implementation
+1. Group header toggles collapse/expand; state persisted via localStorage
+   (`carbon-ai-accordion-{group}`); long lists virtualized.
+2. Message list = one vertical scroll region; input bar + header stay fixed.
+3. Wide content scrolls horizontally inside its card — never widen the page.
+
+### DO NOT TOUCH
+- Backend files.
+- `AIInputBar.jsx` growth behaviour (Phase 23-C).
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/AIConversationTabs.accordion.test.jsx
+npm run build
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+---
+
+### Phase W2-C — Context clear/restore + checkpoint/fork UI
+
+**Date:** 2026-08-19
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Kind:** Frontend-only. Medium.
+**Depends on:** W1-B (checkpoint/restore/fork/clear endpoints).
+
+### Files to Read First
+- `carbon-frontend/src/shell/AIWorkspaceHeader.jsx` — header actions (where Clear/Restore/Fork buttons mount)
+- `carbon-frontend/src/api/aiWorkspace.js` — conversation API wrappers
+- `carbon-frontend/src/shell/AIContextPanel.jsx` — context telemetry surface
+- `docs/DESIGN_AI_WORKSTATION.md` §2.3
+
+### Files to Change
+- `carbon-frontend/src/api/aiWorkspace.js` — MODIFY: `checkpointConversation`/`restoreConversation`/`forkConversation`/`clearContext`
+- `carbon-frontend/src/shell/AIContextMenu.jsx` — ADD (checkpoint picker + clear/fork confirm)
+- `carbon-frontend/src/shell/AIWorkspaceHeader.jsx` — MODIFY: mount `AIContextMenu` (kebab)
+- `carbon-frontend/src/__tests__/AIContextMenu.test.jsx` — ADD
+
+### Implementation
+1. Header kebab → Context: **Clear context** (confirm), **Save checkpoint**
+   (name + note), **Restore** (picker), **Fork from here**.
+2. Clear/fork show a confirm dialog (destructive-ish); fork navigates to the
+   new conversation; restore refreshes the context panel telemetry.
+3. Empty/error/loading 4-state on the checkpoint picker; theme tokens only.
+
+### DO NOT TOUCH
+- Backend files.
+- `AIConversationView.jsx` message stream.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/AIContextMenu.test.jsx
+npm run build
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- Fork/clear never delete the durable conversation; make that visible in copy.
+
+---
+
+### Phase W3-A — Agentic Task Orchestration: backend (plan → approve → execute → audit)
+
+**Date:** 2026-08-20
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Backend-only. Large.
+**Depends on:** W1-A (execution seam + streamed events), W2-A (confirm/decline/stop wired).
+
+### Files to Read First
+- `backend/ai/engine/cognition/plan/planner.py` — `Plan`/`PlanStep` decomposition (already built)
+- `backend/ai/engine/cognition/plan/loop.py` — `ReActLoop` (draft → critic → execute → observe, consent gates, ≤2 replans)
+- `backend/ai/engine/core/models.py` — `Run`/`RunStep`/`ops_runs` provenance ledger + `AuditLog` (already built)
+- `backend/ai/engine/cognition/turn/runner.py` — `AGENT_ORCHESTRATOR_ENABLED` (P3.2 fan-out gate) + `KG_MULTI_STEP_ENABLED` (PR-20 ReAct trigger)
+- `backend/ai/plugins/` — `ToolPlugin`/`WorkflowPlugin` registry (Sprint 12) — the tool surface steps execute through
+- `backend/ai/workspace_api.py` — `run_action_stream`, `confirm_tool_execution`, `decline_tool_execution`, `stop_generation` (seam to reuse)
+- `.ai-toolkit/shared/api-contract.md` + `cbac.md` + `data-layer.md`
+
+### Files to Change
+- `backend/ai/plans_api.py` (NEW) — task orchestration viewset (see Implementation)
+- `backend/ai/plans_service.py` (NEW) — plan lifecycle: create from brief → run via `ReActLoop` → persist `Run`/`RunStep` rows → ledger snapshot
+- `backend/ai/urls.py` (MODIFY) — route `plans/…` endpoints
+- `backend/ai/tests/test_plans.py` (NEW) — ≥8 tests
+
+### Context
+The engine can already decompose a task, execute it step-by-step with critic
+gating + replans, persist a provenance ledger, and gate every mutation behind
+user confirmation — but it only fires **reactively inside chat turns**
+(`AGENT_ORCHESTRATOR_ENABLED`, `KG_MULTI_STEP_ENABLED`) and there is **no
+user-initiated task surface**: no `POST /plans/` that takes a task brief, no
+reviewable plan payload, no per-task audit read. W3-A exposes the built
+machinery as a first-class, auditable task product without touching the engine.
+
+### Design decisions (deep)
+- **Plan is reviewable before execution.** `POST /ai/plans/` `{brief, tool_ids?}` →
+  planner decomposes → returns `plan` (steps: intent, tool, dry-run preview) with
+  status `pending_approval`. Nothing executes until approved — RULE_21.
+- **Two-phase consent.** Step-level `confirm_tool_execution` reuses the W1-A/W2-A
+  seam for host-mutating tools; the plan-level approve gate is a separate
+  explicit call so a multi-step task can be reviewed as a whole, then executed.
+- **Execution streams, audit is durable.** `POST /ai/plans/{id}/run/` streams
+  per-step events (same `onFrame` protocol as `run_action_stream`); every step
+  writes a `RunStep` row and the final `Run` row carries replans_used,
+  confirmations_required, latency, tokens, and provenance — read via
+  `GET /ai/plans/{id}/ledger/`. Parallel steps use the existing P3.2 fan-out gate.
+- **No new engine state.** Plans reuse `Run`/`RunStep`; the ledger stays the
+  single audit source. Fail-visible contract holds: step failure → `failed`
+  status + reason, never a fake success.
+
+### Implementation
+1. `PlansViewSet` (CBAC-scoped, DRF):
+   - `POST /ai/plans/` → create plan `pending_approval` (planner; no execution)
+   - `GET /ai/plans/` + `GET /ai/plans/{id}/` → list/detail (plan + steps + status)
+   - `POST /ai/plans/{id}/approve/` → `approved` (returns run id)
+   - `POST /ai/plans/{id}/run/` → SSE stream of per-step events (reuses
+     `run_action_stream` frame protocol: `step_start/step_result/step_confirm/step_end/done`)
+   - `POST /ai/plans/{id}/steps/{step_id}/confirm|decline/` → step consent
+   - `POST /ai/plans/{id}/stop/` → abort remaining steps (status `stopped`)
+   - `GET /ai/plans/{id}/ledger/` → audit: steps, replans, confirmations,
+     latency, tokens, provenance, actor
+2. `PlansService.run_plan`: feed the approved plan into `ReActLoop`
+   (draft → critic → execute → observe per step; ≤2 replans; consent gates);
+   persist `Run`/`RunStep` rows; finalize ledger.
+3. Wire `plans_api.py` into `backend/ai/urls.py`; GuardChain applies on every call.
+
+### DO NOT TOUCH
+- `backend/ai/engine/` — the engine (planner/ReActLoop/models) is already built; W3-A only calls it.
+- Frontend files (Phase W3-B owns the UI).
+- `AGENT_ORCHESTRATOR_ENABLED` / `KG_MULTI_STEP_ENABLED` default behavior in chat.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check                 # → "no issues"
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run  # → "No changes detected" (reuses Run/RunStep)
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_plans.py -q        # → new tests pass
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q                           # → all green
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- W3-A is the product wrapper, not an engine rewrite — evidence: `ReActLoop`,
+  `Plan`/`PlanStep`, `Run`/`RunStep`/`ops_runs` already exist and persist.
+- Approve-then-run keeps RULE_21 (no silent mutation); parallel fan-out stays
+  behind the P3.2 gate so budgets are enforced.
+
+---
+
+### Phase W3-B — Agentic Task Orchestration: frontend (task panel + plan review + audit)
+
+**Date:** 2026-08-20
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Frontend-only. Medium-large.
+**Depends on:** W3-A (plans endpoints), W2-A (`AIActionRunner` cluster/confirm/stop patterns).
+
+### Files to Read First
+- `carbon-frontend/src/shell/AIAgentPanel.jsx` + `AIActionRunner.jsx` — reuse the run-card/step-card cluster, verbosity, confirm/decline/stop
+- `carbon-frontend/src/api/aiWorkspace.js` — add plans wrappers beside `runActionStream`
+- `docs/DESIGN_AI_WORKSTATION.md` §2.4 (accordion/scroll) + §2.5 (execution seam)
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — where the activity-bar task entry mounts
+- `.ai-toolkit/shared/design-system.md` (RULE_8 tokens, compact density)
+
+### Files to Change
+- `carbon-frontend/src/api/aiWorkspace.js` — MODIFY: `createPlan`, `getPlan`, `listPlans`, `approvePlan`, `runPlanStream`, `confirmPlanStep`, `declinePlanStep`, `stopPlan`, `getPlanLedger`
+- `carbon-frontend/src/shell/AITaskPanel.jsx` — ADD (activity-bar "Tasks" entry; tabbed: Task list / Run detail)
+- `carbon-frontend/src/shell/AITaskPlanCard.jsx` — ADD (reviewable plan: step stepper with dry-run previews + Approve / Decline)
+- `carbon-frontend/src/shell/AITaskAuditCard.jsx` — ADD (ledger per task: steps, replans, confirmations, latency, tokens, provenance)
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — MODIFY (activity-bar entry + render branch)
+- `carbon-frontend/src/__tests__/AITaskPanel.test.jsx` — ADD
+
+### Implementation
+1. **Plan review:** create from a brief (task input in the panel); render plan
+   steps as a stepper with status chips + dry-run previews; **Approve / Decline**
+   gate before any execution (RULE_21).
+2. **Run detail:** stream per-step events into the `AIActionRunner`-style
+   clustered timeline; step confirm/decline + Stop reuse the W2-A handlers.
+3. **Audit:** `AITaskAuditCard` reads `getPlanLedger` — replans used,
+   confirmations required, per-step latency/tokens, provenance, actor; status
+   filter chips on the task list (pending / running / completed / failed / stopped).
+4. Theme tokens only; compact density; empty/loading/error 4-states everywhere.
+
+### DO NOT TOUCH
+- Backend files.
+- `AIInputBar.jsx` growth behaviour.
+- Existing `AIActionRunner.jsx` — extend patterns, don't refactor the W2-A component.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/AITaskPanel.test.jsx   # → passes
+npm run build
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- This is the missing product layer: the engine already plans/executes/audits —
+  W3-B makes it user-initiated, reviewable, and observable end-to-end.
+- W3-A before W3-B; the task list + audit views are the acceptance proof.
+
+---
+
 ## PLATFORM EXPANSION TRACK
 
 Strict build order: **P1 → P2 → P4** (P3 may run in parallel with P2). Full

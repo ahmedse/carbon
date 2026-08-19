@@ -1,0 +1,71 @@
+"""URL routing for the Agentic Task Orchestration API (Sprint 23 W3-A).
+
+Mounted at ``{api_prefix}/ai/plans/`` (see ``config/urls.py``), so each path
+below is relative to ``/carbon-api/ai/plans/``:
+
+    POST   /                        create (brief → pending_approval)
+    GET    /                        list my plans
+    GET    /{id}/                   plan detail + steps
+    POST   /{id}/approve/           plan-level consent (RULE_21)
+    POST   /{id}/decline/           decline a pending plan
+    POST   /{id}/run/               SSE streamed run
+    POST   /{id}/steps/confirm/     confirm a paused consent step
+    POST   /{id}/steps/decline/     decline a paused consent step
+    POST   /{id}/stop/              cancel a run
+    GET    /{id}/ledger/            audit ledger
+
+Note: explicit ``as_view`` mappings instead of a router because the include
+mount already carries the ``plans`` prefix — a router would double it.
+"""
+
+from django.urls import path
+
+from ai.plans_api import PlanViewSet
+
+urlpatterns = [
+    path(
+        "",
+        PlanViewSet.as_view({"get": "list", "post": "create"}),
+        name="ai-plan-list",
+    ),
+    path(
+        "<str:pk>/",
+        PlanViewSet.as_view({"get": "retrieve"}),
+        name="ai-plan-detail",
+    ),
+    path(
+        "<str:pk>/approve/",
+        PlanViewSet.as_view({"post": "approve"}),
+        name="ai-plan-approve",
+    ),
+    path(
+        "<str:pk>/decline/",
+        PlanViewSet.as_view({"post": "decline"}),
+        name="ai-plan-decline",
+    ),
+    path(
+        "<str:pk>/run/",
+        PlanViewSet.as_view({"post": "run"}),
+        name="ai-plan-run",
+    ),
+    path(
+        "<str:pk>/steps/confirm/",
+        PlanViewSet.as_view({"post": "confirm_step"}),
+        name="ai-plan-step-confirm",
+    ),
+    path(
+        "<str:pk>/steps/decline/",
+        PlanViewSet.as_view({"post": "decline_step"}),
+        name="ai-plan-step-decline",
+    ),
+    path(
+        "<str:pk>/stop/",
+        PlanViewSet.as_view({"post": "stop"}),
+        name="ai-plan-stop",
+    ),
+    path(
+        "<str:pk>/ledger/",
+        PlanViewSet.as_view({"get": "ledger"}),
+        name="ai-plan-ledger",
+    ),
+]
