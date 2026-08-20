@@ -185,6 +185,17 @@ function getSidebarItems(studioId) {
         { label: 'Feedback', path: '/feedback', icon: AssessmentIcon },
       ];
     
+    case 'apps':
+      return [
+        { label: 'Healthy Dashboard', path: '/apps/healthy', icon: DashboardIcon },
+        { type: 'divider' },
+        { type: 'group', label: 'Healthy Foods Factory' },
+        { label: 'Loadout Sheet', path: '/apps/healthy/loadout', icon: TableChartIcon },
+        { label: 'Rep Health', path: '/apps/healthy/reps', icon: PeopleIcon },
+        { label: 'AR Queue', path: '/apps/healthy/collections', icon: AccountBalanceWalletIcon },
+        { label: 'Slow Movers', path: '/apps/healthy/inventory', icon: StorageIcon },
+      ];
+    
     default: {
       // Dynamic lookup: if this studioId is a manifest app, return its nav items.
       // This makes ALL future apps work with zero additional changes here.
@@ -208,6 +219,7 @@ function getStudioTitle(studioId) {
     'ai-admin': 'AI Admin',
     settings:'Settings',
     help:    'Help & Support',
+    apps:    'Apps',
   };
   return titles[studioId]
     || APP_REGISTRY.find(m => m.id === studioId)?.name

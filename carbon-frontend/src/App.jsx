@@ -103,6 +103,11 @@ const AILogsPanel = React.lazy(() => import("./pages/admin/ai/AILogsPanel"));
 const AgentTopologyPanel = React.lazy(() => import("./pages/admin/ai/AgentTopologyPanel"));
 const RunTimelinePanel = React.lazy(() => import("./pages/admin/ai/RunTimelinePanel"));
 const AnalyticsDashboard = React.lazy(() => import("./pages/dashboards/AnalyticsDashboard"));
+const HealthyDashboard = React.lazy(() => import("./apps/healthy/HealthyDashboard"));
+const LoadoutSheetPage = React.lazy(() => import("./apps/healthy/LoadoutSheetPage"));
+const RepHealthPage = React.lazy(() => import("./apps/healthy/RepHealthPage"));
+const ARQueuePage = React.lazy(() => import("./apps/healthy/ARQueuePage"));
+const SlowMoversPage = React.lazy(() => import("./apps/healthy/SlowMoversPage"));
 
 import PlatformHome from "./pages/PlatformHome";
 
@@ -252,6 +257,14 @@ export default function App() {
                 <Route path="/data-owner/dashboard" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/data-owner/assets" element={<Navigate to="/carbon/owner/assets" replace />} />
                 <Route path="/data-owner/reports/generate" element={<Navigate to="/carbon/reporting/generate" replace />} />
+                {/* Apps namespace — Healthy Foods Factory domain app */}
+                {/* Namespace root redirect — bare /apps root. RULE_22. */}
+                <Route path="/apps" element={<Navigate to="/apps/healthy" replace />} />
+                <Route path="/apps/healthy" element={<HealthyDashboard />} />
+                <Route path="/apps/healthy/loadout" element={<LoadoutSheetPage />} />
+                <Route path="/apps/healthy/reps" element={<RepHealthPage />} />
+                <Route path="/apps/healthy/collections" element={<ARQueuePage />} />
+                <Route path="/apps/healthy/inventory" element={<SlowMoversPage />} />
                 {/* Admin-only: Schema Admin > Table Manager */}
                 {/* Namespace root redirect — bare /schema-admin root. RULE_22. */}
                 <Route path="/schema-admin" element={<Navigate to="/schema-admin/table-manager" replace />} />
