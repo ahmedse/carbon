@@ -334,6 +334,64 @@ class DQRuleViewSet(viewsets.ModelViewSet):
 
     @swagger_auto_schema(
         operation_description=(
+            'Detect contradictions/redundancies among active rules on a field or table. '
+            'Provide data_field (int) or data_table (int) as a query param. '
+            'Returns findings with kind = conflict|redundant|undecidable.'
+        ),
+        manual_parameters=[
+            openapi.Parameter('data_field', openapi.IN_QUERY, type=openapi.TYPE_INTEGER),
+            openapi.Parameter('data_table', openapi.IN_QUERY, type=openapi.TYPE_INTEGER),
+        ],
+        responses={200: 'Contradiction findings', 400: 'Missing/invalid field or table'},
+    )
+    @action(detail=False, methods=['get'], url_path='contradictions')
+    def contradictions(self, request):
+        """GET /dq/rules/contradictions/?data_field=<id> or ?data_table=<id>
+
+        Semantic layer over the rule-type <-> field-type applicability check:
+        surfaces disjoint ranges, disjoint allowed-value sets, redundant
+        not_null/unique rules, and undecidable semantic overlaps.
+        """
+        from .services import detect_rule_contradictions
+
+        field_raw = request.query_params.get('data_field')
+        table_raw = request.query_params.get('data_table')
+        if not field_raw and not table_raw:
+            return Response(
+                {'detail': 'Provide data_field or data_table query param.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            data_field_id = int(field_raw) if field_raw else None
+            data_table_id = int(table_raw) if table_raw else None
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'data_field / data_table must be integers.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # RBAC: verify the caller can see the target table.
+        try:
+            if data_field_id is not None:
+                field = DataField.objects.select_related('data_table').get(pk=data_field_id)
+                table = field.data_table
+            else:
+                table = DataTable.objects.get(pk=data_table_id)
+        except (DataField.DoesNotExist, DataTable.DoesNotExist):
+            return Response(
+                {'detail': 'Field or table not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        _check_table_access(request.user, table)
+
+        findings = detect_rule_contradictions(
+            data_field_id=data_field_id, data_table_id=data_table_id,
+        )
+        return Response({'count': len(findings), 'findings': findings})
+
+    @swagger_auto_schema(
+        operation_description=(
             'Bulk-execute multiple DQ rules or all rules for a table. '
             'Provide either rule_ids (array) or data_table_id (int).'
         ),

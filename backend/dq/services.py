@@ -992,3 +992,70 @@ def snapshot_schema(table_id=None, notify=False) -> dict:
         })
 
     return {'total': total, 'changes_detected': changes_detected, 'results': results}
+
+
+def _rule_spec(rule):
+    """Build an analysis-ready rule spec from a DQRule instance.
+
+    Prefers `definition` (source of truth, ADR-0006); falls back to flat columns
+    for legacy rules that predate `definition`.
+    """
+    d = rule.definition or {}
+    params = d.get('params') or rule.params or {}
+    return {
+        'rule_id': rule.id,
+        'name': rule.name or d.get('name') or f'rule-{rule.id}',
+        'rule_type': rule.rule_type or d.get('type') or '',
+        'params': params,
+    }
+
+
+def detect_rule_contradictions(data_field_id=None, data_table_id=None):
+    """Return contradiction findings for active rules on a field or table.
+
+    Semantic analysis lives in ``dq/contradiction.py`` (pure). This function
+    only gathers the active, non-archived rules and groups them by field (table
+    level business rules — ``data_field`` NULL — form their own group).
+
+    Args:
+        data_field_id: optional int — analyze rules bound to this field only.
+        data_table_id: optional int — analyze all rules bound to this table.
+
+    Returns:
+        list of finding dicts, each annotated with ``data_field_id`` and
+        ``data_field_name`` (the latter is None for table-level groups).
+    """
+    from .contradiction import analyze_rules
+    from .models import RuleFieldAssignment
+
+    if data_field_id is None and data_table_id is None:
+        return []
+
+    assignments = (
+        RuleFieldAssignment.objects
+        .filter(rule__archived=False, rule__is_active=True)
+        .select_related('rule', 'data_field')
+    )
+    if data_field_id is not None:
+        assignments = assignments.filter(data_field_id=data_field_id)
+    else:
+        assignments = assignments.filter(data_table_id=data_table_id)
+
+    # Group by field (None = table-level business rules).
+    groups: dict = {}
+    field_names: dict = {}
+    for assn in assignments:
+        key = assn.data_field_id
+        groups.setdefault(key, []).append(assn.rule)
+        if key is not None:
+            field_names.setdefault(key, assn.data_field.name if assn.data_field else None)
+
+    findings = []
+    for field_id, rules in groups.items():
+        specs = [_rule_spec(r) for r in rules]
+        for f in analyze_rules(specs):
+            f = dict(f)
+            f['data_field_id'] = field_id
+            f['data_field_name'] = field_names.get(field_id)
+            findings.append(f)
+    return findings
