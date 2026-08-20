@@ -352,9 +352,12 @@ def build_suggest_payload(table_id: int):
         fields_payload.append(field_entry)
 
     table_payload = {
+        'table_id': table.id,
         'name': table.name,
         'description': table.title or table.name,
         'row_count': tp.row_count,
+        'module_id': table.module_id,
+        'org_unit_id': table.module.org_unit_id if table.module_id else None,
         'fields': fields_payload,
     }
     return table_payload, None

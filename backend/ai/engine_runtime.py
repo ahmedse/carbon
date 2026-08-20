@@ -1549,29 +1549,84 @@ def _dq_validate_prompt(
     )
 
 
-def _dq_suggest_prompt(table: dict[str, Any]) -> str:
+def _suggest_columns(table: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalise table columns for the suggest prompt.
+
+    ``build_suggest_payload`` emits ``fields`` (name/type/stats); the legacy
+    provider path emits ``columns``.  Return a list of ``{name, type, ...}``
+    dicts regardless of which key arrived.
+    """
+    raw = table.get("fields") or table.get("columns") or []
+    out: list[dict[str, Any]] = []
+    for entry in raw:
+        if isinstance(entry, str):
+            out.append({"name": entry})
+        elif isinstance(entry, dict) and (entry.get("name") or entry.get("field")):
+            out.append(entry)
+    return out
+
+
+def _dq_suggest_prompt(
+    table: dict[str, Any], retrieval: dict[str, Any] | None = None
+) -> str:
     """Build the suggestion message for a table's metadata.
 
     Requires a JSON object of proposed natural-language DQ business rules
     (completeness, cross-field consistency, temporal plausibility,
     range/outlier plausibility).
+
+    ``retrieval`` (Phase C) is the output of
+    ``ai.knowledge.dq_retriever.retrieve_suggest_context`` — field profiles,
+    canonical per-type examples, and the N most-similar existing rules.  When
+    present it is rendered into the prompt so suggestions are grounded in the
+    platform's own data rather than emitted from metadata alone.  When absent
+    (or when retrieval failed to resolve a ``table_id``) the prompt degrades
+    to the pre-Phase-C baseline.
     """
-    columns = table.get("columns") or []
-    col_json = json.dumps(columns, default=str)[:2000]
-    return (
+    columns = _suggest_columns(table)
+    col_json = json.dumps(columns, default=str)[:2400]
+
+    lines = [
         "You are a data-quality analyst. Propose natural-language data-quality "
         "business rules for the table below — consider completeness, "
         "cross-field consistency, temporal plausibility, and range/outlier "
-        "plausibility — and return a single JSON object:\n"
+        "plausibility — and return a single JSON object:\n",
         '{"suggestions": [{"prompt": str, "rule_type": "nl_check", '
         '"rationale": str, "suggested_severity": "info"|"warn"|"error", '
-        '"confidence": float}, ...]}\n'
-        f"Table name: {table.get('name') or '(unknown)'}\n"
-        f"Description: {table.get('description') or '(none)'}\n"
-        f"Columns: {col_json}\n"
-        f"Row count: {table.get('row_count') or 'unknown'}\n"
-        "Return only the JSON object, nothing else."
-    )
+        '"confidence": float}, ...]}\n',
+        f"Table name: {table.get('name') or '(unknown)'}",
+        f"Description: {table.get('description') or '(none)'}",
+        f"Columns: {col_json}",
+        f"Row count: {table.get('row_count') or 'unknown'}",
+    ]
+
+    retrieval = retrieval or {}
+    if retrieval.get("field_profiles"):
+        profiles_json = json.dumps(
+            retrieval["field_profiles"], default=str
+        )[:2400]
+        lines.append(f"Column profiles (observed stats): {profiles_json}")
+
+    if retrieval.get("canonical_examples"):
+        examples_json = json.dumps(
+            retrieval["canonical_examples"], default=str
+        )[:2400]
+        lines.append(
+            "Canonical v1 rule definitions (by type) already used elsewhere — "
+            f"reuse these shapes where applicable: {examples_json}"
+        )
+
+    if retrieval.get("similar_rules"):
+        similar_json = json.dumps(
+            retrieval["similar_rules"], default=str
+        )[:2000]
+        lines.append(
+            "Existing rules on similar fields (avoid duplicating these): "
+            f"{similar_json}"
+        )
+
+    lines.append("Return only the JSON object, nothing else.")
+    return "\n".join(lines)
 
 
 def _coerce_confidence(value: Any) -> float:
@@ -1686,11 +1741,30 @@ async def _run_dq_suggest(
     LLM outage or unparseable verdict returns ``pulse_unavailable``.
     """
     table = payload.get("table") or {}
+
+    # Phase C — retrieval-augmented context.  A missing/foreign table id (or a
+    # retriever failure) degrades to the metadata-only baseline prompt, never
+    # blocks the suggestion.
+    retrieval: dict[str, Any] | None = None
+    table_id = table.get("table_id")
+    if table_id:
+        try:
+            from ai.knowledge.dq_retriever import retrieve_suggest_context
+
+            retrieval = retrieve_suggest_context(int(table_id))
+        except Exception as exc:  # noqa: BLE001 - retrieval is best-effort
+            logger.warning(
+                "dq.suggest retrieval skipped for table %s: %s", table_id, exc
+            )
+            retrieval = None
+
     llm_text = await _llm_text(
         task="cognition",
         instance_id=instance_id,
         conversation_id=f"dq-suggest-{task_id}",
-        messages=[{"role": "user", "content": _dq_suggest_prompt(table)}],
+        messages=[
+            {"role": "user", "content": _dq_suggest_prompt(table, retrieval)}
+        ],
         temperature=0.4,
         response_format={"type": "json_object"},
     )
@@ -1748,33 +1822,54 @@ _DETERMINISTIC_RULE_TYPES = {
 
 
 def _nl_rule_test_prompt(
-    nl: str, schema: list[dict[str, Any]], table_name: str
+    nl: str,
+    schema: list[dict[str, Any]],
+    table_name: str,
+    retrieval: dict[str, Any] | None = None,
 ) -> str:
     """Build the parse message that turns NL into a v1 rule definition.
 
     Requires a JSON object using ``type`` + ``params`` keys (NOT
     ``rule_type``) so the output matches ``dq.engine.evaluate`` directly.
+
+    ``retrieval`` (Phase C) carries the field profile (observed stats) and
+    similar existing rules so the parse is grounded in the data the rule will
+    actually run against — and so it reuses existing rules instead of
+    re-inventing them.
     """
     schema_json = json.dumps(schema, default=str)[:2000]
-    return (
+    lines = [
         "You are a data-quality engineer. Convert the natural-language rule "
         "below into a single JSON object describing a deterministic v1 DQ "
-        "rule definition:\n"
+        "rule definition:\n",
         '{"type": str, "params": object, "severity": "info"|"warn"|"error", '
-        '"confidence": float, "field": str}\n'
+        '"confidence": float, "field": str}\n',
         '"type" must be one of: not_null, unique, allowed_values, range, '
-        'regex, reference_integrity, threshold.\n'
+        'regex, reference_integrity, threshold.\n',
         '"params" hold the parameters for that type: range -> {"min","max"}; '
         'threshold -> {"operator","value"}; regex -> {"pattern"}; '
         'allowed_values -> {"values":[...]}; unique -> {}; not_null -> {}; '
-        'reference_integrity -> {"reference_set_id": int}.\n'
+        'reference_integrity -> {"reference_set_id": int}.\n',
         '"field" is the column name the rule applies to (use one of the '
-        'columns below).\n'
-        f"Table name: {table_name}\n"
-        f"Columns: {schema_json}\n"
-        f"Natural-language rule: {nl}\n"
-        "Return only the JSON object, nothing else."
-    )
+        'columns below).\n',
+        f"Table name: {table_name}",
+        f"Columns: {schema_json}",
+    ]
+
+    retrieval = retrieval or {}
+    if retrieval.get("field_profile"):
+        profile_json = json.dumps(retrieval["field_profile"], default=str)[:1200]
+        lines.append(f"Field profile (observed stats): {profile_json}")
+    if retrieval.get("similar_rules"):
+        similar_json = json.dumps(retrieval["similar_rules"], default=str)[:2000]
+        lines.append(
+            "Existing rules on similar fields (prefer reusing these shapes): "
+            f"{similar_json}"
+        )
+
+    lines.append(f"Natural-language rule: {nl}")
+    lines.append("Return only the JSON object, nothing else.")
+    return "\n".join(lines)
 
 
 def _is_empty_value(v: Any) -> bool:
@@ -1960,6 +2055,7 @@ async def _run_nl_rule_test(
     schema = payload.get("schema") or []
     rows = payload.get("rows") or []
     field_name = payload.get("field_name")
+    table_id = payload.get("table_id")
 
     if not nl:
         return {
@@ -1980,12 +2076,34 @@ async def _run_nl_rule_test(
             },
         }
 
+    # Phase C — retrieval-augmented context (field profile + similar rules).
+    # Degrades to the schema-only baseline when ``table_id`` is missing or the
+    # retriever cannot resolve it.
+    retrieval: dict[str, Any] | None = None
+    if table_id:
+        try:
+            from ai.knowledge.dq_retriever import retrieve_nl_check_context
+
+            retrieval = retrieve_nl_check_context(
+                int(table_id), field_name=field_name
+            )
+        except Exception as exc:  # noqa: BLE001 - retrieval is best-effort
+            logger.warning(
+                "nl_rule_test retrieval skipped for table %s: %s", table_id, exc
+            )
+            retrieval = None
+
     llm_text = await _llm_text(
         task="cognition",
         instance_id=instance_id,
         conversation_id=f"nl-rule-test-{task_id}",
         messages=[
-            {"role": "user", "content": _nl_rule_test_prompt(nl, schema, table_name)}
+            {
+                "role": "user",
+                "content": _nl_rule_test_prompt(
+                    nl, schema, table_name, retrieval
+                ),
+            }
         ],
         temperature=0.3,
         response_format={"type": "json_object"},
