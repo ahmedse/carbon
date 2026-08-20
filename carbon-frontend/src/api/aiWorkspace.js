@@ -420,9 +420,12 @@ export function sendMessage(token, conversationId, content, model) {
  * @param {string} token - JWT access token
  * @param {string} path - API path relative to API_BASE_URL (no leading slash)
  * @param {object} body - JSON body
- * @param {object} handlers - { onChunk, onProgress, onDone, onStopped, onError }
+ * @param {object} handlers - { onChunk, onProgress, onDone, onStopped, onError, onFrame }
+ *   ``onFrame`` receives every parsed SSE frame object before the typed
+ *   callbacks dispatch — the escape hatch used by the clustered action-run
+ *   stream (turn-* / tool-* frames) without forking this reader.
  */
-async function streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError }) {
+async function streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError, onFrame }) {
   // Replicate apiFetch's auth: supplied token (or stored access token),
   // refreshing it first if expired.
   let accessToken = token || localStorage.getItem('access');
@@ -493,6 +496,7 @@ async function streamJsonPost(token, path, body, { onChunk, onProgress, onDone, 
     } catch {
       return;
     }
+    onFrame?.(frame);
     if (frame.type === 'chunk') {
       onChunk?.(frame.content ?? '');
     } else if (frame.type === 'progress') {
@@ -559,6 +563,57 @@ export async function retryMessageStream(
   if (content) body.content = content;
   if (model) body.model = model;
   await streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError });
+}
+
+/**
+ * Stream a user-initiated agent/tool action run (Sprint W2-A frontend of W1-A).
+ * Reuses the shared streamJsonPost auth + SSE reader — the clustered
+ * ``turn_*`` / ``tool_*`` frames are dispatched via ``onFrame``; ``done``,
+ * ``stopped`` and ``error`` flow through the existing typed callbacks.
+ *
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID
+ * @param {object} spec - { action_type: 'tool'|'agent', tool?, agent?, args?, verbosity? }
+ *   ``tool`` is required for action_type='tool', ``agent`` for 'agent'.
+ *   ``verbosity`` ∈ 'concise'|'full' (default 'concise').
+ * @param {object} handlers - { onTurnStart, onToolStart, onToolArg, onToolResult,
+ *   onToolEnd, onTurnEnd, onDone, onStopped, onError }
+ *   Frame shapes (design §2.5, W1-A):
+ *     turn_start  { turn_id, label, verbosity }
+ *     tool_start  { turn_id, step_id, tool, category }   category ∈ agent|mcp|tool
+ *     tool_arg    { step_id, args }                       full verbosity only
+ *     tool_result { step_id, result }                     full verbosity only (redacted)
+ *     tool_end    { step_id, status, execution_id? }      completed|failed|stopped|needs_confirmation
+ *     turn_end    { turn_id, status, summary }            completed|failed|stopped
+ */
+export async function runActionStream(
+  token,
+  conversationId,
+  { action_type, tool, agent, args, verbosity },
+  { onTurnStart, onToolStart, onToolArg, onToolResult, onToolEnd, onTurnEnd, onDone, onStopped, onError },
+) {
+  const path = `${BASE}conversations/${conversationId}/actions/stream/`;
+  const body = { action_type, args: args || {} };
+  if (tool) body.tool = tool;
+  if (agent) body.agent = agent;
+  if (verbosity) body.verbosity = verbosity;
+
+  await streamJsonPost(token, path, body, {
+    onFrame: (frame) => {
+      switch (frame.type) {
+        case 'turn_start': onTurnStart?.(frame); break;
+        case 'tool_start': onToolStart?.(frame); break;
+        case 'tool_arg': onToolArg?.(frame); break;
+        case 'tool_result': onToolResult?.(frame); break;
+        case 'tool_end': onToolEnd?.(frame); break;
+        case 'turn_end': onTurnEnd?.(frame); break;
+        default: break; // done / stopped / error handled by streamJsonPost
+      }
+    },
+    onDone,
+    onStopped,
+    onError,
+  });
 }
 
 /**
@@ -761,4 +816,154 @@ export function forgetFact(token, id) {
     token,
     method: 'DELETE',
   });
+}
+
+// ── Sprint 23 W3-A — Agentic task orchestration (plans) ─────────────────
+// Endpoints live under /carbon-api/ai/plans/ — reviewable plan lifecycle:
+// create (planning only) → approve → SSE streamed run → per-step consent
+// (confirm/decline) → durable audit ledger.
+
+const PLANS_BASE = 'ai/plans/';
+
+/**
+ * Create a reviewable plan from a brief. Planning only — NOTHING executes
+ * until the plan is approved and run (RULE_21: review before mutation).
+ * @param {string} token - JWT access token
+ * @param {object} params - { brief, conversation_id? }
+ * @returns {Promise<object>} Plan payload (status 'pending_approval')
+ */
+export function createPlan(token, { brief, conversation_id = '' }) {
+  return apiFetch(PLANS_BASE, {
+    token,
+    method: 'POST',
+    body: { brief, conversation_id },
+  });
+}
+
+/**
+ * Fetch a plan + its steps (owner-scoped).
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @returns {Promise<object>} Plan payload
+ */
+export function getPlan(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/`, { token });
+}
+
+/**
+ * List the requesting user's plans, newest first.
+ * @param {string} token - JWT access token
+ * @param {object} [opts] - { limit? (default 50) }
+ * @returns {Promise<object>} { plans: Array, count }
+ */
+export function listPlans(token, { limit } = {}) {
+  const params = new URLSearchParams();
+  if (limit) params.append('limit', String(limit));
+  const qs = params.toString();
+  return apiFetch(`${PLANS_BASE}${qs ? `?${qs}` : ''}`, { token });
+}
+
+/**
+ * Approve a pending plan for execution (plan-level consent gate, RULE_21).
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @returns {Promise<object>} Plan payload (status 'approved')
+ */
+export function approvePlan(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/approve/`, { token, method: 'POST' });
+}
+
+/**
+ * Decline a pending plan — nothing is executed.
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @returns {Promise<object>} Plan payload (status 'cancelled')
+ */
+export function declinePlan(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/decline/`, { token, method: 'POST' });
+}
+
+/**
+ * Stream a plan run over SSE (POST .../plans/{id}/run/). Reuses the shared
+ * streamJsonPost auth + SSE reader; plan frames are dispatched through
+ * ``onFrame`` (plan_start / step_start / step_confirm / step_result /
+ * step_end), and the terminal ``done`` / ``error`` frames flow through the
+ * typed callbacks (done carries the whole frame — the plan stream has no
+ * ``conversation`` key like the chat stream).
+ *
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @param {object} handlers - { onFrame(frame), onDone(frame), onError(message) }
+ *   Frame shapes (W3-A backend):
+ *     plan_start  { plan_id, status, plan: { brief, pattern, source, steps } }
+ *     step_start  { plan_id, step_id, intent }
+ *     step_confirm{ plan_id, step_id, intent, message }   consent gate
+ *     step_result { plan_id, step_id, intent, status, verdict, draft_text,
+ *                   tool_output, error }
+ *     step_end    { plan_id, step_id, status }
+ *     done        { plan_id, status: completed|paused|stopped|failed,
+ *                   final_response }
+ *     error       { error }
+ */
+export async function runPlanStream(token, planId, { onFrame, onDone, onError }) {
+  const path = `${PLANS_BASE}${planId}/run/`;
+
+  await streamJsonPost(token, path, {}, {
+    onFrame: (frame) => {
+      onFrame?.(frame);
+      if (frame.type === 'done') onDone?.(frame);
+    },
+    onError: (message) => onError?.(message),
+  });
+}
+
+/**
+ * Confirm a paused consent step — executes the staged mutation as the user.
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @param {number} stepId - step_index
+ * @returns {Promise<object>} { status: 'confirmed', plan_id, step_id }
+ */
+export function confirmPlanStep(token, planId, stepId) {
+  return apiFetch(`${PLANS_BASE}${planId}/steps/confirm/`, {
+    token,
+    method: 'POST',
+    body: { step_id: stepId },
+  });
+}
+
+/**
+ * Decline a paused consent step — the staged mutation is discarded.
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @param {number} stepId - step_index
+ * @returns {Promise<object>} { status: 'declined', plan_id, step_id }
+ */
+export function declinePlanStep(token, planId, stepId) {
+  return apiFetch(`${PLANS_BASE}${planId}/steps/decline/`, {
+    token,
+    method: 'POST',
+    body: { step_id: stepId },
+  });
+}
+
+/**
+ * Request cancellation of a plan run (idempotent).
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @returns {Promise<object>} Plan payload (status 'cancelled')
+ */
+export function stopPlan(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/stop/`, { token, method: 'POST' });
+}
+
+/**
+ * Audit ledger for a plan: steps, confirmations, replans, latency, tokens,
+ * provenance, actor.
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @returns {Promise<object>} Ledger payload
+ */
+export function getPlanLedger(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/ledger/`, { token });
 }

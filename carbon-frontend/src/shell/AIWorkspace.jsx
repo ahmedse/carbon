@@ -27,11 +27,13 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DataUsageIcon from '@mui/icons-material/DataUsage';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
+import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import ManageSearchIcon from '@mui/icons-material/ManageSearch';
 import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
@@ -55,6 +57,8 @@ import AISettingsTab from './AISettingsTab';
 import AIMemoryTab from './AIMemoryTab';
 import AILearntTab from './AILearntTab';
 import AIRelationshipTab from './AIRelationshipTab';
+import AIAgentPanel from './AIAgentPanel';
+import AITaskPanel from './AITaskPanel';
 import InvestigateTab from './InvestigateTab';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { ExecuteModeProvider } from './ExecuteModeContext';
@@ -562,6 +566,12 @@ export function AIWorkspace({ onClose }) {
             <InvestigateTab conversations={investigateConversations} onSelect={handleOpenInvestigation} onNew={handleNewInvestigation} />
           ) : activePanel === 'artifacts' ? (
             <AIArtifactBrowser />
+          ) : activePanel === 'agent' ? (
+            /* Agent surface: one icon, Agents/MCP/Tools/Logs internal tabs */
+            <AIAgentPanel conversationId={activeConversation?.id ?? null} />
+          ) : activePanel === 'tasks' ? (
+            /* Task orchestration: one icon, Tasks/Run internal tabs */
+            <AITaskPanel conversationId={activeConversation?.id ?? null} />
           ) : !hasAny ? (
             <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
           ) : activeConversation ? (
@@ -659,6 +669,8 @@ export function AIWorkspace({ onClose }) {
             { id: 'context',      icon: <InfoOutlinedIcon sx={{ fontSize: 16 }} />,               label: 'Context'      },
             { id: 'investigate',  icon: <ManageSearchIcon sx={{ fontSize: 16 }} />,               label: 'Investigate'  },
             { id: 'artifacts',    icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />,         label: 'Artifacts'    },
+            { id: 'agent',        icon: <HubOutlinedIcon sx={{ fontSize: 16 }} />,                label: 'Agent'        },
+            { id: 'tasks',        icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />,             label: 'Tasks'       },
             { id: 'usage',        icon: <DataUsageIcon sx={{ fontSize: 16 }} />,                  label: 'Usage'        },
             { id: 'memory',       icon: <PsychologyOutlinedIcon sx={{ fontSize: 16 }} />,         label: 'Memory'       },
             { id: 'settings',     icon: <SettingsOutlinedIcon sx={{ fontSize: 16 }} />,           label: 'Settings'     },

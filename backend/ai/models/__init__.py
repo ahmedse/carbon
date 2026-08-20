@@ -12,6 +12,7 @@ from .workspace import (
     AIGeneration,
     AIMessage,
     AIUserProfile,
+    ConversationCheckpoint,
 )
 from .core import (
     Agent,
@@ -74,6 +75,7 @@ __all__ = [
     "AIGeneration",
     "AIMessage",
     "AIUserProfile",
+    "ConversationCheckpoint",
     "AppScopeMixin",
     "generate_uuid",
     "ModelCatalog",

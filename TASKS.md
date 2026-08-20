@@ -2033,7 +2033,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-20
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE — verified by backend-worker (gates re-run by Master Architect)
 **Kind:** Backend-only. Large.
 **Depends on:** W1-A (execution seam + streamed events), W2-A (confirm/decline/stop wired).
 
@@ -2123,7 +2123,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-20
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE — verified by frontend-worker (gates re-run by Master Architect)
 **Kind:** Frontend-only. Medium-large.
 **Depends on:** W3-A (plans endpoints), W2-A (`AIActionRunner` cluster/confirm/stop patterns).
 

@@ -729,6 +729,260 @@ class CarbonIntelligence:
         finally:
             GENERATIONS.finish(conv_id)
 
+    def run_agent_action_stream(
+        self,
+        user,
+        conversation_id: str,
+        *,
+        action_type: str,
+        tool: str | None = None,
+        agent: str | None = None,
+        args: dict | None = None,
+        verbosity: str = "concise",
+    ):
+        """Stream a user-initiated agent/tool action run (Sprint W1-A).
+
+        Mirrors :meth:`send_message_stream` for persistence and finalization —
+        quota gate, AIGeneration lifecycle, user message, ``working`` marker,
+        guard chain, provider action frames, terminal frame.  The
+        conversation is never left stuck in ``working``.
+
+        Yields:
+          {"type": "turn_start"|"tool_start"|"tool_arg"|"tool_result"|"tool_end"|"turn_end", ...}
+          {"type": "done", "conversation": {...}}
+          {"type": "stopped", "conversation": {...}}
+          {"type": "error", "error": message, ...}
+
+        Cancellation (``GENERATIONS.cancel`` via the existing ``stop``
+        endpoint) surfaces as a ``stopped`` ``turn_end`` frame and a
+        ``{"type": "stopped", ...}`` terminal — never an ``error`` frame.
+        """
+        from ai.models import AIConversation, AIMessage, AIGeneration
+
+        try:
+            conversation = AIConversation.objects.get(
+                id=conversation_id, user=user,
+            )
+        except AIConversation.DoesNotExist:
+            raise ValueError(f"Conversation {conversation_id} not found.")
+
+        try:
+            self._enforce_quota(user)
+        except QuotaExceededError as exc:
+            yield {
+                "type": "error",
+                "error": str(exc),
+                "error_code": "quota",
+                "quota": exc.quota,
+            }
+            return
+
+        conv_id = str(conversation.id)
+        GENERATIONS.start(conv_id)
+        generation = AIGeneration.objects.create(
+            conversation=conversation,
+            token=uuid.uuid4().hex,
+            status="running",
+        )
+
+        def _finalize_generation(
+            final_status: str, usage: dict[str, Any] | None = None
+        ) -> None:
+            generation.status = final_status
+            update_fields = ["status"]
+            if final_status == "cancelled":
+                generation.cancelled_at = timezone.now()
+                update_fields.append("cancelled_at")
+            if final_status == "completed":
+                generation.completed_at = timezone.now()
+                update_fields.append("completed_at")
+                update_fields += self._populate_generation_usage(generation, usage)
+            generation.save(update_fields=update_fields)
+
+        started_at = time.perf_counter()
+        try:
+            # Human-readable, outcome-oriented label (RULE_23 — never engine
+            # class names or transport details in user-facing copy).
+            if action_type == "agent":
+                action_label = f"Run agent {agent}" if agent else "Run agent"
+            else:
+                action_label = f"Run tool {tool}" if tool else "Run tool"
+
+            # Persist the user message + mark working (identical to send path).
+            profile = self._user_preferences(user)
+            self._maybe_autotitle(
+                conversation,
+                action_label,
+                enabled=profile.auto_title if profile is not None else True,
+            )
+            user_msg = AIMessage.objects.create(
+                conversation=conversation,
+                role="user",
+                content=action_label,
+            )
+            conversation._turn_parent_id = user_msg.id
+
+            # Fresh scope (not frozen — permissions may have changed).
+            scope = build_scope(user)
+            if conversation.app_identifier:
+                scope.app_identifier = conversation.app_identifier
+
+            conversation.status = "working"
+            conversation.save(update_fields=["status"])
+
+            # CBAC guard chain — scope validity + data isolation; host
+            # mutations stay staged via RULE_21, never auto-run here.
+            guard_chain, operation = self._guard_workspace_operation(
+                scope,
+                "workspace_action_run",
+                args or {},
+            )
+
+            run_status = "completed"
+            for kind, value, *rest in self.provider.run_tool_stream(
+                conversation_id=conv_id,
+                action_type=action_type,
+                tool=tool,
+                agent=agent,
+                args=args or {},
+                verbosity=verbosity,
+                host_user_id=str(user.pk),
+            ):
+                if kind == "frame":
+                    if isinstance(value, dict) and value.get("type") == "turn_end":
+                        run_status = value.get("status", run_status)
+                    yield value
+                    continue
+
+                if kind == "error":
+                    latency_ms = int((time.perf_counter() - started_at) * 1000)
+                    guard_chain.audit_trail.log(
+                        scope,
+                        operation,
+                        self.provider.provider_name,
+                        latency_ms,
+                        "failed",
+                        error_message=value,
+                    )
+                    user_message = "I couldn't run that action — try again in a moment."
+                    self._save_assistant_message(
+                        conversation,
+                        user_message,
+                        metadata={},
+                        status="failed",
+                        message_status="failed",
+                    )
+                    _finalize_generation("failed")
+                    yield {
+                        "type": "error",
+                        "error": user_message,
+                        "error_kind": (
+                            rest[0].get("error_kind", "permanent")
+                            if rest
+                            else "permanent"
+                        ),
+                    }
+                    return
+
+                if kind == "done":
+                    latency_ms = int((time.perf_counter() - started_at) * 1000)
+                    if run_status == "stopped":
+                        guard_chain.audit_trail.log(
+                            scope,
+                            operation,
+                            self.provider.provider_name,
+                            latency_ms,
+                            "stopped",
+                        )
+                        self._save_assistant_message(
+                            conversation,
+                            "Stopped by user.",
+                            metadata={},
+                            status="completed",
+                            message_status="stopped",
+                        )
+                        _finalize_generation("cancelled")
+                        yield {
+                            "type": "stopped",
+                            "conversation": self.get_conversation(user, conv_id),
+                        }
+                        return
+
+                    if run_status == "failed":
+                        guard_chain.audit_trail.log(
+                            scope,
+                            operation,
+                            self.provider.provider_name,
+                            latency_ms,
+                            "failed",
+                        )
+                        user_message = "The action didn't complete — some steps failed."
+                        self._save_assistant_message(
+                            conversation,
+                            user_message,
+                            metadata={},
+                            status="failed",
+                            message_status="failed",
+                        )
+                        _finalize_generation("failed")
+                        yield {
+                            "type": "error",
+                            "error": user_message,
+                            "error_kind": "permanent",
+                        }
+                        return
+
+                    guard_chain.audit_trail.log(
+                        scope,
+                        operation,
+                        self.provider.provider_name,
+                        latency_ms,
+                        "completed",
+                    )
+                    usage = {"latency_ms": latency_ms, "execution_ms": latency_ms}
+                    self._save_assistant_message(
+                        conversation,
+                        "Action completed.",
+                        metadata={},
+                        status="completed",
+                        message_status="completed",
+                    )
+                    _finalize_generation("completed", usage)
+                    yield {
+                        "type": "done",
+                        "conversation": self.get_conversation(user, conv_id),
+                    }
+                    return
+        except (PermissionError, ValueError) as exc:
+            self._save_assistant_message(
+                conversation,
+                str(exc),
+                metadata={},
+                status="failed",
+                message_status="failed",
+            )
+            _finalize_generation("failed")
+            raise
+        except Exception as exc:  # noqa: BLE001 - fail-visible, never stuck in working
+            logger.exception("action run failed for conversation=%s", conv_id)
+            user_message = "I couldn't run that action — try again in a moment."
+            self._save_assistant_message(
+                conversation,
+                user_message,
+                metadata={},
+                status="failed",
+                message_status="failed",
+            )
+            _finalize_generation("failed")
+            yield {
+                "type": "error",
+                "error": user_message,
+                "error_kind": classify_llm_error(exc),
+            }
+            return
+        finally:
+            GENERATIONS.finish(conv_id)
+
     def _extract_chat_usage(
         self,
         res: dict[str, Any],
@@ -1497,6 +1751,223 @@ class CarbonIntelligence:
             latest.save(update_fields=["status", "cancelled_at"])
 
         return {"stopped": cancelled}
+
+    # ── Sprint 20 W1-B — context lifecycle (checkpoint/restore/fork/clear) ─
+    def _get_lifecycle_conversation(self, user, conversation_id: str):
+        """Load a conversation the user can ACCESS (ValueError when absent).
+
+        Uses the canonical access helper — own OR shared — so console
+        operators (gated by ``ai:manage_console`` at the API layer) can
+        checkpoint/restore/fork/clear conversations they can already see,
+        mirroring ``get_conversation`` / ``export_conversation``.
+        """
+        conversation = self._get_accessible_conversation(
+            user, conversation_id,
+        )
+        if conversation is None:
+            raise ValueError(f"Conversation {conversation_id} not found.")
+        return conversation
+
+    def _get_checkpoint(self, conversation, checkpoint_id: str):
+        """Load a checkpoint scoped to ``conversation`` (ValueError when absent)."""
+        from ai.models import ConversationCheckpoint
+
+        try:
+            return ConversationCheckpoint.objects.get(
+                id=checkpoint_id, conversation=conversation,
+            )
+        except ConversationCheckpoint.DoesNotExist:
+            raise ValueError(f"Checkpoint {checkpoint_id} not found.")
+
+    def _assemble_context_bundle(self, conversation, user) -> dict[str, Any]:
+        """Assemble the conversation's current context bundle (W1-B).
+
+        Mirrors the ``send_message_stream`` assembly: fresh scope, full
+        history, tiered budget.  Returns the raw ``assemble_context`` output
+        (messages + budget + kg_entities + context_signature) plus the
+        conversation summary and the last message id as the checkpoint
+        boundary.
+        """
+        history = list(
+            conversation.messages.order_by("created_at").values(
+                "id", "role", "content", "created_at", "is_deleted",
+            )
+        )
+        scope = build_scope(user)
+        if conversation.app_identifier:
+            scope.app_identifier = conversation.app_identifier
+        assembled = assemble_context(conversation, history, scope)
+        last_msg = conversation.messages.order_by("-created_at").first()
+        return {
+            **assembled,
+            "summary": conversation.summary,
+            # JSON-safe: snapshot_json is persisted via psycopg2's plain JSON
+            # encoder, so UUIDs/datetimes must be stringified here.
+            "message_boundary_id": (
+                str(last_msg.id) if last_msg else None
+            ),
+        }
+
+    def checkpoint_conversation(
+        self,
+        user,
+        conversation_id: str,
+        name: str,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Snapshot the conversation's working context under ``name`` (W1-B).
+
+        Builds the current bundle via ``assemble_context`` (messages + budget
+        + kg_entities + memory) and persists it as ``snapshot_json``.
+        Idempotent: re-saving the same ``name`` overwrites the existing
+        checkpoint (updates snapshot + note).  Never deletes messages or
+        learned facts.  Returns the serialized checkpoint.
+        """
+        from ai.models import ConversationCheckpoint
+
+        conversation = self._get_lifecycle_conversation(user, conversation_id)
+        bundle = self._assemble_context_bundle(conversation, user)
+
+        checkpoint, _created = ConversationCheckpoint.objects.update_or_create(
+            conversation=conversation,
+            name=name,
+            defaults={
+                "owner": user,
+                "note": note or "",
+                "snapshot_json": bundle,
+                "message_boundary_id": bundle.get("message_boundary_id"),
+            },
+        )
+        return _serialize_checkpoint(checkpoint)
+
+    def list_checkpoints(
+        self, user, conversation_id: str,
+    ) -> list[dict[str, Any]]:
+        """List the conversation's named checkpoints, newest first (picker)."""
+        conversation = self._get_lifecycle_conversation(user, conversation_id)
+        return [
+            _serialize_checkpoint(c) for c in conversation.checkpoints.all()
+        ]
+
+    def restore_conversation(
+        self,
+        user,
+        conversation_id: str,
+        checkpoint_id: str,
+    ) -> dict[str, Any]:
+        """Re-seed the conversation's *working* context from a checkpoint.
+
+        Restores the summary + context snapshot (budget / KG entities /
+        context signature) captured at checkpoint time.  The durable
+        ``AIMessage`` log is NOT overwritten and no learning/forget path is
+        touched — the next turn reassembles history from the log while
+        carrying the restored summary.
+        """
+        conversation = self._get_lifecycle_conversation(user, conversation_id)
+        checkpoint = self._get_checkpoint(conversation, checkpoint_id)
+
+        snapshot = checkpoint.snapshot_json or {}
+        conversation.summary = snapshot.get("summary") or ""
+        conversation.context_snapshot_json = {
+            "budget": snapshot.get("budget") or {},
+            "kg_entities": snapshot.get("kg_entities") or [],
+            "context_signature": snapshot.get("context_signature") or "",
+            "restored_from_checkpoint": str(checkpoint.id),
+            "restored_at": timezone.now().isoformat(),
+        }
+        conversation.save(
+            update_fields=["summary", "context_snapshot_json", "updated_at"],
+        )
+        return _serialize_conversation(conversation)
+
+    def fork_conversation(
+        self,
+        user,
+        conversation_id: str,
+        checkpoint_id: str,
+    ) -> dict[str, Any]:
+        """Clone the conversation into a NEW row seeded from a checkpoint.
+
+        The fork gets its own conversation id (never aliases the source row),
+        title ``"{old} — fork"``, and a durable message log cloned up to the
+        checkpoint's ``message_boundary_id`` (inclusive).  Its working context
+        (summary + context snapshot) is seeded from the checkpoint bundle.
+        """
+        from ai.models import AIConversation, AIMessage
+
+        conversation = self._get_lifecycle_conversation(user, conversation_id)
+        checkpoint = self._get_checkpoint(conversation, checkpoint_id)
+        snapshot = checkpoint.snapshot_json or {}
+
+        fork = AIConversation.objects.create(
+            user=user,
+            conversation_type=conversation.conversation_type,
+            title=f"{conversation.title or 'Conversation'} — fork",
+            app_identifier=conversation.app_identifier,
+            status="pending",
+            scope_json=conversation.scope_json,
+            task_payload_json=conversation.task_payload_json,
+        )
+
+        # Clone the durable log up to the checkpoint boundary (inclusive) —
+        # new rows in the fork, same content/order; never alias the source.
+        source_messages = conversation.messages.order_by("created_at")
+        boundary_id = checkpoint.message_boundary_id
+        if boundary_id is not None:
+            boundary = AIMessage.objects.filter(
+                id=boundary_id, conversation=conversation,
+            ).first()
+            if boundary is not None:
+                source_messages = source_messages.filter(
+                    created_at__lte=boundary.created_at,
+                )
+        for msg in source_messages:
+            AIMessage.objects.create(
+                conversation=fork,
+                role=msg.role,
+                content=msg.content,
+                metadata_json=msg.metadata_json,
+                token_usage_json=msg.token_usage_json,
+                parent_message_id=msg.parent_message_id,
+                is_deleted=msg.is_deleted,
+                context_signature=msg.context_signature,
+                status=msg.status,
+                provider_model=msg.provider_model,
+                outcome=msg.outcome,
+                correction_text=msg.correction_text,
+                learned_at=msg.learned_at,
+                created_at=msg.created_at,
+            )
+
+        fork.summary = snapshot.get("summary") or ""
+        fork.context_snapshot_json = {
+            "budget": snapshot.get("budget") or {},
+            "kg_entities": snapshot.get("kg_entities") or [],
+            "context_signature": snapshot.get("context_signature") or "",
+            "forked_from": str(conversation.id),
+            "forked_from_checkpoint": str(checkpoint.id),
+            "forked_at": timezone.now().isoformat(),
+        }
+        fork.save(update_fields=["summary", "context_snapshot_json"])
+        return _serialize_conversation(fork)
+
+    def clear_context(self, user, conversation_id: str) -> dict[str, Any]:
+        """Reset the conversation's *working* context (W1-B).
+
+        Clears the summary + context snapshot levers only.  The conversation
+        row, the durable message log, per-message provenance, and learned
+        facts are all untouched — no learning forget path is called.  A
+        conversation stuck in ``working`` is released back to ``pending``.
+        """
+        conversation = self._get_lifecycle_conversation(user, conversation_id)
+        conversation.summary = ""
+        conversation.context_snapshot_json = {}
+        update_fields = ["summary", "context_snapshot_json", "updated_at"]
+        if conversation.status == "working":
+            conversation.status = "pending"
+            update_fields.append("status")
+        conversation.save(update_fields=update_fields)
+        return _serialize_conversation(conversation)
 
     def regenerate_message(
         self,
@@ -3437,6 +3908,44 @@ def _serialize_conversation(conversation) -> dict[str, Any]:
         "context_snapshot_json": conversation.context_snapshot_json,
         "created_at": conversation.created_at.isoformat(),
         "updated_at": conversation.updated_at.isoformat(),
+    }
+
+
+def _serialize_checkpoint(checkpoint) -> dict[str, Any]:
+    """Serialize a ConversationCheckpoint to dict (picker-safe, no bodies).
+
+    The full assembled bundle (incl. tiered messages) stays in
+    ``snapshot_json`` on the row; the API payload carries only the metadata
+    the picker needs (budget, KG count, summary, boundary).
+    """
+    snapshot = checkpoint.snapshot_json or {}
+    return {
+        "id": str(checkpoint.id),
+        "conversation_id": str(checkpoint.conversation_id),
+        "owner_id": str(checkpoint.owner_id) if checkpoint.owner_id else None,
+        "name": checkpoint.name,
+        "note": checkpoint.note,
+        "message_boundary_id": (
+            str(checkpoint.message_boundary_id)
+            if checkpoint.message_boundary_id
+            else None
+        ),
+        "snapshot": {
+            "budget": snapshot.get("budget") or {},
+            "kg_entities": snapshot.get("kg_entities") or [],
+            "context_signature": snapshot.get("context_signature") or "",
+            "summary": snapshot.get("summary") or "",
+            # Conversation turns only — the bundle also carries system-tier
+            # injection blocks (profile/summary/KG), which aren't history.
+            "message_count": sum(
+                1
+                for m in (snapshot.get("messages") or [])
+                if m.get("role") in ("user", "assistant")
+            ),
+            "boundary_id": snapshot.get("message_boundary_id"),
+        },
+        "created_at": checkpoint.created_at.isoformat(),
+        "updated_at": checkpoint.updated_at.isoformat(),
     }
 
 

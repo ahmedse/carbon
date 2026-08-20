@@ -45,7 +45,12 @@ from backend.ai.protocol import (
     Scope,
     TableProfile,
 )
-from backend.ai.engine_runtime import dispatch_task, dispatch_task_stream, list_modules
+from backend.ai.engine_runtime import (
+    dispatch_action_stream,
+    dispatch_task,
+    dispatch_task_stream,
+    list_modules,
+)
 
 logger = logging.getLogger("carbon.ai.pulse_provider")
 
@@ -521,6 +526,42 @@ class PulseProvider(AIProvider):
         payload = self._chat_payload(request)
 
         yield from dispatch_task_stream(T_CHAT, payload)
+
+
+    def run_tool_stream(
+        self,
+        *,
+        conversation_id: str,
+        action_type: str,
+        tool: str | None = None,
+        agent: str | None = None,
+        args: dict | None = None,
+        verbosity: str = "concise",
+        host_user_id: str | None = None,
+    ):
+        """Stream an agent/tool action run as ``(kind, value)`` tuples.
+
+        Passthrough to the in-process action seam (``dispatch_action_stream``)
+        — Sprint W1-A.  Yields:
+
+          ("frame", frame)    — one clustered frame (turn_*/tool_*, design §2.5)
+          ("done", result)    — terminal success ({"status": "completed"|"stopped"})
+          ("error", message, {"error_kind": ...}) — terminal failure
+
+        Cancellation is checked between steps against the generation registry
+        (``GENERATIONS.cancel`` / ``is_cancelled``); a mid-run cancel yields a
+        ``stopped`` ``turn_end`` frame — never ``error``.
+        """
+        payload = {
+            "conversation_id": conversation_id,
+            "action_type": action_type,
+            "tool": tool,
+            "agent": agent,
+            "args": args or {},
+            "verbosity": verbosity,
+            "host_user_id": host_user_id,
+        }
+        yield from dispatch_action_stream(payload)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────

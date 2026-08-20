@@ -2401,4 +2401,373 @@ def get_task(task_id: str, *, timeout: int | None = None) -> dict[str, Any]:
     }
 
 
-__all__ = ["MODULES", "list_modules", "dispatch_task", "dispatch_task_stream", "get_task"]
+# ── Agent/Tool action execution seam (Sprint W1-A) ────────────────────────
+#
+# ``dispatch_action_stream`` is the sync-to-async bridge the workspace SSE
+# endpoint consumes (identical shape to ``dispatch_task_stream``).  The async
+# work lives in ``_run_action_stream`` which:
+#   * resolves the step list — one tool, or an agent's declared tool_set
+#     (AgentRegistry, NOT a second registry),
+#   * emits the clustered frame protocol (design §2.5):
+#         turn_start {turn_id, label, verbosity}
+#         tool_start {turn_id, step_id, tool, category}  category ∈ agent|mcp|tool
+#         tool_arg   {step_id, args}                     verbosity="full" only
+#         tool_result{step_id, result}                   verbosity="full" only (redacted)
+#         tool_end   {step_id, status}                   completed|failed|stopped|needs_confirmation
+#         turn_end   {turn_id, status, summary}          completed|failed|stopped
+#   * writes a durable ``ai.models.ToolExecution`` row per step
+#     (status running → completed|failed|stopped),
+#   * stages host-mutating tools via ``create_pending_execution`` and emits
+#     ``tool_end{status:"needs_confirmation", execution_id}`` (RULE_21 —
+#     never auto-runs a mutation),
+#   * checks ``GENERATIONS.is_cancelled`` between steps: a cancel mid-run
+#     emits ``tool_end{status:"stopped"}`` + ``turn_end{status:"stopped",
+#     summary:"Stopped by user"}`` and returns — never ``error``, and the
+#     caller never leaves the conversation stuck in ``working``.
+
+
+def _finalize_execution_row(row, status: str, output: dict | None) -> None:
+    """Terminal-state update for a durable ToolExecution step row (sync)."""
+    from django.utils import timezone
+
+    row.status = status
+    row.output = output or {}
+    row.executed_at = timezone.now()
+    row.save(update_fields=["status", "output", "executed_at"])
+
+
+async def _create_execution_row(**kwargs):
+    """Create a durable ToolExecution row from the async runtime (thread-safe)."""
+    from asgiref.sync import sync_to_async
+
+    from ai.models.core import ToolExecution
+
+    return await sync_to_async(
+        ToolExecution.objects.create, thread_sensitive=True
+    )(**kwargs)
+
+
+async def _save_execution_row(row, status: str, output: dict | None) -> None:
+    """Persist a step row's terminal state from the async runtime."""
+    from asgiref.sync import sync_to_async
+
+    await sync_to_async(_finalize_execution_row, thread_sensitive=True)(
+        row, status, output
+    )
+
+
+async def _run_action_stream(
+    instance_id: str,
+    payload: dict[str, Any],
+) -> Any:
+    """Run one agent/tool action, emitting clustered frames (async generator)."""
+    from ai.engine.agent.plugins import ToolContext, set_tool_context
+    from ai.engine.agent.registry import AgentRegistry
+    from ai.engine.agent.tools import MCP_EXECUTORS, get_tool_executors
+    from ai.engine.core.database import get_session_factory
+    from ai.generation_registry import GENERATIONS
+    from ai.host_executor import CarbonHostExecutor
+    from ai.observability_api import _redact_secrets
+
+    conversation_id = str(payload.get("conversation_id") or "")
+    action_type = payload.get("action_type") or "tool"
+    verbosity = payload.get("verbosity") or "concise"
+    if verbosity not in ("concise", "full"):
+        verbosity = "concise"
+    tool_name = payload.get("tool") or ""
+    agent_name = payload.get("agent") or ""
+    args = payload.get("args") or {}
+    host_user_id = payload.get("host_user_id")
+
+    turn_id = f"turn-{uuid.uuid4().hex[:12]}"
+    label = (
+        f"Run agent {agent_name}"
+        if action_type == "agent"
+        else f"Run tool {tool_name}"
+    )
+    yield {
+        "type": "turn_start",
+        "turn_id": turn_id,
+        "label": label,
+        "verbosity": verbosity,
+    }
+
+    instance_config = _carbon_instance_config(host_user_id)
+    factory = get_session_factory(instance_id)
+    async with factory() as db:
+        executor = CarbonHostExecutor(
+            db=db,
+            instance_config=instance_config,
+            user_token=f"inproc:carbon:{host_user_id}" if host_user_id else None,
+            host_user_id=host_user_id,
+        )
+        executors = await get_tool_executors()
+
+        # Resolve the step list: a single tool, or an agent's declared tool_set.
+        if action_type == "agent":
+            registry = AgentRegistry(db)
+            agent = await registry.get_agent(instance_id, agent_name)
+            if agent is None:
+                yield {
+                    "type": "tool_start",
+                    "turn_id": turn_id,
+                    "step_id": 1,
+                    "tool": agent_name,
+                    "category": "agent",
+                }
+                yield {"type": "tool_end", "step_id": 1, "status": "failed"}
+                yield {
+                    "type": "turn_end",
+                    "turn_id": turn_id,
+                    "status": "failed",
+                    "summary": f"Agent {agent_name!r} not found.",
+                }
+                return
+            raw_tool_set = agent.tool_set_json or []
+            if isinstance(raw_tool_set, str):
+                try:
+                    raw_tool_set = json.loads(raw_tool_set)
+                except (json.JSONDecodeError, TypeError):
+                    raw_tool_set = []
+            steps = [
+                {"tool": t, "category": "agent"} for t in (raw_tool_set or [])
+            ]
+            if not steps:
+                # No runnable tools declared — surface the agent profile as an
+                # informational step so the UI still gets a truthful outcome.
+                steps = [
+                    {
+                        "tool": agent_name,
+                        "category": "agent",
+                        "profile": {
+                            "role": agent.role or "",
+                            "tool_set": [],
+                        },
+                    }
+                ]
+        else:
+            category = "mcp" if tool_name in MCP_EXECUTORS else "tool"
+            steps = [{"tool": tool_name, "category": category}]
+
+        failed = 0
+        completed = 0
+        for index, step in enumerate(steps, start=1):
+            step_tool = step.get("tool") or ""
+            category = step.get("category") or "tool"
+
+            # Durable step log — created first so a cancel mid-run leaves a
+            # ``stopped`` row (acceptance bar for abort correctness).
+            row = await _create_execution_row(
+                conversation_id=conversation_id,
+                tool_name=step_tool,
+                input_params=args or None,
+                status="running",
+                host_user_id=host_user_id,
+            )
+
+            if GENERATIONS.is_cancelled(conversation_id):
+                await _save_execution_row(
+                    row, "stopped", {"message": "Cancelled before execution"}
+                )
+                yield {
+                    "type": "tool_start",
+                    "turn_id": turn_id,
+                    "step_id": index,
+                    "tool": step_tool,
+                    "category": category,
+                }
+                yield {"type": "tool_end", "step_id": index, "status": "stopped"}
+                yield {
+                    "type": "turn_end",
+                    "turn_id": turn_id,
+                    "status": "stopped",
+                    "summary": "Stopped by user",
+                }
+                return
+
+            yield {
+                "type": "tool_start",
+                "turn_id": turn_id,
+                "step_id": index,
+                "tool": step_tool,
+                "category": category,
+            }
+            if verbosity == "full":
+                yield {
+                    "type": "tool_arg",
+                    "step_id": index,
+                    "args": args,
+                }
+
+            profile = step.get("profile")
+            if profile is not None:
+                result = {
+                    "agent": step_tool,
+                    **profile,
+                    "note": "No runnable tools declared for this agent.",
+                }
+                await _save_execution_row(row, "completed", result)
+                if verbosity == "full":
+                    yield {
+                        "type": "tool_result",
+                        "step_id": index,
+                        "result": _redact_secrets(result),
+                    }
+                yield {"type": "tool_end", "step_id": index, "status": "completed"}
+                completed += 1
+                continue
+
+            executor_fn = executors.get(step_tool)
+            if executor_fn is None:
+                await _save_execution_row(
+                    row, "failed", {"error": f"Unknown tool: {step_tool}"}
+                )
+                yield {"type": "tool_end", "step_id": index, "status": "failed"}
+                failed += 1
+                continue
+
+            # Engine tool convention: executors are called with a single args
+            # dict; the host executor + turn context ride along as keys, and
+            # plugins receive the ToolContext (RULE_20/RULE_21).
+            call_args = dict(args or {})
+            call_args["executor"] = executor
+            call_args["conversation_id"] = conversation_id
+            set_tool_context(
+                ToolContext(
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    host_user_id=host_user_id,
+                    instance_config=instance_config,
+                    host_api=executor,
+                )
+            )
+            try:
+                result = await executor_fn(call_args)
+            except Exception as exc:  # noqa: BLE001 - fail-visible
+                logger.exception("tool %s failed during action run", step_tool)
+                result = {"error": str(exc)}
+            if not isinstance(result, dict):
+                result = {"result": result}
+
+            if result.get("requires_confirmation"):
+                # RULE_21 — never auto-run a mutation: the executor already
+                # staged a pending ToolExecution row; surface its id so the
+                # workspace confirm/decline flow can drive it.
+                await _save_execution_row(row, "needs_confirmation", result)
+                yield {
+                    "type": "tool_end",
+                    "step_id": index,
+                    "status": "needs_confirmation",
+                    "execution_id": result.get("execution_id"),
+                }
+                completed += 1
+                continue
+
+            if result.get("error"):
+                await _save_execution_row(row, "failed", result)
+                yield {"type": "tool_end", "step_id": index, "status": "failed"}
+                failed += 1
+                continue
+
+            await _save_execution_row(row, "completed", result)
+            if verbosity == "full":
+                yield {
+                    "type": "tool_result",
+                    "step_id": index,
+                    "result": _redact_secrets(result),
+                }
+            yield {"type": "tool_end", "step_id": index, "status": "completed"}
+            completed += 1
+
+        if failed:
+            yield {
+                "type": "turn_end",
+                "turn_id": turn_id,
+                "status": "failed",
+                "summary": f"{failed} of {len(steps)} step(s) failed.",
+            }
+        else:
+            yield {
+                "type": "turn_end",
+                "turn_id": turn_id,
+                "status": "completed",
+                "summary": f"{completed} step(s) completed.",
+            }
+
+
+def dispatch_action_stream(
+    payload: dict[str, Any],
+    *,
+    instance_id: str = "carbon",
+):
+    """Stream an agent/tool action run as ``(kind, value)`` tuples.
+
+    Parallel to :func:`dispatch_task_stream`: the action runner is async and
+    this generator bridges it to a sync iterator with a ``queue.Queue`` and a
+    daemon thread so Django views can consume it inside a
+    ``StreamingHttpResponse`` without blocking the event loop.
+
+    Payload::
+
+        conversation_id  — conversation the run is attached to (abort key)
+        action_type      — "tool" | "agent"
+        tool             — tool name (action_type="tool")
+        agent            — agent name (action_type="agent")
+        args             — tool args dict
+        verbosity        — "concise" | "full"
+        host_user_id     — Django user PK (stamps ToolExecution rows)
+
+    Yields:
+        ("frame", frame)  — one clustered frame (turn_start / tool_start /
+                            tool_arg / tool_result / tool_end / turn_end)
+        ("done", result)  — terminal success ({"status": "completed"|"stopped"})
+        ("error", message, {"error_kind": ...}) — terminal failure
+
+    Cancellation between steps (``GENERATIONS.cancel``) yields
+    ``tool_end{status:"stopped"}`` + ``turn_end{status:"stopped"}`` — never
+    ``error``, never leaves the conversation stuck in ``working``.
+    """
+    q: queue.Queue = queue.Queue()
+
+    async def _collect():
+        final_status = "completed"
+        try:
+            async for frame in _run_action_stream(instance_id, payload):
+                if frame.get("type") == "turn_end":
+                    final_status = frame.get("status", final_status)
+                q.put(("frame", frame))
+            q.put(("done", {"status": final_status}))
+        except Exception as exc:  # noqa: BLE001 - fail-visible contract
+            from ai.engine.llm.provider import classify_llm_error
+
+            logger.exception("action stream failed for instance=%s", instance_id)
+            q.put(
+                (
+                    "error",
+                    f"action failed: {exc}",
+                    {"error_kind": classify_llm_error(exc)},
+                )
+            )
+        finally:
+            q.put(("eof", None))
+
+    def _thread_target():
+        _run_async(_collect())
+
+    threading.Thread(target=_thread_target, daemon=True).start()
+
+    while True:
+        frame = q.get()
+        if frame[0] == "eof":
+            break
+        yield frame
+
+
+__all__ = [
+    "MODULES",
+    "list_modules",
+    "dispatch_task",
+    "dispatch_task_stream",
+    "dispatch_action_stream",
+    "get_task",
+]

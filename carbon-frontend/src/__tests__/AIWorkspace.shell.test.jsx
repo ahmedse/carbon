@@ -27,6 +27,7 @@ vi.mock('../shell/AISettingsTab', () => ({ default: () => <div data-testid="sett
 vi.mock('../shell/AIMemoryTab', () => ({ default: () => <div data-testid="memory-episodes-tab" /> }));
 vi.mock('../shell/AILearntTab', () => ({ default: () => <div data-testid="memory-facts-tab" /> }));
 vi.mock('../shell/AIRelationshipTab', () => ({ default: () => <div data-testid="memory-relationship-tab" /> }));
+vi.mock('../shell/AIAgentPanel', () => ({ default: () => <div data-testid="agent-tab" /> }));
 
 vi.mock('../api/aiPulse', () => ({
   listDomainManifests: vi.fn().mockResolvedValue({ apps: [] }),
@@ -178,6 +179,18 @@ describe('AIWorkspace Investigate mode tab (Phase 9-B)', () => {
     fireEvent.click(investigateButton);
 
     expect(await screen.findByTestId('investigate-tab')).toBeInTheDocument();
+  });
+});
+
+describe('AIWorkspace Agent surface icon (Phase W2-A)', () => {
+  it('renders the Agent panel when Agent is selected from the activity bar', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const agentButton = await screen.findByRole('button', { name: 'Agent' });
+    fireEvent.click(agentButton);
+
+    expect(await screen.findByTestId('agent-tab')).toBeInTheDocument();
+    expect(agentButton).toHaveAttribute('aria-pressed', 'true');
   });
 });
 

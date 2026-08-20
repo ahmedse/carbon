@@ -1052,12 +1052,15 @@ function AIConversationView({ conversationId }) {
     >
       {providerOffline && <AIOfflineBanner />}
 
-      {/* Messages area */}
+      {/* Messages area — the single vertical scroll region (design §2.4):
+          header + input bar stay fixed while this flex region scrolls. */}
       <Box
         ref={scrollRef}
         onScroll={handleScroll}
+        data-testid="messages-scroll"
         sx={{
           flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
           overflowX: 'hidden',
           pt: 1,

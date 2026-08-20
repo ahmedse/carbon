@@ -1,0 +1,281 @@
+// src/__tests__/AITaskPanel.test.jsx
+// Sprint 23 W3-B — agentic task orchestration panel: two internal tabs
+// (Tasks/Run, RULE_17), brief → reviewable plan, plan-level consent gate
+// (RULE_21), streamed step frames (step_start/step_confirm/step_result/
+// step_end), per-step Approve/Decline with resume, Stop, and the durable
+// audit ledger.
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import AITaskPanel from '../shell/AITaskPanel';
+
+// ── Mock hooks + API ──────────────────────────────────────────────────────
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: () => ({ token: 'test-token', userCapabilities: [], isGlobalAdminFlag: false }),
+}));
+
+// Stable function identity per render — a fresh vi.fn() each render would
+// re-create the useCallback deps and loop setState infinitely.
+const { notify, notifyFromError } = vi.hoisted(() => ({
+  notify: vi.fn(),
+  notifyFromError: vi.fn(),
+}));
+
+vi.mock('../components/NotificationProvider', () => ({
+  useNotification: () => ({ notify, notifyFromError, showFeedback: vi.fn() }),
+}));
+
+const listPlans = vi.fn();
+const createPlan = vi.fn();
+const getPlan = vi.fn();
+const approvePlan = vi.fn();
+const declinePlan = vi.fn();
+const runPlanStream = vi.fn();
+const confirmPlanStep = vi.fn();
+const declinePlanStep = vi.fn();
+const stopPlan = vi.fn();
+const getPlanLedger = vi.fn();
+
+vi.mock('../api/aiWorkspace', () => ({
+  listPlans: (...args) => listPlans(...args),
+  createPlan: (...args) => createPlan(...args),
+  getPlan: (...args) => getPlan(...args),
+  approvePlan: (...args) => approvePlan(...args),
+  declinePlan: (...args) => declinePlan(...args),
+  runPlanStream: (...args) => runPlanStream(...args),
+  confirmPlanStep: (...args) => confirmPlanStep(...args),
+  declinePlanStep: (...args) => declinePlanStep(...args),
+  stopPlan: (...args) => stopPlan(...args),
+  getPlanLedger: (...args) => getPlanLedger(...args),
+}));
+
+// ── Fixtures ──────────────────────────────────────────────────────────────
+const PLAN = {
+  id: 'plan-1',
+  status: 'pending_approval',
+  brief: 'Audit the emissions dataset for duplicates.',
+  pattern: 'skill_chain',
+  source: 'user_request',
+  skill_name: 'data_quality',
+  needs_confirmation: true,
+  created_at: '2026-08-20T10:00:00Z',
+  steps: [
+    { step_id: 0, intent: 'Search for duplicate records', tool_name: 'search_entity', tool_args: { dataset: 'emissions' }, status: 'pending' },
+    { step_id: 1, intent: 'Create a rule to prevent duplicates', tool_name: 'create_dq_rule', tool_args: { name: 'no_dupes' }, status: 'pending' },
+  ],
+};
+
+const APPROVED = { ...PLAN, status: 'approved' };
+
+const LEDGER = {
+  plan_id: 'plan-1',
+  status: 'completed',
+  actor: { user_id: 'u-1', display_name: 'Ahmed' },
+  provenance: {
+    pattern: 'skill_chain',
+    source: 'user_request',
+    skill_name: 'data_quality',
+    needs_confirmation: true,
+    created_at: '2026-08-20T10:00:00Z',
+    completed_at: '2026-08-20T10:05:00Z',
+  },
+  usage: { total_latency_ms: 1234, total_llm_calls: 5, total_tokens: 12000 },
+  steps: [
+    { step_id: 0, intent: 'Search for duplicate records', status: 'completed', latency_ms: 400, confirmed: true, skipped: false },
+    { step_id: 1, intent: 'Create a rule to prevent duplicates', status: 'completed', latency_ms: 800, confirmed: true, skipped: false },
+  ],
+  confirmations: [
+    { step_id: 1, intent: 'Create a rule to prevent duplicates', status: 'completed' },
+  ],
+  replans: 0,
+  final_response: 'Found 3 duplicate rows and created rule no_dupes.',
+};
+
+let streamHandlers = {};
+let currentPlan = PLAN;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  localStorage.clear();
+  streamHandlers = {};
+  currentPlan = PLAN;
+  listPlans.mockResolvedValue({ plans: [PLAN], count: 1 });
+  createPlan.mockResolvedValue(PLAN);
+  getPlan.mockImplementation(async () => currentPlan);
+  approvePlan.mockResolvedValue(APPROVED);
+  declinePlan.mockResolvedValue({ ...PLAN, status: 'cancelled' });
+  stopPlan.mockResolvedValue({ ...PLAN, status: 'cancelled' });
+  confirmPlanStep.mockResolvedValue({ status: 'confirmed', plan_id: 'plan-1', step_id: 1 });
+  declinePlanStep.mockResolvedValue({ status: 'declined', plan_id: 'plan-1', step_id: 1 });
+  getPlanLedger.mockResolvedValue(LEDGER);
+  runPlanStream.mockImplementation(async (token, planId, handlers) => {
+    streamHandlers = handlers;
+  });
+});
+
+// ── Tabs + composer ───────────────────────────────────────────────────────
+describe('AITaskPanel — two internal tabs (RULE_17)', () => {
+  it('renders Tasks/Run tabs and defaults to Tasks', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    expect(screen.getByRole('tab', { name: 'Tasks' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Run' })).toBeInTheDocument();
+
+    expect(screen.getByText('Plan a task')).toBeInTheDocument();
+    expect(await screen.findByText('Audit the emissions dataset for duplicates.')).toBeInTheDocument();
+  });
+
+  it('persists the selected tab to localStorage (RULE_17)', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Run' }));
+
+    expect(localStorage.getItem('carbon-ai-task-tab')).toBe('run');
+    expect(await screen.findByText('Open a task from the Tasks tab to review, approve and run it.')).toBeInTheDocument();
+  });
+
+  it('creates a plan from a brief and opens it for review', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    const input = screen.getByLabelText('Task brief');
+    fireEvent.change(input, { target: { value: 'Audit the emissions dataset for duplicates.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create plan' }));
+
+    await waitFor(() => {
+      expect(createPlan).toHaveBeenCalledWith('test-token', {
+        brief: 'Audit the emissions dataset for duplicates.',
+        conversation_id: 'conv-1',
+      });
+    });
+    // Detail loads and the Run tab is shown with the review gate.
+    expect(await screen.findByText('Approve plan')).toBeInTheDocument();
+    expect(screen.getByText('Search for duplicate records')).toBeInTheDocument();
+  });
+});
+
+// ── Plan-level consent gate (RULE_21) ─────────────────────────────────────
+describe('AITaskPanel — plan review and approval', () => {
+  it('shows the approve/decline gate for a pending plan and approves it', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    expect(await screen.findByRole('button', { name: 'Approve plan' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Decline' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve plan' }));
+
+    await waitFor(() => expect(approvePlan).toHaveBeenCalledWith('test-token', 'plan-1'));
+    expect(await screen.findByRole('button', { name: 'Run plan' })).toBeInTheDocument();
+  });
+
+  it('declining a plan leaves nothing executed', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Decline' }));
+
+    await waitFor(() => expect(declinePlan).toHaveBeenCalledWith('test-token', 'plan-1'));
+    expect(await screen.findByText('This plan was cancelled — nothing was executed.')).toBeInTheDocument();
+  });
+});
+
+// ── Streamed run + steps ──────────────────────────────────────────────────
+describe('AITaskPanel — streamed run and step consent', () => {
+  it('streams step frames and shows the audit ledger on completion', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve plan' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Run plan' }));
+
+    await waitFor(() => {
+      expect(runPlanStream).toHaveBeenCalledWith(
+        'test-token',
+        'plan-1',
+        expect.objectContaining({ onFrame: expect.any(Function), onDone: expect.any(Function) }),
+      );
+    });
+
+    // Emit the streamed frames (post-hoc from the durable run record).
+    await waitFor(() => expect(streamHandlers.onFrame).toBeDefined());
+    streamHandlers.onFrame({ type: 'step_start', plan_id: 'plan-1', step_id: 0, intent: 'Search for duplicate records' });
+    streamHandlers.onFrame({
+      type: 'step_result', plan_id: 'plan-1', step_id: 0, intent: 'Search for duplicate records',
+      status: 'completed', tool_output: { count: 3 },
+    });
+    streamHandlers.onFrame({ type: 'step_end', plan_id: 'plan-1', step_id: 0, status: 'completed' });
+    streamHandlers.onDone({ type: 'done', plan_id: 'plan-1', status: 'completed', final_response: 'Found 3 duplicate rows.' });
+
+    expect(await screen.findByText('Run completed')).toBeInTheDocument();
+    expect(await screen.findByText('Audit ledger')).toBeInTheDocument();
+    await waitFor(() => expect(getPlanLedger).toHaveBeenCalledWith('test-token', 'plan-1'));
+    expect(screen.getByText('12000')).toBeInTheDocument();
+    expect(screen.getByText('1234 ms')).toBeInTheDocument();
+  });
+
+  it('pauses on a consent step and confirms it via the step gate', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve plan' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Run plan' }));
+
+    await waitFor(() => expect(streamHandlers.onFrame).toBeDefined());
+    currentPlan = { ...PLAN, status: 'paused' };
+    streamHandlers.onFrame({ type: 'step_confirm', plan_id: 'plan-1', step_id: 1, intent: 'Create a rule to prevent duplicates' });
+    streamHandlers.onDone({ type: 'done', plan_id: 'plan-1', status: 'paused', final_response: null });
+
+    expect(await screen.findByText('Run paused — a step needs your approval')).toBeInTheDocument();
+    expect(screen.getByText('This action writes to Carbon. Approve it to run, or decline to skip it.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() => expect(confirmPlanStep).toHaveBeenCalledWith('test-token', 'plan-1', 1));
+    expect(await screen.findByText('Resume run')).toBeInTheDocument();
+  });
+
+  it('declines a consent step and marks it skipped', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve plan' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Run plan' }));
+
+    await waitFor(() => expect(streamHandlers.onFrame).toBeDefined());
+    currentPlan = { ...PLAN, status: 'paused' };
+    streamHandlers.onFrame({ type: 'step_confirm', plan_id: 'plan-1', step_id: 1, intent: 'Create a rule to prevent duplicates' });
+    streamHandlers.onDone({ type: 'done', plan_id: 'plan-1', status: 'paused', final_response: null });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Decline' }));
+
+    await waitFor(() => expect(declinePlanStep).toHaveBeenCalledWith('test-token', 'plan-1', 1));
+    expect(await screen.findByText('Skipped — not executed.')).toBeInTheDocument();
+  });
+
+  it('stops a running plan and shows stopped copy', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve plan' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Run plan' }));
+
+    expect(await screen.findByRole('button', { name: 'Stop run' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop run' }));
+
+    await waitFor(() => expect(stopPlan).toHaveBeenCalledWith('test-token', 'plan-1'));
+    expect(await screen.findByText('Run stopped')).toBeInTheDocument();
+  });
+
+  it('reports a failed run via the stream error frame', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve plan' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Run plan' }));
+
+    await waitFor(() => expect(streamHandlers.onFrame).toBeDefined());
+    streamHandlers.onError?.('Planning service unavailable');
+
+    expect(await screen.findByText('Run failed')).toBeInTheDocument();
+    expect(screen.getByText('Planning service unavailable')).toBeInTheDocument();
+  });
+});

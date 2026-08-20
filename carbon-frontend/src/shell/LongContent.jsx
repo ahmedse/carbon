@@ -35,6 +35,9 @@ export default function LongContent({ content, threshold = LONG_CONTENT_THRESHOL
         sx={{
           maxHeight: expanded ? 'none' : COLLAPSE_MAX_HEIGHT,
           overflowY: expanded ? 'visible' : 'auto',
+          // W2-B — wide JSON/terminal/table content scrolls horizontally inside
+          // its own card (design §2.4) and never widens the viewport.
+          overflowX: 'auto',
         }}
       >
         {children}

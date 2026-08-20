@@ -31,9 +31,12 @@ from ai.intelligence import (
 )
 from ai.usage_service import QuotaExceededError
 from ai.serializers import (
+    AgentActionStreamSerializer,
     ArtifactCreateSerializer,
     ArtifactSerializer,
     ArtifactUpdateSerializer,
+    CheckpointActionSerializer,
+    CheckpointCreateSerializer,
     ConversationListSerializer,
     ConversationUpdateSerializer,
     CreateConversationSerializer,
@@ -45,6 +48,7 @@ from ai.serializers import (
     ToolExecutionActionSerializer,
     UserProfileSerializer,
 )
+from accounts.capabilities import has_capability
 
 import logging
 
@@ -243,6 +247,45 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                     conversation_id=pk,
                     content=serializer.validated_data["content"],
                     model=serializer.validated_data.get("model") or None,
+                ):
+                    yield f"data: {json.dumps(frame)}\n\n"
+            except ValueError as e:
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+        return StreamingHttpResponse(
+            event_stream(),
+            content_type="text/event-stream",
+        )
+
+    @action(detail=True, methods=["post"], url_path="actions/stream", url_name="run-action-stream")
+    def run_action_stream(self, request, pk=None):
+        """Stream an agent/tool action run as Server-Sent Events (Sprint W1-A).
+
+        Body: ``{action_type: "tool"|"agent", tool?, agent?, args, verbosity}``.
+
+        Frames are ``data: <json>\n\n``:
+          {"type": "turn_start"|"tool_start"|"tool_arg"|"tool_result"|"tool_end"|"turn_end", ...}
+          {"type": "done", "conversation": {...}}
+          {"type": "stopped", "conversation": {...}}
+          {"type": "error", "error": message}
+
+        Host-mutating tools are staged (never auto-run, RULE_21): the
+        ``tool_end`` frame carries ``status:"needs_confirmation"`` +
+        ``execution_id`` for the confirm/decline endpoints.
+        """
+        serializer = AgentActionStreamSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        def event_stream():
+            try:
+                for frame in self.intelligence.run_agent_action_stream(
+                    user=request.user,
+                    conversation_id=pk,
+                    action_type=serializer.validated_data["action_type"],
+                    tool=serializer.validated_data.get("tool") or None,
+                    agent=serializer.validated_data.get("agent") or None,
+                    args=serializer.validated_data.get("args") or {},
+                    verbosity=serializer.validated_data.get("verbosity", "concise"),
                 ):
                     yield f"data: {json.dumps(frame)}\n\n"
             except ValueError as e:
@@ -731,6 +774,126 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
             limit=limit,
         )
         return Response({"suggestions": suggestions})
+
+    # ── Sprint 20 W1-B — context lifecycle (checkpoint/restore/fork/clear) ─
+    @action(detail=True, methods=["post"], url_path="checkpoint", url_name="checkpoint-conversation")
+    def checkpoint(self, request, pk=None):
+        """Save a named snapshot of the conversation's working context.
+
+        Idempotent: re-saving the same ``name`` overwrites the existing
+        checkpoint.  Mutating console action → ``ai:manage_console``.
+        """
+        if not has_capability(request.user, "ai:manage_console"):
+            raise PermissionDenied(
+                "Saving a checkpoint requires ai:manage_console."
+            )
+
+        serializer = CheckpointCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            checkpoint = self.intelligence.checkpoint_conversation(
+                user=request.user,
+                conversation_id=pk,
+                name=serializer.validated_data["name"],
+                note=serializer.validated_data.get("note", ""),
+            )
+            return Response(checkpoint)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=["get"], url_path="checkpoints", url_name="checkpoints")
+    def checkpoints(self, request, pk=None):
+        """List the conversation's named checkpoints, newest first (picker).
+
+        Read-only console action → ``ai:view_console``.
+        """
+        if not has_capability(request.user, "ai:view_console"):
+            raise PermissionDenied(
+                "Listing checkpoints requires ai:view_console."
+            )
+
+        try:
+            checkpoints = self.intelligence.list_checkpoints(
+                user=request.user,
+                conversation_id=pk,
+            )
+            return Response({"checkpoints": checkpoints})
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=["post"], url_path="restore", url_name="restore-conversation")
+    def restore(self, request, pk=None):
+        """Re-seed the conversation's working context from a checkpoint.
+
+        Does NOT overwrite the durable message log.  Mutating console action
+        → ``ai:manage_console``.
+        """
+        if not has_capability(request.user, "ai:manage_console"):
+            raise PermissionDenied(
+                "Restoring a checkpoint requires ai:manage_console."
+            )
+
+        serializer = CheckpointActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            conversation = self.intelligence.restore_conversation(
+                user=request.user,
+                conversation_id=pk,
+                checkpoint_id=serializer.validated_data["checkpoint_id"],
+            )
+            return Response(conversation)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=["post"], url_path="fork", url_name="fork-conversation")
+    def fork(self, request, pk=None):
+        """Clone the conversation into a NEW row seeded from a checkpoint.
+
+        Returns the new conversation id — never aliases the source row.
+        Mutating console action → ``ai:manage_console``.
+        """
+        if not has_capability(request.user, "ai:manage_console"):
+            raise PermissionDenied(
+                "Forking a conversation requires ai:manage_console."
+            )
+
+        serializer = CheckpointActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            conversation = self.intelligence.fork_conversation(
+                user=request.user,
+                conversation_id=pk,
+                checkpoint_id=serializer.validated_data["checkpoint_id"],
+            )
+            return Response(
+                conversation, status=status.HTTP_201_CREATED,
+            )
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=["post"], url_path="clear-context", url_name="clear-context")
+    def clear_context(self, request, pk=None):
+        """Reset the conversation's working context (summary + snapshot).
+
+        Never deletes the conversation row, the message log, or learned
+        facts.  Mutating console action → ``ai:manage_console``.
+        """
+        if not has_capability(request.user, "ai:manage_console"):
+            raise PermissionDenied(
+                "Clearing context requires ai:manage_console."
+            )
+
+        try:
+            conversation = self.intelligence.clear_context(
+                user=request.user,
+                conversation_id=pk,
+            )
+            return Response(conversation)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
 
 class WorkspaceArtifactViewSet(viewsets.GenericViewSet):

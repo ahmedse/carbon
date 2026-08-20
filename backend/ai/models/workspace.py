@@ -379,6 +379,79 @@ class AIGeneration(models.Model):
         return f"{self.conversation_id} [{self.status}]"
 
 
+class ConversationCheckpoint(models.Model):
+    """A named snapshot of a conversation's working context (Sprint 20 W1-B).
+
+    ``checkpoint_conversation`` builds the current context bundle via
+    ``context_assembler.assemble_context`` (messages + budget + kg_entities +
+    memory) and persists it here under a user-chosen name.  Restoring or
+    forking re-seeds a conversation's *working* context from
+    ``snapshot_json``; it never deletes or overwrites the durable
+    ``AIMessage`` log or learned facts.
+
+    Idempotent by design: saving the same ``name`` on the same conversation
+    overwrites the existing checkpoint (update_or_create on the
+    unique-together pair ``(conversation, name)``).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    conversation = models.ForeignKey(
+        AIConversation,
+        on_delete=models.CASCADE,
+        related_name="checkpoints",
+    )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ai_checkpoints",
+    )
+    name = models.CharField(
+        max_length=120,
+        help_text="User-chosen checkpoint name (unique per conversation).",
+    )
+    note = models.TextField(
+        blank=True,
+        default="",
+        help_text="Optional free-text note about this checkpoint.",
+    )
+    snapshot_json = models.JSONField(
+        blank=True,
+        default=dict,
+        help_text="The assembled context bundle: {messages, budget, "
+                  "kg_entities, context_signature, summary, message_boundary_id}.",
+    )
+    message_boundary_id = models.UUIDField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="AIMessage id at the checkpoint boundary (fork seeds up to "
+                  "and including this message).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "ai"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["conversation", "name"],
+                name="ai_checkpoint_conv_name_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["conversation", "-created_at"],
+                name="ai_checkpoint_conv_time_idx",
+            ),
+        ]
+        verbose_name = "AI Conversation Checkpoint"
+        verbose_name_plural = "AI Conversation Checkpoints"
+
+    def __str__(self):
+        return f"{self.name} ({self.conversation_id})"
+
+
 class AIUserProfile(models.Model):
     """Per-user AI settings — quota budget + reset rule (Phase 21-A).
 

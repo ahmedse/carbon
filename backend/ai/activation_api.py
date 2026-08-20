@@ -273,6 +273,9 @@ def _settings_tools() -> list:
     Sprint 12 (ARCH_AI_EXTENSIBILITY): each entry carries ``kind``,
     ``requires_confirmation``, ``capability`` and ``app_identifier`` so the
     admin console can show the growth surface — not just a flat name list.
+
+    Sprint W1-A: each entry also carries the tool's JSON ``parameters``
+    schema so the console can render an args form for the action seam.
     """
     from ai.engine.agent.plugins import WorkflowPlugin, registered_plugins
     from ai.engine.agent.tools import (
@@ -324,6 +327,7 @@ def _settings_tools() -> list:
             {
                 "name": name,
                 "description": function.get("description", ""),
+                "parameters": function.get("parameters", {}),
                 **meta,
             }
         )
@@ -331,14 +335,28 @@ def _settings_tools() -> list:
 
 
 def _settings_agents() -> list:
-    """Registered agent names from the Django-backed agent registry."""
+    """Registered agents (rich metadata) from the Django-backed agent registry.
+
+    Sprint W1-A: each entry is a dict ``{id, name, role, tool_set, is_active}``
+    so the console can render agent cards and wire the action seam.  The
+    Django model stores the tool set in ``tool_set_json`` (a JSON array of
+    tool names); it is surfaced here as ``tool_set``.
+    """
     from ai.models.core import Agent
 
-    return list(
-        Agent.objects.filter(is_active=True)
-        .values_list("name", flat=True)
-        .order_by("name")
+    agents = Agent.objects.filter(is_active=True).values(
+        "id", "name", "role", "tool_set_json", "is_active"
     )
+    return [
+        {
+            "id": str(agent["id"]),
+            "name": agent["name"],
+            "role": agent["role"],
+            "tool_set": agent["tool_set_json"] or [],
+            "is_active": agent["is_active"],
+        }
+        for agent in agents.order_by("name")
+    ]
 
 
 class PulseSettingsView(APIView):
@@ -356,9 +374,10 @@ class PulseSettingsView(APIView):
             "rate_limit": int,
             "routing": {task: model, ...},
             "mcp_servers": [{name, command, args}, ...] | [],
-            "tools_catalog": [{name, description, kind, requires_confirmation,
-                              capability, app_identifier}, ...] | [],
-            "agents": [name, ...] | [],
+            "tools_catalog": [{name, description, parameters, kind,
+                              requires_confirmation, capability,
+                              app_identifier}, ...] | [],
+            "agents": [{id, name, role, tool_set, is_active}, ...] | [],
         }
 
     Every section is independently guarded; a section failure yields that

@@ -16,6 +16,9 @@ import {
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { useAuth } from '../auth/AuthContext';
 
@@ -63,6 +66,26 @@ function getGroup(conv) {
 
 const GROUP_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Older'];
 
+// Sprint W2-B — past-chat accordion (design §2.4): each group header toggles
+// collapse/expand, persisted per group under carbon-ai-accordion-{group}
+// (RULE_17 localStorage pattern). Long groups are capped in the DOM and reveal
+// the rest inline via a "Show N more" toggle (no virtualization lib in the
+// project — the cap bounds rendering for very long session lists).
+const ACCORDION_KEY_PREFIX = 'carbon-ai-accordion-';
+const GROUP_CAP = 50;
+
+function readGroupOpen() {
+  const state = {};
+  for (const g of GROUP_ORDER) {
+    try {
+      state[g] = localStorage.getItem(ACCORDION_KEY_PREFIX + g) !== 'collapsed';
+    } catch {
+      state[g] = true;
+    }
+  }
+  return state;
+}
+
 function AIConversationTabs({
   conversations,
   activeId,
@@ -80,6 +103,24 @@ function AIConversationTabs({
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [renameConvId, setRenameConvId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
+  // W2-B — accordion: per-group open state (localStorage-persisted), the
+  // groups that reveal ALL items (past GROUP_CAP), and the one item expanded
+  // inline within its group.
+  const [groupOpen, setGroupOpen] = useState(readGroupOpen);
+  const [showAll, setShowAll] = useState({});
+  const [expandedItemId, setExpandedItemId] = useState(null);
+
+  const toggleGroup = useCallback((group) => {
+    setGroupOpen((prev) => {
+      const next = !(prev[group] ?? true);
+      try {
+        localStorage.setItem(ACCORDION_KEY_PREFIX + group, next ? 'expanded' : 'collapsed');
+      } catch {
+        // storage may be unavailable — still toggles in-memory
+      }
+      return { ...prev, [group]: next };
+    });
+  }, []);
 
   const isOwned = useCallback(
     (c) => c.visibility !== 'shared' || String(c.user_id) === String(user?.id),
@@ -124,53 +165,83 @@ function AIConversationTabs({
     const type = TYPE_LABELS[conv.conversation_type] || 'Chat';
     const title = conv.title || `${type} #${String(conv.id).slice(0, 6)}`;
     const age = ageLabel(conv);
+    const detailOpen = expandedItemId === conv.id;
 
     return (
-      <Box
-        key={conv.id}
-        role="option"
-        aria-selected={active}
-        onClick={() => onSelect(conv.id)}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.75,
-          px: 1.25,
-          height: 26,
-          cursor: 'pointer',
-          userSelect: 'none',
-          borderLeft: 3,
-          borderColor: active ? 'primary.main' : 'transparent',
-          bgcolor: active ? 'action.selected' : 'transparent',
-          '&:hover': { bgcolor: active ? 'action.selected' : 'action.hover' },
-          '&:hover .sess-menu': { opacity: 1 },
-          '.sess-menu': { opacity: 0, transition: 'opacity 0.1s' },
-        }}
-      >
-        <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: STATUS_COLORS[conv.status] || 'grey.400', flexShrink: 0 }} />
-        <Typography variant="caption" noWrap sx={{ flex: 1, fontSize: '0.8rem', fontWeight: active ? 600 : 400 }}>
-          {title}
-        </Typography>
-        <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'text.disabled', flexShrink: 0, minWidth: 24, textAlign: 'right' }}>
-          {type}
-        </Typography>
-        <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'text.disabled', flexShrink: 0, minWidth: 18, textAlign: 'right' }}>
-          {age}
-        </Typography>
-        {owned && (
-          <IconButton
-            size="small"
-            className="sess-menu"
-            onClick={(e) => openMenu(e, conv)}
-            aria-label={`Session options for ${title}`}
-            sx={{ p: 0.25, flexShrink: 0, ml: -0.5 }}
-          >
-            <MoreVertIcon sx={{ fontSize: 12 }} />
-          </IconButton>
+      <Box key={conv.id}>
+        <Box
+          role="option"
+          aria-selected={active}
+          onClick={() => onSelect(conv.id)}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.75,
+            px: 1.25,
+            height: 26,
+            cursor: 'pointer',
+            userSelect: 'none',
+            borderLeft: 3,
+            borderColor: active ? 'primary.main' : 'transparent',
+            bgcolor: active ? 'action.selected' : 'transparent',
+            '&:hover': { bgcolor: active ? 'action.selected' : 'action.hover' },
+            '&:hover .sess-menu': { opacity: 1 },
+            '.sess-menu': { opacity: 0, transition: 'opacity 0.1s' },
+          }}
+        >
+          <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: STATUS_COLORS[conv.status] || 'grey.400', flexShrink: 0 }} />
+          <Typography variant="caption" noWrap sx={{ flex: 1, fontSize: '0.8rem', fontWeight: active ? 600 : 400 }}>
+            {title}
+          </Typography>
+          <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'text.disabled', flexShrink: 0, minWidth: 24, textAlign: 'right' }}>
+            {type}
+          </Typography>
+          <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'text.disabled', flexShrink: 0, minWidth: 18, textAlign: 'right' }}>
+            {age}
+          </Typography>
+          {owned && (
+            <>
+              {/* W2-B — per-item inline expand (full title + timestamp). */}
+              <IconButton
+                size="small"
+                className="sess-menu"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedItemId((prev) => (prev === conv.id ? null : conv.id));
+                }}
+                aria-label={`Expand ${title} details`}
+                aria-expanded={detailOpen}
+                sx={{ p: 0.25, flexShrink: 0 }}
+              >
+                {detailOpen ? <ExpandLessIcon sx={{ fontSize: 12 }} /> : <ExpandMoreIcon sx={{ fontSize: 12 }} />}
+              </IconButton>
+              <IconButton
+                size="small"
+                className="sess-menu"
+                onClick={(e) => openMenu(e, conv)}
+                aria-label={`Session options for ${title}`}
+                sx={{ p: 0.25, flexShrink: 0, ml: -0.5 }}
+              >
+                <MoreVertIcon sx={{ fontSize: 12 }} />
+              </IconButton>
+            </>
+          )}
+        </Box>
+        {detailOpen && (
+          <Box sx={{ px: 1.25, py: 0.375, borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+            <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6875rem' }}>
+              {conv.title || conv.id}
+            </Typography>
+            {(conv.updated_at || conv.created_at) && (
+              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.625rem' }}>
+                {new Date(conv.updated_at || conv.created_at).toLocaleString()}
+              </Typography>
+            )}
+          </Box>
         )}
       </Box>
     );
-  }, [activeId, isOwned, onSelect, openMenu]);
+  }, [activeId, isOwned, onSelect, openMenu, expandedItemId]);
 
   return (
     <>
@@ -193,14 +264,65 @@ function AIConversationTabs({
             No sessions yet
           </Typography>
         ) : (
-          GROUP_ORDER.filter((g) => grouped[g]?.length).map((group) => (
-            <Box key={group}>
-              <Typography variant="caption" sx={{ display: 'block', px: 1.25, py: 0.25, fontSize: '0.65rem', color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.05em', bgcolor: 'background.default' }}>
-                {group}
-              </Typography>
-              {grouped[group].map(renderItem)}
-            </Box>
-          ))
+          GROUP_ORDER.filter((g) => grouped[g]?.length).map((group) => {
+            const items = grouped[group];
+            const visibleItems = showAll[group] ? items : items.slice(0, GROUP_CAP);
+            const hiddenCount = items.length - visibleItems.length;
+            const open = groupOpen[group] ?? true;
+            return (
+              <Box key={group}>
+                {/* Group header toggle (W2-B accordion — design §2.4). */}
+                <Box
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={open}
+                  aria-label={`Toggle ${group} sessions`}
+                  onClick={() => toggleGroup(group)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleGroup(group);
+                    }
+                  }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    px: 1.25,
+                    py: 0.375,
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    bgcolor: 'background.default',
+                    '&:hover': { bgcolor: 'action.hover' },
+                  }}
+                >
+                  {open ? <ExpandMoreIcon sx={{ fontSize: 13 }} /> : <ChevronRightIcon sx={{ fontSize: 13 }} />}
+                  <Typography variant="caption" sx={{ flex: 1, fontSize: '0.65rem', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                    {group}
+                  </Typography>
+                  <Typography variant="caption" sx={{ fontSize: '0.625rem', color: 'text.disabled' }}>
+                    {items.length}
+                  </Typography>
+                </Box>
+                {open && (
+                  <Box>
+                    {visibleItems.map(renderItem)}
+                    {hiddenCount > 0 && (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.25 }}>
+                        <Button
+                          size="small"
+                          onClick={() => setShowAll((s) => ({ ...s, [group]: true }))}
+                          sx={{ fontSize: '0.625rem', textTransform: 'none', minHeight: 0, p: 0.25 }}
+                        >
+                          Show {hiddenCount} more
+                        </Button>
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            );
+          })
         )}
       </Box>
 

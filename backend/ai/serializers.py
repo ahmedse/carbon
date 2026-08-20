@@ -153,6 +153,63 @@ class ToolExecutionActionSerializer(serializers.Serializer):
     body = serializers.JSONField(required=False, allow_null=True)
 
 
+class CheckpointCreateSerializer(serializers.Serializer):
+    """Body for POST ``conversations/{id}/checkpoint/`` (Sprint W1-B).
+
+    ``name`` is required and unique per conversation — re-saving the same
+    name overwrites the existing checkpoint (idempotent snapshot).
+    """
+
+    name = serializers.CharField(max_length=120, allow_blank=False)
+    note = serializers.CharField(
+        required=False, allow_blank=True, default="",
+    )
+
+
+class CheckpointActionSerializer(serializers.Serializer):
+    """Body for POST ``conversations/{id}/restore/`` and ``.../fork/``.
+
+    ``checkpoint_id`` selects which named snapshot to restore or fork from.
+    """
+
+    checkpoint_id = serializers.UUIDField(required=True)
+
+
+class AgentActionStreamSerializer(serializers.Serializer):
+    """Body for streaming an agent/tool action run (Sprint W1-A).
+
+    ``{action_type: "tool"|"agent", tool?, agent?, args, verbosity}`` —
+    ``tool`` is required for ``action_type="tool"``, ``agent`` for
+    ``action_type="agent"``.  ``verbosity`` selects the clustered frame set:
+    ``concise`` (headers only) vs ``full`` (adds ``tool_arg`` + redacted
+    ``tool_result`` bodies).
+    """
+
+    action_type = serializers.ChoiceField(choices=["tool", "agent"])
+    tool = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=None,
+    )
+    agent = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=None,
+    )
+    args = serializers.JSONField(required=False, default=dict)
+    verbosity = serializers.ChoiceField(
+        choices=["concise", "full"], required=False, default="concise",
+    )
+
+    def validate(self, attrs):
+        action_type = attrs.get("action_type")
+        if action_type == "tool" and not attrs.get("tool"):
+            raise serializers.ValidationError(
+                {"tool": "tool is required for action_type='tool'."}
+            )
+        if action_type == "agent" and not attrs.get("agent"):
+            raise serializers.ValidationError(
+                {"agent": "agent is required for action_type='agent'."}
+            )
+        return attrs
+
+
 class UserProfileSerializer(serializers.Serializer):
     """GET/PATCH body for ``/ai/profile/`` (Phase 22-A).
 
