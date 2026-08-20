@@ -49,7 +49,7 @@ echo 'Read `.ai-toolkit/ONBOARDING.md`' > /path/to/newproject/.github/copilot-in
 | Role | When to Use | Model | Mode |
 |------|-------------|-------|------|
 | **Master Architect** | Planning, decomposition, TASKS.md specs | DeepSeek V4 Pro | Plan |
-| **Scientific Researcher** | Design & run experiments, analyze results | DeepSeek V4-Pro | Experiment |
+| **Scientific Researcher** | Design & run experiments, analyze results | DeepSeek V4-Flash | Experiment |
 | **Backend Worker** | Python, Django, API, services, DB | DeepSeek V4-Flash | Execute |
 | **Frontend Worker** | React, MUI, hooks, UI | DeepSeek V4-Flash | Execute |
 | **DevOps Worker** | Docker, deploy, VPS, cron | DeepSeek V4-Flash | Execute |
@@ -57,7 +57,7 @@ echo 'Read `.ai-toolkit/ONBOARDING.md`' > /path/to/newproject/.github/copilot-in
 | **Debugger/Fixer** | Prod hotfixes, regression tests | DeepSeek V4-Flash | Fix |
 | **QA Validator** | Verification, test planning, validation gates | DeepSeek V4-Flash | Validate |
 | **Product Designer** | UX design, design system, wireframes | DeepSeek V4-Flash | Design |
-| **Curator** | Monthly retro, evolve contracts | DeepSeek V4-Pro | Evolve |
+| **Curator** | Monthly retro, evolve contracts | DeepSeek V4-Flash | Evolve |
 
 ---
 

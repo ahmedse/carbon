@@ -178,3 +178,36 @@ Executed headlessly with the project Playwright (Chromium) — the integrated br
 **PASSED WITH FINDINGS.**
 
 The platform is structurally sound (L1 GATE PASSED, 549 tests, clean build, no security P1s) and the UX surface is strong (dark mode, responsive, truncation, rapid-tab stability, refresh-mid-stream all clean). However, the AI engine has a **systemic P1** (empty replies on tool-requiring turns, ×5 repro), two **crash-level P1s** in the admin console (`engine-settings`, `learning-flywheel`) and one **data-blind P1** (`budget-usage` grid) — all with root causes now pinned to exact lines and one shared upstream cause (MUI X DataGrid v8.5 `valueFormatter` signature migration). A **P2 throttle storm** degrades all admin pages under sustained use. Recommended priority: F-04 (engine), F-02/F-03 (valueFormatter migration — one fix heals two panels), F-01 (ChipList), then F-07 (throttle), then the P2 backlog.
+
+---
+
+## 10. ROUND 2 — Agentic Task Orchestration & Agent Surface (post-866e3a8 W3-A)
+
+**Status: PARTIALLY EXECUTED — live API phases BLOCKED by P1C regressions (F-21, F-22).**
+
+### 10.1 Unit layer (executed — GREEN)
+
+| Layer | Suite | Result |
+|---|---|---|
+| Backend | `ai/tests/test_plans.py` + `test_agent_action_stream.py` + `test_tool_execution_actions.py` | **55 passed** (8.5s) |
+| Frontend | `AITaskPanel.test.jsx` + `AITaskTransferContext.test.jsx` (vitest) | **23 passed** (4.9s) |
+| **Total** | New W3-A task/agent/tool surface | **78/78 PASSED** |
+
+Covers: plan create/list/owner-scope/approve/decline/run SSE frames/consent/confirm/decline/stop/ledger/api-auth; agent action stream; tool execution (search_knowledge, get_entity_details, call_host_api, navigate_to, open_entity, learn_fact, forget_fact, ask_clarification, run_ops_workflow, draft_skill, invoke_skill, code_snippet); MCP registry empty/malformed-config graceful degradation. `pytest.ini --nomigrations` masks migration-graph issues (see F-21).
+
+### 10.2 New P1 blockers — live testing BLOCKED (need master fix, then re-run)
+
+| ID | Sev | Symptom | Root cause (evidence-pinned) | Fix target (for master) |
+|---|---|---|---|---|
+| **F-21** | P1 (P0 for sprint) | `NodeNotFoundError: Migration datahub.0003_remove_models dependencies reference nonexistent parent node ('integrations.turnkey','0002_alter_turnkeymodellink_dataset_version')` — **every `migrate`/`makemigrations` fails** | App label is `turnkey` (TurnkeyConfig `name='integrations.turnkey'` → default label `turnkey`). Loader `disk_migrations` keys = `('turnkey','0001_initial')`, `('turnkey','0002_…')` (verified). `backend/datahub/migrations/0003_remove_models.py:13` (untracked P1C) depends on `('integrations.turnkey', …)` → DummyNode. | Change dep to `('turnkey', '0002_alter_turnkeymodellink_dataset_version')` |
+| **F-22** | P1 (P0 for sprint) | `runserver`/`check` refuse to start — **60 system-check errors (E304/E305 reverse accessor clashes)**; backend STOPPED (was PID 2145, now down) | P1C adoption left duplicate model names: `datahub.DatasetAccessPolicy/group/user`, `datahub.DatasetVersion.approved_by/created_by/data_table`, `datahub.DatasetVersionMember.data_table` clash with `catalog.Dataset*` copies (verified in `backend.log`). State-only `DeleteModel` in 0003 does NOT clear live model classes from `datahub/models.py` → checks run against both apps. | Remove adopted models from `datahub/models.py` (or resolve related_name collisions); then 0003 state-op is redundant |
+
+**Blocker impact on Round 2:** T-01..T-15 (plans lifecycle live), AG-05..AG-10 (actions/stream SSE, MCP, consent, stop) are **BLOCKED** — require a bootable backend on :8009. AG-01..AG-04/AG-11/AG-12 (pure unit/UI) already covered by 10.1. MEM-01/04 memory re-check (AG-11) blocked until backend boots.
+
+### 10.3 Next actions (after master fixes F-21/F-22)
+1. `./manage.sh restart backend` → verify `/carbon-api/health/` 200 + token endpoint JSON.
+2. Phase 1: T-01 (live decomposition, ≤2 plans for LLM budget), T-02..T-05 lifecycle.
+3. Phase 2: run SSE + consent gate + ledger (T-06..T-12).
+4. Phase 3: MCP config redaction + actions/stream SSE (AG-05..AG-10).
+5. Phase 4: MEM-01/04 fact persistence + cross-conversation recall (AG-11).
+6. Phase 5: AITaskPanel/AIAgentPanel UI headless (Playwright `.lN-*.mjs`).

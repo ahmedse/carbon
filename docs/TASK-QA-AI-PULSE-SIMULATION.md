@@ -535,3 +535,58 @@ Additional UX scenarios:
 - RULE_21 no auto-mutation — verify confirm gate in AGT-08/09 (P0 if broken).
 - RULE_23 no implementation leakage — TR-05 (P0 if jargon appears).
 - Feedback UX is color-the-thumb ONLY — FB-01..05 (P0 if text/labels return).
+
+---
+
+## 8. ROUND 2 — Agentic Task Orchestration & Agent Surface (post-866e3a8 W3-A)
+
+> Trigger: commit `866e3a8` shipped Sprint 23 W3-A (task orchestration) + agent surface + QA remediation task files (SPRINT-24..28). Unit tests (`test_plans.py`, `test_agent_action_stream.py`, `test_tool_execution_actions.py`) cover the lifecycle with **patched engine seams** — Round 2 exercises the **live LLM planner + real tool execution + UI**, and re-checks only previously FAILED findings (MEM-01/04). **Nothing that passed in Round 1 is re-run.**
+
+### 8.1 New surface under test
+- **Plans API** `/carbon-api/ai/plans/` — create/list/get/approve/decline/run(SSE)/steps/confirm|decline/stop/ledger. Lifecycle: `pending_approval → approved → running/paused → completed|cancelled|failed`. CBAC owner-scoped (`Run.host_user_id`).
+- **Agent surface** — `AIAgentPanel` (Agents/MCP/Tools/Logs internal tabs) in workspace; backend `CarbonIntelligence`, `dispatch_action_stream` (workspace `actions/stream` SSE), `MCPToolRegistry` (config `MCP_SERVERS`), built-in tools (search_knowledge, get_entity_details, call_host_api, navigate_to, open_entity, learn_fact, forget_fact, ask_clarification, run_ops_workflow, draft_skill, invoke_skill, code_snippet).
+- **ReActLoop execution** — plan run drives ReActLoop with `resume_run_id=plan_id` (reuses Run/RunStep rows), consent gates via `CarbonHostExecutor.confirm_execution/decline_execution`.
+
+### 8.2 Round 2 categories (new IDs, `T-*` = task orchestration, `AG-*` = agent/MCP/tools)
+
+| ID | Scenario | Steps / Assertions |
+|----|----------|--------------------|
+| T-01 | Live plan decomposition | POST `/ai/plans/` brief "Find anomalies in emissions data for Jan and summarize" → 201; steps ≥1, pattern/source present, status `pending_approval`; planner ran REAL LLM (not mocked) |
+| T-02 | Plan list owner-scoped | GET `/ai/plans/` → only own plans; viewer persona GET → 200 empty (or own), never admin's |
+| T-03 | Plan detail | GET `/ai/plans/{id}/` → steps with step_id/intent/tool_name/depends_on |
+| T-04 | Approve gate | approve non-pending → 400; approve pending → status `approved` |
+| T-05 | Decline | decline pending → `cancelled`, steps skipped |
+| T-06 | Run SSE frames | POST `/run/` on approved plan → SSE stream: `plan_start → step_start → step_result → step_end → done(status=completed)`; no jargon (RULE_23) |
+| T-07 | Run unapproved | run on `pending_approval` → error frame, no execution |
+| T-08 | Consent gate | mutation-intending plan (e.g. "create a DQ rule…") → `step_confirm` frame; plan pauses `paused`; NO mutation before confirm |
+| T-09 | Confirm step | POST `/steps/confirm/` → executed; step `completed`; ledger shows confirmation |
+| T-10 | Decline step | POST `/steps/decline/` → skipped; nothing written |
+| T-11 | Stop | POST `/stop/` mid-run (or after) → `cancelled`, pending steps skipped; idempotent |
+| T-12 | Ledger | GET `/ledger/` → actor, provenance, usage (latency/llm_calls/tokens), steps, confirmations, replans |
+| T-13 | RBAC plans | viewer GET admin's plan id → 404; viewer confirm admin's step → 404; unauthenticated → 401 |
+| T-14 | Empty brief | POST brief="" → 400; brief >4000 → 400 |
+| T-15 | Conversation link | create plan with conversation_id → plan shows conversation_id; run persists assistant message? |
+| AG-01 | Agent panel renders | workspace agent icon → Agents/MCP/Tools/Logs tabs; no console errors |
+| AG-02 | Tools catalog | Tools tab lists built-in tools (names/descriptions), no secrets |
+| AG-03 | MCP empty-config | MCP_SERVERS unset → MCP tab empty state "no servers", NO crash; `connect_all()` returns [] gracefully |
+| AG-04 | MCP malformed config | settings payload shows mcp_servers [] when invalid JSON (graceful) |
+| AG-05 | Actions/stream | POST `actions/stream` on a conversation → SSE tool frames (tool_start/tool_completed) for a tool-requiring prompt |
+| AG-06 | Action confirm/decline | staged mutation action → confirm/decline endpoints (reuses workspace confirm seam) |
+| AG-07 | Agent run with declared tool_set | agent mode → tools restricted to declared tool_set |
+| AG-08b | Agent unknown tool | prompt requesting non-existent tool → friendly error frame, no crash |
+| AG-09 | Agent stop | cancel mid-run → stopped frame, run row finalized (not stuck working) |
+| AG-10 | RULE_21 no-auto-mutation (P0) | no tool side effect before explicit confirm (DB evidence) |
+| AG-11 | Memory tool re-check (MEM-01/04 fail) | "Remember that my favorite color is teal" → fact persists after confirm; cross-conversation recall works OR defect re-confirmed with fresh evidence |
+| AG-12 | Ledger honesty | tokens/latency non-zero after real run; provenance pattern/source matches plan |
+
+### 8.3 Round 2 order
+1. Phase 1 — plans lifecycle live API (T-01..T-15) via curl + JWT.
+2. Phase 2 — agentic run SSE + consent (T-06..T-12, AG-05..AG-10).
+3. Phase 3 — MCP/tooling surface (AG-01..AG-04, settings payload, MCPToolRegistry behavior).
+4. Phase 4 — MEM-01/04 re-check (AG-11).
+5. Phase 5 — AITaskPanel + AIAgentPanel UI headless (console errors, frame rendering, consent buttons).
+6. Output: append "Round 2" section to `docs/TASK-RESULT-QA-AI-PULSE-SIMULATION.md`.
+
+### 8.4 Round 2 DO-NOT-TOUCH additions
+- Do NOT re-run Round 1 ✅ scenarios. Do NOT modify `backend/` or `carbon-frontend/src/`.
+- SPRINT-24..28 remediation is NOT yet implemented (F-01/F-02/F-03 still present) — do not re-verify those; they are documented as dispatched.

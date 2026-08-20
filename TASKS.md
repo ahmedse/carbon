@@ -19,6 +19,29 @@ one `## Phase N-X` entry = one Worker Role. No phase spans both backend and fron
 
 ---
 
+## MASTER DIRECTIVE — Test Partitioning (NON-NEGOTIABLE)
+
+Full-suite `pytest` + `pytest-xdist -n auto` spawns parallel Postgres test DBs and
+**hangs the dev laptop**. xdist flags are REMOVED from `backend/pytest.ini` and MUST
+NOT be re-added. Every worker MUST follow:
+
+- **Backend:** one app at a time, never full suite:
+  `python -m pytest <app> -q --maxfail=5 --disable-warnings -p no:cacheprovider`
+  (e.g. `pytest ai -q`, `pytest catalog -q`, `pytest integrations -q`).
+  Max 2 apps in one invocation, and only the changed app + direct dependents.
+- **Frontend:** one spec file at a time, never whole suite:
+  `npx vitest run src/__tests__/<file>.test.jsx`; build **once per phase**
+  (`npm run build`), not per file.
+- **E2E:** only when a journey changed, one spec at a time (`npx playwright test e2e/journeys/<file>`).
+- **NEVER:** `pytest` with no args · `-n auto`/`--dist loadscope`/xdist · `npx vitest run` with no path.
+- Stale-test-DB cleanup (only if `test_carbon*` DBs linger): see `.ai-toolkit/shared/testing.md` RULE 7.
+
+**Frontend completion is PROVEN, not claimed:** a frontend phase is `DONE` only
+when `npm run lint` + a targeted `vitest` + `npm run build` all pass. No build/test
+evidence → not done.
+
+---
+
 ## AI WORKSPACE TRACK
 
 ---
@@ -1287,7 +1310,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-18
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek-V3
-**Status:** PLANNED
+**Status:** DONE — usage aggregation + quota (commits `bb91658` / `d580edc`)
 **Kind:** Backend-only. Medium.
 **Depends on:** Phase 20-A (single-source cost table).
 
@@ -1355,7 +1378,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-18
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** ACTIVE
+**Status:** DONE — Usage & Cost tab (commit `189815a`)
 **Kind:** Frontend-only. Medium.
 **Depends on:** Phase 21-A (endpoints) — ✅ DONE (bb91658).
 
@@ -1435,7 +1458,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-18
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** IN PROGRESS
+**Status:** DONE — profile config fields + wiring (commit `715a2a0`)
 **Kind:** Backend-only. Small-medium.
 **Depends on:** Phase 15 (AIUserProfile), Phase 20-A (catalog FK target).
 
@@ -1503,7 +1526,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-18
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** IN PROGRESS
+**Status:** DONE — AI Settings tab (commit `f73f7c5`)
 **Kind:** Frontend-only. Small.
 **Depends on:** Phase 22-A (GET/PATCH /ai/profile/).
 
@@ -1755,7 +1778,7 @@ Backend and frontend never share a phase.
 **Date:** 2026-08-19
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY
+**Status:** DONE — execution seam + streamed events (commit `866e3a8`)
 **Kind:** Backend-only. Medium.
 **Depends on:** chat SSE (`dispatch_task_stream` + `workspace_api` messages/stream) and `generation_registry`.
 
@@ -1820,7 +1843,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-19
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY
+**Status:** DONE — checkpoint/restore/fork/clear + `ConversationCheckpoint` (commit `866e3a8`)
 **Kind:** Backend-only. Medium.
 **Depends on:** W1-A (fork reuses the abort/stop seam).
 
@@ -1875,7 +1898,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-19
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY
+**Status:** DONE — `AIAgentPanel` + `AIActionRunner` (commit `866e3a8`)
 **Kind:** Frontend-only. Medium-large.
 **Depends on:** W1-A (execution SSE + catalog endpoints).
 
@@ -1942,7 +1965,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-19
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY
+**Status:** DONE — accordion groups + scroll containment (commit `866e3a8`)
 **Kind:** Frontend-only. Small-medium.
 **Depends on:** (independent).
 
@@ -1985,7 +2008,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-19
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY
+**Status:** DONE — `AIContextMenu` + checkpoint/fork UI (commit `d511797`)
 **Kind:** Frontend-only. Medium.
 **Depends on:** W1-B (checkpoint/restore/fork/clear endpoints).
 
