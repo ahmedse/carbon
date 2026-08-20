@@ -2058,7 +2058,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-20
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** DONE — verified by backend-worker (gates re-run by Master Architect)
+**Status:** DONE — verified by backend-worker (gates re-run by Master Architect); last mile `7f4123c` plan_task chat bridge (49 tests)
 **Kind:** Backend-only. Large.
 **Depends on:** W1-A (execution seam + streamed events), W2-A (confirm/decline/stop wired).
 
@@ -2206,7 +2206,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-20
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY — dispatchable
+**Status:** DONE — ACCEPTED (`5e8847c`, 33 tests)
 **Spec:** `docs/DESIGN-AGENT-CATALOG.md` §4 (W3-C)
 **Kind:** Backend-only. Medium.
 **Depends on:** W3-A (plan lifecycle) — ✅ DONE.
@@ -2264,7 +2264,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-20
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY — dispatchable
+**Status:** DONE — ACCEPTED (`eb2e97a`, 15 tests)
 **Spec:** `docs/DESIGN-AGENT-CATALOG.md` §4 (W3-D)
 **Kind:** Backend-only. Medium.
 **Depends on:** W3-A (agent engine + `AgentRegistry` already exist).
@@ -2323,7 +2323,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-20
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY — dispatchable (after W3-C)
+**Status:** DONE — ACCEPTED (`42bce5c`, 22 tests)
 **Spec:** `docs/DESIGN-AGENT-CATALOG.md` §4 (W3-E)
 **Kind:** Backend-only. Medium.
 **Depends on:** W3-C (pause/resume already exist there).
@@ -2377,7 +2377,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-20
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY — dispatchable (after W3-C)
+**Status:** DONE — ACCEPTED (`b630228`, 44 tests + build green; last mile `91e172f` Chat→Tasks open_panel jump)
 **Spec:** `docs/DESIGN-AGENT-CATALOG.md` §4 (W3-F)
 **Kind:** Frontend-only (Workspace surface). Medium.
 **Depends on:** W3-C (edit/pause/resume/fork endpoints).
@@ -2435,7 +2435,7 @@ Append to `TASK-RESULTS.md`.
 **Date:** 2026-08-20
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY — dispatchable (after W3-D + W3-E)
+**Status:** DONE — ACCEPTED (`7d05993`, 34 tests + build green)
 **Spec:** `docs/DESIGN-AGENT-CATALOG.md` §4 (W3-G)
 **Kind:** Frontend-only (Admin surface). Medium-large.
 **Depends on:** W3-D (catalog/topology), W3-E (timeline).
@@ -2701,7 +2701,7 @@ Append to `TASK-RESULTS.md`.
 
 ### Phase P4-B — Healthy Domain App: frontend
 
-**Status:** IN PROGRESS
+**Status:** DONE — ACCEPTED (`d333d8c`) — 27 healthy-screen tests pass; `npm run lint` 0 errors; `npm run build` green. 5 screens + `api/healthy.js` (11 `apiFetch` helpers) + routes/studio/sidebar wiring. DataGrid rows keyed via `getRowId` (`prediction_id` fallback) to satisfy MUI X unique-id.
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
 **Spec:** `docs/DESIGN-PLATFORM.md` §11

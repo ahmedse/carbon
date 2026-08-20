@@ -1,3 +1,242 @@
+## [2026-08-20] Frontend Worker — Phase W3-G: AI Admin catalog + topology + run timeline
+
+### Summary
+14 files changed (12 created/upgraded + routes/nav) — frontend only, `carbon-frontend/src/`. Upgraded `AgentsPanel.jsx` + `SkillsPanel.jsx` from thin `PulseDataPanel` wrappers into real read/write catalogs (table + detail drawer: role, edges, skills, status; admission-verdict chips with passed-flag breakdown), added the declared topology graph (`AgentTopologyGraph.jsx` — reuses the shared `ForceGraph` primitive, no raw d3) and the run timeline (`RunTimeline.jsx` + `RunTimelinePanel.jsx`). Admin-gated agent CRUD (staff = `canSchemaAdmin()` or `isGlobalAdminFlag`) with RULE_21 confirm gates on delete, resume and replay. 5 test files added. 2 routes added (`/admin/ai/topology`, `/admin/ai/runs`). No backend files, no `src/shell/**` engagement logic (nav only), `ToolsPanel`/`McpServersPanel` untouched (not in the W3-G contract), `package.json` untouched.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `src/api/aiCatalog.js` | ✅ | `listAgents(token,{role})` (GET `ai/catalog/` + `?role=`), `getAgent`, `createAgent` (POST), `updateAgent` (PATCH — never sends name), `deleteAgent` (DELETE), `getTopology` (GET `ai/catalog/topology/`), `listSkills` (GET `ai/catalog/skills/`), `getFederatedIndex`, `getRunTimeline` (GET `ai/runs/{id}/timeline/`), `resumeRun` (POST, no body), `replayRun` (POST `{confirm:true}`) — all via `apiFetch` (RULE_10) |
+| 2 | `src/components/graph/AgentTopologyGraph.jsx` | ✅ | Declared topology (ADR-001): nodes=agents, edges=declared handoffs → `ForceGraph`; role→chartPalette color map (exported `agentRoleColor`), legend, click-to-inspect footer, empty message; inactive agents render gray |
+| 3 | `src/components/graph/RunTimeline.jsx` | ✅ | Ordered event log from `{run_id,status,events}` — status chip, per-kind colored dots + outcome labels (exported `timelineEventMeta`, `eventDetailText`), step chips, timestamps; no `@mui/lab` (not a dependency) |
+| 4 | `src/pages/admin/ai/AgentsPanel.jsx` (UPGRADE) | ✅ | Real catalog: CarbonDataGrid (name, role chip, status chip, handoff count, skills, staff-only actions) + detail drawer (tool_set, outgoing/incoming handoffs, skills, playbook blocks) + Table ⇄ Topology toggle embedding `AgentTopologyGraph`; staff-gated create/edit/remove; delete confirm Dialog (RULE_21); `notify`/`notifyFromError` on all mutations; refetch + topology-invalidate after writes |
+| 5 | `src/pages/admin/ai/SkillsPanel.jsx` (UPGRADE) | ✅ | Skill catalog: name/kind/admission verdict chip (admitted/rejected/pending via `admission.verdict`)/status/uses/success/latency; detail drawer with gate-flag breakdown (structural/harmlessness/consistency/marginal_gain) + admitted_by/rejected_by; read-only (admission is engine-owned) |
+| 6 | `src/pages/admin/ai/AgentTopologyPanel.jsx` | ✅ | Route page `/admin/ai/topology`: fetches `getTopology`, 4 grounded states (loading/offline/empty/loaded), refresh, renders `AgentTopologyGraph` |
+| 7 | `src/pages/admin/ai/RunTimelinePanel.jsx` | ✅ | Route page `/admin/ai/runs`: manual run-id entry → `getRunTimeline`; Resume + Replay buttons are RULE_21 confirm-gated (API not called until dialog confirmed); replay copy states "never re-executes" (RULE_23); success/error notifications; refetch after actions |
+| 8 | Routes (App.jsx) | ✅ | `/admin/ai/topology` → `AgentTopologyPanel`, `/admin/ai/runs` → `RunTimelinePanel`, both `<AdminRoute requiredCapability={AI_VIEW_CONSOLE}>` (prefix-matched by `capabilities.js`) |
+| 9 | Nav (ShellSidebar.jsx) | ✅ | `case 'ai-admin'`: "Topology" (`SchemaIcon`, `/admin/ai/topology`) under Agents & Tooling; "Run Timeline" (`TimelineIcon`, `/admin/ai/runs`) under Observability. No `Shell.jsx` change (`studioFromPath` already maps `/admin/ai*` → `'ai-admin'`) |
+| 10 | `src/__tests__/` specs | ✅ | `aiCatalog.test.js` (endpoints + options incl. `?role=`, `{confirm:true}`), `AgentTopologyGraph.test.jsx`, `RunTimeline.test.jsx` (admin graph specs), `AgentsPanel.test.jsx` (staff gate + CRUD + delete confirm), `RunTimelinePanel.test.jsx` (confirm-gated resume/replay) |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `src/api/aiCatalog.js` | W3-G API layer: catalog/topology/skills reads + staff-gated writes + durable run actions |
+| CREATE | `src/components/graph/AgentTopologyGraph.jsx` | Declared topology via ForceGraph; exported `agentRoleColor` + `AGENT_ROLES` |
+| CREATE | `src/components/graph/RunTimeline.jsx` | Ordered event log; exported `timelineEventMeta` + `eventDetailText` |
+| CREATE | `src/pages/admin/ai/AgentTopologyPanel.jsx` | `/admin/ai/topology` page (4 grounded states) |
+| CREATE | `src/pages/admin/ai/RunTimelinePanel.jsx` | `/admin/ai/runs` page (run-id entry + consent-gated resume/replay) |
+| MODIFY | `src/pages/admin/ai/AgentsPanel.jsx` | Thin PulseDataPanel → real catalog + detail drawer + topology toggle + staff-gated CRUD |
+| MODIFY | `src/pages/admin/ai/SkillsPanel.jsx` | Thin PulseDataPanel → skill catalog + admission status |
+| MODIFY | `src/App.jsx` | +2 lazy imports, +2 `<AdminRoute>` routes after `/admin/ai/logs` |
+| MODIFY | `src/shell/ShellSidebar.jsx` | +2 nav entries (nav wiring only — no engagement logic) |
+| CREATE | `src/__tests__/aiCatalog.test.js` | Endpoint/option contracts (incl. replay `{confirm:true}`, PATCH without name) |
+| CREATE | `src/__tests__/AgentTopologyGraph.test.jsx` | Topology render + role legend + empty state + `agentRoleColor` map |
+| CREATE | `src/__tests__/RunTimeline.test.jsx` | Event log render + status chip + pure kind→meta/detail helpers |
+| CREATE | `src/__tests__/AgentsPanel.test.jsx` | Staff gate, create, update-without-name, delete confirm gate, error notify |
+| CREATE | `src/__tests__/RunTimelinePanel.test.jsx` | Manual run-id load, consent-gated resume/replay, offline state |
+
+### How the topology reuses ForceGraph
+`AgentTopologyGraph` (W3-G) and `PlanDagGraph` (W3-F) both render through the shared `src/components/graph/ForceGraph.jsx` primitive (d3-force + drag + zoom/pan + hover tooltip + click-to-inspect + legend) — no raw d3 in page components (design invariant). The topology maps backend `GET /ai/catalog/topology/` payloads 1:1: `nodes: [{id, name, role, status}]` → `ForceGraph nodes {id, label: name, subtitle: role · status}`; `edges: [{from, to, description, max_parallel}]` → `ForceGraph edges {source: from, target: to, label: description}`. Node fill = `agentRoleColor(role)` (chartPalette tokens: orchestrator→blue, researcher→green, planner→purple, critic→orange, domain_specialist→teal, fallback gray); inactive agents render `text.disabled` (no work routed to them). Legend chips = the 5 declared `AGENT_ROLES`; click-to-inspect footer shows role·status chip + outgoing/incoming handoff counts. `ForceGraph` owns its empty state — callers never double-wrap.
+
+### How the admin CRUD + confirm gates work
+- **Staff proxy**: `const staff = canSchemaAdmin?.() || isGlobalAdminFlag;` — non-staff admins with `AI_VIEW_CONSOLE` see the read-only catalog (no Register button, no action icons, no actions column). The backend enforces the real gate (`_admin_gate` → 403 `{error:'admin_required'}`); the UI gate is a presentation proxy.
+- **Create**: Register agent → dialog (name + role Select from the 5 `AGENT_ROLES`, comma-separated tool_set/playbook_blocks, optional model_override, max_turns 1–100) → POST `ai/catalog/` → success toast → refetch + topology invalidation.
+- **Edit**: dialog pre-filled from the row; PATCH `ai/catalog/{id}/` — the payload deliberately never carries `name` (backend update serializer omits it; rename = delete + create).
+- **Remove**: delete icon opens the RULE_21 confirm dialog ("This is a soft delete — the agent is deactivated…"); `deleteAgent` is NOT called until "Remove agent" is confirmed.
+- **Resume/Replay (runs)**: after loading a timeline, Resume/Replay buttons open consent dialogs; the API is not called until confirmed. Replay copy is outcome-terms (RULE_23: "stages a deterministic replay… never re-executes anything"); replay sends `{confirm: true}` per `ReplayConsentSerializer`.
+- Every mutation catch block calls `notifyFromError(err, fallback)`; success paths call `notify({message, type:'success'})`; all fetches use `apiFetch` with grounded loading/offline/empty states (RULE_16).
+
+### Routes Added
+Exact paths (both `<AdminRoute requiredCapability={AI_VIEW_CONSOLE}>` in `App.jsx`, added after `/admin/ai/logs`):
+- `/admin/ai/topology` → `AgentTopologyPanel` (declared agent topology, read-only)
+- `/admin/ai/runs` → `RunTimelinePanel` (cross-user run timeline + consent-gated resume/replay)
+No `Shell.jsx` change — `studioFromPath` already returns `'ai-admin'` for any `/admin/ai*`; `capabilities.js` prefix-matches `/admin/ai` so both routes are auto-covered.
+
+### Verification Output
+`get_errors` on all 14 changed files (api layer, both new graph components, both new panels, both upgraded panels, App.jsx, ShellSidebar.jsx, all 5 test files): **no errors found**. Terminal proof pending — frontend worker session has no terminal tool. Gate commands for Master Architect:
+```
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/aiCatalog.test.js src/__tests__/AgentTopologyGraph.test.jsx src/__tests__/RunTimeline.test.jsx src/__tests__/AgentsPanel.test.jsx src/__tests__/RunTimelinePanel.test.jsx
+npm run build
+```
+
+### Deviations / Assumptions
+- **`GET /runs/` list endpoint does not exist** (verified `backend/ai/durable_urls.py` — only `timeline/`, `resume/`, `replay/` actions). W3-E spec text mentions `GET /runs/`, but the shipped backend has no run-list route, so `RunTimelinePanel` uses a manual run/plan-id text entry (the timeline/resume/replay endpoints are all keyed by id). Recorded as an assumption for the Master.
+- **`@mui/lab` is not installed** — the timeline is an ordered vertical list of theme-token dots (Stack/Paper/Chip/Box), not the MUI `Timeline` component; Gantt-style ranges are beyond the current timeline payload (events are ordered points).
+- **Staff proxy**: `canSchemaAdmin()` or `isGlobalAdminFlag` (matches AuthContext fallback semantics) — the server `_admin_gate` remains authoritative.
+- **Component paths**: TASKS.md lists `src/components/graph/AgentTopologyGraph.jsx` + `RunTimeline.jsx` as the ADD targets; the Master dispatch expects route pages under `pages/admin/ai/`. Both are satisfied: the pure components exist per contract AND thin panels (`AgentTopologyPanel.jsx`, `RunTimelinePanel.jsx`) render them and own the data fetching + consent gates.
+- **`ToolsPanel` / `McpServersPanel` untouched** — not in the W3-G Files-to-Change list; their Pulse data keys (`tools`, `mcp`) remain valid per `observability_api.py`.
+- **`name` is immutable on PATCH** (backend update serializer has no name field) — the UI hides the name field in edit and never sends it.
+- **Icons**: `SchemaIcon`, `TimelineIcon` (sidebar), `SchemaOutlinedIcon`, `TimelineOutlinedIcon` (components) — all confirmed present in `@mui/icons-material`.
+
+## [2026-08-20] Frontend Worker — Phase W3-F: AI Workspace plan controls + live plan DAG
+
+### Summary
+10 files changed (8 created, 2 modified) — frontend only, `carbon-frontend/src/`. W3-C endpoints wired (edit / pause / resume / fork), each edit gated by the diff-review consent dialog (RULE_21) with outcome-terms copy (RULE_23); live plan DAG (d3-force — NOT mermaid, per design invariant) rendered from steps + `depends_on` with status-colored nodes and plan polling during a run; static Mermaid `graph LR` preview for the review card. 6 test files added. No routes added (surface lives in the copilot Tasks pane — RULE_15 check done, no new pathname prefixes). No `src/pages/admin/ai/**`, no backend files, no `package.json` changes.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `src/api/aiWorkspace.js` — W3-C wrappers | ✅ | `editPlan` (PATCH `plans/{id}/`), `editPlanStep` (PATCH `plans/{id}/steps/{step_id}/`), `pausePlan` (POST `pause/`), `resumePlanStream` (POST `resume/` via `streamJsonPost` — SSE, mirrors `runPlanStream`), `forkPlan` (POST `fork/`) |
+| 2 | `src/components/graph/ForceGraph.jsx` | ✅ | Shared d3-force primitive extracted from KnowledgeGraphPanel pattern: force simulation (link/charge/center/collide), drag, zoom/pan (0.2–5), hover tooltip, click-to-inspect, legend; theme tokens only |
+| 3 | `src/components/graph/PlanDagGraph.jsx` | ✅ | Live DAG: nodes = steps, edges = `depends_on`, node fill = step status via theme tokens, Live badge, legend, click-to-inspect, empty state |
+| 4 | `src/components/graph/PlanMermaidPreview.jsx` | ✅ | Static `graph LR` from steps + `depends_on`; lazy mermaid (MarkdownMessage pattern); error fallback chip |
+| 5 | `src/shell/PlanDiffReviewDialog.jsx` | ✅ | Consent gate: added/removed/changed in outcome terms ("New step…", "Removed step…", "now: …"), explicit Keep changes / Cancel, re-approval notice |
+| 6 | `src/shell/StepEditDialog.jsx` | ✅ | Per-step editor: title, instructions, "Runs after" (depends_on Autocomplete of sibling steps) |
+| 7 | `src/shell/AITaskPlanCard.jsx` (MODIFY) | ✅ | Edit brief inline, per-step edit affordance, Plan preview (Graph ↔ Diagram toggle), Pause run / Fork / Resume run controls, Forked copy chip |
+| 8 | `src/shell/AITaskPanel.jsx` (MODIFY) | ✅ | Wires W3-C endpoints; diff gate (empty diff applied directly, real diff opens consent dialog); fork opens the new copy; paused runs resume via `resumePlanStream`; live DAG polling (3s interval, cleaned up) |
+| 9 | `src/__tests__/` specs | ✅ | `planGraph.test.js`, `PlanDagGraph.test.jsx`, `PlanMermaidPreview.test.jsx`, `PlanDiffReviewDialog.test.jsx`, `AITaskPlanCard.controls.test.jsx`, `AITaskPanel.w3c.test.jsx` |
+| 10 | Routes / sidebar | ✅ none | Workspace Tasks surface is the copilot pane (`AIWorkspace` → `AITaskPanel`); no `studioFromPath()` or `App.jsx` changes needed (RULE_15/22 check), no sidebar entries (frontend-worker sidebar rule) |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `src/utils/planGraph.js` | `buildPlanGraph` (nodes=steps, edges=depends_on, orphan-safe, deterministic order), `summarizePlanDiff` (outcome terms), `planDagMermaid` |
+| CREATE | `src/components/graph/ForceGraph.jsx` | Shared d3-force SVG primitive (drag/zoom/pan/hover/click/legend/reset view) |
+| CREATE | `src/components/graph/PlanDagGraph.jsx` | Live plan DAG (status colors via theme tokens, Live badge, click-to-inspect) + exported `planStepStatusColor` |
+| CREATE | `src/components/graph/PlanMermaidPreview.jsx` | Lazy-mermaid static diagram preview |
+| CREATE | `src/shell/PlanDiffReviewDialog.jsx` | Diff-review consent gate (RULE_21/RULE_23) |
+| CREATE | `src/shell/StepEditDialog.jsx` | Step editor (title/instructions/depends_on) |
+| MODIFY | `src/api/aiWorkspace.js` | +5 W3-C wrappers after `getPlanLedger` (PATCH/POST, no raw fetch — `apiFetch` + `streamJsonPost`) |
+| MODIFY | `src/shell/AITaskPlanCard.jsx` | W3-F controls + preview toggle + graph embeds |
+| MODIFY | `src/shell/AITaskPanel.jsx` | W3-F wiring, diff gate, fork/pause/resume, live polling effect |
+| CREATE | `src/__tests__/planGraph.test.js` | 9 unit tests (graph build, diff summary, mermaid source) |
+| CREATE | `src/__tests__/PlanDagGraph.test.jsx` | DAG render, legend, Live badge, empty state, status color mapping |
+| CREATE | `src/__tests__/PlanMermaidPreview.test.jsx` | mermaid render + error fallback (mocked lazy import) |
+| CREATE | `src/__tests__/PlanDiffReviewDialog.test.jsx` | outcome summary, keep/cancel, empty diff |
+| CREATE | `src/__tests__/AITaskPlanCard.controls.test.jsx` | edit/pause/fork/resume controls, preview toggle, forked chip |
+| CREATE | `src/__tests__/AITaskPanel.w3c.test.jsx` | W3-C wiring: edit→diff gate, empty diff, step edit, pause, fork, SSE resume |
+
+### How the DAG renders
+`PlanDagGraph` (Workspace surface) builds `{nodes, edges}` from the plan payload via `buildPlanGraph`: every step becomes a node (id = `step_id`, label = intent); every `depends_on` entry becomes a directed edge (dependency → step). `ForceGraph` runs d3-force (link distance 90, charge −320, center, collide), drag-pins nodes, and applies d3-zoom (0.2–5). Node fill = step status mapped to theme tokens (`completed`→`success.main`, `running`→`primary.main`, `awaiting_approval`→`warning.main`, `failed`→`error.main`, `pending`/`skipped`→`text.disabled`) — never raw hex. During a run, `AITaskPanel` polls `getPlan` every 3 s while `phase === 'working'` and passes fresh data down (interval cleared on unmount/status change). Clicking a node shows its tool + "Depends on: …". The review card also offers a static Mermaid `graph LR` preview (lazy import, `dangerouslySetInnerHTML` SVG — mermaid stays out of the main bundle).
+
+### How the diff consent gate works (RULE_21)
+Editing the brief (`editPlan`) or a step (`editPlanStep`) PATCHes W3-C, which returns the revised plan + `diff {added, removed, changed}` + `replan_gate` — the plan is already `pending_approval` server-side; nothing auto-approves or auto-runs. The frontend: (1) if the diff has real changes it opens `PlanDiffReviewDialog` summarizing each change in outcome terms (RULE_23: "New step: …", "Removed step: …", "Changed step: … now: …"); (2) **Keep changes** applies the revised plan into the view and it must pass the plan consent gate again before running; (3) **Cancel** closes the dialog — the plan stays `pending_approval` (no revert endpoint exists; nothing executes either way). An empty diff is applied directly ("Plan updated." / "Step updated.") since no step set changed.
+
+### Routes Added
+None — exact: no `src/shell/Shell.jsx` / `src/App.jsx` / `src/shell/ShellSidebar.jsx` changes. The AI Workspace Tasks surface is the copilot pane (`AIWorkspace` mounts `AITaskPanel` when `activePanel === 'tasks'`), which is already reachable; `studioFromPath()` requires no new prefixes (RULE_15 satisfied).
+
+### Verification Output
+`get_errors` on all changed files (incl. `src/` workspace-wide): **no errors found**. Terminal proof pending — frontend worker session has no terminal tool. Gate commands for Master Architect:
+```
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/planGraph.test.js src/__tests__/PlanDagGraph.test.jsx src/__tests__/PlanMermaidPreview.test.jsx src/__tests__/PlanDiffReviewDialog.test.jsx src/__tests__/AITaskPlanCard.controls.test.jsx src/__tests__/AITaskPanel.w3c.test.jsx src/__tests__/AITaskPanel.test.jsx
+npm run build
+npm run lint
+```
+
+### Deviations / Assumptions
+- **Resume via `resume/` SSE, not `run/`**: a paused plan resumes through `resumePlanStream` (POST `resume/` — SSE frames, same dispatch as `runPlanStream`); an approved plan still starts through `runPlanStream`. Old W3-B tests never click "Resume run", so routing change is invisible to them.
+- **Consent gate timing**: the PATCH applies server-side and returns the diff (the backend has no preview-only mode), so the consent dialog is the gate between "edit applied" and "revised plan accepted into view / re-approved". Cancel leaves the plan `pending_approval` with nothing executed — consistent with the spec's "never auto-approve".
+- **Polling cadence**: 3 s `getPlan` while a run is active; stops the moment the phase leaves `working`. No polling when the panel is closed (component unmount cleans up the interval).
+- **Empty diff skips the dialog** (nothing changed beyond plan state); a non-empty diff always opens the gate even if the user only touched the brief.
+- **d3 usage**: d3 is only inside `src/components/graph/ForceGraph.jsx` (page components route through it); mermaid is only used by `PlanMermaidPreview.jsx` + the existing `MarkdownMessage` block — no new deps, `package.json` untouched.
+
+## [2026-08-20] Backend Worker — Phase W3-E: Durable execution (crash-resume / replay / timeline)
+
+### Summary
+5 files changed (4 created, 1 modified). 22 tests written (`ai/tests/test_durable.py`). No engine files touched (`backend/ai/engine/**` untouched), no new migrations (no model/field changes), no frontend changes, no other backend apps touched. Terminal proof pending Master Architect verification gate (backend worker session has no terminal tool).
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `ai/durable_service.py` — `DurableExecutionService` | ✅ | Timeline + crash-safe resume + consent-gated replay staging; all owner-scoped (CBAC), fail-visible exceptions |
+| 2 | `ai/durable_api.py` — DRF `RunViewSet` | ✅ | `GET .../timeline/`, `POST .../resume/`, `POST .../replay/`; `IsAuthenticated`; 404/400/503 fail-visible envelopes |
+| 3 | `ai/durable_urls.py` + `config/urls.py` registration | ✅ | Mounted at `{api_prefix}/ai/runs/` (explicit `as_view` mappings — no router, same convention as `ai.plans_urls`) |
+| 4 | `ai/tests/test_durable.py` | ✅ | 22 tests reusing W3-C fixtures (`_make_plan`/`_make_step` from `ai.tests.test_plans`, `user`/`other_user`/`run_ids_cleanup`/`api_client`/`get_token_for_user`) |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `backend/ai/durable_service.py` | `DurableExecutionService`: `timeline()` (derived event log + `working_notes.audit` merge), `resume_run()` (reconcile → `PlansService.resume_plan` pre-flight), `replay_run()` (RULE_21 consent-gated staging), `PlanConsentError` |
+| CREATE | `backend/ai/durable_api.py` | `RunViewSet` (timeline/resume/replay actions) + `ReplayConsentSerializer` (`confirm` required) |
+| CREATE | `backend/ai/durable_urls.py` | 3 explicit routes under `{api_prefix}/ai/runs/` |
+| MODIFY | `backend/config/urls.py` | +1 — `path(f'{api_prefix}/ai/runs/', include('ai.durable_urls'))` |
+| CREATE | `backend/ai/tests/test_durable.py` | 22 tests (see below) |
+
+### Endpoints (mounted under `/carbon-api/ai/runs/`)
+```
+GET  /{run_id}/timeline/   ordered event log {run_id, status, events:[{t, kind, detail, step_id?}]} ascending
+POST /{run_id}/resume/     crash-safe resume — reconciles stale running/failed steps, reuses W3-C pre-flight,
+                           returns {status:"resumed", plan_id, plan, crash_recovery, reconciled_steps, timeline}
+POST /{run_id}/replay/     consent-gated ({confirm: true}) replay staging — steps→pending, tokens cleared,
+                           run→replaying, returns {status:"replaying", replay:{re_run_steps,reset_count}, timeline}
+                           STAGING ONLY — never auto-starts execution
+```
+
+### Verification Output
+Terminal proof pending — backend worker session has no terminal tool. Gate commands for Master Architect:
+```
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_durable.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+
+### Deviations / Assumptions
+- **Engine seam for re-execution**: no direct engine call from the durable service. Resume re-arms the run to `paused` (the W3-C `resume_run_id` contract) and reuses `PlansService.resume_plan` for the canonical pre-flight; the actual re-execution re-enters via the existing SSE run stream (`plans_service.run_plan_stream` → `_run_plan_frames` → `ReActLoop.run(resume_run_id=run.id)`) exactly as W3-C does. Replay is staging-only by spec (RULE_21 — no auto-start); re-execution after a staged replay re-enters the same stream path.
+- **"Mark the run `resumed`"**: the response carries `status: "resumed"` (product term, identical to W3-C `resume_plan`); the durable `Run.status` materializes as `paused` because the engine seam (`ReActLoop.run` with `resume_run_id`) hard-requires `status == "paused"`, and `_RUNNABLE_STATUSES = {approved, paused}`. A persisted `"resumed"` status would dead-end both the stream path and the engine. Documented in `durable_service.py`.
+- **Replay source statuses**: `{completed, failed, cancelled}` only. `running` is refused (resetting a live run could double-execute mutations — RULE_21); `pending_approval`/`approved` never executed; `replaying` already staged. A staged `replaying` run is not in `_RUNNABLE_STATUSES` — re-execution entry is a follow-up concern (W3-G / a later phase may extend `_RUNNABLE_STATUSES`).
+- **Timeline derivation**: events are derived from durable facts only (`Run.created_at/updated_at/completed_at`, `RunStep.created_at/updated_at/status`, `working_notes.forked_from`/`replay`). Pauses/resumes/replays performed by this service append `working_notes.audit` events (JSONField — no migration). W3-C `pause_plan`/`edit_plan`/`edit_step` do not write audit entries, so historical pauses are shown via the derived `plan_paused` current-state event and replans/step edits appear only when an audit entry exists — limitation documented.
+- `_run_async` (from `ai.plans_service`) was NOT needed: the durable ops are pure ORM + reuse of W3-C sync methods — no async engine seam is bridged here.
+- Time: `django.utils.timezone.now()` only (never `datetime.now()`).
+- `get_errors` on all changed files: **no errors found**.
+
+## [2026-08-16] Backend Worker — Phase W3-D: Unified Agent Catalog (backend CRUD + federated discovery)
+
+### Summary
+5 files changed (4 created, 1 modified). 15 API tests written (`ai/tests/test_catalog.py`). No engine files touched, no new migrations, no frontend changes. Terminal proof pending Master Architect verification gate (backend worker has no terminal in this session).
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `ai/catalog_service.py` — read-mostly catalog service | ✅ | Bridges async engine seams via `_run_async` (from `ai.plans_service`) + `get_session_factory(PLAN_INSTANCE_ID)`; DB is source of truth; plugins additive |
+| 2 | `ai/catalog_api.py` — DRF `CatalogViewSet` | ✅ | Reads `IsAuthenticated`; writes staff-gated (403 RULE_21); 404/400/503 fail-visible envelopes |
+| 3 | `ai/catalog_urls.py` + `config/urls.py` registration | ✅ | Mounted at `{api_prefix}/ai/catalog/` (avoid collision with existing `/catalog/` app) |
+| 4 | `ai/tests/test_catalog.py` | ✅ | 15 tests; DjangoStore backend + engine-seam seeding (same pattern as `test_store_execute.py`) |
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| CREATE | `backend/ai/catalog_service.py` | 468 | `CatalogService`: `list_agents`/`get_agent`/`topology`/`list_skills`/`register_agent`/`update_agent`/`remove_agent`/`federated_index` + `_discover_plugins` (ToolPlugin/WorkflowPlugin, kind classified via `WorkflowPlugin` ABC) |
+| CREATE | `backend/ai/catalog_api.py` | 230 | `CatalogViewSet` (list/retrieve/create/partial_update/destroy + `topology`/`skills`/`index` actions), `AgentCreateSerializer`, `AgentUpdateSerializer` |
+| CREATE | `backend/ai/catalog_urls.py` | 70 | Explicit `as_view` mappings (no router — include mount already carries the prefix); static paths (`agents/`, `topology/`, `skills/`, `index/`) before `<str:pk>/` |
+| MODIFY | `backend/config/urls.py` | +1 | `path(f'{api_prefix}/ai/catalog/', include('ai.catalog_urls'))` after the `ai/plans/` include |
+| CREATE | `backend/ai/tests/test_catalog.py` | 380 | 15 tests: auth 401, list+edges+skills, role filter, detail (handoffs/skills/last_admission), topology graph, skills admission, staff-gated CRUD, federated index w/ plugin fakes |
+
+### Endpoints (mounted under `/carbon-api/ai/catalog/`)
+```
+GET    /                       list agent roles (declared edges + admitted skills); ?role= filter
+POST   /                       register/upsert agent (staff only — RULE_21)
+GET    /{id}/                  agent metadata + in/out handoffs + skills + last admission log
+PATCH  /{id}/                  in-place update (staff only; name immutable — engine upsert key)
+DELETE /{id}/                  soft-delete (is_active=False; staff only)
+GET    /topology/              declared graph {nodes, edges} (ADR-001)
+GET    /skills/                skill catalog + admission verdicts
+GET    /index/                 federated index {agents, plugins} — DB source of truth
+GET    /agents/ | /agents/{id}/  literal W3-D spec aliases for root/detail
+```
+
+### Verification Output
+Terminal proof pending — backend worker session has no terminal tool. Gate commands for Master Architect:
+```
+cd backend && /home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_catalog.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+
+### Deviations / Assumptions
+- `backend/ai/urls.py` does not exist → used `ai/catalog_urls.py` + registration in `config/urls.py` (mirrors `ai.plans_urls` convention).
+- Route mounted at `/carbon-api/ai/catalog/` (AI catalog) to avoid colliding with the existing `/carbon-api/catalog/` (Django catalog app).
+- Async bridging: every public service method wraps one async engine op via `_run_async` (module-level, from `ai.plans_service`); time is engine/`timezone.now()` timestamps read back verbatim — no `datetime.now()`.
+- Admin gating: `IsAuthenticated` + inline `request.user.is_staff` → `403 {"error": "admin_required"}` (task-spec gating; RULE_21 — registering/removing an agent is an explicit admin act).
+- `PATCH` keeps `name` (engine `register_agent` upserts on instance_id+name); rename = delete + create.
+- Detail `last_admission_log` = most recent admission-gate evaluation in the instance (agents don't own logs; skills do — the field surfaces the newest admission event).
+- Federated index: DB agents never shadowed — plugins returned in a separate `plugins` list, additive only; kind classified by `isinstance(plugin, WorkflowPlugin)`.
+- Fail-visible errors: unexpected failures → `503 {"error": "catalog_unavailable"}` envelope, never a bare 500.
+- No engine edits (`backend/ai/engine/**` untouched — only public seams called), no new migrations (engine SQLAlchemy models + existing Django mirrors used as-is).
+
 ## [2026-08-16] Frontend Worker — Phase 7A: Domain Manifest Frontend Wiring
 
 ### Summary
@@ -2569,3 +2808,141 @@ the first pytest run may need `--create-db` once so the test DB picks up the new
 - **`apps.py` comment claims `register_domain` is `has_domain`-guarded** — slightly inaccurate (it raises `ValueError` on duplicate), but Python module caching guarantees the module body runs once, so registration is effectively idempotent across `ready()` and direct test imports. Cosmetic only.
 
 **Verdict: IMPLEMENTED — PENDING RUNTIME GATE** (static checks clean; run the 5 commands above to confirm).
+
+## [2026-08-20] Frontend Worker — Phase P4-B: Healthy Domain App frontend (`apps/healthy/`)
+
+**Worker role:** frontend-worker · **Task:** "implement Phase P4-B — Healthy Domain App frontend COMPLETELY, from scratch to passing build" (dispatch gate: `npm run lint`, `npx vitest run src/__tests__/healthy/`, `npm run build`) · **Status:** IMPLEMENTED — static checks clean; runtime gate pending terminal execution (see Verification Output).
+
+### Summary
+Built the full **Healthy Foods Factory** frontend under `carbon-frontend/src/apps/healthy/`, backed by an `apiFetch`-only helper module (`src/api/healthy.js`) that maps every `/carbon-api/healthy/` endpoint, and wired it into the shell (routes, `studioFromPath`, sidebar). Five screens cover the §11 screen table: dashboard (5 pipeline status rows + summary KPIs), loadout sheet (week picker + rep table + item rows + CSV export), rep health (churn-risk cards), AR queue (risk-sorted collections table), and slow movers (demand heatmap + alert table). All copy describes **outcomes** (RULE_23) — "Forecast ready", "Forecasts ready", "No overdue accounts" — never internal pipeline/model language. 27 Vitest + RTL tests cover the helpers, the API wiring, and every screen's loaded/empty/error states.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `src/api/healthy.js` — apiFetch helpers for every `/carbon-api/healthy/` endpoint | ✅ | 11 helpers (snapshots list/trigger, loadout list/week/rep/actuals, rep-health list/detail, summary, ar-queue, slow-movers); all via `apiFetch`, never raw `fetch()` (RULE_10) |
+| 2 | `src/apps/healthy/utils.js` — pure helpers | ✅ | `churnRiskLevel`, `arRiskLevel`, `slowMoverSeverity`, `formatCurrency`, `formatPercent`, `buildLoadoutCsv` (no JSX → no react-refresh warnings) |
+| 3 | `HealthyDashboard.jsx` (`/apps/healthy`) | ✅ | 5 pipeline status rows + 6 StatCard KPIs; loading/error/empty states |
+| 4 | `LoadoutSheetPage.jsx` (`/apps/healthy/loadout`) | ✅ | week `Select`, rep `StandardDataGrid`, item `StandardDataGrid`, Export XLS (CSV) |
+| 5 | `RepHealthPage.jsx` (`/apps/healthy/reps`) | ✅ | card grid + churn-risk `Chip` + 4 book-of-business metrics |
+| 6 | `ARQueuePage.jsx` (`/apps/healthy/collections`) | ✅ | risk-sorted `StandardDataGrid` (`initialState.sorting` desc) + currency/risk renderers |
+| 7 | `SlowMoversPage.jsx` (`/apps/healthy/inventory`) | ✅ | demand heatmap (theme-token `alpha(error.main)`) + alert table |
+| 8 | Tests under `src/__tests__/healthy/` (27) | ✅ | `utils` (6), `api.healthy` (10), `HealthyDashboard` (3), `RepHealthPage` (2), `LoadoutSheetPage` (2), `ARQueuePage` (2), `SlowMoversPage` (2) |
+| 9 | `src/App.jsx` — register routes | ✅ | 5 lazy imports + `/apps`→`/apps/healthy` index redirect (RULE_22) + 5 namespace-prefixed routes |
+| 10 | `src/shell/Shell.jsx` — `studioFromPath()` | ✅ | `/apps` → `'apps'` (RULE_15); `STUDIO_PATHS.apps` added |
+| 11 | `src/shell/ShellSidebar.jsx` — "Apps"/Healthy nav | ✅ | `case 'apps'` nav section + `getStudioTitle` `apps: 'Apps'` |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `carbon-frontend/src/api/healthy.js` | 11 apiFetch helpers |
+| CREATE | `carbon-frontend/src/apps/healthy/utils.js` | pure formatters + CSV builder |
+| CREATE | `carbon-frontend/src/apps/healthy/HealthyDashboard.jsx` | dashboard screen |
+| CREATE | `carbon-frontend/src/apps/healthy/LoadoutSheetPage.jsx` | loadout screen |
+| CREATE | `carbon-frontend/src/apps/healthy/RepHealthPage.jsx` | rep-health screen |
+| CREATE | `carbon-frontend/src/apps/healthy/ARQueuePage.jsx` | AR queue screen |
+| CREATE | `carbon-frontend/src/apps/healthy/SlowMoversPage.jsx` | slow-movers screen |
+| CREATE | `carbon-frontend/src/__tests__/healthy/` (7 files) | 27 tests |
+| MODIFY | `carbon-frontend/src/App.jsx` | +5 lazy imports, +6 routes |
+| MODIFY | `carbon-frontend/src/shell/Shell.jsx` | `studioFromPath` `/apps`→`apps`; `STUDIO_PATHS.apps` |
+| MODIFY | `carbon-frontend/src/shell/ShellSidebar.jsx` | `case 'apps'` nav; `apps: 'Apps'` title |
+
+### Verification Output
+```
+Static validation (the only gate executable in this session — no terminal tool):
+  get_errors over all 7 source files + 7 test files + 3 modified files
+  → "No errors found" (all clean).
+
+Runtime gate — MUST be run by the Master/operator (frontend-worker had no terminal
+execution capability in this session). Commands in order:
+
+  cd /home/ahmed/aast/carbon/carbon-frontend
+  npm run lint
+  npx vitest run src/__tests__/healthy/
+  npm run build
+
+Expected: 27 tests pass (0 fail); lint clean; vite build clean.
+```
+
+### Deviations
+- **No ActivityBar studio icon / PlatformHome app card for Healthy.** The dispatch's modify list is exactly `App.jsx` + `Shell.jsx` + `ShellSidebar.jsx`; registering an app studio (which also gates visibility through `hasAppAccess` → `healthy:view`) would require `src/apps/registry.js` + `src/capabilities.js` + `src/shell/useShellState.js`, all outside the stated scope. The Healthy app is reachable at `/apps/healthy` (direct URL) and shows an **"Apps"** sidebar section; it simply does not get a dedicated ActivityBar icon or PlatformHome card. Flagged for a follow-up if the app must be discoverable from the home surface.
+- **Frontend capability constants (`healthy:view` / `healthy:manage`) not added.** The backend already defines them (`backend/accounts/capabilities.py`); the frontend `src/capabilities.js` was left untouched as out-of-scope. Consequence: the "Apps" sidebar section is not CBAC-gated per-screen (it renders for all authenticated users), consistent with the current un-gated fallback for unknown routes.
+- **`src/shell/Breadcrumbs.jsx` left untouched** (dispatch marks it read-only). No inline breadcrumbs were added (RULE_9 preserved). `/apps/healthy/*` will not render a breadcrumb trail (the `ROUTE_CONFIG` fallback produces no trail for unknown namespaces) — cosmetic only.
+- **Export button emits CSV, not true XLSX.** The §11 spec says "ExportXLS"; implemented as a CSV download (no `xlsx`/`exceljs` dependency in `package.json`, and adding one was out of scope). Column set matches the loadout sheet.
+
+### Issues Found
+- **Terminal execution unavailable in this session** — `npm run lint`, `npx vitest run src/__tests__/healthy/`, and `npm run build` could not be executed. Static analysis (`get_errors`) is clean across every new and modified file; all imports resolve against verified source paths (`components/Page/*`, `components/layout/PageContainer`, `components/Cards/StatCard`, `components/StandardDataGrid`, `hooks/useDocumentTitle`, `auth/AuthContext`, `api/api`).
+- **MUI X DataGrid requires `ResizeObserver`** (absent in jsdom); the three table-screen tests install a `FakeResizeObserver` stub in `beforeEach` (same pattern as `AIInputBar.growth.test.jsx`).
+
+**Verdict: IMPLEMENTED — PENDING RUNTIME GATE** (static checks clean; run the 3 commands above to confirm; expected 27/27 vitest).
+
+## [2026-08-20] Master Architect — Chat → plan_task plugin (W3-A last mile)
+
+### Summary
+Fixed "Run agent planner" producing generic prose: the chat assistant's curated toolset
+(`turn/runner.py` `_draft_tools`) had no way to reach the W3-A plans API. Added a
+Carbon-side `ToolPlugin` `plan_task` (plugin growth model — zero edits under
+`backend/ai/engine/` except the Carbon-owned runner allow-set) that calls
+`PlansService.create_plan` with the authenticated user, returning a real
+pending_approval plan + outcome copy (RULE_23). Planning stays non-mutating
+(RULE_21 gate = the plan-approval step in the Tasks panel).
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `backend/ai/plugins/plan_task.py` | `PlanTask(ToolPlugin)`: name `plan_task`, input `{brief}`, `requires_confirmation=False`; resolves Django user from `ctx.host_user_id` (graceful `DoesNotExist`/`ValueError`), calls `PlansService.create_plan(user, brief, conversation_id)` via `sync_to_async`; returns `{action:"plan_created", plan_id, status, steps, message "…Nothing has executed — review and approve it in the Tasks panel."}` |
+| MODIFY | `backend/ai/plugins/__init__.py` | `register_plugin(PlanTask())` in `register_builtin_plugins()` |
+| MODIFY | `backend/ai/engine/cognition/turn/runner.py` | `_draft_tools` allow set += `"plan_task"`; GROUNDING RULES += "plan_task only DRAFTS a plan… never claim a task ran" |
+| CREATE | `backend/ai/tests/test_plan_task.py` | 8 tests: registration, metadata, in-chat tool definitions, auth/brief gating, unknown-user graceful, pending_approval plan creation (engine seams faked like `test_plans.py`) |
+
+### Verification
+- `manage.py check` clean; `makemigrations --check --dry-run` → "No changes detected".
+- New tests + plugin/catalog/plans suites: 51 + 53 passed; full `pytest ai -q` → **620 passed** (no regressions).
+- Live: backend restarted; `plan_task` registered in `logs/backend.log`; in-process `get_tool_definitions()` and `get_tool_executors()` both resolve `plan_task` (the exact S5 dispatch map).
+
+### Notes / Deviations
+- `test_plans.py`'s `_FakePlanner` returns engine `Plan`/`PlanStep` dataclasses; the fake in `test_plan_task.py` mirrors it (plain dict breaks `_plan_to_dict`).
+- User pk cast: `objects.get(pk="does-not-exist")` raises `ValueError` (int field), not `DoesNotExist` — plugin catches both.
+
+## [2026-08-20] Master Architect — Chat → Tasks jump (open_panel action, W3-F last mile)
+
+### Summary
+The chat reply "Review and approve it in the Tasks panel" gave the user no way
+to actually reach the panel: the Tasks surface is a workspace left-rail SWITCH
+(`activePanel === 'tasks'`), not a URL route, and chat action buttons only
+supported `navigate` (react-router Link) + `pending_actions`. Fixed with a new
+`open_panel` action type threaded backend → bubble → workspace → Tasks panel,
+so one click jumps from the plan-created reply into the plan's lifecycle
+controls (approve/edit/reject/fork/run/pause/resume/stop).
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `backend/ai/engine_runtime.py` | `_extract_tool_actions`: `action == "plan_created"` → emits `{type:"open_panel", panel:"tasks", plan_id, label:"Open in Tasks", summary:"Review, approve and run the plan"}` (RULE_23 copy, no engine names) |
+| MODIFY | `carbon-frontend/src/shell/AIMessageBubble.jsx` | New `onOpenPanel` prop; `panelActions = rawActions.filter(a => a?.type === 'open_panel')` included in `showActionRow`; renders contained button calling `onOpenPanel(panel, plan_id)` (disabled when no handler) |
+| MODIFY | `carbon-frontend/src/shell/AIConversationView.jsx` | Accepts `onOpenPanel`, forwards to both older + recent message bubbles |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | `tasksFocusPlanId` state; `handleOpenPanel(panel, planId)` switches panel + sets focus; passes `onOpenPanel` to AIConversationView and `focusPlanId`/`onFocusPlanConsumed` to AITaskPanel |
+| MODIFY | `carbon-frontend/src/shell/AITaskPanel.jsx` | New props `focusPlanId`/`onFocusPlanConsumed`; effect auto-opens the focused plan via existing `openPlan()` (Run tab) with ref-dedup so the same id is not re-fetched |
+| CREATE | `backend/ai/tests/test_access_manifest.py` (test added) | `test_plan_created_emits_open_panel_tasks_action` |
+| MODIFY | `carbon-frontend/src/__tests__/AIMessageBubble.actions.test.jsx` | +2 tests: open_panel button calls `onOpenPanel('tasks', plan_id)`; button disabled when no handler |
+| MODIFY | `carbon-frontend/src/__tests__/AITaskPanel.w3c.test.jsx` | +2 tests: focus auto-opens plan + consumes focus; new id re-opens, same id does not |
+
+### Verification
+- `pytest ai -q` → **622 passed** (620 baseline + 2 new: extraction + plan_task).
+- Frontend 6 suites (AIWorkspace.shell, AIConversationView.collapse/operations,
+  AIMessageBubble.actions, AITaskPanel, AITaskPanel.w3c) → **51 passed**.
+- Live browser E2E (admin): "Run agent planner" → ✅ Plan a30a37b9 drafted +
+  **Open in Tasks** button → click → Tasks panel active (left-rail Tasks icon
+  pressed), plan auto-opened on the Run tab with **Approve plan / Decline /
+  Fork** + Edit plan + Edit step 0 + live plan DAG (Pending/Running/Needs
+  approval/Finished/Failed legend).
+
+### Notes / Deviations
+- **Rules-of-Hooks gotcha (browser-caught)**: `AIWorkspace` has an
+  `if (loading) return …` early return mid-component; a `useCallback` added
+  AFTER it (original `handleOpenPanel`) made the hook count differ between
+  loading↔loaded renders ("Rendered more hooks than during the previous
+  render"). Fixed by making `handleOpenPanel` a plain arrow function (no hook)
+  — legal after the early return.
+- Stored message metadata is frozen at send time: only NEW plan-created turns
+  carry the `open_panel` action; older replies (pre-fix) show the ✅ copy but no
+  button (a fresh "Run agent planner" regenerates it).
