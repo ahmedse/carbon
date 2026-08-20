@@ -1,7 +1,7 @@
 # Design — Unified Agent Catalog & Agentic Workflow Evolution
 
 **Owner:** Master Architect
-**Status:** Ratified (dispatchable — see TASKS.md W3-C → W3-F)
+**Status:** Ratified (dispatchable — see TASKS.md W3-C → W3-G)
 **Applies to:** `backend/ai/` + `carbon-frontend/src/`
 **Depends on:** W3-A / W3-B (Agentic Task Orchestration — DONE)
 
@@ -29,7 +29,7 @@ Everything below reuses existing engine seams. **No new Django apps** (ADR-0008)
 
 ---
 
-## 2. Invariants (binding on all four phases)
+## 2. Invariants (binding on all phases)
 
 1. **ADR-001 declared topology.** Agents are roles, handoffs are declared edges.
    No LangGraph, no free-form agent chat. The catalog *reads* the declared graph;
@@ -47,48 +47,59 @@ Everything below reuses existing engine seams. **No new Django apps** (ADR-0008)
    no full-context rebuild unless the brief changed structurally.
 7. **Fan-out artifact refs.** `WorkerPool.fan_out` returns artifact references,
    not inline payloads. Visualization reads refs, never re-runs work.
+8. **Two surfaces, never mingled.** Carbon has TWO distinct AI frontends:
+   - **AI Workspace / Pulse** (`src/shell/`) — where end users **engage** with
+     AI: conversations, running tasks, reviewing/editing/forking their own plans,
+     seeing their own plan progress.
+   - **AI Admin** (`src/pages/admin/ai/`) — where admins **manage & observe** the
+     system: agent/skill catalog CRUD, handoff topology, run ledger/timeline,
+     monitoring.
+   The shared backend API serves both, but a frontend phase targets ONE surface
+   only. A graph that shows a *user's own* plan belongs in the Workspace; a graph
+   that shows the *system's* agents/runs belongs in Admin.
 
 ---
 
 ## 3. Architecture
 
 ```
-                          ┌─────────────────────────────────────┐
-                          │           carbon-frontend           │
-                          │  W3-D-ui: Catalog UI                │
-                          │  W3-F:    Plan DAG / Topology /     │
-                          │           Timeline / Mermaid        │
-                          └───────────────┬─────────────────────┘
-                                          │ apiFetch (RULE_10)
-                          ┌───────────────▼─────────────────────┐
-                          │        plans_api.py  (extended)     │
-                          │  + catalog_api.py  (new)            │
-                          │  + observability_api.py (extended)  │
-                          └───────────────┬─────────────────────┘
-                                          │ delegates
-                          ┌───────────────▼─────────────────────┐
-                          │        plans_service.py (extended)  │
-                          │  + catalog_service.py (new)         │
-                          └──────┬──────────────────┬───────────┘
-                                 │ calls            │ reads
-                    ┌────────────▼────┐      ┌──────▼──────────┐
-                    │  engine seams   │      │   durable store │
-                    │  SkillAware     │      │  Run / RunStep  │
-                    │  Planner        │      │  Agent/Handoff  │
-                    │  ReActLoop      │      │  Skill/Admission│
-                    │  WorkerPool     │      │  Trajectory     │
-                    └─────────────────┘      └─────────────────┘
+        ┌──────────────────────────────┐      ┌──────────────────────────────┐
+        │   AI WORKSPACE  (shell/)     │      │     AI ADMIN  (admin/ai/)    │
+        │  engage: run/plan/consent    │      │  manage+observe: catalog/    │
+        │  W3-F plan controls + DAG    │      │  topology/timeline  W3-G     │
+        └───────────────┬──────────────┘      └───────────────┬──────────────┘
+                        │ apiFetch (RULE_10)                  │ apiFetch
+        ┌───────────────▼─────────────────────────────────────▼──────────────┐
+        │        plans_api.py (extended) · catalog_api.py (new) ·            │
+        │                  observability_api.py (extended)                   │
+        └───────────────────────────────┬────────────────────────────────────┘
+                                        │ delegates
+        ┌───────────────────────────────▼────────────────────────────────────┐
+        │  plans_service.py (extended) · catalog_service.py (new)            │
+        └──────┬──────────────────────────────────────┬──────────────────────┘
+               │ calls                                │ reads
+      ┌────────▼────────┐                   ┌─────────▼─────────┐
+      │   engine seams  │                   │   durable store   │
+      │  SkillAware     │                   │  Run / RunStep    │
+      │  Planner        │                   │  Agent/Handoff    │
+      │  ReActLoop      │                   │  Skill/Admission  │
+      │  WorkerPool     │                   │  Trajectory       │
+      └─────────────────┘                   └───────────────────┘
 ```
 
 **Key rule:** the service layer is the *only* place that composes engine seams.
-Views → service → engine. Nothing else reaches across.
+Views → service → engine. Nothing else reaches across. **The frontend surfaces
+stay separate** — Workspace for engagement, Admin for management/observation.
 
 ---
 
 ## 4. Phase decomposition
 
 > **Naming note:** W3-A (backend) and W3-B (frontend) of "Agentic Task
-> Orchestration" already exist and are DONE. New work is W3-C → W3-F.
+> Orchestration" already exist and are DONE. New work is W3-C → W3-G.
+> **Surface rule:** backend phases (W3-C/D/E) are surface-agnostic. Frontend
+> phases are surface-bound: **W3-F = AI Workspace** (`shell/`), **W3-G = AI
+> Admin** (`pages/admin/ai/`). Never mix the two in one phase.
 
 ### W3-C — Plan lifecycle: edit / pause / resume / fork (backend)
 
@@ -127,7 +138,7 @@ Expose the existing `AgentRegistry` (`Agent`, `AgentHandoff`, `Skill`,
   domain_specialist) with their declared handoff edges + skills.
 - `GET /catalog/agents/{id}/` — one agent: metadata, incoming/outgoing handoffs,
   admitted skills, last admission log.
-- `GET /catalog/topology/` — the **declared graph** as nodes+edges (feeds W3-F).
+- `GET /catalog/topology/` — the **declared graph** as nodes+edges (feeds W3-G).
 - `POST /catalog/agents/` + `PATCH/DELETE /catalog/agents/{id}/` — admin-gated
   registration (maps to `register_agent` / `remove_agent`). RULE_21: explicit.
 - `GET /catalog/skills/` — skill catalog + admission status.
@@ -136,16 +147,16 @@ Expose the existing `AgentRegistry` (`Agent`, `AgentHandoff`, `Skill`,
   `ToolPlugin`/`WorkflowPlugin` extensions discovered via `plugins.py`. The merge
   is read-only; the DB remains the source of truth.
 
-**UI (`W3-D-ui`):** `AIAgentCatalogPage.jsx` — table of agents (role, edges,
-skills, status) + a detail drawer showing handoff topology. Reuse
-`TableDataPage` / `StandardDataGrid` + theme tokens (RULE_8).
+**Surface:** **Admin** (`pages/admin/ai/`). The catalog UI upgrades the existing
+`AgentsPanel.jsx` + `SkillsPanel.jsx` (currently thin `PulseDataPanel`
+wrappers) into a real read/write catalog — NOT a new parallel page. This phase
+is backend-only; the Admin UI lands in W3-G.
 
 **Files:** `backend/ai/catalog_service.py` (new), `backend/ai/catalog_api.py`
-(new), `backend/ai/urls.py` (route), `backend/ai/tests/test_catalog.py` (new);
-`carbon-frontend/src/pages/admin/ai/AIAgentCatalogPage.jsx` (new) + route.
+(new), `backend/ai/urls.py` (route), `backend/ai/tests/test_catalog.py` (new).
 
-**Gate:** backend `pytest ai/tests/test_catalog.py`; frontend `npx vitest run`
-catalog specs; `npm run build`.
+**Gate:** `pytest ai/tests/test_catalog.py`; `manage.py check`;
+`makemigrations --check --dry-run` clean.
 
 ### W3-E — Durable execution: crash-resume / replay / observability (backend)
 
@@ -157,7 +168,7 @@ catalog specs; `npm run build`.
   never re-executes). Returns step-by-step `{step, status, started_at,
   finished_at, artifacts}`.
 - **`GET /plans/{id}/timeline/`** — run timeline (start/end per step, Gantt-ready
-  ranges) for W3-F.
+  ranges) for W3-G.
 - **`GET /runs/`** — list runs (resume/replay entry points) across plans.
 
 **Files:** `backend/ai/plans_service.py` (modify), `backend/ai/plans_api.py`
@@ -166,29 +177,46 @@ test_plans.py` (extend).
 
 **Gate:** `pytest ai/tests/test_plans.py`; `manage.py check`; no new migrations.
 
-### W3-F — Workflow & agent visualization (frontend)
+### W3-F — AI Workspace: plan controls + live plan DAG (frontend, `shell/`)
 
-Reuse existing d3 primitives — do **not** add dependencies.
+User-facing **engagement** surface. Reuse existing d3 primitives — no new deps.
 
 - **Extract `src/components/graph/ForceGraph.jsx`** from
   `KnowledgeGraphPanel.jsx` (d3-force + drag/zoom/pan + hover + click + legend),
-  so it's shared.
+  so it's shared by both surfaces.
+- **Plan edit/pause/resume/fork controls** wired into `AITaskPlanCard.jsx` /
+  `AITaskPanel.jsx` (W3-C endpoints), with the diff-review gate from
+  `PATCH /plans/{id}/`.
 - **`PlanDagGraph.jsx`** — live plan DAG: nodes=steps, edges=`depends_on`,
-  node color=status (pending/running/completed/failed/awaiting). Polls the plan
-  during a run.
-- **`AgentTopologyGraph.jsx`** — renders `GET /catalog/topology/` (agents +
-  declared handoffs).
-- **`RunTimeline.jsx`** — Gantt-style timeline from `GET /plans/{id}/timeline/`.
+  node color=status (pending/running/completed/failed/awaiting). Polls the
+  *current user's* plan during a run.
 - **`PlanMermaidPreview.jsx`** — Mermaid `graph` preview of the plan DAG for the
   review card (reuses `MarkdownMessage` lazy mermaid rendering; `mermaid` is
   already a dependency).
 
 **Files:** `carbon-frontend/src/components/graph/ForceGraph.jsx` (new,
-extracted), `PlanDagGraph.jsx`, `AgentTopologyGraph.jsx`, `RunTimeline.jsx`,
-`PlanMermaidPreview.jsx` (new), wire into `AITaskPlanCard.jsx` / new
-`AITaskVisualPanel.jsx` (route via `studioFromPath()` — RULE_15).
+extracted), `PlanDagGraph.jsx`, `PlanMermaidPreview.jsx` (new); wire into
+`src/shell/AITaskPlanCard.jsx` + `AITaskPanel.jsx`.
 
-**Gate:** `npx vitest run` graph specs; `npm run lint`; `npm run build`.
+**Gate:** `npx vitest run` workspace graph specs; `npm run lint`; `npm run build`.
+
+### W3-G — AI Admin: catalog + topology + run timeline (frontend, `admin/ai/`)
+
+Admin **manage & observe** surface. Reuses `ForceGraph.jsx`.
+
+- **Catalog CRUD UI** — upgrade `AgentsPanel.jsx` + `SkillsPanel.jsx` (from thin
+  `PulseDataPanel` wrappers) to a real table + detail drawer: agent role, edges,
+  skills, status; admin-gated create/edit/remove (RULE_21).
+- **`AgentTopologyGraph.jsx`** — renders `GET /catalog/topology/` (agents +
+  declared handoffs) — the system's declared graph.
+- **`RunTimeline.jsx`** — Gantt-style timeline from `GET /plans/{id}/timeline/`
+  + `GET /runs/` — cross-user run observation for admins.
+
+**Files:** `carbon-frontend/src/pages/admin/ai/AgentsPanel.jsx` (upgrade),
+`SkillsPanel.jsx` (upgrade), `src/components/graph/AgentTopologyGraph.jsx`,
+`RunTimeline.jsx` (new).
+
+**Gate:** `npx vitest run` admin graph specs; `npm run lint`; `npm run build`.
 
 ---
 
@@ -196,16 +224,18 @@ extracted), `PlanDagGraph.jsx`, `AgentTopologyGraph.jsx`, `RunTimeline.jsx`,
 
 ```
 W3-C (plan lifecycle) ──┐
-                        ├──► W3-E (resume/replay/timeline) ──► W3-F (viz)
-W3-D (catalog backend) ─┘         ▲                            │
-        │                         │                            │
-        └──► W3-D-ui (catalog UI) ┘  (timeline/topology feed W3-F)
+                        ├──► W3-E (resume/replay/timeline) ──► W3-G (admin observe)
+W3-D (catalog backend) ─┘         ▲                             ▲
+        │                         │                             │
+        │                         │        (topology + timeline)
+        │                         └─────────────────────────────┘
+        └──────────────► W3-F (workspace plan controls + DAG)  ←── W3-C
 ```
 
 - **Backend first:** W3-C and W3-D are independent — dispatch in parallel.
 - **W3-E** depends on W3-C (resume/pause already exist there).
-- **W3-D-ui** depends on W3-D; **W3-F** depends on W3-D (topology) + W3-E
-  (timeline).
+- **W3-F** (Workspace) depends on W3-C (plan endpoints) — no admin dependency.
+- **W3-G** (Admin) depends on W3-D (catalog/topology) + W3-E (timeline).
 
 ---
 

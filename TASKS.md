@@ -2287,7 +2287,7 @@ Append to `TASK-RESULTS.md`.
    edges + skills; `GET /catalog/agents/{id}/` returns one agent (incoming/
    outgoing handoffs, admitted skills, last admission log).
 2. **Topology.** `GET /catalog/topology/` returns the declared graph as
-   `{nodes:[], edges:[]}` (ADR-001 declared edges only) — feeds W3-F.
+   `{nodes:[], edges:[]}` (ADR-001 declared edges only) — feeds W3-G (Admin).
 3. **CRUD (admin-gated).** `POST/PATCH/DELETE /catalog/agents/{id}/` map to
    `register_agent`/`remove_agent`; explicit, RULE_21.
 4. **Federated index.** Build a request-time index merging `AgentRegistry.
@@ -2313,7 +2313,8 @@ Append to `TASK-RESULTS.md`.
 
 ### Notes for the Master
 - W3-D is independent of W3-C — dispatch in parallel.
-- W3-D feeds W3-D-ui (catalog page) and W3-F (topology graph).
+- W3-D is **Admin**-surface (manage & observe). Its UI lands in W3-G by upgrading
+  the existing `AgentsPanel.jsx` + `SkillsPanel.jsx` — NOT the Workspace.
 
 ---
 
@@ -2366,56 +2367,57 @@ cd /home/ahmed/aast/carbon/backend
 Append to `TASK-RESULTS.md`.
 
 ### Notes for the Master
-- W3-E feeds W3-F (timeline view).
+- W3-E is **Admin**-surface observability (cross-user run ledger/timeline).
+  Feeds W3-G (Admin timeline view), not the Workspace.
 
 ---
 
-### Phase W3-F — Workflow & agent visualization (frontend)
+### Phase W3-F — AI Workspace: plan controls + live plan DAG (frontend, `shell/`)
 
 **Date:** 2026-08-20
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY — dispatchable (after W3-D + W3-E)
+**Status:** READY — dispatchable (after W3-C)
 **Spec:** `docs/DESIGN-AGENT-CATALOG.md` §4 (W3-F)
-**Kind:** Frontend-only. Medium-large.
-**Depends on:** W3-D (topology), W3-E (timeline).
+**Kind:** Frontend-only (Workspace surface). Medium.
+**Depends on:** W3-C (edit/pause/resume/fork endpoints).
 
 ### Files to Read First
 - `carbon-frontend/src/pages/admin/ai/KnowledgeGraphPanel.jsx` — d3-force + drag/zoom/pan + hover + legend source to extract
+- `carbon-frontend/src/shell/AITaskPlanCard.jsx` + `AITaskPanel.jsx` — where plan controls + preview mount
 - `carbon-frontend/src/shell/MarkdownMessage.jsx` — lazy Mermaid block rendering
-- `carbon-frontend/src/shell/AITaskPlanCard.jsx` — where the Mermaid preview mounts
-- `carbon-frontend/src/api/aiWorkspace.js` — plans/catalog wrappers
-- `docs/DESIGN-AGENT-CATALOG.md` §4 W3-F + `.ai-toolkit/shared/design-system.md` (RULE_8)
+- `carbon-frontend/src/api/aiWorkspace.js` — plans wrappers
+- `docs/DESIGN-AGENT-CATALOG.md` §2 + §4 W3-F + `.ai-toolkit/shared/design-system.md` (RULE_8)
 
 ### Files to Change
 - `carbon-frontend/src/components/graph/ForceGraph.jsx` — ADD (extract shared d3 core from `KnowledgeGraphPanel`)
 - `carbon-frontend/src/components/graph/PlanDagGraph.jsx` — ADD (nodes=steps, edges=`depends_on`, status-colored)
-- `carbon-frontend/src/components/graph/AgentTopologyGraph.jsx` — ADD (agents + declared handoffs)
-- `carbon-frontend/src/components/graph/RunTimeline.jsx` — ADD (Gantt from timeline endpoint)
 - `carbon-frontend/src/components/graph/PlanMermaidPreview.jsx` — ADD (Mermaid `graph` preview)
-- `carbon-frontend/src/shell/AITaskPlanCard.jsx` — MODIFY (embed `PlanMermaidPreview` + `PlanDagGraph`)
-- `carbon-frontend/src/shell/AITaskVisualPanel.jsx` — ADD (tabbed: DAG / topology / timeline), route via `studioFromPath()` (RULE_15)
-- `carbon-frontend/src/__tests__/` graph specs — ADD
+- `carbon-frontend/src/shell/AITaskPlanCard.jsx` — MODIFY (embed `PlanMermaidPreview` + `PlanDagGraph`; add edit/pause/resume/fork controls with diff-review)
+- `carbon-frontend/src/shell/AITaskPanel.jsx` — MODIFY (wire W3-C controls)
+- `carbon-frontend/src/__tests__/` workspace graph specs — ADD
 
 ### Implementation
 1. **Extract `ForceGraph.jsx`** from `KnowledgeGraphPanel.jsx` — reusable d3-force
    SVG with drag/zoom/pan, hover tooltip, click-to-inspect, legend. No new deps.
-2. **Plan DAG live** — nodes=steps, edges=`depends_on`, node color=status; polls
-   during a run.
-3. **Agent topology** — renders `GET /catalog/topology/` nodes+edges.
-4. **Run timeline** — Gantt from `GET /plans/{id}/timeline/`.
-5. **Mermaid preview** — `graph` DAG for the review card (reuses lazy mermaid).
-6. Theme tokens only (RULE_8); route + sidebar via `studioFromPath()` (RULE_15).
+   (Shared primitive — the Admin surface reuses it in W3-G.)
+2. **Plan edit/pause/resume/fork controls** wired to W3-C endpoints; show the
+   `PATCH /plans/{id}/` diff-review gate before re-approve (RULE_21).
+3. **Plan DAG live** — nodes=steps, edges=`depends_on`, node color=status; polls
+   the *current user's* plan during a run.
+4. **Mermaid preview** — `graph` DAG for the review card (reuses lazy mermaid).
+5. Theme tokens only (RULE_8); Workspace surface only (`shell/`).
 
 ### DO NOT TOUCH
 - Backend files.
 - `KnowledgeGraphPanel.jsx` public behaviour — extract, don't regress.
+- Admin surface (`src/pages/admin/ai/**`) — that is W3-G.
 
 ### Verification Gate
 ```bash
 cd /home/ahmed/aast/carbon/carbon-frontend
 npm run lint
-npx vitest run src/__tests__/   # graph specs pass
+npx vitest run src/__tests__/   # workspace graph specs pass
 npm run build
 ```
 
@@ -2423,8 +2425,64 @@ npm run build
 Append to `TASK-RESULTS.md`.
 
 ### Notes for the Master
-- W3-F is the visual acceptance proof for the whole catalog track.
-- Dispatch W3-D-ui (catalog page, §4 W3-D) alongside W3-F after W3-D lands.
+- W3-F is the **Workspace (engage)** acceptance proof: a user edits/pauses/fork
+  their own plan and watches its live DAG. No admin concerns here.
+
+---
+
+### Phase W3-G — AI Admin: catalog + topology + run timeline (frontend, `admin/ai/`)
+
+**Date:** 2026-08-20
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY — dispatchable (after W3-D + W3-E)
+**Spec:** `docs/DESIGN-AGENT-CATALOG.md` §4 (W3-G)
+**Kind:** Frontend-only (Admin surface). Medium-large.
+**Depends on:** W3-D (catalog/topology), W3-E (timeline).
+
+### Files to Read First
+- `carbon-frontend/src/pages/admin/ai/AgentsPanel.jsx` + `SkillsPanel.jsx` — thin `PulseDataPanel` wrappers to upgrade
+- `carbon-frontend/src/pages/admin/ai/KnowledgeGraphPanel.jsx` — d3 source (already extracted to `ForceGraph.jsx` in W3-F)
+- `carbon-frontend/src/pages/admin/ai/PulseDataPanel.jsx` — existing data-panel pattern
+- `carbon-frontend/src/api/aiPulse.js` — existing pulse read API wrappers
+- `docs/DESIGN-AGENT-CATALOG.md` §2 + §4 W3-G + `.ai-toolkit/shared/design-system.md` (RULE_8)
+
+### Files to Change
+- `carbon-frontend/src/pages/admin/ai/AgentsPanel.jsx` — UPGRADE (real read/write catalog: table + detail drawer with handoff topology; admin-gated create/edit/remove, RULE_21)
+- `carbon-frontend/src/pages/admin/ai/SkillsPanel.jsx` — UPGRADE (skill catalog + admission status)
+- `carbon-frontend/src/components/graph/AgentTopologyGraph.jsx` — ADD (agents + declared handoffs from `GET /catalog/topology/`)
+- `carbon-frontend/src/components/graph/RunTimeline.jsx` — ADD (Gantt from `GET /plans/{id}/timeline/` + `GET /runs/`)
+- `carbon-frontend/src/__tests__/` admin graph specs — ADD
+
+### Implementation
+1. **Catalog CRUD UI** — upgrade `AgentsPanel.jsx` + `SkillsPanel.jsx` from thin
+   wrappers to a real table + detail drawer: agent role, edges, skills, status;
+   admin-gated create/edit/remove (RULE_21).
+2. **Agent topology** — renders `GET /catalog/topology/` — the system's declared
+   graph (ADR-001).
+3. **Run timeline** — Gantt from `GET /plans/{id}/timeline/` + `GET /runs/` —
+   cross-user run observation for admins.
+4. Theme tokens only (RULE_8); Admin surface only (`pages/admin/ai/`).
+
+### DO NOT TOUCH
+- Backend files.
+- Workspace surface (`src/shell/**`) — that is W3-F.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/   # admin graph specs pass
+npm run build
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- W3-G is the **Admin (manage & observe)** acceptance proof: admins CRUD agents,
+  inspect the declared topology, and review cross-user run timelines.
+- Do NOT mingled with W3-F (Workspace).
 
 ---
 

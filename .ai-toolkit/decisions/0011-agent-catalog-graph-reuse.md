@@ -4,7 +4,7 @@
 **Status:** Accepted
 **Author:** Master Architect
 **Supersedes:** None (new decision)
-**Referenced by:** `docs/DESIGN-AGENT-CATALOG.md`, TASKS.md W3-C → W3-F
+**Referenced by:** `docs/DESIGN-AGENT-CATALOG.md`, TASKS.md W3-C → W3-G
 
 ---
 
@@ -37,6 +37,14 @@ Two forces required a decision before dispatch:
    dependency** — `d3-*` and `mermaid` are already installed.
 4. **Visualization reads refs, never re-runs work.** Graph/timeline components
    poll plan/catalog/timeline endpoints; they never trigger execution.
+5. **Two frontend surfaces, never mingled.** The shared backend API serves both,
+   but frontend work is surface-bound:
+   - **AI Workspace** (`src/shell/`) = engagement (run/plan/consent, a user's own
+     plan DAG) — W3-F.
+   - **AI Admin** (`src/pages/admin/ai/`) = manage & observe (catalog CRUD,
+     handoff topology, run ledger/timeline) — W3-G.
+   A graph of the *user's own* plan lives in the Workspace; a graph of the
+   *system's* agents/runs lives in Admin. Never put both in one phase.
 
 ## Alternatives Considered
 
@@ -49,15 +57,17 @@ Two forces required a decision before dispatch:
 ## Consequences
 
 - **Positive:** one federated catalog view; one shared graph primitive; no new
-  deps; plan edits are consent-gated and diff-reviewed.
+  deps; plan edits are consent-gated and diff-reviewed; clean separation between
+  the Workspace (engage) and Admin (manage/observe) surfaces.
 - **Negative / trade-off:** the federated index is request-time (not cached), so
   topology has a small per-request build cost — acceptable at current catalog size.
 - **Do NOT re-try:** a second hand-rolled d3 graph outside `ForceGraph.jsx`;
-  a new Django app for the catalog (ADR-0008); editing `backend/ai/engine/**`.
+  a new Django app for the catalog (ADR-0008); editing `backend/ai/engine/**`;
+  a catalog page that mingles Workspace and Admin concerns.
 
 ## References
 
 - `backend/ai/engine/agent/registry.py` — `AgentRegistry`
 - `backend/ai/engine/core/models.py` — `Agent`, `AgentHandoff`, `Skill`, `SkillAdmissionLog`
 - `carbon-frontend/src/pages/admin/ai/KnowledgeGraphPanel.jsx` — d3 source to extract
-- TASKS.md W3-C → W3-F
+- TASKS.md W3-C → W3-G
