@@ -160,6 +160,7 @@ INSTALLED_APPS = [
     'connections',
     'importexport',
     'evidence',
+    'healthy',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',
     'django.contrib.auth',

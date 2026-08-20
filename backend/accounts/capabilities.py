@@ -518,6 +518,26 @@ APPREGISTRY_MANAGE = Capability(
     category="platform",
 )
 
+# ── Healthy Foods Factory capabilities (Phase P4-A) ───────────────
+
+HEALTHY_VIEW = Capability(
+    key="healthy:view",
+    domain="healthy",
+    action="view",
+    label="View Healthy Factory",
+    description="Browse ERP snapshots, load-out sheets, rep health cards, and dashboards",
+    category="data",
+)
+
+HEALTHY_MANAGE = Capability(
+    key="healthy:manage",
+    domain="healthy",
+    action="manage",
+    label="Manage Healthy Factory",
+    description="Trigger ERP snapshots/pipelines and post load-out actuals",
+    category="admin",
+)
+
 
 # ═══════════════════════════════════════════════════════════════════
 # ALL CAPABILITIES — master registry
@@ -587,6 +607,9 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     # App Registry
     APPREGISTRY_VIEW.key: APPREGISTRY_VIEW,
     APPREGISTRY_MANAGE.key: APPREGISTRY_MANAGE,
+    # Healthy Foods Factory
+    HEALTHY_VIEW.key: HEALTHY_VIEW,
+    HEALTHY_MANAGE.key: HEALTHY_MANAGE,
 }
 
 
@@ -664,6 +687,9 @@ IMPLIES: Dict[str, Set[str]] = {
 
     # ── App Registry manage → view ──
     APPREGISTRY_MANAGE.key: {APPREGISTRY_VIEW.key},
+
+    # ── Healthy manage → view ──
+    HEALTHY_MANAGE.key: {HEALTHY_VIEW.key},
 
     # ── AI admin → view ──
     AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key},
@@ -744,6 +770,7 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         DATAHUB_VIEW.key,
         TURNKEY_VIEW.key,
         APPREGISTRY_VIEW.key,
+        HEALTHY_VIEW.key,
     },
 
     # ── Analysts (cross-org read + reporting) ──
@@ -767,6 +794,7 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         DATAHUB_VIEW.key,
         TURNKEY_VIEW.key,
         APPREGISTRY_VIEW.key,
+        HEALTHY_VIEW.key,
     },
 
     # ── Viewers (org-scoped read-only) ──
@@ -786,6 +814,7 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         DATAHUB_VIEW.key,
         TURNKEY_VIEW.key,
         APPREGISTRY_VIEW.key,
+        HEALTHY_VIEW.key,
     },
 
     # ── Auditors (org-scoped read + audit) ──
@@ -807,6 +836,7 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         DATAHUB_VIEW.key,
         TURNKEY_VIEW.key,
         APPREGISTRY_VIEW.key,
+        HEALTHY_VIEW.key,
     },
 }
 

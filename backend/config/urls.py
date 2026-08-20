@@ -79,6 +79,7 @@ urlpatterns = [
     path(f'{api_prefix}/dq/', include('dq.urls')),
     path(f'{api_prefix}/apps/', include('appregistry.urls')),
     path(f'{api_prefix}/integrations/turnkey/', include('integrations.turnkey.urls')),
+    path(f'{api_prefix}/healthy/', include('healthy.urls')),
     path(f'{api_prefix}/ai/workspace/', include('ai.workspace_urls')),
     path(f'{api_prefix}/ai/plans/', include('ai.plans_urls')),
     path(f'{api_prefix}/ai/usage/', include('ai.usage_urls')),
