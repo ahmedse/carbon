@@ -30,5 +30,6 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 |---|-------|--------|
 | [0001](0001-pattern-architecture.md) | Pattern architecture (Strategy/Command) | Accepted |
 | [0010](0010-data-product-domain-neutral.md) | Data Product must not carry GHG `scope` (domain vocabulary stays out of the generic core) | Proposed |
+| [0011](0011-agent-catalog-graph-reuse.md) | Unified Agent Catalog + graph visualization reuse (extract `ForceGraph.jsx`; no new deps) | Accepted |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

@@ -17,6 +17,8 @@ one `## Phase N-X` entry = one Worker Role. No phase spans both backend and fron
 
 **Dispatch a task:** `./.ai-toolkit/scripts/activate.sh <role>` → paste into worker chat (model per `project.config.md` WORKER_MODEL_POLICY).
 
+**Phase-name uniqueness:** before adding a new `Phase N-X`, grep this file for the proposed ID (e.g. `grep -n "Phase W3-B" TASKS.md`) — phase IDs are never reused even after a phase is `DONE`.
+
 ---
 
 ## MASTER DIRECTIVE — Test Partitioning (NON-NEGOTIABLE)
@@ -2199,6 +2201,233 @@ Append to `TASK-RESULTS.md`.
 
 ---
 
+### Phase W3-C — Plan lifecycle: edit / pause / resume / fork (backend)
+
+**Date:** 2026-08-20
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY — dispatchable
+**Spec:** `docs/DESIGN-AGENT-CATALOG.md` §4 (W3-C)
+**Kind:** Backend-only. Medium.
+**Depends on:** W3-A (plan lifecycle) — ✅ DONE.
+
+### Files to Read First
+- `backend/ai/plans_service.py` — existing statuses + `_RUNNABLE_STATUSES` + `run_plan_stream`
+- `backend/ai/plans_api.py` — existing ViewSet route map
+- `backend/ai/tests/test_plans.py` — existing coverage to extend
+- `docs/DESIGN-AGENT-CATALOG.md` §2 invariants + §4 W3-C
+- `.ai-toolkit/shared/base-rules.md` + `project.config.md` (HARD RULES)
+
+### Files to Change
+- `backend/ai/plans_service.py` — MODIFY: `edit_plan` (replan with diff), `pause_plan`, `resume_plan`, `fork_plan`, `edit_step`
+- `backend/ai/plans_api.py` — MODIFY: `PATCH /plans/{id}/`, `PATCH /plans/{id}/steps/{step_id}/`, `POST /plans/{id}/pause/`, `POST /plans/{id}/resume/`, `POST /plans/{id}/fork/`
+- `backend/ai/tests/test_plans.py` — EXTEND: edit-diff, pause/resume, fork tests
+
+### Implementation
+1. **Edit brief → replan with diff.** `PATCH /plans/{id}/` accepts a new `brief`
+   (+ optional `step_deltas`). Re-run `SkillAwarePlanner.decompose()`, return a
+   **diff** (`added`/`removed`/`changed` steps). If plan is `approved`/`running`/
+   `paused`, the diff returns as a review payload and the plan drops to
+   `pending_approval` — user must re-approve (RULE_21, no auto-mutation).
+2. **Per-step edit.** `PATCH /plans/{id}/steps/{step_id}/` edits `title` /
+   `instructions` / `depends_on` with the same diff-review rule.
+3. **Pause.** `POST /plans/{id}/pause/` only from `running` → `STATUS_PAUSED`.
+   Must not corrupt steps already `awaiting_approval` (consent pause is separate).
+4. **Resume.** `POST /plans/{id}/resume/` from `paused`/`approved` re-enters
+   `run_plan_stream` with `resume_run_id=plan_id` (reuses `_RUNNABLE_STATUSES`).
+5. **Fork.** `POST /plans/{id}/fork/` clones plan JSON + brief into a new `Run`
+   row (`forked_from`), status `pending_approval`. Copy, not a link.
+
+### DO NOT TOUCH
+- `backend/ai/engine/**` — call seams only, never reimplement.
+- No new migrations (`makemigrations --check --dry-run` stays clean).
+- Frontend files.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_plans.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- W3-C is the foundation W3-E (resume/replay) builds on — dispatch before/with W3-D.
+
+---
+
+### Phase W3-D — Unified Agent Catalog: backend CRUD + federated discovery
+
+**Date:** 2026-08-20
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY — dispatchable
+**Spec:** `docs/DESIGN-AGENT-CATALOG.md` §4 (W3-D)
+**Kind:** Backend-only. Medium.
+**Depends on:** W3-A (agent engine + `AgentRegistry` already exist).
+
+### Files to Read First
+- `backend/ai/engine/agent/registry.py` — `AgentRegistry.register_agent/get_agent/list_agents/remove_agent`
+- `backend/ai/engine/core/models.py` — `Agent`, `AgentHandoff`, `Skill`, `SkillAdmissionLog`, `AGENT_ROLES`
+- `backend/ai/engine/agent/plugins.py` — `ToolPlugin`/`WorkflowPlugin` discovery seam
+- `backend/ai/plans_api.py` — CBAC/owner-scoping pattern to mirror
+- `docs/DESIGN-AGENT-CATALOG.md` §2 + §4 W3-D
+
+### Files to Change
+- `backend/ai/catalog_service.py` — ADD: read-mostly catalog queries + topology + federated index
+- `backend/ai/catalog_api.py` — ADD: `GET /catalog/agents/`, `GET /catalog/agents/{id}/`, `GET /catalog/topology/`, `POST/PATCH/DELETE /catalog/agents/{id}/`, `GET /catalog/skills/`
+- `backend/ai/urls.py` — MODIFY: route `catalog/` → `catalog_api`
+- `backend/ai/tests/test_catalog.py` — ADD
+
+### Implementation
+1. **List/detail.** `GET /catalog/agents/` returns roles with declared handoff
+   edges + skills; `GET /catalog/agents/{id}/` returns one agent (incoming/
+   outgoing handoffs, admitted skills, last admission log).
+2. **Topology.** `GET /catalog/topology/` returns the declared graph as
+   `{nodes:[], edges:[]}` (ADR-001 declared edges only) — feeds W3-F.
+3. **CRUD (admin-gated).** `POST/PATCH/DELETE /catalog/agents/{id}/` map to
+   `register_agent`/`remove_agent`; explicit, RULE_21.
+4. **Federated index.** Build a request-time index merging `AgentRegistry.
+   list_agents` (DB) with `ToolPlugin`/`WorkflowPlugin` discovery from
+   `plugins.py`. Read-only merge; DB stays source of truth.
+5. CBAC: catalog writes owner/role-scoped; reads follow the plan CBAC pattern.
+
+### DO NOT TOUCH
+- `backend/ai/engine/**` — read seams only.
+- No new migrations.
+- Frontend files.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_catalog.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- W3-D is independent of W3-C — dispatch in parallel.
+- W3-D feeds W3-D-ui (catalog page) and W3-F (topology graph).
+
+---
+
+### Phase W3-E — Durable execution: crash-resume / replay / timeline (backend)
+
+**Date:** 2026-08-20
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY — dispatchable (after W3-C)
+**Spec:** `docs/DESIGN-AGENT-CATALOG.md` §4 (W3-E)
+**Kind:** Backend-only. Medium.
+**Depends on:** W3-C (pause/resume already exist there).
+
+### Files to Read First
+- `backend/ai/plans_service.py` — `run_plan_stream`, status reconciliation
+- `backend/ai/engine/core/models.py` — `Run`, `RunStep`, `Trajectory`
+- `backend/ai/observability_api.py` — existing observability surface
+- `docs/DESIGN-AGENT-CATALOG.md` §2 + §4 W3-E
+
+### Files to Change
+- `backend/ai/plans_service.py` — MODIFY: crash-safe `resume`, `replay`, `timeline`
+- `backend/ai/plans_api.py` — MODIFY: `POST /plans/{id}/replay/`, `GET /plans/{id}/timeline/`
+- `backend/ai/observability_api.py` — EXTEND: `GET /runs/` (run list)
+- `backend/ai/tests/test_plans.py` — EXTEND: resume-reconcile, replay, timeline
+
+### Implementation
+1. **Crash-safe resume.** On `resume`, reconcile `RunStep` rows: mark stale
+   `running`/`awaiting_approval` steps correctly; skip already-completed steps;
+   re-enter via `resume_run_id=plan_id`.
+2. **Replay (read-only).** `POST /plans/{id}/replay/` reconstructs a deterministic
+   timeline from `RunStep` + `Trajectory` — never re-executes. Returns
+   `{step, status, started_at, finished_at, artifacts}`.
+3. **Timeline.** `GET /plans/{id}/timeline/` returns Gantt-ready ranges per step.
+4. **Run list.** `GET /runs/` lists runs across plans (resume/replay entry points).
+
+### DO NOT TOUCH
+- `backend/ai/engine/**`.
+- No new migrations.
+- Frontend files.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_plans.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- W3-E feeds W3-F (timeline view).
+
+---
+
+### Phase W3-F — Workflow & agent visualization (frontend)
+
+**Date:** 2026-08-20
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY — dispatchable (after W3-D + W3-E)
+**Spec:** `docs/DESIGN-AGENT-CATALOG.md` §4 (W3-F)
+**Kind:** Frontend-only. Medium-large.
+**Depends on:** W3-D (topology), W3-E (timeline).
+
+### Files to Read First
+- `carbon-frontend/src/pages/admin/ai/KnowledgeGraphPanel.jsx` — d3-force + drag/zoom/pan + hover + legend source to extract
+- `carbon-frontend/src/shell/MarkdownMessage.jsx` — lazy Mermaid block rendering
+- `carbon-frontend/src/shell/AITaskPlanCard.jsx` — where the Mermaid preview mounts
+- `carbon-frontend/src/api/aiWorkspace.js` — plans/catalog wrappers
+- `docs/DESIGN-AGENT-CATALOG.md` §4 W3-F + `.ai-toolkit/shared/design-system.md` (RULE_8)
+
+### Files to Change
+- `carbon-frontend/src/components/graph/ForceGraph.jsx` — ADD (extract shared d3 core from `KnowledgeGraphPanel`)
+- `carbon-frontend/src/components/graph/PlanDagGraph.jsx` — ADD (nodes=steps, edges=`depends_on`, status-colored)
+- `carbon-frontend/src/components/graph/AgentTopologyGraph.jsx` — ADD (agents + declared handoffs)
+- `carbon-frontend/src/components/graph/RunTimeline.jsx` — ADD (Gantt from timeline endpoint)
+- `carbon-frontend/src/components/graph/PlanMermaidPreview.jsx` — ADD (Mermaid `graph` preview)
+- `carbon-frontend/src/shell/AITaskPlanCard.jsx` — MODIFY (embed `PlanMermaidPreview` + `PlanDagGraph`)
+- `carbon-frontend/src/shell/AITaskVisualPanel.jsx` — ADD (tabbed: DAG / topology / timeline), route via `studioFromPath()` (RULE_15)
+- `carbon-frontend/src/__tests__/` graph specs — ADD
+
+### Implementation
+1. **Extract `ForceGraph.jsx`** from `KnowledgeGraphPanel.jsx` — reusable d3-force
+   SVG with drag/zoom/pan, hover tooltip, click-to-inspect, legend. No new deps.
+2. **Plan DAG live** — nodes=steps, edges=`depends_on`, node color=status; polls
+   during a run.
+3. **Agent topology** — renders `GET /catalog/topology/` nodes+edges.
+4. **Run timeline** — Gantt from `GET /plans/{id}/timeline/`.
+5. **Mermaid preview** — `graph` DAG for the review card (reuses lazy mermaid).
+6. Theme tokens only (RULE_8); route + sidebar via `studioFromPath()` (RULE_15).
+
+### DO NOT TOUCH
+- Backend files.
+- `KnowledgeGraphPanel.jsx` public behaviour — extract, don't regress.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/   # graph specs pass
+npm run build
+```
+
+### Output contract
+Append to `TASK-RESULTS.md`.
+
+### Notes for the Master
+- W3-F is the visual acceptance proof for the whole catalog track.
+- Dispatch W3-D-ui (catalog page, §4 W3-D) alongside W3-F after W3-D lands.
+
+---
+
 ## PLATFORM EXPANSION TRACK
 
 Strict build order: **P1 → P2 → P4** (P3 may run in parallel with P2). Full
@@ -2372,7 +2601,7 @@ Append to `TASK-RESULTS.md`.
 
 ### Phase P4-A — Healthy Domain App: backend (`healthy/`)
 
-**Status:** Not started
+**Status:** DONE — ACCEPTED (35 healthy tests; `manage.py check` + `makemigrations --check --dry-run` + `migrate healthy` clean; commit `38f8def`)
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
 **Spec:** `docs/DESIGN-PLATFORM.md` §8
@@ -2414,12 +2643,12 @@ Append to `TASK-RESULTS.md`.
 
 ### Phase P4-B — Healthy Domain App: frontend
 
-**Status:** Not started
+**Status:** IN PROGRESS
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
 **Spec:** `docs/DESIGN-PLATFORM.md` §11
 **Kind:** Frontend-only. Medium-large.
-**Depends on:** P4-A (endpoints).
+**Depends on:** P4-A (endpoints) — ✅ DONE (`38f8def`, `/carbon-api/healthy/` live).
 
 ### Files to Read First
 - `docs/DESIGN-PLATFORM.md` §8 + §11
