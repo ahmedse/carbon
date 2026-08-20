@@ -25,12 +25,32 @@ function loadEnv() {
 const envVars = loadEnv();
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Stub `.css` imports (e.g. `@mui/x-data-grid/esm/index.css`) so tests
+    // don't fail with "Unknown file extension .css". RULE: tests never need
+    // real stylesheets — jsdom only.
+    {
+      name: 'stub-css-imports',
+      enforce: 'pre',
+      load(id) {
+        if (id.endsWith('.css')) return '';
+      },
+    },
+  ],
   test: {
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/setupTests.js',
     css: false,
+    server: {
+      deps: {
+        // @mui/x-data-grid imports `esm/index.css`; Node's native ESM loader
+        // can't parse CSS, so inline the package and let Vite + the css stub
+        // (plugin above) handle it instead of externalizing it.
+        inline: ['@mui/x-data-grid'],
+      },
+    },
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

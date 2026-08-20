@@ -49,6 +49,8 @@ import FeedbackIcon from '@mui/icons-material/Feedback';
 import LoopIcon from '@mui/icons-material/Loop';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import SchemaIcon from '@mui/icons-material/Schema';
+import TimelineIcon from '@mui/icons-material/Timeline';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
 import { can } from '../authz';
@@ -157,6 +159,7 @@ function getSidebarItems(studioId) {
         { label: 'MCP Servers', path: '/admin/ai/mcp', icon: HubIcon, role: 'admin' },
         { label: 'Tools', path: '/admin/ai/tools', icon: HandymanIcon, role: 'admin' },
         { label: 'Skills Catalog', path: '/admin/ai/skills', icon: ExtensionIcon, role: 'admin' },
+        { label: 'Topology', path: '/admin/ai/topology', icon: SchemaIcon, role: 'admin' },
         { label: 'Archetypes', path: '/admin/ai/archetypes', icon: AutoFixHighIcon, role: 'admin' },
         { label: 'Prompts & Playbook', path: '/admin/ai/prompts', icon: MenuBookIcon, role: 'admin' },
         { type: 'group', label: 'Feedback & Learning' },
@@ -166,6 +169,7 @@ function getSidebarItems(studioId) {
         { type: 'group', label: 'Observability' },
         { label: 'Monitoring', path: '/admin/ai/monitoring', icon: MonitorHeartIcon, role: 'admin' },
         { label: 'Audit Trail', path: '/admin/ai/audit', icon: HistoryIcon, role: 'admin' },
+        { label: 'Run Timeline', path: '/admin/ai/runs', icon: TimelineIcon, role: 'admin' },
         { label: 'Logs', path: '/admin/ai/logs', icon: ArticleIcon, role: 'admin' },
       ];
     
