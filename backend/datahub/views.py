@@ -149,11 +149,36 @@ class VersionListCreateView(APIView):
 
     def post(self, request, dataset_id):
         dataset = self.get_dataset(request, dataset_id)
-        data_table_id = request.data.get('data_table')
-        if not data_table_id:
-            raise ValidationError({'data_table': 'This field is required.'})
 
         from dataschema.models import DataTable
+
+        # Multi-table composition: data_tables=[id1, id2, ...]
+        data_table_ids = request.data.get('data_tables')
+        if data_table_ids is not None:
+            if not isinstance(data_table_ids, (list, tuple)) or not data_table_ids:
+                raise ValidationError(
+                    {'data_tables': 'Must be a non-empty list of DataTable ids.'})
+            tables = list(DataTable.objects.filter(pk__in=data_table_ids))
+            if len(tables) != len(set(data_table_ids)):
+                raise ValidationError(
+                    {'data_tables': 'One or more DataTable ids do not exist.'})
+            for table in tables:
+                if table.module_id != dataset.module_id:
+                    raise PermissionDenied(
+                        'A DataTable belongs to a different module.')
+            version = ingest_service.create_version(
+                dataset, tables, source_type='api', source_ref='manual',
+                user=request.user,
+            )
+            return Response(DatasetVersionSerializer(version).data,
+                            status=status.HTTP_201_CREATED)
+
+        # Legacy single-table path (unchanged behavior).
+        data_table_id = request.data.get('data_table')
+        if not data_table_id:
+            raise ValidationError(
+                {'data_table': 'This field is required unless data_tables is provided.'})
+
         table = get_object_or_404(DataTable, pk=data_table_id)
         if table.module_id != dataset.module_id:
             raise PermissionDenied('The DataTable belongs to a different module.')

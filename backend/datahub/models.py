@@ -66,6 +66,11 @@ class Dataset(models.Model):
         User, null=True, blank=True, on_delete=models.SET_NULL,
         related_name='owned_datasets',
     )
+    steward = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='stewarded_datasets',
+        help_text='Data steward accountable for this data product (advisory).',
+    )
     source = models.ForeignKey(
         DataSource, null=True, blank=True, on_delete=models.SET_NULL,
         related_name='datasets',
@@ -144,6 +149,41 @@ class DatasetVersion(models.Model):
 
     def __str__(self):
         return f"{self.dataset.name} v{self.version_number} ({self.status})"
+
+    @property
+    def tables(self):
+        """All DataTables in this version (members first, legacy fallback)."""
+        member_tables = [m.data_table for m in self.members.all()]
+        if member_tables:
+            return member_tables
+        return [self.data_table] if self.data_table_id else []
+
+
+class DatasetVersionMember(models.Model):
+    """One table inside a multi-table DatasetVersion (the data-product composition)."""
+    version = models.ForeignKey(
+        'DatasetVersion', on_delete=models.CASCADE, related_name='members')
+    data_table = models.ForeignKey(
+        'dataschema.DataTable', on_delete=models.PROTECT,
+        related_name='dataset_version_members')
+    order = models.PositiveIntegerField(default=0)
+    label = models.CharField(
+        max_length=120, blank=True,
+        help_text='Semantic name within the product, e.g. "orders", "customers".')
+    row_count = models.IntegerField(default=0)
+    schema_snapshot = models.JSONField(default=dict, blank=True)
+    health_score = models.FloatField(null=True, blank=True)
+    health_detail = models.JSONField(default=dict, blank=True)
+    dq_job_id = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        ordering = ['order', 'id']
+        unique_together = [('version', 'data_table')]
+        verbose_name = 'dataset version member'
+        verbose_name_plural = 'dataset version members'
+
+    def __str__(self):
+        return f"{self.version} :: {self.data_table_id or self.label or self.order}"
 
 
 class DataContract(models.Model):

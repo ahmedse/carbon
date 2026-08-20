@@ -26,7 +26,7 @@ from django.utils import timezone
 from dataschema.models import DataField, DataRow, DataTable
 from dq.jobs import create_job, execute as execute_job
 
-from .models import DatasetVersion
+from .models import DatasetVersion, DatasetVersionMember
 from .services import approve_version, check_contract, gate_validity, mirror_health_to_catalog
 
 logger = logging.getLogger(__name__)
@@ -162,25 +162,79 @@ def compute_health(table, rows, validity, contract=None) -> dict:
     }
 
 
-def create_version(dataset, table, *, source_type, source_ref, user=None,
-                   auto_approve=False, contract=None) -> DatasetVersion:
-    """Core pipeline: table → DQ → health → DatasetVersion → contract → (approve)."""
-    rows = list(table.rows.filter(is_archived=False))
-    # The gate + health math operate on raw dicts, not DataRow instances.
-    raw_rows = [row.values for row in rows]
-    validity = gate_validity(table, raw_rows)
+def create_version(dataset, tables, *, source_type, source_ref, user=None,
+                   auto_approve=False, contract=None, labels=None) -> DatasetVersion:
+    """Core pipeline: table(s) → DQ → health → DatasetVersion → contract → (approve).
 
-    health = compute_health(table, raw_rows, validity, contract=contract)
+    ``tables`` may be a single ``DataTable`` (back-compat) or a list of
+    ``DataTable`` instances (multi-table composition). Each table gets its own
+    ``DatasetVersionMember`` with per-table health/schema/DQ; the version-level
+    aggregates are the union/mean across members.
+    """
+    if isinstance(tables, DataTable):
+        tables = [tables]
+    if not tables:
+        raise ValueError('create_version requires at least one table.')
+    labels = labels or {}
 
-    # DQ via the existing seam: create a profile job and execute it inline.
-    dq_job = None
-    dq_job_id = ''
-    try:
-        dq_job = create_job('profile', table=table, user=user)
-        executed = execute_job(dq_job)
-        dq_job_id = str(getattr(executed, 'pk', '') or '')
-    except Exception:  # pragma: no cover — DQ must never break ingest
-        logger.exception('DQ job failed during ingest for table %s', table.pk)
+    # Per-table: DQ job + gate validity + compute health → one member each.
+    member_data = []
+    total_rows = 0
+    merged_schema = {}
+    merged_health = {'completeness': [], 'validity': [], 'freshness': []}
+    member_health_scores = []
+    last_dq_job_id = ''
+
+    for order, table in enumerate(tables):
+        rows = list(table.rows.filter(is_archived=False))
+        # The gate + health math operate on raw dicts, not DataRow instances.
+        raw_rows = [row.values for row in rows]
+        validity = gate_validity(table, raw_rows)
+        health = compute_health(table, raw_rows, validity, contract=contract)
+
+        # DQ via the existing seam: create a profile job and execute it inline.
+        dq_job_id = ''
+        try:
+            dq_job = create_job('profile', table=table, user=user)
+            executed = execute_job(dq_job)
+            dq_job_id = str(getattr(executed, 'pk', '') or '')
+        except Exception:  # pragma: no cover — DQ must never break ingest
+            logger.exception('DQ job failed during ingest for table %s', table.pk)
+        last_dq_job_id = dq_job_id
+
+        member_data.append({
+            'table': table,
+            'order': order,
+            'row_count': len(rows),
+            'schema_snapshot': schema_snapshot_from_table(table),
+            'health_score': health['health_score'],
+            'health_detail': {
+                'completeness': health['completeness'],
+                'validity': health['validity'],
+                'freshness': health['freshness'],
+            },
+            'dq_job_id': dq_job_id,
+            'label': labels.get(table.pk, ''),
+        })
+
+        total_rows += len(rows)
+        for name, spec in (member_data[-1]['schema_snapshot'] or {}).items():
+            merged_schema.setdefault(name, spec)
+        merged_health['completeness'].append(health['completeness'])
+        merged_health['validity'].append(health['validity'])
+        merged_health['freshness'].append(health['freshness'])
+        if health['health_score'] is not None:
+            member_health_scores.append(health['health_score'])
+
+    # Version-level aggregates across members (plain mean — deliberate simplification).
+    def _mean(values, default=None):
+        return round(sum(values) / len(values), 4) if values else default
+    version_health_score = _mean(member_health_scores)
+    version_health_detail = {
+        'completeness': _mean(merged_health['completeness']),
+        'validity': _mean(merged_health['validity']),
+        'freshness': _mean(merged_health['freshness']),
+    }
 
     next_number = (
         DatasetVersion.objects.filter(dataset=dataset)
@@ -191,16 +245,12 @@ def create_version(dataset, table, *, source_type, source_ref, user=None,
     version = DatasetVersion.objects.create(
         dataset=dataset,
         version_number=next_number,
-        data_table=table,
-        row_count=len(rows),
-        schema_snapshot=schema_snapshot_from_table(table),
-        health_score=health['health_score'],
-        health_detail={
-            'completeness': health['completeness'],
-            'validity': health['validity'],
-            'freshness': health['freshness'],
-        },
-        dq_job_id=dq_job_id,
+        data_table=tables[0],
+        row_count=total_rows,
+        schema_snapshot=merged_schema,
+        health_score=version_health_score,
+        health_detail=version_health_detail,
+        dq_job_id=last_dq_job_id,
         lineage={
             'source': {'type': source_type, 'ref': source_ref or ''},
             'upstream_version_ids': [],
@@ -209,6 +259,19 @@ def create_version(dataset, table, *, source_type, source_ref, user=None,
         status='pending',
         created_by=user if user and user.is_authenticated else None,
     )
+
+    for md in member_data:
+        DatasetVersionMember.objects.create(
+            version=version,
+            data_table=md['table'],
+            order=md['order'],
+            label=md['label'],
+            row_count=md['row_count'],
+            schema_snapshot=md['schema_snapshot'],
+            health_score=md['health_score'],
+            health_detail=md['health_detail'],
+            dq_job_id=md['dq_job_id'],
+        )
 
     # Mirror health into the catalog.
     if user and user.is_authenticated:
@@ -229,6 +292,35 @@ def create_version(dataset, table, *, source_type, source_ref, user=None,
         approve_version(version, user)
 
     return version
+
+
+def create_version_from_tables(dataset, table_specs, *, source_type, source_ref,
+                               user=None, auto_approve=False, contract=None) -> DatasetVersion:
+    """Convenience multi-table compose: each spec is either
+    {'table': DataTable} or {'columns': [...], 'rows': [...], 'label': '...'}.
+    Column/row specs are materialized via the existing create_data_table +
+    write_rows helpers, then all tables flow through create_version.
+    """
+    tables = []
+    labels = {}
+    next_number = (
+        DatasetVersion.objects.filter(dataset=dataset)
+        .order_by('-version_number').values_list('version_number', flat=True).first()
+        or 0
+    ) + 1
+    for spec in table_specs:
+        if 'table' in spec:
+            tables.append(spec['table'])
+        else:
+            table = create_data_table(dataset, spec['columns'], next_number, user=user)
+            write_rows(table, spec['rows'], user=user)
+            tables.append(table)
+            if spec.get('label'):
+                labels[table.pk] = spec['label']
+    return create_version(
+        dataset, tables, source_type=source_type, source_ref=source_ref,
+        user=user, auto_approve=auto_approve, contract=contract, labels=labels,
+    )
 
 
 def ingest_rows(dataset, columns, rows, *, source_type, source_ref,

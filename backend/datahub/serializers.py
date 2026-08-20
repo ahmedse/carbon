@@ -6,8 +6,8 @@ Validation at the serializer boundary; business logic lives in services/ingest.
 from rest_framework import serializers
 
 from .models import (
-    Dataset, DatasetVersion, DataContract, DataContractViolation,
-    DatasetAccessPolicy,
+    Dataset, DatasetVersion, DatasetVersionMember, DataContract,
+    DataContractViolation, DatasetAccessPolicy,
 )
 
 
@@ -24,21 +24,34 @@ class DatasetVersionListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class DatasetVersionMemberSerializer(serializers.ModelSerializer):
+    """Read-only view of one table inside a multi-table DatasetVersion."""
+
+    class Meta:
+        model = DatasetVersionMember
+        fields = [
+            'id', 'data_table', 'order', 'label', 'row_count',
+            'schema_snapshot', 'health_score', 'health_detail', 'dq_job_id',
+        ]
+        read_only_fields = fields
+
+
 class DatasetVersionSerializer(serializers.ModelSerializer):
     """Full version detail — includes schema snapshot + health breakdown."""
+    members = DatasetVersionMemberSerializer(many=True, read_only=True)
 
     class Meta:
         model = DatasetVersion
         fields = [
-            'id', 'dataset', 'version_number', 'data_table',
+            'id', 'dataset', 'version_number', 'data_table', 'members',
             'row_count', 'schema_snapshot', 'health_score', 'health_detail',
             'dq_job_id', 'lineage', 'status', 'approved_by', 'approved_at',
             'rejection_reason', 'created_at', 'created_by',
         ]
         read_only_fields = [
-            'id', 'dataset', 'version_number', 'data_table', 'row_count',
-            'schema_snapshot', 'health_score', 'health_detail', 'dq_job_id',
-            'lineage', 'status', 'approved_by', 'approved_at',
+            'id', 'dataset', 'version_number', 'data_table', 'members',
+            'row_count', 'schema_snapshot', 'health_score', 'health_detail',
+            'dq_job_id', 'lineage', 'status', 'approved_by', 'approved_at',
             'rejection_reason', 'created_at', 'created_by',
         ]
 
@@ -51,10 +64,10 @@ class DatasetListSerializer(serializers.ModelSerializer):
         model = Dataset
         fields = [
             'id', 'name', 'slug', 'description', 'module', 'domain',
-            'classification', 'status', 'owner', 'current_version',
+            'classification', 'status', 'owner', 'steward', 'current_version',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'current_version']
+        read_only_fields = ['id', 'steward', 'created_at', 'updated_at', 'current_version']
 
 
 class DatasetSerializer(serializers.ModelSerializer):
@@ -65,8 +78,8 @@ class DatasetSerializer(serializers.ModelSerializer):
         model = Dataset
         fields = [
             'id', 'name', 'slug', 'description', 'module', 'domain',
-            'classification', 'status', 'owner', 'source', 'current_version',
-            'tags', 'created_at', 'updated_at', 'created_by',
+            'classification', 'status', 'owner', 'steward', 'source',
+            'current_version', 'tags', 'created_at', 'updated_at', 'created_by',
         ]
         read_only_fields = ['id', 'current_version', 'created_at', 'updated_at', 'created_by']
 

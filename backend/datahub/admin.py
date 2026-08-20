@@ -2,16 +2,27 @@ from django.contrib import admin
 
 from .models import (
     DataContract, DataContractViolation, Dataset, DatasetAccessPolicy,
-    DatasetVersion,
+    DatasetVersion, DatasetVersionMember,
 )
 
 
 @admin.register(Dataset)
 class DatasetAdmin(admin.ModelAdmin):
-    list_display = ('name', 'slug', 'module', 'status', 'classification', 'updated_at')
+    list_display = ('name', 'slug', 'module', 'status', 'classification',
+                    'steward', 'updated_at')
     list_filter = ('status', 'classification', 'module')
     search_fields = ('name', 'slug', 'description')
     readonly_fields = ('id', 'created_at', 'updated_at')
+
+
+class DatasetVersionMemberInline(admin.TabularInline):
+    model = DatasetVersionMember
+    extra = 0
+    # Governance snapshot — read-only except the semantic label + order.
+    readonly_fields = ('data_table', 'row_count', 'schema_snapshot',
+                       'health_score', 'health_detail', 'dq_job_id')
+    fields = ('data_table', 'label', 'order', 'row_count', 'health_score',
+              'dq_job_id')
 
 
 @admin.register(DatasetVersion)
@@ -21,6 +32,7 @@ class DatasetVersionAdmin(admin.ModelAdmin):
     list_filter = ('status',)
     search_fields = ('dataset__name',)
     readonly_fields = ('id', 'created_at')
+    inlines = [DatasetVersionMemberInline]
 
 
 @admin.register(DataContract)

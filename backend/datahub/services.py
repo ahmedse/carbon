@@ -90,8 +90,11 @@ def check_contract(version, contract=None) -> list:
 
     violations = []
 
-    # 1) Schema — missing required fields
-    schema = version.schema_snapshot or {}
+    # 1) Schema — missing required fields (union across all member tables)
+    schema = dict(version.schema_snapshot or {})
+    for member in version.members.all():
+        for name, spec in (member.schema_snapshot or {}).items():
+            schema.setdefault(name, spec)
     for field_name in contract.required_fields or []:
         if field_name not in schema:
             violations.append(DataContractViolation.objects.create(
@@ -188,17 +191,34 @@ def reject_version(version, user, reason: str = '') -> None:
 def mirror_health_to_catalog(version, user=None) -> None:
     """Mirror a version's health to catalog.AssetProfile.quality_status/score.
 
+    Mirrors per member table when the version has composition members (each
+    member carries its own health_score); falls back to the version's
+    single-table behavior for legacy versions without members.
+
     Thresholds mirror dq conventions: passing ≥ 0.9, warning ≥ 0.7, failing < 0.7.
     """
+    members = list(version.members.all())
+    if members:
+        for member in members:
+            score = member.health_score if member.health_score is not None else version.health_score
+            if score is None:
+                continue
+            _mirror_score(version.data_table_id, score, member.data_table, user)
+        return
     if version.health_score is None:
         return
-    ap, _ = AssetProfile.objects.get_or_create(data_table=version.data_table)
+    _mirror_score(version.data_table_id, version.health_score, version.data_table, user)
+
+
+def _mirror_score(version_table_id, health_score, data_table, user=None) -> None:
+    """Apply one health score to a table's AssetProfile (shared by both paths)."""
+    ap, _ = AssetProfile.objects.get_or_create(data_table=data_table)
     old_status = ap.quality_status
     old_score = ap.quality_score
-    score = round(version.health_score * 100)
-    if version.health_score >= PASSING_THRESHOLD:
+    score = round(health_score * 100)
+    if health_score >= PASSING_THRESHOLD:
         ap.quality_status = 'passing'
-    elif version.health_score >= WARNING_THRESHOLD:
+    elif health_score >= WARNING_THRESHOLD:
         ap.quality_status = 'warning'
     else:
         ap.quality_status = 'failing'
@@ -209,7 +229,7 @@ def mirror_health_to_catalog(version, user=None) -> None:
             + (['updated_by'] if user else []))
     if ap.quality_status != old_status or ap.quality_score != old_score:
         logger.info('Mirrored health for table %s: %s (%s -> %s)',
-                    version.data_table_id, score, old_status, ap.quality_status)
+                    version_table_id, score, old_status, ap.quality_status)
 
 
 def gate_validity(table, rows) -> float:

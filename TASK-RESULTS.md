@@ -2427,3 +2427,71 @@ $ npm run build
   mock (status `paused`) removes the plan-level gate so only the per-step Decline remains.
 - **Build chunk-size warnings**: pre-existing (largest chunk 1.6 MB, same as baseline) — no new
   code-splitting introduced.
+
+---
+
+## [2026-08-20] Backend — Sprint 29 Phase P1B: Dataset Composition (1 Dataset = N Tables)
+
+**Worker role:** backend-worker · **Task file:** `tasks/SPRINT-29-P1B-DATASET-COMPOSITION.md` · **Status:** COMPLETE
+
+## Summary
+Promoted `Dataset` to a true data product: added `Dataset.steward` (advisory FK, mirroring `AssetProfile.steward`) and a new `DatasetVersionMember` model so one `DatasetVersion` can compose **N tables** while keeping `DatasetVersion.data_table` as a non-nullable primary-table alias for back-compat (43 pre-existing tests untouched and green). `DatasetVersion.tables` returns member tables first, legacy single-table fallback otherwise. Ingest now profiles + health-scores **each** member table and rolls up row counts / merged schema / mean health at version level. Contract schema checks union member schemas; catalog health mirroring writes one `AssetProfile` per member table. The API accepts `data_tables: [id1, id2, ...]` alongside the legacy single `data_table`.
+
+## Task Results
+1. ✅ `Dataset.steward` FK added (models) + migration `0002_dataset_steward_datasetversionmember`
+2. ✅ `DatasetVersionMember` model (order, label, row_count, schema_snapshot, health_score, health_detail, dq_job_id; `unique_together(version, data_table)`)
+3. ✅ `DatasetVersion.tables` property — members-first, legacy `[data_table]` fallback
+4. ✅ `create_version(dataset, tables_list, ...)` — per-member profiling/DQ/health; single-table kwarg still works (wraps `[t]`)
+5. ✅ `create_version_from_tables(dataset, table_specs, ...)` — materializes `{'columns','rows','label'}` specs
+6. ✅ `check_contract` — required-fields union across member `schema_snapshot`s
+7. ✅ `mirror_health_to_catalog` — one `AssetProfile` per member table (legacy single path preserved)
+8. ✅ `DatasetVersionSerializer.members` (read-only nested) + `steward` on dataset serializers (writable on detail, read-only on list)
+9. ✅ `VersionListCreateView.post` accepts `data_tables` list (module-match + existence validation; 400 on empty/unknown)
+10. ✅ Admin: `DatasetVersionMember` TabularInline (label/order editable, snapshot readonly) + `steward` in `DatasetAdmin.list_display`
+11. ✅ 10 new tests in `tests/test_composition.py` — all green
+12. ✅ Migration 0002 generated, applied, `makemigrations --check --dry-run` clean
+
+## Files Changed
+- `backend/datahub/models.py`
+- `backend/datahub/ingest.py`
+- `backend/datahub/services.py`
+- `backend/datahub/serializers.py`
+- `backend/datahub/views.py`
+- `backend/datahub/admin.py`
+- `backend/datahub/migrations/0002_dataset_steward_datasetversionmember.py` (new)
+- `backend/datahub/tests/test_composition.py` (new)
+- `TASK-RESULTS.md` (this entry)
+
+## Verification Output
+```
+$ /home/ahmed/aast/carbon/.venv/bin/python manage.py check
+System check identified no issues (0 silenced).
+
+$ /home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations datahub
+Migrations for 'datahub':
+  datahub/migrations/0002_dataset_steward_datasetversionmember.py
+    + Add field steward to dataset
+    + Create model DatasetVersionMember
+
+$ /home/ahmed/aast/carbon/.venv/bin/python manage.py migrate datahub
+Applying datahub.0002_dataset_steward_datasetversionmember... OK
+
+$ /home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+No changes detected
+
+$ PGPASSWORD=*** PGUSER=ahmed /home/ahmed/aast/carbon/.venv/bin/python -m pytest datahub -q --create-db
+53 passed in 9.13s
+```
+pytest form: **with PG env vars** (`PGPASSWORD`/`PGUSER`), `--create-db` (one forced recreation — see Issues Found; subsequent runs green with `--reuse-db`).
+
+## Deviations
+- **Version-level `health_score` = plain mean of member scores** — deliberate simplification per spec (no weighting, no per-table SLA). Flagged for a future phase if members need weighted importance.
+- **`DatasetVersion.data_table` kept non-nullable primary-table alias** (set to first member's table) rather than nulled — preserves all 43 pre-existing tests; `tables` property is the canonical multi-table accessor.
+- **Single-table legacy ingest path now creates one `DatasetVersionMember`** — uniform rollup logic (row_count/schema/health all flow through members); behavior parity verified by pre-existing tests.
+- **`DatasetListSerializer.steward` is read-only** per spec ("read-only for list"); `DatasetSerializer` (create/update) accepts it.
+
+## Issues Found
+- **Stale `--reuse-db` test DB after 0002** (P2, environment-only): first run failed 50 tests with `column "steward_id" of relation "datahub_dataset" does not exist` because the reused test DB predated the migration. Fixed with one `--create-db` run; test DB now current and `--reuse-db` is green. No code change required.
+- No application defects found.
+
+**Verdict: PASSED**
