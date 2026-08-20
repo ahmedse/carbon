@@ -8,7 +8,7 @@
 // RULE_8: node/edge colors are supplied as theme tokens (theme.palette.* /
 // chartPalette.*) by the caller — never inline raw hex. RULE_10: this is a
 // pure presentational component — no fetching here.
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Box, Button, Paper, Stack, Typography, useTheme } from '@mui/material';
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from 'd3-force';
@@ -65,19 +65,6 @@ export default function ForceGraph({
   const nodeStroke = theme.palette.divider;
   const selectStroke = theme.palette.primary.main;
   const hoverPaper = theme.palette.background.paper;
-
-  // Degree per node — feeds radius growth so connected steps read bigger.
-  const degrees = useMemo(() => {
-    const d = {};
-    nodes.forEach((n) => {
-      d[n.id] = 0;
-    });
-    edges.forEach((e) => {
-      if (d[e.source] !== undefined) d[e.source] += 1;
-      if (d[e.target] !== undefined) d[e.target] += 1;
-    });
-    return d;
-  }, [nodes, edges]);
 
   useEffect(() => {
     const svgEl = svgRef.current;

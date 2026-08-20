@@ -3,7 +3,7 @@
 // Reuses the lazy-mermaid pattern from MarkdownMessage (mermaid is already a
 // dependency; the heavy lib stays out of the main bundle). Theme tokens only
 // (RULE_8); outcome labels only (RULE_23).
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Box, Chip, Typography } from '@mui/material';
 import { planDagMermaid } from '../../utils/planGraph';
