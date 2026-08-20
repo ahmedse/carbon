@@ -88,6 +88,10 @@ export function AIWorkspace({ onClose }) {
   // Sessions drawer starts collapsed (VS Code Copilot-style) — the user opens
   // it via the Sessions activity-bar icon when needed.
   const [activePanel, setActivePanel] = useState(null);
+  // Chat → Tasks jump: when a chat reply's "Open in Tasks" button is clicked,
+  // the workspace switches to the Tasks panel and the panel auto-opens the
+  // created plan (consumed by AITaskPanel via onFocusPlanConsumed).
+  const [tasksFocusPlanId, setTasksFocusPlanId] = useState(null);
   // Grouped Memory surface: episodes (memory) / facts (learnt) / relationship
   // are one domain — one activity icon, internal MUI Tabs (RULE_17).
   const [memoryTab, setMemoryTab] = useState(() => {
@@ -511,6 +515,18 @@ export function AIWorkspace({ onClose }) {
 
   const togglePanel = (panel) => setActivePanel((prev) => (prev === panel ? null : panel));
 
+  // open_panel action from a chat reply — switch the workspace panel and,
+  // for tasks, focus the plan the assistant just drafted. Plain function:
+  // this sits AFTER the `if (loading)` early return, so it must not call
+  // hooks (a useCallback here would trip the Rules-of-Hooks check when
+  // loading flips).
+  const handleOpenPanel = (panel, planId) => {
+    setActivePanel(panel);
+    if (panel === 'tasks' && planId) {
+      setTasksFocusPlanId(planId);
+    }
+  };
+
   return (
     <ExecuteModeProvider>
       <Box sx={{ display: 'flex', height: '100%', bgcolor: 'background.default' }}>
@@ -571,11 +587,20 @@ export function AIWorkspace({ onClose }) {
             <AIAgentPanel conversationId={activeConversation?.id ?? null} />
           ) : activePanel === 'tasks' ? (
             /* Task orchestration: one icon, Tasks/Run internal tabs */
-            <AITaskPanel conversationId={activeConversation?.id ?? null} />
+            <AITaskPanel
+              conversationId={activeConversation?.id ?? null}
+              focusPlanId={tasksFocusPlanId}
+              onFocusPlanConsumed={() => setTasksFocusPlanId(null)}
+            />
           ) : !hasAny ? (
             <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
           ) : activeConversation ? (
-            <AIConversationView key={activeConversation.id} conversationId={activeConversation.id} showContextPanel={false} />
+            <AIConversationView
+              key={activeConversation.id}
+              conversationId={activeConversation.id}
+              showContextPanel={false}
+              onOpenPanel={handleOpenPanel}
+            />
           ) : (
             <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
           )}

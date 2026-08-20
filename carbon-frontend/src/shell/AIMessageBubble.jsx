@@ -215,6 +215,7 @@ function AIMessageBubble({
   onDelete,
   onConfirmExecution,
   onDeclineExecution,
+  onOpenPanel,
   onNotify,
 }) {
   const [showActions, setShowActions] = useState(false);
@@ -662,9 +663,13 @@ function AIMessageBubble({
   const navigateActions = rawActions.filter(
     (a) => a?.type === 'navigate' && isSafeInternalRoute(a.route),
   );
+  // open_panel action → switch the workspace to a panel (e.g. Tasks) and
+  // focus the referenced object (plan created from chat). Rendered as a
+  // button (NOT a route Link — the panel is a workspace surface).
+  const panelActions = rawActions.filter((a) => a?.type === 'open_panel');
   const pendingActions = Array.isArray(metadata.pending_actions) ? metadata.pending_actions : [];
   const showActionRow = Boolean(
-    !isUser && (navigateActions.length > 0 || pendingActions.length > 0),
+    !isUser && (navigateActions.length > 0 || pendingActions.length > 0 || panelActions.length > 0),
   );
 
   // ── Pending-action proposal review ────────────────────────────────────
@@ -838,6 +843,22 @@ function AIMessageBubble({
               aria-label={nav.label || 'Open'}
             >
               {nav.label || 'Open'}
+            </Button>
+          ))}
+        </Box>
+      )}
+      {panelActions.length > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+          {panelActions.map((act, idx) => (
+            <Button
+              key={`${act.panel}-${act.plan_id || ''}-${idx}`}
+              size="small"
+              variant={panelActions.length === 1 ? 'contained' : 'outlined'}
+              disabled={!onOpenPanel}
+              onClick={() => onOpenPanel?.(act.panel, act.plan_id)}
+              aria-label={act.label || 'Open'}
+            >
+              {act.label || 'Open'}
             </Button>
           ))}
         </Box>

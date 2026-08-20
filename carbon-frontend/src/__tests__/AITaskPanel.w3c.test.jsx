@@ -238,3 +238,39 @@ describe('AITaskPanel — pause, fork, resume (W3-C endpoints)', () => {
     expect(screen.getAllByText('Running…').length).toBeGreaterThan(0);
   });
 });
+
+// ── Chat → Tasks jump (plan_created open_panel action) ───────────────────
+describe('AITaskPanel — chat "Open in Tasks" focus jump', () => {
+  it('auto-opens the focused plan and consumes the focus', async () => {
+    const onFocusPlanConsumed = vi.fn();
+    render(
+      <AITaskPanel conversationId="conv-1" focusPlanId="plan-1" onFocusPlanConsumed={onFocusPlanConsumed} />,
+    );
+
+    await waitFor(() => expect(getPlan).toHaveBeenCalledWith('test-token', 'plan-1'));
+    // The plan detail (Run tab) is shown — this is where approve/run/pause live.
+    expect(await screen.findByText('Task plan')).toBeInTheDocument();
+    expect(onFocusPlanConsumed).toHaveBeenCalled();
+  });
+
+  it('opens a new focus plan id but does not re-open the same id', async () => {
+    const onFocusPlanConsumed = vi.fn();
+    const { rerender } = render(
+      <AITaskPanel conversationId="conv-1" focusPlanId="plan-1" onFocusPlanConsumed={onFocusPlanConsumed} />,
+    );
+    await waitFor(() => expect(getPlan).toHaveBeenCalledWith('test-token', 'plan-1'));
+
+    // Re-render with the same focus id (e.g. panel toggled) → no duplicate fetch.
+    rerender(
+      <AITaskPanel conversationId="conv-1" focusPlanId="plan-1" onFocusPlanConsumed={onFocusPlanConsumed} />,
+    );
+    expect(getPlan).toHaveBeenCalledTimes(1);
+
+    // New plan id → opened again.
+    rerender(
+      <AITaskPanel conversationId="conv-1" focusPlanId="plan-2" onFocusPlanConsumed={onFocusPlanConsumed} />,
+    );
+    await waitFor(() => expect(getPlan).toHaveBeenCalledWith('test-token', 'plan-2'));
+    expect(getPlan).toHaveBeenCalledTimes(2);
+  });
+});

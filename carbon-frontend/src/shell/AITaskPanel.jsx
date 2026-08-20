@@ -214,8 +214,10 @@ StepCard.propTypes = {
  * Agentic task orchestration panel.
  * @param {object} props
  * @param {string|null} props.conversationId - anchor conversation UUID
+ * @param {string|null} props.focusPlanId - plan to auto-open (chat "Open in Tasks" jump)
+ * @param {function} props.onFocusPlanConsumed - called once the focus is handled
  */
-function AITaskPanel({ conversationId }) {
+function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }) {
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const notifyRef = useRef(notify);
@@ -335,6 +337,17 @@ function AITaskPanel({ conversationId }) {
       setDetailLoading(false);
     }
   }, [token, applyPlanToView]);
+
+  // Chat → Tasks jump: a chat reply's "Open in Tasks" button lands here with
+  // the plan id of the just-drafted plan. Open it once, then signal the
+  // workspace that the focus was consumed so the same plan can be re-focused.
+  const focusPlanRef = useRef(null);
+  useEffect(() => {
+    if (!focusPlanId || focusPlanRef.current === focusPlanId) return;
+    focusPlanRef.current = focusPlanId;
+    openPlan(focusPlanId);
+    onFocusPlanConsumed?.();
+  }, [focusPlanId, openPlan, onFocusPlanConsumed]);
 
   const handleCreate = async () => {
     const trimmed = brief.trim();

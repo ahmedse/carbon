@@ -59,7 +59,7 @@ function normalizeConversationShape(payload) {
   };
 }
 
-function AIConversationView({ conversationId }) {
+function AIConversationView({ conversationId, onOpenPanel }) {
   const { token, user, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const { executeMode, setExecuteMode } = useExecuteMode();
@@ -1186,6 +1186,7 @@ function AIConversationView({ conversationId }) {
               onRedraftReport={handleRedraftReport}
               onConfirmExecution={handleConfirmExecution}
               onDeclineExecution={handleDeclineExecution}
+              onOpenPanel={onOpenPanel}
               onRetry={isOwner ? handleRetryMessage : undefined}
               onEdit={isOwner ? handleEditMessage : undefined}
               onDelete={isOwner ? handleDeleteMessage : undefined}
@@ -1219,6 +1220,7 @@ function AIConversationView({ conversationId }) {
             onRedraftReport={handleRedraftReport}
             onConfirmExecution={handleConfirmExecution}
             onDeclineExecution={handleDeclineExecution}
+            onOpenPanel={onOpenPanel}
             onRetry={isOwner ? handleRetryMessage : undefined}
             onEdit={isOwner ? handleEditMessage : undefined}
             onDelete={isOwner ? handleDeleteMessage : undefined}

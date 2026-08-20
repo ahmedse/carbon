@@ -299,4 +299,46 @@ describe('AIMessageBubble AI-driven actions', () => {
     // MUI Dialog animates out — wait for it to unmount.
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
+
+  it('renders an "Open in Tasks" button for an open_panel action and calls onOpenPanel', () => {
+    const onOpenPanel = vi.fn();
+    renderBubble(
+      {
+        id: 'msg-plan',
+        role: 'assistant',
+        content: '✅ Plan 7a0c10ae drafted — nothing has run yet.',
+        created_at: '2026-08-15T10:00:00Z',
+        outcome: null,
+        metadata: {
+          action: {
+            type: 'open_panel',
+            panel: 'tasks',
+            plan_id: '7a0c10ae',
+            label: 'Open in Tasks',
+            summary: 'Review, approve and run the plan',
+          },
+        },
+      },
+      { onOpenPanel },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open in Tasks' }));
+    expect(onOpenPanel).toHaveBeenCalledWith('tasks', '7a0c10ae');
+  });
+
+  it('does not render an open_panel button when no handler is wired', () => {
+    renderBubble({
+      id: 'msg-plan-2',
+      role: 'assistant',
+      content: '✅ Plan 8b1d22af drafted — nothing has run yet.',
+      created_at: '2026-08-15T10:00:00Z',
+      outcome: null,
+      metadata: {
+        action: { type: 'open_panel', panel: 'tasks', plan_id: '8b1d22af', label: 'Open in Tasks' },
+      },
+    });
+
+    const button = screen.getByRole('button', { name: 'Open in Tasks' });
+    expect(button).toBeDisabled();
+  });
 });
