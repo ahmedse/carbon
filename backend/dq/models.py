@@ -7,29 +7,15 @@ from dataschema.models import DataTable, DataField
 
 User = get_user_model()
 
-RULE_TYPES = [
-    ('not_null', 'Not Null'), ('unique', 'Unique'),
-    ('allowed_values', 'Allowed Values'), ('range', 'Range'), ('regex', 'Regex'),
-    ('reference_integrity', 'Reference Integrity'), ('threshold', 'Threshold'),
-    ('nl_check', 'NL Check'),
-    ('anomaly_detect', 'Anomaly Detect'),  # Phase 4 — feeds anomaly.detect payloads
-]
-SEVERITY_CHOICES = [('info', 'Info'), ('warn', 'Warn'), ('error', 'Error')]
-RULE_LEVELS = [
-    ('field_validation', 'Field Validation'),
-    ('business_rule', 'Business Rule'),
-]
-
-DIMENSIONS = [
-    ('completeness', 'Completeness'),
-    ('validity', 'Validity'),
-    ('accuracy', 'Accuracy'),
-    ('consistency', 'Consistency'),
-    ('timeliness', 'Timeliness'),
-    ('uniqueness', 'Uniqueness'),
-    ('integrity', 'Integrity'),
-    ('reasonability', 'Reasonability'),
-]
+# Phase 24 (Phase A): the rule vocabulary is externalized to dq/catalog.py
+# (data, not code). Re-exported here for backward compatibility — existing
+# call sites do `from dq.models import RULE_TYPES`, `DIMENSIONS`, etc.
+from .catalog import (  # noqa: E402
+    RULE_TYPE_CHOICES as RULE_TYPES,
+    RULE_LEVEL_CHOICES as RULE_LEVELS,
+    DIMENSIONS,
+    SEVERITY_CHOICES,
+)
 
 # Phase 3 — Jobs: everything beyond the write-time gate is an explicit,
 # user-started job with a followable lifecycle (see TASK-DQ-CORE-P3-JOBS).

@@ -11,65 +11,20 @@ import re
 from typing import Any, Dict, List
 
 # ── Constants ───────────────────────────────────────────────────────────────
-
-DIMENSIONS = [
-    ('completeness', 'Completeness'),
-    ('validity', 'Validity'),
-    ('accuracy', 'Accuracy'),
-    ('consistency', 'Consistency'),
-    ('timeliness', 'Timeliness'),
-    ('uniqueness', 'Uniqueness'),
-    ('integrity', 'Integrity'),
-    ('reasonability', 'Reasonability'),
-]
-
-DIMENSION_CODES = {d[0] for d in DIMENSIONS}
-
-RULE_TYPES = [
-    'not_null', 'unique', 'allowed_values', 'range', 'regex',
-    'reference_integrity', 'threshold', 'nl_check',
-    # Phase 4 (TASK-DQ-CORE-P4-PULSE): business-level rule that declares the
-    # anomaly prompts fed to the anomaly.detect job payload. No field params.
-    'anomaly_detect',
-]
-
-RULE_LEVELS = {'field', 'business'}
-
-SEVERITY_VALUES = {'info', 'warn', 'error'}
-
-GATE_ELIGIBLE_TYPES = frozenset({
-    'not_null', 'unique', 'allowed_values', 'range', 'regex',
-    'reference_integrity', 'threshold',
-})
-
-THRESHOLD_OPERATORS = frozenset({'gte', 'gt', 'lte', 'lt', 'eq', 'neq'})
-
-
-# ── Rule type → field type applicability ─────────────────────────────────────
-# Which DataField.type values a rule_type can meaningfully apply to.
-# `None` means "any field type" (no restriction). Keys must stay in sync with
-# RULE_TYPES above and DataField.FIELD_TYPES in dataschema/models.py.
-# `range`/`threshold` are numeric-only because the engine coerces via float();
-# `regex` is string/text; `reference_integrity` targets reference/select fields.
-RULE_FIELD_TYPE_COMPAT = {
-    'not_null': None,
-    'unique': None,
-    'allowed_values': {'string', 'text', 'select', 'number', 'date', 'boolean'},
-    'range': {'number'},
-    'regex': {'string', 'text'},
-    'reference_integrity': {'reference', 'select'},
-    'threshold': {'number'},
-    'nl_check': None,
-    'anomaly_detect': None,
-}
-
-
-def rule_field_type_compatible(rule_type: str, field_type: str) -> bool:
-    """Return True if `rule_type` can apply to a DataField of `field_type`."""
-    allowed = RULE_FIELD_TYPE_COMPAT.get(rule_type)
-    if allowed is None:
-        return True
-    return field_type in allowed
+# Phase 24 (Phase A): the vocabulary is externalized to dq/catalog.py (data,
+# not code). Re-exported here for backward compatibility — existing call sites
+# do `from dq.rule_schema import RULE_TYPES`, `GATE_ELIGIBLE_TYPES`, etc.
+from .catalog import (  # noqa: E402
+    RULE_TYPE_CODES as RULE_TYPES,
+    RULE_LEVEL_CODES as RULE_LEVELS,
+    DIMENSIONS,
+    DIMENSION_CODES,
+    SEVERITY_VALUES,
+    THRESHOLD_OPERATORS,
+    GATE_ELIGIBLE_TYPES,
+    RULE_FIELD_TYPE_COMPAT,
+    rule_field_type_compatible,
+)
 
 
 def validate_definition(d: Dict[str, Any]) -> List[Dict[str, str]]:
