@@ -83,6 +83,7 @@ urlpatterns = [
     path(f'{api_prefix}/ai/workspace/', include('ai.workspace_urls')),
     path(f'{api_prefix}/ai/plans/', include('ai.plans_urls')),
     path(f'{api_prefix}/ai/catalog/', include('ai.catalog_urls')),
+    path(f'{api_prefix}/ai/runs/', include('ai.durable_urls')),
     path(f'{api_prefix}/ai/usage/', include('ai.usage_urls')),
     path(f'{api_prefix}/ai/profile/', ai_workspace_views.UserProfileView.as_view(), name='ai-user-profile'),
     path(f'{api_prefix}/ai/memory/', include('ai.memory_urls')),
