@@ -1,5 +1,5 @@
 """
-datahub/services.py — Dataset Hub business logic.
+catalog/dataset_services.py — Dataset Hub business logic (moved from datahub).
 
 Thin views call these services. Responsibilities:
   * contract evaluation → DataContractViolation records
@@ -12,9 +12,9 @@ import logging
 from django.db.models import Q
 from django.utils import timezone
 
-from catalog.models import AssetProfile
 from dq.gate import check_rows
 
+from .models import AssetProfile
 from .models import DataContractViolation, DatasetAccessPolicy
 
 logger = logging.getLogger(__name__)

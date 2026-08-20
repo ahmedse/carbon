@@ -1,5 +1,5 @@
 """
-datahub/ingest.py — ingest pipeline for the Dataset Hub (trust core).
+catalog/dataset_ingest.py — ingest pipeline for the Dataset Hub (trust core; moved from datahub).
 
 Pipeline (design §5.5):
   1. Accept raw rows (ERP snapshot, CSV upload, or API payload).
@@ -27,7 +27,7 @@ from dataschema.models import DataField, DataRow, DataTable
 from dq.jobs import create_job, execute as execute_job
 
 from .models import DatasetVersion, DatasetVersionMember
-from .services import approve_version, check_contract, gate_validity, mirror_health_to_catalog
+from .dataset_services import approve_version, check_contract, gate_validity, mirror_health_to_catalog
 
 logger = logging.getLogger(__name__)
 

@@ -103,7 +103,7 @@ class TurnKeyModelLink(models.Model):
     ]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     dataset_version = models.ForeignKey(
-        'datahub.DatasetVersion', on_delete=models.PROTECT,
+        'catalog.DatasetVersion', on_delete=models.PROTECT,
         related_name='turnkey_links',
     )
     turnkey_config = models.ForeignKey(TurnKeyConfig, on_delete=models.PROTECT)

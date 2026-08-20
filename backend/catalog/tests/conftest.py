@@ -1,9 +1,9 @@
-"""Shared fixtures for the datahub test suite."""
+"""Shared fixtures for the catalog dataset test suite."""
 import pytest
 
 from catalog.models import DataDomain
 from core.models import Module
-from datahub.models import Dataset
+from catalog.models import Dataset
 
 
 @pytest.fixture

@@ -19,7 +19,7 @@ import logging
 from django.db import transaction
 from django.utils import timezone
 
-from datahub.models import DataContract, DataContractViolation, DatasetVersion
+from catalog.models import DataContract, DataContractViolation, DatasetVersion
 from dataschema.models import DataRow
 from dq import jobs as dq_jobs
 

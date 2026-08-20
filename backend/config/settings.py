@@ -151,6 +151,9 @@ INSTALLED_APPS = [
     'catalog',
     'mdm',
     'dq',
+    # datahub: zero-model shell app retained so its historical migrations
+    # (0001/0002 create the tables, catalog.0007 renames them, 0003 empties
+    # the app state) stay in the graph for fresh-DB builds (Phase P1C).
     'datahub',
     'integrations.turnkey',
     'appregistry',

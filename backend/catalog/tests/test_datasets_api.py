@@ -5,16 +5,16 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
-from datahub.models import DataContract, DataContractViolation, Dataset, DatasetVersion
+from catalog.models import DataContract, DataContractViolation, Dataset, DatasetVersion
 
-DATASETS_URL = '/carbon-api/datahub/datasets/'
-ERP_URL = '/carbon-api/datahub/datasets/{id}/ingest/erp/'
-UPLOAD_URL = '/carbon-api/datahub/datasets/{id}/ingest/upload/'
-VERSIONS_URL = '/carbon-api/datahub/datasets/{id}/versions/'
-APPROVE_URL = '/carbon-api/datahub/datasets/{id}/versions/{vid}/approve/'
-REJECT_URL = '/carbon-api/datahub/datasets/{id}/versions/{vid}/reject/'
-CONTRACT_URL = '/carbon-api/datahub/datasets/{id}/contract/'
-VIOLATIONS_URL = '/carbon-api/datahub/datasets/{id}/contract/violations/'
+DATASETS_URL = '/carbon-api/catalog/datasets/'
+ERP_URL = '/carbon-api/catalog/datasets/{id}/ingest/erp/'
+UPLOAD_URL = '/carbon-api/catalog/datasets/{id}/ingest/upload/'
+VERSIONS_URL = '/carbon-api/catalog/datasets/{id}/versions/'
+APPROVE_URL = '/carbon-api/catalog/datasets/{id}/versions/{vid}/approve/'
+REJECT_URL = '/carbon-api/catalog/datasets/{id}/versions/{vid}/reject/'
+CONTRACT_URL = '/carbon-api/catalog/datasets/{id}/contract/'
+VIOLATIONS_URL = '/carbon-api/catalog/datasets/{id}/contract/violations/'
 
 ERP_ROWS = [
     {'name': 'Amina', 'age': 30, 'department': 'Finance'},
@@ -291,7 +291,7 @@ def test_contract_freshness_violation(auth_client, module_a, make_dataset):
     DatasetVersion.objects.filter(id=v['id']).update(
         created_at=timezone.now() - timezone.timedelta(hours=5))
     version = DatasetVersion.objects.get(id=v['id'])
-    from datahub.services import check_contract
+    from catalog.dataset_services import check_contract
     check_contract(version)
 
     violations = DataContractViolation.objects.filter(dataset_version__id=v['id'])

@@ -13,7 +13,7 @@ from django.conf import settings
 
 from catalog.models import DataDomain
 from core.models import Module
-from datahub.models import DataContract, Dataset, DatasetVersion
+from catalog.models import DataContract, Dataset, DatasetVersion
 from dataschema.models import DataTable
 from integrations.turnkey.models import TurnKeyConfig, TurnKeyModelLink
 

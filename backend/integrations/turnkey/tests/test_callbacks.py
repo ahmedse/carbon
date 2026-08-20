@@ -2,7 +2,7 @@
 import pytest
 from django.utils import timezone
 
-from datahub.models import DataContractViolation, DatasetVersion
+from catalog.models import DataContract, DataContractViolation, DatasetVersion
 from dq.models import DQJob
 from integrations.turnkey.models import DriftAlert, PredictionRecord, input_hash_of
 from integrations.turnkey.tests.conftest import signed_post
@@ -79,7 +79,6 @@ def test_drift_callback_triggers_dq(db, api_client, linked_version, make_dataset
     """Drift alert → DriftAlert created + DQ job created + contract violation."""
     ctx = linked_version()
     # Give the dataset a contract with a quality SLA (min_health_score).
-    from datahub.models import DataContract
     DataContract.objects.create(
         dataset=ctx['dataset'],
         required_fields=['product'],

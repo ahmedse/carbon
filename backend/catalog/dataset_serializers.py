@@ -1,5 +1,5 @@
 """
-datahub/serializers.py — thin DRF serializers for the Dataset Hub.
+catalog/dataset_serializers.py — thin DRF serializers for the Dataset Hub (moved from datahub).
 
 Validation at the serializer boundary; business logic lives in services/ingest.
 """

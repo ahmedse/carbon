@@ -1,11 +1,11 @@
 """CBAC / capability gating + module isolation tests for the Dataset Hub."""
 import pytest
 
-from datahub.models import Dataset, DatasetAccessPolicy
+from catalog.models import Dataset, DatasetAccessPolicy
 
-DATASETS_URL = '/carbon-api/datahub/datasets/'
-INGEST_URL = '/carbon-api/datahub/datasets/{id}/ingest/erp/'
-APPROVE_URL = '/carbon-api/datahub/datasets/{id}/versions/{vid}/approve/'
+DATASETS_URL = '/carbon-api/catalog/datasets/'
+INGEST_URL = '/carbon-api/catalog/datasets/{id}/ingest/erp/'
+APPROVE_URL = '/carbon-api/catalog/datasets/{id}/versions/{vid}/approve/'
 
 
 @pytest.fixture
@@ -88,7 +88,7 @@ def test_approve_requires_approve_capability(
         module_a, make_dataset):
     ds = make_dataset(module_a, slug='payroll-approve-gate')
     table = _make_table(ds, 1)
-    from datahub.models import DatasetVersion
+    from catalog.models import DatasetVersion
     version = DatasetVersion.objects.create(dataset=ds, version_number=1, data_table=table)
 
     viewer = create_user('viewer2')

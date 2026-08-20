@@ -6,7 +6,7 @@ Never expose the encrypted key ciphertext — configs serialize only a
 """
 from rest_framework import serializers
 
-from datahub.models import DatasetVersion
+from catalog.models import DatasetVersion
 from .models import DriftAlert, PredictionRecord, TurnKeyConfig, TurnKeyModelLink
 
 

@@ -1,5 +1,5 @@
 """
-datahub/views.py — THIN views for the Dataset Hub.
+catalog/dataset_views.py — THIN views for the Dataset Hub (moved from datahub).
 
 Pattern (per base-rules): validate → call service → serialize. No business
 logic in views. CBAC gating per design §4.2:
@@ -25,10 +25,10 @@ from rest_framework.views import APIView
 from accounts.permissions import AdminOrSuperuserOnly, ReadAnyWriteAdmin
 from accounts.rbac_utils import get_visible_module_ids
 
-from . import ingest as ingest_service
-from . import services as datahub_services
+from . import dataset_ingest as ingest_service
+from . import dataset_services as datahub_services
 from .models import DataContract, DataContractViolation, Dataset, DatasetVersion
-from .serializers import (
+from .dataset_serializers import (
     DataContractSerializer, DataContractViolationSerializer,
     DatasetListSerializer, DatasetSerializer, DatasetVersionListSerializer,
     DatasetVersionSerializer,

@@ -7,12 +7,12 @@ health mirror, the multi-table API, and the steward field.
 import pytest
 from django.db import IntegrityError
 
-from datahub.ingest import create_version
-from datahub.models import DataContract, DataContractViolation, DatasetVersion
-from datahub.services import check_contract, mirror_health_to_catalog
+from catalog.dataset_ingest import create_version
+from catalog.models import DataContract, DataContractViolation, DatasetVersion
+from catalog.dataset_services import check_contract, mirror_health_to_catalog
 
-DATASETS_URL = '/carbon-api/datahub/datasets/'
-VERSIONS_URL = '/carbon-api/datahub/datasets/{id}/versions/'
+DATASETS_URL = '/carbon-api/catalog/datasets/'
+VERSIONS_URL = '/carbon-api/catalog/datasets/{id}/versions/'
 
 
 def _table_for(dataset, version_number, fields=None, rows=None):
@@ -50,7 +50,7 @@ def test_version_tables_returns_members_in_order(module_a, make_dataset):
     t2 = _table_for(ds, 2)
     version = DatasetVersion.objects.create(
         dataset=ds, version_number=1, data_table=t1)
-    from datahub.models import DatasetVersionMember
+    from catalog.models import DatasetVersionMember
     DatasetVersionMember.objects.create(version=version, data_table=t1, order=1)
     DatasetVersionMember.objects.create(version=version, data_table=t2, order=0)
 
@@ -64,7 +64,7 @@ def test_member_unique_together_blocks_duplicate_table(module_a, make_dataset):
     t1 = _table_for(ds, 1)
     version = DatasetVersion.objects.create(
         dataset=ds, version_number=1, data_table=t1)
-    from datahub.models import DatasetVersionMember
+    from catalog.models import DatasetVersionMember
     DatasetVersionMember.objects.create(version=version, data_table=t1, order=0)
     with pytest.raises(IntegrityError):
         DatasetVersionMember.objects.create(

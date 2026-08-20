@@ -3,7 +3,7 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
-from datahub.models import (
+from catalog.models import (
     DataContract, DataContractViolation, Dataset, DatasetAccessPolicy,
     DatasetVersion,
 )

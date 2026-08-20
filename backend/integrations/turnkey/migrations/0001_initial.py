@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('datahub', '0001_initial'),
+        ('catalog', '0007_adopt_datasets'),
         ('dataschema', '0005_add_dq_flags'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
@@ -43,7 +43,7 @@ class Migration(migrations.Migration):
                 ('status', models.CharField(choices=[('pending', 'Pending'), ('registered', 'Registered in TurnKey'), ('promoted', 'Promoted to production'), ('failed', 'Failed')], default='pending', max_length=20)),
                 ('error_detail', models.TextField(blank=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('dataset_version', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='turnkey_links', to='datahub.datasetversion')),
+                ('dataset_version', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='turnkey_links', to='catalog.datasetversion')),
                 ('linked_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='turnkey_links', to=settings.AUTH_USER_MODEL)),
                 ('turnkey_config', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to='turnkey.turnkeyconfig')),
             ],

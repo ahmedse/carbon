@@ -2,8 +2,8 @@
 import pytest
 
 from catalog.models import AssetProfile
-from datahub.models import DatasetAccessPolicy, DatasetVersion
-from datahub.services import get_dataset_access, mirror_health_to_catalog
+from catalog.models import DatasetAccessPolicy, DatasetVersion
+from catalog.dataset_services import get_dataset_access, mirror_health_to_catalog
 
 
 def _version_with_health(ds, score=0.95, detail=None, n=1):
@@ -79,7 +79,7 @@ def test_get_dataset_access_module_grant(
 
 @pytest.mark.django_db
 def test_check_contract_no_contract_returns_empty(module_a, make_dataset):
-    from datahub.services import check_contract
+    from catalog.dataset_services import check_contract
     ds = make_dataset(module_a, slug='payroll-nocontract')
     version = _version_with_health(ds)
     assert check_contract(version) == []
