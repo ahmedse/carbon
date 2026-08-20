@@ -1059,3 +1059,57 @@ def detect_rule_contradictions(data_field_id=None, data_table_id=None):
             f['data_field_name'] = field_names.get(field_id)
             findings.append(f)
     return findings
+
+
+def table_rule_inventory(table_id):
+    """Domain-level inventory of a table's active rules (Phase 24 Phase B).
+
+    Returns ``{rules, field_gaps, contradictions}``:
+      - ``rules``: flat list of active rule specs, each annotated with
+        ``data_field_id`` / ``data_field_name`` (table-level rules have None).
+      - ``field_gaps``: active fields with no active rules (gap analysis).
+      - ``contradictions``: findings from ``detect_rule_contradictions``.
+
+    Pure domain logic (no AI); consumed by ``ai/knowledge/dq_graph.py``.
+    """
+    from .models import RuleFieldAssignment
+    from dataschema.models import DataField
+
+    fields = {
+        f.id: f for f in DataField.objects.filter(
+            data_table_id=table_id, is_active=True, is_archived=False)
+    }
+    assignments = (
+        RuleFieldAssignment.objects
+        .filter(data_table_id=table_id, rule__archived=False, rule__is_active=True)
+        .select_related('rule', 'data_field')
+    )
+
+    rules = []
+    covered = set()
+    for a in assignments:
+        d = a.rule.definition or {}
+        rules.append({
+            'rule_id': a.rule.id,
+            'name': a.rule.name or d.get('name'),
+            'rule_type': a.rule.rule_type or d.get('type'),
+            'dimension': a.rule.dimension,
+            'severity': a.rule.severity,
+            'is_active': a.rule.is_active,
+            'params': d.get('params') or a.rule.params or {},
+            'data_field_id': a.data_field_id,
+            'data_field_name': a.data_field.name if a.data_field_id else None,
+        })
+        if a.data_field_id:
+            covered.add(a.data_field_id)
+
+    gaps = [
+        {'field_id': f.id, 'name': f.name, 'label': f.label, 'type': f.type}
+        for f in fields.values() if f.id not in covered
+    ]
+
+    return {
+        'rules': rules,
+        'field_gaps': gaps,
+        'contradictions': detect_rule_contradictions(data_table_id=table_id),
+    }
