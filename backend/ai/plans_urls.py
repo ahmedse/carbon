@@ -6,9 +6,14 @@ below is relative to ``/carbon-api/ai/plans/``:
     POST   /                        create (brief → pending_approval)
     GET    /                        list my plans
     GET    /{id}/                   plan detail + steps
+    PATCH  /{id}/                   edit plan (replan + diff)
+    PATCH  /{id}/steps/{step}/      edit a single plan step
     POST   /{id}/approve/           plan-level consent (RULE_21)
     POST   /{id}/decline/           decline a pending plan
     POST   /{id}/run/               SSE streamed run
+    POST   /{id}/pause/             pause a running plan
+    POST   /{id}/resume/            resume a paused plan (SSE)
+    POST   /{id}/fork/              fork into a new reviewable plan
     POST   /{id}/steps/confirm/     confirm a paused consent step
     POST   /{id}/steps/decline/     decline a paused consent step
     POST   /{id}/stop/              cancel a run
@@ -30,7 +35,7 @@ urlpatterns = [
     ),
     path(
         "<str:pk>/",
-        PlanViewSet.as_view({"get": "retrieve"}),
+        PlanViewSet.as_view({"get": "retrieve", "patch": "partial_update"}),
         name="ai-plan-detail",
     ),
     path(
@@ -57,6 +62,26 @@ urlpatterns = [
         "<str:pk>/steps/decline/",
         PlanViewSet.as_view({"post": "decline_step"}),
         name="ai-plan-step-decline",
+    ),
+    path(
+        "<str:pk>/steps/<str:step_id>/",
+        PlanViewSet.as_view({"patch": "edit_step"}),
+        name="ai-plan-step-edit",
+    ),
+    path(
+        "<str:pk>/pause/",
+        PlanViewSet.as_view({"post": "pause"}),
+        name="ai-plan-pause",
+    ),
+    path(
+        "<str:pk>/resume/",
+        PlanViewSet.as_view({"post": "resume"}),
+        name="ai-plan-resume",
+    ),
+    path(
+        "<str:pk>/fork/",
+        PlanViewSet.as_view({"post": "fork"}),
+        name="ai-plan-fork",
     ),
     path(
         "<str:pk>/stop/",

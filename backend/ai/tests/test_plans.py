@@ -1,5 +1,5 @@
 """
-Agentic Task Orchestration — plan lifecycle tests (Sprint 23 W3-A).
+Agentic Task Orchestration — plan lifecycle tests (Sprint 23 W3-A + W3-C).
 
 Covers:
   - create: brief → pending_approval plan + RunStep rows (planning only,
@@ -12,6 +12,15 @@ Covers:
     seam), decline skips it.
   - stop: cancels run + skips pending steps.
   - ledger: usage, confirmations, replans, provenance, actor.
+  - edit (W3-C): PATCH /plans/{id}/ replans and returns {added, removed,
+    changed}; non-pending plans drop to pending_approval (RULE_21) with
+    ``replan_gate``; step deltas applied; PATCH /plans/{id}/steps/{step}/
+    edits title (intent) / instructions / depends_on and resets execution
+    state.
+  - pause / resume (W3-C): running → paused (consent steps untouched);
+    resume pre-flights _RUNNABLE_STATUSES and re-enters run_plan_stream (SSE).
+  - fork (W3-C): clones plan_json + brief into a new pending_approval Run
+    (``working_notes.forked_from`` provenance; copy, not a link).
 
 Engine seams are patched at their lazy import points — the engine itself is
 untouched (W3-A is a product wrapper, not an engine rewrite).
@@ -120,25 +129,34 @@ def _plan_from_steps(plan_json_steps):
 
 
 class _FakePlanner:
-    """Stand-in for SkillAwarePlanner — no LLM call."""
+    """Stand-in for SkillAwarePlanner — no LLM call.
+
+    ``plan_specs`` maps an exact brief string → plan spec dict so tests can
+    simulate replanning with a different decomposition; ``default_plan_spec``
+    is used when no entry matches (standard 2-step plan otherwise). The
+    fixture resets both before every test.
+    """
+
+    plan_specs: dict = {}
+    default_plan_spec: dict | None = None
 
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
     async def decompose(self, **kwargs):
-        return _plan_from_steps(
-            {
-                "pattern": "root_cause",
-                "source": "llm_decompose",
-                "steps": [
-                    {"step_id": 0, "intent": "Load the emissions totals",
-                     "tool_name": None, "tool_args": {}, "depends_on": []},
-                    {"step_id": 1, "intent": "Compare against the baseline",
-                     "tool_name": None, "tool_args": {}, "depends_on": [0]},
-                ],
-                "synthesis_instruction": "Summarize findings.",
-            }
-        )
+        utterance = (kwargs.get("utterance") or "").strip()
+        spec = self.plan_specs.get(utterance) or self.default_plan_spec or {
+            "pattern": "root_cause",
+            "source": "llm_decompose",
+            "steps": [
+                {"step_id": 0, "intent": "Load the emissions totals",
+                 "tool_name": None, "tool_args": {}, "depends_on": []},
+                {"step_id": 1, "intent": "Compare against the baseline",
+                 "tool_name": None, "tool_args": {}, "depends_on": [0]},
+            ],
+            "synthesis_instruction": "Summarize findings.",
+        }
+        return _plan_from_steps(spec)
 
 
 class _FakeSession:
@@ -253,6 +271,8 @@ def patch_engine_seams(monkeypatch):
         monkeypatch.setattr(
             "ai.engine.cognition.plan.planner.SkillAwarePlanner", _FakePlanner
         )
+        _FakePlanner.plan_specs = {}
+        _FakePlanner.default_plan_spec = None
         monkeypatch.setattr(
             "ai.engine.cognition.plan.loop.ReActLoop", _FakeReActLoop
         )
@@ -644,3 +664,363 @@ def test_api_run_returns_sse_stream(
     assert '"type": "plan_start"' in body
     assert '"type": "done"' in body
     assert '"status": "completed"' in body
+
+
+# ── W3-C: edit / pause / resume / fork ───────────────────────────────────
+
+_REVISED_PLAN_SPEC = {
+    "pattern": "comparative",
+    "source": "llm_decompose",
+    "steps": [
+        {"step_id": 0, "intent": "Load the emissions totals",
+         "tool_name": "query_table", "tool_args": {}, "depends_on": []},
+        {"step_id": 1, "intent": "Tally the quarterly results",
+         "tool_name": None, "tool_args": {}, "depends_on": [0]},
+        {"step_id": 2, "intent": "Compute quarterly totals",
+         "tool_name": None, "tool_args": {}, "depends_on": [1]},
+    ],
+    "synthesis_instruction": "Summarize.",
+}
+
+
+@pytest.mark.django_db
+def test_edit_plan_replans_and_returns_diff(user, patch_engine_seams, run_ids_cleanup):
+    plan = _make_plan(user)
+    _make_step(plan, step_index=0)
+    _make_step(plan, step_index=1)
+    run_ids_cleanup.append(plan.id)
+    _FakePlanner.plan_specs = {
+        "Revised brief: compute quarterly totals": _REVISED_PLAN_SPEC
+    }
+
+    service = PlansService()
+    result = service.edit_plan(
+        user, plan.id, brief="Revised brief: compute quarterly totals"
+    )
+
+    # Still pending_approval — editing never auto-approves (RULE_21).
+    assert result["status"] == "pending_approval"
+    assert result["replan_gate"] is False
+    assert result["brief"] == "Revised brief: compute quarterly totals"
+
+    diff = result["diff"]
+    assert [s["intent"] for s in diff["added"]] == [
+        "Tally the quarterly results", "Compute quarterly totals",
+    ]
+    assert [s["intent"] for s in diff["removed"]] == ["Compare against the baseline"]
+    assert len(diff["changed"]) == 1
+    assert diff["changed"][0]["old"]["tool_name"] is None
+    assert diff["changed"][0]["new"]["tool_name"] == "query_table"
+
+    # Durable rows reflect the new plan.
+    run = Run.objects.get(id=plan.id)
+    assert run.user_message == "Revised brief: compute quarterly totals"
+    assert len(run.plan_json["steps"]) == 3
+    assert run.plan_json["steps"][1]["intent"] == "Tally the quarterly results"
+    steps = list(RunStep.objects.filter(run_id=run.id).order_by("step_index"))
+    assert len(steps) == 3
+    assert all(s.status == "pending" for s in steps)
+
+
+@pytest.mark.django_db
+def test_edit_plan_active_plan_drops_to_pending_approval(
+    user, patch_engine_seams, run_ids_cleanup
+):
+    _FakePlanner.plan_specs = {
+        "Revised brief: compute quarterly totals": _REVISED_PLAN_SPEC
+    }
+    service = PlansService()
+
+    for status in ("approved", "running", "paused"):
+        plan = _make_plan(user, status=status)
+        run_ids_cleanup.append(plan.id)
+
+        result = service.edit_plan(
+            user, plan.id, brief="Revised brief: compute quarterly totals"
+        )
+
+        assert result["status"] == "pending_approval"
+        assert result["replan_gate"] is True
+        assert "diff" in result
+        # The revised plan must be explicitly re-approved (RULE_21).
+        service.approve_plan(user, plan.id)
+        assert Run.objects.get(id=plan.id).status == "approved"
+
+
+@pytest.mark.django_db
+def test_edit_plan_applies_step_deltas(user, patch_engine_seams, run_ids_cleanup):
+    plan = _make_plan(user)
+    _make_step(plan, step_index=0)
+    _make_step(plan, step_index=1)
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    result = service.edit_plan(
+        user, plan.id,
+        brief=plan.user_message,  # same brief — pure delta edit
+        step_deltas=[
+            {"action": "remove", "step_id": 1},
+            {"action": "add", "intent": "Archive the results", "depends_on": [0]},
+        ],
+    )
+
+    intents = [s["intent"] for s in result["steps"]]
+    assert "Archive the results" in intents
+    assert "Compare against the baseline" not in intents
+    assert len(result["steps"]) == 2
+
+
+@pytest.mark.django_db
+def test_edit_step_updates_title_and_depends_on(user, patch_engine_seams, run_ids_cleanup):
+    plan = _make_plan(user)
+    _make_step(plan, step_index=0)
+    _make_step(plan, step_index=1)
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    result = service.edit_step(
+        user, plan.id, 1,
+        title="Compare against the revised baseline",
+        instructions="Ignore one-off outliers.",
+        depends_on=[],
+    )
+
+    assert result["status"] == "pending_approval"
+    assert result["replan_gate"] is False
+    step = next(s for s in result["steps"] if s["step_id"] == 1)
+    assert step["intent"] == "Compare against the revised baseline"
+    assert step["depends_on"] == []
+    assert step["instructions"] == "Ignore one-off outliers."
+    assert len(result["diff"]["changed"]) == 1
+
+
+@pytest.mark.django_db
+def test_edit_step_active_plan_drops_to_pending_approval(
+    user, patch_engine_seams, run_ids_cleanup
+):
+    plan = _make_plan(user, status="approved")
+    _make_step(plan, step_index=0, status="completed")
+    _make_step(plan, step_index=1, status="completed", token="tok-1")
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    result = service.edit_step(user, plan.id, 0, title="Renamed step")
+
+    assert result["status"] == "pending_approval"
+    assert result["replan_gate"] is True
+    # Execution/consent state reset — the edited plan must be re-approved.
+    steps = list(RunStep.objects.filter(run_id=plan.id).order_by("step_index"))
+    assert all(s.status == "pending" for s in steps)
+    assert all(s.confirmation_token is None for s in steps)
+
+
+@pytest.mark.django_db
+def test_edit_step_rejects_unknown_step(user, patch_engine_seams, run_ids_cleanup):
+    plan = _make_plan(user)
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    with pytest.raises(PlanStepError):
+        service.edit_step(user, plan.id, 99, title="Nope")
+
+
+@pytest.mark.django_db
+def test_pause_plan_only_from_running_keeps_consent_step(
+    user, patch_engine_seams, run_ids_cleanup
+):
+    plan = _make_plan(user, status="running")
+    _make_step(plan, step_index=0, status="completed")
+    _make_step(plan, step_index=1, status="awaiting_approval", token="tok-1")
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    result = service.pause_plan(user, plan.id)
+
+    assert result["status"] == "paused"
+    # Pause never corrupts a consent step (consent pause is separate).
+    step = RunStep.objects.get(run_id=plan.id, step_index=1)
+    assert step.status == "awaiting_approval"
+    assert step.confirmation_token == "tok-1"
+
+
+@pytest.mark.django_db
+def test_pause_plan_rejects_non_running(user, patch_engine_seams, run_ids_cleanup):
+    plan = _make_plan(user, status="approved")
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    with pytest.raises(PlanNotRunnableError):
+        service.pause_plan(user, plan.id)
+
+
+@pytest.mark.django_db
+def test_resume_plan_preflights_runnable_statuses(user, patch_engine_seams, run_ids_cleanup):
+    service = PlansService()
+
+    paused = _make_plan(user, status="paused")
+    run_ids_cleanup.append(paused.id)
+    assert service.resume_plan(user, paused.id)["status"] == "resumed"
+
+    approved = _make_plan(user, status="approved")
+    run_ids_cleanup.append(approved.id)
+    assert service.resume_plan(user, approved.id)["status"] == "resumed"
+
+    pending = _make_plan(user)  # pending_approval — must approve first
+    run_ids_cleanup.append(pending.id)
+    with pytest.raises(PlanNotRunnableError):
+        service.resume_plan(user, pending.id)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_resume_paused_plan_reenters_run(user, patch_engine_seams, run_ids_cleanup):
+    patch_engine_seams.outcomes = {0: "completed", 1: "completed"}
+    plan = _make_plan(user, status="paused")
+    _make_step(plan, step_index=0, status="completed")
+    _make_step(plan, step_index=1)
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    frames = list(service._run_plan_frames_sync(user, plan.id))
+
+    assert frames[0]["type"] == "plan_start"
+    assert frames[-1]["type"] == "done"
+    assert frames[-1]["status"] == "completed"
+
+
+@pytest.mark.django_db
+def test_fork_plan_clones_into_new_run(user, patch_engine_seams, run_ids_cleanup):
+    plan = _make_plan(user, status="approved")
+    _make_step(plan, step_index=0, status="completed")
+    _make_step(plan, step_index=1, status="awaiting_approval", token="tok-1")
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    fork = service.fork_plan(user, plan.id)
+
+    assert fork["id"] != plan.id
+    assert fork["status"] == "pending_approval"
+    assert fork["forked_from"] == plan.id
+    assert fork["brief"] == plan.user_message
+    assert len(fork["steps"]) == 2
+    assert all(s["status"] == "pending" for s in fork["steps"])
+
+    fork_run = Run.objects.get(id=fork["id"])
+    assert fork_run.host_user_id == str(user.pk)
+    assert fork_run.working_notes == {"forked_from": plan.id}
+    run_ids_cleanup.append(fork["id"])
+
+    # Copy, not a link — the parent ledger is untouched.
+    parent = Run.objects.get(id=plan.id)
+    assert parent.status == "approved"
+    parent_step = RunStep.objects.get(run_id=plan.id, step_index=1)
+    assert parent_step.status == "awaiting_approval"
+    assert parent_step.confirmation_token == "tok-1"
+
+
+@pytest.mark.django_db
+def test_fork_plan_rejects_other_users_plan(
+    user, other_user, patch_engine_seams, run_ids_cleanup
+):
+    plan = _make_plan(other_user)
+    run_ids_cleanup.append(plan.id)
+
+    service = PlansService()
+    with pytest.raises(PlanNotAccessibleError):
+        service.fork_plan(user, plan.id)
+
+
+# ── W3-C: REST API ───────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_api_patch_plan_returns_diff_for_review(
+    api_client, get_token_for_user, user, patch_engine_seams, run_ids_cleanup
+):
+    token = get_token_for_user(user)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+    plan = _make_plan(user, status="approved")
+    _make_step(plan, step_index=0)
+    _make_step(plan, step_index=1)
+    run_ids_cleanup.append(plan.id)
+    _FakePlanner.plan_specs = {
+        "Revised brief: compute quarterly totals": _REVISED_PLAN_SPEC
+    }
+
+    resp = api_client.patch(
+        f"/carbon-api/ai/plans/{plan.id}/",
+        {"brief": "Revised brief: compute quarterly totals"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
+    assert body["status"] == "pending_approval"
+    assert body["replan_gate"] is True
+    assert body["diff"]["added"] and body["diff"]["removed"]
+    assert Run.objects.get(id=plan.id).status == "pending_approval"
+
+
+@pytest.mark.django_db
+def test_api_patch_step_applies_diff_review_rule(
+    api_client, get_token_for_user, user, patch_engine_seams, run_ids_cleanup
+):
+    token = get_token_for_user(user)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+    plan = _make_plan(user, status="approved")
+    _make_step(plan, step_index=0)
+    _make_step(plan, step_index=1)
+    run_ids_cleanup.append(plan.id)
+
+    resp = api_client.patch(
+        f"/carbon-api/ai/plans/{plan.id}/steps/1/",
+        {"title": "Renamed step", "depends_on": []},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
+    assert body["status"] == "pending_approval"
+    assert body["replan_gate"] is True
+    assert body["steps"][1]["intent"] == "Renamed step"
+    assert len(body["diff"]["changed"]) == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_api_pause_resume_fork_lifecycle(
+    api_client, get_token_for_user, user, patch_engine_seams, run_ids_cleanup
+):
+    patch_engine_seams.outcomes = {0: "completed", 1: "completed"}
+    token = get_token_for_user(user)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    # Pause only from running.
+    plan = _make_plan(user, status="running")
+    _make_step(plan, step_index=0)
+    _make_step(plan, step_index=1)
+    run_ids_cleanup.append(plan.id)
+
+    resp = api_client.post(f"/carbon-api/ai/plans/{plan.id}/pause/")
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "paused"
+
+    # Resume from paused → SSE stream re-enters execution.
+    resp = api_client.post(f"/carbon-api/ai/plans/{plan.id}/resume/")
+    assert resp.status_code == 200
+    assert resp["Content-Type"].startswith("text/event-stream")
+    body = b"".join(resp.streaming_content).decode()
+    assert '"type": "plan_start"' in body
+    assert '"type": "done"' in body
+    assert '"status": "completed"' in body
+
+    # Resume from pending_approval → 400 (must approve first).
+    pending = _make_plan(user)
+    run_ids_cleanup.append(pending.id)
+    resp = api_client.post(f"/carbon-api/ai/plans/{pending.id}/resume/")
+    assert resp.status_code == 400
+
+    # Fork → new pending_approval copy.
+    resp = api_client.post(f"/carbon-api/ai/plans/{plan.id}/fork/")
+    assert resp.status_code == 201, resp.content
+    fork = resp.json()
+    assert fork["id"] != plan.id
+    assert fork["status"] == "pending_approval"
+    assert fork["forked_from"] == plan.id
+    run_ids_cleanup.append(fork["id"])

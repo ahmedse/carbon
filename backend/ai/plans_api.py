@@ -9,6 +9,11 @@ Endpoints (all owner-scoped, CBAC via ``host_user_id``):
     POST   /carbon-api/ai/plans/{id}/approve/         plan-level consent (RULE_21)
     POST   /carbon-api/ai/plans/{id}/decline/         decline a pending plan
     POST   /carbon-api/ai/plans/{id}/run/             SSE streamed run
+    PATCH  /carbon-api/ai/plans/{id}/                 edit plan (replan + diff)
+    PATCH  /carbon-api/ai/plans/{id}/steps/{step}/    edit a single plan step
+    POST   /carbon-api/ai/plans/{id}/pause/           pause a running plan
+    POST   /carbon-api/ai/plans/{id}/resume/          resume a paused plan (SSE)
+    POST   /carbon-api/ai/plans/{id}/fork/            fork into a new reviewable plan
     POST   /carbon-api/ai/plans/{id}/steps/confirm/   confirm a paused consent step
     POST   /carbon-api/ai/plans/{id}/steps/decline/   decline a paused consent step
     POST   /carbon-api/ai/plans/{id}/stop/            cancel a run
@@ -49,6 +54,32 @@ class PlanCreateSerializer(serializers.Serializer):
 
 class PlanConfirmSerializer(serializers.Serializer):
     step_id = serializers.IntegerField(required=True)
+
+
+class PlanEditSerializer(serializers.Serializer):
+    """PATCH /plans/{id}/ — new brief (+ optional step deltas).
+
+    ``brief`` may be omitted to re-plan the existing brief while applying
+    ``step_deltas``; the service keeps at least one of them meaningful.
+    """
+
+    brief = serializers.CharField(
+        required=False, allow_blank=True, max_length=4000
+    )
+    step_deltas = serializers.ListField(
+        child=serializers.DictField(), required=False
+    )
+
+
+class PlanStepEditSerializer(serializers.Serializer):
+    """PATCH /plans/{id}/steps/{step}/ — ``title`` → intent, instructions,
+    depends_on. All fields optional (PATCH semantics)."""
+
+    title = serializers.CharField(required=False, allow_blank=True)
+    instructions = serializers.CharField(required=False, allow_blank=True)
+    depends_on = serializers.ListField(
+        child=serializers.IntegerField(), required=False
+    )
 
 
 class PlanViewSet(viewsets.GenericViewSet):
@@ -104,6 +135,64 @@ class PlanViewSet(viewsets.GenericViewSet):
                 {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
             )
 
+    def partial_update(self, request, pk=None):
+        """Edit the plan brief → re-plan and return the diff for review.
+
+        Editing never auto-approves (RULE_21): a non-pending plan drops to
+        ``pending_approval`` and the response carries ``replan_gate``.
+        """
+        serializer = PlanEditSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = self.service.edit_plan(
+                request.user,
+                pk,
+                brief=serializer.validated_data.get("brief"),
+                step_deltas=serializer.validated_data.get("step_deltas"),
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except (PlanNotRunnableError, PlanStepError, ValueError) as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(result)
+
+    @action(
+        detail=True,
+        methods=["patch"],
+        url_path=r"steps/(?P<step_id>[^/.]+)",
+        url_name="edit-plan-step",
+    )
+    def edit_step(self, request, pk=None, step_id=None):
+        """Edit a single plan step (title/instructions/depends_on).
+
+        Same diff-review rule as ``partial_update``: non-pending plans drop
+        to ``pending_approval`` (RULE_21).
+        """
+        serializer = PlanStepEditSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = self.service.edit_step(
+                request.user,
+                pk,
+                step_id,
+                title=serializer.validated_data.get("title"),
+                instructions=serializer.validated_data.get("instructions"),
+                depends_on=serializer.validated_data.get("depends_on"),
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except (PlanNotRunnableError, PlanStepError, ValueError) as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(result)
+
     # ── Plan-level consent ────────────────────────────────────────────────
 
     @action(detail=True, methods=["post"], url_path="approve", url_name="approve-plan")
@@ -134,6 +223,63 @@ class PlanViewSet(viewsets.GenericViewSet):
                 {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
             )
 
+    # ── W3-C: pause / resume / fork ───────────────────────────────────────
+
+    @action(detail=True, methods=["post"], url_path="pause", url_name="pause-plan")
+    def pause(self, request, pk=None):
+        """Pause a running plan (ledger-level; consent steps untouched)."""
+        try:
+            return Response(self.service.pause_plan(request.user, pk))
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except PlanNotRunnableError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=True, methods=["post"], url_path="resume", url_name="resume-plan")
+    def resume(self, request, pk=None):
+        """Resume a paused/approved plan — re-enters ``run_plan_stream`` (SSE).
+
+        Same frame protocol as ``run``; a non-runnable plan is a plain 400
+        instead of an ``error`` frame.
+        """
+        try:
+            self.service.resume_plan(request.user, pk)  # pre-flight gate
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except PlanNotRunnableError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        def event_stream():
+            try:
+                for frame in self.service.run_plan_stream(request.user, pk):
+                    yield f"data: {json.dumps(frame)}\n\n"
+            except Exception as exc:  # noqa: BLE001 - never hang the stream
+                logger.warning("plan resume stream failed plan=%s: %s", pk, exc)
+                yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
+
+        return StreamingHttpResponse(
+            event_stream(),
+            content_type="text/event-stream",
+        )
+
+    @action(detail=True, methods=["post"], url_path="fork", url_name="fork-plan")
+    def fork(self, request, pk=None):
+        """Fork a plan into a new reviewable copy (``forked_from`` provenance)."""
+        try:
+            result = self.service.fork_plan(request.user, pk)
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        return Response(result, status=status.HTTP_201_CREATED)
     # ── Execution ─────────────────────────────────────────────────────────
 
     @action(detail=True, methods=["post"], url_path="run", url_name="run-plan")

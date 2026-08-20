@@ -128,6 +128,14 @@ class PlansService:
         from ai.models.core import RunStep
 
         plan_json = run.plan_json or {}
+        # Service-owned per-step metadata (e.g. ``instructions`` from step
+        # edits) rides in plan_json — engine fields stay untouched. Legacy
+        # rows may carry string reprs, so guard with isinstance.
+        step_meta = {
+            s.get("step_id"): s
+            for s in plan_json.get("steps", [])
+            if isinstance(s, dict)
+        }
         if steps is None:
             steps = list(
                 RunStep.objects.filter(run_id=run.id).order_by("step_index")
@@ -136,6 +144,10 @@ class PlansService:
             "id": run.id,
             "status": run.status,
             "brief": run.user_message,
+            "forked_from": (
+                (run.working_notes or {}).get("forked_from")
+                if run.working_notes else None
+            ),
             "pattern": plan_json.get("pattern", "custom"),
             "source": plan_json.get("source", "single_step"),
             "skill_name": plan_json.get("skill_name"),
@@ -151,6 +163,9 @@ class PlansService:
                     "tool_name": s.tool_name,
                     "tool_args": s.tool_args_json or {},
                     "depends_on": s.depends_on_json or [],
+                    "instructions": (
+                        (step_meta.get(s.step_index) or {}).get("instructions")
+                    ),
                     "status": s.status,
                     "draft_text": s.draft_text,
                     "critic_verdict": s.critic_verdict,
@@ -159,6 +174,179 @@ class PlansService:
                 for s in steps
             ],
         }
+
+    # ── W3-C: replan helpers ─────────────────────────────────────────────
+
+    @staticmethod
+    def _plan_to_dict(plan) -> dict:
+        """Serialize an engine Plan into the service's plan_json shape.
+
+        Steps become plain dicts (NOT dataclass reprs) so edit / replan /
+        run all operate on structured data. ``instructions`` (service-owned
+        review text from step edits) is an extra key the engine ignores.
+        """
+        return {
+            "pattern": plan.pattern,
+            "steps": [
+                {
+                    "step_id": s.step_id,
+                    "intent": s.intent,
+                    "tool_name": s.tool_name,
+                    "tool_args": s.tool_args or {},
+                    "skill_name": s.skill_name,
+                    "depends_on": s.depends_on or [],
+                    "is_mutation": bool(s.is_mutation),
+                    "dry_run_supported": bool(s.dry_run_supported),
+                }
+                for s in plan.steps
+            ],
+            "synthesis_instruction": plan.synthesis_instruction,
+            "source": plan.source,
+            "skill_name": plan.skill_name,
+            "needs_confirmation": bool(plan.needs_confirmation),
+        }
+
+    def _decompose(self, user, brief):
+        """Run SkillAwarePlanner.decompose on a fresh engine session."""
+        from ai.engine.core.config import get_settings
+        from ai.engine.core.database import get_session_factory
+        from ai.engine.cognition.plan.planner import SkillAwarePlanner
+        from ai.engine.skills.registry import SkillRegistry
+
+        settings = get_settings()
+        user_pk = str(user.pk)
+
+        async def _decompose():
+            factory = get_session_factory(PLAN_INSTANCE_ID)
+            async with factory() as db:
+                registry = SkillRegistry(db)
+                planner = SkillAwarePlanner(model=settings.LLM_MODEL)
+                return await planner.decompose(
+                    utterance=brief,
+                    skill_registry=registry,
+                    instance_id=PLAN_INSTANCE_ID,
+                    user_id=user_pk,
+                )
+
+        return _run_async(_decompose())
+
+    @staticmethod
+    def _normalize_intent(intent) -> str:
+        return (intent or "").strip().lower()
+
+    @staticmethod
+    def _step_key(step) -> tuple:
+        """Canonical fingerprint for diffing two plan steps."""
+        step = step if isinstance(step, dict) else {}
+        return (
+            (step.get("intent") or "").strip().lower(),
+            step.get("tool_name") or "",
+            json.dumps(step.get("tool_args") or {}, sort_keys=True, default=str),
+            json.dumps(sorted(step.get("depends_on") or [])),
+            (step.get("instructions") or "").strip(),
+        )
+
+    @classmethod
+    def _plan_diff(cls, old_steps, new_steps, key="intent") -> dict:
+        """Diff two step lists → ``{added, removed, changed}`` (RULE_23 terms).
+
+        Steps are matched by ``key`` (``"intent"`` for replans where step ids
+        are regenerated, ``"step_id"`` for in-place step edits where the id is
+        stable). ``changed`` entries carry ``{"old": ..., "new": ...}`` pairs.
+        """
+        def _key(s):
+            s = s if isinstance(s, dict) else {}
+            if key == "step_id":
+                return s.get("step_id")
+            return cls._normalize_intent(s.get("intent"))
+
+        old = {_key(s): s for s in old_steps if isinstance(s, dict)}
+        new = {_key(s): s for s in new_steps if isinstance(s, dict)}
+        added = [s for k, s in new.items() if k not in old]
+        removed = [s for k, s in old.items() if k not in new]
+        changed = [
+            {"old": old[k], "new": new[k]}
+            for k in old.keys() & new.keys()
+            if cls._step_key(old[k]) != cls._step_key(new[k])
+        ]
+        return {"added": added, "removed": removed, "changed": changed}
+
+    @staticmethod
+    def _apply_step_deltas(steps, step_deltas) -> list:
+        """Apply user-supplied step deltas on top of a fresh decomposition.
+
+        Each delta::
+
+            {"action": "remove", "step_id": N}
+            {"action": "add", "intent": ..., "tool_name": ...,
+             "tool_args": {...}, "depends_on": [...]}
+            {"action": "update", "step_id": N, "intent"?: ...,
+             "tool_name"?: ..., "tool_args"?: ..., "depends_on"?: ...}
+
+        Deltas are applied in order; the returned step list feeds the diff so
+        the outcome is always reviewable.
+        """
+        if not isinstance(step_deltas, list):
+            raise ValueError("step_deltas must be a list.")
+        steps = [dict(s) for s in steps if isinstance(s, dict)]
+        next_id = max((s.get("step_id", 0) for s in steps), default=0) + 1
+        for delta in step_deltas:
+            if not isinstance(delta, dict):
+                continue
+            action = delta.get("action")
+            if action == "remove":
+                steps = [
+                    s for s in steps
+                    if s.get("step_id") != delta.get("step_id")
+                ]
+            elif action == "add":
+                step = {
+                    "step_id": delta.get("step_id", next_id),
+                    "intent": delta.get("intent", ""),
+                    "tool_name": delta.get("tool_name"),
+                    "tool_args": delta.get("tool_args") or {},
+                    "skill_name": delta.get("skill_name"),
+                    "depends_on": delta.get("depends_on") or [],
+                    "is_mutation": bool(delta.get("is_mutation", False)),
+                    "dry_run_supported": bool(
+                        delta.get("dry_run_supported", False)
+                    ),
+                    "instructions": delta.get("instructions"),
+                }
+                steps.append(step)
+                next_id = max(next_id, int(step["step_id"]) + 1)
+            elif action == "update":
+                for s in steps:
+                    if s.get("step_id") != delta.get("step_id"):
+                        continue
+                    for field in (
+                        "intent", "tool_name", "tool_args", "depends_on",
+                        "skill_name", "instructions",
+                    ):
+                        if field in delta:
+                            s[field] = delta[field]
+                    if "is_mutation" in delta:
+                        s["is_mutation"] = bool(delta["is_mutation"])
+        return steps
+
+    @staticmethod
+    def _replace_run_steps(run_id, steps):
+        """Replace a plan's RunStep rows from a (possibly edited) step list."""
+        from ai.models.core import RunStep
+
+        RunStep.objects.filter(run_id=run_id).delete()
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            RunStep.objects.create(
+                run_id=run_id,
+                step_index=int(step.get("step_id", 0)),
+                intent=step.get("intent", ""),
+                tool_name=step.get("tool_name"),
+                tool_args_json=step.get("tool_args") or {},
+                depends_on_json=step.get("depends_on") or [],
+                status=STEP_PENDING,
+            )
 
     @staticmethod
     def _rebuild_plan(run):
@@ -203,10 +391,6 @@ class PlansService:
         one RunStep row per step.
         """
         from ai.models.core import Run, RunStep, generate_uuid
-        from ai.engine.core.config import get_settings
-        from ai.engine.core.database import get_session_factory
-        from ai.engine.cognition.plan.planner import SkillAwarePlanner
-        from ai.engine.skills.registry import SkillRegistry
 
         brief = (brief or "").strip()
         if not brief:
@@ -214,23 +398,8 @@ class PlansService:
         if len(brief) > 4000:
             raise ValueError("brief is too long (max 4000 characters).")
 
-        settings = get_settings()
         user_pk = str(user.pk)
-
-        async def _decompose():
-            factory = get_session_factory(PLAN_INSTANCE_ID)
-            async with factory() as db:
-                registry = SkillRegistry(db)
-                planner = SkillAwarePlanner(model=settings.LLM_MODEL)
-                plan = await planner.decompose(
-                    utterance=brief,
-                    skill_registry=registry,
-                    instance_id=PLAN_INSTANCE_ID,
-                    user_id=user_pk,
-                )
-            return plan
-
-        plan = _run_async(_decompose())
+        plan = self._decompose(user, brief)
 
         run_id = generate_uuid()
         run = Run(
@@ -240,7 +409,7 @@ class PlansService:
             host_user_id=user_pk,
             user_message=brief,
             status=STATUS_PENDING_APPROVAL,
-            plan_json=json.loads(json.dumps(plan.__dict__, default=str)),
+            plan_json=self._plan_to_dict(plan),
         )
         run.save()
 
@@ -316,6 +485,205 @@ class PlansService:
             status=STEP_SKIPPED
         )
         return self.get_plan(user, plan_id)
+
+    # ── W3-C: edit / pause / resume / fork ────────────────────────────────
+
+    def edit_plan(self, user, plan_id: str, brief=None, step_deltas=None) -> dict:
+        """Re-plan from a (possibly new) brief and return the step diff.
+
+        Always re-runs ``SkillAwarePlanner.decompose`` and returns
+        ``{added, removed, changed}`` for review — editing NEVER auto-approves
+        (RULE_21). Any plan that is not ``pending_approval`` (approved,
+        running, paused, completed, …) drops back to ``pending_approval`` so
+        the user explicitly re-approves the revised plan before execution.
+        """
+        run = self._get_owned_run(user, plan_id)
+
+        new_brief = (brief or run.user_message or "").strip()
+        if not new_brief:
+            raise ValueError("brief is required.")
+        if len(new_brief) > 4000:
+            raise ValueError("brief is too long (max 4000 characters).")
+
+        old_plan_json = run.plan_json or {}
+        old_steps = [
+            s for s in old_plan_json.get("steps", []) if isinstance(s, dict)
+        ]
+
+        plan = self._decompose(user, new_brief)
+        steps = self._plan_to_dict(plan)["steps"]
+        if step_deltas:
+            steps = self._apply_step_deltas(steps, step_deltas)
+
+        diff = self._plan_diff(old_steps, steps)
+        replan_gate = run.status != STATUS_PENDING_APPROVAL
+
+        run.user_message = new_brief
+        run.plan_json = self._plan_to_dict(plan)
+        run.plan_json["steps"] = steps
+        if replan_gate:
+            run.status = STATUS_PENDING_APPROVAL
+        run.save(
+            update_fields=["user_message", "plan_json", "status", "updated_at"]
+        )
+        self._replace_run_steps(run.id, steps)
+
+        logger.info(
+            "Plan edited id=%s user=%s replan_gate=%s added=%d removed=%d changed=%d",
+            plan_id, str(user.pk), replan_gate,
+            len(diff["added"]), len(diff["removed"]), len(diff["changed"]),
+        )
+        result = self.get_plan(user, plan_id)
+        result["diff"] = diff
+        result["replan_gate"] = replan_gate
+        return result
+
+    def edit_step(self, user, plan_id: str, step_id, title=None,
+                  instructions=None, depends_on=None) -> dict:
+        """Edit one plan step — ``title`` → intent, plus instructions and
+        depends_on — with the same diff-review rule as ``edit_plan``.
+
+        A non-pending plan drops to ``pending_approval`` and all step
+        execution state resets to ``pending``: the edited plan must be
+        re-approved before anything executes (RULE_21).
+        """
+        from ai.models.core import RunStep
+
+        run = self._get_owned_run(user, plan_id)
+        plan_json = dict(run.plan_json or {})
+        old_steps = [
+            dict(s) for s in plan_json.get("steps", []) if isinstance(s, dict)
+        ]
+        steps = [dict(s) for s in old_steps]
+        target = next(
+            (s for s in steps if s.get("step_id") == int(step_id)), None
+        )
+        if target is None:
+            raise PlanStepError(f"Step {step_id} not found on plan {run.id}.")
+
+        if title is not None:
+            title = str(title).strip()
+            if title:
+                target["intent"] = title
+        if instructions is not None:
+            target["instructions"] = str(instructions).strip()
+        if depends_on is not None:
+            target["depends_on"] = depends_on
+
+        plan_json["steps"] = steps
+        run.plan_json = plan_json
+        replan_gate = run.status != STATUS_PENDING_APPROVAL
+        if replan_gate:
+            run.status = STATUS_PENDING_APPROVAL
+        run.save(update_fields=["plan_json", "status", "updated_at"])
+
+        # Reset execution state — the edited plan goes back to review.
+        RunStep.objects.filter(run_id=run.id).update(
+            status=STEP_PENDING,
+            draft_text=None,
+            critic_verdict=None,
+            error=None,
+            confirmation_token=None,
+            tool_output_json=None,
+        )
+        RunStep.objects.filter(run_id=run.id, step_index=int(step_id)).update(
+            intent=target["intent"],
+            depends_on_json=target.get("depends_on") or [],
+        )
+
+        diff = self._plan_diff(old_steps, steps, key="step_id")
+        logger.info(
+            "Plan step edited id=%s step=%s user=%s replan_gate=%s",
+            plan_id, step_id, str(user.pk), replan_gate,
+        )
+        result = self.get_plan(user, plan_id)
+        result["diff"] = diff
+        result["replan_gate"] = replan_gate
+        return result
+
+    def pause_plan(self, user, plan_id: str) -> dict:
+        """Pause a running plan (ledger-level).
+
+        Only ``running`` → ``paused``. Step rows are left untouched — a step
+        already ``awaiting_approval`` (consent pause) keeps its state; a plan
+        pause never corrupts the consent gate.
+        """
+        run = self._get_owned_run(user, plan_id)
+        if run.status != STATUS_RUNNING:
+            raise PlanNotRunnableError(
+                f"Only running plans can be paused (status: {run.status})."
+            )
+        run.status = STATUS_PAUSED
+        run.save(update_fields=["status", "updated_at"])
+        logger.info("Plan paused id=%s user=%s", plan_id, str(user.pk))
+        return self.get_plan(user, plan_id)
+
+    def resume_plan(self, user, plan_id: str) -> dict:
+        """Pre-flight a resume: re-enter execution from ``paused``/``approved``.
+
+        Reuses ``_RUNNABLE_STATUSES``; the actual re-entry into
+        ``run_plan_stream`` (with ``resume_run_id=plan_id``) happens through
+        the streaming run path.
+        """
+        run = self._get_owned_run(user, plan_id)
+        if run.status not in _RUNNABLE_STATUSES:
+            raise PlanNotRunnableError(
+                f"Plan is not runnable (status: {run.status}). "
+                "Resume from paused or approved only."
+            )
+        logger.info(
+            "Plan resume pre-flighted id=%s user=%s status=%s",
+            plan_id, str(user.pk), run.status,
+        )
+        return {
+            "status": "resumed",
+            "plan_id": run.id,
+            "plan": self.get_plan(user, plan_id),
+        }
+
+    def fork_plan(self, user, plan_id: str) -> dict:
+        """Clone a plan (plan_json + brief) into a NEW Run row.
+
+        The fork is a copy, not a link: a fresh run id, its own RunStep rows
+        (all pending), status ``pending_approval``. ``forked_from`` provenance
+        is recorded in ``working_notes`` (no schema change — the engine never
+        reads it).
+        """
+        from ai.models.core import Run, RunStep, generate_uuid
+
+        source = self._get_owned_run(user, plan_id)
+        plan_json = json.loads(json.dumps(source.plan_json or {}))
+        steps = [
+            s for s in plan_json.get("steps", []) if isinstance(s, dict)
+        ]
+
+        fork_id = generate_uuid()
+        fork = Run(
+            id=fork_id,
+            instance_id=source.instance_id or PLAN_INSTANCE_ID,
+            conversation_id=source.conversation_id or "",
+            host_user_id=str(user.pk),
+            user_message=source.user_message,
+            status=STATUS_PENDING_APPROVAL,
+            plan_json=plan_json,
+            working_notes={"forked_from": source.id},
+        )
+        fork.save()
+        for step in steps:
+            RunStep.objects.create(
+                run_id=fork_id,
+                step_index=int(step.get("step_id", 0)),
+                intent=step.get("intent", ""),
+                tool_name=step.get("tool_name"),
+                tool_args_json=step.get("tool_args") or {},
+                depends_on_json=step.get("depends_on") or [],
+                status=STEP_PENDING,
+            )
+        logger.info(
+            "Plan forked id=%s from=%s user=%s",
+            fork_id, source.id, str(user.pk),
+        )
+        return self.get_plan(user, fork_id)
 
     # ── Execution: SSE streamed run ───────────────────────────────────────
 
