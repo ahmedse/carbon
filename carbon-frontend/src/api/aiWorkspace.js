@@ -967,3 +967,78 @@ export function stopPlan(token, planId) {
 export function getPlanLedger(token, planId) {
   return apiFetch(`${PLANS_BASE}${planId}/ledger/`, { token });
 }
+
+// ── W3-C — plan controls (edit / pause / resume / fork) ──────────────────
+// Editing never auto-approves (RULE_21): the response carries a step diff
+// ({added, removed, changed}) + replan_gate; the Workspace shows the diff
+// review gate before the revised plan is re-approved.
+
+/**
+ * Edit a plan's brief (replan). Returns the plan + `diff` + `replan_gate`.
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @param {object} params - { brief?, step_deltas? }
+ * @returns {Promise<object>} Plan payload with { diff, replan_gate }
+ */
+export function editPlan(token, planId, { brief, step_deltas } = {}) {
+  const body = {};
+  if (brief !== undefined) body.brief = brief;
+  if (step_deltas !== undefined) body.step_deltas = step_deltas;
+  return apiFetch(`${PLANS_BASE}${planId}/`, { token, method: 'PATCH', body });
+}
+
+/**
+ * Edit a single plan step (title/instructions/depends_on) — same diff-review
+ * rule as editPlan.
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @param {number} stepId - step_index
+ * @param {object} params - { title?, instructions?, depends_on? }
+ * @returns {Promise<object>} Plan payload with { diff, replan_gate }
+ */
+export function editPlanStep(token, planId, stepId, { title, instructions, depends_on } = {}) {
+  const body = {};
+  if (title !== undefined) body.title = title;
+  if (instructions !== undefined) body.instructions = instructions;
+  if (depends_on !== undefined) body.depends_on = depends_on;
+  return apiFetch(`${PLANS_BASE}${planId}/steps/${stepId}/`, { token, method: 'PATCH', body });
+}
+
+/**
+ * Pause a running plan (ledger-level; consent steps untouched).
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @returns {Promise<object>} Plan payload (status 'paused')
+ */
+export function pausePlan(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/pause/`, { token, method: 'POST' });
+}
+
+/**
+ * Fork a plan into a NEW reviewable copy (pending_approval).
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @returns {Promise<object>} Forked plan payload
+ */
+export function forkPlan(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/fork/`, { token, method: 'POST' });
+}
+
+/**
+ * Resume a paused/approved plan over SSE (POST .../plans/{id}/resume/).
+ * Same frame protocol as runPlanStream (step_start / step_confirm /
+ * step_result / step_end / done / error).
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @param {object} handlers - { onFrame(frame), onDone(frame), onError(message) }
+ */
+export async function resumePlanStream(token, planId, { onFrame, onDone, onError }) {
+  const path = `${PLANS_BASE}${planId}/resume/`;
+  await streamJsonPost(token, path, {}, {
+    onFrame: (frame) => {
+      onFrame?.(frame);
+      if (frame.type === 'done') onDone?.(frame);
+    },
+    onError: (message) => onError?.(message),
+  });
+}

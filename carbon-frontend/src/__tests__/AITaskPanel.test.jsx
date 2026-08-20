@@ -146,9 +146,11 @@ describe('AITaskPanel — two internal tabs (RULE_17)', () => {
         conversation_id: 'conv-1',
       });
     });
-    // Detail loads and the Run tab is shown with the review gate.
+    // Detail loads and the Run tab is shown with the review gate. The step
+    // intent appears in the step list AND as a node label in the live DAG
+    // (W3-F preview) — assert on the list rather than a single text node.
     expect(await screen.findByText('Approve plan')).toBeInTheDocument();
-    expect(screen.getByText('Search for duplicate records')).toBeInTheDocument();
+    expect(screen.getAllByText('Search for duplicate records').length).toBeGreaterThan(0);
   });
 });
 

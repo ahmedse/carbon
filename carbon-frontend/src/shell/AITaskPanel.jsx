@@ -1,11 +1,13 @@
 // src/shell/AITaskPanel.jsx
-// Sprint 23 W3-B — agentic task orchestration surface: a user brief becomes
-// a reviewable plan (W3-A backend) that runs only after the plan-level
+// Sprint 23 W3-B + W3-F — agentic task orchestration surface: a user brief
+// becomes a reviewable plan (W3-A backend) that runs only after the plan-level
 // consent gate (RULE_21), streams step frames over SSE, pauses at any step
 // that writes to Carbon (per-step Approve/Decline), and lands in a durable
-// audit ledger. One activity icon, two internal tabs persisted to
-// localStorage (RULE_17). Outcome copy only (RULE_23); theme tokens only
-// (RULE_8); compact density throughout.
+// audit ledger. W3-F adds the plan controls (edit / pause / resume / fork)
+// wired to W3-C, each edit passing through the diff-review consent gate, and
+// a live plan DAG that polls the plan while a run is active. One activity
+// icon, two internal tabs persisted to localStorage (RULE_17). Outcome copy
+// only (RULE_23); theme tokens only (RULE_8); compact density throughout.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
@@ -42,14 +44,22 @@ import {
   createPlan,
   declinePlan,
   declinePlanStep,
+  editPlan,
+  editPlanStep,
+  forkPlan,
   getPlan,
   getPlanLedger,
   listPlans,
+  pausePlan,
+  resumePlanStream,
   runPlanStream,
   stopPlan,
 } from '../api/aiWorkspace';
+import { summarizePlanDiff } from '../utils/planGraph';
 import AITaskPlanCard from './AITaskPlanCard';
 import AITaskAuditCard from './AITaskAuditCard';
+import PlanDiffReviewDialog from './PlanDiffReviewDialog';
+import StepEditDialog from './StepEditDialog';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -207,7 +217,9 @@ StepCard.propTypes = {
  */
 function AITaskPanel({ conversationId }) {
   const { token } = useAuth();
-  const { notifyFromError } = useNotification();
+  const { notify, notifyFromError } = useNotification();
+  const notifyRef = useRef(notify);
+  notifyRef.current = notify;
   const notifyFromErrorRef = useRef(notifyFromError);
   notifyFromErrorRef.current = notifyFromError;
 
@@ -234,6 +246,11 @@ function AITaskPanel({ conversationId }) {
   const [confirmingId, setConfirmingId] = useState(null);
   const [ledger, setLedger] = useState(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
+
+  // W3-F — plan controls: edits are gated by the diff-review consent dialog
+  const [mutating, setMutating] = useState(false);
+  const [editStepTarget, setEditStepTarget] = useState(null);
+  const [diffReview, setDiffReview] = useState(null); // { diff, plan }
 
   const runPhaseRef = useRef(phase);
   runPhaseRef.current = phase;
@@ -263,34 +280,6 @@ function AITaskPanel({ conversationId }) {
     loadPlans();
   }, [loadPlans]);
 
-  const openPlan = useCallback(async (planId) => {
-    setDetailLoading(true);
-    try {
-      const plan = await getPlan(token, planId);
-      setSelectedPlan(plan);
-      setRunSteps(
-        Array.isArray(plan.steps)
-          ? plan.steps.map((s) => ({
-              step_id: s.step_id,
-              intent: s.intent,
-              tool_name: s.tool_name,
-              tool_args: s.tool_args,
-              status: s.status || 'pending',
-              tool_output: null,
-              error: null,
-            }))
-          : [],
-      );
-      setPhase(plan.status === 'completed' ? 'finished' : plan.status === 'cancelled' ? 'stopped' : plan.status === 'failed' ? 'error' : 'idle');
-      setLedger(null);
-      setTab('run');
-    } catch (err) {
-      notifyFromErrorRef.current(err, 'Could not open the plan');
-    } finally {
-      setDetailLoading(false);
-    }
-  }, [token]);
-
   const refreshPlan = useCallback(async (planId) => {
     try {
       const plan = await getPlan(token, planId);
@@ -302,6 +291,50 @@ function AITaskPanel({ conversationId }) {
       return null;
     }
   }, [token]);
+
+  // Live plan polling — while a run is active, refresh the plan so the plan
+  // DAG reflects live step statuses (W3-F).
+  useEffect(() => {
+    if (!selectedPlan || phase !== 'working') return undefined;
+    const timer = setInterval(() => {
+      refreshPlan(selectedPlan.id);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [selectedPlan?.id, phase, refreshPlan]);
+
+  const applyPlanToView = useCallback((plan) => {
+    setSelectedPlan(plan);
+    setRunSteps(
+      Array.isArray(plan.steps)
+        ? plan.steps.map((s) => ({
+            step_id: s.step_id,
+            intent: s.intent,
+            tool_name: s.tool_name,
+            tool_args: s.tool_args,
+            depends_on: s.depends_on || [],
+            instructions: s.instructions || '',
+            status: s.status || 'pending',
+            tool_output: null,
+            error: null,
+          }))
+        : [],
+    );
+    setPhase(plan.status === 'completed' ? 'finished' : plan.status === 'cancelled' ? 'stopped' : plan.status === 'failed' ? 'error' : 'idle');
+    setLedger(null);
+  }, []);
+
+  const openPlan = useCallback(async (planId) => {
+    setDetailLoading(true);
+    try {
+      const plan = await getPlan(token, planId);
+      applyPlanToView(plan);
+      setTab('run');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not open the plan');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [token, applyPlanToView]);
 
   const handleCreate = async () => {
     const trimmed = brief.trim();
@@ -379,6 +412,7 @@ function AITaskPanel({ conversationId }) {
   const handleRun = async () => {
     if (!selectedPlan) return;
     const planId = selectedPlan.id;
+    const streamFn = selectedPlan.status === 'paused' ? resumePlanStream : runPlanStream;
     setPhase('working');
     setErrorMessage(null);
     setLedger(null);
@@ -387,7 +421,7 @@ function AITaskPanel({ conversationId }) {
     );
 
     try {
-      await runPlanStream(token, planId, {
+      await streamFn(token, planId, {
         onFrame: (frame) => {
           if (frame.type === 'step_start') {
             upsertStep({ step_id: frame.step_id, intent: frame.intent, status: 'running' });
@@ -462,6 +496,92 @@ function AITaskPanel({ conversationId }) {
       notifyFromErrorRef.current(err, 'Could not decline the step');
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  // ── W3-F — plan controls (edit / pause / fork) ─────────────────────────
+  // Edits never auto-approve (RULE_21): the PATCH returns the revised plan +
+  // diff; a diff with real changes opens the consent gate; an empty diff is
+  // applied directly (nothing changed beyond the plan state).
+  const handleEditPlan = async (newBrief) => {
+    if (!selectedPlan || !newBrief) return;
+    setMutating(true);
+    try {
+      const updated = await editPlan(token, selectedPlan.id, { brief: newBrief });
+      if (summarizePlanDiff(updated?.diff).count > 0) {
+        setDiffReview({ diff: updated.diff, plan: updated });
+      } else {
+        applyPlanToView(updated);
+        notifyRef.current('Plan updated.', 'success');
+      }
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not update the plan');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const saveStepEdit = async (fields) => {
+    if (!selectedPlan || !editStepTarget) return;
+    const stepId = editStepTarget.step.step_id;
+    setEditStepTarget(null);
+    setMutating(true);
+    try {
+      const updated = await editPlanStep(token, selectedPlan.id, stepId, fields);
+      if (summarizePlanDiff(updated?.diff).count > 0) {
+        setDiffReview({ diff: updated.diff, plan: updated });
+      } else {
+        applyPlanToView(updated);
+        notifyRef.current('Step updated.', 'success');
+      }
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not update the step');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  // User reviewed the diff and keeps the revised plan — it stays
+  // pending_approval and needs the plan consent gate again before running.
+  const confirmDiff = () => {
+    if (!diffReview) return;
+    applyPlanToView(diffReview.plan);
+    setPlans((prev) =>
+      prev.map((p) => (p.id === diffReview.plan.id ? { ...p, status: diffReview.plan.status } : p)),
+    );
+    notifyRef.current('Changes kept — the plan needs your approval again.', 'info');
+    setDiffReview(null);
+  };
+
+  const handlePause = async () => {
+    if (!selectedPlan) return;
+    setMutating(true);
+    try {
+      const updated = await pausePlan(token, selectedPlan.id);
+      setSelectedPlan(updated);
+      setPhase('paused');
+      setPlans((prev) =>
+        prev.map((p) => (p.id === updated.id ? { ...p, status: updated.status } : p)),
+      );
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not pause the run');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const handleFork = async () => {
+    if (!selectedPlan) return;
+    setMutating(true);
+    try {
+      const forked = await forkPlan(token, selectedPlan.id);
+      await loadPlans();
+      await openPlan(forked.id);
+      notifyRef.current('Forked — a reviewable copy was created.', 'success');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not fork the plan');
+    } finally {
+      setMutating(false);
     }
   };
 
@@ -562,11 +682,16 @@ function AITaskPanel({ conversationId }) {
       <Stack spacing={1.25}>
         <AITaskPlanCard
           plan={selectedPlan}
-          busy={creating}
+          busy={creating || mutating}
           running={phase === 'working'}
+          live={phase === 'working'}
           onApprove={handleApprove}
           onDecline={handleDecline}
           onRun={handleRun}
+          onPause={handlePause}
+          onFork={handleFork}
+          onEditPlan={handleEditPlan}
+          onEditStep={(step) => setEditStepTarget({ step })}
         />
 
         {phase === 'working' && (
@@ -694,6 +819,23 @@ function AITaskPanel({ conversationId }) {
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}>
         {tab === 'tasks' ? renderTasks() : renderRun()}
       </Box>
+
+      {/* W3-F — diff-review consent gate + step edit dialog (survive tab switches) */}
+      <PlanDiffReviewDialog
+        open={!!diffReview}
+        diff={diffReview?.diff}
+        busy={mutating}
+        onConfirm={confirmDiff}
+        onCancel={() => setDiffReview(null)}
+      />
+      <StepEditDialog
+        open={!!editStepTarget}
+        step={editStepTarget?.step}
+        steps={selectedPlan?.steps || []}
+        busy={mutating}
+        onSave={saveStepEdit}
+        onClose={() => setEditStepTarget(null)}
+      />
     </Box>
   );
 }

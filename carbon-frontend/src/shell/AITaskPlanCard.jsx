@@ -1,10 +1,14 @@
 // src/shell/AITaskPlanCard.jsx
-// Sprint 23 W3-B — reviewable plan card for a user-initiated agentic task:
-// brief + pattern/source chips + a step list with tool args previews.
+// Sprint 23 W3-B + W3-F — reviewable plan card for a user-initiated agentic
+// task: brief + pattern/source chips + a step list with tool args previews,
+// a plan preview (live d3 DAG + static Mermaid diagram), and lifecycle
+// controls (edit / pause / resume / fork) wired to the W3-C endpoints.
+//
 // The plan-level consent gate (RULE_21) is explicit: Approve/Decline before
-// anything executes; once approved a Run button appears. Outcome copy only
-// (RULE_23); theme tokens only (RULE_8).
-import React from 'react';
+// anything executes; once approved a Run button appears. Every edit opens the
+// diff-review gate in the parent BEFORE the revised plan is re-approved.
+// Outcome copy only (RULE_23); theme tokens only (RULE_8).
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -12,14 +16,23 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  IconButton,
   Paper,
   Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
+import CallSplitIcon from '@mui/icons-material/CallSplit';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import { PLAN_STATUS, STEP_STATUS } from './aiTaskStatus';
+import PlanDagGraph from '../components/graph/PlanDagGraph';
+import PlanMermaidPreview from '../components/graph/PlanMermaidPreview';
 
 function JsonPreview({ title, value }) {
   if (value === null || value === undefined) return null;
@@ -53,16 +66,37 @@ function JsonPreview({ title, value }) {
 JsonPreview.propTypes = { title: PropTypes.string, value: PropTypes.any };
 
 /**
- * Reviewable plan card.
+ * Reviewable plan card with lifecycle controls + live plan DAG.
  * @param {object} props
  * @param {object} props.plan - plan payload (createPlan/getPlan shape)
  * @param {boolean} [props.busy] - an async action is in flight
  * @param {function} [props.onApprove] - () => void, plan-level consent (RULE_21)
  * @param {function} [props.onDecline] - () => void
  * @param {function} [props.onRun] - () => void, start/resume the streamed run
+ * @param {function} [props.onPause] - () => void, pause a running plan
+ * @param {function} [props.onFork] - () => void, fork into a reviewable copy
+ * @param {function} [props.onEditPlan] - (newBrief) => void
+ * @param {function} [props.onEditStep] - (step) => void
  * @param {boolean} [props.running] - stream is active
+ * @param {boolean} [props.live] - run is live (DAG shows the Live badge)
  */
-function AITaskPlanCard({ plan, busy, running, onApprove, onDecline, onRun }) {
+function AITaskPlanCard({
+  plan,
+  busy,
+  running,
+  live = false,
+  onApprove,
+  onDecline,
+  onRun,
+  onPause,
+  onFork,
+  onEditPlan,
+  onEditStep,
+}) {
+  const [editBriefOpen, setEditBriefOpen] = useState(false);
+  const [editBriefValue, setEditBriefValue] = useState('');
+  const [previewMode, setPreviewMode] = useState('graph');
+
   if (!plan) return null;
 
   const statusMeta = PLAN_STATUS[plan.status] || PLAN_STATUS.pending_approval;
@@ -70,6 +104,19 @@ function AITaskPlanCard({ plan, busy, running, onApprove, onDecline, onRun }) {
   const reviewable = plan.status === 'pending_approval';
   const runnable = plan.status === 'approved' || plan.status === 'paused';
   const showRun = runnable && !running;
+  const editable = plan.status !== 'running' && !running;
+
+  const openEditBrief = () => {
+    setEditBriefValue(plan.brief || '');
+    setEditBriefOpen(true);
+  };
+
+  const saveEditBrief = () => {
+    const next = editBriefValue.trim();
+    if (!next || !onEditPlan) return;
+    onEditPlan(next);
+    setEditBriefOpen(false);
+  };
 
   return (
     <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
@@ -89,13 +136,64 @@ function AITaskPlanCard({ plan, busy, running, onApprove, onDecline, onRun }) {
       <Stack spacing={1.25} sx={{ p: 1.25 }}>
         {/* Brief + provenance chips */}
         <Box>
-          <Typography variant="body2" sx={{ fontSize: '0.75rem', whiteSpace: 'pre-wrap' }}>
-            {plan.brief}
-          </Typography>
+          {editBriefOpen ? (
+            <Stack spacing={0.75}>
+              <TextField
+                multiline
+                minRows={2}
+                maxRows={4}
+                fullWidth
+                size="small"
+                value={editBriefValue}
+                onChange={(e) => setEditBriefValue(e.target.value)}
+                inputProps={{ 'aria-label': 'Plan brief' }}
+                sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
+              />
+              <Stack direction="row" spacing={1}>
+                <Button
+                  size="small"
+                  variant="contained"
+                  disabled={busy || !editBriefValue.trim()}
+                  onClick={saveEditBrief}
+                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+                >
+                  {busy ? 'Updating…' : 'Apply changes'}
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={busy}
+                  onClick={() => setEditBriefOpen(false)}
+                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+                >
+                  Cancel
+                </Button>
+              </Stack>
+            </Stack>
+          ) : (
+            <>
+              <Typography variant="body2" sx={{ fontSize: '0.75rem', whiteSpace: 'pre-wrap' }}>
+                {plan.brief}
+              </Typography>
+              {editable && onEditPlan && (
+                <Tooltip title="Edit the plan brief">
+                  <IconButton
+                    size="small"
+                    onClick={openEditBrief}
+                    aria-label="Edit plan"
+                    sx={{ p: 0.25, mt: 0.25 }}
+                  >
+                    <EditOutlinedIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </>
+          )}
           <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
             {plan.pattern && <Chip size="small" variant="outlined" label={plan.pattern} sx={{ height: 18, fontSize: '0.625rem' }} />}
             {plan.source && <Chip size="small" variant="outlined" label={`Source · ${plan.source}`} sx={{ height: 18, fontSize: '0.625rem' }} />}
             {plan.skill_name && <Chip size="small" variant="outlined" label={`Skill · ${plan.skill_name}`} sx={{ height: 18, fontSize: '0.625rem' }} />}
+            {plan.forked_from && <Chip size="small" variant="outlined" label="Forked copy" sx={{ height: 18, fontSize: '0.625rem' }} />}
             {plan.needs_confirmation && (
               <Chip size="small" color="warning" variant="outlined" label="Requires approval" sx={{ height: 18, fontSize: '0.625rem' }} />
             )}
@@ -121,6 +219,18 @@ function AITaskPlanCard({ plan, busy, running, onApprove, onDecline, onRun }) {
                     <Chip size="small" variant="outlined" label={step.tool_name} sx={{ height: 16, fontSize: '0.5625rem' }} />
                   )}
                   <Chip size="small" variant="outlined" label={stepMeta.label} color={stepMeta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
+                  {editable && onEditStep && (
+                    <Tooltip title="Edit this step">
+                      <IconButton
+                        size="small"
+                        onClick={() => onEditStep(step)}
+                        aria-label={`Edit step ${step.step_id}`}
+                        sx={{ p: 0.125 }}
+                      >
+                        <EditOutlinedIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </Stack>
                 {step.tool_args !== null && step.tool_args !== undefined && Object.keys(step.tool_args).length > 0 && (
                   <Box sx={{ px: 1.25, pb: 0.75 }}>
@@ -148,9 +258,39 @@ function AITaskPlanCard({ plan, busy, running, onApprove, onDecline, onRun }) {
           </Typography>
         )}
 
+        {/* Plan preview — live d3 DAG + static Mermaid diagram toggle */}
+        {steps.length > 0 && (
+          <Box sx={{ mt: 0.25 }}>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Typography variant="caption" color="text.secondary" sx={{ flex: 1, fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Plan preview
+              </Typography>
+              <ToggleButtonGroup
+                value={previewMode}
+                exclusive
+                size="small"
+                onChange={(_e, next) => {
+                  if (next !== null) setPreviewMode(next);
+                }}
+                aria-label="Plan preview view"
+              >
+                <ToggleButton value="graph" sx={{ fontSize: '0.625rem', py: 0.125, px: 0.75 }}>Graph</ToggleButton>
+                <ToggleButton value="diagram" sx={{ fontSize: '0.625rem', py: 0.125, px: 0.75 }}>Diagram</ToggleButton>
+              </ToggleButtonGroup>
+            </Stack>
+            <Box sx={{ mt: 0.75 }}>
+              {previewMode === 'graph' ? (
+                <PlanDagGraph plan={plan} height={300} live={live} />
+              ) : (
+                <PlanMermaidPreview plan={plan} />
+              )}
+            </Box>
+          </Box>
+        )}
+
         {/* Plan-level consent gate (RULE_21) — nothing executes before approve */}
         {reviewable && (
-          <Stack direction="row" spacing={1} sx={{ mt: 0.25 }}>
+          <Stack direction="row" spacing={1} sx={{ mt: 0.25, flexWrap: 'wrap', rowGap: 0.5 }}>
             <Button
               size="small"
               variant="contained"
@@ -170,11 +310,23 @@ function AITaskPlanCard({ plan, busy, running, onApprove, onDecline, onRun }) {
             >
               Decline
             </Button>
+            {onFork && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<CallSplitIcon sx={{ fontSize: 13 }} />}
+                disabled={busy}
+                onClick={onFork}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+              >
+                Fork
+              </Button>
+            )}
           </Stack>
         )}
 
         {showRun && (
-          <Stack direction="row" spacing={1} sx={{ mt: 0.25 }}>
+          <Stack direction="row" spacing={1} sx={{ mt: 0.25, flexWrap: 'wrap', rowGap: 0.5 }}>
             <Button
               size="small"
               variant="contained"
@@ -185,6 +337,51 @@ function AITaskPlanCard({ plan, busy, running, onApprove, onDecline, onRun }) {
             >
               {plan.status === 'paused' ? 'Resume run' : 'Run plan'}
             </Button>
+            {onFork && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<CallSplitIcon sx={{ fontSize: 13 }} />}
+                disabled={busy}
+                onClick={onFork}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+              >
+                Fork
+              </Button>
+            )}
+          </Stack>
+        )}
+
+        {running && onPause && (
+          <Stack direction="row" spacing={1} sx={{ mt: 0.25 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              color="warning"
+              startIcon={<PauseIcon sx={{ fontSize: 14 }} />}
+              disabled={busy}
+              onClick={onPause}
+              sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+            >
+              Pause run
+            </Button>
+          </Stack>
+        )}
+
+        {!reviewable && !showRun && !running && (
+          <Stack direction="row" spacing={1} sx={{ mt: 0.25, flexWrap: 'wrap', rowGap: 0.5 }}>
+            {onFork && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<CallSplitIcon sx={{ fontSize: 13 }} />}
+                disabled={busy}
+                onClick={onFork}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+              >
+                Fork
+              </Button>
+            )}
           </Stack>
         )}
 
@@ -209,9 +406,14 @@ AITaskPlanCard.propTypes = {
   plan: PropTypes.object,
   busy: PropTypes.bool,
   running: PropTypes.bool,
+  live: PropTypes.bool,
   onApprove: PropTypes.func,
   onDecline: PropTypes.func,
   onRun: PropTypes.func,
+  onPause: PropTypes.func,
+  onFork: PropTypes.func,
+  onEditPlan: PropTypes.func,
+  onEditStep: PropTypes.func,
 };
 
 export default AITaskPlanCard;
