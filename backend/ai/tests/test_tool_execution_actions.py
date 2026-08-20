@@ -151,6 +151,30 @@ def test_grounded_note_navigate_summary():
     assert "Opened rule." in note
 
 
+def test_grounded_note_plan_created():
+    # plan_task outcome (RULE_23 — product terms only: plan, steps,
+    # pending_approval, Tasks panel; no engine class names).
+    tools = [
+        {"tool_name": "plan_task", "result": json.dumps({
+            "action": "plan_created",
+            "plan_id": "2dcf0692-dc0b-447d-be97-abe9258e56ce",
+            "status": "pending_approval",
+            "steps": [
+                {"step_id": 1, "intent": "Audit emissions uploads"},
+                {"step_id": 2, "intent": "Compare quarters"},
+            ],
+        })},
+    ]
+    note = _grounded_outcome_note(tools)
+    assert "Plan 2dcf0692 drafted" in note
+    assert "2 steps" in note
+    assert "pending_approval" in note
+    assert "Review and approve it in the Tasks panel" in note
+    assert "• Audit emissions uploads" in note
+    assert "SkillAwarePlanner" not in note
+    assert "Run" not in note or "Run row" not in note
+
+
 def test_grounded_note_empty():
     assert _grounded_outcome_note([]) == ""
 

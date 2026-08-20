@@ -210,6 +210,29 @@ class TestRoutesActionExtraction:
         names = {d.get("function", {}).get("name") for d in defs}
         assert "list_my_capabilities" in names
 
+    def test_plan_created_emits_open_panel_tasks_action(self):
+        # plan_task outcome → the chat reply carries an "Open in Tasks" action
+        # so the user can jump straight to approve/edit/run/fork/pause.
+        completed_tools = [
+            {
+                "tool_name": "plan_task",
+                "result": {
+                    "requires_confirmation": False,
+                    "action": "plan_created",
+                    "plan_id": "7a0c10ae",
+                    "status": "pending_approval",
+                    "brief": "Run agent planner",
+                },
+            }
+        ]
+        actions, pending = _extract_tool_actions(completed_tools)
+        assert pending == []
+        assert len(actions) == 1
+        assert actions[0]["type"] == "open_panel"
+        assert actions[0]["panel"] == "tasks"
+        assert actions[0]["plan_id"] == "7a0c10ae"
+        assert actions[0]["label"] == "Open in Tasks"
+
 
 # ── Unified rich "Your Access" document (deterministic GFM table) ──────────
 

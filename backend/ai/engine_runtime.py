@@ -346,6 +346,22 @@ def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list
                 "summary": str(data.get("summary") or ""),
             })
 
+        if data.get("action") == "plan_created":
+            # plan_task outcome — jump the user straight to the workspace
+            # Tasks panel where approve/run/edit/fork/pause live. The panel is
+            # a workspace surface (not a URL route), so the action type is
+            # ``open_panel`` and the UI switches the active panel + focuses
+            # the created plan (RULE_23 — product copy, plan id, no engine
+            # names).
+            plan_id = str(data.get("plan_id") or "").strip()
+            actions.append({
+                "type": "open_panel",
+                "panel": "tasks",
+                "plan_id": plan_id,
+                "label": "Open in Tasks",
+                "summary": "Review, approve and run the plan",
+            })
+
         # Capability listing (list_my_capabilities): emit one navigate action
         # per scoped page link — the UI renders these as small buttons under
         # the listing reply.
@@ -520,6 +536,30 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
             summary = str(data.get("summary") or data.get("label") or "").strip()
             if summary:
                 lines.append(f"✅ {summary}")
+        elif data.get("action") == "plan_created":
+            # plan_task outcome (RULE_23 — product terms: plan, steps,
+            # pending_approval, Tasks panel; never engine class names).
+            plan_id = str(data.get("plan_id") or "").strip()
+            short_id = plan_id[:8] if plan_id else ""
+            steps = data.get("steps") or []
+            status = str(data.get("status") or "pending_approval")
+            step_copy = f"{len(steps)} step{'s' if len(steps) != 1 else ''}"
+            if short_id:
+                lines.append(
+                    f"✅ Plan {short_id} drafted ({step_copy}, status: "
+                    f"{status}) — nothing has run yet. Review and approve it "
+                    "in the Tasks panel to execute."
+                )
+            else:
+                lines.append(
+                    f"✅ Plan drafted ({step_copy}, status: {status}) — "
+                    "nothing has run yet. Review and approve it in the "
+                    "Tasks panel to execute."
+                )
+            for s in steps:
+                intent = str(s.get("intent") or "").strip()
+                if intent:
+                    lines.append(f"  • {intent}")
     return "\n\n".join(lines)
 
 

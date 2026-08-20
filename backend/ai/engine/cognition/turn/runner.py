@@ -66,7 +66,7 @@ class TurnPipelineRunner:
 
                 allow = {
                     "create_dq_rule", "search_knowledge", "get_entity_details",
-                    "list_my_capabilities",
+                    "list_my_capabilities", "plan_task",
                 }
                 self._draft_tools = [
                     d for d in get_tool_definitions()
@@ -417,13 +417,23 @@ class TurnPipelineRunner:
                 f"{system_prompt}\n\n"
                 "GROUNDING RULES — follow them exactly:\n"
                 "- You have tools available. Use them to do real work instead "
-                "of guessing.\n"
+                "of guessing. When a tool matches the user's request, call it "
+                "right away — do not answer in prose instead of using it, and "
+                "do not say you cannot run/execute tasks.\n"
+                "- When the user asks you to plan, orchestrate, or run a task "
+                "(e.g. 'run agent planner', 'plan a data quality audit'), call "
+                "plan_task IMMEDIATELY with their request as the brief — do "
+                "not ask for more details first.\n"
                 "- NEVER claim an action succeeded (e.g. 'rule created') unless "
                 "a tool result confirms it.\n"
                 "- The create_dq_rule tool only STAGES a proposal — it returns "
                 "a confirmation execution. Nothing is written until the user "
                 "confirms. Tell the user a confirmation button appeared; do "
                 "NOT say the rule was created.\n"
+                "- The plan_task tool DRAFTS a plan and returns a plan id in "
+                "pending_approval; it does not execute anything. After calling "
+                "it, tell the user the plan id and that it awaits approval in "
+                "the Tasks panel. Never claim a task ran or completed.\n"
                 "- If a tool errors, report the error plainly.\n"
                 "- When the user asks what you can do, use the capability-list "
                 "tool so the app can attach the matching page links as small "

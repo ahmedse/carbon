@@ -22,6 +22,8 @@ def register_builtin_plugins() -> None:
 
     from .create_dq_rule import CreateDQRule
     from .list_capabilities import ListCapabilities
+    from .plan_task import PlanTask
 
     register_plugin(CreateDQRule())
     register_plugin(ListCapabilities())
+    register_plugin(PlanTask())
