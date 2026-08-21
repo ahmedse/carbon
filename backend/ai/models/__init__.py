@@ -51,6 +51,7 @@ from .core import (
     UserKey,
     VectorEmbedding,
 )
+from .feedback import DqFeedbackEvent
 from .knowledge_graph import (
     KgBootstrapRun,
     KgCacheEntry,
@@ -76,6 +77,7 @@ __all__ = [
     "AIMessage",
     "AIUserProfile",
     "ConversationCheckpoint",
+    "DqFeedbackEvent",
     "AppScopeMixin",
     "generate_uuid",
     "ModelCatalog",

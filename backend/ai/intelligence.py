@@ -1061,6 +1061,20 @@ class CarbonIntelligence:
         message.outcome = outcome
         message.save(update_fields=["outcome", "correction_text"])
 
+        # Phase 24-D — DQ-context feedback capture (best-effort). When the
+        # judged message carries metadata_json["dq"], the signal is mirrored
+        # into the DqFeedbackEvent ledger for the Phase 24 pipeline.
+        try:
+            from ai.feedback import capture_workspace_feedback
+
+            capture_workspace_feedback(message)
+        except Exception:  # noqa: BLE001 — capture must never break feedback
+            logger.warning(
+                "DQ feedback capture failed for message %s",
+                message.id,
+                exc_info=True,
+            )
+
         # Sprint 11 — real-time learning: consume the judgement immediately so the
         # feedback flywheel turns without waiting for the scheduler sweep. Best-effort
         # only: a failure here leaves learned_at NULL and the sweep retries it; it must

@@ -1595,6 +1595,18 @@ class DQSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
         suggestion.status = 'accepted'
         suggestion.save(update_fields=['status', 'updated_at'])
 
+        # Phase 24-D — feed the learning loop (best-effort, never blocks the
+        # response). The accepted suggestion is a strong positive signal that
+        # promotes the rule to a canonical-example candidate.
+        try:
+            from ai.feedback import capture_suggestion_feedback
+
+            capture_suggestion_feedback(
+                suggestion, 'accepted', user=request.user, rule_id=rule.id,
+            )
+        except Exception:  # noqa: BLE001 — capture is best-effort
+            logger.warning('feedback capture failed for accepted suggestion %s', suggestion.id)
+
         from .serializers import DQRuleSerializer
         return Response(DQRuleSerializer(rule).data, status=status.HTTP_201_CREATED)
 
@@ -1620,6 +1632,18 @@ class DQSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
         suggestion.status = 'rejected'
         suggestion.reject_reason = request.data.get('reason', '') or ''
         suggestion.save(update_fields=['status', 'reject_reason', 'updated_at'])
+
+        # Phase 24-D — feed the learning loop (best-effort).
+        try:
+            from ai.feedback import capture_suggestion_feedback
+
+            capture_suggestion_feedback(
+                suggestion, 'rejected', user=request.user,
+                reason=suggestion.reject_reason,
+            )
+        except Exception:  # noqa: BLE001 — capture is best-effort
+            logger.warning('feedback capture failed for rejected suggestion %s', suggestion.id)
+
         return Response(DQSuggestionSerializer(suggestion).data)
 
 
