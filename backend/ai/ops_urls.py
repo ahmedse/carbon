@@ -21,6 +21,9 @@ from ai.ops_api import (
     ImpactTableView,
     LineageFieldView,
     LineageTableView,
+    MdmDedupView,
+    MdmExplainView,
+    MdmProposeMergeView,
     PolicyDriftView,
     PolicyDraftView,
     PolicyExplainView,
@@ -64,4 +67,8 @@ urlpatterns = [
     path("policies/drift/", PolicyDriftView.as_view(), name="ai-policy-drift"),
     path("policies/<int:policy_id>/", PolicyExplainView.as_view(), name="ai-policy-explain"),
     path("policies/<int:policy_id>/draft/", PolicyDraftView.as_view(), name="ai-policy-draft"),
+    # MDM & data product (Phase 24-K) — explain/dedup read-only; propose-merge draft gated on mdm:manage
+    path("mdm/entity/<int:value_id>/", MdmExplainView.as_view(), name="ai-mdm-explain"),
+    path("mdm/dedup/", MdmDedupView.as_view(), name="ai-mdm-dedup"),
+    path("mdm/dedup/propose-merge/", MdmProposeMergeView.as_view(), name="ai-mdm-propose-merge"),
 ]

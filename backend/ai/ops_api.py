@@ -325,3 +325,69 @@ class PolicyDriftView(APIView):
     def get(self, request):
         from ai.knowledge.policy_advisor import flag_policy_drift
         return Response(flag_policy_drift())
+
+
+# ── MDM & data product (Phase 24-K) ────────────────────────────────────────
+# Entity explain + dedup suggestions are read-only (platform:view_audit).
+# Proposing a merge is DRAFT-ONLY — requires_confirmation payload, never
+# writes (RULE_21); gated on mdm:manage (the capability whose holder may
+# eventually apply the merge).
+
+
+def _parse_threshold(request, default: float = 0.85) -> float:
+    try:
+        value = float(request.query_params.get("threshold", default))
+    except (TypeError, ValueError):
+        return default
+    return min(max(value, 0.0), 1.0)
+
+
+class MdmExplainView(APIView):
+    """GET /mdm/entity/{value_id}/ — explain an entity's master record."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request, value_id):
+        from ai.knowledge.mdm_advisor import explain_entity
+        result = explain_entity(value_id)
+        if "error" in result:
+            return Response(result, status=404)
+        return Response(result)
+
+
+class MdmDedupView(APIView):
+    """GET /mdm/dedup/?set_id=1&threshold=0.85 — dedup suggestions (never merges)."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request):
+        from ai.knowledge.mdm_advisor import dedup_suggestions
+        set_id = request.query_params.get("set_id")
+        result = dedup_suggestions(
+            set_id=int(set_id) if set_id and set_id.isdigit() else None,
+            threshold=_parse_threshold(request),
+        )
+        if "error" in result:
+            return Response(result, status=404)
+        return Response(result)
+
+
+class MdmProposeMergeView(APIView):
+    """POST /mdm/dedup/propose-merge/ — DRAFT a merge (never executes)."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "mdm:manage"
+
+    def post(self, request):
+        from ai.knowledge.mdm_advisor import propose_merge
+        data = request.data or {}
+        result = propose_merge(
+            set_id=data.get("set_id"),
+            duplicate_value_id=data.get("duplicate_value_id"),
+            gold_value_id=data.get("gold_value_id"),
+        )
+        if "error" in result:
+            return Response(result, status=404)
+        return Response(result)
