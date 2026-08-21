@@ -279,6 +279,8 @@ class DQRuleViewSet(viewsets.ModelViewSet):
         from .jobs import create_job, execute
         from .serializers import DQJobSerializer
 
+        from .workflows import workflow_needs_prompt
+
         rule = self.get_object()
         _check_rule_access(request.user, rule)
 
@@ -289,7 +291,7 @@ class DQRuleViewSet(viewsets.ModelViewSet):
             table = DataTable.objects.filter(id=table_ids[0]).first()
 
         payload = {'rule_id': rule.id}
-        if job_type == 'nl_check':
+        if workflow_needs_prompt(job_type):
             from .jobs import _prompt_for_rule
             payload['prompt'] = request.data.get('prompt') or _prompt_for_rule(rule)
 
@@ -1407,6 +1409,7 @@ class DQJobViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """POST /dq/jobs/ — create + execute (deterministic) or submit (Pulse)."""
         from .jobs import create_job, execute
+        from .workflows import validate_job_payload
 
         job_type = request.data.get('job_type')
         if job_type not in dict(DQJob._meta.get_field('job_type').choices):
@@ -1432,17 +1435,11 @@ class DQJobViewSet(viewsets.ModelViewSet):
                 return Response({'error': f'DataTable {table_id} not found'}, status=status.HTTP_404_NOT_FOUND)
             _check_table_access(request.user, table)
 
-        # rule_run/nl_check jobs require a rule; profile/freshness/schema a table
-        if job_type in ('rule_run', 'nl_check') and rule is None:
-            return Response(
-                {'error': f'{job_type} job requires rule_id'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if job_type in ('profile', 'freshness', 'schema', 'anomaly', 'suggest') and table is None:
-            return Response(
-                {'error': f'{job_type} job requires data_table_id'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # Required refs come from the workflow spec (dq/workflows.py), not a
+        # hardcoded tuple — a new job type declares its needs in its spec.
+        ok, err = validate_job_payload(job_type, rule=rule, table=table)
+        if not ok:
+            return Response({'error': err}, status=status.HTTP_400_BAD_REQUEST)
 
         job = create_job(job_type, rule=rule, table=table, payload=payload, user=request.user)
         execute(job)

@@ -16,13 +16,21 @@ Lifecycle model (design decisions in TASK-DQ-CORE-P3-JOBS.md):
     also writes an honest DQResult(status='skipped_unavailable') so scores
     show the gap instead of silently auto-passing.
 
+Phase 24-E (declarative workflows): the if/elif dispatcher is GONE. Every
+job type is a spec row in ``dq/workflows.py`` (WORKFLOW_SPECS) declaring its
+kind (deterministic | pulse), required refs, and handler names. The runner
+here only resolves the spec and delegates — adding a job type means one spec
+row + one handler, never a dispatcher edit (ADR-0008: a workflow = a spec).
+
 All exceptions are caught here — the runner NEVER raises out. State changes
 persist so any later read sees a consistent terminal status.
 """
 import logging
+import sys
 
-from .models import DQJob, JOB_TYPES
 from . import services
+from .models import DQJob
+from .workflows import get_workflow, has_workflow, resolve_handler
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +39,13 @@ PULSE_UNAVAILABLE_LIMIT = 20
 
 
 def create_job(job_type, *, rule=None, table=None, payload=None, user=None) -> DQJob:
-    """Create (but do not run) a DQJob. Use execute() to start it."""
-    if job_type not in dict(JOB_TYPES):
+    """Create (but do not run) a DQJob. Use execute() to start it.
+
+    Validated against the workflow registry (dq/workflows.py) — the model's
+    JOB_TYPES choices stay the DB-level constraint, but dispatchability is
+    decided by the spec registry.
+    """
+    if not has_workflow(job_type):
         raise ValueError(f'Unknown job_type: {job_type}')
     return DQJob.objects.create(
         job_type=job_type,
@@ -43,31 +56,39 @@ def create_job(job_type, *, rule=None, table=None, payload=None, user=None) -> D
     )
 
 
+def _resolve(spec: dict, key: str):
+    """Resolve a spec handler name against this module at call time.
+
+    Looked up dynamically (not captured in the spec) so ``unittest.mock``
+    patches on this module (e.g. ``patch.object(jobs_module, '_run_rule_job')``)
+    take effect.
+    """
+    return resolve_handler(spec[key], sys.modules[__name__])
+
+
 def execute(job: DQJob) -> DQJob:
     """Run a job to a terminal state (done/failed), or submit to Pulse.
 
     Deterministic jobs run inline and persist their result summary.
     Pulse jobs submit to Pulse and enter running (polled via refresh()).
     Never raises — failures are recorded on the job itself.
+
+    Dispatch is fully spec-driven (dq/workflows.py): the workflow's ``kind``
+    selects the flow, its handler names the implementation. There is no
+    job-type if/elif chain here.
     """
     if job.status == 'canceled':
         return job  # nothing to do
 
     try:
-        if job.job_type == 'rule_run':
-            return _run_rule_job(job)
-        if job.job_type == 'profile':
-            return _run_profile_job(job)
-        if job.job_type == 'freshness':
-            return _run_freshness_job(job)
-        if job.job_type == 'schema':
-            return _run_schema_job(job)
-        if job.job_type in ('nl_check', 'suggest', 'anomaly'):
-            return _submit_pulse_job(job)
-        job.status = 'failed'
-        job.error = f'Unknown job_type: {job.job_type}'
-        job.save(update_fields=['status', 'error', 'updated_at'])
-        return job
+        spec = get_workflow(job.job_type)
+        if spec['kind'] == 'deterministic':
+            return _resolve(spec, 'run')(job)
+
+        response = _resolve(spec, 'submit')(job)
+        if isinstance(response, DQJob):
+            return response  # submit handler terminalized the job itself
+        return _record_pulse_submission(job, response, spec)
     except Exception as exc:  # runner never raises
         logger.exception('DQJob %s (%s) failed', job.pk, job.job_type)
         job.status = 'failed'
@@ -77,12 +98,13 @@ def execute(job: DQJob) -> DQJob:
 
 
 def refresh(job: DQJob) -> DQJob:
-    """Poll a Pulse job (nl_check/suggest/anomaly) and advance its status.
+    """Poll a Pulse job (per its workflow spec) and advance its status.
 
     Deterministic jobs are already terminal — refresh() is a no-op for them.
     Call from DQJobViewSet.retrieve() before serializing.
     """
-    if job.job_type not in ('nl_check', 'suggest', 'anomaly'):
+    spec = get_workflow(job.job_type)
+    if spec['kind'] != 'pulse':
         return job
     if job.status in ('done', 'failed', 'canceled'):
         return job
@@ -93,8 +115,8 @@ def refresh(job: DQJob) -> DQJob:
         job.status = 'failed'
         job.error = 'Pulse job has no pulse_task_id'
         job.save(update_fields=['status', 'error', 'updated_at'])
-        if job.job_type == 'nl_check':
-            _write_skipped_result(job, job.error)
+        if spec.get('on_failed'):
+            _resolve(spec, 'on_failed')(job, job.error)
         return job
 
     response = CarbonIntelligence().get_task_status(job.pulse_task_id)
@@ -115,8 +137,8 @@ def refresh(job: DQJob) -> DQJob:
             job.save(update_fields=[
                 'status', 'error', 'payload', 'progress', 'updated_at',
             ])
-            if job.job_type == 'nl_check':
-                _write_skipped_result(job, job.error)
+            if spec.get('on_failed'):
+                _resolve(spec, 'on_failed')(job, job.error)
         else:
             job.save(update_fields=['payload', 'updated_at'])
         return job
@@ -132,12 +154,8 @@ def refresh(job: DQJob) -> DQJob:
         job.status = 'done'
         job.progress = 100
         job.result = response.get('result') or {}
-        if job.job_type == 'nl_check':
-            _write_nl_check_results(job)
-        elif job.job_type == 'suggest':
-            _persist_suggestions(job)
-        elif job.job_type == 'anomaly':
-            _write_anomaly_results(job)
+        if spec.get('on_completed'):
+            _resolve(spec, 'on_completed')(job)
         job.save(update_fields=['status', 'progress', 'result', 'updated_at'])
         return job
 
@@ -145,8 +163,8 @@ def refresh(job: DQJob) -> DQJob:
         job.status = 'failed'
         job.error = str(response.get('error') or 'Pulse task failed')
         job.save(update_fields=['status', 'error', 'updated_at'])
-        if job.job_type == 'nl_check':
-            _write_skipped_result(job, job.error)
+        if spec.get('on_failed'):
+            _resolve(spec, 'on_failed')(job, job.error)
         return job
 
     # Unknown status from Pulse — leave running; next poll decides.
@@ -256,59 +274,63 @@ def _prompt_for_rule(rule) -> str:
     return ''
 
 
-def _submit_pulse_job(job: DQJob) -> DQJob:
-    """Submit an nl_check/suggest job to Pulse; store pulse_task_id, go running.
+def _submit_nl_check_job(job: DQJob) -> DQJob:
+    """Submit an nl_check job to Pulse (dq.validate); return the response.
 
     Pulse may answer synchronously (§1.2, status completed with result) or
-    asynchronously (§1.3, status pending + poll_url). Either way we store the
-    task id; refresh() advances non-terminal jobs from GET /dq/jobs/{id}/.
+    asynchronously (§1.3, status pending + poll_url). Either way execute()
+    records the response via _record_pulse_submission; refresh() advances
+    non-terminal jobs from GET /dq/jobs/{id}/.
     """
     from ai.intelligence import CarbonIntelligence
 
-    intelligence = CarbonIntelligence()
+    if job.rule_id is None:
+        raise ValueError('nl_check job requires a rule')
+    prompt = job.payload.get('prompt') or _prompt_for_rule(job.rule)
+    if not prompt:
+        raise ValueError('nl_check job requires a prompt (payload.prompt or rule definition)')
+    return CarbonIntelligence().submit_dq_validate(
+        rules=[{
+            'id': job.rule_id,
+            'prompt': prompt,
+            'fields': job.payload.get('fields', []),
+            'severity': job.rule.severity if job.rule_id else 'error',
+        }],
+        rows=job.payload.get('rows', []),
+        context={
+            'table_name': job.data_table.name if job.data_table_id else '',
+            'row_count_hint': len(job.payload.get('rows', [])),
+            'job_id': job.pk,
+        },
+    )
 
-    if job.job_type == 'nl_check':
-        if job.rule_id is None:
-            raise ValueError('nl_check job requires a rule')
-        prompt = job.payload.get('prompt') or _prompt_for_rule(job.rule)
-        if not prompt:
-            raise ValueError('nl_check job requires a prompt (payload.prompt or rule definition)')
-        response = intelligence.submit_dq_validate(
-            rules=[{
-                'id': job.rule_id,
-                'prompt': prompt,
-                'fields': job.payload.get('fields', []),
-                'severity': job.rule.severity if job.rule_id else 'error',
-            }],
-            rows=job.payload.get('rows', []),
-            context={
-                'table_name': job.data_table.name if job.data_table_id else '',
-                'row_count_hint': len(job.payload.get('rows', [])),
-                'job_id': job.pk,
-            },
-        )
-    elif job.job_type == 'suggest':
-        table_payload, err = services.build_suggest_payload(job.data_table_id)
-        if err:
-            job.status = 'failed'
-            job.error = err.get('message', 'Could not build suggest payload')
-            job.save(update_fields=['status', 'error', 'updated_at'])
-            return job
-        response = intelligence.submit_dq_suggest(table_payload)
-    elif job.job_type == 'anomaly':
-        return _submit_anomaly_job(job)
-    else:
-        raise ValueError(f'Unknown Pulse job_type: {job.job_type}')
 
-    return _record_pulse_submission(job, response)
+def _submit_suggest_job(job: DQJob) -> DQJob:
+    """Submit a suggest job to Pulse (dq.suggest); return the response.
+
+    A payload-build failure terminalizes the job (failed) and returns it
+    directly — execute() detects the DQJob return and skips recording.
+    """
+    from ai.intelligence import CarbonIntelligence
+
+    table_payload, err = services.build_suggest_payload(job.data_table_id)
+    if err:
+        job.status = 'failed'
+        job.error = err.get('message', 'Could not build suggest payload')
+        job.save(update_fields=['status', 'error', 'updated_at'])
+        return job
+    return CarbonIntelligence().submit_dq_suggest(table_payload)
 
 
 def _submit_anomaly_job(job: DQJob) -> DQJob:
-    """Submit an anomaly.detect job to Pulse (Phase 4).
+    """Submit an anomaly.detect job to Pulse (Phase 4); return the response.
 
     Carbon-side guard first: with fewer than MIN_ANOMALY_PROFILES profile
     snapshots the job completes done with result.state='insufficient_history'
-    and Pulse is never called (nothing fabricated — fail-visible).
+    and Pulse is never called (nothing fabricated — fail-visible). Such a
+    terminalized job is returned directly (execute() detects the DQJob
+    return and skips recording); otherwise the response goes back for
+    _record_pulse_submission.
     """
     from ai.intelligence import CarbonIntelligence
 
@@ -332,20 +354,25 @@ def _submit_anomaly_job(job: DQJob) -> DQJob:
         job.save(update_fields=['status', 'error', 'updated_at'])
         return job
 
-    response = CarbonIntelligence().submit_anomaly_detect(payload)
-    return _record_pulse_submission(job, response)
+    return CarbonIntelligence().submit_anomaly_detect(payload)
 
 
-def _record_pulse_submission(job: DQJob, response: dict) -> DQJob:
-    """Persist the outcome of a Pulse submission (sync-complete or accepted)."""
+def _record_pulse_submission(job: DQJob, response: dict, spec: dict) -> DQJob:
+    """Persist the outcome of a Pulse submission (sync-complete or accepted).
+
+    ``spec`` is the workflow spec for job.job_type; its ``on_completed`` /
+    ``on_failed`` handler names decide how a terminal response is persisted
+    (e.g. nl_check writes DQResult rows via _write_nl_check_results; a failed
+    nl_check writes an honest skipped result via _write_skipped_result).
+    """
     if response.get('status') == 'pulse_unavailable':
         job.status = 'failed'
         job.error = str(response.get('error', {}).get('message', 'Pulse unavailable'))
         job.save(update_fields=['status', 'error', 'updated_at'])
         # Fail-visible (design decision #1): a failed nl_check job leaves an
         # honest skipped result so scores show the gap.
-        if job.job_type == 'nl_check':
-            _write_skipped_result(job, job.error)
+        if spec.get('on_failed'):
+            _resolve(spec, 'on_failed')(job, job.error)
         return job
 
     task_id = response.get('task_id') or ''
@@ -356,12 +383,8 @@ def _record_pulse_submission(job: DQJob, response: dict) -> DQJob:
         job.status = 'done'
         job.progress = 100
         job.result = response.get('result') or {}
-        if job.job_type == 'nl_check':
-            _write_nl_check_results(job)
-        elif job.job_type == 'suggest':
-            _persist_suggestions(job)
-        elif job.job_type == 'anomaly':
-            _write_anomaly_results(job)
+        if spec.get('on_completed'):
+            _resolve(spec, 'on_completed')(job)
     elif task_status == 'failed':
         job.status = 'failed'
         job.error = str(response.get('error') or 'Pulse task failed')
