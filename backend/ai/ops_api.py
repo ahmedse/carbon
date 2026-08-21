@@ -246,3 +246,82 @@ class ImpactFieldView(APIView):
         if "error" in result:
             return Response(result, status=404)
         return Response(result)
+
+
+# ── Governance & policy (Phase 24-J) ──────────────────────────────────────
+# Explain / map / drift are read-only (platform:view_audit). Drafting a
+# policy change is DRAFT-ONLY — the reply carries requires_confirmation and
+# never writes (RULE_21); gated on catalog:manage_policies (the capability
+# whose holder may eventually apply it).
+
+
+def _parse_bool_param(request, name: str) -> bool | None:
+    raw = request.query_params.get(name)
+    if raw is None:
+        return None
+    return raw.lower() in ("1", "true", "yes", "on")
+
+
+class PolicyListView(APIView):
+    """GET /policies/?enabled=1&scope_type=global — policy inventory."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request):
+        from ai.knowledge.policy_advisor import list_policies
+        return Response(list_policies(
+            enabled=_parse_bool_param(request, "enabled"),
+            scope_type=request.query_params.get("scope_type"),
+        ))
+
+
+class PolicyExplainView(APIView):
+    """GET /policies/{policy_id}/ — policy explanation grounded in the rule catalog."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request, policy_id):
+        from ai.knowledge.policy_advisor import explain_policy
+        result = explain_policy(policy_id)
+        if "error" in result:
+            return Response(result, status=404)
+        return Response(result)
+
+
+class PolicyDraftView(APIView):
+    """POST /policies/{policy_id}/draft/ — DRAFT a policy change (never executes)."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "catalog:manage_policies"
+
+    def post(self, request, policy_id):
+        from ai.knowledge.policy_advisor import draft_policy_change
+        result = draft_policy_change(policy_id, request.data.get("proposed", {}))
+        if "error" in result:
+            status = 404 if result["error"]["code"] == "not_found" else 400
+            return Response(result, status=status)
+        return Response(result)
+
+
+class PolicyMapView(APIView):
+    """GET /policies/map/ — rules → policies → dimensions projection."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request):
+        from ai.knowledge.policy_advisor import map_rules_to_policies
+        return Response(map_rules_to_policies())
+
+
+class PolicyDriftView(APIView):
+    """GET /policies/drift/ — unbound rules, stale policies, dimension gaps."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request):
+        from ai.knowledge.policy_advisor import flag_policy_drift
+        return Response(flag_policy_drift())

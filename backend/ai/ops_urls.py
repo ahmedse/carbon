@@ -21,6 +21,11 @@ from ai.ops_api import (
     ImpactTableView,
     LineageFieldView,
     LineageTableView,
+    PolicyDriftView,
+    PolicyDraftView,
+    PolicyExplainView,
+    PolicyListView,
+    PolicyMapView,
     PulseHealthView,
     PulseModulesView,
     PulseTaskStatusView,
@@ -53,4 +58,10 @@ urlpatterns = [
     path("lineage/field/<int:field_id>/", LineageFieldView.as_view(), name="ai-lineage-field"),
     path("impact/table/<int:table_id>/", ImpactTableView.as_view(), name="ai-impact-table"),
     path("impact/field/<int:field_id>/", ImpactFieldView.as_view(), name="ai-impact-field"),
+    # Governance & policy (Phase 24-J) — explain/map/drift read-only; drafts gated on catalog:manage_policies
+    path("policies/", PolicyListView.as_view(), name="ai-policy-list"),
+    path("policies/map/", PolicyMapView.as_view(), name="ai-policy-map"),
+    path("policies/drift/", PolicyDriftView.as_view(), name="ai-policy-drift"),
+    path("policies/<int:policy_id>/", PolicyExplainView.as_view(), name="ai-policy-explain"),
+    path("policies/<int:policy_id>/draft/", PolicyDraftView.as_view(), name="ai-policy-draft"),
 ]
