@@ -40,3 +40,5 @@ def register_builtin_domains() -> None:
         from .admin import AdminDomainAI  # noqa: F401
     if not has_domain("mdm"):
         from .mdm import MdmDomainAI  # noqa: F401
+    if not has_domain("data_product"):
+        from .data_product import DataProductDomainAI  # noqa: F401
