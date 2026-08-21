@@ -8,6 +8,7 @@ See .ai-toolkit/shared/ai-contract.md §8 for registration steps.
 Current domains:
   - emissions (carbon footprint)
   - water (water management)
+  - admin (platform administration — access, lineage, governance, MDM)
   - (future) waste
 
 ``register_builtin_domains()`` is invoked once at app startup
@@ -33,3 +34,5 @@ def register_builtin_domains() -> None:
         from .emissions import EmissionsDomainAI  # noqa: F401
     if not has_domain("water"):
         from .water import WaterDomainAI  # noqa: F401
+    if not has_domain("admin"):
+        from .admin import AdminDomainAI  # noqa: F401
