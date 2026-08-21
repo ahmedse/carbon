@@ -9,6 +9,8 @@ Current domains:
   - emissions (carbon footprint)
   - water (water management)
   - admin (platform administration — access, lineage, governance, MDM)
+  - mdm (master data — reference sets, gold-record confidence, dedup)
+  - data_product (governed, versioned data products)
   - (future) waste
 
 ``register_builtin_domains()`` is invoked once at app startup
@@ -36,3 +38,5 @@ def register_builtin_domains() -> None:
         from .water import WaterDomainAI  # noqa: F401
     if not has_domain("admin"):
         from .admin import AdminDomainAI  # noqa: F401
+    if not has_domain("mdm"):
+        from .mdm import MdmDomainAI  # noqa: F401
