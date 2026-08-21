@@ -184,3 +184,65 @@ class AccessAssistAnomaliesView(APIView):
     def get(self, request):
         from ai.knowledge.access_assist import flag_access_anomalies
         return Response(flag_access_anomalies(org_unit_ids=_parse_org_ids(request)))
+
+
+# ── Lineage & impact (Phase 24-I) ─────────────────────────────────────────
+# Read-only knowledge-graph projections over dataschema lineage + DQ rules
+# (extends Phase B dq_graph). The coworker engine calls the modules directly;
+# these HTTP views gate the admin console surface on platform:view_audit.
+
+
+class LineageTableView(APIView):
+    """GET /lineage/table/{table_id}/ — transitive upstream/downstream lineage."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request, table_id):
+        from ai.knowledge.lineage import table_lineage
+        result = table_lineage(table_id)
+        if "error" in result:
+            return Response(result, status=404)
+        return Response(result)
+
+
+class LineageFieldView(APIView):
+    """GET /lineage/field/{field_id}/ — field-level flow (feeds / fed-by / references)."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request, field_id):
+        from ai.knowledge.lineage import field_lineage
+        result = field_lineage(field_id)
+        if "error" in result:
+            return Response(result, status=404)
+        return Response(result)
+
+
+class ImpactTableView(APIView):
+    """GET /impact/table/{table_id}/ — what breaks if this table changes."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request, table_id):
+        from ai.knowledge.lineage import impact_analysis_table
+        result = impact_analysis_table(table_id)
+        if "error" in result:
+            return Response(result, status=404)
+        return Response(result)
+
+
+class ImpactFieldView(APIView):
+    """GET /impact/field/{field_id}/ — what breaks if this field changes."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request, field_id):
+        from ai.knowledge.lineage import impact_analysis_field
+        result = impact_analysis_field(field_id)
+        if "error" in result:
+            return Response(result, status=404)
+        return Response(result)

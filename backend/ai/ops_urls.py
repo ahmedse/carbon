@@ -17,6 +17,10 @@ from ai.ops_api import (
     AccessAssistUsersWithCapabilityView,
     DomainAppManifestDetailView,
     DomainAppManifestListView,
+    ImpactFieldView,
+    ImpactTableView,
+    LineageFieldView,
+    LineageTableView,
     PulseHealthView,
     PulseModulesView,
     PulseTaskStatusView,
@@ -44,4 +48,9 @@ urlpatterns = [
     path("access-assist/capability/<str:capability_key>/users/", AccessAssistUsersWithCapabilityView.as_view(), name="ai-access-assist-capability-users"),
     path("access-assist/propose-grant/", AccessAssistProposeGrantView.as_view(), name="ai-access-assist-propose-grant"),
     path("access-assist/anomalies/", AccessAssistAnomaliesView.as_view(), name="ai-access-assist-anomalies"),
+    # Lineage & impact (Phase 24-I) — capability-gated, read-only
+    path("lineage/table/<int:table_id>/", LineageTableView.as_view(), name="ai-lineage-table"),
+    path("lineage/field/<int:field_id>/", LineageFieldView.as_view(), name="ai-lineage-field"),
+    path("impact/table/<int:table_id>/", ImpactTableView.as_view(), name="ai-impact-table"),
+    path("impact/field/<int:field_id>/", ImpactFieldView.as_view(), name="ai-impact-field"),
 ]
