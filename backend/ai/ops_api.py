@@ -106,3 +106,81 @@ class DomainAppManifestDetailView(APIView):
                 status=404,
             )
         return Response(get_manifest(app_identifier))
+
+
+# ── Access & CBAC assistance (Phase 24-H) ─────────────────────────────────
+# Read-only/proposal-only. Every view is capability-gated and filters its
+# answers by the caller's org subtree when requested. Proposals never write.
+
+
+def _parse_org_ids(request) -> list[int] | None:
+    """``?org_unit_ids=1,2,3`` → [1,2,3]; absent → None (global scope)."""
+    raw = request.query_params.get("org_unit_ids")
+    if not raw:
+        return None
+    try:
+        return [int(part) for part in raw.split(",") if part.strip()]
+    except ValueError:
+        return []
+
+
+class AccessAssistCapabilitiesView(APIView):
+    """GET /access-assist/users/{user_id}/capabilities/?org_unit_ids=… — effective capability set."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request, user_id):
+        from ai.knowledge.access_assist import effective_capabilities
+        return Response(effective_capabilities(user_id, org_unit_ids=_parse_org_ids(request)))
+
+
+class AccessAssistUsersWithCapabilityView(APIView):
+    """GET /access-assist/capability/{capability_key}/users/?org_unit_ids=… — who can reach X?"""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request, capability_key):
+        from ai.knowledge.access_assist import users_with_capability
+        return Response(users_with_capability(capability_key, org_unit_ids=_parse_org_ids(request)))
+
+
+class AccessAssistProposeGrantView(APIView):
+    """POST /access-assist/propose-grant/ — least-privilege grant proposal.
+
+    Read-only: returns a ``requires_confirmation`` payload; never mutates.
+    """
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:manage_access"
+
+    def post(self, request):
+        from ai.knowledge.access_assist import propose_grant
+
+        user_id = request.data.get("user_id")
+        capability_key = request.data.get("capability_key")
+        org_unit_ids = request.data.get("org_unit_ids")
+        if not user_id or not capability_key:
+            return Response(
+                {"detail": "user_id and capability_key are required."}, status=400
+            )
+        result = propose_grant(
+            user_id=int(user_id),
+            capability_key=str(capability_key),
+            org_unit_ids=org_unit_ids,
+        )
+        if "error" in result:
+            return Response(result, status=404 if result["error"]["code"] == "not_found" else 400)
+        return Response(result)
+
+
+class AccessAssistAnomaliesView(APIView):
+    """GET /access-assist/anomalies/?org_unit_ids=… — over-granted users + dormant grants."""
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "platform:view_audit"
+
+    def get(self, request):
+        from ai.knowledge.access_assist import flag_access_anomalies
+        return Response(flag_access_anomalies(org_unit_ids=_parse_org_ids(request)))

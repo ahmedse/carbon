@@ -11,6 +11,10 @@ from ai.observability_api import (
     PulseInventoryView,
 )
 from ai.ops_api import (
+    AccessAssistAnomaliesView,
+    AccessAssistCapabilitiesView,
+    AccessAssistProposeGrantView,
+    AccessAssistUsersWithCapabilityView,
     DomainAppManifestDetailView,
     DomainAppManifestListView,
     PulseHealthView,
@@ -35,4 +39,9 @@ urlpatterns = [
     # Domain app manifest API — available to all authenticated users
     path("apps/", DomainAppManifestListView.as_view(), name="ai-domain-apps"),
     path("apps/<str:app_identifier>/", DomainAppManifestDetailView.as_view(), name="ai-domain-app-detail"),
+    # Access & CBAC assistance (Phase 24-H) — capability-gated, read-only
+    path("access-assist/users/<int:user_id>/capabilities/", AccessAssistCapabilitiesView.as_view(), name="ai-access-assist-capabilities"),
+    path("access-assist/capability/<str:capability_key>/users/", AccessAssistUsersWithCapabilityView.as_view(), name="ai-access-assist-capability-users"),
+    path("access-assist/propose-grant/", AccessAssistProposeGrantView.as_view(), name="ai-access-assist-propose-grant"),
+    path("access-assist/anomalies/", AccessAssistAnomaliesView.as_view(), name="ai-access-assist-anomalies"),
 ]
