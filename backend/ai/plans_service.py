@@ -44,6 +44,7 @@ logger = logging.getLogger("carbon.ai.plans_service")
 PLAN_INSTANCE_ID = "carbon"
 
 # Run statuses this service owns (superset of the engine's status set).
+STATUS_DISCOVERING = "discovering"
 STATUS_PENDING_APPROVAL = "pending_approval"
 STATUS_APPROVED = "approved"
 STATUS_RUNNING = "running"
@@ -505,6 +506,220 @@ class PlansService:
             run_id, user_pk, len(plan.steps), plan.source,
         )
         return self.get_plan(user, run_id)
+
+    # ── W5-B: guided discovery conversation ───────────────────────────────
+
+    DISCOVERY_MAX_TURNS = 5
+
+    DISCOVERY_SYSTEM_PROMPT = (
+        "You are Pulse, the planning assistant for the Carbon Data Trust "
+        "Platform. Before proposing a plan, you clarify the user's outcome "
+        "with a short series of focused questions. Ask ONE concise question "
+        "at a time. When you have enough information, respond with complete."
+    )
+
+    def _discovery_prompt(self, brief: str, turns: list) -> list:
+        """Build the chat messages for one discovery round."""
+        messages = [
+            {"role": "system", "content": self.DISCOVERY_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Outcome to plan: {brief}"},
+        ]
+        for turn in turns:
+            question = (turn.get("question") or "").strip()
+            if question:
+                messages.append({"role": "assistant", "content": question})
+            reply = (turn.get("reply") or "").strip()
+            if reply:
+                messages.append({"role": "user", "content": reply})
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "Respond with JSON only: either "
+                    '{"action":"ask","question":"<your question>"} to ask the '
+                    'next clarifying question, or {"action":"complete"} when '
+                    "you have enough to propose a plan."
+                ),
+            }
+        )
+        return messages
+
+    def _ask_discovery_llm(self, brief: str, turns: list) -> dict:
+        """One discovery round → ``{"action": "ask"|"complete", "question": ...}``.
+
+        Uses the shared ``chat_completion`` seam (lazily imported, mirroring
+        ``_decompose``) so tests can patch it without hitting a live LLM.
+        """
+        from ai.engine.core.config import get_settings
+        from ai.engine.llm.provider import chat_completion
+
+        settings = get_settings()
+        text = _run_async(
+            chat_completion(
+                self._discovery_prompt(brief, turns),
+                model=settings.LLM_MODEL,
+                temperature=0.3,
+                response_format={"type": "json_object"},
+            )
+        )
+        try:
+            data = json.loads((text or "").strip())
+        except (json.JSONDecodeError, TypeError):
+            data = {}
+        action = (data.get("action") or "ask").strip().lower()
+        question = (data.get("question") or "").strip()
+        if action == "complete":
+            return {"action": "complete", "question": None}
+        if not question:
+            question = (
+                "Could you tell me a bit more about what you want to accomplish?"
+            )
+        return {"action": "ask", "question": question}
+
+    @staticmethod
+    def _enrich_brief(brief: str, turns: list) -> str:
+        """Fold answered discovery turns into the brief for decomposition."""
+        answered = [t for t in turns if (t.get("reply") or "").strip()]
+        if not answered:
+            return brief
+        qa = "\n".join(
+            f"Q: {(t.get('question') or '').strip()}\n"
+            f"A: {(t.get('reply') or '').strip()}"
+            for t in answered
+        )
+        return f"{brief}\n\nRequirements clarified during discovery:\n{qa}"
+
+    def start_discovery(self, user, brief: str, conversation_id: str = "") -> dict:
+        """Begin a guided discovery conversation (W5-B).
+
+        Creates a Run in ``discovering`` state (no plan yet) and returns the
+        first clarifying question from Pulse as the opening ``discovery_turn``
+        frame.
+        """
+        from ai.models.core import Run, generate_uuid
+
+        brief = (brief or "").strip()
+        if not brief:
+            raise ValueError("brief is required.")
+        if len(brief) > 4000:
+            raise ValueError("brief is too long (max 4000 characters).")
+
+        first = self._ask_discovery_llm(brief, [])
+        turns = [{"question": first["question"], "reply": None}]
+
+        run_id = generate_uuid()
+        Run.objects.create(
+            id=run_id,
+            instance_id=PLAN_INSTANCE_ID,
+            conversation_id=conversation_id or "",
+            host_user_id=str(user.pk),
+            user_message=brief,
+            status=STATUS_DISCOVERING,
+            plan_json={"discovery_turns": turns, "brief": brief},
+        )
+
+        logger.info(
+            "Discovery started id=%s user=%s question=%r",
+            run_id, str(user.pk), first["question"],
+        )
+        return {
+            "id": run_id,
+            "status": "needs_input",
+            "run_status": STATUS_DISCOVERING,
+            "brief": brief,
+            "question": first["question"],
+            "turns": turns,
+            "conversation_id": conversation_id or "",
+        }
+
+    def advance_discovery(self, user, plan_id: str, user_reply: str) -> dict:
+        """Advance a discovery conversation by one user reply (W5-B).
+
+        Appends the reply to ``discovery_turns``, asks Pulse for the next
+        question or completion. On completion the enriched brief (original
+        brief + discovery answers) is decomposed into a full plan and the Run
+        transitions to ``pending_approval`` (RULE_21 — review only).
+        """
+        from ai.models.core import RunStep
+
+        run = self._get_owned_run(user, plan_id)
+        if run.status != STATUS_DISCOVERING:
+            raise PlanNotRunnableError(
+                f"Only discovering plans accept replies (status: {run.status})."
+            )
+
+        reply = (user_reply or "").strip()
+        if not reply:
+            raise ValueError("reply is required.")
+
+        plan_json = run.plan_json or {}
+        turns = list(plan_json.get("discovery_turns") or [])
+        brief = plan_json.get("brief") or run.user_message or ""
+
+        # Fill the current pending turn with the user's reply.
+        filled = False
+        for turn in turns:
+            if not (turn.get("reply") or "").strip():
+                turn["reply"] = reply
+                filled = True
+                break
+        if not filled:
+            turns.append({"question": "", "reply": reply})
+
+        if len(turns) >= self.DISCOVERY_MAX_TURNS:
+            decision = {"action": "complete", "question": None}
+        else:
+            decision = self._ask_discovery_llm(brief, turns)
+
+        if decision.get("action") == "complete":
+            enriched = self._enrich_brief(brief, turns)
+            plan = self._decompose(user, enriched)
+            plan_dict = self._plan_to_dict(plan)
+            plan_dict["discovery_turns"] = turns
+            plan_dict["brief"] = brief
+
+            run.plan_json = plan_dict
+            run.status = STATUS_PENDING_APPROVAL
+            run.save(update_fields=["plan_json", "status", "updated_at"])
+
+            RunStep.objects.filter(run_id=run.id).delete()
+            for step in plan.steps:
+                RunStep.objects.create(
+                    run_id=run.id,
+                    step_index=step.step_id,
+                    intent=step.intent,
+                    tool_name=step.tool_name,
+                    tool_args_json=step.tool_args or {},
+                    depends_on_json=step.depends_on or [],
+                    status=STEP_PENDING,
+                )
+
+            logger.info(
+                "Discovery complete id=%s user=%s steps=%d",
+                run.id, str(user.pk), len(plan.steps),
+            )
+            return {
+                "id": run.id,
+                "status": "plan_ready",
+                "run_status": STATUS_PENDING_APPROVAL,
+                "question": None,
+                "plan": self.get_plan(user, run.id),
+                "turns": turns,
+            }
+
+        next_question = decision.get("question")
+        turns.append({"question": next_question, "reply": None})
+        run.plan_json = {"discovery_turns": turns, "brief": brief}
+        run.save(update_fields=["plan_json", "updated_at"])
+
+        return {
+            "id": run.id,
+            "status": "needs_input",
+            "run_status": STATUS_DISCOVERING,
+            "question": next_question,
+            "plan": None,
+            "turns": turns,
+        }
 
     def get_plan(self, user, plan_id: str) -> dict:
         """Fetch a plan + its steps (owner-scoped)."""

@@ -22,6 +22,8 @@ vi.mock('../components/NotificationProvider', () => ({
 
 const listPlans = vi.fn();
 const createPlan = vi.fn();
+const startDiscoveryPlan = vi.fn();
+const advanceDiscovery = vi.fn();
 const getPlan = vi.fn();
 const approvePlan = vi.fn();
 const declinePlan = vi.fn();
@@ -39,6 +41,8 @@ const getPlanLedger = vi.fn();
 vi.mock('../api/aiWorkspace', () => ({
   listPlans: (...args) => listPlans(...args),
   createPlan: (...args) => createPlan(...args),
+  startDiscoveryPlan: (...args) => startDiscoveryPlan(...args),
+  advanceDiscovery: (...args) => advanceDiscovery(...args),
   getPlan: (...args) => getPlan(...args),
   approvePlan: (...args) => approvePlan(...args),
   declinePlan: (...args) => declinePlan(...args),

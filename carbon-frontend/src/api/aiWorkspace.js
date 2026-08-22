@@ -841,6 +841,37 @@ export function createPlan(token, { brief, conversation_id = '' }) {
 }
 
 /**
+ * W5-B — start a guided discovery conversation (Pulse asks first).
+ * POST /ai/plans/ with `discovery_mode: true`.
+ * @param {string} token - JWT access token
+ * @param {object} params - { brief, conversation_id? }
+ * @returns {Promise<object>} { id, status: 'needs_input', question, turns, ... }
+ */
+export function startDiscoveryPlan(token, { brief, conversation_id = '' }) {
+  return apiFetch(PLANS_BASE, {
+    token,
+    method: 'POST',
+    body: { brief, conversation_id, discovery_mode: true },
+  });
+}
+
+/**
+ * W5-B — reply to Pulse's discovery question.
+ * POST /ai/plans/{id}/discover/ with `{ reply }`.
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @param {string} reply - the user's answer to the current question
+ * @returns {Promise<object>} { id, status: 'needs_input'|'plan_ready', question, plan, turns }
+ */
+export function advanceDiscovery(token, planId, reply) {
+  return apiFetch(`${PLANS_BASE}${planId}/discover/`, {
+    token,
+    method: 'POST',
+    body: { reply },
+  });
+}
+
+/**
  * Fetch a plan + its steps (owner-scoped).
  * @param {string} token - JWT access token
  * @param {string} planId - UUID

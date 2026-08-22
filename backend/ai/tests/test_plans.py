@@ -347,6 +347,119 @@ def test_create_plan_rejects_empty_brief(user, patch_engine_seams):
         service.create_plan(user, brief="   ")
 
 
+# ── W5-B: guided discovery conversation ─────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_discovery_start_returns_question(
+    user, patch_engine_seams, run_ids_cleanup, monkeypatch
+):
+    monkeypatch.setattr(
+        "ai.engine.llm.provider.chat_completion",
+        AsyncMock(
+            return_value=(
+                '{"action": "ask", "question": "Which data sources should I analyze?"}'
+            )
+        ),
+    )
+    service = PlansService()
+    result = service.start_discovery(user, brief="Summarize our carbon footprint")
+
+    assert result["status"] == "needs_input"
+    assert result["run_status"] == "discovering"
+    assert result["question"] == "Which data sources should I analyze?"
+    assert result["turns"] == [
+        {"question": "Which data sources should I analyze?", "reply": None}
+    ]
+
+    run = Run.objects.get(id=result["id"])
+    assert run.status == "discovering"
+    assert run.plan_json["discovery_turns"] == result["turns"]
+    run_ids_cleanup.append(run.id)
+
+
+@pytest.mark.django_db
+def test_discovery_advance_continues_or_completes(
+    user, patch_engine_seams, run_ids_cleanup, monkeypatch
+):
+    monkeypatch.setattr(
+        "ai.engine.llm.provider.chat_completion",
+        AsyncMock(
+            side_effect=[
+                '{"action": "ask", "question": "Which data sources?"}',
+                '{"action": "ask", "question": "What time period?"}',
+            ]
+        ),
+    )
+    service = PlansService()
+    started = service.start_discovery(user, brief="Summarize our carbon footprint")
+    run_ids_cleanup.append(started["id"])
+
+    advance = service.advance_discovery(
+        user, started["id"], "Use the raw emissions ledger"
+    )
+
+    assert advance["status"] == "needs_input"
+    assert advance["question"] == "What time period?"
+    assert advance["turns"][0] == {
+        "question": "Which data sources?",
+        "reply": "Use the raw emissions ledger",
+    }
+    assert advance["turns"][1] == {
+        "question": "What time period?",
+        "reply": None,
+    }
+
+    run = Run.objects.get(id=started["id"])
+    assert run.status == "discovering"
+
+
+@pytest.mark.django_db
+def test_discovery_complete_transitions_to_pending_approval(
+    user, patch_engine_seams, run_ids_cleanup, monkeypatch
+):
+    _FakePlanner.default_plan_spec = {
+        "pattern": "root_cause",
+        "source": "llm_decompose",
+        "steps": [
+            {
+                "step_id": 0,
+                "intent": "Load the emissions totals",
+                "tool_name": None,
+                "tool_args": {},
+                "depends_on": [],
+            },
+        ],
+        "synthesis_instruction": "Summarize.",
+    }
+    monkeypatch.setattr(
+        "ai.engine.llm.provider.chat_completion",
+        AsyncMock(
+            side_effect=[
+                '{"action": "ask", "question": "Which data sources?"}',
+                '{"action": "complete"}',
+            ]
+        ),
+    )
+    service = PlansService()
+    started = service.start_discovery(user, brief="Summarize our carbon footprint")
+    run_ids_cleanup.append(started["id"])
+
+    advance = service.advance_discovery(
+        user, started["id"], "Use the raw emissions ledger"
+    )
+
+    assert advance["status"] == "plan_ready"
+    assert advance["run_status"] == "pending_approval"
+    assert advance["plan"]["status"] == "pending_approval"
+    assert len(advance["plan"]["steps"]) == 1
+
+    run = Run.objects.get(id=started["id"])
+    assert run.status == "pending_approval"
+    assert run.plan_json["discovery_turns"][0]["reply"] == "Use the raw emissions ledger"
+    assert RunStep.objects.filter(run_id=run.id).count() == 1
+
+
 # ── Owner scoping (CBAC) ─────────────────────────────────────────────────
 
 

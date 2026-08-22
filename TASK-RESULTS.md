@@ -3157,3 +3157,42 @@ controls (approve/edit/reject/fork/run/pause/resume/stop).
 - Stored message metadata is frozen at send time: only NEW plan-created turns
   carry the `open_panel` action; older replies (pre-fix) show the ✅ copy but no
   button (a fresh "Run agent planner" regenerates it).
+
+## [2026-08-22] Master Architect — Sprint W5-B: guided discovery conversation
+
+### Summary
+Replaced the immediate "brief → decompose → plan" flow with a multi-turn guided
+discovery conversation (F-23). Backend adds `start_discovery` / `advance_discovery`
+on `PlansService` (a `Run` in `discovering` state collects `discovery_turns`, Pulse
+asks one question at a time via the `chat_completion` seam, and on completion the
+enriched brief decomposes into a `pending_approval` plan — RULE_21, nothing runs).
+Frontend swaps the static brief form for a `DiscoveryComposer` with compact
+plain-text message bubbles and a "Plan ready — review below" → review transition.
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `backend/ai/plans_service.py` | `STATUS_DISCOVERING='discovering'`; `_discovery_prompt` / `_ask_discovery_llm` (lazy `chat_completion` seam) / `_enrich_brief`; `start_discovery` (Run in discovering + first question) and `advance_discovery` (fill turn, cap at `DISCOVERY_MAX_TURNS=5`, `complete` → `_decompose` + `pending_approval` + recreate RunSteps) |
+| MODIFY | `backend/ai/plans_api.py` | `PlanDiscoverSerializer`; `discovery_mode` flag on create; `advance_discovery` `@action` (`POST /plans/{id}/discover/`) with 404/400 guards |
+| MODIFY | `backend/ai/plans_urls.py` | route `ai-plan-discover` before promote-template |
+| MODIFY | `backend/ai/tests/test_plans.py` | 3 tests (`test_discovery_start_returns_question`, `test_discovery_advance_continues_or_completes`, `test_discovery_complete_transitions_to_pending_approval`) patching `chat_completion` with `AsyncMock` |
+| MODIFY | `carbon-frontend/src/api/aiWorkspace.js` | `startDiscoveryPlan` (`discovery_mode: true`) + `advanceDiscovery` (`POST .../discover/`) |
+| CREATE | `carbon-frontend/src/shell/DiscoveryComposer.jsx` | brief → discovery bubbles → "Plan ready — review below" → `onPlanReady`; plain-text bubbles, no raw JSON, theme tokens only |
+| MODIFY | `carbon-frontend/src/shell/AITaskPanel.jsx` | composer replaced with `<DiscoveryComposer>`; `handleDiscoveryReady` opens the plan on the Run tab; removed now-unused immediate `handleCreate`/`createPlan` path |
+| MODIFY | `carbon-frontend/src/__tests__/AITaskPanel.test.jsx` | +2 discovery-flow tests (start→reply→ready→review; multi-turn bubbles); mocks for the two endpoints |
+| MODIFY | `carbon-frontend/src/__tests__/AITaskPanel.w3c.test.jsx` | mock factory extended with `startDiscoveryPlan`/`advanceDiscovery` |
+
+### Verification
+- Backend: `pytest ai/tests/test_plans.py -q` → **36 passed**; `manage.py check` clean;
+  `makemigrations --check --dry-run` → "No changes detected".
+- Frontend: `npm run lint` → 0 errors (9 pre-existing warnings); `npx vitest run
+  src/__tests__/AITaskPanel.test.jsx src/__tests__/AITaskPanel.w3c.test.jsx` → **24 passed**;
+  `npm run build` → ✓ 15299 modules transformed.
+- Full `npx vitest run` → 781 passed / 10 failed (4 failing files) — all failures
+  pre-existing and unrelated (AIMessageBubble Promote/feedback, AISharedThreads,
+  healthy/LoadoutSheetPage).
+
+### Notes / Deviations
+- "Render AITaskPlanCard" is realized by the Run tab (existing card + consent gate);
+  the composer's `plan_ready` state shows the banner and a "Review plan" transition
+  instead of duplicating the card's approve/run handlers inside the composer.

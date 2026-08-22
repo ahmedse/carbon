@@ -50,6 +50,15 @@ class PlanCreateSerializer(serializers.Serializer):
     conversation_id = serializers.CharField(
         required=False, allow_blank=True, default=""
     )
+    # W5-B: when true, start in guided-discovery mode (Pulse asks first)
+    # instead of immediately decomposing into a plan.
+    discovery_mode = serializers.BooleanField(required=False, default=False)
+
+
+class PlanDiscoverSerializer(serializers.Serializer):
+    """POST /plans/{id}/discover/ — the user's reply to Pulse's question."""
+
+    reply = serializers.CharField(required=True, allow_blank=False, max_length=4000)
 
 
 class PlanConfirmSerializer(serializers.Serializer):
@@ -120,20 +129,61 @@ class PlanViewSet(viewsets.GenericViewSet):
             )
 
     def create(self, request):
-        """Create a reviewable plan from a brief — planning only, no execution."""
+        """Create a reviewable plan from a brief — planning only, no execution.
+
+        W5-B: with ``discovery_mode=True`` the brief opens a guided discovery
+        conversation instead (Pulse asks clarifying questions before planning).
+        """
         serializer = PlanCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            plan = self.service.create_plan(
-                request.user,
-                brief=serializer.validated_data["brief"],
-                conversation_id=serializer.validated_data.get("conversation_id", ""),
-            )
+            if serializer.validated_data.get("discovery_mode"):
+                plan = self.service.start_discovery(
+                    request.user,
+                    brief=serializer.validated_data["brief"],
+                    conversation_id=serializer.validated_data.get(
+                        "conversation_id", ""
+                    ),
+                )
+            else:
+                plan = self.service.create_plan(
+                    request.user,
+                    brief=serializer.validated_data["brief"],
+                    conversation_id=serializer.validated_data.get(
+                        "conversation_id", ""
+                    ),
+                )
         except ValueError as exc:
             return Response(
                 {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
             )
         return Response(plan, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="discover",
+        url_name="advance-discovery",
+    )
+    def advance_discovery(self, request, pk=None):
+        """Advance a guided discovery conversation by one user reply (W5-B)."""
+        serializer = PlanDiscoverSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = self.service.advance_discovery(
+                request.user,
+                pk,
+                user_reply=serializer.validated_data["reply"],
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except (PlanNotRunnableError, ValueError) as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(result)
 
     def retrieve(self, request, pk=None):
         """Fetch a plan + its steps."""

@@ -51,6 +51,11 @@ urlpatterns = [
         name="ai-plan-detail",
     ),
     path(
+        "<str:pk>/discover/",
+        PlanViewSet.as_view({"post": "advance_discovery"}),
+        name="ai-plan-discover",
+    ),
+    path(
         "<str:pk>/promote-template/",
         PlanViewSet.as_view({"post": "promote_template"}),
         name="ai-plan-promote-template",

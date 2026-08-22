@@ -3575,7 +3575,7 @@ Append results to `TASK-RESULTS.md`.
 
 ### Phase W5-B — Agent mode: guided discovery conversation before plan creation
 
-**Status:** TODO
+**Status:** DONE
 **Worker Role:** backend-worker THEN frontend-worker (two sub-phases, same spec)
 **Recommended Model:** DeepSeek V4-Flash
 **Kind:** Backend (Django service + API) + Frontend. Medium-large.

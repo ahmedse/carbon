@@ -26,6 +26,8 @@ vi.mock('../components/NotificationProvider', () => ({
 
 const listPlans = vi.fn();
 const createPlan = vi.fn();
+const startDiscoveryPlan = vi.fn();
+const advanceDiscovery = vi.fn();
 const getPlan = vi.fn();
 const approvePlan = vi.fn();
 const declinePlan = vi.fn();
@@ -38,6 +40,8 @@ const getPlanLedger = vi.fn();
 vi.mock('../api/aiWorkspace', () => ({
   listPlans: (...args) => listPlans(...args),
   createPlan: (...args) => createPlan(...args),
+  startDiscoveryPlan: (...args) => startDiscoveryPlan(...args),
+  advanceDiscovery: (...args) => advanceDiscovery(...args),
   getPlan: (...args) => getPlan(...args),
   approvePlan: (...args) => approvePlan(...args),
   declinePlan: (...args) => declinePlan(...args),
@@ -100,6 +104,17 @@ beforeEach(() => {
   currentPlan = PLAN;
   listPlans.mockResolvedValue({ plans: [PLAN], count: 1 });
   createPlan.mockResolvedValue(PLAN);
+  startDiscoveryPlan.mockResolvedValue({
+    id: 'plan-1',
+    status: 'needs_input',
+    question: 'Which dataset should we audit?',
+    turns: [{ question: 'Which dataset should we audit?', reply: null }],
+  });
+  advanceDiscovery.mockResolvedValue({
+    status: 'plan_ready',
+    plan: PLAN,
+    turns: [{ question: 'Which dataset should we audit?', reply: 'The emissions dataset' }],
+  });
   getPlan.mockImplementation(async () => currentPlan);
   approvePlan.mockResolvedValue(APPROVED);
   declinePlan.mockResolvedValue({ ...PLAN, status: 'cancelled' });
@@ -133,24 +148,76 @@ describe('AITaskPanel — two internal tabs (RULE_17)', () => {
     expect(await screen.findByText('Open a task from the Tasks tab to review, approve and run it.')).toBeInTheDocument();
   });
 
-  it('creates a plan from a brief and opens it for review', async () => {
+  it('starts a guided discovery and opens the ready plan for review (W5-B)', async () => {
     render(<AITaskPanel conversationId="conv-1" />);
 
     const input = screen.getByLabelText('Task brief');
     fireEvent.change(input, { target: { value: 'Audit the emissions dataset for duplicates.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create plan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start planning' }));
 
     await waitFor(() => {
-      expect(createPlan).toHaveBeenCalledWith('test-token', {
+      expect(startDiscoveryPlan).toHaveBeenCalledWith('test-token', {
         brief: 'Audit the emissions dataset for duplicates.',
         conversation_id: 'conv-1',
       });
     });
-    // Detail loads and the Run tab is shown with the review gate. The step
-    // intent appears in the step list AND as a node label in the live DAG
-    // (W3-F preview) — assert on the list rather than a single text node.
+    // Pulse's first question renders as a plain-text message bubble.
+    expect(await screen.findByText('Which dataset should we audit?')).toBeInTheDocument();
+
+    const reply = screen.getByLabelText('Discovery reply');
+    fireEvent.change(reply, { target: { value: 'The emissions dataset' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => {
+      expect(advanceDiscovery).toHaveBeenCalledWith('test-token', 'plan-1', 'The emissions dataset');
+    });
+    // Plan ready banner → review → Run tab with the consent gate. The step
+    // intent appears in the step list AND as a node label in the live DAG.
+    expect(await screen.findByText('Plan ready — review below')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Review plan' }));
+
     expect(await screen.findByText('Approve plan')).toBeInTheDocument();
     expect(screen.getAllByText('Search for duplicate records').length).toBeGreaterThan(0);
+  });
+
+  it('renders Pulse questions and user replies as bubbles across turns (W5-B)', async () => {
+    advanceDiscovery
+      .mockResolvedValueOnce({
+        status: 'needs_input',
+        question: 'What field uniquely identifies a record?',
+        turns: [
+          { question: 'Which dataset should we audit?', reply: 'The emissions dataset' },
+          { question: 'What field uniquely identifies a record?', reply: null },
+        ],
+      })
+      .mockResolvedValueOnce({
+        status: 'plan_ready',
+        plan: PLAN,
+        turns: [
+          { question: 'Which dataset should we audit?', reply: 'The emissions dataset' },
+          { question: 'What field uniquely identifies a record?', reply: 'report_id' },
+        ],
+      });
+
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    fireEvent.change(screen.getByLabelText('Task brief'), { target: { value: 'Audit duplicates.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start planning' }));
+
+    expect(await screen.findByText('Which dataset should we audit?')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Discovery reply'), { target: { value: 'The emissions dataset' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    // Second question AND the user's prior reply both render as bubbles.
+    expect(await screen.findByText('What field uniquely identifies a record?')).toBeInTheDocument();
+    expect(screen.getByText('The emissions dataset')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Discovery reply'), { target: { value: 'report_id' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(await screen.findByText('Plan ready — review below')).toBeInTheDocument();
+    expect(advanceDiscovery).toHaveBeenCalledTimes(2);
   });
 });
 

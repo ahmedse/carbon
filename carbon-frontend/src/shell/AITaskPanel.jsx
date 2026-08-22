@@ -24,7 +24,6 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
@@ -41,7 +40,6 @@ import { useNotification } from '../components/NotificationProvider';
 import {
   approvePlan,
   confirmPlanStep,
-  createPlan,
   declinePlan,
   declinePlanStep,
   editPlan,
@@ -63,6 +61,7 @@ import AITaskPlanCard from './AITaskPlanCard';
 import AITaskAuditCard from './AITaskAuditCard';
 import PlanDiffReviewDialog from './PlanDiffReviewDialog';
 import StepEditDialog from './StepEditDialog';
+import DiscoveryComposer from './DiscoveryComposer';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -273,8 +272,6 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   // Task list + composer
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
-  const [brief, setBrief] = useState('');
-  const [creating, setCreating] = useState(false);
 
   // Selected plan detail + run state
   const [selectedPlan, setSelectedPlan] = useState(null);
@@ -404,21 +401,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     onFocusPlanConsumed?.();
   }, [focusPlanId, openPlan, onFocusPlanConsumed]);
 
-  const handleCreate = async () => {
-    const trimmed = brief.trim();
-    if (!trimmed) return;
-    setCreating(true);
-    try {
-      const plan = await createPlan(token, { brief: trimmed, conversation_id: conversationId || '' });
-      setBrief('');
-      await loadPlans();
-      await openPlan(plan.id);
-    } catch (err) {
-      notifyFromErrorRef.current(err, 'Could not create the plan');
-    } finally {
-      setCreating(false);
-    }
-  };
+  // W5-B — when discovery finishes, open the reviewable plan on the Run tab
+  // (where AITaskPlanCard renders with the consent gate) and refresh the list.
+  const handleDiscoveryReady = useCallback((plan) => {
+    applyPlanToView(plan);
+    loadPlans();
+    setTab('run');
+  }, [applyPlanToView, loadPlans]);
 
   // ── Plan-level consent gate (RULE_21) ─────────────────────────────────
   const handleApprove = async () => {
@@ -703,37 +692,8 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   // ── Tasks tab: composer + list ────────────────────────────────────────
   const renderTasks = () => (
     <Stack spacing={1.25}>
-      {/* New-plan composer */}
-      <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
-        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem', mb: 0.75 }}>
-          Plan a task
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.6875rem', mb: 0.75 }}>
-          Describe the outcome — the assistant plans the steps first. Nothing executes until you approve the plan and run it.
-        </Typography>
-        <TextField
-          multiline
-          minRows={2}
-          maxRows={4}
-          fullWidth
-          size="small"
-          placeholder="e.g. Audit the emissions dataset for duplicates and create a rule to prevent them."
-          value={brief}
-          onChange={(e) => setBrief(e.target.value)}
-          inputProps={{ 'aria-label': 'Task brief' }}
-          sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
-        />
-        <Button
-          size="small"
-          variant="contained"
-          startIcon={<AddOutlinedIcon sx={{ fontSize: 14 }} />}
-          disabled={creating || !brief.trim()}
-          onClick={handleCreate}
-          sx={{ mt: 1, fontSize: '0.6875rem', textTransform: 'none' }}
-        >
-          {creating ? 'Planning…' : 'Create plan'}
-        </Button>
-      </Paper>
+      {/* New-plan composer — W5-B guided discovery (brief → Pulse questions → plan) */}
+      <DiscoveryComposer conversationId={conversationId} onPlanReady={handleDiscoveryReady} />
 
       {/* Task list */}
       <Stack direction="row" alignItems="center" spacing={1}>
@@ -807,7 +767,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       <Stack spacing={1.25}>
         <AITaskPlanCard
           plan={selectedPlan}
-          busy={creating || mutating}
+          busy={mutating}
           running={phase === 'working'}
           live={phase === 'working'}
           onApprove={handleApprove}
