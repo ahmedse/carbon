@@ -111,7 +111,7 @@ describe('AIConversationTabs shared-thread grouping (a)', () => {
     expect(screen.getByText('Shared')).toBeInTheDocument();
   });
 
-  it('hides the close button on non-owned shared tabs but keeps it on owned tabs', () => {
+  it('hides owner affordances on non-owned shared tabs but keeps them on owned tabs', () => {
     render(
       <AIConversationTabs
         conversations={conversations}
@@ -122,11 +122,15 @@ describe('AIConversationTabs shared-thread grouping (a)', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Close conversation My Report')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Close conversation Teammate Report')).not.toBeInTheDocument();
+    // Owned session: inline expand + session options.
+    expect(screen.getByLabelText('Expand My Report details')).toBeInTheDocument();
+    expect(screen.getByLabelText('Session options for My Report')).toBeInTheDocument();
+    // Non-owned shared session: read-only list row, no owner affordances.
+    expect(screen.queryByLabelText('Expand Teammate Report details')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Session options for Teammate Report')).not.toBeInTheDocument();
   });
 
-  it('groups owned tabs first, then a divider, then shared tabs', () => {
+  it('lists owned and shared sessions together in the sessions list in order', () => {
     render(
       <AIConversationTabs
         conversations={conversations}
@@ -137,10 +141,13 @@ describe('AIConversationTabs shared-thread grouping (a)', () => {
       />,
     );
 
-    expect(screen.getByRole('separator')).toBeInTheDocument();
-    const tabs = screen.getAllByRole('tab');
-    expect(tabs[0].textContent).toContain('My Report');
-    expect(tabs[1].textContent).toContain('Teammate Report');
+    // The redesigned sessions list is a recency-grouped accordion (no more
+    // owned/shared tabs or dividers) — input order is preserved in-group.
+    expect(screen.getByRole('listbox', { name: 'Conversation sessions' })).toBeInTheDocument();
+    const rows = screen.getAllByRole('option');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain('My Report');
+    expect(rows[1].textContent).toContain('Teammate Report');
   });
 });
 
@@ -160,8 +167,8 @@ describe('AIConversationView read-only collaboration (b)', () => {
     expect(await screen.findByText('You have read-only access to this shared thread.')).toBeInTheDocument();
     expect(screen.queryByTestId('input-bar')).not.toBeInTheDocument();
     // Share toggle must not be shown to non-owners.
-    expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Shared' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share conversation' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Unshare conversation' })).not.toBeInTheDocument();
   });
 });
 
@@ -178,16 +185,16 @@ describe('AIConversationView Share toggle (c)', () => {
 
     render(<AIConversationView conversationId="owned-1" />);
 
-    const shareButton = await screen.findByRole('button', { name: 'Share' });
+    const shareButton = await screen.findByRole('button', { name: 'Share conversation' });
     fireEvent.click(shareButton);
 
     await waitFor(() => {
       expect(updateConversation).toHaveBeenCalledWith('test-token', 'owned-1', { visibility: 'shared' });
     });
 
-    // Local state flips the label to "Shared".
+    // Local state flips the label to the unshare affordance.
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Shared' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Unshare conversation' })).toBeInTheDocument();
     });
   });
 
@@ -204,8 +211,8 @@ describe('AIConversationView Share toggle (c)', () => {
     render(<AIConversationView conversationId="shared-2" />);
 
     await screen.findByText('You have read-only access to this shared thread.');
-    expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Shared' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share conversation' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Unshare conversation' })).not.toBeInTheDocument();
   });
 });
 

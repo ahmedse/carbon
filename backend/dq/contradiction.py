@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 __all__ = [
     'analyze_rules',
+    'composite_runtime_verdicts',
     'CONFLICT',
     'REDUNDANT',
     'UNDECIDABLE',
@@ -229,3 +230,83 @@ def analyze_rules(rules: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 ))
 
     return findings
+
+
+# ── Runtime composite verdict ───────────────────────────────────────────────
+
+def composite_runtime_verdicts(
+    findings: List[Dict[str, Any]],
+    rule_outcomes: Dict[Any, Optional[bool]],
+) -> List[Dict[str, Any]]:
+    """Resolve ``undecidable`` overlaps into composite runtime verdicts.
+
+    The static analyzer cannot decide whether two semantically-overlapping
+    rules (``nl_check`` vs ``regex``, two ``regex`` rules, reference-set
+    membership, etc.) can coexist. At runtime we DO have each rule's verdict
+    over the same field's rows, so we can emit a composite verdict:
+
+      * ``conflict``   — the rules DISAGREE (one passed, the other failed);
+                         the field cannot satisfy both. This is the runtime
+                         composite "conflict" verdict.
+      * ``consistent`` — the rules AGREE (both passed or both failed); the
+                         overlap is benign and resolved.
+      * ``unresolved`` — at least one rule has no runtime outcome (e.g. a
+                         job-only ``nl_check``/``anomaly_detect`` rule skipped
+                         in a synchronous run), so the overlap stays
+                         undecidable.
+
+    Non-``undecidable`` findings (``conflict``/``redundant``) are passed
+    through unchanged so callers get a single merged list.
+
+    Args:
+        findings: finding dicts from ``analyze_rules`` (or the
+            ``detect_rule_contradictions`` service wrapper), already scoped to
+            one field's rules.
+        rule_outcomes: dict mapping ``rule_id`` -> ``bool | None``. ``None`` or
+            a missing key means the rule was not evaluated in this run.
+
+    Returns:
+        list of verdict dicts. ``undecidable`` findings are replaced with a
+        runtime verdict carrying the same ``rule_ids``/``rule_names``/
+        ``rule_types`` plus ``data_field_id``/``data_field_name`` when present.
+    """
+    verdicts: List[Dict[str, Any]] = []
+    for f in findings:
+        if f.get('kind') != UNDECIDABLE:
+            verdicts.append(dict(f))
+            continue
+
+        statuses: List[bool] = []
+        unresolved = False
+        for rid in f['rule_ids']:
+            outcome = rule_outcomes.get(rid)
+            if outcome is None:
+                unresolved = True
+            else:
+                statuses.append(bool(outcome))
+
+        base = {k: f.get(k) for k in ('rule_ids', 'rule_names', 'rule_types')}
+        if 'data_field_id' in f:
+            base['data_field_id'] = f.get('data_field_id')
+        if 'data_field_name' in f:
+            base['data_field_name'] = f.get('data_field_name')
+
+        if unresolved or not statuses:
+            base['kind'] = 'unresolved'
+            base['message'] = (
+                'Semantic overlap could not be resolved at runtime: at least '
+                'one rule was not evaluated (e.g. a job-only nl_check/'
+                'anomaly_detect rule skipped in a synchronous run).'
+            )
+        elif len(set(statuses)) > 1:
+            base['kind'] = CONFLICT
+            base['message'] = (
+                'Rules disagree at runtime: one passed while the other failed '
+                'on the same field; the field cannot satisfy both.'
+            )
+        else:
+            base['kind'] = 'consistent'
+            base['message'] = 'Rules agree at runtime; the overlap is resolved.'
+        verdicts.append(base)
+
+    return verdicts

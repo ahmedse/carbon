@@ -4,6 +4,7 @@ import PropTypes from 'prop-types';
 import {
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -199,6 +200,14 @@ function AIConversationTabs({
           <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'text.disabled', flexShrink: 0, minWidth: 18, textAlign: 'right' }}>
             {age}
           </Typography>
+          {!owned && (
+            <Chip
+              size="small"
+              variant="outlined"
+              label="Shared"
+              sx={{ height: 14, fontSize: '0.5625rem', flexShrink: 0 }}
+            />
+          )}
           {owned && (
             <>
               {/* W2-B — per-item inline expand (full title + timestamp). */}

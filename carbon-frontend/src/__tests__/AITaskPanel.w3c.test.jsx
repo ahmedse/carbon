@@ -314,6 +314,36 @@ describe('AITaskPanel — W5-D Monitor tab', () => {
     expect(screen.getByText('Search for duplicate records')).toBeInTheDocument();
   });
 
+  it('renders the run ledger status timeline with per-step latency and Finished chips', async () => {
+    currentPlan = { ...PLAN, status: 'completed', updated_at: '2026-08-20T10:05:00Z' };
+    getPlanLedger.mockResolvedValue({
+      plan_id: 'plan-1',
+      status: 'completed',
+      usage: { total_latency_ms: 1200, total_llm_calls: 5, total_tokens: 12000 },
+      provenance: { completed_at: '2026-08-20T10:05:00Z' },
+      steps: [
+        { step_id: 0, intent: 'Search for duplicate records', status: 'completed', latency_ms: 400 },
+        { step_id: 1, intent: 'Create a rule to prevent duplicates', status: 'completed', latency_ms: 800 },
+      ],
+    });
+
+    render(<AITaskPanel conversationId="conv-1" />);
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    await screen.findByText('Task plan');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Monitor' }));
+
+    // Plan status chip + Duration metric from the ledger provenance.
+    expect(await screen.findByText('Completed')).toBeInTheDocument();
+    expect(screen.getByText('Duration')).toBeInTheDocument();
+    // Steps metric: completed/total.
+    expect(screen.getByText('2/2')).toBeInTheDocument();
+    // Per-step timeline rows: latency + status chip per ledger step.
+    expect(await screen.findByText('400 ms')).toBeInTheDocument();
+    expect(screen.getByText('800 ms')).toBeInTheDocument();
+    expect(screen.getAllByText('Finished').length).toBeGreaterThanOrEqual(2);
+  });
+
   it('shows an empty state when no plan is selected', async () => {
     render(<AITaskPanel conversationId="conv-1" />);
     fireEvent.click(screen.getByRole('tab', { name: 'Monitor' }));
@@ -368,5 +398,71 @@ describe('AITaskPanel — W5-D Results tab', () => {
     expect(screen.getByRole('button', { name: 'Fork' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ledger JSON' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Response .md' })).toBeInTheDocument();
+    // Artifact card body: size via formatBytes + download action.
+    expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Download' }).length).toBeGreaterThanOrEqual(1);
+    // Headings for the outcome copy + actions.
+    expect(screen.getByText('Final response')).toBeInTheDocument();
+    expect(screen.getByText('Artifacts')).toBeInTheDocument();
+    expect(screen.getByText('Actions')).toBeInTheDocument();
+  });
+
+  it('renders step outputs on the Run view and the artifact list on Results', async () => {
+    currentPlan = {
+      ...PLAN,
+      status: 'completed',
+      updated_at: '2026-08-20T10:05:00Z',
+      steps: [
+        {
+          step_id: 0,
+          intent: 'Search for duplicate records',
+          tool_name: 'search_entity',
+          tool_args: { dataset: 'emissions' },
+          status: 'completed',
+          output_type: 'table',
+          tool_output: { headers: ['Row', 'Status'], rows: [['1', 'duplicate']] },
+        },
+        {
+          step_id: 1,
+          intent: 'Create a rule to prevent duplicates',
+          tool_name: 'create_dq_rule',
+          tool_args: { name: 'no_dupes' },
+          status: 'completed',
+          output_type: 'text',
+          tool_output: 'Rule no_dupes created.',
+        },
+      ],
+    };
+    getPlanLedger.mockResolvedValue({
+      plan_id: 'plan-1',
+      status: 'completed',
+      usage: { total_latency_ms: 1200, total_llm_calls: 5, total_tokens: 12000 },
+      provenance: { completed_at: '2026-08-20T10:05:00Z' },
+      steps: [],
+      final_response: 'Found 3 duplicate rows and created rule no_dupes.',
+    });
+    listPlanArtifacts.mockResolvedValue({
+      plan_id: 'plan-1',
+      artifacts: [
+        { id: 10, name: 'report.csv', mime_type: 'text/csv', size_bytes: 2048, download_url: '/ai/plans/plan-1/artifacts/10/download/', created_at: '2026-08-20T10:05:00Z' },
+      ],
+    });
+
+    render(<AITaskPanel conversationId="conv-1" />);
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    await screen.findByText('Task plan');
+
+    // Step outputs render on the Run view via StepOutputRenderer.
+    expect(await screen.findByText('Row')).toBeInTheDocument();
+    expect(screen.getByText('duplicate')).toBeInTheDocument();
+    expect(screen.getByText('Rule no_dupes created.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
+
+    // Results tab: final response + artifact card with download action.
+    expect(await screen.findByText('Found 3 duplicate rows and created rule no_dupes.')).toBeInTheDocument();
+    expect(await screen.findByText('report.csv')).toBeInTheDocument();
+    expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Download' }).length).toBeGreaterThanOrEqual(1);
   });
 });

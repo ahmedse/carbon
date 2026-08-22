@@ -56,8 +56,13 @@ function toText(value) {
 function normalizeTable(value) {
   let data = value;
   if (data && typeof data === 'object' && !Array.isArray(data)) {
-    const inner = data.result ?? data.data ?? data.rows;
-    if (inner && typeof inner === 'object') data = inner;
+    // Honor an explicit { headers, rows } shape at the top level — unwrapping
+    // `rows` here would swallow the headers and eat the first row instead.
+    const hasDirectHeaders = Array.isArray(data.headers) || Array.isArray(data.columns);
+    if (!hasDirectHeaders) {
+      const inner = data.result ?? data.data ?? data.rows;
+      if (inner && typeof inner === 'object') data = inner;
+    }
   }
 
   if (Array.isArray(data)) {
@@ -136,7 +141,7 @@ function RawJson({ value }) {
       >
         Raw output
       </Button>
-      <Collapse in={open}>
+      <Collapse in={open} unmountOnExit>
         <Box
           component="pre"
           sx={{

@@ -609,6 +609,35 @@ def _emit_governance_event(ap, old_status, old_score, new_status, new_score, use
         logger.warning("GovernanceEvent create failed: %s", exc)
 
 
+def _run_conflict_verdicts(table_id, results):
+    """Composite conflict verdicts for a completed DQ run.
+
+    Combines the static ``conflict``/``redundant`` findings with runtime-resolved
+    ``undecidable`` overlaps. Each finding is scoped to one field, so rule
+    outcomes are keyed by ``(rule_id, data_field_id)`` and resolved per field.
+
+    Returns a list of verdict dicts (empty list = no findings).
+    """
+    from .contradiction import composite_runtime_verdicts
+
+    findings = detect_rule_contradictions(data_table_id=table_id)
+    if not findings:
+        return []
+
+    outcomes = {}
+    for res in results:
+        outcomes[(res.rule_id, res.data_field_id)] = res.passed
+
+    verdicts = []
+    for finding in findings:
+        field_id = finding.get('data_field_id')
+        rule_outcomes = {
+            rid: outcomes.get((rid, field_id)) for rid in finding['rule_ids']
+        }
+        verdicts.extend(composite_runtime_verdicts([finding], rule_outcomes))
+    return verdicts
+
+
 def run_dq(table_id, user=None):
     """Run all active DQ rules for a table. Returns summary dict."""
     start_time = time.time()
@@ -707,6 +736,7 @@ def run_dq(table_id, user=None):
     return {
         'table': table_id,
         'rules_run': len(results),
+        'conflicts': _run_conflict_verdicts(table_id, results),
         'summary': [{
             'rule_id': r.rule_id,
             'rule_name': r.rule.name,

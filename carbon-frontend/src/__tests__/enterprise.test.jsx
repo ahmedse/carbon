@@ -24,6 +24,9 @@ vi.mock('../theme/useThemeMode', () => ({
 
 // ── Shell smoke ──────────────────────────────────────────────────────
 describe('Shell', () => {
+  // The full app shell (lazy routes, AI workspace) is heavy to import +
+  // render; under parallel-suite CPU load 15s is too tight. 60s is honest:
+  // this test is a smoke check, not a perf gate.
   it('renders without crashing', async () => {
     const { Shell } = await import('../shell/Shell');
     const { container } = render(
@@ -34,7 +37,7 @@ describe('Shell', () => {
       </ThemeProvider>
     );
     expect(container).toBeTruthy();
-  });
+  }, 60000);
 });
 
 // ── PageHeader ──────────────────────────────────────────────────────

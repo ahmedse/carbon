@@ -105,7 +105,7 @@ describe('AIArtifactBrowser', () => {
 // ── Promote button in AIMessageBubble ───────────────────────────────────────
 
 describe('AIMessageBubble Promote action', () => {
-  it('renders Promote button when onPromote is supplied', () => {
+  it('renders Promote in the message action menu when onPromote is supplied', async () => {
     render(
       <MemoryRouter>
         <AIMessageBubble
@@ -115,7 +115,9 @@ describe('AIMessageBubble Promote action', () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('button', { name: /promote/i })).toBeInTheDocument();
+    // Promote lives in the overflow menu — open it, then assert the menuitem.
+    fireEvent.click(screen.getByRole('button', { name: 'More message actions' }));
+    expect(await screen.findByRole('menuitem', { name: 'Promote' })).toBeInTheDocument();
   });
 
   it('does not render Promote button without onPromote', () => {
@@ -127,14 +129,15 @@ describe('AIMessageBubble Promote action', () => {
     expect(screen.queryByRole('button', { name: /promote/i })).not.toBeInTheDocument();
   });
 
-  it('calls onPromote with the message when clicked', () => {
+  it('calls onPromote with the message when Promote is clicked', async () => {
     const onPromote = vi.fn();
     render(
       <MemoryRouter>
         <AIMessageBubble message={ASSISTANT_MSG} onPromote={onPromote} conversationType="chat" />
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByRole('button', { name: /promote/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'More message actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Promote' }));
     expect(onPromote).toHaveBeenCalledWith(ASSISTANT_MSG);
   });
 
