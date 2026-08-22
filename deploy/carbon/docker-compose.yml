@@ -1,7 +1,11 @@
 # ─────────────────────────────────────────────────────────────────
-#  Carbon Data Trust Platform — Production Docker Compose
+#  Carbon Data Trust Platform — production Docker Compose
 #  Backend only (Gunicorn). Frontend is served by nginx on host.
 #  PostgreSQL is on host, accessed via host.docker.internal.
+#
+#  This is the "carbon" instantiation of deploy/instance/ (ADR-0015:
+#  one codebase, N isolated deployments). INSTANCE namespaces the
+#  container + volume names; defaults to "carbon" for backward compat.
 #
 #  Usage:
 #    docker compose --env-file backend/.env.carbon \
@@ -13,20 +17,20 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-    image: carbon-backend:${IMAGE_TAG:-latest}
-    container_name: carbon-backend
+    image: ${INSTANCE:-carbon}-backend:${IMAGE_TAG:-latest}
+    container_name: ${INSTANCE:-carbon}-backend
     restart: unless-stopped
     env_file:
-      - ../../backend/.env.carbon
+      - ${ENV_FILE:-../../backend/.env.carbon}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - carbon_static:/static
-      - carbon_media:/media
-      - carbon_uploads:/app/dataschema_uploads
-      - carbon_evidence:/app/mediafiles/evidence
-      - carbon_exports:/app/mediafiles/exports
-      - carbon_imports:/app/mediafiles/imports
+      - ${INSTANCE:-carbon}_static:/static
+      - ${INSTANCE:-carbon}_media:/media
+      - ${INSTANCE:-carbon}_uploads:/app/dataschema_uploads
+      - ${INSTANCE:-carbon}_evidence:/app/mediafiles/evidence
+      - ${INSTANCE:-carbon}_exports:/app/mediafiles/exports
+      - ${INSTANCE:-carbon}_imports:/app/mediafiles/imports
     ports:
       - "${BACKEND_PORT:-8002}:8000"
     healthcheck:
@@ -37,9 +41,9 @@ services:
       start_period: 40s
 
 volumes:
-  carbon_static:
-  carbon_media:
-  carbon_uploads:
-  carbon_evidence:
-  carbon_exports:
-  carbon_imports:
+  ${INSTANCE:-carbon}_static:
+  ${INSTANCE:-carbon}_media:
+  ${INSTANCE:-carbon}_uploads:
+  ${INSTANCE:-carbon}_evidence:
+  ${INSTANCE:-carbon}_exports:
+  ${INSTANCE:-carbon}_imports:

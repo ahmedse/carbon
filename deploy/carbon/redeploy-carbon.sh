@@ -23,6 +23,7 @@ header() { echo; echo -e "${BLUE}══  $*  ══${NC}"; }
 # Load env
 [[ -f "$ENV_FILE" ]] || { echo "Missing env file: $ENV_FILE" >&2; exit 1; }
 set -a; source "$ENV_FILE"; set +a
+INSTANCE="${INSTANCE:-carbon}"
 
 # ── Resolve version ───────────────────────────────────────────────
 if [[ "${1:-}" != "" ]]; then
@@ -79,6 +80,15 @@ ok "Frontend built"
 # ── 4. Reload nginx ───────────────────────────────────────────────
 sudo nginx -t && sudo systemctl reload nginx
 ok "Nginx reloaded"
+
+# ── 5. Per-instance app activation (ADR-0015) ────────────────────
+if [[ -n "${APP_ACTIVE_SLUGS:-}" ]]; then
+    docker exec "${INSTANCE}-backend" python manage.py activate_apps --active "$APP_ACTIVE_SLUGS" \
+        && ok "Apps activated: $APP_ACTIVE_SLUGS"
+else
+    docker exec "${INSTANCE}-backend" python manage.py activate_apps --all \
+        && ok "All apps activated"
+fi
 
 echo
 ok "Deployed ${IMAGE_TAG} → https://${DOMAIN}"

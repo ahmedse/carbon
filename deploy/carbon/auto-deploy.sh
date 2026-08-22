@@ -102,6 +102,15 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
+log "Activating apps (ADR-0015)"
+if [[ -f "$ENV_FILE" ]]; then set -a; source "$ENV_FILE"; set +a; fi
+INSTANCE="${INSTANCE:-carbon}"
+if [[ -n "${APP_ACTIVE_SLUGS:-}" ]]; then
+    docker exec "${INSTANCE}-backend" python manage.py activate_apps --active "$APP_ACTIVE_SLUGS" || true
+else
+    docker exec "${INSTANCE}-backend" python manage.py activate_apps --all || true
+fi
+
 log "Reloading nginx"
 sudo nginx -t && sudo systemctl reload nginx
 

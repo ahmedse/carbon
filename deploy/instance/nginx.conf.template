@@ -1,0 +1,104 @@
+# /etc/nginx/sites-available/__DOMAIN__
+#
+# Carbon Data Trust Platform — production site for instance "__INSTANCE__"
+# Rendered from deploy/instance/nginx.conf.template by deploy-instance.sh.
+#
+# Frontend : React SPA served from /srv/__INSTANCE__/carbon-frontend/dist
+# Backend  : Gunicorn in Docker on 127.0.0.1:${BACKEND_PORT}
+# Static   : /srv/__INSTANCE__/backend/staticfiles
+# Media    : /srv/__INSTANCE__/backend/mediafiles
+# API      : /carbon-api/ proxied to Docker backend
+#
+# After rendering, run:
+#   sudo cp deploy/__INSTANCE__/nginx.conf /etc/nginx/sites-available/__DOMAIN__
+#   sudo ln -s /etc/nginx/sites-available/__DOMAIN__ /etc/nginx/sites-enabled/
+#   sudo certbot --nginx -d __DOMAIN__
+#   sudo nginx -t && sudo systemctl reload nginx
+
+# ── HTTP → HTTPS redirect ─────────────────────────────────────────
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __DOMAIN__;
+
+    location /.well-known/acme-challenge/ { root /var/www/html; }
+    location / { return 301 https://$host$request_uri; }
+}
+
+# ── HTTPS main block ──────────────────────────────────────────────
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name __DOMAIN__;
+
+    # ── TLS — filled in by certbot ────────────────────────────────
+    # ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
+    # include /etc/letsencrypt/options-ssl-nginx.conf;
+    # ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # ── Security headers ──────────────────────────────────────────
+    add_header X-Frame-Options "SAMEORIGIN"        always;
+    add_header X-Content-Type-Options "nosniff"    always;
+    add_header Referrer-Policy "strict-origin"      always;
+    add_header X-XSS-Protection "1; mode=block"    always;
+
+    client_max_body_size 50M;
+
+    # ── Compression ───────────────────────────────────────────────
+    gzip on;
+    gzip_vary on;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_types
+        text/plain text/css text/xml text/javascript
+        application/json application/javascript application/x-javascript
+        application/xml image/svg+xml;
+
+    # ── Django static files ───────────────────────────────────────
+    location /static/ {
+        alias /srv/__INSTANCE__/backend/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # ── Django media files ────────────────────────────────────────
+    location /media/ {
+        alias /srv/__INSTANCE__/backend/mediafiles/;
+        expires 7d;
+        add_header Cache-Control "public";
+        access_log off;
+    }
+
+    # ── Carbon API ────────────────────────────────────────────────
+    location /carbon-api/ {
+        proxy_pass         http://127.0.0.1:${BACKEND_PORT};
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_connect_timeout 10s;
+    }
+
+    # ── Django admin ──────────────────────────────────────────────
+    location /admin/ {
+        proxy_pass         http://127.0.0.1:${BACKEND_PORT};
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+
+    # ── React SPA (catch-all) ─────────────────────────────────────
+    root /srv/__INSTANCE__/carbon-frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        expires -1;
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
+    }
+}

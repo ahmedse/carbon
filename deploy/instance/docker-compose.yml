@@ -1,0 +1,49 @@
+# ─────────────────────────────────────────────────────────────────
+#  Carbon — production Docker Compose for ONE isolated instance
+#  (ADR-0015: one codebase, N isolated deployments).
+#
+#  Everything instance-specific comes from the instance env file at
+#  runtime (${...}), so this single compose file serves every org.
+#  ${INSTANCE} disambiguates container + volume names so multiple
+#  instances can run side-by-side on one host.
+#
+#  Usage:
+#    docker compose --env-file backend/.env.<instance> \
+#                   -f deploy/<instance>/docker-compose.yml up -d
+# ─────────────────────────────────────────────────────────────────
+
+services:
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    image: ${INSTANCE}-backend:${IMAGE_TAG:-latest}
+    container_name: ${INSTANCE}-backend
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${INSTANCE}_static:/static
+      - ${INSTANCE}_media:/media
+      - ${INSTANCE}_uploads:/app/dataschema_uploads
+      - ${INSTANCE}_evidence:/app/mediafiles/evidence
+      - ${INSTANCE}_exports:/app/mediafiles/exports
+      - ${INSTANCE}_imports:/app/mediafiles/imports
+    ports:
+      - "${BACKEND_PORT:-8002}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/carbon-api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  ${INSTANCE}_static:
+  ${INSTANCE}_media:
+  ${INSTANCE}_uploads:
+  ${INSTANCE}_evidence:
+  ${INSTANCE}_exports:
+  ${INSTANCE}_imports:

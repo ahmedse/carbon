@@ -61,6 +61,7 @@ set +a
 for v in DOMAIN BACKEND_PORT DB_NAME DB_USER DB_PASSWORD DJANGO_SECRET_KEY; do
     [[ -n "${!v}" ]] || die "$v is not set in $ENV_FILE"
 done
+INSTANCE="${INSTANCE:-carbon}"
 
 NGINX_CONF="/etc/nginx/sites-available/${DOMAIN}"
 NGINX_SRC="$DEPLOY_DIR/nginx.conf"
@@ -167,6 +168,16 @@ else
     warn "Backend not yet responding on port $BACKEND_PORT (may still be running migrations)"
 fi
 
+# ── 4b. Per-instance app activation (ADR-0015) ────────────────────
+header "App activation"
+if [[ -n "${APP_ACTIVE_SLUGS:-}" ]]; then
+    ok "Activating apps: $APP_ACTIVE_SLUGS"
+    docker exec "${INSTANCE}-backend" python manage.py activate_apps --active "$APP_ACTIVE_SLUGS"
+else
+    ok "No APP_ACTIVE_SLUGS — activating all apps"
+    docker exec "${INSTANCE}-backend" python manage.py activate_apps --all
+fi
+
 # ── 5. Frontend build ─────────────────────────────────────────────
 header "Frontend — npm build"
 
@@ -245,12 +256,12 @@ fi
 header "Deployment complete"
 
 ok "Domain  : https://${DOMAIN}"
-ok "Backend : http://127.0.0.1:${BACKEND_PORT}  (container: carbon-backend)"
+ok "Backend : http://127.0.0.1:${BACKEND_PORT}  (container: ${INSTANCE}-backend)"
 ok "DB      : postgres://localhost/${DB_NAME}  (host, via host.docker.internal)"
 ok "Frontend: ${FRONTEND_DIR}/dist"
 echo
 info "Useful commands:"
-echo "  docker logs carbon-backend -f"
+echo "  docker logs ${INSTANCE}-backend -f"
 echo "  docker compose --env-file $ENV_FILE -f $COMPOSE_FILE down"
 echo "  docker compose --env-file $ENV_FILE -f $COMPOSE_FILE up -d"
 echo "  cd $FRONTEND_DIR && npm run build"
