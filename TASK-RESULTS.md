@@ -3245,3 +3245,48 @@ helpers.
 - `export_document` resolves the owning plan through a `contextvars.ContextVar`
   set around the engine run — the frozen engine `ToolContext` has no `run_id`
   (RULE_20 downward-only import preserved; sibling `ai` import).
+
+## [2026-08-22] Master Architect — Sprint W5-D: agent mode Monitor + Results views
+
+### Summary
+Frontend-only phase completing the agent-mode surface. `AITaskPanel` gains two
+new internal tabs — **Monitor** and **Results** — replacing the W5-A placeholders.
+`AIWorkspace`'s agent activity-bar Monitor/Results icons now route into those
+tabs via a new `externalTab` prop (the `AgentPlaceholder` stub is removed).
+Monitor shows live run metrics (duration, step completion/failed/skipped, token +
+LLM-call usage, estimated LLM cost at $0.28/1M tokens, min/max/avg step latency)
+plus a per-step health table, auto-polling the durable ledger every 5s while a
+run is working and loading it once when settled. Results shows the plan's final
+response, its artifacts (emoji icon by MIME, download + collapsible preview for
+previewable types), and actions (Rerun when the plan is approved, Fork, and
+Ledger JSON / Response .md exports). No backend changes.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Extend `AITaskPanel` internal tabs | ✅ | Added `monitor` + `results` `Tab`s between Run and Templates; `externalTab` prop (default `tasks`) + sync effect routes `tasks|monitor|results` into `setTab` (RULE_17) |
+| 2 | `renderMonitor()` | ✅ | No-plan empty state; status chip; metrics grid via `MonitorMetric` (Duration `formatDuration`, Steps completed/total, Failed, Skipped, Tokens `toLocaleString`, LLM calls, Est. cost `formatCost((tokens/1e6)*0.28)`, Latency min/max/avg ms); "Step health" table (step_id, intent, latency, status chip via `STEP_STATUS_ICON`), falls back to `runSteps` when ledger has no steps |
+| 3 | `renderResults()` | ✅ | No-plan empty state; "Run the plan to see results." until `phase==='finished'`; final-response card (pre-wrap); artifacts grid via `ResultArtifactCard`; Actions card (Rerun gated on `status==='approved'`, Fork, Ledger JSON + Response .md exports) |
+| 4 | Wire `AIWorkspace` | ✅ | Removed `AgentPlaceholder`; single `<AITaskPanel ... externalTab={agentView} />`; Monitor/Results icons reuse the toggle `selectAgentView` |
+| 5 | Ledger + artifacts auto-load effects | ✅ | Ledger polls 5s while `working` on monitor/results, loads once when settled; artifacts fetched via `listPlanArtifacts` when results + `finished` (cancellation flag) |
+| 6 | Helpers | ✅ | `LLM_COST_PER_1M_TOKENS=0.28`, `formatDuration`, `formatCost`, `artifactIcon`, `isPreviewableMime`, `triggerDownload`, `formatBytes` (all theme-token / pure, RULE_23 outcome copy) |
+| 7 | Tests | ✅ | `AITaskPanel.w3c.test.jsx` +4 (monitor metrics/health from ledger + empty state; results placeholder + final response/artifacts/actions); `AITaskPanel.test.jsx` mock surface extended; `AIWorkspace.shell.test.jsx` `AITaskPanel` mock now captures `externalTab` + 2 W5-D tests assert Monitor/Results icons route the correct tab |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `carbon-frontend/src/shell/AITaskPanel.jsx` | Monitor/Results tabs + `renderMonitor`/`renderResults` + helpers + auto-load effects + `externalTab` |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | Removed `AgentPlaceholder`, wired `externalTab={agentView}` |
+| MODIFY | `carbon-frontend/src/__tests__/AITaskPanel.w3c.test.jsx` | +4 W5-D monitor/results tests, `listPlanArtifacts`/`downloadArtifact` mocks |
+| MODIFY | `carbon-frontend/src/__tests__/AITaskPanel.test.jsx` | mock surface extended (`listPlanArtifacts`/`downloadArtifact`) |
+| MODIFY | `carbon-frontend/src/__tests__/AIWorkspace.shell.test.jsx` | `AITaskPanel` mock captures `externalTab`; 2 W5-D tests replaced the W5-A placeholder tests |
+
+### Verification
+- `npm run lint` → **0 errors** (8 warnings, all pre-existing; removed the one pre-existing `exhaustive-deps` warning in `AITaskPanel.jsx` by capturing `selectedPlan?.id`).
+- `npx vitest run src/__tests__/AITaskPanel.test.jsx src/__tests__/AITaskPanel.w3c.test.jsx src/__tests__/AIWorkspace.shell.test.jsx` → **45 passed**.
+- `npm run build` → ✓ (26.2s).
+
+### Notes / Deviations
+- **Pre-existing unrelated failures** in the full suite (not W5-D): `AIArtifacts.test.jsx` (2), `AIMessageBubble.feedback.test.jsx` (3), `AISharedThreads.test.jsx` (4), `healthy/LoadoutSheetPage.test.jsx` (1) — 10 failures in files untouched by W5-D, tied to other in-flight work (e.g. `backend/healthy/*` LoadoutLine/checkpoint).
+- **Flaky W5-B tests**: `AITaskPanel.test.jsx` "starts a guided discovery…" and "renders Pulse questions…" intermittently fail only in the full-suite run (timing-sensitive streaming mocks); they pass 16/16 in isolation. Pre-existing; not caused by W5-D (W5-D effects are gated on `tab==='monitor'/'results'` and don't run on the Tasks tab).
+- The 2 new ledger/artifacts effects follow the existing `selectedPlan?.id` dep pattern (no identity churn).
