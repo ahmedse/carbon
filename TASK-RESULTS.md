@@ -1,3 +1,34 @@
+## [2026-08-22] Backend Worker — P1C "Dataset into Catalog": datahub app fully removed, catalog.0007 self-contained + Ask-AI button/entity-scoped resume fix
+
+### Summary
+Phase P1C completion: the legacy `datahub` Django app is **fully removed** and its six models live natively in `catalog` behind a **self-contained `catalog.0007` migration** (fresh-DB builds create `catalog_*` tables directly; no RunSQL renames, no `datahub` dependency). Also landed this window: **Ask-AI button fix** (entity entry points scoped so no unrelated/leaky entry points; resume is entity-scoped so the button never hijacks an unrelated conversation thread) and the manifest entry-point scoping from the domain entry-point work.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `catalog.0007` rewritten self-contained | ✅ | Removed `SeparateDatabaseAndState` + all 7 RunSQL table renames + `datahub` dep; pure `CreateModel` (Dataset, DatasetVersion, DatasetVersionMember, DataContract, DataContractViolation, DatasetAccessPolicy) + `AddField current_version`; deps: catalog 0006, auth 0012, connections 0001, core 0014, dataschema 0005, swappable AUTH_USER_MODEL; fresh DB creates `catalog_*` directly, already-applied DBs skip |
+| 2 | `datahub` removed from `INSTALLED_APPS` | ✅ | `backend/config/settings.py` — removed `'datahub'` + its comment block |
+| 3 | `backend/datahub/` deleted | ✅ | `rm -rf` (apps.py, __init__.py, migrations 0001/0002/0003/__init__) |
+| 4 | DB verified | ✅ | Django ORM: 7 `catalog_*` tables present (dataset, dataset_tags, datasetversion, datasetversionmember, datacontract, datacontractviolation, datasetaccesspolicy), **zero** `datahub_*` tables; dataset rows intact |
+| 5 | Migration/state checks | ✅ | `makemigrations --check --dry-run` → "No changes detected"; `manage.py check` → 0 issues; `showmigrations catalog turnkey` all `[X]`; `migrate --plan` shows only unrelated `healthy.0002` (another worker's — left unapplied) |
+| 6 | Tests | ✅ | `pytest catalog/tests integrations/turnkey/tests -q` → **95 passed** in 15.78s |
+| 7 | verify.sh gate | ✅ | django check ✓, lint ✓, build ✓, route audit clean (80 paths / 17 namespaces) ✓, no secrets/hex/MUI-v5 ✓ — GATE PASSED |
+| 8 | Ask-AI button opens conversation | ✅ | Root cause: resume was `conversation_type='chat'` only → picked most-recent open chat of ANY entity (stale water-table thread) → looked like "nothing opens". Fix: `findOpenConversation` gains `entityScope` filter against `task_payload_json`; `buildEntityScope` scopes to `table_id`/`module_id`; fresh entity conversations open with empty composer; title uses `entityLabel()` (catalog exposes `title`, not `name`) |
+| 9 | Domain entry-point scoping | ✅ | `ai/domain/*.py` + `domain_protocol.py`: `entry_points = []` for hr/finance/customer, no `"*"` on_entity anywhere, data_product `on_entity="module"`; `test_domain_non_data.py` asserts no leaky entry points |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `backend/catalog/migrations/0007_adopt_datasets.py` | Rewritten self-contained (no datahub dep, no RunSQL renames) |
+| MODIFY | `backend/config/settings.py` | Removed `datahub` from INSTALLED_APPS |
+| DELETE | `backend/datahub/` (7 files) | Entire app deleted |
+| MODIFY | `backend/ai/domain/{admin,customer,data_product,emissions,finance,hr,mdm}.py`, `backend/ai/domain_protocol.py` | Entry-point scoping (no leaky/`*` entry points) |
+| MODIFY | `backend/ai/tests/test_domain_non_data.py` | Assertion tests for scoped entry points |
+| MODIFY | `carbon-frontend/src/api/aiWorkspace.js` | `findOpenConversation` entityScope filter |
+| MODIFY | `carbon-frontend/src/shell/AITaskTransferContext.jsx` | `buildEntityScope` + entity-scoped resume |
+| MODIFY | `carbon-frontend/src/shell/AIDomainEntryPoints.jsx` | `entityLabel` (title/name) + payload build |
+| MODIFY | `carbon-frontend/src/__tests__/{AIDomainEntryPoints.test.jsx,AITaskTransferContext.test.jsx,findOpenConversation.test.js}` | 42/42 tests incl. entityScope coverage |
+
 ## [2026-08-21] Frontend Worker — Phase W5-A: Chat / Agent mode split at workspace level (ADR-0014)
 
 ### Summary

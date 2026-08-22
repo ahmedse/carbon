@@ -97,6 +97,17 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
     return base;
   }, []);
 
+  // Build the entity scope for the resume lookup from the normalized payload.
+  // A transfer carries entity identity (table/module); the existing-thread
+  // lookup must be scoped to it so a generic 'chat' never resumes a thread
+  // that belongs to a DIFFERENT table/module.
+  const buildEntityScope = useCallback((normalizedPayload = {}) => {
+    const scope = {};
+    if (normalizedPayload.table_id != null) scope.table_id = normalizedPayload.table_id;
+    if (normalizedPayload.module_id != null) scope.module_id = normalizedPayload.module_id;
+    return Object.keys(scope).length > 0 ? scope : null;
+  }, []);
+
   const transferTask = useCallback(
     async (type, payload, metadata = {}) => {
       // Auto-open the copilot pane if hidden
@@ -123,9 +134,13 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
       try {
         // Phase 16 — resume the most recent open thread of the same kind
         // (one open conversation per type+app) instead of always creating.
+        // Scoped to the transferred entity (table/module) so a generic chat
+        // never hijacks a thread that belongs to a different entity.
+        const entityScope = buildEntityScope(normalizedPayload);
         const existing = await findOpenConversation(token, {
           conversation_type: type,
           app_identifier: appIdentifier || undefined,
+          ...(entityScope ? { entityScope } : {}),
         });
 
         let conv;
@@ -187,7 +202,7 @@ export function AITaskTransferProvider({ children, onRequestOpen }) {
         return null;
       }
     },
-    [token, notifyFromError, enrichPayload],
+    [token, notifyFromError, enrichPayload, buildEntityScope],
   );
 
   const clearPendingTransfer = useCallback(() => {

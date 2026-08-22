@@ -37,10 +37,9 @@ class DataProductDomainAI(DomainAIOperations):
 
     # ── Manifest: entry-point buttons on domain pages ─────────────────────
     entry_points = [
-        {"label": "Explain product",   "task_type": "product_explain", "on_entity": "dataset", "icon": "Info"},
-        {"label": "Product health",    "task_type": "product_health",  "on_entity": "dataset", "icon": "HealthAndSafety"},
-        {"label": "Draft new version", "task_type": "product_draft",   "on_entity": "dataset", "icon": "PostAdd"},
-        {"label": "Ask about this",    "task_type": "chat",            "on_entity": "*",       "icon": "Chat"},
+        {"label": "Explain product",   "task_type": "product_explain", "on_entity": "module", "icon": "Info"},
+        {"label": "Product health",    "task_type": "product_health",  "on_entity": "module", "icon": "HealthAndSafety"},
+        {"label": "Draft new version", "task_type": "product_draft",   "on_entity": "module", "icon": "PostAdd"},
     ]
 
     # ── Manifest: context-aware starter chips ─────────────────────────────

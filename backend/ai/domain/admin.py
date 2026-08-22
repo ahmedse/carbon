@@ -57,14 +57,13 @@ class AdminDomainAI(DomainAIOperations):
     # ── Manifest: entry-point buttons on admin/ops pages ──────────────────
     entry_points = [
         {"label": "Check access",        "task_type": "access_query",     "on_entity": "user",   "icon": "AdminPanelSettings"},
-        {"label": "Who can reach?",      "task_type": "access_query",     "on_entity": "*",      "icon": "ManageAccounts"},
+        {"label": "Who can reach?",      "task_type": "access_query",     "on_entity": "table",  "icon": "ManageAccounts"},
         {"label": "Trace lineage",       "task_type": "lineage_trace",    "on_entity": "table",  "icon": "AccountTree"},
         {"label": "Impact analysis",     "task_type": "impact_analysis",  "on_entity": "table",  "icon": "Construction"},
         {"label": "Explain policy",      "task_type": "policy_explain",   "on_entity": "policy", "icon": "Gavel"},
         {"label": "Draft policy change", "task_type": "policy_draft",     "on_entity": "policy", "icon": "EditNote"},
         {"label": "Explain master record", "task_type": "mdm_explain",    "on_entity": "entity", "icon": "Badge"},
         {"label": "Suggest dedup",       "task_type": "mdm_dedup",        "on_entity": "entity", "icon": "JoinInner"},
-        {"label": "Ask about this",      "task_type": "chat",             "on_entity": "*",      "icon": "Chat"},
     ]
 
     # ── Manifest: context-aware starter chips ─────────────────────────────

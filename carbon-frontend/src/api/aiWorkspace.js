@@ -45,20 +45,33 @@ export function listConversations(
 
 /**
  * Find the most recent open (non-archived) conversation of a given type,
- * optionally scoped to an app. Returns null when none exists. Used to resume
- * an existing thread instead of always creating a new one.
+ * optionally scoped to an app and/or an entity (table/module). Returns null
+ * when none exists. Used to resume an existing thread instead of always
+ * creating a new one.
+ *
+ * ``entityScope`` (optional) is a map of task_payload keys that must match
+ * the conversation's own task payload, e.g. { table_id: 35 } or
+ * { module_id: 'm1' }. Without it, a generic 'chat' transfer would resume
+ * the most recent open chat thread regardless of which table/module it
+ * belongs to — hijacking an unrelated conversation.
  * @param {string} token - JWT access token
- * @param {object} params - { conversation_type, app_identifier? }
+ * @param {object} params - { conversation_type, app_identifier?, entityScope? }
  * @returns {Promise<object|null>}
  */
 export async function findOpenConversation(
   token,
-  { conversation_type, app_identifier } = {},
+  { conversation_type, app_identifier, entityScope } = {},
 ) {
   const list = await listConversations(token, { conversation_type, limit: 200 });
   const matches = (list || []).filter((c) => {
     if (!c || c.is_archived) return false;
     if (app_identifier != null && c.app_identifier !== app_identifier) return false;
+    if (entityScope) {
+      const tp = c.task_payload_json || c.task_payload || {};
+      for (const [key, value] of Object.entries(entityScope)) {
+        if (value != null && tp[key] !== value) return false;
+      }
+    }
     return true;
   });
   matches.sort((a, b) => {

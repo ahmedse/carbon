@@ -40,7 +40,6 @@ class EmissionsDomainAI(DomainAIOperations):
         {"label": "Suggest Rules",  "task_type": "dq_suggest",   "on_entity": "table",  "icon": "AutoFixHigh"},
         {"label": "Investigate",    "task_type": "investigate",   "on_entity": "table",  "icon": "ManageSearch"},
         {"label": "Draft Report",   "task_type": "report_draft",  "on_entity": "module", "icon": "Description"},
-        {"label": "Ask about this", "task_type": "chat",          "on_entity": "*",      "icon": "Chat"},
     ]
 
     # ── Manifest: context-aware starter chips ─────────────────────────────

@@ -63,9 +63,12 @@ def test_supported_task_types_are_advisory_only():
             assert table_type not in cls.supported_task_types
 
 
-def test_manifest_has_entry_points_and_starters():
+def test_manifest_no_leaky_entry_points_but_has_starters():
+    # Manifest-only verticals own no entity pages: entry_points must stay
+    # empty (the old "*" / "module" entries leaked HR/finance/customer
+    # actions onto catalog pages). Their AI surface is starter prompts only.
     for _app_id, _display, cls in NON_DATA_DOMAINS:
-        assert len(cls.entry_points) >= 2
+        assert cls.entry_points == []
         assert "default" in cls.starter_prompts
         assert len(cls.starter_prompts["default"]) >= 1
 

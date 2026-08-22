@@ -44,6 +44,35 @@ describe('findOpenConversation (Phase 16)', () => {
     expect(found.id).toBe('c4');
   });
 
+  it('scopes results to an entity (table_id) when provided', async () => {
+    apiFetch.mockResolvedValue([
+      { id: 'w', conversation_type: 'chat', updated_at: '2024-07-01T00:00:00Z', is_archived: false, task_payload_json: {} },
+      { id: 't', conversation_type: 'chat', updated_at: '2024-06-01T00:00:00Z', is_archived: false, task_payload_json: { table_id: 35, table_name: 'Electricity' } },
+    ]);
+
+    const found = await findOpenConversation('test-token', {
+      conversation_type: 'chat',
+      entityScope: { table_id: 35 },
+    });
+
+    // The newest thread (id 'w') has no table payload → skipped; the one
+    // bound to table 35 wins.
+    expect(found.id).toBe('t');
+  });
+
+  it('returns null when no open thread is bound to the entity', async () => {
+    apiFetch.mockResolvedValue([
+      { id: 'w', conversation_type: 'chat', updated_at: '2024-07-01T00:00:00Z', is_archived: false, task_payload_json: {} },
+    ]);
+
+    const found = await findOpenConversation('test-token', {
+      conversation_type: 'chat',
+      entityScope: { table_id: 35 },
+    });
+
+    expect(found).toBeNull();
+  });
+
   it('returns null when only archived conversations exist', async () => {
     apiFetch.mockResolvedValue([
       { id: 'a1', conversation_type: 'chat', updated_at: '2024-08-01T00:00:00Z', is_archived: true },

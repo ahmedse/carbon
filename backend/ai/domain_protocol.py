@@ -104,8 +104,11 @@ class DomainAIOperations(ABC):
     supported_task_types: list[str] = []
 
     # Entry points: buttons rendered on this domain's pages.
-    # Schema: [{label, task_type, on_entity ("table"|"module"|"*"), icon}]
-    # "on_entity" controls which entity types cause the button to appear.
+    # Schema: [{label, task_type, on_entity, icon}]
+    # "on_entity" controls which entity types cause the button to appear and
+    # must be a concrete type the domain owns ("table"|"module"|"entity"|
+    # "user"|"policy"). The "*" wildcard is forbidden: it leaks a domain's
+    # actions onto every page, including pages of unrelated domains.
     entry_points: list[dict[str, str]] = []
 
     # Context-aware starter prompts for the empty state.

@@ -45,10 +45,10 @@ class FinanceDomainAI(DomainAIOperations):
     ]
 
     # ── Manifest: entry-point buttons ─────────────────────────────────────
-    entry_points = [
-        {"label": "Draft budget memo", "task_type": "report_draft", "on_entity": "module", "icon": "Description"},
-        {"label": "Ask finance",       "task_type": "chat",         "on_entity": "*",      "icon": "Chat"},
-    ]
+    # Manifest-only vertical: owns no entity pages, so no page entry points.
+    # (The old "*" / "module" entries leaked finance actions onto catalog pages.)
+    # AI surface = starter prompts + chat only.
+    entry_points = []
 
     # ── Manifest: context-aware starter chips ─────────────────────────────
     starter_prompts = {

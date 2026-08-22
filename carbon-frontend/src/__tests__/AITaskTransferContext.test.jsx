@@ -225,6 +225,9 @@ describe('AITaskTransferContext enrichPayload (Phase 7C)', () => {
     expect(findOpenConversation).toHaveBeenCalledWith('test-token', {
       conversation_type: 'investigate',
       app_identifier: 'emissions',
+      // Resume lookup is scoped to the transferred entity so a generic chat
+      // never hijacks a thread that belongs to a different table/module.
+      entityScope: { table_id: 't1' },
     });
     // Auto-send still fires into the resumed thread.
     expect(sendMessage).toHaveBeenCalledWith(
@@ -232,6 +235,42 @@ describe('AITaskTransferContext enrichPayload (Phase 7C)', () => {
       'existing-1',
       'Investigate this table',
     );
+  });
+
+  it('scopes the chat resume lookup to the module when transferring from a data product', async () => {
+    findOpenConversation.mockResolvedValue({
+      id: 'existing-2',
+      conversation_type: 'chat',
+    });
+
+    render(
+      <AITaskTransferProvider>
+        <Capture />
+      </AITaskTransferProvider>,
+    );
+    await act(async () => {
+      await transferTask(
+        'chat',
+        { module_id: 'm7', module_name: 'Scope 2 Electricity' },
+        { title: 'Ask about: Scope 2 Electricity' },
+      );
+    });
+
+    expect(createConversation).not.toHaveBeenCalled();
+    expect(findOpenConversation).toHaveBeenCalledWith('test-token', {
+      conversation_type: 'chat',
+      app_identifier: undefined,
+      entityScope: { module_id: 'm7' },
+    });
+  });
+
+  it('does not pass an entity scope for payloads with no entity identity', async () => {
+    await dispatch('investigate', {}, { app_identifier: 'emissions' });
+
+    expect(findOpenConversation).toHaveBeenCalledWith('test-token', {
+      conversation_type: 'investigate',
+      app_identifier: 'emissions',
+    });
   });
 
   it('creates a new conversation when no open thread exists', async () => {

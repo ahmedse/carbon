@@ -1,45 +1,32 @@
 // src/shell/AIDomainEntryPoints.jsx
-// ONE AI button component ("Ask AI") that activates the Pulse with the
-// current entity's context (table | module). Clicking the main button opens a
-// context-scoped chat; a split-button arrow reveals the entity's
-// domain-specific actions (manifest entry_points) — never one button per
-// entry point. Dispatches via useAITaskTransfer.
-import React, { useMemo, useState } from 'react';
-import {
-  Box, Button, ButtonGroup, Menu, MenuItem, ListItemIcon, ListItemText,
-} from '@mui/material';
+// ONE simple AI button ("Ask AI") that activates the Pulse with the current
+// entity's context (table | module). No dropdowns, no per-domain action
+// buttons — the context carries what the user is doing (workspace, entity,
+// intent) and the Pulse figures out how to help.
+import React from 'react';
+import { Box, Button } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import FactCheckIcon from '@mui/icons-material/FactCheck';
-import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
-import ManageSearchIcon from '@mui/icons-material/ManageSearch';
-import DescriptionIcon from '@mui/icons-material/Description';
-import ChatIcon from '@mui/icons-material/Chat';
-import { useAuth } from '../auth/AuthContext';
-import { useDomainManifests } from '../hooks/useDomainManifests';
 import { useAITaskTransfer } from './useAITaskTransfer';
 
-const ICON_MAP = {
-  FactCheck: FactCheckIcon,
-  AutoFixHigh: AutoFixHighIcon,
-  ManageSearch: ManageSearchIcon,
-  Description: DescriptionIcon,
-  Chat: ChatIcon,
-};
+// The catalog detail endpoints return the display label as `title` (e.g.
+// { id, title, description, ... }), while some list/other shapes use `name`.
+function entityLabel(entity, entityId) {
+  return entity?.name ?? entity?.title ?? entityId;
+}
 
 function buildPayload(entityType, entityId, entity, context) {
   if (entityType === 'table') {
     return {
       table_id: entityId,
-      table_name: entity?.name ?? null,
+      table_name: entityLabel(entity, null),
       row_count: entity?.row_count ?? null,
       module_id: entity?.module_id ?? context?.module_id ?? null,
-      module_name: context?.module_name ?? null,
+      module_name: entity?.module_name ?? context?.module_name ?? null,
     };
   }
   return {
     module_id: entityId,
-    module_name: entity?.name ?? null,
+    module_name: entityLabel(entity, null),
   };
 }
 
@@ -52,109 +39,39 @@ function currentViewFor(entityType) {
 }
 
 export default function AIDomainEntryPoints({ entityType, entityId, entity, context }) {
-  const { token } = useAuth();
-  const { manifests } = useDomainManifests(token);
   const { transferTask } = useAITaskTransfer();
-  const [anchorEl, setAnchorEl] = useState(null);
 
-  const points = useMemo(() => {
-    const out = [];
-    for (const manifest of manifests) {
-      for (const ep of manifest?.entry_points || []) {
-        if (ep?.on_entity === entityType || ep?.on_entity === '*') {
-          out.push({ ...ep, app_identifier: manifest.app_identifier });
-        }
-      }
-    }
-    // Dedupe identical (task_type, label) pairs so the generic chat offered
-    // by every domain app is not repeated per app.
-    const seen = new Set();
-    return out.filter((point) => {
-      const key = `${point.task_type}:${point.label}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [manifests, entityType]);
-
-  // Domain-specific actions only; the generic chat lives on the main button.
-  const actions = useMemo(() => points.filter((point) => point.task_type !== 'chat'), [points]);
-
-  if (points.length === 0) return null;
-
-  const closeMenu = () => setAnchorEl(null);
-
-  const workspaceContext = (intentSignal) => ({
-    workspace: 'catalog',
-    current_view: currentViewFor(entityType),
-    entity_type: entityType,
-    entity_id: entityId,
-    entity_name: entity?.name ?? null,
-    intent_signal: intentSignal,
-    recent_actions: [],
-  });
-
-  // Main button: activate the Pulse with the current entity's context.
-  const handleAsk = () => {
-    closeMenu();
+  const handle = () => {
     transferTask(
       'chat',
       buildPayload(entityType, entityId, entity, context),
       {
-        title: `Ask about: ${entity?.name ?? entityId}`,
+        title: `Ask about: ${entityLabel(entity, entityId)}`,
         source_page: sourcePageFor(entityType),
-        workspaceContext: workspaceContext('chat'),
-      },
-    );
-  };
-
-  // Split-button arrow: entity-specific domain actions from the manifests.
-  const handleAction = (point) => {
-    closeMenu();
-    transferTask(
-      point.task_type,
-      buildPayload(entityType, entityId, entity, context),
-      {
-        app_identifier: point.app_identifier,
-        title: `${point.label}: ${entity?.name ?? entityId}`,
-        source_page: sourcePageFor(entityType),
-        workspaceContext: workspaceContext(point.task_type),
+        workspaceContext: {
+          workspace: 'catalog',
+          current_view: currentViewFor(entityType),
+          entity_type: entityType,
+          entity_id: entityId,
+          entity_name: entityLabel(entity, null),
+          intent_signal: 'chat',
+          recent_actions: [],
+        },
       },
     );
   };
 
   return (
     <Box>
-      <ButtonGroup size="small" variant="outlined" color="primary" aria-label="Ask AI">
-        <Button startIcon={<AutoAwesomeIcon />} onClick={handleAsk}>
-          Ask AI
-        </Button>
-        {actions.length > 0 && (
-          <Button
-            aria-label="More AI actions"
-            aria-haspopup="true"
-            onClick={(event) => setAnchorEl(event.currentTarget)}
-          >
-            <ArrowDropDownIcon />
-          </Button>
-        )}
-      </ButtonGroup>
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={closeMenu}>
-        {actions.map((point) => {
-          const Icon = ICON_MAP[point.icon] || AutoAwesomeIcon;
-          return (
-            <MenuItem
-              key={`${point.app_identifier}:${point.task_type}:${point.label}`}
-              onClick={() => handleAction(point)}
-            >
-              <ListItemIcon>
-                <Icon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>{point.label}</ListItemText>
-            </MenuItem>
-          );
-        })}
-      </Menu>
+      <Button
+        size="small"
+        variant="outlined"
+        startIcon={<AutoAwesomeIcon />}
+        aria-label="Ask AI"
+        onClick={handle}
+      >
+        Ask AI
+      </Button>
     </Box>
   );
 }

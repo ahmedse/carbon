@@ -43,7 +43,6 @@ class MdmDomainAI(DomainAIOperations):
         {"label": "Explain master record", "task_type": "mdm_explain",    "on_entity": "entity",       "icon": "Badge"},
         {"label": "Suggest dedup",         "task_type": "mdm_dedup",      "on_entity": "entity",       "icon": "JoinInner"},
         {"label": "Draft merge",           "task_type": "mdm_merge_draft", "on_entity": "entity",      "icon": "Merge"},
-        {"label": "Ask about this",        "task_type": "chat",           "on_entity": "*",            "icon": "Chat"},
     ]
 
     # ── Manifest: context-aware starter chips ─────────────────────────────
