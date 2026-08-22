@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import json
 
-from django.http import StreamingHttpResponse
+from django.http import FileResponse, StreamingHttpResponse
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -486,3 +486,45 @@ class PlanViewSet(viewsets.GenericViewSet):
             return Response(
                 {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
             )
+
+    # ── W5-C: artifact delivery ───────────────────────────────────────────
+
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="artifacts",
+        url_name="list-plan-artifacts",
+    )
+    def list_artifacts(self, request, pk=None):
+        """List the artifacts a plan produced (owner-scoped)."""
+        try:
+            return Response(self.service.list_artifacts(request.user, pk))
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path=r"artifacts/(?P<artifact_id>[^/.]+)/download",
+        url_name="download-plan-artifact",
+    )
+    def download_artifact(self, request, pk=None, artifact_id=None):
+        """Stream an artifact file as an attachment (owner-scoped)."""
+        try:
+            artifact = self.service.get_artifact(
+                request.user, pk, artifact_id
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        response = FileResponse(
+            artifact.file.open("rb"),
+            as_attachment=True,
+            filename=artifact.name,
+            content_type=artifact.mime_type
+            or "application/octet-stream",
+        )
+        return response

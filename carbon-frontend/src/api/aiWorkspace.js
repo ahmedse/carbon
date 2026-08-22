@@ -1,7 +1,7 @@
 // src/api/aiWorkspace.js
 // API layer for AI Workspace — conversation CRUD + messaging.
 // All calls go through Carbon backend → AI Heart → AI provider. Never direct.
-import { apiFetch, refreshAccessToken } from './api';
+import { apiFetch, authFetch, refreshAccessToken } from './api';
 import { API_BASE_URL } from '../config';
 import { isJwtExpired } from '../jwt';
 
@@ -1113,4 +1113,76 @@ export function instantiatePlanTemplate(token, templateId) {
     token,
     method: 'POST',
   });
+}
+
+// ── W5-C — artifact delivery ─────────────────────────────────────────────
+// Steps can produce durable artifacts (docx/xlsx/csv) stored in MEDIA_ROOT.
+// These helpers list a plan's artifacts and stream one down as a blob.
+
+/**
+ * List the artifacts a plan produced, oldest first.
+ * GET /ai/plans/{id}/artifacts/
+ * @param {string} token - JWT access token
+ * @param {string} planId - plan UUID
+ * @returns {Promise<object>} { plan_id, artifacts: Array<{id,name,mime_type,size_bytes,step_index,download_url,created_at}>, count }
+ */
+export function listPlanArtifacts(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/artifacts/`, { token });
+}
+
+/**
+ * Download an artifact as a blob and return an object URL (caller must revoke
+ * it via URL.revokeObjectURL once done).
+ * GET /ai/plans/{id}/artifacts/{artifactId}/download/
+ * @param {string} token - JWT access token
+ * @param {string} planId - plan UUID
+ * @param {string|number} artifactId - RunArtifact id
+ * @returns {Promise<string>} object URL
+ */
+export async function downloadArtifact(token, planId, artifactId) {
+  const path = `${PLANS_BASE}${planId}/artifacts/${artifactId}/download/`;
+  return downloadArtifactUrl(token, path);
+}
+
+/**
+ * Download an artifact from an already-built relative path (e.g. the
+ * `download_url` a step's tool output carries) and return an object URL.
+ * @param {string} token - JWT access token
+ * @param {string} path - relative API path (e.g. ai/plans/{id}/artifacts/{aid}/download/)
+ * @returns {Promise<string>} object URL
+ */
+export async function downloadArtifactUrl(token, path) {
+  // Backend-built `download_url` values already include the API prefix (e.g.
+  // `/carbon-api/ai/plans/...`). `authFetch` re-prepends `API_BASE_URL` (which
+  // also carries that prefix), so strip a leading prefix here to avoid a
+  // double-prefixed URL.
+  let relative = path;
+  try {
+    const basePath = new URL(API_BASE_URL).pathname.replace(/\/+$/, '');
+    if (basePath && relative.startsWith(`${basePath}/`)) {
+      relative = relative.slice(basePath.length);
+    }
+  } catch {
+    // ignore — keep the path unchanged on malformed base URL
+  }
+  const response = await authFetch(relative, { token, timeoutMs: 60000 });
+  if (!response.ok) {
+    let message = `Download failed (${response.status})`;
+    try {
+      const text = await response.text();
+      if (text) {
+        try {
+          const parsed = JSON.parse(text);
+          message = parsed?.detail || parsed?.message || parsed?.error || message;
+        } catch {
+          message = text;
+        }
+      }
+    } catch {
+      // ignore — keep the status-based message
+    }
+    throw new Error(message);
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
 }

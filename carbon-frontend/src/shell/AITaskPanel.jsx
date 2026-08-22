@@ -15,6 +15,7 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Collapse,
   IconButton,
   Paper,
   Stack,
@@ -27,6 +28,7 @@ import {
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
@@ -62,6 +64,7 @@ import AITaskAuditCard from './AITaskAuditCard';
 import PlanDiffReviewDialog from './PlanDiffReviewDialog';
 import StepEditDialog from './StepEditDialog';
 import DiscoveryComposer from './DiscoveryComposer';
+import StepOutputRenderer, { ArtifactCard } from '../components/ai/StepOutputRenderer';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -119,40 +122,67 @@ function StepStatusIcon({ status }) {
 
 StepStatusIcon.propTypes = { status: PropTypes.string };
 
+// W5-C — collapsible "Input parameters" section (key→value rows, not raw JSON).
+function InputParams({ value }) {
+  const [open, setOpen] = useState(false);
+  if (value === null || value === undefined) return null;
+  const isObject = value !== null && typeof value === 'object' && !Array.isArray(value);
+  const entries = isObject ? Object.entries(value) : null;
+  if (entries && entries.length === 0) return null;
+  if (!entries && String(value).length === 0) return null;
+
+  return (
+    <Box sx={{ mt: 0.5 }}>
+      <Button
+        size="small"
+        color="inherit"
+        onClick={() => setOpen((v) => !v)}
+        endIcon={open ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        sx={{ fontSize: '0.625rem', textTransform: 'none', px: 0, minWidth: 0 }}
+      >
+        Input parameters
+      </Button>
+      <Collapse in={open}>
+        {entries ? (
+          <Stack spacing={0.25} sx={{ mt: 0.5 }}>
+            {entries.map(([key, val]) => (
+              <Box key={key} sx={{ display: 'flex', gap: 1, alignItems: 'baseline' }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    fontSize: '0.625rem',
+                    fontWeight: 600,
+                    color: 'text.secondary',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    minWidth: 88,
+                    flexShrink: 0,
+                  }}
+                >
+                  {key.replace(/_/g, ' ')}
+                </Typography>
+                <Typography sx={{ fontSize: '0.6875rem', wordBreak: 'break-word', minWidth: 0 }}>
+                  {typeof val === 'string' ? val : JSON.stringify(val)}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
+        ) : (
+          <Typography sx={{ fontSize: '0.6875rem', mt: 0.5, wordBreak: 'break-word' }}>
+            {String(value)}
+          </Typography>
+        )}
+      </Collapse>
+    </Box>
+  );
+}
+
+InputParams.propTypes = { value: PropTypes.any };
+
 function StepCard({ step, phaseName, confirming, onConfirm, onDecline }) {
   const [open, setOpen] = useState(true);
   const meta = STEP_STATUS_ICON[step.status] || { label: 'Pending', color: 'default' };
   const showBody = open || step.status === 'awaiting_approval' || step.status === 'failed';
-  const hasOutput = step.tool_output !== null && step.tool_output !== undefined && String(step.tool_output).length > 0;
-
-  const renderJson = (title, value) => {
-    if (value === null || value === undefined) return null;
-    const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-    return (
-      <Box sx={{ mt: 0.5 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          {title}
-        </Typography>
-        <Box
-          component="pre"
-          sx={{
-            m: 0,
-            mt: 0.25,
-            p: 1,
-            borderRadius: 1,
-            bgcolor: 'action.hover',
-            fontSize: '0.6875rem',
-            lineHeight: 1.45,
-            maxHeight: 200,
-            overflow: 'auto',
-            whiteSpace: 'pre',
-          }}
-        >
-          {text}
-        </Box>
-      </Box>
-    );
-  };
 
   return (
     <Paper variant="outlined" sx={{ borderRadius: 1 }}>
@@ -184,8 +214,15 @@ function StepCard({ step, phaseName, confirming, onConfirm, onDecline }) {
 
       {showBody && (
         <Box sx={{ px: 1.25, pb: 0.875 }}>
-          {renderJson('Input', step.tool_args)}
-          {hasOutput && renderJson('Output', step.tool_output)}
+          <InputParams value={step.tool_args} />
+          <StepOutputRenderer outputType={step.output_type} value={step.tool_output} />
+          {Array.isArray(step.artifacts) && step.artifacts.length > 0 && (
+            <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+              {step.artifacts.map((artifact) => (
+                <ArtifactCard key={artifact.id ?? artifact.name} value={artifact} />
+              ))}
+            </Stack>
+          )}
           {step.verdict && step.verdict !== 'ok' && step.verdict !== 'accepted' && (
             <Typography variant="caption" color={step.verdict === 'veto' ? 'error.main' : 'text.secondary'} sx={{ display: 'block', mt: 0.5, fontSize: '0.6875rem' }}>
               Review: {step.verdict}
@@ -368,8 +405,10 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             instructions: s.instructions || '',
             agent_role: s.agent_role || 'orchestrator',
             status: s.status || 'pending',
-            tool_output: null,
-            error: null,
+            tool_output: s.tool_output ?? null,
+            output_type: s.output_type ?? null,
+            artifacts: s.artifacts ?? [],
+            error: s.error ?? null,
           }))
         : [],
     );
@@ -490,6 +529,8 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               intent: frame.intent,
               status: frame.status || 'completed',
               tool_output: frame.tool_output ?? null,
+              output_type: frame.output_type ?? null,
+              artifacts: frame.artifacts ?? [],
               error: frame.error ?? null,
             });
           } else if (frame.type === 'step_end') {

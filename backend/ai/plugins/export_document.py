@@ -38,6 +38,11 @@ logger = logging.getLogger("carbon.ai.plugins.export_document")
 
 _SAFE_FMT = {"docx", "xlsx"}
 
+_MIME = {
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
 
 def _slugify(value: str) -> str:
     value = re.sub(r"[^\w\s-]", "", value or "").strip().lower()
@@ -152,11 +157,44 @@ class ExportDocument(ToolPlugin):
         if not files:
             return {"error": "No document was generated."}
 
+        # W5-C: persist into the plan's artifact store so the plan UI lists it
+        # with a first-class download link. The frozen engine ToolContext has
+        # no ``run_id``, so the owning plan is resolved from the thread-local
+        # set by ``plans_service`` around the engine run. Sibling import
+        # (same ``ai`` app) — not an upward domain-app import (RULE_20).
+        artifact_ids: list = []
+        try:
+            from ai.plans_service import (
+                PlansService,
+                get_current_plan_run,
+            )
+
+            run_id = get_current_plan_run()
+            if run_id:
+                step_index = PlansService.resolve_export_step_index(run_id)
+                for entry in files:
+                    local_path = out_dir / entry["filename"]
+                    if not local_path.exists():
+                        continue
+                    stored = PlansService.store_artifact(
+                        run_id=run_id,
+                        step_index=step_index,
+                        name=entry["filename"],
+                        content_bytes=local_path.read_bytes(),
+                        mime_type=_MIME.get(entry["format"], "application/octet-stream"),
+                    )
+                    entry["artifact_id"] = stored["artifact_id"]
+                    entry["download_url"] = stored["download_url"]
+                    artifact_ids.append(stored["artifact_id"])
+        except Exception:  # fail-visible — artifact storage must never break the export
+            logger.exception("export_document store_artifact failed")
+
         return {
             "requires_confirmation": False,
             "action": "download",
             "title": title,
             "files": files,
+            "artifact_ids": artifact_ids,
             "message": (
                 f"Exported “{title}” as "
                 + ", ".join(f.get("format", "").upper() for f in files)

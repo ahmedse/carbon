@@ -31,11 +31,14 @@ Design contracts (TASKS.md W3-A — backend):
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import queue
 import threading
 
+from django.conf import settings
+from django.core.files.base import ContentFile
 from django.utils import timezone
 
 logger = logging.getLogger("carbon.ai.plans_service")
@@ -126,6 +129,101 @@ def _parse_tool_output_json(tool_output_json):
     return {}
 
 
+# The plan Run id for the currently-executing step (set by the Django-side
+# orchestrator before driving the engine, cleared after). The engine's frozen
+# ``ToolContext`` does not carry ``run_id``, so export-style plugins read this
+# thread-local to resolve the owning plan without touching ``backend/ai/engine/``.
+_PLAN_RUN_CONTEXT: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "plans_service_plan_run_id", default=None
+)
+
+
+def set_current_plan_run(run_id: str | None) -> None:
+    _PLAN_RUN_CONTEXT.set(run_id)
+
+
+def get_current_plan_run() -> str | None:
+    return _PLAN_RUN_CONTEXT.get()
+
+
+def _artifact_download_url(run_id, artifact_id) -> str:
+    """Public download URL for a stored plan artifact (W5-C).
+
+    Uses the configured API prefix so the link matches the plans API mount.
+    """
+    prefix = getattr(settings, "API_PREFIX", "/api/v1/").rstrip("/")
+    return f"{prefix}/ai/plans/{run_id}/artifacts/{artifact_id}/download/"
+
+
+def _infer_output_type(tool_output_json):
+    """Infer the renderer type for a step's tool output (W5-C B4).
+
+    Outcome-shape driven so the frontend can pick a semantic renderer:
+    ``text`` (prose), ``table`` (rows/columns), ``chart`` (series), ``artifact``
+    (files), ``json`` (structured fallback). Returns ``None`` when there is no
+    output yet.
+    """
+    data = _parse_tool_output_json(tool_output_json)
+    if not data:
+        return None
+    # An explicit hint always wins (tool or service may already say the kind).
+    hint = (
+        data.get("_output_type")
+        or data.get("output_type")
+        or data.get("type")
+        or data.get("render")
+    )
+    if hint in ("text", "table", "chart", "artifact", "json"):
+        return hint
+    # Artifact-shaped: any file/download marker in the payload.
+    if any(
+        k in data
+        for k in (
+            "artifact",
+            "artifacts",
+            "file",
+            "files",
+            "file_path",
+            "download_url",
+            "path",
+            "filename",
+        )
+    ):
+        return "artifact"
+    result = data.get("result", data)
+    if isinstance(result, str):
+        return "text"
+    if isinstance(result, dict):
+        if any(k in result for k in ("series", "labels", "values", "x", "y")):
+            return "chart"
+        if any(k in result for k in ("columns", "headers", "rows")):
+            return "table"
+        return "json"
+    if isinstance(result, list):
+        if not result:
+            return "json"
+        if all(isinstance(r, dict) for r in result):
+            return "table"
+        if all(isinstance(r, (int, float)) for r in result):
+            return "chart"
+        return "json"
+    return "json"
+
+
+def _with_output_type(tool_output_json):
+    """Return the tool output with ``_output_type`` injected (W5-C B4).
+
+    Keeps the original value intact when it already carries a hint or is empty.
+    """
+    data = _parse_tool_output_json(tool_output_json)
+    if not data:
+        return tool_output_json
+    if isinstance(data, dict) and "_output_type" not in data:
+        data = dict(data)
+        data["_output_type"] = _infer_output_type(data)
+    return data
+
+
 class PlansService:
     """Plan lifecycle: create → review → approve → run → consent → ledger."""
 
@@ -155,9 +253,66 @@ class PlansService:
         return step
 
     @staticmethod
+    def store_artifact(run_id, step_index, name, content_bytes, mime_type):
+        """Persist a plan-step artifact and return its public metadata (W5-C).
+
+        Durable artifact delivery: writes to ``MEDIA_ROOT/ai_artifacts/…`` and
+        creates a ``RunArtifact`` row scoped to ``run_id``. Returns
+        ``{artifact_id, name, size_bytes, download_url}`` so the caller (the
+        ``export_document`` plugin) can surface a download link in its output.
+        """
+        from ai.models.core import Run, RunArtifact
+
+        run = Run.objects.get(id=run_id)
+        content_bytes = content_bytes or b""
+        artifact = RunArtifact.objects.create(
+            run_id=run.id,
+            step_index=step_index,
+            name=name or "artifact",
+            mime_type=mime_type or "application/octet-stream",
+            size_bytes=len(content_bytes),
+        )
+        artifact.file.save(name or "artifact", ContentFile(content_bytes), save=True)
+        logger.info(
+            "Stored plan artifact id=%s run=%s step=%s name=%s bytes=%d",
+            artifact.id, run_id, step_index, name, len(content_bytes),
+        )
+        return {
+            "artifact_id": artifact.id,
+            "name": artifact.name,
+            "size_bytes": artifact.size_bytes,
+            "download_url": _artifact_download_url(run_id, artifact.id),
+        }
+
+    @staticmethod
+    def resolve_export_step_index(run_id, step_index=None):
+        """Map an export to a plan step index when the caller lacks one.
+
+        The frozen engine ``ToolContext`` does not carry ``step_id``; the
+        contextvar carries only ``run_id``. Best effort: honour an explicit
+        ``step_index``, else attach to the most recent step that actually ran
+        ``export_document``, else the most recent completed step, else ``None``
+        (artifacts are still listed at plan level).
+        """
+        from ai.models.core import RunStep
+
+        if step_index is not None:
+            return int(step_index)
+        steps = list(
+            RunStep.objects.filter(run_id=run_id).order_by("-step_index")
+        )
+        for s in steps:
+            if s.tool_name == "export_document":
+                return s.step_index
+        for s in steps:
+            if s.status == STEP_COMPLETED:
+                return s.step_index
+        return steps[0].step_index if steps else None
+
+    @staticmethod
     def _serialize_run(run, steps=None):
         """Product-facing plan payload (RULE_23 — outcome terms only)."""
-        from ai.models.core import RunStep
+        from ai.models.core import RunArtifact, RunStep
 
         plan_json = run.plan_json or {}
         # Service-owned per-step metadata (e.g. ``instructions`` from step
@@ -172,6 +327,10 @@ class PlansService:
             steps = list(
                 RunStep.objects.filter(run_id=run.id).order_by("step_index")
             )
+        # Artifacts grouped by step (W5-C): one query for the whole run.
+        artifacts_by_step: dict = {}
+        for a in RunArtifact.objects.filter(run_id=run.id):
+            artifacts_by_step.setdefault(a.step_index, []).append(a)
         return {
             "id": run.id,
             "status": run.status,
@@ -217,6 +376,20 @@ class PlansService:
                     "draft_text": s.draft_text,
                     "critic_verdict": s.critic_verdict,
                     "error": s.error,
+                    "tool_output": _with_output_type(s.tool_output_json),
+                    "output_type": _infer_output_type(s.tool_output_json),
+                    "artifacts": [
+                        {
+                            "id": a.id,
+                            "name": a.name,
+                            "mime_type": a.mime_type,
+                            "size_bytes": a.size_bytes,
+                            "download_url": _artifact_download_url(
+                                run.id, a.id
+                            ),
+                        }
+                        for a in artifacts_by_step.get(s.step_index, [])
+                    ],
                 }
                 for s in steps
             ],
@@ -744,6 +917,45 @@ class PlansService:
             "count": len(runs),
         }
 
+    # ── W5-C: artifact delivery ───────────────────────────────────────────
+
+    def list_artifacts(self, user, plan_id: str) -> dict:
+        """List the artifacts attached to a plan (owner-scoped)."""
+        from ai.models.core import RunArtifact
+
+        run = self._get_owned_run(user, plan_id)
+        artifacts = list(
+            RunArtifact.objects.filter(run_id=run.id).order_by("created_at")
+        )
+        return {
+            "plan_id": run.id,
+            "artifacts": [
+                {
+                    "id": a.id,
+                    "name": a.name,
+                    "mime_type": a.mime_type,
+                    "size_bytes": a.size_bytes,
+                    "step_index": a.step_index,
+                    "download_url": _artifact_download_url(run.id, a.id),
+                    "created_at": (
+                        a.created_at.isoformat() if a.created_at else None
+                    ),
+                }
+                for a in artifacts
+            ],
+            "count": len(artifacts),
+        }
+
+    def get_artifact(self, user, plan_id: str, artifact_id):
+        """Fetch an artifact row (owner-scoped) for download streaming."""
+        from ai.models.core import RunArtifact
+
+        run = self._get_owned_run(user, plan_id)
+        try:
+            return RunArtifact.objects.get(id=artifact_id, run_id=run.id)
+        except (RunArtifact.DoesNotExist, ValueError, TypeError):
+            raise PlanNotAccessibleError(f"Artifact {artifact_id} not found.")
+
     # ── Consent: plan-level approve ───────────────────────────────────────
 
     def approve_plan(self, user, plan_id: str) -> dict:
@@ -1202,18 +1414,25 @@ class PlansService:
             )()
             if pending_steps:
                 resume_token = pending_steps[0].confirmation_token
-            await loop.run(
-                plan=plan,
-                instance_id=PLAN_INSTANCE_ID,
-                conversation_id=conversation_id,
-                user_message=run.user_message,
-                system_prompt=system_prompt,
-                instance_config=instance_config,
-                user_info=user_info,
-                host_user_id=user_pk,
-                resume_run_id=run.id,
-                confirmation_token=resume_token,
-            )
+            # Publish the plan run id for plugins (W5-C): the frozen engine
+            # ToolContext has no ``run_id``, so export_document resolves its
+            # owning plan from this thread-local during execution.
+            set_current_plan_run(str(run.id))
+            try:
+                await loop.run(
+                    plan=plan,
+                    instance_id=PLAN_INSTANCE_ID,
+                    conversation_id=conversation_id,
+                    user_message=run.user_message,
+                    system_prompt=system_prompt,
+                    instance_config=instance_config,
+                    user_info=user_info,
+                    host_user_id=user_pk,
+                    resume_run_id=run.id,
+                    confirmation_token=resume_token,
+                )
+            finally:
+                set_current_plan_run(None)
 
     # ── Execution: SSE streamed run ───────────────────────────────────────
 
@@ -1370,6 +1589,16 @@ class PlansService:
             (s for s in steps if s.status == STEP_AWAITING_APPROVAL), None
         )
 
+        # W5-C: surface any artifacts produced by this run on the live frames.
+        from ai.models.core import RunArtifact
+
+        run_artifacts = await sync_to_async(
+            lambda: list(RunArtifact.objects.filter(run_id=run.id))
+        )()
+        artifacts_by_step: dict = {}
+        for a in run_artifacts:
+            artifacts_by_step.setdefault(a.step_index, []).append(a)
+
         # W4-D learning flywheel: feed the finalized run outcome back into the
         # SkillRegistry (Reflexion-style step feedback). Fires only on
         # terminal runs (completed/failed) — the retry loop above never
@@ -1412,8 +1641,19 @@ class PlansService:
                     "status": step.status,
                     "verdict": step.critic_verdict,
                     "draft_text": step.draft_text,
-                    "tool_output": step.tool_output_json,
+                    "tool_output": _with_output_type(step.tool_output_json),
+                    "output_type": _infer_output_type(step.tool_output_json),
                     "error": step.error,
+                    "artifacts": [
+                        {
+                            "id": a.id,
+                            "name": a.name,
+                            "mime_type": a.mime_type,
+                            "size_bytes": a.size_bytes,
+                            "download_url": _artifact_download_url(run.id, a.id),
+                        }
+                        for a in artifacts_by_step.get(step.step_index, [])
+                    ],
                 }
                 yield {
                     "type": "step_end",

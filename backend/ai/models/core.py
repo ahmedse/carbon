@@ -357,6 +357,30 @@ class RunStep(AppScopeMixin):
         app_label = "ai"
 
 
+class RunArtifact(models.Model):
+    """A durable file produced by a plan step (W5-C).
+
+    First-class artifact delivery: steps that generate Word/Excel/CSV/JSON
+    files persist them here and expose a download link. Scoped via
+    ``run.host_user_id`` (CBAC) — no ``AppScopeMixin`` of its own, matching
+    the plans ownership boundary (RULE_20: no upward imports).
+    """
+
+    run = models.ForeignKey(
+        Run, on_delete=models.CASCADE, related_name="artifacts"
+    )
+    step_index = models.IntegerField(null=True)
+    name = models.CharField(max_length=255)
+    mime_type = models.CharField(max_length=100)
+    file = models.FileField(upload_to="ai_artifacts/%Y/%m/")
+    size_bytes = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "ai"
+        ordering = ["created_at"]
+
+
 class PlanTemplate(AppScopeMixin):
     """Reusable plan template (Gap #3) — a promoted, named ``plan_json``.
 

@@ -18,6 +18,8 @@ below is relative to ``/carbon-api/ai/plans/``:
     POST   /{id}/steps/decline/     decline a paused consent step
     POST   /{id}/stop/              cancel a run
     GET    /{id}/ledger/            audit ledger
+    GET    /{id}/artifacts/         list plan artifacts (W5-C)
+    GET    /{id}/artifacts/{aid}/download/   download an artifact (W5-C)
 
 Note: explicit ``as_view`` mappings instead of a router because the include
 mount already carries the ``plans`` prefix — a router would double it.
@@ -114,5 +116,15 @@ urlpatterns = [
         "<str:pk>/ledger/",
         PlanViewSet.as_view({"get": "ledger"}),
         name="ai-plan-ledger",
+    ),
+    path(
+        "<str:pk>/artifacts/",
+        PlanViewSet.as_view({"get": "list_artifacts"}),
+        name="ai-plan-artifact-list",
+    ),
+    path(
+        "<str:pk>/artifacts/<str:artifact_id>/download/",
+        PlanViewSet.as_view({"get": "download_artifact"}),
+        name="ai-plan-artifact-download",
     ),
 ]
