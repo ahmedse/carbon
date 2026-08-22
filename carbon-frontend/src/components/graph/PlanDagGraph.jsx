@@ -80,9 +80,10 @@ const NODE_STATUS = {
  * @param {object} props.plan - plan payload (GET /ai/plans/{id}/)
  * @param {number} [props.height] - graph viewport height
  * @param {boolean} [props.live] - show the "Live" badge (parent is running)
+ * @param {boolean} [props.fill] - render to fill the container (full-screen modal)
  * @param {string} [props.testId] - data-testid
  */
-export default function PlanDagGraph({ plan, height = 380, live = false, testId = 'plan-dag-graph' }) {
+export default function PlanDagGraph({ plan, height = 380, live = false, fill = false, testId = 'plan-dag-graph' }) {
   const theme = useTheme();
   const [selected, setSelected] = useState(null);
 
@@ -397,6 +398,7 @@ export default function PlanDagGraph({ plan, height = 380, live = false, testId 
       modalCloseTestId="plan-graph-modal-close"
       expandTestId="plan-graph-expand"
       exportFileName="plan-graph"
+      fill={fill}
     />
   );
 }
@@ -405,5 +407,6 @@ PlanDagGraph.propTypes = {
   plan: PropTypes.object,
   height: PropTypes.number,
   live: PropTypes.bool,
+  fill: PropTypes.bool,
   testId: PropTypes.string,
 };

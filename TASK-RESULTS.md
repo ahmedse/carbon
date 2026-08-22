@@ -3290,3 +3290,45 @@ Ledger JSON / Response .md exports). No backend changes.
 - **Pre-existing unrelated failures** in the full suite (not W5-D): `AIArtifacts.test.jsx` (2), `AIMessageBubble.feedback.test.jsx` (3), `AISharedThreads.test.jsx` (4), `healthy/LoadoutSheetPage.test.jsx` (1) — 10 failures in files untouched by W5-D, tied to other in-flight work (e.g. `backend/healthy/*` LoadoutLine/checkpoint).
 - **Flaky W5-B tests**: `AITaskPanel.test.jsx` "starts a guided discovery…" and "renders Pulse questions…" intermittently fail only in the full-suite run (timing-sensitive streaming mocks); they pass 16/16 in isolation. Pre-existing; not caused by W5-D (W5-D effects are gated on `tab==='monitor'/'results'` and don't run on the Tasks tab).
 - The 2 new ledger/artifacts effects follow the existing `selectedPlan?.id` dep pattern (no identity churn).
+
+## [2026-08-22] Frontend Worker — Phase W5-E: EnterpriseGraph drag/resize NaN fix + live run graph prominence
+
+### Summary
+Two-part frontend fix per Sprint W5-E (`TASKS.md` W5): (1) the node drag/resize
+visual break (QA finding from Round 2) — drag origins are now snapshotted from
+the **effective** node geometry (layout + overrides merged) instead of the raw
+layout node, so a drag after a resize (or resize after a drag) never computes
+NaN origins/dimensions; (2) while a run is `live`, the plan execution graph is
+promoted ABOVE the step stream at height 420 (progress at a glance), keeping the
+compact 300px placement below the step list for non-live review. `fill={false}`
+is now forwarded explicitly through `PlanDagGraph` to `EnterpriseGraph`.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `EnterpriseGraph.jsx` — drag/resize origin snapshot | ✅ | `startNodeDrag` reads `origX/origY` from `nodeById.get(node.id) || node` (effective); `startResize` reads `origW/origH` as `en.w ?? node.w` / `en.h ?? node.h`; `nodeById` already derived from `effectiveNodes` in the same component |
+| 2 | `PlanDagGraph.jsx` + `AITaskPlanCard.jsx` — Run-view graph prominence | ✅ | `PlanDagGraph` gains `fill = false` prop (forwarded to `EnterpriseGraph`, propTypes updated); `AITaskPlanCard` extracts `renderPlanPreview(sx)` helper — `live` → graph first, above the step stream, `height=420`; non-live → compact 300px below the step list (unchanged) |
+| 3 | Regression tests | ✅ | `PlanDagGraph.test.jsx` +2: drag-after-resize keeps position (exact +40/+30 px delta, no NaN), resize-after-drag keeps finite dimensions (+40/+20, dragged x/y preserved) |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `carbon-frontend/src/components/graph/EnterpriseGraph.jsx` | Effective-geometry drag/resize origin snapshots |
+| MODIFY | `carbon-frontend/src/components/graph/PlanDagGraph.jsx` | `fill` prop added + forwarded |
+| MODIFY | `carbon-frontend/src/shell/AITaskPlanCard.jsx` | `renderPlanPreview` helper; live → graph above steps @ 420px |
+| MODIFY | `carbon-frontend/src/__tests__/PlanDagGraph.test.jsx` | +2 W5-E regression tests |
+
+### Verification Output
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/PlanDagGraph.test.jsx src/__tests__/AITaskPlanCard.controls.test.jsx
+  # 2 files, 28 tests passed
+npx vitest run PlanDagGraph planGraph AITaskPlanCard.controls AgentTopologyGraph AITaskPanel AITaskPanel.w3c
+  # 6 files, 75 tests passed
+npx eslint src/components/graph/EnterpriseGraph.jsx src/components/graph/PlanDagGraph.jsx src/shell/AITaskPlanCard.jsx src/__tests__/PlanDagGraph.test.jsx
+  # 0 errors, 2 pre-existing react-refresh warnings (exported helpers)
+npm run build   # ✓ built in ~27s
+```
+Manual browser check (Agent mode): move node → resize → move again → no visual
+break; resize after move → no visual break. (`fill=false` keeps the fixed 420px
+viewport in Run view; no layout changes to EnterpriseGraph.)

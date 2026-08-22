@@ -3844,7 +3844,7 @@ Append results to `TASK-RESULTS.md`.
 
 ### Phase W5-E — EnterpriseGraph drag visual bug fix + agent mode run graph prominence
 
-**Status:** TODO
+**Status:** DONE ✅ (2026-08-22)
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
 **Kind:** Frontend-only. Small-medium.

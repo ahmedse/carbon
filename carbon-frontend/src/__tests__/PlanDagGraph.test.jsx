@@ -208,6 +208,59 @@ describe('EnterpriseGraph interactions (movable/resizable nodes, live status, to
     expect(Number(nodeRect.getAttribute('width'))).toBeGreaterThan(beforeW);
   });
 
+  it('keeps a correct position when dragging after a resize (no NaN origin)', () => {
+    const { container } = renderGraph({ plan: PLAN });
+    const node = container.querySelector('[role="button"][aria-label^="Step 0:"]');
+    const before = node.getAttribute('transform');
+
+    // Resize first — the drag origin must come from the EFFECTIVE (post-resize)
+    // geometry, not a stale raw-layout position (W5-E).
+    const handle = container.querySelector('[data-testid="plan-dag-graph-resize-0"]');
+    fireEvent.mouseDown(handle, { button: 0, clientX: 200, clientY: 200 });
+    fireEvent.mouseMove(handle, { clientX: 240, clientY: 220 });
+    fireEvent.mouseUp(handle, { clientX: 240, clientY: 220 });
+
+    // Then drag the node by (+40, +30) px.
+    fireEvent.mouseDown(node, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(node, { clientX: 140, clientY: 130 });
+    fireEvent.mouseUp(node, { clientX: 140, clientY: 130 });
+
+    const after = node.getAttribute('transform');
+    expect(after).not.toContain('NaN');
+    const parse = (t) => t.match(/translate\(([\d.]+), ([\d.]+)\)/);
+    const b = parse(before);
+    const a = parse(after);
+    expect(a).not.toBeNull();
+    expect(Number(a[1]) - Number(b[1])).toBeCloseTo(40, 5);
+    expect(Number(a[2]) - Number(b[2])).toBeCloseTo(30, 5);
+  });
+
+  it('keeps correct dimensions when resizing after a drag (no NaN size)', () => {
+    const { container } = renderGraph({ plan: PLAN });
+    const node = container.querySelector('[role="button"][aria-label^="Step 0:"]');
+    const nodeRect = node.querySelector('rect');
+    const beforeW = Number(nodeRect.getAttribute('width'));
+
+    // Drag the node first.
+    fireEvent.mouseDown(node, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(node, { clientX: 140, clientY: 130 });
+    fireEvent.mouseUp(node, { clientX: 140, clientY: 130 });
+
+    // Then resize by (+40, +20) px — dimensions must stay finite and the
+    // dragged x/y must be preserved (W5-E).
+    const handle = container.querySelector('[data-testid="plan-dag-graph-resize-0"]');
+    fireEvent.mouseDown(handle, { button: 0, clientX: 200, clientY: 200 });
+    fireEvent.mouseMove(handle, { clientX: 240, clientY: 220 });
+    fireEvent.mouseUp(handle, { clientX: 240, clientY: 220 });
+
+    const w = Number(nodeRect.getAttribute('width'));
+    const h = Number(nodeRect.getAttribute('height'));
+    expect(Number.isFinite(w)).toBe(true);
+    expect(Number.isFinite(h)).toBe(true);
+    expect(w).toBeCloseTo(beforeW + 40, 5);
+    expect(node.getAttribute('transform')).not.toContain('NaN');
+  });
+
   it('redraw drops node position overrides and resets the view', () => {
     const { container } = renderGraph({ plan: PLAN });
     const node = container.querySelector('[role="button"][aria-label^="Step 0:"]');

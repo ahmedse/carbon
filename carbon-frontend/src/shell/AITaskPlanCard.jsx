@@ -107,6 +107,39 @@ function AITaskPlanCard({
   const runnable = plan.status === 'approved' || plan.status === 'paused';
   const showRun = runnable && !running;
   const editable = plan.status !== 'running' && !running;
+  // W5-E: while a run is live the graph is promoted ABOVE the step stream at a
+  // taller fixed height (progress at a glance); when reviewing a non-live plan
+  // it stays compact below the step list.
+  const graphHeight = live ? 420 : 300;
+  const renderPlanPreview = (sx = {}) =>
+    steps.length > 0 && (
+      <Box sx={{ mt: 0.25, ...sx }}>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Typography variant="caption" color="text.secondary" sx={{ flex: 1, fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Plan preview
+          </Typography>
+          <ToggleButtonGroup
+            value={previewMode}
+            exclusive
+            size="small"
+            onChange={(_e, next) => {
+              if (next !== null) setPreviewMode(next);
+            }}
+            aria-label="Plan preview view"
+          >
+            <ToggleButton value="graph" sx={{ fontSize: '0.625rem', py: 0.125, px: 0.75 }}>Graph</ToggleButton>
+            <ToggleButton value="diagram" sx={{ fontSize: '0.625rem', py: 0.125, px: 0.75 }}>Diagram</ToggleButton>
+          </ToggleButtonGroup>
+        </Stack>
+        <Box sx={{ mt: 0.75 }}>
+          {previewMode === 'graph' ? (
+            <PlanDagGraph plan={plan} height={graphHeight} live={live} fill={false} />
+          ) : (
+            <PlanMermaidPreview plan={plan} />
+          )}
+        </Box>
+      </Box>
+    );
 
   const openEditBrief = () => {
     setEditBriefValue(plan.brief || '');
@@ -203,6 +236,9 @@ function AITaskPlanCard({
         </Box>
 
         <Divider sx={{ my: 0.25 }} />
+
+        {/* Live run — graph FIRST, above the step stream (W5-E prominence). */}
+        {live && renderPlanPreview({ mb: 0.5 })}
 
         {/* Workflow stages (phases) with steps + agent assignments */}
         <Stack direction="row" alignItems="center" spacing={0.5}>
@@ -307,35 +343,8 @@ function AITaskPlanCard({
           </Typography>
         )}
 
-        {/* Plan preview — live d3 DAG + static Mermaid diagram toggle */}
-        {steps.length > 0 && (
-          <Box sx={{ mt: 0.25 }}>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography variant="caption" color="text.secondary" sx={{ flex: 1, fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Plan preview
-              </Typography>
-              <ToggleButtonGroup
-                value={previewMode}
-                exclusive
-                size="small"
-                onChange={(_e, next) => {
-                  if (next !== null) setPreviewMode(next);
-                }}
-                aria-label="Plan preview view"
-              >
-                <ToggleButton value="graph" sx={{ fontSize: '0.625rem', py: 0.125, px: 0.75 }}>Graph</ToggleButton>
-                <ToggleButton value="diagram" sx={{ fontSize: '0.625rem', py: 0.125, px: 0.75 }}>Diagram</ToggleButton>
-              </ToggleButtonGroup>
-            </Stack>
-            <Box sx={{ mt: 0.75 }}>
-              {previewMode === 'graph' ? (
-                <PlanDagGraph plan={plan} height={300} live={live} />
-              ) : (
-                <PlanMermaidPreview plan={plan} />
-              )}
-            </Box>
-          </Box>
-        )}
+        {/* Plan preview — below the step list for non-live review. */}
+        {!live && renderPlanPreview()}
 
         {/* Plan-level consent gate (RULE_21) — nothing executes before approve */}
         {reviewable && (

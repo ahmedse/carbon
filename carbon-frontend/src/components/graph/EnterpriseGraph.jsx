@@ -277,7 +277,11 @@ export default function EnterpriseGraph({
     if (e.button !== 0) return;
     e.stopPropagation();
     moved.current = false;
-    drag.current = { mode: 'node', id: node.id, startX: e.clientX, startY: e.clientY, origX: node.x, origY: node.y };
+    // Snapshot x/y from the EFFECTIVE node (layout + overrides merged) so a
+    // drag that follows a resize starts from the resized position, not a
+    // stale layout position (W5-E drag/resize NaN fix).
+    const en = nodeById.get(node.id) || node;
+    drag.current = { mode: 'node', id: node.id, startX: e.clientX, startY: e.clientY, origX: en.x, origY: en.y };
     setDragging(true);
   };
 
@@ -285,7 +289,10 @@ export default function EnterpriseGraph({
     if (e.button !== 0) return;
     e.stopPropagation();
     moved.current = false;
-    drag.current = { mode: 'resize', id: node.id, startX: e.clientX, startY: e.clientY, origW: node.w, origH: node.h };
+    // Snapshot w/h from the EFFECTIVE node so a resize that follows a drag
+    // keeps the dragged x/y and never computes NaN from a missing origin.
+    const en = nodeById.get(node.id) || node;
+    drag.current = { mode: 'resize', id: node.id, startX: e.clientX, startY: e.clientY, origW: en.w ?? node.w, origH: en.h ?? node.h };
     setDragging(true);
   };
 
