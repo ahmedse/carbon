@@ -11,6 +11,9 @@ Current domains:
   - admin (platform administration — access, lineage, governance, MDM)
   - mdm (master data — reference sets, gold-record confidence, dedup)
   - data_product (governed, versioned data products)
+  - finance (non-data operations vertical — advisory/drafting only)
+  - hr (non-data operations vertical — advisory/drafting only)
+  - customer (non-data operations vertical — advisory/drafting only)
   - (future) waste
 
 ``register_builtin_domains()`` is invoked once at app startup
@@ -42,3 +45,10 @@ def register_builtin_domains() -> None:
         from .mdm import MdmDomainAI  # noqa: F401
     if not has_domain("data_product"):
         from .data_product import DataProductDomainAI  # noqa: F401
+    # Gap #5 — non-data operations verticals (manifest-only adapters).
+    if not has_domain("finance"):
+        from .finance import FinanceDomainAI  # noqa: F401
+    if not has_domain("hr"):
+        from .hr import HRDomainAI  # noqa: F401
+    if not has_domain("customer"):
+        from .customer import CustomerOpsDomainAI  # noqa: F401
