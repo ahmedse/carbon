@@ -1,6 +1,8 @@
 // src/__tests__/AIInputBar.mode.test.jsx
-// Phase 21-C — VS Code Copilot-style composer: Ask/Agent mode selector and
-// persistent context chips (restore context across turns).
+// Phase 21-C — persistent context chips (restore context across turns).
+// W5-A (ADR-0014) — the Ask/Agent composer selector MOVED to the workspace
+// header; the composer itself is now mode-agnostic and must not render the
+// pill or any mode hint/steering copy.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import AIInputBar from '../shell/AIInputBar';
@@ -17,6 +19,10 @@ import { apiFetch } from '../api/api';
 
 const TABLES = [{ id: 35, title: 'Electricity', name: 'electricity' }];
 
+// Mirrors AIInputBar's PLACEHOLDER_MAP.working — the composer no longer swaps
+// in mode-specific steering copy while working (W5-A).
+const PLACEHOLDER_WORKING = 'AI is thinking… (Enter to queue)';
+
 function renderBar(props = {}) {
   return render(<AIInputBar onSend={vi.fn()} {...props} />);
 }
@@ -26,40 +32,35 @@ beforeEach(() => {
   apiFetch.mockResolvedValue({ results: TABLES });
 });
 
-describe('AIInputBar composer mode (Ask = answers only / Agent = executes)', () => {
-  it('renders Ask/Agent mode selector with Ask selected by default', () => {
+describe('AIInputBar composer (W5-A — mode lives in the workspace header)', () => {
+  it('no longer renders the Ask/Agent composer-mode selector', () => {
     renderBar();
-    expect(screen.getByRole('group', { name: 'Composer mode' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Composer mode' })).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /answers and advice only, nothing executed/i }),
-    ).toHaveAttribute('aria-pressed', 'true');
+      screen.queryByRole('button', { name: /answers and advice only, nothing executed/i }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /plan and execute actions in a workflow/i }),
-    ).toHaveAttribute('aria-pressed', 'false');
+      screen.queryByRole('button', { name: /plan and execute actions in a workflow/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it('notifies the parent when the mode switches to Agent', () => {
-    const onModeChange = vi.fn();
-    renderBar({ onModeChange });
-    fireEvent.click(screen.getByRole('button', { name: /plan and execute actions in a workflow/i }));
-    expect(onModeChange).toHaveBeenCalledWith('agent');
+  it('no longer shows the dynamic mode hint text', () => {
+    renderBar();
+    expect(screen.queryByText(/no rules created, no data changed/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Agents execute actions — you confirm before they run/i),
+    ).not.toBeInTheDocument();
   });
 
-  it('uses the steering placeholder in Agent mode while working', () => {
-    renderBar({ mode: 'agent', working: true });
+  it('uses the default working placeholder (no agent steering copy)', () => {
+    renderBar({ working: true });
     expect(screen.getByLabelText('Message input')).toHaveAttribute(
       'placeholder',
-      expect.stringContaining('interrupt'),
+      PLACEHOLDER_WORKING,
     );
-  });
-
-  it('shows a dynamic mode hint that switches with the selected mode', () => {
-    renderBar();
-    // Default Ask mode → answers-only hint (nothing is executed).
-    expect(screen.getByText(/no rules created, no data changed/i)).toBeInTheDocument();
-    // Agent mode → execution hint (agents run actions, user confirms first).
-    renderBar({ mode: 'agent' });
-    expect(screen.getByText(/Agents execute actions — you confirm before they run/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Message input').getAttribute('placeholder')).not.toContain(
+      'interrupt',
+    );
   });
 
   it('shows a context chip for a resolved mention and keeps it after sending', async () => {

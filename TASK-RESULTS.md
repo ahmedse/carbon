@@ -1,3 +1,54 @@
+## [2026-08-21] Frontend Worker — Phase W5-A: Chat / Agent mode split at workspace level (ADR-0014)
+
+### Summary
+Frontend-only refactor per Sprint W5-A (`TASKS.md` W5, ADR-0014). **Chat** and **Agent** are now the two top-level Pulse modes, owned by `AIWorkspaceHeader` (mode buttons + always-visible safety-contract text), persisted under `localStorage['carbon-ai-mode']` (default `'chat'`). The Ask/Agent pill was **removed** from `AIInputBar` (composer is now mode-agnostic). Agent mode hosts `AITaskPanel` as its primary area with a mode-specific activity bar (Tasks / Monitor / Results — Monitor & Results are placeholders until W5-D) and emits its run lifecycle to the header via a new `onLifecycleStateChange` prop. Chat mode keeps the conversation surface + its original activity bar (minus the old Agent/Tasks icons). No backend changes.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `AIWorkspaceHeader.jsx` — mode toggle + safety contract | ✅ | `mode`/`onModeChange`/`agentLifecycleState` props; compact `ToggleButtonGroup` (`💬 Chat` / `🤖 Agent`, `aria-label`s "Chat mode"/"Agent mode"); contract text always visible, EXACT ADR-0014 §4 copy per lifecycle state (chat/idle/plan_pending/running/consent_needed/done, idle fallback) |
+| 2 | `AIWorkspace.jsx` — workspace-level mode | ✅ | `MODE_STORAGE_KEY='carbon-ai-mode'` (lazy init + persist effect); `agentLifecycleState` + `agentView` state; `handleModeChange` (closes chat drawer on agent); removed `agent`/`tasks` panel branches + unused imports; agent primary area = `<AITaskPanel conversationId={null} focusPlanId onFocusPlanConsumed onLifecycleStateChange>`; activity bar split by mode (chat: sessions/context/investigate/artifacts/memory/usage/settings + New chat; agent: Tasks/Monitor/Results, no New chat); `handleOpenPanel('tasks'|'agent')` → switches to agent mode (+ plan focus) preserving the chat→Tasks jump; header + `ExecuteModeProvider` kept MOUNTED across loading (early return removed → inline `{loading ? <Loading/> : <content/>}` conditional; helpers moved above `return`) |
+| 3 | `AIInputBar.jsx` — pill removed | ✅ | Deleted `<Box role="group" aria-label="Composer mode">` pill + dynamic hint Typography; removed `mode`/`onModeChange` from signature + propTypes; simplified placeholder (no agent steering copy); removed unused imports (`ToggleButton`, `AutoAwesomeIcon`, `AutoFixHighIcon`) |
+| 4 | `AITaskPanel.jsx` — lifecycle emission | ✅ | New `onLifecycleStateChange` prop + effect on `[phase, selectedPlan?.status]` → `deriveLifecycleState` (working→running, paused→consent_needed, finished→done, stopped→idle, error→error; plan status fallback: pending_approval/discovering→plan_pending, paused→consent_needed, running→running, completed→done, failed→error); callback via ref (stable identity, mirrors `notifyRef` pattern); propTypes added |
+| 5 | Tests | ✅ | `AIInputBar.mode.test.jsx` — 4 pill tests replaced with 3 "pill is gone" tests (selector, hint, default working placeholder); `AIWorkspace.shell.test.jsx` — removed header mock (real header now exercised), added `AITaskPanel` mock, W2-A Agent-icon test replaced by 6 W5-A tests (default chat, switch to agent, switch back, persistence+restore, Monitor/Results placeholders); NEW `AIWorkspaceHeader.mode.test.jsx` (9 tests: contract text per state + fallback + mode-change callbacks); `AITaskPanel.test.jsx` — +5 lifecycle-emission tests (plan_pending/running→done/consent_needed/stopped→idle/error) |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `carbon-frontend/src/shell/AIWorkspaceHeader.jsx` | Mode ToggleButtonGroup + safety-contract text + new props |
+| MODIFY | `carbon-frontend/src/shell/AIWorkspace.jsx` | Mode state/persistence, agent mode branch, activity-bar split, `handleOpenPanel` agent routing, removed agent/tasks branches + `AIAgentPanel`/`HubOutlinedIcon` imports, `AgentPlaceholder` |
+| MODIFY | `carbon-frontend/src/shell/AIInputBar.jsx` | Removed Ask/Agent pill + hint + mode props + unused imports |
+| MODIFY | `carbon-frontend/src/shell/AITaskPanel.jsx` | `onLifecycleStateChange` + `deriveLifecycleState` |
+| MODIFY | `carbon-frontend/src/__tests__/AIInputBar.mode.test.jsx` | −4 pill tests, +3 removed-pill tests |
+| MODIFY | `carbon-frontend/src/__tests__/AIWorkspace.shell.test.jsx` | Real header, +`AITaskPanel` mock, −1 W2-A test, +6 W5-A mode tests |
+| CREATE | `carbon-frontend/src/__tests__/AIWorkspaceHeader.mode.test.jsx` | 9 header contract/mode tests |
+| MODIFY | `carbon-frontend/src/__tests__/AITaskPanel.test.jsx` | +5 lifecycle-emission tests |
+
+### Verification Output
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint          # 0 errors (9 pre-existing warnings, none in W5-A files)
+npx vitest run        # 4 W5-A files → 49/49 pass; full suite → 781 pass / 9 pre-existing failures (non-W5-A files)
+npm run build         # clean vite build (chunk-size warnings only)
+```
+Master Architect verification (all gates executed):
+- `npm run lint` → **0 errors** (9 pre-existing warnings, none in W5-A files)
+- `npx vitest run src/__tests__/AIWorkspace.shell.test.jsx src/__tests__/AIWorkspaceHeader.mode.test.jsx src/__tests__/AIInputBar.mode.test.jsx src/__tests__/AITaskPanel.test.jsx` → **49/49 passed**
+- `npx vitest run` (full) → **781 passed / 9 failed** across 4 files, all **pre-existing and non-W5-A** (`AIArtifacts.test.jsx`, `AIMessageBubble.feedback.test.jsx`, `AISharedThreads.test.jsx`, `healthy/LoadoutSheetPage.test.jsx`); none import `AIWorkspace.jsx`
+- `npm run build` → clean (chunk-size warnings only)
+- Manual browser verification was NOT performed (deferred to W5-D/E review).
+
+### Deviations / Assumptions
+- **Running contract text uses the literal "Step N of M"** from ADR-0014 §4 — the `onLifecycleStateChange` callback carries no step counts today; W5-D will enrich it (noted in ADR-0014).
+- **Agent activity bar is Tasks / Monitor / Results** — Run and Audit remain internal tabs of `AITaskPanel` (adding duplicate external icons created a highlight mismatch with the panel's own tabs). Monitor/Results render outcome-only placeholder copy per spec ("available soon", RULE_23).
+- **`AIConversationView` still passes `mode`/`onModeChange` to `AIInputBar`** — accepted per spec; the component ignores the unknown props and `sendMode` stays `'queue'` (default chat behavior). W5-B should clean this up.
+- **E2E `journey-12-task-run.spec.ts` `gotoTasks()`** clicks `[aria-label="Tasks"]` — the Tasks icon now lives only in Agent mode, and Pulse opens in Chat mode → **E2E will break** until the W5-B+ refresh updates the journey (out of scope for this gate; `aria-label="Tasks"` is preserved on the agent-mode activity button).
+- Test-file decision: workspace-level mode tests were folded into `AIWorkspace.shell.test.jsx` (which already owns the heavy mock setup) instead of a new `AIWorkspace.mode.test.jsx` — avoids duplicating the API/auth mock scaffolding; coverage is equivalent.
+- `ChevronLeftIcon` import in `AIWorkspace.jsx` was already unused before this phase (capitalized identifiers are exempted by the `no-unused-vars` `varsIgnorePattern: '^[A-Z_]'`) — left untouched to keep the diff focused.
+- **Post-worker fix (Master Architect)**: the worker's `if (loading) return <header-only>` early return rendered `AIWorkspaceHeader` WITHOUT `ExecuteModeProvider` and UNMOUNTED/remounted it when `loading` flipped — async `findByText`/`findByTestId` queries resolved against the loading tree and then detached, causing 5 `toBeInTheDocument()` failures + dead-node clicks. Fixed by removing the early return and rendering an inline `{loading ? <Loading/> : <content/>}` conditional so `AIWorkspaceHeader` + `ExecuteModeProvider` stay MOUNTED across the transition; moved `hasAny`/`togglePanel`/`handleOpenPanel`/`selectAgentView` above the `return`.
+
+---
+
 ## [2026-08-21] Frontend Worker — Graph UX round 3: enterprise graph primitive (movable/resizable nodes, maximize/export, refined look)
 
 ### Summary

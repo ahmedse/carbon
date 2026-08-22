@@ -27,9 +27,10 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DataUsageIcon from '@mui/icons-material/DataUsage';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
-import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
+import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import ManageSearchIcon from '@mui/icons-material/ManageSearch';
 import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
@@ -57,7 +58,6 @@ import AISettingsTab from './AISettingsTab';
 import AIMemoryTab from './AIMemoryTab';
 import AILearntTab from './AILearntTab';
 import AIRelationshipTab from './AIRelationshipTab';
-import AIAgentPanel from './AIAgentPanel';
 import AITaskPanel from './AITaskPanel';
 import InvestigateTab from './InvestigateTab';
 import { useAITaskTransfer } from './useAITaskTransfer';
@@ -65,8 +65,36 @@ import { ExecuteModeProvider } from './ExecuteModeContext';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
 
+// W5-A (ADR-0014) — Chat/Agent is a workspace-level mode, persisted.
+const MODE_STORAGE_KEY = 'carbon-ai-mode';
+
 // RULE_17: grouped Memory surface persists its internal tab selection.
 const MEMORY_TAB_KEY = 'carbon-ai-memory-tab';
+
+// W5-A — placeholder surface for agent views whose dedicated UIs arrive with
+// later W5 phases (Monitor/Results). Outcome copy only (RULE_23).
+function AgentPlaceholder({ title, body }) {
+  return (
+    <Box
+      sx={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        p: 2,
+      }}
+    >
+      <Box sx={{ textAlign: 'center', maxWidth: 360 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5 }}>
+          {title}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+          {body}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
 
 export function AIWorkspace({ onClose }) {
   const { token } = useAuth();
@@ -88,8 +116,25 @@ export function AIWorkspace({ onClose }) {
   // Sessions drawer starts collapsed (VS Code Copilot-style) — the user opens
   // it via the Sessions activity-bar icon when needed.
   const [activePanel, setActivePanel] = useState(null);
+  // W5-A (ADR-0014) — workspace-level mode: 'chat' (advisory conversation) or
+  // 'agent' (planning + execution + consent + audit). Persisted so the user's
+  // last mode survives close/reopen.
+  const [mode, setMode] = useState(() => {
+    try {
+      return localStorage.getItem(MODE_STORAGE_KEY) === 'agent' ? 'agent' : 'chat';
+    } catch {
+      return 'chat';
+    }
+  });
+  // W5-A — lifecycle state reported by AITaskPanel; drives the header's
+  // always-visible safety-contract text (ADR-0014 §4).
+  const [agentLifecycleState, setAgentLifecycleState] = useState('idle');
+  // W5-A — agent-mode activity-bar view. Tasks/Run/Audit host AITaskPanel
+  // today; Monitor/Results are placeholders until their dedicated surfaces
+  // land in later W5 phases.
+  const [agentView, setAgentView] = useState('tasks'); // tasks|run|monitor|results|audit
   // Chat → Tasks jump: when a chat reply's "Open in Tasks" button is clicked,
-  // the workspace switches to the Tasks panel and the panel auto-opens the
+  // the workspace switches to the Agent mode and the panel auto-opens the
   // created plan (consumed by AITaskPanel via onFocusPlanConsumed).
   const [tasksFocusPlanId, setTasksFocusPlanId] = useState(null);
   // Grouped Memory surface: episodes (memory) / facts (learnt) / relationship
@@ -190,6 +235,15 @@ export function AIWorkspace({ onClose }) {
       /* ignore */
     }
   }, [activeId]);
+
+  // W5-A — persist the workspace mode (ADR-0014: mode survives close/reopen).
+  useEffect(() => {
+    try {
+      localStorage.setItem(MODE_STORAGE_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  }, [mode]);
 
   // Persist the grouped Memory tab (RULE_17).
   useEffect(() => {
@@ -484,48 +538,45 @@ export function AIWorkspace({ onClose }) {
     document.addEventListener('mouseup', onUp);
   }, [drawerWidth]);
 
-  if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-          bgcolor: 'background.default',
-        }}
-      >
-        <AIWorkspaceHeader onClose={onClose} conversationId={null} />
-        <Box
-          sx={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Typography variant="caption" color="text.secondary">
-            Loading…
-          </Typography>
-        </Box>
-      </Box>
-    );
-  }
+  // W5-A — switch the workspace-level mode. The sessions/context drawer is a
+  // chat-mode surface, so it closes when entering Agent mode.
+  const handleModeChange = useCallback((nextMode) => {
+    setMode(nextMode);
+    if (nextMode === 'agent') {
+      setActivePanel(null);
+    }
+  }, []);
+
+  // W5-A — AITaskPanel reports its lifecycle state; the header shows the
+  // matching safety-contract text (ADR-0014 §4).
+  const handleLifecycleStateChange = useCallback((state) => {
+    setAgentLifecycleState(state);
+  }, []);
 
   const hasAny = order.length > 0 || archivedIds.length > 0;
 
   const togglePanel = (panel) => setActivePanel((prev) => (prev === panel ? null : panel));
 
   // open_panel action from a chat reply — switch the workspace panel and,
-  // for tasks, focus the plan the assistant just drafted. Plain function:
-  // this sits AFTER the `if (loading)` early return, so it must not call
-  // hooks (a useCallback here would trip the Rules-of-Hooks check when
-  // loading flips).
+  // for tasks, focus the plan the assistant just drafted. Plain function (not
+  // a useCallback) so it can be defined alongside the other render helpers.
+  // Tasks/Agent actions now enter Agent mode (ADR-0014): the workspace
+  // switches mode and, for tasks, hands the plan id to AITaskPanel.
   const handleOpenPanel = (panel, planId) => {
-    setActivePanel(panel);
-    if (panel === 'tasks' && planId) {
-      setTasksFocusPlanId(planId);
+    if (panel === 'tasks' || panel === 'agent') {
+      setActivePanel(null);
+      setMode('agent');
+      if (panel === 'tasks' && planId) {
+        setTasksFocusPlanId(planId);
+      }
+      return;
     }
+    setActivePanel(panel);
   };
+
+  // W5-A — agent activity-bar view selection. Re-clicking the active view
+  // returns to the default Tasks view.
+  const selectAgentView = (view) => setAgentView((prev) => (prev === view ? 'tasks' : view));
 
   return (
     <ExecuteModeProvider>
@@ -538,71 +589,103 @@ export function AIWorkspace({ onClose }) {
             conversationId={activeConversation?.id ?? null}
             onConversationUpdated={handleConversationUpdated}
             onForked={handleForked}
+            mode={mode}
+            onModeChange={handleModeChange}
+            agentLifecycleState={agentLifecycleState}
           />
-          {providerOffline && <AIOfflineBanner />}
-          {activePanel === 'usage' ? (
-            <AIUsageTab />
-          ) : activePanel === 'settings' ? (
-            <AISettingsTab />
-          ) : activePanel === 'memory' ? (
-            /* Grouped Memory surface: episodes / facts / relationship are one
-               domain — internal MUI Tabs (RULE_17), like Copilot's grouped views. */
-            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-              <Box sx={{ px: 1, pt: 0.5, borderBottom: 1, borderColor: 'divider' }}>
-                <Tabs
-                  value={memoryTab}
-                  onChange={(e, v) => setMemoryTab(v)}
-                  variant="fullWidth"
-                  aria-label="Memory views"
-                  sx={{
-                    minHeight: 34,
-                    '& .MuiTab-root': { minHeight: 34, fontSize: '0.6875rem', py: 0.5 },
-                  }}
-                >
-                  <Tab value="episodes" label="Episodes" />
-                  <Tab value="facts" label="Facts" />
-                  <Tab value="relationship" label="Relationship" />
-                </Tabs>
-              </Box>
-              <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                {memoryTab === 'episodes' ? (
-                  <AIMemoryTab />
-                ) : memoryTab === 'facts' ? (
-                  <AILearntTab />
-                ) : (
-                  <AIRelationshipTab
-                    onShowFacts={() => setMemoryTab('facts')}
-                    onShowEpisodes={() => setMemoryTab('episodes')}
-                    onShowUsage={() => setActivePanel('usage')}
-                  />
-                )}
-              </Box>
+          {loading ? (
+            <Box
+              sx={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Typography variant="caption" color="text.secondary">
+                Loading…
+              </Typography>
             </Box>
-          ) : activePanel === 'investigate' ? (
-            <InvestigateTab conversations={investigateConversations} onSelect={handleOpenInvestigation} onNew={handleNewInvestigation} />
-          ) : activePanel === 'artifacts' ? (
-            <AIArtifactBrowser />
-          ) : activePanel === 'agent' ? (
-            /* Agent surface: one icon, Agents/MCP/Tools/Logs internal tabs */
-            <AIAgentPanel conversationId={activeConversation?.id ?? null} />
-          ) : activePanel === 'tasks' ? (
-            /* Task orchestration: one icon, Tasks/Run internal tabs */
-            <AITaskPanel
-              conversationId={activeConversation?.id ?? null}
-              focusPlanId={tasksFocusPlanId}
-              onFocusPlanConsumed={() => setTasksFocusPlanId(null)}
-            />
-          ) : !hasAny ? (
-            <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
-          ) : activeConversation ? (
-            <AIConversationView
-              key={activeConversation.id}
-              conversationId={activeConversation.id}
-              showContextPanel={false}
-              onOpenPanel={handleOpenPanel}
-            />
+          ) : mode === 'agent' ? (
+            /* Agent mode (ADR-0014): AITaskPanel is the primary area — no
+               conversation surface. The activity bar picks the agent view;
+               Monitor/Results are placeholders until W5-D. */
+            agentView === 'monitor' ? (
+              <AgentPlaceholder
+                title="📊 Monitor"
+                body="See live run metrics, token burn, and step health while the agent works. Available soon."
+              />
+            ) : agentView === 'results' ? (
+              <AgentPlaceholder
+                title="📦 Results"
+                body="Review completed outputs and artifacts, then rerun or fork the plan. Available soon."
+              />
+            ) : (
+              <AITaskPanel
+                conversationId={activeConversation?.id ?? null}
+                focusPlanId={tasksFocusPlanId}
+                onFocusPlanConsumed={() => setTasksFocusPlanId(null)}
+                onLifecycleStateChange={handleLifecycleStateChange}
+              />
+            )
           ) : (
-            <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
+            <>
+              {providerOffline && <AIOfflineBanner />}
+              {activePanel === 'usage' ? (
+                <AIUsageTab />
+              ) : activePanel === 'settings' ? (
+                <AISettingsTab />
+              ) : activePanel === 'memory' ? (
+                /* Grouped Memory surface: episodes / facts / relationship are one
+                   domain — internal MUI Tabs (RULE_17), like Copilot's grouped views. */
+                <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                  <Box sx={{ px: 1, pt: 0.5, borderBottom: 1, borderColor: 'divider' }}>
+                    <Tabs
+                      value={memoryTab}
+                      onChange={(e, v) => setMemoryTab(v)}
+                      variant="fullWidth"
+                      aria-label="Memory views"
+                      sx={{
+                        minHeight: 34,
+                        '& .MuiTab-root': { minHeight: 34, fontSize: '0.6875rem', py: 0.5 },
+                      }}
+                    >
+                      <Tab value="episodes" label="Episodes" />
+                      <Tab value="facts" label="Facts" />
+                      <Tab value="relationship" label="Relationship" />
+                    </Tabs>
+                  </Box>
+                  <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                    {memoryTab === 'episodes' ? (
+                      <AIMemoryTab />
+                    ) : memoryTab === 'facts' ? (
+                      <AILearntTab />
+                    ) : (
+                      <AIRelationshipTab
+                        onShowFacts={() => setMemoryTab('facts')}
+                        onShowEpisodes={() => setMemoryTab('episodes')}
+                        onShowUsage={() => setActivePanel('usage')}
+                      />
+                    )}
+                  </Box>
+                </Box>
+              ) : activePanel === 'investigate' ? (
+                <InvestigateTab conversations={investigateConversations} onSelect={handleOpenInvestigation} onNew={handleNewInvestigation} />
+              ) : activePanel === 'artifacts' ? (
+                <AIArtifactBrowser />
+              ) : !hasAny ? (
+                <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
+              ) : activeConversation ? (
+                <AIConversationView
+                  key={activeConversation.id}
+                  conversationId={activeConversation.id}
+                  showContextPanel={false}
+                  onOpenPanel={handleOpenPanel}
+                />
+              ) : (
+                <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
+              )}
+            </>
           )}
         </Box>
 
@@ -675,7 +758,11 @@ export function AIWorkspace({ onClose }) {
           </Box>
         )}
 
-        {/* Activity bar — rightmost edge */}
+        {/* Activity bar — rightmost edge. W5-A (ADR-0014): each mode shows
+            only its relevant surfaces. Chat = conversation-centric panels;
+            Agent = tasks + run + monitor + results + audit — today Tasks
+            hosts the panel (which has its own Run/Audit tabs) and
+            Monitor/Results are placeholders until their W5-D surfaces land. */}
         <Box
           sx={{
             width: 32,
@@ -689,38 +776,59 @@ export function AIWorkspace({ onClose }) {
             py: 0.5,
           }}
         >
-          {[
-            { id: 'sessions',     icon: <ForumOutlinedIcon sx={{ fontSize: 16 }} />,             label: 'Sessions'     },
-            { id: 'context',      icon: <InfoOutlinedIcon sx={{ fontSize: 16 }} />,               label: 'Context'      },
-            { id: 'investigate',  icon: <ManageSearchIcon sx={{ fontSize: 16 }} />,               label: 'Investigate'  },
-            { id: 'artifacts',    icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />,         label: 'Artifacts'    },
-            { id: 'agent',        icon: <HubOutlinedIcon sx={{ fontSize: 16 }} />,                label: 'Agent'        },
-            { id: 'tasks',        icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />,             label: 'Tasks'       },
-            { id: 'usage',        icon: <DataUsageIcon sx={{ fontSize: 16 }} />,                  label: 'Usage'        },
-            { id: 'memory',       icon: <PsychologyOutlinedIcon sx={{ fontSize: 16 }} />,         label: 'Memory'       },
-            { id: 'settings',     icon: <SettingsOutlinedIcon sx={{ fontSize: 16 }} />,           label: 'Settings'     },
-          ].map(({ id, icon, label }) => (
-            <Tooltip key={id} title={label} placement="left">
-              <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: activePanel === id ? 'primary.main' : 'transparent' }}>
-                <IconButton
-                  size="small"
-                  onClick={() => togglePanel(id)}
-                  color={activePanel === id ? 'primary' : 'default'}
-                  aria-label={label}
-                  aria-pressed={activePanel === id}
-                  sx={{ p: 0.875, borderRadius: 1 }}
-                >
-                  {icon}
-                </IconButton>
-              </Box>
-            </Tooltip>
-          ))}
+          {mode === 'agent'
+            ? [
+                { id: 'tasks',   icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />,          label: 'Tasks'   },
+                { id: 'monitor', icon: <LeaderboardOutlinedIcon sx={{ fontSize: 16 }} />,      label: 'Monitor' },
+                { id: 'results', icon: <HistoryOutlinedIcon sx={{ fontSize: 16 }} />,          label: 'Results' },
+              ].map(({ id, icon, label }) => (
+                <Tooltip key={id} title={label} placement="left">
+                  <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: agentView === id ? 'primary.main' : 'transparent' }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => selectAgentView(id)}
+                      color={agentView === id ? 'primary' : 'default'}
+                      aria-label={label}
+                      aria-pressed={agentView === id}
+                      sx={{ p: 0.875, borderRadius: 1 }}
+                    >
+                      {icon}
+                    </IconButton>
+                  </Box>
+                </Tooltip>
+              ))
+            : [
+                { id: 'sessions',    icon: <ForumOutlinedIcon sx={{ fontSize: 16 }} />,             label: 'Sessions'    },
+                { id: 'context',     icon: <InfoOutlinedIcon sx={{ fontSize: 16 }} />,               label: 'Context'     },
+                { id: 'investigate', icon: <ManageSearchIcon sx={{ fontSize: 16 }} />,               label: 'Investigate' },
+                { id: 'artifacts',   icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />,         label: 'Artifacts'   },
+                { id: 'memory',      icon: <PsychologyOutlinedIcon sx={{ fontSize: 16 }} />,         label: 'Memory'      },
+                { id: 'usage',       icon: <DataUsageIcon sx={{ fontSize: 16 }} />,                  label: 'Usage'       },
+                { id: 'settings',    icon: <SettingsOutlinedIcon sx={{ fontSize: 16 }} />,           label: 'Settings'    },
+              ].map(({ id, icon, label }) => (
+                <Tooltip key={id} title={label} placement="left">
+                  <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: activePanel === id ? 'primary.main' : 'transparent' }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => togglePanel(id)}
+                      color={activePanel === id ? 'primary' : 'default'}
+                      aria-label={label}
+                      aria-pressed={activePanel === id}
+                      sx={{ p: 0.875, borderRadius: 1 }}
+                    >
+                      {icon}
+                    </IconButton>
+                  </Box>
+                </Tooltip>
+              ))}
           <Box sx={{ flex: 1 }} />
-          <Tooltip title="New chat" placement="left">
-            <IconButton size="small" onClick={handleNewChat} aria-label="New chat" sx={{ p: 0.875 }}>
-              <AddCommentOutlinedIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
+          {mode === 'chat' && (
+            <Tooltip title="New chat" placement="left">
+              <IconButton size="small" onClick={handleNewChat} aria-label="New chat" sx={{ p: 0.875 }}>
+                <AddCommentOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
 
         <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}>

@@ -3498,7 +3498,7 @@ Append to `TASK-RESULTS.md`.
 
 ### Phase W5-A — Chat / Agent mode split at workspace level
 
-**Status:** TODO
+**Status:** DONE
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
 **Kind:** Frontend-only. Medium. No backend changes.

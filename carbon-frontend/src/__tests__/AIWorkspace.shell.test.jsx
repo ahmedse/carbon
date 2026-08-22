@@ -1,5 +1,7 @@
 // src/__tests__/AIWorkspace.shell.test.jsx
 // Sprint 16 — shell rewrite: id-keyed tabs (G6) + durable archive on close (G1).
+// W5-A (ADR-0014) — Chat/Agent mode split at workspace level: the header owns
+// the mode buttons + safety contract; the activity bar is mode-specific.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
@@ -16,7 +18,10 @@ vi.mock('../shell/useAITaskTransfer', () => ({
   useAITaskTransfer: () => ({ pendingTransferId: null, clearPendingTransfer: vi.fn() }),
 }));
 
-vi.mock('../shell/AIWorkspaceHeader', () => ({ default: () => null }));
+// The REAL AIWorkspaceHeader renders so the W5-A mode buttons + safety
+// contract can be exercised. Its AIContextMenu is mount-safe with a null
+// conversationId (checkpoint load is gated on open && conversationId).
+// vi.mock('../shell/AIWorkspaceHeader', () => ({ default: () => null }));
 vi.mock('../shell/AIConversationView', () => ({ default: () => null }));
 vi.mock('../shell/AISuggestionRail', () => ({ default: () => null }));
 vi.mock('../shell/AIEmptyState', () => ({ default: () => null }));
@@ -28,6 +33,7 @@ vi.mock('../shell/AIMemoryTab', () => ({ default: () => <div data-testid="memory
 vi.mock('../shell/AILearntTab', () => ({ default: () => <div data-testid="memory-facts-tab" /> }));
 vi.mock('../shell/AIRelationshipTab', () => ({ default: () => <div data-testid="memory-relationship-tab" /> }));
 vi.mock('../shell/AIAgentPanel', () => ({ default: () => <div data-testid="agent-tab" /> }));
+vi.mock('../shell/AITaskPanel', () => ({ default: () => <div data-testid="task-panel" /> }));
 
 vi.mock('../api/aiPulse', () => ({
   listDomainManifests: vi.fn().mockResolvedValue({ apps: [] }),
@@ -182,15 +188,78 @@ describe('AIWorkspace Investigate mode tab (Phase 9-B)', () => {
   });
 });
 
-describe('AIWorkspace Agent surface icon (Phase W2-A)', () => {
-  it('renders the Agent panel when Agent is selected from the activity bar', async () => {
+describe('AIWorkspace mode split (Phase W5-A / ADR-0014)', () => {
+  it('opens in Chat mode: chat contract text and chat activity bar only', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);
 
-    const agentButton = await screen.findByRole('button', { name: 'Agent' });
-    fireEvent.click(agentButton);
+    expect(
+      await screen.findByText(/Answers and advice only\. Nothing is created or changed/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sessions' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tasks' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Monitor' })).not.toBeInTheDocument();
+  });
 
-    expect(await screen.findByTestId('agent-tab')).toBeInTheDocument();
-    expect(agentButton).toHaveAttribute('aria-pressed', 'true');
+  it('switches to Agent mode via the header: task panel + agent contract + agent activity bar', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Agent mode' }));
+
+    expect(await screen.findByTestId('task-panel')).toBeInTheDocument();
+    expect(screen.getByText(/The AI will plan before doing anything/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tasks' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Monitor' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Results' })).toBeInTheDocument();
+    // Chat-only surfaces are hidden in Agent mode.
+    expect(screen.queryByRole('button', { name: 'Sessions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New chat' })).not.toBeInTheDocument();
+  });
+
+  it('switches back to Chat mode from the header', async () => {
+    localStorage.setItem('carbon-ai-mode', 'agent');
+    render(<AIWorkspace onClose={vi.fn()} />);
+    await screen.findByTestId('task-panel');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chat mode' }));
+
+    expect(
+      await screen.findByText(/Answers and advice only\. Nothing is created or changed/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('task-panel')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sessions' })).toBeInTheDocument();
+  });
+
+  it('persists the mode to localStorage and restores it on reopen (RULE_17)', async () => {
+    const { unmount } = render(<AIWorkspace onClose={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Agent mode' }));
+    await screen.findByTestId('task-panel');
+    expect(localStorage.getItem('carbon-ai-mode')).toBe('agent');
+
+    unmount();
+    render(<AIWorkspace onClose={vi.fn()} />);
+    expect(await screen.findByTestId('task-panel')).toBeInTheDocument();
+    expect(localStorage.getItem('carbon-ai-mode')).toBe('agent');
+  });
+
+  it('shows the Monitor placeholder view in Agent mode', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Agent mode' }));
+    await screen.findByTestId('task-panel');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Monitor' }));
+    expect(screen.getByText(/📊 Monitor/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('task-panel')).not.toBeInTheDocument();
+  });
+
+  it('shows the Results placeholder view in Agent mode', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Agent mode' }));
+    await screen.findByTestId('task-panel');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Results' }));
+    expect(screen.getByText(/📦 Results/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('task-panel')).not.toBeInTheDocument();
   });
 });
 

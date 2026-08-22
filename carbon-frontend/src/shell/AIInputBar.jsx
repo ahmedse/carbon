@@ -11,14 +11,11 @@ import {
   ListItemButton,
   Paper,
   TextField,
-  ToggleButton,
   Tooltip,
   Typography,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import StopCircleIcon from '@mui/icons-material/StopCircle';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../api/api';
 import { API_ROUTES } from '../config';
@@ -70,8 +67,6 @@ function AIInputBar({
   onStop,
   conversationStatus,
   onMentionsChange,
-  mode = 'ask',
-  onModeChange,
 }) {
   const { token } = useAuth();
   const { executeMode } = useExecuteMode();
@@ -231,9 +226,7 @@ function AIInputBar({
   );
 
   const placeholder = working
-    ? mode === 'agent'
-      ? 'Agent running — new directions interrupt and steer the run (Enter)…'
-      : PLACEHOLDER_MAP.working
+    ? PLACEHOLDER_MAP.working
     : conversationStatus === 'needs_input'
       ? PLACEHOLDER_MAP.needs_input
       : PLACEHOLDER_MAP.default;
@@ -257,91 +250,9 @@ function AIInputBar({
     >
 
 
-      {/* Composer chrome: Ask/Agent mode selector + dynamic mode hint.
-          Ask = answer & advice only — nothing is executed (no rule creation,
-          no data changes). Agent = run a plan where one or more agents execute
-          concrete actions in a workflow (user confirms each action first). */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 1,
-          px: 1.5,
-          pt: 1,
-        }}
-      >
-        <Box
-          role="group"
-          aria-label="Composer mode"
-          sx={{
-            display: 'inline-flex',
-            p: '2px',
-            bgcolor: 'action.hover',
-            borderRadius: 1,
-          }}
-        >
-          <Tooltip
-            title="Ask the AI — get answers and advice. Nothing is created or changed: no rule creation, no data edits. The AI may suggest, but you apply it manually."
-            placement="top"
-          >
-            <span>
-              <ToggleButton
-                value="ask"
-                aria-label="Ask — answers and advice only, nothing executed"
-                onClick={() => mode !== 'ask' && onModeChange?.('ask')}
-                selected={mode === 'ask'}
-                sx={{
-                  fontSize: '0.75rem',
-                  lineHeight: 1.1,
-                  minHeight: 24,
-                  px: 1.25,
-                  py: '2px',
-                  borderRadius: 0.75,
-                  border: 0,
-                  textTransform: 'none',
-                  ...(mode === 'ask' && { bgcolor: 'action.selected' }),
-                }}
-              >
-                <AutoAwesomeIcon sx={{ fontSize: 13, mr: 0.5 }} />
-                Ask
-              </ToggleButton>
-            </span>
-          </Tooltip>
-          <Tooltip
-            title="Run an agent — Pulse plans the job and one or more agents execute concrete actions (create DQ rules, fix data, run queries) as a workflow. You confirm each action before it runs."
-            placement="top"
-          >
-            <span>
-              <ToggleButton
-                value="agent"
-                aria-label="Agent — plan and execute actions in a workflow"
-                onClick={() => mode !== 'agent' && onModeChange?.('agent')}
-                selected={mode === 'agent'}
-                sx={{
-                  fontSize: '0.75rem',
-                  lineHeight: 1.1,
-                  minHeight: 24,
-                  px: 1.25,
-                  py: '2px',
-                  borderRadius: 0.75,
-                  border: 0,
-                  textTransform: 'none',
-                  ...(mode === 'agent' && { bgcolor: 'action.selected' }),
-                }}
-              >
-                <AutoFixHighIcon sx={{ fontSize: 13, mr: 0.5 }} />
-                Agent
-              </ToggleButton>
-            </span>
-          </Tooltip>
-        </Box>
-        <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.625rem' }}>
-          {mode === 'ask'
-            ? 'Answers & advice only — no rules created, no data changed'
-            : 'Agents execute actions — you confirm before they run'}
-        </Typography>
-      </Box>
+      {/* Composer chrome — W5-A (ADR-0014): the Ask/Agent mode selector moved
+          to the workspace header. The composer is mode-agnostic now; the
+          safety contract lives in AIWorkspaceHeader. */}
 
       {/* Persistent context chips — attached mentions survive across turns
           until explicitly removed (restore context). */}
@@ -533,8 +444,6 @@ AIInputBar.propTypes = {
   onStop: PropTypes.func,
   conversationStatus: PropTypes.string,
   onMentionsChange: PropTypes.func,
-  mode: PropTypes.oneOf(['ask', 'agent']),
-  onModeChange: PropTypes.func,
 };
 
 export default AIInputBar;

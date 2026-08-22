@@ -76,6 +76,30 @@ function formatWhen(value) {
   return parsed.isValid() ? parsed.tz(PROJECT_TIMEZONE).format('MMM D, YYYY · HH:mm') : '';
 }
 
+// W5-A (ADR-0014) — panel run phase + plan status → workspace-level lifecycle
+// state consumed by the header safety-contract text (ADR-0014 §4).
+// phase: {idle,working,paused,finished,stopped,error} + plan.status
+//   → {idle,plan_pending,running,consent_needed,done,error}
+function deriveLifecycleState(phase, planStatus) {
+  switch (phase) {
+    case 'working': return 'running';
+    case 'paused': return 'consent_needed';
+    case 'finished': return 'done';
+    case 'error': return 'error';
+    case 'stopped': return 'idle';
+    default: break;
+  }
+  switch (planStatus) {
+    case 'pending_approval':
+    case 'discovering': return 'plan_pending';
+    case 'paused': return 'consent_needed';
+    case 'running': return 'running';
+    case 'completed': return 'done';
+    case 'failed': return 'error';
+    default: return 'idle';
+  }
+}
+
 // ── Step card — one planned step, live status, consent gate ──────────────
 const STEP_STATUS_ICON = {
   running: { label: 'Running…', color: 'primary', icon: 'spinner' },
@@ -226,8 +250,11 @@ StepCard.propTypes = {
  * @param {string|null} props.conversationId - anchor conversation UUID
  * @param {string|null} props.focusPlanId - plan to auto-open (chat "Open in Tasks" jump)
  * @param {function} props.onFocusPlanConsumed - called once the focus is handled
+ * @param {function} props.onLifecycleStateChange - W5-A: reports the workspace-level
+ *   lifecycle state (idle|plan_pending|running|consent_needed|done|error) so the
+ *   header can show the right safety-contract text (ADR-0014 §4).
  */
-function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }) {
+function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, onLifecycleStateChange }) {
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const notifyRef = useRef(notify);
@@ -273,6 +300,16 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }
 
   const runPhaseRef = useRef(phase);
   runPhaseRef.current = phase;
+
+  // W5-A — emit the workspace-level lifecycle state whenever the run phase or
+  // the plan status changes so the header contract text stays in sync. The
+  // callback rides a ref so a new identity from the parent never re-triggers
+  // the effect (mirrors the notifyRef pattern above).
+  const onLifecycleStateChangeRef = useRef(onLifecycleStateChange);
+  onLifecycleStateChangeRef.current = onLifecycleStateChange;
+  useEffect(() => {
+    onLifecycleStateChangeRef.current?.(deriveLifecycleState(phase, selectedPlan?.status));
+  }, [phase, selectedPlan?.status]);
 
   const handleTabChange = useCallback((e, value) => {
     setTab(value);
@@ -1022,6 +1059,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }
 
 AITaskPanel.propTypes = {
   conversationId: PropTypes.string,
+  focusPlanId: PropTypes.string,
+  onFocusPlanConsumed: PropTypes.func,
+  onLifecycleStateChange: PropTypes.func,
 };
 
 export default AITaskPanel;

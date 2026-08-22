@@ -281,3 +281,88 @@ describe('AITaskPanel — streamed run and step consent', () => {
     expect(screen.getByText('Planning service unavailable')).toBeInTheDocument();
   });
 });
+
+// ── W5-A lifecycle emission (ADR-0014) ────────────────────────────────────
+describe('AITaskPanel — emits workspace lifecycle state (W5-A / ADR-0014)', () => {
+  it('reports plan_pending while a plan awaits approval', async () => {
+    const onLifecycleStateChange = vi.fn();
+    render(<AITaskPanel conversationId="conv-1" onLifecycleStateChange={onLifecycleStateChange} />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+
+    await waitFor(() => {
+      expect(onLifecycleStateChange).toHaveBeenLastCalledWith('plan_pending');
+    });
+  });
+
+  it('reports running while the stream works and done on completion', async () => {
+    const onLifecycleStateChange = vi.fn();
+    render(<AITaskPanel conversationId="conv-1" onLifecycleStateChange={onLifecycleStateChange} />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve plan' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Run plan' }));
+
+    await waitFor(() => {
+      expect(onLifecycleStateChange).toHaveBeenLastCalledWith('running');
+    });
+
+    streamHandlers.onDone({ type: 'done', plan_id: 'plan-1', status: 'completed', final_response: 'Done.' });
+
+    await waitFor(() => {
+      expect(onLifecycleStateChange).toHaveBeenLastCalledWith('done');
+    });
+  });
+
+  it('reports consent_needed when a step pauses for approval', async () => {
+    const onLifecycleStateChange = vi.fn();
+    render(<AITaskPanel conversationId="conv-1" onLifecycleStateChange={onLifecycleStateChange} />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve plan' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Run plan' }));
+
+    await waitFor(() => expect(streamHandlers.onFrame).toBeDefined());
+    currentPlan = { ...PLAN, status: 'paused' };
+    streamHandlers.onFrame({ type: 'step_confirm', plan_id: 'plan-1', step_id: 1, intent: 'Create a rule to prevent duplicates' });
+    streamHandlers.onDone({ type: 'done', plan_id: 'plan-1', status: 'paused', final_response: null });
+
+    await waitFor(() => {
+      expect(onLifecycleStateChange).toHaveBeenLastCalledWith('consent_needed');
+    });
+  });
+
+  it('reports idle after a run is stopped', async () => {
+    const onLifecycleStateChange = vi.fn();
+    render(<AITaskPanel conversationId="conv-1" onLifecycleStateChange={onLifecycleStateChange} />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve plan' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Run plan' }));
+
+    await waitFor(() => {
+      expect(onLifecycleStateChange).toHaveBeenLastCalledWith('running');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Stop run' }));
+
+    await waitFor(() => {
+      expect(onLifecycleStateChange).toHaveBeenLastCalledWith('idle');
+    });
+  });
+
+  it('reports error when the stream fails', async () => {
+    const onLifecycleStateChange = vi.fn();
+    render(<AITaskPanel conversationId="conv-1" onLifecycleStateChange={onLifecycleStateChange} />);
+
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve plan' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Run plan' }));
+
+    await waitFor(() => expect(streamHandlers.onFrame).toBeDefined());
+    streamHandlers.onError?.('Planning service unavailable');
+
+    await waitFor(() => {
+      expect(onLifecycleStateChange).toHaveBeenLastCalledWith('error');
+    });
+  });
+});
