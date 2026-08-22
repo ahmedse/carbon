@@ -71,31 +71,6 @@ const MODE_STORAGE_KEY = 'carbon-ai-mode';
 // RULE_17: grouped Memory surface persists its internal tab selection.
 const MEMORY_TAB_KEY = 'carbon-ai-memory-tab';
 
-// W5-A — placeholder surface for agent views whose dedicated UIs arrive with
-// later W5 phases (Monitor/Results). Outcome copy only (RULE_23).
-function AgentPlaceholder({ title, body }) {
-  return (
-    <Box
-      sx={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        p: 2,
-      }}
-    >
-      <Box sx={{ textAlign: 'center', maxWidth: 360 }}>
-        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5 }}>
-          {title}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
-          {body}
-        </Typography>
-      </Box>
-    </Box>
-  );
-}
-
 export function AIWorkspace({ onClose }) {
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
@@ -608,26 +583,16 @@ export function AIWorkspace({ onClose }) {
             </Box>
           ) : mode === 'agent' ? (
             /* Agent mode (ADR-0014): AITaskPanel is the primary area — no
-               conversation surface. The activity bar picks the agent view;
-               Monitor/Results are placeholders until W5-D. */
-            agentView === 'monitor' ? (
-              <AgentPlaceholder
-                title="📊 Monitor"
-                body="See live run metrics, token burn, and step health while the agent works. Available soon."
-              />
-            ) : agentView === 'results' ? (
-              <AgentPlaceholder
-                title="📦 Results"
-                body="Review completed outputs and artifacts, then rerun or fork the plan. Available soon."
-              />
-            ) : (
-              <AITaskPanel
-                conversationId={activeConversation?.id ?? null}
-                focusPlanId={tasksFocusPlanId}
-                onFocusPlanConsumed={() => setTasksFocusPlanId(null)}
-                onLifecycleStateChange={handleLifecycleStateChange}
-              />
-            )
+               conversation surface. The activity bar picks the agent view; the
+               Monitor/Results icons route into AITaskPanel's internal tabs
+               (W5-D) via externalTab. */
+            <AITaskPanel
+              conversationId={activeConversation?.id ?? null}
+              focusPlanId={tasksFocusPlanId}
+              onFocusPlanConsumed={() => setTasksFocusPlanId(null)}
+              onLifecycleStateChange={handleLifecycleStateChange}
+              externalTab={agentView}
+            />
           ) : (
             <>
               {providerOffline && <AIOfflineBanner />}
@@ -760,9 +725,8 @@ export function AIWorkspace({ onClose }) {
 
         {/* Activity bar — rightmost edge. W5-A (ADR-0014): each mode shows
             only its relevant surfaces. Chat = conversation-centric panels;
-            Agent = tasks + run + monitor + results + audit — today Tasks
-            hosts the panel (which has its own Run/Audit tabs) and
-            Monitor/Results are placeholders until their W5-D surfaces land. */}
+            Agent = tasks + run + monitor + results. W5-D: the Monitor and
+            Results icons route into AITaskPanel's internal tabs. */}
         <Box
           sx={{
             width: 32,

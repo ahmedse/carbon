@@ -32,6 +32,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import StopIcon from '@mui/icons-material/Stop';
 import dayjs from 'dayjs';
@@ -44,11 +45,13 @@ import {
   confirmPlanStep,
   declinePlan,
   declinePlanStep,
+  downloadArtifact,
   editPlan,
   editPlanStep,
   forkPlan,
   getPlan,
   getPlanLedger,
+  listPlanArtifacts,
   listPlans,
   listPlanTemplates,
   instantiatePlanTemplate,
@@ -72,10 +75,72 @@ dayjs.extend(timezone);
 const TASK_TAB_KEY = 'carbon-ai-task-tab';
 const PROJECT_TIMEZONE = 'Africa/Cairo';
 
+// W5-D — estimated token cost uses a single DeepSeek V4-Flash blended rate
+// (USD per 1M tokens). Kept as a named constant until a server-side rate
+// config lands (no hardcoded secrets; this is a public list price).
+const LLM_COST_PER_1M_TOKENS = 0.28;
+
 function formatWhen(value) {
   if (!value) return '';
   const parsed = dayjs(value);
   return parsed.isValid() ? parsed.tz(PROJECT_TIMEZONE).format('MMM D, YYYY · HH:mm') : '';
+}
+
+// W5-D — human duration for the Monitor tab (elapsed, never negative).
+function formatDuration(startIso, endIso) {
+  if (!startIso) return '—';
+  const start = dayjs(startIso);
+  if (!start.isValid()) return '—';
+  const end = endIso ? dayjs(endIso) : dayjs();
+  if (!end.isValid()) return '—';
+  const secs = Math.max(0, end.diff(start, 'second'));
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ${secs % 60}s`;
+  const hours = Math.floor(mins / 60);
+  return `${hours}h ${mins % 60}m`;
+}
+
+// W5-D — compact USD rendering for estimated cost.
+function formatCost(usd) {
+  if (usd == null || Number.isNaN(usd)) return '—';
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
+}
+
+// W5-D — emoji file icon by mime_type (RULE_23 outcome copy only).
+function artifactIcon(mime) {
+  const m = (mime || '').toLowerCase();
+  if (m.includes('spreadsheet') || m.includes('excel') || m.includes('xlsx') || m.includes('csv')) return '📊';
+  if (m.includes('json')) return '🗄';
+  if (m.includes('pdf') || m.includes('word') || m.includes('doc')) return '📄';
+  return '📁';
+}
+
+// W5-D — a mime type is inline-previewable when its text can be read as lines.
+function isPreviewableMime(mime) {
+  const m = (mime || '').toLowerCase();
+  return /json|csv|text|plain|markdown|xml|yaml|yml/.test(m);
+}
+
+// W5-D — human file size for the Results artifact cards.
+function formatBytes(bytes) {
+  if (bytes == null || Number.isNaN(bytes)) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// W5-D — trigger a browser download for an in-memory blob (Share/Export).
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // W5-A (ADR-0014) — panel run phase + plan status → workspace-level lifecycle
@@ -280,6 +345,140 @@ StepCard.propTypes = {
   onDecline: PropTypes.func,
 };
 
+// W5-D — labelled metric for the Monitor grid (mirrors AITaskAuditCard Stat).
+function MonitorMetric({ label, value }) {
+  return (
+    <Box sx={{ minWidth: 88 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
+MonitorMetric.propTypes = {
+  label: PropTypes.string.isRequired,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+};
+
+// W5-D — one artifact in the Results grid: emoji icon by mime_type, name +
+// size, Download, and an inline Preview (first 20 lines, collapsible) for
+// text-like artifacts.
+function ResultArtifactCard({ artifact, planId, token }) {
+  const { notifyFromError } = useNotification();
+  const [busy, setBusy] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLines, setPreviewLines] = useState([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const name = artifact.name || 'artifact';
+  const mime = artifact.mime_type || '';
+  const previewable = isPreviewableMime(mime);
+
+  const fetchBlobUrl = async () => downloadArtifact(token, planId, artifact.id);
+
+  const handleDownload = async () => {
+    setBusy(true);
+    try {
+      const url = await fetchBlobUrl();
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      notifyFromError(err, 'Could not download the artifact');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handlePreview = async () => {
+    if (previewOpen) {
+      setPreviewOpen(false);
+      return;
+    }
+    if (previewLines.length === 0) {
+      setPreviewLoading(true);
+      try {
+        const url = await fetchBlobUrl();
+        const text = await fetch(url).then((r) => r.text());
+        URL.revokeObjectURL(url);
+        setPreviewLines(text.split('\n').slice(0, 20));
+      } catch (err) {
+        notifyFromError(err, 'Could not preview the artifact');
+      } finally {
+        setPreviewLoading(false);
+      }
+    }
+    setPreviewOpen(true);
+  };
+
+  return (
+    <Paper variant="outlined" sx={{ p: 1 }}>
+      <Stack direction="row" alignItems="flex-start" spacing={0.75}>
+        <Typography component="span" sx={{ fontSize: '1rem', lineHeight: 1 }} aria-hidden>
+          {artifactIcon(mime)}
+        </Typography>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {name}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem' }}>
+            {artifact.size_bytes != null ? formatBytes(artifact.size_bytes) : (mime || 'Unknown size')}
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={busy}
+            onClick={handleDownload}
+            sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
+          >
+            {busy ? '…' : 'Download'}
+          </Button>
+          {previewable && (
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={previewLoading}
+              onClick={handlePreview}
+              sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
+            >
+              {previewLoading ? '…' : previewOpen ? 'Hide' : 'Preview'}
+            </Button>
+          )}
+        </Stack>
+      </Stack>
+      <Collapse in={previewOpen}>
+        <Box sx={{ mt: 0.75, p: 0.75, borderRadius: 1, bgcolor: 'background.default', maxHeight: 220, overflowY: 'auto' }}>
+          {previewLines.length === 0 ? (
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+              No text to preview.
+            </Typography>
+          ) : (
+            <Typography variant="caption" component="pre" sx={{ m: 0, fontSize: '0.6875rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {previewLines.join('\n')}
+            </Typography>
+          )}
+        </Box>
+      </Collapse>
+    </Paper>
+  );
+}
+
+ResultArtifactCard.propTypes = {
+  artifact: PropTypes.object.isRequired,
+  planId: PropTypes.string.isRequired,
+  token: PropTypes.string,
+};
+
 /**
  * Agentic task orchestration panel.
  * @param {object} props
@@ -289,8 +488,11 @@ StepCard.propTypes = {
  * @param {function} props.onLifecycleStateChange - W5-A: reports the workspace-level
  *   lifecycle state (idle|plan_pending|running|consent_needed|done|error) so the
  *   header can show the right safety-contract text (ADR-0014 §4).
+ * @param {string} props.externalTab - W5-D: the workspace activity-bar view
+ *   (tasks|monitor|results) that drives this panel's internal tab, so the
+ *   Monitor and Results activity icons open the right internal view.
  */
-function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, onLifecycleStateChange }) {
+function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, onLifecycleStateChange, externalTab = 'tasks' }) {
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const notifyRef = useRef(notify);
@@ -319,6 +521,10 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   const [confirmingId, setConfirmingId] = useState(null);
   const [ledger, setLedger] = useState(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
+
+  // W5-D — Results tab artifacts (from GET .../artifacts/).
+  const [artifacts, setArtifacts] = useState([]);
+  const [artifactsLoading, setArtifactsLoading] = useState(false);
 
   // W3-F — plan controls: edits are gated by the diff-review consent dialog
   const [mutating, setMutating] = useState(false);
@@ -354,6 +560,18 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   }, []);
 
+  // W5-D — the workspace activity bar (Monitor 📊 / Results 📦) drives this
+  // panel's internal tab. Only external *changes* move the tab, so the RULE_17
+  // persisted value still wins on mount and internal tab clicks aren't fought.
+  const prevExternalTabRef = useRef(externalTab);
+  useEffect(() => {
+    if (prevExternalTabRef.current === externalTab) return;
+    prevExternalTabRef.current = externalTab;
+    if (externalTab === 'tasks' || externalTab === 'monitor' || externalTab === 'results') {
+      setTab(externalTab);
+    }
+  }, [externalTab]);
+
   const loadPlans = useCallback(async () => {
     setPlansLoading(true);
     try {
@@ -385,9 +603,10 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   // Live plan polling — while a run is active, refresh the plan so the plan
   // DAG reflects live step statuses (W3-F).
   useEffect(() => {
-    if (!selectedPlan || phase !== 'working') return undefined;
+    const planId = selectedPlan?.id;
+    if (!planId || phase !== 'working') return undefined;
     const timer = setInterval(() => {
-      refreshPlan(selectedPlan.id);
+      refreshPlan(planId);
     }, 3000);
     return () => clearInterval(timer);
   }, [selectedPlan?.id, phase, refreshPlan]);
@@ -483,6 +702,42 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       setLedgerLoading(false);
     }
   }, [token]);
+
+  // W5-D — Monitor/Results auto-load the ledger. Poll every 5s while a run is
+  // live; load once when the run has settled and no ledger is present yet.
+  useEffect(() => {
+    const planId = selectedPlan?.id;
+    if (!planId || (tab !== 'monitor' && tab !== 'results')) return undefined;
+    if (phase === 'working') {
+      const timer = setInterval(() => loadLedger(planId), 5000);
+      return () => clearInterval(timer);
+    }
+    if (['finished', 'paused', 'stopped', 'error'].includes(phase) && !ledger) {
+      loadLedger(planId);
+    }
+    return undefined;
+  }, [tab, phase, selectedPlan?.id, ledger, loadLedger]);
+
+  // W5-D — Results tab loads the plan's artifacts once the run has finished.
+  useEffect(() => {
+    const planId = selectedPlan?.id;
+    if (tab !== 'results' || !planId || phase !== 'finished') return undefined;
+    let cancelled = false;
+    setArtifactsLoading(true);
+    listPlanArtifacts(token, planId)
+      .then((data) => {
+        if (!cancelled) setArtifacts(Array.isArray(data?.artifacts) ? data.artifacts : []);
+      })
+      .catch((err) => {
+        if (!cancelled) notifyFromErrorRef.current(err, 'Could not load artifacts');
+      })
+      .finally(() => {
+        if (!cancelled) setArtifactsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, phase, selectedPlan?.id, token]);
 
   const upsertStep = useCallback((patch) => {
     setRunSteps((prev) => {
@@ -1013,6 +1268,222 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     </Stack>
   );
 
+  // ── Monitor tab: live run metrics + per-step health table ─────────────
+  const renderMonitor = () => {
+    if (!selectedPlan) {
+      return (
+        <Typography variant="body2" color="text.secondary" sx={{ py: 3, fontSize: '0.75rem' }}>
+          Open a task from the Tasks tab to monitor its run.
+        </Typography>
+      );
+    }
+
+    const planMeta = { pending_approval: { label: 'Needs review', color: 'warning' }, approved: { label: 'Approved', color: 'primary' }, running: { label: 'Running…', color: 'primary' }, paused: { label: 'Needs approval', color: 'warning' }, completed: { label: 'Completed', color: 'success' }, failed: { label: 'Failed', color: 'error' }, cancelled: { label: 'Cancelled', color: 'default' } }[selectedPlan.status] || { label: selectedPlan.status, color: 'default' };
+    const usage = ledger?.usage || {};
+    const steps = Array.isArray(ledger?.steps) ? ledger.steps : runSteps;
+    const total = steps.length;
+    const completed = steps.filter((s) => s.status === 'completed').length;
+    const failed = steps.filter((s) => s.status === 'failed').length;
+    const skipped = steps.filter((s) => s.status === 'skipped').length;
+    const latencies = steps.map((s) => s.latency_ms).filter((v) => typeof v === 'number' && Number.isFinite(v));
+    const minLat = latencies.length ? Math.min(...latencies) : null;
+    const maxLat = latencies.length ? Math.max(...latencies) : null;
+    const avgLat = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null;
+    const tokens = usage.total_tokens ?? 0;
+    const llmCalls = usage.total_llm_calls ?? 0;
+    const cost = (tokens / 1_000_000) * LLM_COST_PER_1M_TOKENS;
+    const completedAt = ledger?.provenance?.completed_at || (phase === 'finished' ? selectedPlan.updated_at : null);
+    const duration = formatDuration(selectedPlan.created_at, completedAt);
+
+    return (
+      <Stack spacing={1.25}>
+        <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+            <LeaderboardOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+            <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, fontSize: '0.75rem' }}>
+              Monitor
+            </Typography>
+            <Chip size="small" label={planMeta.label} color={planMeta.color} variant="outlined" sx={{ height: 18, fontSize: '0.625rem' }} />
+          </Stack>
+
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+            <MonitorMetric label="Duration" value={duration} />
+            <MonitorMetric label="Steps" value={`${completed}/${total}`} />
+            <MonitorMetric label="Failed" value={failed} />
+            <MonitorMetric label="Skipped" value={skipped} />
+            <MonitorMetric label="Tokens" value={tokens.toLocaleString()} />
+            <MonitorMetric label="LLM calls" value={llmCalls} />
+            <MonitorMetric label="Est. cost" value={formatCost(cost)} />
+            <MonitorMetric label="Latency (min/max/avg)" value={minLat == null ? '—' : `${minLat}/${maxLat}/${avgLat} ms`} />
+          </Box>
+        </Paper>
+
+        <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.25, py: 0.875, borderBottom: 1, borderColor: 'divider' }}>
+            <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary' }}>
+              Step health
+            </Typography>
+            {ledgerLoading && <CircularProgress size={14} />}
+          </Stack>
+          {steps.length === 0 ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', p: 1.25, fontSize: '0.6875rem' }}>
+              {phase === 'working' ? 'Waiting for steps to start…' : 'No steps recorded yet.'}
+            </Typography>
+          ) : (
+            <Stack sx={{ maxHeight: 320, overflowY: 'auto' }}>
+              {steps.map((step) => {
+                const stepMeta = STEP_STATUS_ICON[step.status] || { label: step.status || 'Pending', color: 'default' };
+                return (
+                  <Stack key={step.step_id} direction="row" alignItems="center" spacing={0.75} sx={{ px: 1.25, py: 0.5, borderBottom: 1, borderColor: 'divider' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem', minWidth: 52, fontFamily: 'monospace' }}>
+                      {step.step_id}
+                    </Typography>
+                    <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {step.intent || `Step ${step.step_id}`}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
+                      {step.latency_ms != null ? `${step.latency_ms} ms` : '—'}
+                    </Typography>
+                    <Chip size="small" variant="outlined" label={stepMeta.label} color={stepMeta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
+                  </Stack>
+                );
+              })}
+            </Stack>
+          )}
+        </Paper>
+      </Stack>
+    );
+  };
+
+  // ── Share/Export helpers (RULE_23 — outcome copy only) ────────────────
+  const exportLedgerJson = () => {
+    if (!ledger || !selectedPlan) return;
+    triggerDownload(
+      new Blob([JSON.stringify(ledger, null, 2)], { type: 'application/json' }),
+      `plan-${selectedPlan.id}-ledger.json`,
+    );
+  };
+
+  const exportFinalResponseMd = () => {
+    if (!selectedPlan) return;
+    const text = ledger?.final_response || 'No final response recorded.';
+    triggerDownload(new Blob([text], { type: 'text/markdown' }), `plan-${selectedPlan.id}-response.md`);
+  };
+
+  // ── Results tab: final response + artifacts + actions ─────────────────
+  const renderResults = () => {
+    if (!selectedPlan) {
+      return (
+        <Typography variant="body2" color="text.secondary" sx={{ py: 3, fontSize: '0.75rem' }}>
+          Open a task from the Tasks tab to see its results.
+        </Typography>
+      );
+    }
+
+    if (phase !== 'finished') {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+            Run the plan to see results.
+          </Typography>
+        </Box>
+      );
+    }
+
+    const finalResponse = ledger?.final_response;
+    const rerunnable = selectedPlan.status === 'approved';
+
+    return (
+      <Stack spacing={1.25}>
+        <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
+          <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary', mb: 0.5 }}>
+            Final response
+          </Typography>
+          {finalResponse ? (
+            <Typography variant="body2" sx={{ fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {finalResponse}
+            </Typography>
+          ) : (
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+              No final response recorded for this run.
+            </Typography>
+          )}
+        </Paper>
+
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary' }}>
+            Artifacts
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+            {artifacts.length}
+          </Typography>
+        </Stack>
+
+        {artifactsLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={20} /></Box>
+        ) : artifacts.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 2, fontSize: '0.75rem' }}>
+            This run produced no artifacts.
+          </Typography>
+        ) : (
+          <Stack spacing={0.75}>
+            {artifacts.map((artifact) => (
+              <ResultArtifactCard key={artifact.id ?? artifact.name} artifact={artifact} planId={selectedPlan.id} token={token} />
+            ))}
+          </Stack>
+        )}
+
+        <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
+          <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary', mb: 0.75 }}>
+            Actions
+          </Typography>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+            <Tooltip title={rerunnable ? 'Run the plan again' : 'Approve the plan to run it again'}>
+              <span>
+                <Button
+                  size="small"
+                  variant="contained"
+                  disabled={!rerunnable || mutating}
+                  onClick={handleRun}
+                  sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+                >
+                  Rerun
+                </Button>
+              </span>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={mutating}
+              onClick={handleFork}
+              sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+            >
+              Fork
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={!ledger}
+              onClick={exportLedgerJson}
+              sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+            >
+              Ledger JSON
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={!finalResponse}
+              onClick={exportFinalResponseMd}
+              sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+            >
+              Response .md
+            </Button>
+          </Stack>
+        </Paper>
+      </Stack>
+    );
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, bgcolor: 'background.default' }}>
       {/* Internal views — one Tasks icon, two tabs (RULE_17) */}
@@ -1029,13 +1500,23 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         >
           <Tab value="tasks" label="Tasks" />
           <Tab value="run" label="Run" />
+          <Tab value="monitor" label="Monitor" />
+          <Tab value="results" label="Results" />
           <Tab value="templates" label="Templates" />
         </Tabs>
       </Box>
 
       {/* Tab content */}
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}>
-        {tab === 'tasks' ? renderTasks() : tab === 'run' ? renderRun() : renderTemplates()}
+        {tab === 'tasks'
+          ? renderTasks()
+          : tab === 'run'
+            ? renderRun()
+            : tab === 'monitor'
+              ? renderMonitor()
+              : tab === 'results'
+                ? renderResults()
+                : renderTemplates()}
       </Box>
 
       {/* W3-F — diff-review consent gate + step edit dialog (survive tab switches) */}
@@ -1063,6 +1544,7 @@ AITaskPanel.propTypes = {
   focusPlanId: PropTypes.string,
   onFocusPlanConsumed: PropTypes.func,
   onLifecycleStateChange: PropTypes.func,
+  externalTab: PropTypes.oneOf(['tasks', 'run', 'monitor', 'results', 'templates']),
 };
 
 export default AITaskPanel;

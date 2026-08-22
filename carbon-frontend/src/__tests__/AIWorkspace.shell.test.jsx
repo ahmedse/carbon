@@ -33,7 +33,9 @@ vi.mock('../shell/AIMemoryTab', () => ({ default: () => <div data-testid="memory
 vi.mock('../shell/AILearntTab', () => ({ default: () => <div data-testid="memory-facts-tab" /> }));
 vi.mock('../shell/AIRelationshipTab', () => ({ default: () => <div data-testid="memory-relationship-tab" /> }));
 vi.mock('../shell/AIAgentPanel', () => ({ default: () => <div data-testid="agent-tab" /> }));
-vi.mock('../shell/AITaskPanel', () => ({ default: () => <div data-testid="task-panel" /> }));
+vi.mock('../shell/AITaskPanel', () => ({
+  default: ({ externalTab }) => <div data-testid="task-panel" data-tab={externalTab ?? 'tasks'} />,
+}));
 
 vi.mock('../api/aiPulse', () => ({
   listDomainManifests: vi.fn().mockResolvedValue({ apps: [] }),
@@ -242,24 +244,28 @@ describe('AIWorkspace mode split (Phase W5-A / ADR-0014)', () => {
     expect(localStorage.getItem('carbon-ai-mode')).toBe('agent');
   });
 
-  it('shows the Monitor placeholder view in Agent mode', async () => {
+  it('switches the Agent task panel to the Monitor tab via the activity bar (W5-D)', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Agent mode' }));
     await screen.findByTestId('task-panel');
 
     fireEvent.click(screen.getByRole('button', { name: 'Monitor' }));
-    expect(screen.getByText(/📊 Monitor/i)).toBeInTheDocument();
-    expect(screen.queryByTestId('task-panel')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId('task-panel')).toHaveAttribute('data-tab', 'monitor'),
+    );
+    expect(screen.getByTestId('task-panel')).toBeInTheDocument();
   });
 
-  it('shows the Results placeholder view in Agent mode', async () => {
+  it('switches the Agent task panel to the Results tab via the activity bar (W5-D)', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Agent mode' }));
     await screen.findByTestId('task-panel');
 
     fireEvent.click(screen.getByRole('button', { name: 'Results' }));
-    expect(screen.getByText(/📦 Results/i)).toBeInTheDocument();
-    expect(screen.queryByTestId('task-panel')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId('task-panel')).toHaveAttribute('data-tab', 'results'),
+    );
+    expect(screen.getByTestId('task-panel')).toBeInTheDocument();
   });
 });
 

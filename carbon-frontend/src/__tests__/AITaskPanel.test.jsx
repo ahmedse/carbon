@@ -36,6 +36,8 @@ const confirmPlanStep = vi.fn();
 const declinePlanStep = vi.fn();
 const stopPlan = vi.fn();
 const getPlanLedger = vi.fn();
+const listPlanArtifacts = vi.fn();
+const downloadArtifact = vi.fn();
 
 vi.mock('../api/aiWorkspace', () => ({
   listPlans: (...args) => listPlans(...args),
@@ -50,6 +52,8 @@ vi.mock('../api/aiWorkspace', () => ({
   declinePlanStep: (...args) => declinePlanStep(...args),
   stopPlan: (...args) => stopPlan(...args),
   getPlanLedger: (...args) => getPlanLedger(...args),
+  listPlanArtifacts: (...args) => listPlanArtifacts(...args),
+  downloadArtifact: (...args) => downloadArtifact(...args),
 }));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -151,9 +155,9 @@ describe('AITaskPanel — two internal tabs (RULE_17)', () => {
   it('starts a guided discovery and opens the ready plan for review (W5-B)', async () => {
     render(<AITaskPanel conversationId="conv-1" />);
 
-    const input = screen.getByLabelText('Task brief');
+    const input = screen.getByLabelText('Message input');
     fireEvent.change(input, { target: { value: 'Audit the emissions dataset for duplicates.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Start planning' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     await waitFor(() => {
       expect(startDiscoveryPlan).toHaveBeenCalledWith('test-token', {
@@ -161,12 +165,13 @@ describe('AITaskPanel — two internal tabs (RULE_17)', () => {
         conversation_id: 'conv-1',
       });
     });
-    // Pulse's first question renders as a plain-text message bubble.
+    // Pulse's first question renders as a rich message bubble (reuses the
+    // main chat's AIMessageBubble).
     expect(await screen.findByText('Which dataset should we audit?')).toBeInTheDocument();
 
-    const reply = screen.getByLabelText('Discovery reply');
+    const reply = screen.getByLabelText('Message input');
     fireEvent.change(reply, { target: { value: 'The emissions dataset' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     await waitFor(() => {
       expect(advanceDiscovery).toHaveBeenCalledWith('test-token', 'plan-1', 'The emissions dataset');
@@ -201,20 +206,20 @@ describe('AITaskPanel — two internal tabs (RULE_17)', () => {
 
     render(<AITaskPanel conversationId="conv-1" />);
 
-    fireEvent.change(screen.getByLabelText('Task brief'), { target: { value: 'Audit duplicates.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Start planning' }));
+    fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'Audit duplicates.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     expect(await screen.findByText('Which dataset should we audit?')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Discovery reply'), { target: { value: 'The emissions dataset' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'The emissions dataset' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     // Second question AND the user's prior reply both render as bubbles.
     expect(await screen.findByText('What field uniquely identifies a record?')).toBeInTheDocument();
     expect(screen.getByText('The emissions dataset')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Discovery reply'), { target: { value: 'report_id' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'report_id' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     expect(await screen.findByText('Plan ready — review below')).toBeInTheDocument();
     expect(advanceDiscovery).toHaveBeenCalledTimes(2);

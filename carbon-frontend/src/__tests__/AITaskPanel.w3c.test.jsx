@@ -37,6 +37,8 @@ const confirmPlanStep = vi.fn();
 const declinePlanStep = vi.fn();
 const stopPlan = vi.fn();
 const getPlanLedger = vi.fn();
+const listPlanArtifacts = vi.fn();
+const downloadArtifact = vi.fn();
 
 vi.mock('../api/aiWorkspace', () => ({
   listPlans: (...args) => listPlans(...args),
@@ -56,6 +58,8 @@ vi.mock('../api/aiWorkspace', () => ({
   declinePlanStep: (...args) => declinePlanStep(...args),
   stopPlan: (...args) => stopPlan(...args),
   getPlanLedger: (...args) => getPlanLedger(...args),
+  listPlanArtifacts: (...args) => listPlanArtifacts(...args),
+  downloadArtifact: (...args) => downloadArtifact(...args),
 }));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -91,6 +95,7 @@ beforeEach(() => {
   confirmPlanStep.mockResolvedValue({ status: 'confirmed', plan_id: 'plan-1', step_id: 1 });
   declinePlanStep.mockResolvedValue({ status: 'declined', plan_id: 'plan-1', step_id: 1 });
   getPlanLedger.mockResolvedValue({ plan_id: 'plan-1', status: 'completed', runs: [] });
+  listPlanArtifacts.mockResolvedValue({ plan_id: 'plan-1', artifacts: [], count: 0 });
   runPlanStream.mockImplementation(async (token, planId, handlers) => {
     streamHandlers.run = handlers;
   });
@@ -276,5 +281,92 @@ describe('AITaskPanel — chat "Open in Tasks" focus jump', () => {
     );
     await waitFor(() => expect(getPlan).toHaveBeenCalledWith('test-token', 'plan-2'));
     expect(getPlan).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ── W5-D — Monitor tab (live metrics + step health) ──────────────────────
+describe('AITaskPanel — W5-D Monitor tab', () => {
+  it('renders metrics and per-step health from the ledger', async () => {
+    currentPlan = { ...PLAN, status: 'completed', updated_at: '2026-08-20T10:05:00Z' };
+    getPlanLedger.mockResolvedValue({
+      plan_id: 'plan-1',
+      status: 'completed',
+      usage: { total_latency_ms: 1200, total_llm_calls: 5, total_tokens: 12000 },
+      provenance: { completed_at: '2026-08-20T10:05:00Z' },
+      steps: [
+        { step_id: 0, intent: 'Search for duplicate records', status: 'completed', latency_ms: 400 },
+        { step_id: 1, intent: 'Create a rule to prevent duplicates', status: 'completed', latency_ms: 800 },
+      ],
+    });
+
+    render(<AITaskPanel conversationId="conv-1" />);
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    await screen.findByText('Task plan');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Monitor' }));
+
+    await waitFor(() => expect(getPlanLedger).toHaveBeenCalledWith('test-token', 'plan-1'));
+    expect(await screen.findByText('12,000')).toBeInTheDocument();
+    expect(screen.getByText('Tokens')).toBeInTheDocument();
+    expect(screen.getByText('LLM calls')).toBeInTheDocument();
+    expect(screen.getByText('Est. cost')).toBeInTheDocument();
+    expect(screen.getByText('Step health')).toBeInTheDocument();
+    expect(screen.getByText('Search for duplicate records')).toBeInTheDocument();
+  });
+
+  it('shows an empty state when no plan is selected', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Monitor' }));
+    expect(screen.getByText('Open a task from the Tasks tab to monitor its run.')).toBeInTheDocument();
+  });
+});
+
+// ── W5-D — Results tab (final response + artifacts + actions) ────────────
+describe('AITaskPanel — W5-D Results tab', () => {
+  it('shows a placeholder before the run completes', async () => {
+    currentPlan = { ...PLAN, status: 'approved' };
+
+    render(<AITaskPanel conversationId="conv-1" />);
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    await screen.findByText('Task plan');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
+
+    expect(screen.getByText('Run the plan to see results.')).toBeInTheDocument();
+  });
+
+  it('renders the final response and artifacts after a completed run', async () => {
+    currentPlan = { ...PLAN, status: 'completed', updated_at: '2026-08-20T10:05:00Z' };
+    getPlanLedger.mockResolvedValue({
+      plan_id: 'plan-1',
+      status: 'completed',
+      usage: { total_latency_ms: 1200, total_llm_calls: 5, total_tokens: 12000 },
+      provenance: { completed_at: '2026-08-20T10:05:00Z' },
+      steps: [],
+      final_response: 'Found 3 duplicate rows and created rule no_dupes.',
+    });
+    listPlanArtifacts.mockResolvedValue({
+      plan_id: 'plan-1',
+      artifacts: [
+        { id: 10, name: 'report.csv', mime_type: 'text/csv', size_bytes: 2048, download_url: '/ai/plans/plan-1/artifacts/10/download/', created_at: '2026-08-20T10:05:00Z' },
+        { id: 11, name: 'summary.json', mime_type: 'application/json', size_bytes: 512, download_url: '/ai/plans/plan-1/artifacts/11/download/', created_at: '2026-08-20T10:05:00Z' },
+      ],
+    });
+
+    render(<AITaskPanel conversationId="conv-1" />);
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+    await screen.findByText('Task plan');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
+
+    expect(await screen.findByText('Found 3 duplicate rows and created rule no_dupes.')).toBeInTheDocument();
+    await waitFor(() => expect(listPlanArtifacts).toHaveBeenCalledWith('test-token', 'plan-1'));
+    expect(await screen.findByText('report.csv')).toBeInTheDocument();
+    expect(screen.getByText('summary.json')).toBeInTheDocument();
+    expect(screen.getByText('📊')).toBeInTheDocument();
+    expect(screen.getByText('🗄')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fork' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ledger JSON' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Response .md' })).toBeInTheDocument();
   });
 });
