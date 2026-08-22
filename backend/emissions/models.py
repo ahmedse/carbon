@@ -6,6 +6,22 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 
+def _as_date(value):
+    """Normalize a date or ISO date-string to a datetime.date.
+
+    Django 5.x leaves raw strings on model __init__ assignment (to_python only
+    runs on DB read / full_clean), so freshly-created ReportingPeriod /
+    EmissionFactor instances may hold 'YYYY-MM-DD' strings. Guard every place
+    that does arithmetic on these values.
+    """
+    from datetime import date as _date
+    if value is None or isinstance(value, _date):
+        return value
+    if isinstance(value, str):
+        return _date.fromisoformat(value)
+    return value
+
+
 class ReportingPeriod(models.Model):
     """
     Defines a reporting cycle with configurable start and end dates.
@@ -591,7 +607,7 @@ class Calculation(models.Model):
         
         # If reporting_period provided, extract year from it if not explicitly given
         if reporting_period and not reporting_year:
-            reporting_year = reporting_period.start_date.year
+            reporting_year = _as_date(reporting_period.start_date).year
         
         return cls.objects.create(
             data_row=data_row,
@@ -851,7 +867,7 @@ class CalculationRule(models.Model):
                 pass
         
         if reporting_period:
-            reporting_year = reporting_period.start_date.year
+            reporting_year = _as_date(reporting_period.start_date).year
         elif activity_date:
             reporting_year = activity_date.year
         elif period_year:
@@ -986,11 +1002,11 @@ class CalculationRule(models.Model):
                 result = self.calculate_for_row(row, reporting_period, user)
                 if result:
                     created += 1
-                    
-                    # Optionally write back to output field
-                    if self.output_field:
-                        row.values[self.output_field.name] = float(result.co2e_kg)
-                        row.save(update_fields=['values', 'updated_at'])
+                    # NOTE: no write-back into row.values — DataRow is
+                    # append-only (immutable evidence, dataschema.models
+                    # _MUTABLE_FIELDS). The result is already persisted by
+                    # calculate_for_row via Calculation.create_from_data_row,
+                    # which is the canonical audit trail for output values.
                 else:
                     skipped += 1
             except Exception as e:

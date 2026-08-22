@@ -126,6 +126,53 @@ class CalculationRecalculateTests(TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertIn('closed', response.json()['detail'])
 
+    # ── Append-only compliance ────────────────────────────────────────────
+
+    def test_calculate_for_table_does_not_mutate_source_row(self):
+        """calculate_for_table persists results in Calculation but NEVER
+        writes back into the append-only DataRow (storage Fix 5). The old
+        write-back (row.values[...] + save) raised IntegrityError under the
+        append-only trust layer and was silently counted as an error."""
+        output_field = DataField.objects.create(
+            data_table=self.table, name='co2e_output', label='CO2e output',
+            type='number', required=False,
+        )
+        rule = CalculationRule.objects.create(
+            data_table=self.table,
+            activity_field=self.field,
+            emission_factor=self.factor,
+            name='Therms → CO2e (with output field)',
+            is_active=True,
+            output_field=output_field,
+        )
+        # Fresh row — the setUp row already has a Calculation for this factor,
+        # which calculate_for_table would skip (not recalculate).
+        fresh_row = DataRow.objects.create(
+            data_table=self.table,
+            values={'therms': '100'},
+        )
+        original_values = dict(fresh_row.values)
+
+        created, skipped, errors = rule.calculate_for_table(
+            reporting_period=self.period, user=self.user,
+        )
+
+        # self.row is skipped (already has a Calculation for this factor);
+        # fresh_row is created. errors stays 0 — no IntegrityError from a
+        # write-back, and no crash on ISO-string period dates.
+        self.assertEqual(created, 1)
+        self.assertEqual(skipped, 1)
+        self.assertEqual(errors, 0)
+        self.assertTrue(
+            Calculation.objects.filter(
+                data_row=fresh_row, emission_factor=self.factor,
+            ).exists(),
+        )
+        # The source row is untouched — result lives in Calculation only.
+        fresh_row.refresh_from_db()
+        self.assertEqual(fresh_row.values, original_values)
+        self.assertNotIn('co2e_output', fresh_row.values)
+
     # ── Batch recalculate ─────────────────────────────────────────────────
 
     def test_batch_recalculate_returns_200_with_counts(self):
