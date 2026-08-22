@@ -501,3 +501,81 @@ def test_api_replay_confirmed_stages_only(
     steps = list(RunStep.objects.filter(run_id=plan.id))
     assert all(s.status == "pending" for s in steps)
     assert all(s.confirmation_token is None for s in steps)
+
+
+# ── Run comparison — GET /ai/runs/compare/ (F-W5-RUN-01 gate) ───────────
+
+
+class CompareRunsTests:
+    """Regression gate for ``compare_runs`` / ``RunViewSet.compare``.
+
+    Proves ``GET /carbon-api/ai/runs/compare/?a=<id>&b=<id>`` is routed and
+    live: aligned step diff with ``status_changed`` flags, 400 on missing
+    params, and CBAC 404 when either run belongs to another user.
+    """
+
+    @pytest.mark.django_db
+    def test_compare_runs_returns_aligned_diff(
+        self, api_client, get_token_for_user, user, run_ids_cleanup
+    ):
+        # Two runs owned by the same user; step 1 diverges (completed vs failed).
+        run_a = _make_plan(user, status="completed")
+        _make_step(run_a, step_index=0, status="completed")
+        _make_step(run_a, step_index=1, status="completed")
+        run_b = _make_plan(user, status="completed")
+        _make_step(run_b, step_index=0, status="completed")
+        _make_step(run_b, step_index=1, status="failed")
+        run_ids_cleanup.extend([run_a.id, run_b.id])
+
+        token = get_token_for_user(user)
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        resp = api_client.get(
+            f"/carbon-api/ai/runs/compare/?a={run_a.id}&b={run_b.id}"
+        )
+        assert resp.status_code == 200, resp.content
+        body = resp.json()
+
+        assert body["a"]["run_id"] == run_a.id
+        assert body["b"]["run_id"] == run_b.id
+
+        # Step 0 aligned — no status_changed flag on the entry.
+        aligned = next(e for e in body["step_diff"] if e["step_index"] == 0)
+        assert aligned["a_status"] == "completed"
+        assert aligned["b_status"] == "completed"
+        assert "status_changed" not in aligned
+
+        # Step 1 diverged — status_changed flag present.
+        diverged = next(e for e in body["step_diff"] if e["step_index"] == 1)
+        assert diverged["a_status"] == "completed"
+        assert diverged["b_status"] == "failed"
+        assert diverged["status_changed"] is True
+        assert body["diverged_steps"] == [diverged]
+
+    @pytest.mark.django_db
+    def test_compare_runs_rejects_missing_params(
+        self, api_client, get_token_for_user, user
+    ):
+        token = get_token_for_user(user)
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        resp = api_client.get("/carbon-api/ai/runs/compare/")
+        assert resp.status_code == 400, resp.content
+        assert "?a=<run_id>&b=<run_id>" in resp.json()["error"]
+
+    @pytest.mark.django_db
+    def test_compare_runs_cross_user_denied(
+        self, api_client, get_token_for_user, user, other_user, run_ids_cleanup
+    ):
+        # Run b belongs to another user → CBAC 404 (owner scoping).
+        run_a = _make_plan(user, status="completed")
+        run_b = _make_plan(other_user, status="completed")
+        run_ids_cleanup.extend([run_a.id, run_b.id])
+
+        token = get_token_for_user(user)
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        resp = api_client.get(
+            f"/carbon-api/ai/runs/compare/?a={run_a.id}&b={run_b.id}"
+        )
+        assert resp.status_code == 404, resp.content

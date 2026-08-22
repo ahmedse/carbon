@@ -195,3 +195,52 @@ def test_infer_output_type_shapes():
     assert _infer_output_type({"nested": {"key": "value"}}) == "json"
     assert _infer_output_type(None) is None
     assert _infer_output_type({}) is None
+
+
+# ── output_type inference regression gate (F-W5-C-01) ───────────────────
+
+
+def test_infer_output_type_table():
+    assert _infer_output_type(
+        {"columns": ["source", "tco2e"], "rows": [["grid", 12.4]]}
+    ) == "table"
+
+
+def test_infer_output_type_chart():
+    assert _infer_output_type(
+        {"series": [{"name": "co2e", "data": [1, 2, 3]}]}
+    ) == "chart"
+
+
+def test_infer_output_type_artifact():
+    assert _infer_output_type(
+        {"download_url": "/ai/plans/x/artifacts/1/download/"}
+    ) == "artifact"
+
+
+def test_infer_output_type_empty_returns_none():
+    assert _infer_output_type(None) is None
+    assert _infer_output_type({}) is None
+    assert _infer_output_type("") is None
+
+
+@pytest.mark.django_db
+def test_serialize_run_injects_output_type(user):
+    """A completed structured step carries output_type + tool_output._output_type."""
+    run = _make_run(user)
+    RunStep.objects.create(
+        run_id=run.id,
+        step_index=0,
+        intent="Load the emissions totals",
+        tool_name="carbon.query.execute",
+        status="completed",
+        tool_output_json={
+            "columns": ["source", "tco2e"],
+            "rows": [["grid", 12.4]],
+        },
+    )
+
+    payload = PlansService().get_plan(user, run.id)
+    step = payload["steps"][0]
+    assert step["output_type"] == "table"
+    assert step["tool_output"]["_output_type"] == "table"
