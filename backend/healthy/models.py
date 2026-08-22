@@ -107,3 +107,36 @@ class RepHealthCard(models.Model):
 
     def __str__(self):
         return f"{self.rep_code} health — {self.week_start}"
+
+
+class LoadoutLine(models.Model):
+    """Typed line item inside a LoadoutSheet — replaces the JSON line_items list."""
+
+    sheet           = models.ForeignKey(LoadoutSheet, on_delete=models.CASCADE, related_name='lines')
+    item_code       = models.CharField(max_length=64)
+    item_name       = models.CharField(max_length=200, blank=True)
+    qty_recommended = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    qty_actual      = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        unique_together = ('sheet', 'item_code')
+        indexes = [models.Index(fields=['item_code'], name='loadoutline_item_idx')]
+
+    def __str__(self):
+        return f"{self.sheet} / {self.item_code}"
+
+
+class MaterializationCheckpoint(models.Model):
+    """High-water mark for each healthy pipeline — enables incremental materialization."""
+
+    pipeline_key   = models.CharField(max_length=80, unique=True)
+    last_row_id    = models.BigIntegerField(default=0)
+    last_ran_at    = models.DateTimeField(null=True, blank=True)
+    rows_processed = models.BigIntegerField(default=0)
+    updated_at     = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['pipeline_key']
+
+    def __str__(self):
+        return f"{self.pipeline_key} @ row {self.last_row_id}"

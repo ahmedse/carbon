@@ -74,11 +74,12 @@ def test_loadout_generate_and_submit_actuals(create_user):
         line_items=[{'item_code': 'SKU-101', 'qty_recommended': 10}],
         user=user,
     )
-    assert sheet.line_items[0]['qty_recommended'] == 10
+    assert sheet.lines.get(item_code='SKU-101').qty_recommended == 10
     assert sheet.rep_name == 'Amina'
 
-    updated = LoadoutService().submit_actuals(sheet, {'SKU-101': 8})
-    assert updated.line_items[0]['qty_actual'] == 8
+    updated_count = LoadoutService().submit_actuals(sheet, {'SKU-101': 8})
+    assert updated_count == 1
+    assert sheet.lines.get(item_code='SKU-101').qty_actual == 8
 
 
 @pytest.mark.django_db

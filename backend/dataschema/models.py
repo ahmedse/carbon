@@ -103,8 +103,35 @@ class DataRow(models.Model):
     is_archived = models.BooleanField(default=False)
     version = models.PositiveIntegerField(default=1)
     dq_flags = models.JSONField(default=list, blank=True)
+    # Content hash (sha256 of canonical JSON of normalized values) used by the
+    # ingest watermark to skip already-materialized rows on incremental re-runs.
+    row_hash = models.CharField(max_length=64, db_index=True, blank=True, default='')
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['data_table', 'id'],         name='datarow_table_id_idx'),
+            models.Index(fields=['data_table', 'created_at'], name='datarow_table_time_idx'),
+        ]
+        # fillfactor=100 is applied via migration 0007 ALTER TABLE — no dead-tuple headroom needed
+
+    _MUTABLE_FIELDS = frozenset({'is_archived', 'dq_flags', 'version', 'updated_at', 'updated_by_id'})
 
     def save(self, *args, **kwargs):
+        # Append-only trust layer: only the mutable bookkeeping fields may be
+        # updated. Inserts (including explicit-PK inserts via create(id=...))
+        # are always allowed.
+        if self.pk is not None and not kwargs.get('force_insert'):
+            allowed = self._MUTABLE_FIELDS
+            update_fields = set(kwargs.get('update_fields') or [])
+            if not update_fields:
+                from django.db import IntegrityError
+                raise IntegrityError(
+                    "DataRow is append-only — do not update; insert a new row."
+                )
+            bad = update_fields - allowed
+            if bad:
+                from django.db import IntegrityError
+                raise IntegrityError(f"DataRow fields are immutable: {bad}")
         if self.values and isinstance(self.values, dict):
             self.values = {k.lower(): v for k, v in self.values.items()}
         super().save(*args, **kwargs)

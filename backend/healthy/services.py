@@ -198,8 +198,12 @@ class ERPSnapshotService:
             conn.close()
 
     def run_snapshot(self, source_view: str, *, user=None, dataset=None,
-                     extract_params=None, auto_approve=False):
-        """Record an ERPSnapshot and (optionally) ingest it into a DatasetVersion."""
+                     extract_params=None, auto_approve=False, since_id=0):
+        """Record an ERPSnapshot and (optionally) ingest it into a DatasetVersion.
+
+        ``since_id`` is the incremental watermark: > 0 reuses the dataset's
+        latest materialized table and appends only genuinely new rows.
+        """
         from .models import ERPSnapshot
         snapshot = ERPSnapshot.objects.create(
             source_view=source_view,
@@ -212,7 +216,7 @@ class ERPSnapshotService:
             rows = self.extract_rows(source_view, extract_params)
             version = None
             if dataset is not None:
-                version = self._ingest(dataset, rows, user, auto_approve)
+                version = self._ingest(dataset, rows, user, auto_approve, since_id)
             snapshot.row_count = len(rows)
             snapshot.status = 'done'
             snapshot.completed_at = timezone.now()
@@ -229,13 +233,14 @@ class ERPSnapshotService:
             raise
         return snapshot, version
 
-    def _ingest(self, dataset, rows, user, auto_approve):
+    def _ingest(self, dataset, rows, user, auto_approve, since_id=0):
         from catalog.dataset_ingest import ingest_erp
         return ingest_erp(
             dataset, rows,
             source_ref=self.data_source_name,
             user=user,
             auto_approve=auto_approve,
+            since_id=since_id,
         )
 
 
@@ -289,17 +294,30 @@ class HealthyPipelineService:
         )
         return config
 
-    def run_pipeline(self, pipeline_key: str, *, user=None, auto_approve=False) -> dict:
+    def run_pipeline(self, pipeline_key: str, *, user=None, auto_approve=False,
+                     full=False) -> dict:
         """snapshot → DatasetVersion (DQ) → TurnKeyModelLink → PredictionRecord."""
+        from django.db.models import Max
         from integrations.turnkey.models import PredictionRecord, TurnKeyModelLink, input_hash_of
+        from .models import MaterializationCheckpoint
 
         if pipeline_key not in PIPELINES:
             raise ValueError(f"Unknown healthy pipeline: {pipeline_key!r}")
         spec = PIPELINES[pipeline_key]
 
+        checkpoint, _ = MaterializationCheckpoint.objects.get_or_create(
+            pipeline_key=pipeline_key,
+            defaults={'last_row_id': 0},
+        )
+        since_id = 0 if full else checkpoint.last_row_id
+
         dataset, _module = self.ensure_dataset(spec, user)
         snapshot, version = ERPSnapshotService().run_snapshot(
-            spec['source_view'], user=user, dataset=dataset, auto_approve=auto_approve,
+            spec['source_view'],
+            user=user,
+            dataset=dataset,
+            auto_approve=auto_approve,
+            since_id=since_id,
         )
 
         config = self.ensure_turnkey_config(user)
@@ -321,11 +339,27 @@ class HealthyPipelineService:
             input_hash=input_hash_of(payload['input']),
             prediction=payload['prediction'],
         )
+
+        # advance checkpoint to the highest DataRow id ingested this run
+        if version is not None:
+            from dataschema.models import DataRow
+            max_id = (
+                DataRow.objects
+                .filter(data_table__dataset_versions=version)
+                .aggregate(m=Max('id'))['m']
+            )
+            if max_id is not None and max_id > checkpoint.last_row_id:
+                checkpoint.last_row_id = max_id
+                checkpoint.last_ran_at = timezone.now()
+                checkpoint.rows_processed += snapshot.row_count or 0
+                checkpoint.save()
+
         return {
             'snapshot': snapshot,
             'version': version,
             'link': link,
             'prediction': prediction,
+            'checkpoint': checkpoint,
         }
 
     def _prediction_payload(self, pipeline_key: str) -> dict:
@@ -376,29 +410,42 @@ class LoadoutService:
 
     def generate_sheet(self, week_start, rep_code, *, rep_name='',
                        line_items=None, prediction_ref=None, user=None) -> object:
-        from .models import LoadoutSheet
+        from .models import LoadoutLine, LoadoutSheet
         sheet, _ = LoadoutSheet.objects.update_or_create(
             week_start=week_start,
             rep_code=rep_code,
             defaults={
                 'rep_name': rep_name or '',
-                'line_items': line_items or [],
                 'prediction_ref': prediction_ref,
                 'generated_by': _authenticated_user(user),
             },
         )
+        if line_items:
+            sheet.lines.all().delete()
+            LoadoutLine.objects.bulk_create(
+                [
+                    LoadoutLine(
+                        sheet=sheet,
+                        item_code=item['item_code'],
+                        item_name=item.get('item_name', ''),
+                        qty_recommended=item.get('qty_recommended', 0) or 0,
+                    )
+                    for item in line_items
+                    if item.get('item_code')
+                ],
+                ignore_conflicts=True,
+            )
         return sheet
 
-    def submit_actuals(self, sheet, actuals: dict) -> object:
-        """Merge posted actual quantities into a load-out sheet's line items."""
-        items = list(sheet.line_items or [])
-        for item in items:
-            code = item.get('item_code')
-            if code is not None and code in actuals:
-                item['qty_actual'] = actuals[code]
-        sheet.line_items = items
-        sheet.save(update_fields=['line_items'])
-        return sheet
+    def submit_actuals(self, sheet, actuals: dict) -> int:
+        """Update qty_actual on typed LoadoutLine rows by item_code."""
+        from .models import LoadoutLine
+        updated = 0
+        for line in sheet.lines.filter(item_code__in=actuals.keys()):
+            line.qty_actual = actuals[line.item_code]
+            line.save(update_fields=['qty_actual'])
+            updated += 1
+        return updated
 
 
 # ── Dashboards ───────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 """Healthy app serializers."""
 from rest_framework import serializers
 
-from .models import ERPSnapshot, LoadoutSheet, RepHealthCard
+from .models import ERPSnapshot, LoadoutLine, LoadoutSheet, RepHealthCard
 
 
 class ERPSnapshotSerializer(serializers.ModelSerializer):
@@ -18,12 +18,20 @@ class ERPSnapshotSerializer(serializers.ModelSerializer):
         ]
 
 
+class LoadoutLineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LoadoutLine
+        fields = ['id', 'item_code', 'item_name', 'qty_recommended', 'qty_actual']
+
+
 class LoadoutSheetSerializer(serializers.ModelSerializer):
+    lines = LoadoutLineSerializer(many=True, read_only=True)
+
     class Meta:
         model = LoadoutSheet
         fields = [
             'id', 'week_start', 'rep_code', 'rep_name', 'prediction_ref',
-            'line_items', 'generated_at', 'generated_by',
+            'lines', 'generated_at', 'generated_by',
         ]
         read_only_fields = ['id', 'generated_at', 'generated_by']
 

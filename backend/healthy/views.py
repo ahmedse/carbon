@@ -127,7 +127,7 @@ class LoadoutActualsView(APIView):
 
     def post(self, request, week, rep):
         sheet = get_object_or_404(LoadoutSheet, week_start=week, rep_code=rep)
-        sheet = LoadoutService().submit_actuals(sheet, request.data or {})
+        LoadoutService().submit_actuals(sheet, request.data or {})
         return Response(LoadoutSheetSerializer(sheet).data)
 
 

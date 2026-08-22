@@ -110,4 +110,6 @@ def test_superuser_posts_loadout_actuals(auth, superuser):
         {'SKU-101': 8}, format='json',
     )
     assert resp.status_code == 200
-    assert resp.json()['line_items'][0]['qty_actual'] == 8
+    lines = resp.json()['lines']
+    assert lines[0]['item_code'] == 'SKU-101'
+    assert lines[0]['qty_actual'] == '8.00'

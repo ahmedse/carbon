@@ -16,7 +16,9 @@ Pipeline (design §5.5):
      dataset.current_version). Otherwise stay 'pending' for manual review.
 """
 import csv
+import hashlib
 import io
+import json
 import logging
 import re
 
@@ -67,6 +69,19 @@ def _normalize_name(value):
     return text_utils.slugify(value)[:MAX_TABLE_NAME]
 
 
+def row_hash_of(values) -> str:
+    """Stable content hash for dedup — canonical JSON of normalized values.
+
+    Normalization must match DataRow.save(): keys lowercased. Used by
+    write_rows (inserts) and the ingest watermark (skip already-ingested rows).
+    """
+    normalized = {str(k).lower(): v for k, v in (values or {}).items()}
+    return hashlib.sha256(
+        json.dumps(normalized, sort_keys=True, separators=(',', ':'),
+                   default=str).encode('utf-8')
+    ).hexdigest()
+
+
 def create_data_table(dataset, columns, version_number, user=None) -> DataTable:
     """Create the dataschema.DataTable + DataFields backing a dataset version."""
     table_name = _normalize_name(f"{dataset.slug}_v{version_number}")
@@ -89,11 +104,19 @@ def create_data_table(dataset, columns, version_number, user=None) -> DataTable:
     return table
 
 
-def write_rows(table, rows, user=None) -> int:
-    """Bulk-create DataRows (keyed by lowercased normalized field name)."""
+def write_rows(table, rows, user=None, *, skip_hashes=None) -> int:
+    """Bulk-create DataRows (keyed by lowercased normalized field name).
+
+    Returns the number of rows actually inserted. When ``skip_hashes`` is a
+    set of content hashes already materialized, rows matching a stored hash
+    are skipped — the incremental (watermark) re-run dedup path. Duplicates
+    within the incoming batch are also skipped.
+    """
     fields = list(table.fields.order_by('order'))
     field_names = [f.name for f in fields]
     now = timezone.now()
+    skip_hashes = skip_hashes or set()
+    seen = set()
     payloads = []
     for row in rows:
         if not isinstance(row, dict):
@@ -101,9 +124,14 @@ def write_rows(table, rows, user=None) -> int:
         values = {}
         for name in field_names:
             values[name] = row.get(name, row.get(name.title(), ''))
+        row_hash = row_hash_of(values)
+        if row_hash in skip_hashes or row_hash in seen:
+            continue
+        seen.add(row_hash)
         payloads.append(DataRow(
             data_table=table,
             values=values,
+            row_hash=row_hash,
             is_archived=False,
             version=1,
         ))
@@ -324,11 +352,17 @@ def create_version_from_tables(dataset, table_specs, *, source_type, source_ref,
 
 
 def ingest_rows(dataset, columns, rows, *, source_type, source_ref,
-                user=None, auto_approve=False) -> DatasetVersion:
-    """Full ingest from an already-normalized payload of rows.
+                user=None, auto_approve=False, since_id=0) -> DatasetVersion:
+    """Ingest from an already-normalized payload of rows.
 
     ``columns`` is a list of {name, label?, type?, required?, sample?}.
     ``rows`` is a list of dicts keyed by column name.
+
+    ``since_id`` is the MaterializationCheckpoint watermark. 0 / falsy = full
+    re-materialization into a fresh per-version table. > 0 = incremental:
+    reuse the dataset's latest materialized table and append only rows whose
+    content hash is not already stored there; if nothing is new, the current
+    version is returned unchanged (no duplicate version / duplicate rows).
     """
     from .models import DataContract
     contract = DataContract.objects.filter(dataset=dataset, is_active=True).first()
@@ -337,15 +371,61 @@ def ingest_rows(dataset, columns, rows, *, source_type, source_ref,
         .order_by('-version_number').values_list('version_number', flat=True).first()
         or 0
     ) + 1
-    table = create_data_table(dataset, columns, next_number, user=user)
-    write_rows(table, rows, user=user)
+    table, skip_hashes = _resolve_ingest_table(dataset, columns, next_number, since_id)
+    inserted = write_rows(table, rows, user=user, skip_hashes=skip_hashes)
+    if inserted == 0 and since_id > 0:
+        # Re-run of an unchanged extract — nothing new to materialize.
+        # Return the current version instead of creating a duplicate.
+        latest = (
+            DatasetVersion.objects.filter(dataset=dataset)
+            .order_by('-version_number').first()
+        )
+        if latest is not None:
+            return latest
     return create_version(
         dataset, table, source_type=source_type, source_ref=source_ref,
         user=user, auto_approve=auto_approve, contract=contract,
     )
 
 
-def ingest_erp(dataset, rows, *, source_ref='', user=None, auto_approve=False) -> DatasetVersion:
+def _resolve_ingest_table(dataset, columns, next_number, since_id):
+    """Return (table, skip_hashes) for this ingest run.
+
+    - since_id == 0 (full): fresh per-version table, no dedup.
+    - since_id > 0 (incremental): reuse the dataset's latest materialized
+      table (when the incoming schema still fits) and skip rows whose content
+      hash is already stored there.
+    """
+    if since_id <= 0:
+        return create_data_table(dataset, columns, next_number), None
+    latest_id = (
+        DatasetVersion.objects.filter(dataset=dataset)
+        .exclude(data_table__isnull=True)
+        .order_by('-version_number')
+        .values_list('data_table_id', flat=True)
+        .first()
+    )
+    if latest_id is None:
+        return create_data_table(dataset, columns, next_number), None
+    table = DataTable.objects.get(pk=latest_id)
+    existing_fields = {f.name for f in table.fields.all()}
+    incoming_fields = {
+        (text_utils.slugify(str(c['name'])).replace('-', '_') or f'field_{i}')[:50]
+        for i, c in enumerate(columns, start=1)
+    }
+    if not incoming_fields.issubset(existing_fields):
+        # Schema drift since the last run — fall back to a fresh table.
+        return create_data_table(dataset, columns, next_number), None
+    existing_hashes = set(
+        DataRow.objects.filter(data_table=table)
+        .exclude(row_hash='')
+        .values_list('row_hash', flat=True)
+    )
+    return table, existing_hashes
+
+
+def ingest_erp(dataset, rows, *, source_ref='', user=None, auto_approve=False,
+               since_id=0) -> DatasetVersion:
     """ERP snapshot ingest. ``rows`` = list of dicts from the ERP view."""
     if not rows:
         raise ValueError('ERP snapshot contains no rows.')
@@ -353,7 +433,7 @@ def ingest_erp(dataset, rows, *, source_ref='', user=None, auto_approve=False) -
     return ingest_rows(
         dataset, columns, rows,
         source_type='erp_snapshot', source_ref=source_ref or 'erp',
-        user=user, auto_approve=auto_approve,
+        user=user, auto_approve=auto_approve, since_id=since_id,
     )
 
 

@@ -12,13 +12,17 @@
 
 **Verdict:** Carbon is a domain-app factory. The machinery (`appregistry/`, `ai/domain_protocol.py`, CBAC, Dataset Hub, TurnKey Bridge) is real and shipped. You can build new apps by cloning the `healthy/` pattern.
 
-**The one gap:** The data storage layer (`dataschema.DataRow.values = JSONField()`) is optimized for governed, audited, DQ-scored trust operations — not for analytical/BI workloads (ERP aggregations, KPI dashboards, cross-org analytics). For moderate-scale tabular data (thousands to low tens-of-thousands of rows) it's fine. For ERP-BI scale (millions of rows, `SUM/GROUP BY` over JSON), it will be slow without tuning.
+**The one gap:** It is **not** a missing analytical store. Carbon uses a deliberate two-layer model:
+- **Trust layer** — `dataschema.DataRow.values = JSONField()`: governed, audited, DQ-scored raw snapshots (row-as-document).
+- **BI layer** — typed relational domain models with real columns/FKs/indexes, e.g. `healthy.RepHealthCard.churn_probability = FloatField`.
+
+**"Materialize"** = extract rows from the JSON trust layer → write typed Django models. `healthy/` already does this end-to-end. The real gap is that `hr.py` and the KPI apps have **no typed models yet** — not that Postgres can't do BI. At AASTMT scale (~5K staff, <10M fact rows), tuned Postgres 16 (typed tables + GIN + materialized views) is sufficient; no ClickHouse/DuckDB needed.
 
 **Recommended sequence:**
 1. ✅ **Healthy AI app** — already built, just extend (more pipelines/models)
 2. ✅ **Facility management + Academic portfolio** — new apps, clean fit (asset CRUD, document artifacts)
 3. ⚠️ **Sustainability goals** — extend `emissions/`, don't duplicate
-4. 🔧 **HR/ERP-BI + KPI dashboards** — build *after* deciding the analytics layer (Option A or B below)
+4. 🔧 **HR/ERP-BI + KPI dashboards** — write typed models + materialize (clone `healthy/`); no new store required
 
 ---
 
@@ -136,40 +140,54 @@
 
 ---
 
-### 1.8 Data Storage — The Honest Assessment
+### 1.8 Data Storage — Two Layers (Trust + BI), Not One Gap
 
-**Current model:**
+Carbon is deliberately **two-layered**:
+
+**Layer 1 — Trust (`dataschema.DataRow`)**
 ```python
 # dataschema/models.py
 class DataRow(models.Model):
     data_table = ForeignKey(DataTable, …)
-    values = JSONField()  # one JSON document per row
+    values = JSONField()  # one JSON document per row — raw, governed, audited
     created_at, updated_at, is_archived, version
     dq_flags = JSONField(default=list)
 ```
 
-**Every row is a JSON document.** No GIN index on `values`. No columnar store. No materialized views. No star schema.
+This is the *source of truth*: immutable row-as-document snapshots, DQ-scored, lineage-tracked, audit-friendly. It is **not** where you run BI queries.
 
-**Infra:** One PostgreSQL 16 + Redis. Transactional, not analytical.
+**Layer 2 — BI (typed domain models, materialized from Layer 1)**
 
-**What this is good for:**
+`healthy/` already demonstrates the pattern: `ERPSnapshotService` extracts rows from Layer 1 and writes **typed models with real columns, FKs, and indexes**:
+
+```python
+# healthy/models.py — materialized, queryable BI outputs
+class RepHealthCard(models.Model):
+    week_start = DateField(db_index=True)
+    rep_code = CharField(db_index=True)
+    churn_probability = FloatField()      # a real column, not a JSON key
+    ar_overdue_amount = DecimalField()    # SUM/GROUP BY-friendly
+```
+
+**"Materialize"** = `extract JSON rows → transform → write typed Django models`. This is exactly how ERP-BI, KPI, and payroll aggregations should be built — and it is already shipped in `healthy/`.
+
+**Infra:** One PostgreSQL 16 + Redis. Typed tables + GIN indexes + materialized views cover AASTMT scale.
+
+**What Layer 1 (trust) is for:**
 - ✅ Governed, audited, DQ-scored trust operations
-- ✅ Tabular data CRUD (create/read/update/delete rows)
-- ✅ AI context assembly (pull row → feed to LLM)
-- ✅ Moderate-scale reads (thousands to low tens-of-thousands of rows)
-- ✅ Document/artifact storage
+- ✅ Tabular data CRUD + AI context assembly
+- ✅ Immutable provenance + lineage
 
-**What this is NOT good for:**
-- ❌ ERP-BI workloads: `SELECT SUM(payroll) FROM rows WHERE org_unit IN (…) GROUP BY department` over millions of rows → full-table JSONB scan, slow
-- ❌ KPI dashboards: cross-org aggregations, time-series rollups, drill-downs
-- ❌ Real-time analytics on large fact tables
+**What Layer 2 (typed models) is for:**
+- ✅ ERP-BI aggregations (`SUM`/`GROUP BY` over real, indexed columns)
+- ✅ KPI dashboards, time-series rollups, drill-downs
+- ✅ Materialized views refreshed on schedule
 
-**Why PostgreSQL 16 itself is capable but the current layer isn't:**
-- Postgres can do BI. The problem is the abstraction: row-as-JSON with no GIN indexes, no aggregate tables, no materialized views. It's a generic trust layer, not an analytical one.
+**The actual gap (small):**
+- ❌ `hr.py` is manifest-only — it has **zero typed models**. That's the gap, not a missing store.
+- ❌ KPI apps need typed fact models + materialized views — a build step, not an infra decision.
 
-**Verdict:** The storage model is *correct* for what Carbon is (data trust core). It will hit a wall for ERP-BI / KPI-heavy apps without tuning.
-
----
+**Verdict:** No new analytical store. Build typed models and materialize them from the trust layer — `healthy/` is the blueprint. Revisit only if fact tables exceed ~10M rows with sub-second ad-hoc OLAP requirements.
 
 ## 2. Your Four Proposed Apps — Readiness Assessment
 
@@ -182,15 +200,15 @@ class DataRow(models.Model):
 - `appregistry/` can declare the app
 - CBAC can scope `hr:view`, `hr:manage`
 
-**Data layer:** ⚠️ **Gap**
+**Data layer:** ⚠️ **Gap (small)**
 - `hr.py` today is manifest-only (explicitly: "no tables in the trust platform")
-- To be a real ERP-BI app, you need:
-  - HR data models (`Employee`, `Department`, `PayrollRecord`, `Attendance`, `LeaveRequest`)
+- To be a real ERP-BI app, clone `healthy/`:
+  - HR typed models (`Employee`, `Department`, `PayrollRecord`, `Attendance`, `LeaveRequest`)
   - A `DataSource` to the ERP HR module (read-only)
-  - Ingest path (ERP → DatasetVersion, like Healthy)
-  - **BI read layer** (this is the blocker — see §3)
+  - Ingest path (ERP → `DataRow` trust layer → materialize typed models)
+  - Materialized views for payroll/attrition rollups
 
-**Verdict:** ⚠️ Half-ready. App shell + AI seam exist. Data model + analytics layer are the gaps.
+**Verdict:** ⚠️ Half-ready. App shell + AI seam exist. Typed models + materialization are the remaining build step — no new store needed.
 
 ---
 
@@ -217,15 +235,15 @@ class DataRow(models.Model):
 
 **App machinery:** ✅ Ready
 
-**Data layer:** ⚠️ **Gap**
+**Data layer:** ⚠️ **Gap (small)**
 - KPIs are aggregations over fact tables (`SUM`, `AVG`, `GROUP BY`, time-series rollups)
 - MDM already has the org tree (`college` / `department` / `facility`)
-- You need:
-  - Fact tables (events, transactions, outcomes)
-  - Aggregation layer (materialized views or dedicated OLAP store)
-  - Drill-down queries (same BI gap as HR)
+- You need typed fact models + materialized views (tuned Postgres), e.g.:
+  - Fact tables (`KpiFact`, `Event`, `Transaction`) with real columns
+  - `REFRESH MATERIALIZED VIEW CONCURRENTLY` jobs for rollups
+  - Drill-down queries over `mdm.OrgUnit` FKs
 
-**Verdict:** ⚠️ Half-ready. Org tree + app shell exist. Aggregation layer is the blocker.
+**Verdict:** ⚠️ Half-ready. Org tree + app shell exist. Typed fact models + MVs are the remaining build step — no dedicated OLAP store needed at AASTMT scale.
 
 ---
 
@@ -288,116 +306,65 @@ Add "sustainability goals" as a new section within `emissions/` (targets, milest
 
 ---
 
-## 3. The Storage Layer Gap — Two Options
+## 3. The Real Work — Materialize Typed Models (No New Store)
 
-### Option A: Tuned PostgreSQL (recommended for moderate scale)
+There is no "analytics layer decision" to make. Carbon already has the answer in
+`healthy/`: **extract JSON from the trust layer → write typed Django models with
+real columns, FKs, and indexes.** Materialized views and GIN indexes make tuned
+PostgreSQL 16 sufficient for AASTMT's scale.
 
-**Approach:** Stay on PostgreSQL 16, but tune the layer for analytics.
+### 3.1 The pattern (already shipped in `healthy/`)
 
-**What to add:**
-1. **Domain-specific tables with real columns** (not JSON) for fact tables:
+1. **Typed fact/dimension models** with real columns (not JSON):
    ```python
    # hr/models.py
    class PayrollRecord(models.Model):
-       employee = ForeignKey(Employee, …)
-       org_unit = ForeignKey(OrgUnit, …)  # for GROUP BY
+       employee = ForeignKey(Employee, on_delete=…)
+       org_unit = ForeignKey(OrgUnit, on_delete=…)   # for GROUP BY / drill-down
        period = DateField(db_index=True)
-       gross_pay = DecimalField()
-       net_pay = DecimalField()
-       …
+       gross_pay = DecimalField(max_digits=12, decimal_places=2)
+       net_pay = DecimalField(max_digits=12, decimal_places=2)
    ```
-   
-2. **GIN indexes on JSONB** where you must keep JSON:
+
+2. **GIN index on the trust layer** where JSON must be queried:
    ```python
    class DataRow(models.Model):
        values = JSONField()
-       
        class Meta:
-           indexes = [
-               GinIndex(fields=['values'], name='datarow_values_gin'),
-           ]
+           indexes = [GinIndex(fields=['values'], name='datarow_values_gin')]
    ```
 
-3. **Materialized views for KPIs:**
+3. **Materialized views** for KPI rollups:
    ```sql
    CREATE MATERIALIZED VIEW kpi_payroll_by_dept AS
    SELECT org_unit_id, period, SUM(gross_pay), AVG(gross_pay), COUNT(*)
    FROM hr_payrollrecord
    GROUP BY org_unit_id, period;
-   
+
    CREATE INDEX ON kpi_payroll_by_dept (org_unit_id, period);
    ```
-   
    Refresh: `REFRESH MATERIALIZED VIEW CONCURRENTLY kpi_payroll_by_dept;` (scheduled job).
 
-4. **Aggregate tables:**
+4. **Aggregate snapshot tables** for a versioned, queryable summary:
    ```python
    class KPISnapshot(models.Model):
-       metric_key = CharField()  # e.g. "payroll_by_dept"
-       org_unit = ForeignKey(OrgUnit, …)
+       metric_key = CharField()          # e.g. "payroll_by_dept"
+       org_unit = ForeignKey(OrgUnit, on_delete=…)
        period = DateField(db_index=True)
-       value = DecimalField()
+       value = DecimalField(max_digits=18, decimal_places=4)
        metadata = JSONField()
    ```
 
-**Pros:**
-- No new infra
-- PostgreSQL 16 can handle moderate-scale BI (millions of rows with proper indexing)
-- Keep all data in one place (trust + analytics)
+### 3.2 Scale guidance
 
-**Cons:**
-- Need to write + maintain materialized view refresh jobs
-- Still have to be careful about query patterns (avoid full JSONB scans)
-- Won't scale to "true big data" (tens of millions of rows, real-time sub-second queries)
+| Condition | What to do |
+|-----------|-----------|
+| ≤ ~5K staff, ≤ 10M fact rows (AASTMT today) | Typed models + GIN + materialized views on the **existing** Postgres 16. Done. |
+| > 10M rows or sub-second ad-hoc OLAP | Revisit later (DuckDB/ClickHouse read-replica). **Not now.** |
 
-**When this works:**
-- Org size: < 10,000 employees
-- Fact tables: < 10M rows
-- Query patterns: pre-aggregated dashboards, not ad-hoc drill-anywhere OLAP
-- Update frequency: hourly/daily refreshes acceptable (not real-time)
-
-**Verdict:** ✅ Recommended for AASTMT (one campus, ~5K staff, moderate data volume).
-
----
-
-### Option B: Dedicated Analytical Store (for larger scale or real-time)
-
-**Approach:** Keep Carbon as the trust core (governed, DQ-scored, audited). Add a separate analytical tier for BI/KPIs.
-
-**Patterns:**
-1. **DuckDB in-process** (for single-node BI queries):
-   - Export DatasetVersion → Parquet
-   - Query Parquet with DuckDB (columnar, fast)
-   - Refresh: rebuild Parquet on version approval
-
-2. **ClickHouse / TimescaleDB** (for distributed BI):
-   - Push approved DatasetVersion → ClickHouse
-   - Run BI queries there
-   - Keep Carbon as source-of-truth; ClickHouse is read-replica
-
-3. **Materialized views in a read-replica Postgres:**
-   - Stand up a read-only Postgres replica
-   - Build MVs there (keep the primary clean)
-
-**Pros:**
-- Scales to tens/hundreds of millions of rows
-- Real-time or near-real-time analytics
-- Dedicated infra = no risk of slowing down the trust core
-
-**Cons:**
-- New infra to maintain
-- Data duplication (sync lag, consistency concerns)
-- More complexity
-
-**When you need this:**
-- Org size: > 10,000 employees
-- Fact tables: > 10M rows
-- Query patterns: ad-hoc drill-anywhere OLAP, real-time dashboards
-- Update frequency: real-time or sub-minute
-
-**Verdict:** ⚠️ Overkill for AASTMT today. Consider only if Option A proves insufficient after 1 year.
-
----
+**Bottom line:** "Materialize" is a code task (write `models.py` + an extract/transform
+service), not an infrastructure decision. Clone `healthy/ERPSnapshotService` +
+`RepHealthCard` and you're done.
 
 ## 4. Concrete Recommendations — Sequencing
 
@@ -423,30 +390,24 @@ Add "sustainability goals" as a new section within `emissions/` (targets, milest
 
 ---
 
-### Phase 3 (6 months): Analytics layer decision + HR/KPI
+### Phase 3 (6 months): Materialize HR + KPI
 
-5. 🔧 **Decide analytics layer:** Run a 1-week proof-of-concept for Option A (tuned Postgres). Build one KPI dashboard (e.g. headcount by dept/college over 12 months) on top of the existing `mdm.OrgUnit` tree + synthetic payroll data.
-   - If query latency < 1s and refresh jobs are stable → commit to Option A.
-   - If it's slow or brittle → evaluate Option B (dedicated store).
-
-6. 🔧 **HR/ERP-BI app:**
-   - Build HR data models (`Employee`, `PayrollRecord`, `Attendance`, …)
+5. 🔧 **HR/ERP-BI app:**
+   - Build HR typed models (`Employee`, `PayrollRecord`, `Attendance`, …)
    - Ingest from ERP HR module (clone Healthy's `ERPSnapshotService`)
-   - Build BI layer (MVs + aggregate tables, Option A)
+   - Materialize: extract trust-layer rows → typed models + MVs (see §3)
    - Domain AI manifest (`hr.py` already exists, extend with task types)
    - Frontend (dashboards, drill-downs)
 
-7. 🔧 **KPI dashboards (staff/dept/college):**
-   - Reuse the BI layer from HR
+6. 🔧 **KPI dashboards (staff/dept/college):**
+   - Reuse the typed models + MVs from HR
    - Models: `KPIDefinition`, `KPISnapshot`, `KPITarget`
    - Dashboards: performance, attrition, productivity, research output
    - Drill-downs by org unit (reuse `mdm.OrgUnit`)
 
-**Effort:** 4 sprints (PoC + HR + KPI).
+**Effort:** 4 sprints (HR + KPI).
 
-**Blocker:** Analytics layer decision (Phase 3 gate 5).
-
----
+**No blocker** — materialization is a normal build step, not a gated decision.
 
 ## 5. The Domain-App Checklist (Clone `healthy/`)
 
@@ -486,12 +447,11 @@ When building a new app, follow this pattern (all from `healthy/`):
 
 **Yes, Carbon is ready for new domain apps.** The machinery is real, tested, and shipped. `healthy/` is the blueprint.
 
-**The one gap is the analytics layer.** For apps that are primarily CRUD/documents (facility, portfolio), you're good to go. For apps that are BI-heavy (HR/ERP, KPI dashboards), you need to decide: tuned Postgres (Option A, recommended) or dedicated store (Option B, overkill for AASTMT today).
+**There is no missing analytics store.** For apps that are primarily CRUD/documents (facility, portfolio), you're good to go. For BI-heavy apps (HR/ERP, KPI dashboards), the work is to **materialize typed models** from the trust layer — exactly what `healthy/` already does with `RepHealthCard`. Tuned Postgres 16 (typed tables + GIN + materialized views) is sufficient at AASTMT scale.
 
 **Recommended sequence:**
 1. Healthy (extend) → Facility + Portfolio (new) → Sustainability (extend `emissions/`)
-2. After those 4, run a 1-week PoC on the analytics layer
-3. Then tackle HR/ERP-BI + KPI
+2. Then materialize HR/ERP-BI + KPI (typed models + MVs)
 
 **Next step:** Pick one app to build first (recommend: Facility Management, cleanest fit) and I'll write the full implementation spec with models, services, API surface, and frontend scaffold.
 
