@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.engine.core.clock import utcnow
@@ -153,16 +153,13 @@ class SkillsStore:
             alpha = 0.3  # EMA weight for newest observation
             new_avg_latency = (1 - alpha) * skill.avg_latency_ms + alpha * latency_ms
 
-        await self.db.execute(
-            update(Skill)
-            .where(Skill.id == skill_id)
-            .values(
-                usage_count=new_count,
-                success_rate=round(new_success_rate, 4),
-                avg_latency_ms=round(new_avg_latency, 2),
-                last_executed_at=utcnow(),
-            )
-        )
+        # Mutate in place and let the store's commit flush it back — the
+        # Django backend re-saves tracked objects on commit, so a raw SQL
+        # ``update()`` here would be clobbered by the stale tracked row.
+        skill.usage_count = new_count
+        skill.success_rate = round(new_success_rate, 4)
+        skill.avg_latency_ms = round(new_avg_latency, 2)
+        skill.last_executed_at = utcnow()
         await self.db.commit()
         logger.debug(
             "SkillsStore.update_stats: id=%s count=%d rate=%.3f latency=%.1f",

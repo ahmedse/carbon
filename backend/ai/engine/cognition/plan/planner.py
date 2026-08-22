@@ -72,22 +72,31 @@ def _score_skill(skill, utterance_lower: str) -> float:
 
     # Direct name match is strongest signal
     if name_lower in utterance_lower:
-        return 0.95
-
+        score = 0.95
     # Word overlap on name tokens
-    name_tokens = set(name_lower.split())
-    utterance_tokens = set(utterance_lower.split())
-    name_hits = len(name_tokens & utterance_tokens)
-    if name_hits > 0:
-        return min(0.6 + name_hits * 0.1, 0.9)
+    else:
+        name_tokens = set(name_lower.split())
+        utterance_tokens = set(utterance_lower.split())
+        name_hits = len(name_tokens & utterance_tokens)
+        if name_hits > 0:
+            score = min(0.6 + name_hits * 0.1, 0.9)
+        else:
+            # Description overlap
+            desc_tokens = set(desc_lower.split())
+            desc_hits = len(desc_tokens & utterance_tokens)
+            if desc_hits > 0:
+                score = min(0.3 + desc_hits * 0.1, 0.6)
+            else:
+                score = 0.0
 
-    # Description overlap
-    desc_tokens = set(desc_lower.split())
-    desc_hits = len(desc_tokens & utterance_tokens)
-    if desc_hits > 0:
-        return min(0.3 + desc_hits * 0.1, 0.6)
-
-    return 0.0
+    # Learnt-signal boost (W4-D): skills with a proven success record rank
+    # above cold matches at equal keyword overlap. Pure read — never writes.
+    if getattr(skill, "success_rate", 0) and getattr(skill, "usage_count", 0):
+        boost = min(0.1, 0.05 + 0.05 * float(skill.success_rate))
+        if skill.usage_count >= 3 and skill.success_rate >= 0.75:
+            boost = min(0.15, boost + 0.05)
+        return min(score + boost, 0.99)
+    return score
 
 
 # ── LLM decompose prompt (agentic tool format, not SQL) ────────────────────────

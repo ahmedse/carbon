@@ -1155,6 +1155,19 @@ class PlansService:
             (s for s in steps if s.status == STEP_AWAITING_APPROVAL), None
         )
 
+        # W4-D learning flywheel: feed the finalized run outcome back into the
+        # SkillRegistry (Reflexion-style step feedback). Fires only on
+        # terminal runs (completed/failed) — the retry loop above never
+        # reaches here mid-flight, and feed_run_feedback re-guards status.
+        try:
+            from ai.feedback.skill_flywheel import feed_run_feedback
+
+            feed_result = await sync_to_async(feed_run_feedback)(str(run.id))
+            if feed_result:
+                logger.info("skill flywheel: %s", feed_result)
+        except Exception:  # BLE001 — learning must never fail a plan run
+            logger.exception("skill flywheel failed for run %s", run.id)
+
         for step in steps:
             if step.status in (STEP_SKIPPED,):
                 continue

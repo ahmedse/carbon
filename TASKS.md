@@ -2979,12 +2979,188 @@ new tests); `--part B` still 6/6 and `--check-golden` still 0 regressions
 **Date:** 2026-08-20
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash (RULE_24)
-**Status:** PLANNED
-**Depends on:** W4-A, W4-C.
+**Status:** DONE ✅ (landed 2026-08-22 — flywheel + planner boost + 10 tests; all gates green)
+**Depends on:** W4-A (durable Run/RunStep rows + live loop ✅), W4-C (multi-agent
+loop + replan ✅).
 
-Feed critic verdicts + tool outcomes back into the SkillRegistry as learnt
-signals (successful plans promote skills; vetoed steps adjust scoring) so
-decomposition quality improves with use. Spec pending W4-B's metrics.
+**Goal (scoped to what is actually live):** the ReAct loop already persists a
+per-step `critic_verdict` (`pass`/`pass_with_flag`/`rewrite`/`veto`), tool
+output, error, and latency on `RunStep` rows, and a `Run` row with
+`total_llm_calls`/`total_latency_ms`/`status`. The `Skill` model already has
+`usage_count`, `success_rate`, `avg_latency_ms`, `last_executed_at`,
+`gate_status`, and `status`. What is **missing** is the flywheel that *feeds
+run outcomes back into the SkillRegistry* so decomposition quality improves
+with use: successful plans promote their source skill's score, vetoed/failed
+steps depress it. This phase builds that loop **outside the engine core**
+(mirroring Phase D's `ai/feedback/` pattern — capture → pipeline; never
+learning inside `engine/**`, RULE_6) and wires the planner's skill ranking to
+consume the learnt signal.
+
+Design (verbatim from the W4-D stub): *"Feed critic verdicts + tool outcomes
+back into the SkillRegistry as learnt signals (successful plans promote
+skills; vetoed steps adjust scoring) so decomposition quality improves with
+use."*
+
+### Files to Read First
+- `backend/ai/plans_service.py` — `_execute_plan_once` (~L911), the retry loop
+  + final `Run`/`RunStep` re-read in `_run_plan_frames` (~L1120-1210, where the
+  flywheel hook fires), `_serialize_run` (~L157, `skill_name` from `plan_json`).
+- `backend/ai/models/core.py` — `Run` (~L312: `plan_json`, `status`,
+  `total_llm_calls`, `total_latency_ms`), `RunStep` (~L337: `critic_verdict`,
+  `critic_flags_json`, `tool_output_json`, `error`, `latency_ms`, `status`).
+- `backend/ai/engine/skills/registry.py` — `SkillRegistry` (thin async CRUD:
+  `add`, `get`, `list_by_user`, `list_promoted`, `search`, `update_status`).
+- `backend/ai/engine/skills/crud.py` — `SkillsStore`: `resolve_skill` (~L102,
+  name-or-ID → promoted-first), `update_stats` (~L136, updates
+  `usage_count`/`success_rate`/`avg_latency_ms`/`last_executed_at` — **already
+  exists, currently called from nowhere in the plan path**),
+  `promote_to_instance` (~L172).
+- `backend/ai/engine/cognition/plan/planner.py` — `_score_skill` (~L65, pure
+  keyword overlap today — the learnable ranking), `_parse_skill_plan` (~L322,
+  sets `Plan.source="skill"`, `Plan.skill_name`), `SkillAwarePlanner.decompose`
+  (~L219).
+- `backend/ai/engine/core/models.py` — `Skill` (~L820: `usage_count`,
+  `success_rate`, `avg_latency_ms`, `last_executed_at`, `gate_status`, `status`).
+- `backend/ai/feedback/` (Phase D pattern) — `__init__.py`, `pipeline.py`
+  (idempotency: `applied_at` + `idempotency_key` guard; revert via
+  `revert_payload`), `signals.py` (`quality_score_for` taxonomy).
+- `backend/ai/engine/cognition/plan/loop.py` — the `succeeded` computation
+  (~L486: `all(r.critic_verdict in ("pass","pass_with_flag") and not r.error
+  for r in step_results)`) — the exact success predicate to mirror at the
+  flywheel seam.
+
+### Files to Change
+- NEW `backend/ai/feedback/skill_flywheel.py` — the learning loop (outside the
+  engine; no `engine/**` writes).
+- `backend/ai/plans_service.py` — fire the flywheel after a run finalizes.
+- `backend/ai/engine/cognition/plan/planner.py` — `_score_skill` consumes
+  `success_rate`/`usage_count` (a small, deterministic learnt-signal boost).
+- NEW `backend/ai/tests/test_skill_flywheel.py` — unit + integration tests.
+
+### Implementation (exact seams)
+
+**1. NEW `backend/ai/feedback/skill_flywheel.py`.** Public surface:
+
+- `feed_run_feedback(run_id: str) -> dict | None` — sync entry (called from
+  `plans_service` via `sync_to_async` or thread). Reads the Django `Run` +
+  `RunStep` rows for `run_id`; **no-ops** (returns `None`) unless:
+  `run.plan_json.get("source") == "skill"` **and** `plan_json.get("skill_name")`
+  is a non-empty string. Computes the outcome:
+  - `success = run.status == "completed"` and every non-skipped step has
+    `critic_verdict in ("pass", "pass_with_flag")` and no `error` (mirror the
+    loop's `succeeded` predicate, L486).
+  - `vetoed = count of steps with critic_verdict == "veto"`
+  - `total_latency_ms = run.total_latency_ms or None`
+  - `flags = [f for s in steps for f in (s.critic_flags_json or [])]`
+  Then opens an engine session (`get_session_factory(PLAN_INSTANCE_ID)`),
+  resolves the skill via `SkillsStore(db).resolve_skill(PLAN_INSTANCE_ID,
+  skill_name)`, and calls `SkillsStore(db).update_stats(skill.id, success,
+  latency_ms)` — **RULE_21 is satisfied because `update_stats` only mutates the
+  skill's own learning ledger columns, never host data, and never auto-promotes
+  status**; the phase explicitly documents that promotion (status →
+  `instance_promoted`) stays human-gated via `promote_to_instance`/admission
+  gate (out of scope here). Returns
+  `{"skill_id", "skill_name", "success", "vetoed", "latency_ms", "updated"}`.
+  Idempotency: **at-least-once is safe** (update_stats is a running average);
+  still, guard with `run.working_notes`-independent check — only fire when the
+  run is in a terminal state (`completed`/`failed`), so the retry loop never
+  double-fires mid-flight.
+- `promote_on_success(skill_id, threshold_successes: int = 3,
+  min_success_rate: float = 0.75) -> bool` — **helper only** (optional): after
+  `update_stats`, if `usage_count >= threshold_successes and success_rate >=
+  min_success_rate and skill.status != "instance_promoted"`, return True so a
+  caller can surface "promote?" to the user (RULE_21 — the flywheel **never
+  writes** status; it only reports readiness). Include a unit test that it
+  returns True/False correctly without mutating status.
+- Keep it importable without touching `engine/**` (imports only
+  `ai.engine.skills.crud.SkillsStore`, `ai.engine.core.database`, models).
+
+**2. `plans_service.py` — fire the hook.** In `_run_plan_frames`, after the
+retry loop and the final `run.refresh_from_db()` + `steps` re-read (i.e. after
+the `done`-frame logic's input data is settled), add:
+```python
+from ai.feedback.skill_flywheel import feed_run_feedback
+try:
+    feed_result = await sync_to_async(feed_run_feedback)(str(run.id))
+    if feed_result:
+        logger.info("skill flywheel: %s", feed_result)
+except Exception:  # BLE001 — learning must never fail a plan run
+    logger.exception("skill flywheel failed for run %s", run.id)
+```
+Place it *before* the final `yield` of `done` (so the learnt signal is applied
+before the client sees completion) — or immediately after; either is fine, but
+it must be inside the try/except and after the retry loop so only terminal
+states reach it. Do **not** call it from `_execute_plan_once` (per-attempt —
+would fire during retries).
+
+**3. `planner.py:_score_skill` — consume learnt signals.** Keep the keyword
+scoring exactly as-is, then add a deterministic quality boost at the end:
+```python
+# Learnt-signal boost (W4-D): skills with a proven success record rank
+# above cold matches at equal keyword overlap. Pure read — never writes.
+if getattr(skill, "success_rate", 0) and getattr(skill, "usage_count", 0):
+    boost = min(0.1, 0.05 + 0.05 * float(skill.success_rate))
+    if skill.usage_count >= 3 and skill.success_rate >= 0.75:
+        boost = min(0.15, boost + 0.05)
+    return min(score + boost, 0.99)
+return score
+```
+- `_MATCH_THRESHOLD` (0.5) unchanged. Unit tests: equal keyword overlap → the
+  skill with `success_rate=1.0, usage_count=5` outscores `success_rate=0.0`;
+  boost never crosses 0.99; zero-usage skills score identically to today
+  (golden-safe: `simulate_agent_workflows --part B --check-golden` must show 0
+  regressions because the boost is additive and only triggers on nonzero stats).
+
+**4. NEW `backend/ai/tests/test_skill_flywheel.py`** (mirror `test_dq_feedback.py`
+style; reuse `_make_plan`/`_make_step` from `ai.tests.test_plans` + engine
+session fixtures from `test_plans.py`). Tests:
+
+- `test_flywheel_noop_without_skill_source` — plan with `source="single_step"`,
+  or `source="skill"` but no `skill_name` → `feed_run_feedback` returns `None`
+  and no `Skill` row is touched.
+- `test_flywheel_promotes_successful_run` — seed a `Skill` (`multi_step_plan`,
+  `instance_promoted` or draft), `_make_plan(status="completed")` with
+  `plan_json.source="skill"` + `skill_name`, steps all `pass` →
+  `update_stats` applied: `usage_count == 1`, `success_rate == 1.0`,
+  `last_executed_at` set; result dict matches.
+- `test_flywheel_depresses_vetoed_run` — one step `critic_verdict="veto"` (or
+  `error` set, run `status="failed"`) → `success=False`, `success_rate < 1.0`,
+  `vetoed == 1`.
+- `test_flywheel_does_not_fire_mid_flight` — run `status="running"` →
+  returns `None` (retry-loop safety).
+- `test_promote_on_success_never_mutates` — after enough successes,
+  `promote_on_success(...)` returns True but `skill.status` still `draft`.
+- `test_score_skill_consumes_learnt_signal` — ranking + 0.99 cap + zero-usage
+  unchanged (3 assertions).
+
+### DO NOT TOUCH
+- `backend/ai/engine/cognition/plan/loop.py` — the loop already records
+  verdicts/outcomes; **no learning inside the engine** (RULE_6).
+- `backend/ai/engine/skills/gate.py` + `registry.py` — admission gate +
+  status transitions stay as-is; the flywheel only feeds stats and reports
+  readiness.
+- `ai/feedback/pipeline.py` / `signals.py` / `capture.py` — Phase D surface
+  unchanged (the flywheel is additive, keyed on run outcomes, not DQ events).
+- `Skill` model / migrations — **no schema change** (all needed columns exist).
+- `simulate_agent_workflows.py` scenario functions + golden — the planner boost
+  is additive and zero-usage-neutral; `--check-golden` must stay 0 regressions.
+  (Adding a `b07` scenario is optional and only after tests pass; if added,
+  re-record golden with `--record-golden`.)
+- Frontend, other apps, `manage.py`, Docker gates.
+
+### Verification Gate (copy-paste; capture terminal output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_skill_flywheel.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python manage.py simulate_agent_workflows --part B
+/home/ahmed/aast/carbon/.venv/bin/python manage.py simulate_agent_workflows --part B --check-golden
+```
+**Acceptance:** `manage.py check` clean; new flywheel tests green; full `pytest
+ai` green (all prior + new); `--part B` still 6/6 and `--check-golden` still 0
+regressions (planner boost is additive, zero-usage-neutral). Then mark W4-D
+DONE.
 
 ---
 
@@ -3308,3 +3484,525 @@ Append to `TASK-RESULTS.md`.
 |---|---|---|
 | DQ rule contradiction detection | backend-worker | Detect two *different* rules on the same field that can't both pass (disjoint `range`/`allowed_values` intervals); warn on redundant overlap (duplicate `not_null`, `unique`+`not_null`); emit a composite "conflict" verdict at runtime for semantically-undecidable overlaps (e.g. `nl_check` vs `regex`). Semantic layer on top of the existing rule-type ↔ field-type applicability check. |
 | Production v1.3 tag + deploy | devops-worker | After final QA gate. Tag + deploy per `docs/DEPLOYMENT_PLAN_AASTMT_CARBON.md`. |
+
+---
+
+## Sprint W5 — Pulse Chat/Agent Mode Split + Agentic Lifecycle Completion
+
+> **Architect note:** ADR-0014 (`decisions/0014-pulse-chat-agent-mode-split.md`) governs
+> all W5 phases. Read it before dispatching any worker. Phases are ordered — W5-A first,
+> then B, C, D in any order, E last. F-21 and F-22 (migration blockers) must be fixed
+> before B and C can be integration-tested against the live backend.
+
+---
+
+### Phase W5-A — Chat / Agent mode split at workspace level
+
+**Status:** TODO
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Kind:** Frontend-only. Medium. No backend changes.
+**Depends on:** none (pure UI refactor)
+
+#### Goal
+Make Chat and Agent the two top-level modes in Pulse. Remove the `Ask/Agent` pill
+from `AIInputBar`. Add mode buttons to `AIWorkspaceHeader`. Persist mode. Reshape the
+workspace so each mode shows only its relevant surface. Add the always-visible safety
+contract text to the header.
+
+#### Files to Read First
+- `.ai-toolkit/decisions/0014-pulse-chat-agent-mode-split.md` — the binding decision
+- `carbon-frontend/src/shell/AIWorkspace.jsx` — routing + panel switching
+- `carbon-frontend/src/shell/AIWorkspaceHeader.jsx` — header component
+- `carbon-frontend/src/shell/AIInputBar.jsx` — remove Ask/Agent pill from here
+- `carbon-frontend/src/shell/AITaskPanel.jsx` — agent mode host
+- `.ai-toolkit/shared/compact-ui.md` — density rules
+- `.ai-toolkit/shared/design-system.md`
+
+#### Tasks
+
+**T1 — `AIWorkspaceHeader.jsx`: add Chat / Agent mode buttons**
+- Add `mode` prop (`'chat'|'agent'`) and `onModeChange` callback
+- Render two compact ToggleButtons (`💬 Chat` | `🤖 Agent`) in the header toolbar (left of the close button)
+- Render the safety contract text as a `Typography caption` beside the mode buttons — text varies per `mode` + `agentLifecycleState` prop (idle / plan_pending / running / consent_needed / done)
+- Theme tokens only (RULE_8); compact density (RULE_3)
+
+**T2 — `AIWorkspace.jsx`: workspace-level mode state**
+- Add `mode` state, persisted to `localStorage` under key `carbon-ai-mode` (default `'chat'`)
+- Pass `mode` and `onModeChange` to `AIWorkspaceHeader`
+- Chat mode: render existing conversation surface (no change to current chat path)
+- Agent mode: render `AITaskPanel` as the primary area (no conversation view)
+- Remove the `activePanel === 'tasks'` branch from the activity-bar panel switch — Tasks is now Agent mode, not a panel
+- Activity bar in Chat mode: Sessions / Context / Investigate / Artifacts / Memory / Usage / Settings (unchanged)
+- Activity bar in Agent mode: only agent-relevant icons — Tasks (plan list) · Run · Monitor (placeholder for W5-D) · Results (placeholder for W5-D) · Audit
+- Pass `agentLifecycleState` down from `AITaskPanel` via a callback so the header shows the correct contract text
+
+**T3 — `AIInputBar.jsx`: remove mode pill**
+- Delete the `Ask / Agent` ToggleButton group (the `<Box role="group" aria-label="Composer mode">` block) and its associated `mode` + `onModeChange` props
+- The mode hint text below the composer (`Ask = advisory …`) is also removed
+- Keep all other composer logic unchanged
+
+**T4 — `AITaskPanel.jsx`: emit lifecycle state to workspace**
+- Add `onLifecycleStateChange` prop
+- Call it whenever `phase` changes: map `{idle,working,paused,finished,stopped,error}` + `plan.status` → `{idle,plan_pending,running,consent_needed,done,error}`
+- No other changes to AITaskPanel logic
+
+#### DO NOT TOUCH
+- Backend files
+- `AIConversationView.jsx`, `AIConversationTabs.jsx`, `AIEmptyState.jsx`
+- Any existing test file content (update test assertions only if a changed prop breaks them)
+- Route paths, API endpoints, `aria-label` values used in E2E selectors
+
+#### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint                  # 0 errors
+npx vitest run                # existing passing tests still pass; new mode tests pass
+npm run build                 # clean build
+```
+
+Also manually verify in the browser:
+- Opening Pulse shows Chat mode by default
+- Clicking Agent switches to AITaskPanel; clicking Chat switches back
+- Mode persists across close/reopen
+- Header contract text changes correctly as agent lifecycle progresses
+- No Ask/Agent pill in the composer
+
+#### Output contract
+Append results to `TASK-RESULTS.md`.
+
+---
+
+### Phase W5-B — Agent mode: guided discovery conversation before plan creation
+
+**Status:** TODO
+**Worker Role:** backend-worker THEN frontend-worker (two sub-phases, same spec)
+**Recommended Model:** DeepSeek V4-Flash
+**Kind:** Backend (Django service + API) + Frontend. Medium-large.
+**Depends on:** W5-A (mode split — brief view needs the new agent workspace layout)
+**Blocked by:** F-21 + F-22 (migration/boot blockers) — fix those first
+
+#### Goal
+Replace the current "brief → immediate LLM decompose → plan" flow with a multi-turn
+guided discovery conversation. Pulse first asks clarifying questions, collects requirements,
+then proposes a structured plan for review. Eliminates F-23.
+
+#### Backend sub-phase
+
+**Files to Read First**
+- `backend/ai/plans_service.py` — `create_plan`, `PlansService`
+- `backend/ai/plans_api.py` — `PlanViewSet.create`
+- `backend/ai/models/core.py` — `Run`, `RunStep`
+- `backend/ai/workspace_api.py` — existing conversation flow for reference
+- `.ai-toolkit/shared/ai-contract.md` — RULE_21 (no auto-mutation)
+
+**Tasks**
+
+B1 — `backend/ai/plans_service.py`: add `start_discovery` and `advance_discovery`
+- `start_discovery(user, brief, conversation_id='')` → creates a `Run` with `status='discovering'` and `plan_json={'discovery_turns': [], 'brief': brief}`; returns the first Pulse question as a `discovery_turn` frame
+- `advance_discovery(user, plan_id, user_reply)` → appends the reply to `discovery_turns`, calls the LLM to either ask the next question OR declare discovery complete and generate a full plan; returns `{'status': 'needs_input'|'plan_ready', 'question': str|None, 'plan': dict|None}`
+- When `status='plan_ready'`: calls `SkillAwarePlanner.decompose` with the enriched brief (original brief + discovery answers) and transitions the Run to `status='pending_approval'`
+- Add `STATUS_DISCOVERING = 'discovering'` to the service constants
+
+B2 — `backend/ai/plans_api.py`: new discovery endpoints
+- `POST /plans/{id}/discover/` — `PlanViewSet.advance_discovery`: accepts `{'reply': str}`, delegates to `PlansService.advance_discovery`, returns `{'status', 'question', 'plan'}`
+- `POST /plans/` already creates the Run via `create_plan`; add a `discovery_mode=True` optional flag so the frontend can start in discovery mode
+- Guard: discovery endpoints only callable when `run.status == 'discovering'`
+
+B3 — `backend/ai/plans_urls.py`: register the new route
+- Add `POST /{id}/discover/` before the existing action routes
+
+**Backend Verification Gate**
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_plans.py -q
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+```
+Add at least 3 tests to `ai/tests/test_plans.py`:
+- `test_discovery_start_returns_question`
+- `test_discovery_advance_continues_or_completes`
+- `test_discovery_complete_transitions_to_pending_approval`
+
+#### Frontend sub-phase
+
+**Files to Read First**
+- `carbon-frontend/src/shell/AITaskPanel.jsx` — current Tasks tab composer
+- `carbon-frontend/src/api/aiWorkspace.js` — plans API helpers
+- `.ai-toolkit/shared/design-system.md`
+- `.ai-toolkit/shared/compact-ui.md`
+
+**Tasks**
+
+F1 — `carbon-frontend/src/api/aiWorkspace.js`: add discovery API helpers
+- `startDiscoveryPlan(token, { brief, conversation_id })` → `POST /ai/plans/` with `discovery_mode: true`
+- `advanceDiscovery(token, planId, reply)` → `POST /ai/plans/{id}/discover/` with `{ reply }`
+
+F2 — `carbon-frontend/src/shell/AITaskPanel.jsx`: Brief view with discovery conversation
+- Replace the static `<TextField>` + "Create plan" button in the Tasks tab with a `DiscoveryComposer`:
+  - User types their outcome
+  - On submit: calls `startDiscoveryPlan` → renders the first question from Pulse as a message bubble
+  - User replies in the same input → calls `advanceDiscovery` → renders next question or transitions to the Plan view
+  - While `status === 'needs_input'`: show conversation bubbles (Pulse question + user reply history)
+  - When `status === 'plan_ready'`: show "Plan ready — review below" banner and render `AITaskPlanCard`
+- Style: compact message bubbles, same visual density as `AIConversationView` but simpler (no full message toolbar)
+- No raw JSON; questions and replies render as plain text bubbles
+
+#### DO NOT TOUCH
+- `backend/ai/engine/` — call public seams only
+- `backend/ai/models/core.py` — `Run.status` choices list must be extended but do NOT change existing statuses
+- Any existing test files beyond the new tests specified above
+
+#### Output contract
+Append results to `TASK-RESULTS.md`.
+
+---
+
+### Phase W5-C — Artifact delivery: storage, API, and semantic output rendering
+
+**Status:** TODO
+**Worker Role:** backend-worker THEN frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Kind:** Backend (model + service + API) + Frontend (renderer). Large.
+**Depends on:** W5-A
+**Blocked by:** F-21 + F-22 (fix first)
+
+#### Goal
+Give the agent workflow a first-class artifact delivery mechanism: steps that produce
+files (Word, Excel, CSV, JSON reports) store them durably and expose download links.
+Step outputs are rendered semantically (not as raw JSON `<pre>` blocks). Eliminates F-24 and F-25.
+
+#### Backend sub-phase
+
+**Files to Read First**
+- `backend/ai/models/core.py` — `Run`, `RunStep`
+- `backend/ai/plans_service.py` — `_serialize_run`, step serialization
+- `backend/ai/plans_api.py` — step output shape
+- `backend/config/settings.py` — `MEDIA_ROOT`, `MEDIA_URL`
+- `backend/ai/plugins/export_document.py` — existing export plugin (reuse its logic)
+
+**Tasks**
+
+B1 — `backend/ai/models/core.py`: add `RunArtifact` model (NEW — justified migration)
+```python
+class RunArtifact(models.Model):
+    run       = models.ForeignKey(Run, on_delete=models.CASCADE, related_name='artifacts')
+    step_index = models.IntegerField(null=True)
+    name      = models.CharField(max_length=255)
+    mime_type = models.CharField(max_length=100)
+    file      = models.FileField(upload_to='ai_artifacts/%Y/%m/')
+    size_bytes = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    class Meta: ordering = ['created_at']
+```
+- Migration: `backend/ai/migrations/0020_runartifact.py`
+- Do NOT use `AppScopeMixin` here (artifact is scoped via `run.host_user_id`)
+
+B2 — `backend/ai/plans_service.py`: artifact storage helper
+- `store_artifact(run_id, step_index, name, content_bytes, mime_type)` → saves to `MEDIA_ROOT/ai_artifacts/`, creates `RunArtifact`, returns `{'artifact_id', 'name', 'size_bytes', 'download_url'}`
+- Expose `download_url` as `/carbon-api/ai/plans/{run_id}/artifacts/{artifact_id}/download/`
+- Wire the `export_document` plugin to call `store_artifact` after generating a docx/xlsx
+
+B3 — `backend/ai/plans_api.py`: artifact endpoints
+- `GET /plans/{id}/artifacts/` → list `RunArtifact` rows for the plan
+- `GET /plans/{id}/artifacts/{artifact_id}/download/` → `FileResponse` (streaming, Content-Disposition: attachment)
+- Both endpoints are owner-scoped (same CBAC as the rest of plans_api)
+
+B4 — `_serialize_run` + `_serialize_step`: add artifact links to step payload
+- Each step's serialized form gains: `'artifacts': [{'id', 'name', 'mime_type', 'size_bytes', 'download_url'}]`
+- `tool_output` gains an `'_output_type'` field: `'text'|'table'|'chart'|'artifact'|'json'` — the service infers this from the output shape; frontend uses it to pick the renderer
+
+**Backend Verification Gate**
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_plans.py ai/tests/test_artifacts.py -q
+```
+Add `ai/tests/test_artifacts.py` with at least 4 tests:
+- `test_store_artifact_creates_file_and_record`
+- `test_artifact_list_endpoint_owner_scoped`
+- `test_artifact_download_streams_file`
+- `test_cross_user_artifact_access_denied`
+
+#### Frontend sub-phase
+
+**Files to Read First**
+- `carbon-frontend/src/shell/AITaskPanel.jsx` — `StepCard`, `renderJson`
+- `carbon-frontend/src/api/aiWorkspace.js` — plan API helpers
+- `carbon-frontend/src/shell/AITaskAuditCard.jsx`
+- `.ai-toolkit/shared/design-system.md`
+
+**Tasks**
+
+F1 — new `carbon-frontend/src/components/ai/StepOutputRenderer.jsx`
+A pure component that takes `{ outputType, value }` and renders:
+- `'text'` → `Typography` with `white-space: pre-wrap`; no `<pre>` block
+- `'table'` → `Table` (MUI) with first-row header detection; max 10 rows, "show more" accordion
+- `'artifact'` → artifact card: file icon + name + size + `[Download]` button (calls download URL via `apiFetch` with `responseType: blob`)
+- `'chart'` → Sparkline or simple bar (reuse existing `StatCard` pattern); fallback to table if chart data is malformed
+- `'json'` → collapsible `<pre>` block labelled "Raw output" — hidden by default, toggle to show
+- `null` / unknown → nothing (no output yet)
+
+F2 — `carbon-frontend/src/shell/AITaskPanel.jsx`: replace `renderJson` with `StepOutputRenderer`
+- In `StepCard`: replace `{renderJson('Output', step.tool_output)}` with `<StepOutputRenderer outputType={step.output_type} value={step.tool_output} />`
+- In `StepCard`: replace `{renderJson('Input', step.tool_args)}` with a collapsible "Input parameters" section that shows key→value rows, not raw JSON
+- Add artifact card below each step if `step.artifacts?.length > 0`
+
+F3 — `carbon-frontend/src/api/aiWorkspace.js`: artifact helpers
+- `listPlanArtifacts(token, planId)` → `GET /ai/plans/{id}/artifacts/`
+- `downloadArtifact(token, planId, artifactId)` → `GET /ai/plans/{id}/artifacts/{id}/download/` → returns a blob URL
+
+#### DO NOT TOUCH
+- `backend/ai/engine/`
+- Existing `export_document` plugin logic beyond the `store_artifact` call addition
+
+#### Output contract
+Append results to `TASK-RESULTS.md`.
+
+---
+
+### Phase W5-D — Agent mode Monitor + Results views
+
+**Status:** TODO
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Kind:** Frontend-only. Medium. No new backend endpoints needed (uses existing ledger + artifacts).
+**Depends on:** W5-A, W5-C (artifacts needed for Results view)
+
+#### Goal
+Add two missing views to agent mode: a live Monitor tab (metrics during/after run) and a
+Results tab (artifacts grid + output summary + rerun/fork). Partially addresses F-27.
+
+#### Files to Read First
+- `carbon-frontend/src/shell/AITaskPanel.jsx` — current tab structure, phase state
+- `carbon-frontend/src/shell/AITaskAuditCard.jsx` — usage stats shape (reuse)
+- `carbon-frontend/src/api/aiWorkspace.js` — `getPlanLedger`, `listPlanArtifacts`
+- `.ai-toolkit/shared/design-system.md`
+- `.ai-toolkit/shared/compact-ui.md`
+
+#### Tasks
+
+**T1 — `AITaskPanel.jsx`: add Monitor and Results internal tabs**
+Current tabs: `tasks | run | templates`
+New tabs: `tasks | run | monitor | results | templates`
+
+RULE_17: persist selected tab to `localStorage` key `carbon-ai-task-tab` (already exists — extend the valid values).
+
+**T2 — Monitor tab** (`renderMonitor()` function in AITaskPanel)
+Renders when `tab === 'monitor'`. Shows:
+- Header: "Monitor" + current plan status chip
+- Live metrics grid (reuse `AITaskAuditCard` Stat layout):
+  - Duration (elapsed from plan `created_at` to now or `completed_at`)
+  - Steps completed / total
+  - Steps failed / skipped
+  - Token usage (from ledger `usage.total_tokens`)
+  - LLM calls (from ledger `usage.total_llm_calls`)
+  - Estimated cost (tokens × DeepSeek V4-Flash rate from config or hardcoded constant)
+  - Latency per step (min / max / avg from ledger steps)
+- Step health table: step_id | intent (truncated) | status chip | latency_ms
+- Auto-loads ledger when `phase === 'finished'|'paused'|'stopped'|'error'`; polls every 5s when `phase === 'working'`
+- Empty state when no plan selected
+
+**T3 — Results tab** (`renderResults()` function in AITaskPanel)
+Renders when `tab === 'results'`. Shows:
+- Only rendered after `phase === 'finished'` (otherwise shows "Run the plan to see results")
+- Final response card: ledger `final_response` as formatted text (not JSON)
+- Artifacts grid: calls `listPlanArtifacts` and renders one card per artifact
+  - File icon (by mime_type: 📄 docx/pdf, 📊 xlsx/csv, 🗄 json, 📁 other)
+  - Name + size
+  - `[Download]` button
+  - `[Preview]` for text/csv (shows first 20 lines in a collapsible)
+- Rerun button: calls `approvePlan` (if `approved`) or shows disabled with tooltip
+- Fork button: calls `forkPlan` → opens the forked plan in the Tasks tab
+- Share / Export button: exports the ledger as JSON or the final_response as a `.md` file
+
+**T4 — Activity bar in Agent mode**: wire Monitor and Results icons
+- `📊` icon → sets `tab = 'monitor'`
+- `📦` icon → sets `tab = 'results'`
+- These replace the `usage` and `artifacts` activity-bar icons when in Agent mode
+
+#### DO NOT TOUCH
+- Backend files
+- Chat mode components
+
+#### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run    # existing tests pass; add tests for Monitor + Results render
+npm run build
+```
+Add to `src/__tests__/AITaskPanel.w3c.test.jsx` or a new file:
+- `test_monitor_tab_renders_metrics_from_ledger`
+- `test_results_tab_renders_artifacts_and_final_response`
+- `test_results_tab_shows_placeholder_before_run_completes`
+
+#### Output contract
+Append results to `TASK-RESULTS.md`.
+
+---
+
+### Phase W5-E — EnterpriseGraph drag visual bug fix + agent mode run graph prominence
+
+**Status:** TODO
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Kind:** Frontend-only. Small-medium.
+**Depends on:** W5-A (agent mode layout established)
+
+#### Goal
+Fix the node drag visual break (QA finding from Round 2) and make the execution graph
+a prominent, always-visible feature of Agent mode Run view rather than hidden below fold.
+
+#### Root cause (already diagnosed — do NOT re-investigate)
+`EnterpriseGraph.jsx` `onMouseMove` drag handler stores only `{x, y}` when moving
+(drops `w`, `h`) and only `{w, h}` when resizing (drops `x`, `y`).
+`effectiveNodes` uses `{ ...n, ...o }` spread which IS correct, but `drag.current.origW`
+and `drag.current.origH` are taken from `node.w` / `node.h` at drag-start — if those are
+already `undefined` from a previous drag, the second drag stores `{origW: undefined}` and
+`clamp(undefined + dx, …)` → `NaN`.
+
+The fix: at drag-start, snapshot `w`/`h` from `effectiveNodes` (the merged value),
+not from the raw `node` prop. Same for `x`/`y` at resize-start.
+
+#### Files to Read First
+- `carbon-frontend/src/components/graph/EnterpriseGraph.jsx` — `startNodeDrag`, `startResize`, `drag.current` snapshot
+- `carbon-frontend/src/__tests__/PlanDagGraph.test.jsx` — existing drag/resize tests
+- `.ai-toolkit/decisions/0012-enterprise-graph-canvas.md` — ADR-0012 Decision 3
+
+#### Tasks
+
+**T1 — `EnterpriseGraph.jsx`: fix drag origin snapshot**
+In `startNodeDrag`:
+```js
+// BEFORE (reads raw layout node — w/h may be stale after a prior resize):
+drag.current = { mode: 'node', id: node.id, startX: e.clientX, startY: e.clientY, origX: node.x, origY: node.y };
+
+// AFTER (read from effectiveNodes so post-resize w/h are included):
+const en = nodeById.get(node.id) || node;
+drag.current = { mode: 'node', id: node.id, startX: e.clientX, startY: e.clientY, origX: en.x, origY: en.y };
+```
+
+In `startResize`:
+```js
+// BEFORE:
+drag.current = { mode: 'resize', id: node.id, startX: e.clientX, startY: e.clientY, origW: node.w, origH: node.h };
+
+// AFTER:
+const en = nodeById.get(node.id) || node;
+drag.current = { mode: 'resize', id: node.id, startX: e.clientX, startY: e.clientY, origW: en.w ?? node.w, origH: en.h ?? node.h };
+```
+
+Note: `nodeById` is already computed from `effectiveNodes` in the same component — use it directly.
+
+**T2 — `PlanDagGraph.jsx`: make the graph prominent in Run view**
+Current: plan graph lives inside `AITaskPlanCard`, below the step list, as a `height=300` embedded card.
+Change: when `live === true` (run is active), render the graph at `height=420` and position it ABOVE the step stream, so users see execution progress at a glance without scrolling.
+Pass `fill={false}` (existing prop, keeps the fixed height); no layout changes to EnterpriseGraph itself.
+
+**T3 — Regression tests**
+Add to `src/__tests__/PlanDagGraph.test.jsx`:
+- `test_drag_after_resize_keeps_correct_position` — drag a node, resize it, drag again; position should not be NaN
+- `test_resize_after_drag_keeps_correct_dimensions` — resize, drag, resize again; dimensions should not be NaN
+
+#### DO NOT TOUCH
+- `backend/` files
+- `planGraph.js` layout logic
+- `ForceGraph.jsx`
+
+#### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run    # PlanDagGraph.test.jsx — all tests including new regression tests pass
+npm run build
+```
+
+Manual browser check in Agent mode:
+- Move a node, then resize it, then move it again → no visual break
+- Resize after move → no visual break
+
+#### Output contract
+Append results to `TASK-RESULTS.md`.
+
+---
+
+## Sprint W5 — Worker Activation Prompts
+
+### W5-A: Frontend Worker
+```
+Your role is frontend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/frontend-worker.md
+4. Read .ai-toolkit/decisions/0014-pulse-chat-agent-mode-split.md
+5. Read TASKS.md — Phase W5-A (Chat / Agent mode split)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+```
+
+### W5-B: Backend Worker (run first)
+```
+Your role is backend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/backend-worker.md
+4. Read .ai-toolkit/decisions/0014-pulse-chat-agent-mode-split.md
+5. Read TASKS.md — Phase W5-B backend sub-phase (discovery conversation)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+NOTE: F-21 and F-22 (migration blockers) must be resolved before running migrate.
+```
+
+### W5-B: Frontend Worker (after backend W5-B is done)
+```
+Your role is frontend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/frontend-worker.md
+4. Read .ai-toolkit/decisions/0014-pulse-chat-agent-mode-split.md
+5. Read TASKS.md — Phase W5-B frontend sub-phase (discovery composer)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+```
+
+### W5-C: Backend Worker (run first)
+```
+Your role is backend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/backend-worker.md
+4. Read TASKS.md — Phase W5-C backend sub-phase (artifact storage + API)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+```
+
+### W5-C: Frontend Worker (after backend W5-C is done)
+```
+Your role is frontend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/frontend-worker.md
+4. Read TASKS.md — Phase W5-C frontend sub-phase (StepOutputRenderer + artifact cards)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+```
+
+### W5-D: Frontend Worker
+```
+Your role is frontend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/frontend-worker.md
+4. Read TASKS.md — Phase W5-D (Monitor + Results views)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+Depends on: W5-A and W5-C frontend done.
+```
+
+### W5-E: Frontend Worker
+```
+Your role is frontend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/frontend-worker.md
+4. Read .ai-toolkit/decisions/0012-enterprise-graph-canvas.md
+5. Read TASKS.md — Phase W5-E (graph drag fix + run graph prominence)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+Can be run in parallel with W5-D.
+```
+
