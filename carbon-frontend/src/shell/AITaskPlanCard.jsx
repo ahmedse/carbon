@@ -30,41 +30,60 @@ import CallSplitIcon from '@mui/icons-material/CallSplit';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
-import { PLAN_STATUS, STEP_STATUS } from './aiTaskStatus';
+import { PLAN_STATUS, STEP_STATUS, agentRoleLabel, toolLabel } from './aiTaskStatus';
 import PlanDagGraph from '../components/graph/PlanDagGraph';
 import PlanMermaidPreview from '../components/graph/PlanMermaidPreview';
 import { buildPlanPhases } from '../utils/planGraph';
 
-function JsonPreview({ title, value }) {
+// W3-G — human-readable key→value input rows (not raw JSON). Flattens a
+// top-level object into labelled rows so `{ dataset: 'emissions' }` reads as
+// "Dataset · emissions" instead of a JSON blob.
+function KeyValuePreview({ title, value }) {
   if (value === null || value === undefined) return null;
-  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  const isObject = value !== null && typeof value === 'object' && !Array.isArray(value);
+  const entries = isObject ? Object.entries(value) : null;
+  if (entries && entries.length === 0) return null;
+  if (!entries && String(value).length === 0) return null;
+
   return (
     <Box sx={{ mt: 0.5 }}>
       <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         {title}
       </Typography>
-      <Box
-        component="pre"
-        sx={{
-          m: 0,
-          mt: 0.25,
-          p: 1,
-          borderRadius: 1,
-          bgcolor: 'action.hover',
-          fontSize: '0.6875rem',
-          lineHeight: 1.45,
-          maxHeight: 200,
-          overflow: 'auto',
-          whiteSpace: 'pre',
-        }}
-      >
-        {text}
-      </Box>
+      {entries ? (
+        <Stack spacing={0.25} sx={{ mt: 0.25 }}>
+          {entries.map(([key, val]) => (
+            <Box key={key} sx={{ display: 'flex', gap: 1, alignItems: 'baseline' }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  fontSize: '0.625rem',
+                  fontWeight: 600,
+                  color: 'text.secondary',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  minWidth: 88,
+                  flexShrink: 0,
+                }}
+              >
+                {key.replace(/_/g, ' ')}
+              </Typography>
+              <Typography sx={{ fontSize: '0.6875rem', wordBreak: 'break-word', minWidth: 0 }}>
+                {typeof val === 'string' ? val : JSON.stringify(val)}
+              </Typography>
+            </Box>
+          ))}
+        </Stack>
+      ) : (
+        <Typography sx={{ fontSize: '0.6875rem', mt: 0.25, wordBreak: 'break-word' }}>
+          {String(value)}
+        </Typography>
+      )}
     </Box>
   );
 }
 
-JsonPreview.propTypes = { title: PropTypes.string, value: PropTypes.any };
+KeyValuePreview.propTypes = { title: PropTypes.string, value: PropTypes.any };
 
 /**
  * Reviewable plan card with lifecycle controls + live plan DAG.
@@ -78,6 +97,9 @@ JsonPreview.propTypes = { title: PropTypes.string, value: PropTypes.any };
  * @param {function} [props.onFork] - () => void, fork into a reviewable copy
  * @param {function} [props.onEditPlan] - (newBrief) => void
  * @param {function} [props.onEditStep] - (step) => void
+ * @param {function} [props.onConfirmStep] - (stepId) => void, per-step consent
+ * @param {function} [props.onDeclineStep] - (stepId) => void, per-step skip
+ * @param {number|string|null} [props.confirmingId] - step currently consenting
  * @param {boolean} [props.running] - stream is active
  * @param {boolean} [props.live] - run is live (DAG shows the Live badge)
  */
@@ -93,6 +115,9 @@ function AITaskPlanCard({
   onFork,
   onEditPlan,
   onEditStep,
+  onConfirmStep,
+  onDeclineStep,
+  confirmingId = null,
 }) {
   const [editBriefOpen, setEditBriefOpen] = useState(false);
   const [editBriefValue, setEditBriefValue] = useState('');
@@ -283,17 +308,17 @@ function AITaskPlanCard({
                         <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {step.intent || `Step ${step.step_id}`}
                         </Typography>
-                        {step.agent_role && step.agent_role !== 'orchestrator' && (
+                        {step.agent_role && (
                           <Chip
                             size="small"
                             variant="outlined"
                             color="secondary"
-                            label={step.agent_role.replace(/_/g, ' ')}
+                            label={`Agent ${step.step_id + 1} · ${agentRoleLabel(step.agent_role)}`}
                             sx={{ height: 16, fontSize: '0.5625rem' }}
                           />
                         )}
                         {step.tool_name && (
-                          <Chip size="small" variant="outlined" label={step.tool_name} sx={{ height: 16, fontSize: '0.5625rem' }} />
+                          <Chip size="small" variant="outlined" label={toolLabel(step.tool_name)} sx={{ height: 16, fontSize: '0.5625rem' }} />
                         )}
                         <Chip size="small" variant="outlined" label={stepMeta.label} color={stepMeta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
                         {editable && onEditStep && (
@@ -311,13 +336,37 @@ function AITaskPlanCard({
                       </Stack>
                       {step.tool_args !== null && step.tool_args !== undefined && Object.keys(step.tool_args).length > 0 && (
                         <Box sx={{ px: 1.25, pb: 0.75 }}>
-                          <JsonPreview title="Inputs (dry-run preview)" value={step.tool_args} />
+                          <KeyValuePreview title="Input" value={step.tool_args} />
                         </Box>
                       )}
                       {step.status === 'awaiting_approval' && (
-                        <Typography variant="caption" color="warning.main" sx={{ display: 'block', px: 1.25, pb: 0.75, fontSize: '0.6875rem' }}>
-                          This step writes to Carbon — it is waiting for your approval.
-                        </Typography>
+                        <Box sx={{ px: 1.25, pb: 0.75 }}>
+                          <Box sx={{ p: 1, borderRadius: 1, bgcolor: 'warning.soft' }}>
+                            <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6875rem', mb: 0.5 }}>
+                              This step writes to Carbon — approve it to run, or decline to skip it.
+                            </Typography>
+                            <Stack direction="row" spacing={1}>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                disabled={busy || confirmingId === step.step_id}
+                                onClick={() => onConfirmStep && onConfirmStep(step.step_id)}
+                                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+                              >
+                                {confirmingId === step.step_id ? 'Approving…' : 'Approve'}
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                disabled={busy || confirmingId === step.step_id}
+                                onClick={() => onDeclineStep && onDeclineStep(step.step_id)}
+                                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+                              >
+                                Decline
+                              </Button>
+                            </Stack>
+                          </Box>
+                        </Box>
                       )}
                       {step.status === 'failed' && step.error && (
                         <Typography variant="caption" color="error.main" sx={{ display: 'block', px: 1.25, pb: 0.75, fontSize: '0.6875rem' }}>
@@ -472,6 +521,9 @@ AITaskPlanCard.propTypes = {
   onFork: PropTypes.func,
   onEditPlan: PropTypes.func,
   onEditStep: PropTypes.func,
+  onConfirmStep: PropTypes.func,
+  onDeclineStep: PropTypes.func,
+  confirmingId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
 };
 
 export default AITaskPlanCard;

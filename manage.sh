@@ -590,6 +590,31 @@ cmd_migrate() {
     echo ""
 }
 
+# W6-E F-29: materialize due plan schedules into reviewable Runs (idempotent).
+# Cron (manual/CI-only; NO docker):
+#   */5 * * * * cd /home/ahmed/aast/carbon && ./manage.sh schedules >> logs/schedules.log 2>&1
+# Preview first with:  ./manage.sh schedules --dry-run
+cmd_schedules() {
+    print_header
+    log_info "Running due plan schedules..."
+    echo ""
+
+    local python
+    python=$(get_python)
+
+    if [[ -z "$python" ]]; then
+        log_error "Python venv not found!"
+        return 1
+    fi
+
+    cd "$BACKEND_DIR" || return 1
+    if [[ "${1:-}" == "--dry-run" ]]; then
+        "$python" manage.py run_due_schedules --dry-run
+    else
+        "$python" manage.py run_due_schedules
+    fi
+}
+
 cmd_shell() {
     local python
     python=$(get_python)
@@ -705,6 +730,7 @@ cmd_help() {
     echo "  migrate            Run Django migrations"
     echo "  shell              Open Django shell"
     echo "  test               Run backend tests (pytest)"
+    echo "  schedules [--dry-run]  Materialize due plan schedules (W6-E F-29)"
     echo "  clean              Deep clean (stop, clear caches, archive logs)"
     echo "  killall            Emergency: force kill everything"
     echo "  help               Show this help"
@@ -715,6 +741,7 @@ cmd_help() {
     echo "  ./manage.sh status         # Check what's running"
     echo "  ./manage.sh logs backend   # View backend logs"
     echo "  ./manage.sh migrate        # Run DB migrations"
+    echo "  ./manage.sh schedules      # Fire due plan schedules (cron: */5 * * * *)"
     echo "  ./manage.sh clean          # Full cleanup"
     echo ""
     echo -e "${CYAN}Ports:${NC}"
@@ -742,6 +769,7 @@ main() {
         migrate)    cmd_migrate ;;
         shell)      cmd_shell ;;
         test)       cmd_test "$@" ;;
+        schedules)  cmd_schedules "${2:-}" ;;
         clean)      cmd_clean ;;
         killall)    cmd_killall ;;
         help|-h|--help) cmd_help ;;

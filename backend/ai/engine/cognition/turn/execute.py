@@ -18,6 +18,22 @@ logger = logging.getLogger("pulse.cognition.turn.execute")
 # Lazy import — avoids circular dependency with notifier
 broadcast_run_event = None
 
+# W6-C: output-type marker keys promoted from a dict tool result to the
+# wrapper's TOP level. plans_service._infer_output_type (frozen contract)
+# infers a step's renderer kind from the top-level keys of the PERSISTED
+# tool_output; dict results (e.g. export_document's {files, download_url})
+# arrive nested inside the JSON-string ``result`` and would otherwise
+# serialize as "text". Mirror the frozen vocabulary exactly.
+_OUTPUT_TYPE_MARKER_KEYS = frozenset({
+    # hints
+    "_output_type", "output_type", "type", "render",
+    # artifact markers
+    "artifact", "artifacts", "file", "files", "file_path",
+    "download_url", "path", "filename",
+    # table / chart markers
+    "headers", "rows", "columns", "series", "labels", "values", "x", "y",
+})
+
 
 class ExecuteWitness:
     """Parallel tool dispatch + streaming. Executes tool calls from S3 draft."""
@@ -358,6 +374,22 @@ async def _execute_single_tool(
 
         result_str = _safe_serialize(result)
 
+        # ── W6-C: surface output-type markers at the wrapper top level ──
+        # plans_service._infer_output_type reads the PERSISTED tool_output's
+        # top-level keys (frozen contract — "fix the handoff, not
+        # store_artifact/_infer_output_type itself"). Dict results are
+        # JSON-strings nested under ``result``; promote the marker keys so
+        # export-style plugins serialize as "artifact" (and table/chart
+        # results as their real shape) instead of "text". Additive only —
+        # key-based consumers (``_safe_summary``, ``_extract_tool_actions``)
+        # read ``result``/``tool_name``/``error`` by name and are unaffected.
+        _extra: dict = {}
+        if isinstance(result, dict):
+            _extra = {
+                k: v for k, v in result.items()
+                if k in _OUTPUT_TYPE_MARKER_KEYS
+            }
+
         logger.debug("Tool executed: %s args=%s latency=%.0fms", tool_name, str(args)[:100], elapsed)
         return {
             "tool_name": tool_name,
@@ -365,6 +397,7 @@ async def _execute_single_tool(
             "error": None,
             "latency_ms": elapsed,
             "guardrail_flags": guardrail_flags,
+            **_extra,
         }
     except Exception as e:
         elapsed = (time.monotonic() - t0) * 1000

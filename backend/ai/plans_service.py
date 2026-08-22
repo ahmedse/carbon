@@ -146,6 +146,23 @@ def get_current_plan_run() -> str | None:
     return _PLAN_RUN_CONTEXT.get()
 
 
+# The plan step index currently executing (set by ReActLoop around each step's
+# tool dispatch, cleared after). export_document-style plugins read this via
+# ``resolve_export_step_index`` so multi-step runs — including parallel waves —
+# attribute artifacts to the step that ACTUALLY ran, not a heuristic.
+_PLAN_STEP_CONTEXT: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "plans_service_plan_step_index", default=None
+)
+
+
+def set_current_step_index(step_index: int | None) -> None:
+    _PLAN_STEP_CONTEXT.set(step_index)
+
+
+def get_current_step_index() -> int | None:
+    return _PLAN_STEP_CONTEXT.get()
+
+
 def _artifact_download_url(run_id, artifact_id) -> str:
     """Public download URL for a stored plan artifact (W5-C).
 
@@ -298,6 +315,14 @@ class PlansService:
 
         if step_index is not None:
             return int(step_index)
+        # W6-D: the ReActLoop records the step it is dispatching in a
+        # contextvar (copied onto the sync_to_async worker thread), so a
+        # multi-step run attributes the artifact to the step that actually
+        # ran — the heuristic below would otherwise label every export with
+        # the highest-indexed export step.
+        current = get_current_step_index()
+        if current is not None:
+            return int(current)
         steps = list(
             RunStep.objects.filter(run_id=run_id).order_by("-step_index")
         )
@@ -464,6 +489,7 @@ class PlansService:
                     skill_registry=registry,
                     instance_id=PLAN_INSTANCE_ID,
                     user_id=user_pk,
+                    force_decompose=True,
                 )
 
         return _run_async(_decompose())
@@ -607,6 +633,7 @@ class PlansService:
                 is_mutation=bool(s.get("is_mutation", False)),
                 dry_run_supported=bool(s.get("dry_run_supported", False)),
                 agent_role=s.get("agent_role", "orchestrator"),
+                instructions=s.get("instructions"),
             )
             for s in plan_json.get("steps", [])
         ]
@@ -1049,6 +1076,12 @@ class PlansService:
         A non-pending plan drops to ``pending_approval`` and all step
         execution state resets to ``pending``: the edited plan must be
         re-approved before anything executes (RULE_21).
+
+        W6-E F-28 steering: on a PAUSED run, editing a not-yet-executed
+        (``pending``) step's service-owned metadata (``instructions``/
+        ``intent``) keeps the plan paused and is honored on resume — no
+        re-approval, no ledger wipe. Editing an executed or consent-awaiting
+        step on a paused run still drops to ``pending_approval`` (RULE_21).
         """
         from ai.models.core import RunStep
 
@@ -1073,26 +1106,57 @@ class PlansService:
         if depends_on is not None:
             target["depends_on"] = depends_on
 
+        step_row = RunStep.objects.filter(
+            run_id=run.id, step_index=int(step_id)
+        ).first()
+        # F-28: paused run + a step that has not executed yet → steer in
+        # place (stay paused, resume honors the edit).
+        steer_paused = (
+            run.status == STATUS_PAUSED
+            and step_row is not None
+            and step_row.status == STEP_PENDING
+        )
+
         plan_json["steps"] = steps
         run.plan_json = plan_json
-        replan_gate = run.status != STATUS_PENDING_APPROVAL
-        if replan_gate:
-            run.status = STATUS_PENDING_APPROVAL
-        run.save(update_fields=["plan_json", "status", "updated_at"])
+        if steer_paused:
+            replan_gate = False
+            run.save(update_fields=["plan_json", "updated_at"])
+            # Refresh just this step's metadata; execution state stays
+            # pending so the resume re-runs it with the edited instructions.
+            RunStep.objects.filter(
+                run_id=run.id, step_index=int(step_id)
+            ).update(
+                intent=target["intent"],
+                depends_on_json=target.get("depends_on") or [],
+                status=STEP_PENDING,
+                draft_text=None,
+                critic_verdict=None,
+                error=None,
+                confirmation_token=None,
+                tool_output_json=None,
+            )
+        else:
+            replan_gate = run.status != STATUS_PENDING_APPROVAL
+            if replan_gate:
+                run.status = STATUS_PENDING_APPROVAL
+            run.save(update_fields=["plan_json", "status", "updated_at"])
 
-        # Reset execution state — the edited plan goes back to review.
-        RunStep.objects.filter(run_id=run.id).update(
-            status=STEP_PENDING,
-            draft_text=None,
-            critic_verdict=None,
-            error=None,
-            confirmation_token=None,
-            tool_output_json=None,
-        )
-        RunStep.objects.filter(run_id=run.id, step_index=int(step_id)).update(
-            intent=target["intent"],
-            depends_on_json=target.get("depends_on") or [],
-        )
+            # Reset execution state — the edited plan goes back to review.
+            RunStep.objects.filter(run_id=run.id).update(
+                status=STEP_PENDING,
+                draft_text=None,
+                critic_verdict=None,
+                error=None,
+                confirmation_token=None,
+                tool_output_json=None,
+            )
+            RunStep.objects.filter(
+                run_id=run.id, step_index=int(step_id)
+            ).update(
+                intent=target["intent"],
+                depends_on_json=target.get("depends_on") or [],
+            )
 
         diff = self._plan_diff(old_steps, steps, key="step_id")
         logger.info(
@@ -1301,6 +1365,233 @@ class PlansService:
             run_id, tpl.id, str(user.pk),
         )
         return self.get_plan(user, run_id)
+
+    # ── W6-E F-29: scheduling / triggers ──────────────────────────────────
+
+    @staticmethod
+    def _cron_trigger(cron_expr: str):
+        """Build an apscheduler ``CronTrigger`` from a standard 5-field cron expr."""
+        from apscheduler.triggers.cron import CronTrigger
+
+        return CronTrigger.from_crontab(cron_expr)
+
+    def create_schedule(
+        self,
+        user,
+        name: str,
+        *,
+        template_id: str | None = None,
+        plan_json: dict | None = None,
+        cron_expr: str | None = None,
+        run_at=None,
+        description: str | None = None,
+    ) -> dict:
+        """Create a ``RunSchedule`` — recurring ``cron_expr`` or one-off ``run_at``.
+
+        ``template_id`` (a template the requesting user owns) or a
+        ``plan_json`` snapshot supplies the plan shape. ``next_run_at`` is
+        computed eagerly so ``run_due_schedules`` only compares timestamps
+        (deterministic and idempotent).
+        """
+        from ai.models.core import PlanTemplate, RunSchedule, generate_uuid
+
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("name is required.")
+        if template_id and plan_json:
+            raise ValueError("Provide template_id OR plan_json, not both.")
+        if not template_id and not plan_json:
+            raise ValueError("template_id or plan_json is required.")
+        if bool(cron_expr) == bool(run_at):
+            raise ValueError("Provide exactly one of cron_expr or run_at.")
+
+        tpl = None
+        if template_id:
+            try:
+                tpl = PlanTemplate.objects.get(
+                    id=template_id, host_user_id=str(user.pk)
+                )
+            except PlanTemplate.DoesNotExist:
+                raise PlanNotAccessibleError(
+                    f"Template {template_id} not found."
+                )
+
+        now = timezone.now()
+        next_run: datetime | None = None
+        if run_at is not None:
+            next_run = run_at
+        else:
+            next_run = self._cron_trigger(cron_expr).get_next_fire_time(
+                None, now
+            )
+
+        schedule = RunSchedule(
+            id=generate_uuid(),
+            instance_id=PLAN_INSTANCE_ID,
+            host_user_id=str(user.pk),
+            name=name,
+            description=(description or "").strip(),
+            template=tpl,
+            plan_json=(
+                json.loads(json.dumps(plan_json)) if plan_json else None
+            ),
+            cron_expr=cron_expr,
+            run_at=run_at,
+            next_run_at=next_run,
+        )
+        schedule.save()
+        logger.info(
+            "RunSchedule created id=%s user=%s cron=%s run_at=%s next=%s",
+            schedule.id, str(user.pk), cron_expr, run_at, next_run,
+        )
+        return self._serialize_schedule(schedule)
+
+    @staticmethod
+    def _serialize_schedule(schedule) -> dict:
+        """Product-facing schedule payload (RULE_23 — outcome terms only)."""
+        return {
+            "id": schedule.id,
+            "name": schedule.name,
+            "description": schedule.description,
+            "cron_expr": schedule.cron_expr,
+            "run_at": schedule.run_at.isoformat() if schedule.run_at else None,
+            "enabled": schedule.enabled,
+            "last_run_at": (
+                schedule.last_run_at.isoformat()
+                if schedule.last_run_at else None
+            ),
+            "next_run_at": (
+                schedule.next_run_at.isoformat()
+                if schedule.next_run_at else None
+            ),
+            "template_id": schedule.template_id,
+            "created_at": (
+                schedule.created_at.isoformat()
+                if schedule.created_at else None
+            ),
+        }
+
+    def list_schedules(self, user) -> dict:
+        """List the requesting user's schedules (owner scoping), soonest first."""
+        from ai.models.core import RunSchedule
+
+        schedules = list(
+            RunSchedule.objects.filter(host_user_id=str(user.pk)).order_by(
+                "next_run_at"
+            )
+        )
+        return {
+            "schedules": [self._serialize_schedule(s) for s in schedules],
+            "count": len(schedules),
+        }
+
+    def delete_schedule(self, user, schedule_id: str) -> dict:
+        """Delete a schedule the requesting user owns (CBAC)."""
+        from ai.models.core import RunSchedule
+
+        deleted, _ = RunSchedule.objects.filter(
+            id=schedule_id, host_user_id=str(user.pk)
+        ).delete()
+        if not deleted:
+            raise PlanNotAccessibleError(f"Schedule {schedule_id} not found.")
+        logger.info("RunSchedule deleted id=%s user=%s", schedule_id, str(user.pk))
+        return {"deleted": True, "schedule_id": schedule_id}
+
+    def materialize_due_schedules(self, *, dry_run: bool = False) -> dict:
+        """Materialize every due schedule into a fresh ``pending_approval`` Run.
+
+        Idempotent contract (F-29): due = ``enabled`` AND ``next_run_at <=
+        now``. Each due schedule is claimed with an atomic compare-and-set on
+        ``next_run_at`` so concurrent invocations fire exactly once. Runs are
+        ``pending_approval`` (RULE_21 — nothing executes without approval),
+        owned by the schedule's owner (CBAC), with ``working_notes``
+        provenance. Cron schedules advance to their next occurrence;
+        one-offs disable themselves after firing.
+        """
+        from ai.models.core import Run, RunSchedule, RunStep, generate_uuid
+
+        now = timezone.now()
+        due = list(
+            RunSchedule.objects.filter(
+                enabled=True, next_run_at__lte=now
+            ).order_by("next_run_at")
+        )
+        materialized: list[dict] = []
+        for s in due:
+            plan_json = (
+                json.loads(json.dumps(s.template.plan_json or {}))
+                if s.template_id
+                else json.loads(json.dumps(s.plan_json or {}))
+            )
+            if not plan_json.get("steps"):
+                # Nothing materializable — leave due for inspection.
+                continue
+            if dry_run:
+                materialized.append(
+                    {"schedule_id": s.id, "name": s.name, "run_id": None}
+                )
+                continue
+            # Atomic claim — exactly one concurrent invoker wins.
+            claimed = RunSchedule.objects.filter(
+                id=s.id, next_run_at=s.next_run_at
+            ).update(last_run_at=now, updated_at=now)
+            if claimed == 0:
+                continue
+            run_id = generate_uuid()
+            run = Run(
+                id=run_id,
+                instance_id=s.instance_id or PLAN_INSTANCE_ID,
+                conversation_id="",
+                host_user_id=s.host_user_id,
+                user_message=s.name,
+                status=STATUS_PENDING_APPROVAL,
+                plan_json=plan_json,
+                working_notes={
+                    "schedule_id": s.id,
+                    "scheduled_at": s.next_run_at.isoformat(),
+                },
+            )
+            run.save()
+            for step in plan_json.get("steps", []):
+                if not isinstance(step, dict):
+                    continue
+                RunStep.objects.create(
+                    run_id=run_id,
+                    step_index=int(step.get("step_id", 0)),
+                    intent=step.get("intent", ""),
+                    tool_name=step.get("tool_name"),
+                    tool_args_json=step.get("tool_args") or {},
+                    depends_on_json=step.get("depends_on") or [],
+                    status=STEP_PENDING,
+                )
+            # Advance the schedule.
+            if s.cron_expr:
+                nxt = self._cron_trigger(s.cron_expr).get_next_fire_time(
+                    now, now
+                )
+                RunSchedule.objects.filter(id=s.id).update(
+                    next_run_at=nxt, updated_at=now
+                )
+            else:
+                RunSchedule.objects.filter(id=s.id).update(
+                    next_run_at=None, enabled=False, updated_at=now
+                )
+            materialized.append(
+                {
+                    "schedule_id": s.id,
+                    "name": s.name,
+                    "run_id": run_id,
+                }
+            )
+            logger.info(
+                "RunSchedule fired id=%s run=%s user=%s dry_run=%s",
+                s.id, run_id, s.host_user_id, dry_run,
+            )
+        return {
+            "dry_run": dry_run,
+            "materialized": len(materialized),
+            "runs": materialized,
+        }
 
     # ── Bounded retry helpers (Gap #2) ────────────────────────────────────
 

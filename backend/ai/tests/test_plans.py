@@ -139,11 +139,13 @@ class _FakePlanner:
 
     plan_specs: dict = {}
     default_plan_spec: dict | None = None
+    last_decompose_kwargs: dict = {}
 
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
     async def decompose(self, **kwargs):
+        _FakePlanner.last_decompose_kwargs = dict(kwargs)
         utterance = (kwargs.get("utterance") or "").strip()
         spec = self.plan_specs.get(utterance) or self.default_plan_spec or {
             "pattern": "root_cause",
@@ -345,6 +347,51 @@ def test_create_plan_rejects_empty_brief(user, patch_engine_seams):
     service = PlansService()
     with pytest.raises(ValueError):
         service.create_plan(user, brief="   ")
+
+
+def test_looks_agent_multi_step_detects_multi_action_brief():
+    """The water-consumption brief (create … reuse or create … and bind …)
+    must be classified as multi-step — it previously fell through to a
+    single-step passthrough (regression guard for the W6 decompose fix)."""
+    from ai.engine.cognition.plan.planner import _looks_agent_multi_step
+
+    brief = (
+        "Create a table for water consumption carbon footprint under data "
+        "product ID 31 (AAST Abu Qeer), reuse or create required DQ rules, "
+        "and bind them to the table."
+    )
+    assert _looks_agent_multi_step(brief) is True
+    assert _looks_agent_multi_step("what is X?") is False
+
+
+@pytest.mark.django_db
+def test_create_plan_forces_decompose(user, patch_engine_seams, run_ids_cleanup):
+    """create_plan must always attempt LLM decomposition (force_decompose=True),
+    even when the brief would not match the keyword heuristic."""
+    brief = (
+        "Create a table for water consumption carbon footprint under data "
+        "product ID 31 (AAST Abu Qeer), reuse or create required DQ rules, "
+        "and bind them to the table."
+    )
+    _FakePlanner.plan_specs = {
+        brief: {
+            "pattern": "custom",
+            "source": "llm_decompose",
+            "steps": [
+                {"step_id": 0, "intent": "Check existing DQ rules"},
+                {"step_id": 1, "intent": "Create the table"},
+                {"step_id": 2, "intent": "Bind DQ rules"},
+            ],
+            "synthesis_instruction": "Combine.",
+        }
+    }
+    service = PlansService()
+    plan = service.create_plan(user, brief=brief)
+
+    assert _FakePlanner.last_decompose_kwargs.get("force_decompose") is True
+    assert plan["source"] == "llm_decompose"
+    assert len(plan["steps"]) == 3
+    run_ids_cleanup.append(plan["id"])
 
 
 # ── W5-B: guided discovery conversation ─────────────────────────────────

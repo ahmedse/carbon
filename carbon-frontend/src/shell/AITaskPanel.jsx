@@ -62,6 +62,7 @@ import {
   stopPlan,
 } from '../api/aiWorkspace';
 import { buildPlanPhases, summarizePlanDiff } from '../utils/planGraph';
+import { agentRoleLabel, toolLabel } from './aiTaskStatus';
 import AITaskPlanCard from './AITaskPlanCard';
 import AITaskAuditCard from './AITaskAuditCard';
 import PlanDiffReviewDialog from './PlanDiffReviewDialog';
@@ -269,10 +270,10 @@ function StepCard({ step, phaseName, confirming, onConfirm, onDecline }) {
           <Chip size="small" variant="outlined" label={phaseName} sx={{ height: 16, fontSize: '0.5625rem' }} />
         )}
         {step.agent_role && step.agent_role !== 'orchestrator' && (
-          <Chip size="small" variant="outlined" color="secondary" label={step.agent_role.replace(/_/g, ' ')} sx={{ height: 16, fontSize: '0.5625rem' }} />
+          <Chip size="small" variant="outlined" color="secondary" label={`Agent ${step.step_id + 1} · ${agentRoleLabel(step.agent_role)}`} sx={{ height: 16, fontSize: '0.5625rem' }} />
         )}
         {step.tool_name && (
-          <Chip size="small" variant="outlined" label={step.tool_name} sx={{ height: 16, fontSize: '0.5625rem' }} />
+          <Chip size="small" variant="outlined" label={toolLabel(step.tool_name)} sx={{ height: 16, fontSize: '0.5625rem' }} />
         )}
         <Chip size="small" variant="outlined" label={meta.label} color={meta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
       </Stack>
@@ -631,7 +632,19 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           }))
         : [],
     );
-    setPhase(plan.status === 'completed' ? 'finished' : plan.status === 'cancelled' ? 'stopped' : plan.status === 'failed' ? 'error' : 'idle');
+    // A paused plan reopens on the consent surface (its awaiting_approval
+    // steps must be actionable), not on the idle surface.
+    setPhase(
+      plan.status === 'completed'
+        ? 'finished'
+        : plan.status === 'cancelled'
+          ? 'stopped'
+          : plan.status === 'failed'
+            ? 'error'
+            : plan.status === 'paused'
+              ? 'paused'
+              : 'idle',
+    );
     setLedger(null);
   }, []);
 
@@ -1073,6 +1086,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           onFork={handleFork}
           onEditPlan={handleEditPlan}
           onEditStep={(step) => setEditStepTarget({ step })}
+          onConfirmStep={handleConfirmStep}
+          onDeclineStep={handleDeclineStep}
+          confirmingId={confirmingId}
         />
 
         {phase === 'working' && (

@@ -402,6 +402,46 @@ class PlanTemplate(AppScopeMixin):
         app_label = "ai"
 
 
+class RunSchedule(models.Model):
+    """Scheduled plan materialization (F-29 / W6-E).
+
+    Recurring ``cron_expr`` (standard 5-field cron, evaluated with
+    apscheduler's ``CronTrigger``) or a one-off ``run_at``. The
+    ``run_due_schedules`` management command materializes each due schedule
+    into a fresh ``pending_approval`` Run (RULE_21 — nothing executes without
+    approval), deduped via ``next_run_at``/``last_run_at`` so repeated or
+    concurrent invocations never double-fire. Schedules are private to their
+    owner (``host_user_id``, CBAC), mirroring ``PlanTemplate``.
+    """
+
+    id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
+    instance_id = models.TextField(db_index=True)
+    host_user_id = models.CharField(
+        max_length=255, null=True, blank=True, db_index=True
+    )
+    name = models.TextField()
+    description = models.TextField(null=True, blank=True)
+    template = models.ForeignKey(
+        "ai.PlanTemplate",
+        on_delete=models.CASCADE,
+        related_name="schedules",
+        null=True,
+        blank=True,
+    )
+    plan_json = models.JSONField(null=True, blank=True)  # snapshot fallback
+    cron_expr = models.TextField(null=True, blank=True)
+    run_at = models.DateTimeField(null=True, blank=True)
+    enabled = models.BooleanField(default=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    next_run_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "ai"
+        ordering = ["next_run_at"]
+
+
 class Trajectory(AppScopeMixin):
     id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
     run_id = models.TextField(db_index=True)

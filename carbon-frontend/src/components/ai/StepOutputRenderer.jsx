@@ -125,6 +125,45 @@ function normalizeSeries(value) {
   return null;
 }
 
+/** Human-readable key→value rows for flat JSON objects (RULE_23 outcome copy).
+ *  `{ rule_details: "…" }` renders as a labelled row instead of a raw blob;
+ *  complex (nested/array) shapes fall back to the collapsible raw block. */
+function KeyValueOutput({ value }) {
+  const isPlainObject = value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!isPlainObject) return <RawJson value={value} />;
+  const entries = Object.entries(value);
+  if (entries.length === 0) return null;
+  const allScalar = entries.every(([, v]) => v === null || typeof v !== 'object');
+  if (!allScalar) return <RawJson value={value} />;
+  return (
+    <Box sx={{ mt: 0.5 }}>
+      <Stack spacing={0.25}>
+        {entries.map(([key, val]) => (
+          <Box key={key} sx={{ display: 'flex', gap: 1, alignItems: 'baseline' }}>
+            <Typography
+              variant="caption"
+              sx={{
+                fontSize: '0.625rem',
+                fontWeight: 600,
+                color: 'text.secondary',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                minWidth: 96,
+                flexShrink: 0,
+              }}
+            >
+              {key.replace(/_/g, ' ')}
+            </Typography>
+            <Typography sx={{ fontSize: '0.6875rem', wordBreak: 'break-word', minWidth: 0, whiteSpace: 'pre-wrap' }}>
+              {typeof val === 'string' ? val : val == null ? '—' : String(val)}
+            </Typography>
+          </Box>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
 /** Collapsible "Raw output" JSON block — hidden by default. */
 function RawJson({ value }) {
   const [open, setOpen] = useState(false);
@@ -342,7 +381,7 @@ function StepOutputRenderer({ outputType, value }) {
     case 'artifact':
       return <ArtifactCard value={value} />;
     case 'json':
-      return <RawJson value={value} />;
+      return <KeyValueOutput value={value} />;
     default:
       return null;
   }

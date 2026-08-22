@@ -164,6 +164,8 @@ class ExportDocument(ToolPlugin):
         # (same ``ai`` app) — not an upward domain-app import (RULE_20).
         artifact_ids: list = []
         try:
+            from asgiref.sync import sync_to_async
+
             from ai.plans_service import (
                 PlansService,
                 get_current_plan_run,
@@ -171,12 +173,22 @@ class ExportDocument(ToolPlugin):
 
             run_id = get_current_plan_run()
             if run_id:
-                step_index = PlansService.resolve_export_step_index(run_id)
+                # W6-C: the engine executes this plugin inside the run's event
+                # loop, and ``resolve_export_step_index`` / ``store_artifact``
+                # are sync Django-ORM calls — a direct call raises
+                # ``SynchronousOnlyOperation`` (async-unsafe) and the whole
+                # handoff silently no-ops (fail-visible catch below), so the
+                # plan never gets its RunArtifact rows. Bridge through
+                # ``sync_to_async`` (dedicated sub-thread, contextvars copied)
+                # so the artifact store actually lands.
+                step_index = await sync_to_async(
+                    PlansService.resolve_export_step_index
+                )(run_id)
                 for entry in files:
                     local_path = out_dir / entry["filename"]
                     if not local_path.exists():
                         continue
-                    stored = PlansService.store_artifact(
+                    stored = await sync_to_async(PlansService.store_artifact)(
                         run_id=run_id,
                         step_index=step_index,
                         name=entry["filename"],

@@ -1,7 +1,7 @@
 """Pulse observability read API tests (TASKS-PULSE-VENDOR-FRONTEND-PHASE-B).
 
 Tests:
-  * inventory/ requires auth and returns all 13 panels (key/label/count/models)
+  * inventory/ requires auth and returns all 14 panels (key/label/count/models)
   * data/<key>/ 404s on unknown panels, merges + tags rows for known ones
   * Instance.host_api_token never leaks (field excluded + JSON redaction)
   * archetypes/ lists the vendored engine bundles
@@ -47,7 +47,7 @@ def test_inventory_returns_all_panels(auth_client):
     resp = auth_client.get(f"{BASE}/inventory/")
     assert resp.status_code == 200
     panels = resp.json()["panels"]
-    assert len(panels) == 13
+    assert len(panels) == 14
     assert {panel["key"] for panel in panels} == set(PANEL_REGISTRY.keys())
     for panel in panels:
         assert "key" in panel and "label" in panel

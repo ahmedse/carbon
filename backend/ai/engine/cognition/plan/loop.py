@@ -374,6 +374,7 @@ class ReActLoop:
                 executed = await asyncio.gather(*[_run_one(s) for s in ready])
 
             # Phase 3 — fold back IN ORDER (same post-step logic as today)
+            stopped_for_pause = False
             for step, result, step_latency in executed:
                 step_results.append(result)
                 total_llm_calls += 1  # each step involves at least one LLM call
@@ -418,7 +419,14 @@ class ReActLoop:
                         )
                         # Update Run status to paused
                         await self._pause_run(_db, run_id)
-                    break  # stop the entire loop
+                    # W6-F: halt the ENTIRE run at the consent gate — no
+                    # later step may execute (the earlier `break` only exited
+                    # the fold-back `for`, letting the outer `while remaining:`
+                    # fallback run later steps and `_finalize_run` clobber the
+                    # paused status to failed/completed, which blocked
+                    # confirm_step's `status == paused` guard).
+                    stopped_for_pause = True
+                    break
 
                 # ── P1.1: Persist RunStep row ──────────────────────────
                 if _db is not None and run_id is not None:
@@ -470,6 +478,9 @@ class ReActLoop:
                             "strategy": _phase_strategy.get(_pid, "sequential"),
                             "step_ids": _phase_steps.get(_pid, []),
                         })
+
+            if stopped_for_pause:
+                break  # stop the entire loop (outer while)
 
         # ── Check for pause (consent gate hit) ────────────────────────────
         is_paused = bool(step_results and step_results[-1].paused)
@@ -683,14 +694,23 @@ class ReActLoop:
 
         # Execute (only if not vetoed)
         if not dry_run:
-            execution = await ex.execute(
-                text=draft.text,
-                tool_calls=draft.tool_calls,
-                stream_callback=stream_callback,
-                progress_callback=progress_callback,
-                agent_role=agent_role or step.agent_role,
-                is_worker=(step.agent_role not in ("orchestrator", "", None)),
-            )
+            # W6-D: record the dispatching step so export-style plugins can
+            # attribute artifacts to THIS step (multi-step / parallel runs).
+            # Contextvars flow onto the sync_to_async worker thread via
+            # asgiref, and are cleared so sibling steps never bleed.
+            from ai.plans_service import set_current_step_index
+            set_current_step_index(step.step_id)
+            try:
+                execution = await ex.execute(
+                    text=draft.text,
+                    tool_calls=draft.tool_calls,
+                    stream_callback=stream_callback,
+                    progress_callback=progress_callback,
+                    agent_role=agent_role or step.agent_role,
+                    is_worker=(step.agent_role not in ("orchestrator", "", None)),
+                )
+            finally:
+                set_current_step_index(None)
             result.executed = True
             result.tool_output = execution.completed_tools[0] if execution.completed_tools else None
 
@@ -744,6 +764,11 @@ class ReActLoop:
         """Construct the prompt for this specific step, including prior results."""
         parts = [f"Original user request: {user_message}"]
         parts.append(f"Current step: {step.intent}")
+        if step.instructions:
+            # W6-E F-28: service-owned steering metadata (edited while the
+            # plan is paused) — the resume honors the edit by feeding it into
+            # the step prompt.
+            parts.append(f"Step instructions: {step.instructions}")
         if step.tool_name:
             parts.append(f"Use tool: {step.tool_name} with args: {step.tool_args}")
 

@@ -2,8 +2,8 @@
 // W6-B1 — StepOutputRenderer: table/chart/artifact/json/text rendering paths.
 // Asserts the REAL component contract: MUI table for tabular data (never a
 // raw <pre>), bars with title tooltips for charts, a Download action (button,
-// not href) for artifacts, and a hidden "Raw output" <pre> for JSON that only
-// appears after expanding.
+// not href) for artifacts, human-readable key→value rows for flat JSON, and a
+// hidden "Raw output" <pre> for nested JSON that only appears after expanding.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
@@ -97,8 +97,17 @@ describe('StepOutputRenderer — output shapes', () => {
     });
   });
 
-  it('keeps raw JSON collapsed behind the Raw output toggle', () => {
-    const { container } = render(<StepOutputRenderer outputType="json" value={{ a: 1 }} />);
+  it('renders flat JSON as human-readable key→value rows', () => {
+    const { container } = render(<StepOutputRenderer outputType="json" value={{ rule_details: 'Derived from analysis' }} />);
+
+    // Flat objects render as labelled rows, never a raw <pre>.
+    expect(container.querySelector('pre')).not.toBeInTheDocument();
+    expect(screen.getByText('rule details')).toBeInTheDocument();
+    expect(screen.getByText('Derived from analysis')).toBeInTheDocument();
+  });
+
+  it('keeps nested JSON collapsed behind the Raw output toggle', () => {
+    const { container } = render(<StepOutputRenderer outputType="json" value={{ nested: { a: 1 } }} />);
 
     // Hidden until expanded.
     expect(container.querySelector('pre')).not.toBeInTheDocument();

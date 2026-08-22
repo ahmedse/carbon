@@ -29,6 +29,8 @@ class PlanStep:
     is_mutation: bool = False
     dry_run_supported: bool = False
     agent_role: str = "orchestrator"   # AGENT_ROLES value — who executes this step
+    instructions: str | None = None  # W6-E F-28: service-owned steering metadata
+                                     # (edited while paused; honored on resume)
 
 
 @dataclass
@@ -171,6 +173,7 @@ _MULTI_SIGNALS: list[str] = [
     " also ", " additionally ", " as well as ",
     "root cause", "what if",
     " both ", " each ", "multi-step", "multiple steps",
+    ", and ",
 ]
 
 # Explicit requests to plan / convert a conversation into a task. These are the
@@ -207,20 +210,33 @@ _TASK_VERB_STEMS: list[str] = [
 _MUTATION_TOOL_NAMES: set[str] = {"export_document"}
 
 
+# Imperative action verbs — two or more distinct verbs in one brief strongly
+# signal a multi-action job ("create … reuse or create … and bind …").
+_ACTION_VERBS: list[str] = [
+    "create", "bind", "validate", "check", "reuse", "build", "add",
+    "update", "delete", "remove", "import", "export", "ingest", "attach",
+    "link", "apply", "run", "populate", "finalize",
+]
+
+
 def _looks_agent_multi_step(utterance: str) -> bool:
     """Does this utterance likely benefit from multi-step decomposition?
 
     True when the user (a) explicitly asks to plan / convert into a task,
-    (b) names a multi-step job verb (compare, audit, study, …), or (c) uses a
-    sequential connective.  A bare factual question ("what is X?") stays
-    single-step so it answers with prose instead of burning an LLM decompose.
+    (b) names a multi-step job verb (compare, audit, study, …), (c) uses a
+    sequential connective, or (d) stacks two or more imperative action verbs.
+    A bare factual question ("what is X?") stays single-step so it answers
+    with prose instead of burning an LLM decompose.
     """
     lower = utterance.lower()
     if any(s in lower for s in _MULTI_SIGNALS):
         return True
     if any(s in lower for s in _PLAN_SIGNALS):
         return True
-    return any(stem in lower for stem in _TASK_VERB_STEMS)
+    if any(stem in lower for stem in _TASK_VERB_STEMS):
+        return True
+    # Two or more distinct action verbs ⇒ a multi-action job, not a bare query.
+    return sum(1 for v in _ACTION_VERBS if v in lower) >= 2
 
 
 # ── Planner ────────────────────────────────────────────────────────────────────
@@ -249,6 +265,7 @@ class SkillAwarePlanner:
         model: str = "",
         instance_id: str = "",
         user_id: str = "",
+        force_decompose: bool = False,
     ) -> Plan:
         """Decompose utterance into a Plan.
 
@@ -259,6 +276,9 @@ class SkillAwarePlanner:
             model: LLM model name (uses self.model if empty)
             instance_id: pulse instance id
             user_id: host user identifier (author_user_id)
+            force_decompose: when True, always attempt LLM decomposition
+                (explicit "plan this" requests) even if the heuristic signals
+                don't fire; single-step remains the failure fallback.
 
         Returns:
             Plan — always non-None; source="single_step" for trivial queries
@@ -291,7 +311,13 @@ class SkillAwarePlanner:
                     return plan
 
         # ── Step 3: LLM decomposition fallback ──────────────────────────────
-        if _looks_agent_multi_step(utterance) and client is not None:
+        # force_decompose bypasses the utterance heuristic: an explicit
+        # "plan this" request must ALWAYS attempt LLM decomposition, even when
+        # the brief doesn't hit the keyword signals. The heuristic remains for
+        # the free-form chat path (TurnPipelineRunner) where a bare factual
+        # question should stay single-step.
+        should_decompose = force_decompose or _looks_agent_multi_step(utterance)
+        if should_decompose and client is not None:
             plan = await self._llm_decompose(
                 utterance, client, model_name,
                 instance_id=instance_id, skills=skills,
@@ -346,6 +372,7 @@ class SkillAwarePlanner:
                     depends_on=s.get("depends_on", []),
                     is_mutation=s.get("is_mutation", False),
                     dry_run_supported=s.get("dry_run_supported", False),
+                    instructions=s.get("instructions"),
                 )
                 # Deterministic mutation classification (capability fact) —
                 # never trust authorial is_mutation for write-capable tools.
@@ -437,6 +464,7 @@ class SkillAwarePlanner:
                 is_mutation=s.get("is_mutation", False),
                 dry_run_supported=s.get("dry_run_supported", False),
                 agent_role=s.get("agent_role", "orchestrator"),
+                instructions=s.get("instructions"),
             )
             steps.append(step)
 
