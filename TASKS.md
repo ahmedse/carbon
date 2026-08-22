@@ -3659,7 +3659,7 @@ Append results to `TASK-RESULTS.md`.
 
 ### Phase W5-C — Artifact delivery: storage, API, and semantic output rendering
 
-**Status:** TODO
+**Status:** DONE ✅ (2026-08-22)
 **Worker Role:** backend-worker THEN frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
 **Kind:** Backend (model + service + API) + Frontend (renderer). Large.
@@ -3763,7 +3763,7 @@ Append results to `TASK-RESULTS.md`.
 
 ### Phase W5-D — Agent mode Monitor + Results views
 
-**Status:** TODO
+**Status:** DONE ✅ (2026-08-22)
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
 **Kind:** Frontend-only. Medium. No new backend endpoints needed (uses existing ledger + artifacts).
