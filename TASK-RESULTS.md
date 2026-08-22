@@ -3196,3 +3196,52 @@ plain-text message bubbles and a "Plan ready — review below" → review transi
 - "Render AITaskPlanCard" is realized by the Run tab (existing card + consent gate);
   the composer's `plan_ready` state shows the banner and a "Review plan" transition
   instead of duplicating the card's approve/run handlers inside the composer.
+
+## [2026-08-22] Master Architect — Sprint W5-C: artifact delivery (storage, API, semantic output rendering)
+
+### Summary
+Completed the W5-C vertical end-to-end. Backend (B1-B5) adds durable plan-step
+artifact storage and a first-class download API; frontend (F1-F3) renders step
+outputs semantically instead of raw JSON. A `RunArtifact` model (FK to `Run`,
+`related_name='artifacts'`) holds step-scoped files under `MEDIA_ROOT/ai_artifacts/…`.
+`PlansService` infers an output type (`text|table|chart|artifact|json`) from each
+step's tool output (`_infer_output_type`) and injects `_output_type` so the
+frontend can pick a semantic renderer. `export_document` now persists generated
+DOCX/XLSX files as first-class artifacts via a plan-run contextvar (the frozen
+engine `ToolContext` carries no `run_id`). Step serialization and live SSE
+`step_result` frames both carry `artifacts[]` + `output_type`. Frontend adds a
+pure `StepOutputRenderer` (text/table/chart/artifact/json, collapsible raw JSON,
+table row cap + expand, simple bar chart, artifact download cards) wired into
+`AITaskPanel` with an `InputParams` section and `aiWorkspace` blob-download
+helpers.
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `backend/ai/migrations/0020_runartifact.py` | `RunArtifact` CreateModel (run FK, step_index, name, mime_type, file, size_bytes, created_at) |
+| MODIFY | `backend/ai/models/core.py` | `RunArtifact` model (no AppScopeMixin) |
+| MODIFY | `backend/ai/models/__init__.py` | export `RunArtifact` |
+| MODIFY | `backend/ai/plans_service.py` | `store_artifact` / `list_artifacts` / `get_artifact` (owner-scoped) / `_artifact_download_url` (API-prefix-aware) / `_infer_output_type` / `_with_output_type` / `resolve_export_step_index` + `set/get_current_plan_run` contextvar; `_serialize_run` step payload + SSE `step_result` frames gain `artifacts[]` + `output_type` + `tool_output._output_type` |
+| MODIFY | `backend/ai/plans_api.py` | `list_artifacts` (`GET /plans/{id}/artifacts/`) + `download_artifact` (`FileResponse` attachment, CBAC owner scoping) |
+| MODIFY | `backend/ai/plans_urls.py` | routes `ai-plan-artifact-list` + `ai-plan-artifact-download` |
+| MODIFY | `backend/ai/plugins/export_document.py` | persist generated files via `store_artifact` (contextvar run resolution, fail-visible never breaks export) |
+| CREATE | `backend/ai/tests/test_artifacts.py` | 6 tests (store/list/download/owner-scoping/serialization) under temp MEDIA_ROOT |
+| CREATE | `carbon-frontend/src/components/ai/StepOutputRenderer.jsx` | semantic renderer (`formatBytes`/`toText`/`normalizeTable`/`normalizeSeries`/`TableOutput`/`ChartOutput`/`RawJson`/`ArtifactCard`), theme tokens only, token from `useAuth()` |
+| MODIFY | `carbon-frontend/src/shell/AITaskPanel.jsx` | `InputParams` collapsible section + `StepOutputRenderer` + `ArtifactCard` list; step mapping carries `tool_output`/`output_type`/`artifacts`/`error`; `step_result` frame handler carries `output_type`/`artifacts` |
+| MODIFY | `carbon-frontend/src/api/aiWorkspace.js` | `listPlanArtifacts` / `downloadArtifact` / `downloadArtifactUrl` (API-prefix-stripping blob download, 60s timeout) |
+
+### Verification
+- Backend: `pytest ai/tests/test_plans.py ai/tests/test_artifacts.py -q` → **42 passed**; `manage.py check` clean; `makemigrations ai --check --dry-run` → "No changes detected in app 'ai'".
+- Frontend: `npm run lint` → 0 errors (9 pre-existing warnings); `npx vitest run src/__tests__/AITaskPanel.test.jsx src/__tests__/AITaskPanel.w3c.test.jsx src/__tests__/aiWorkspace.test.js src/__tests__/aiWorkspace.operations.test.js` → **32 passed**; `npm run build` → ✓.
+
+### Notes / Deviations
+- **Test-infra flake, not a code bug**: an initial backend run failed with
+  `UniqueViolation` on `auth_permission` + `Run.DoesNotExist` + `accounts_user_username_key`
+  duplicates. Root cause was a stale `test_carbon_dev` database (from
+  `pytest.ini` `--reuse-db --nomigrations`) plus two lingering async-DB
+  connections left by a prior run. Resolved by terminating the idle backends and
+  `DROP DATABASE test_carbon_dev`; the full suite then passed 42/42 clean. No
+  W5-C code was changed for this.
+- `export_document` resolves the owning plan through a `contextvars.ContextVar`
+  set around the engine run — the frozen engine `ToolContext` has no `run_id`
+  (RULE_20 downward-only import preserved; sibling `ai` import).
