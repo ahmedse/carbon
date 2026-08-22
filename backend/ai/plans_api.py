@@ -82,6 +82,15 @@ class PlanStepEditSerializer(serializers.Serializer):
     )
 
 
+class PlanTemplateSerializer(serializers.Serializer):
+    """POST /plans/{id}/promote-template/ — name + optional description."""
+
+    name = serializers.CharField(required=True, allow_blank=False, max_length=200)
+    description = serializers.CharField(
+        required=False, allow_blank=True, default=""
+    )
+
+
 class PlanViewSet(viewsets.GenericViewSet):
     """Agentic task orchestration — reviewable plan lifecycle."""
 
@@ -280,6 +289,46 @@ class PlanViewSet(viewsets.GenericViewSet):
                 {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
             )
         return Response(result, status=status.HTTP_201_CREATED)
+
+    # ── W3-D: plan templates (Gap #3) ─────────────────────────────────────
+
+    def list_templates(self, request):
+        """GET /plans/templates/ — list the requesting user's templates."""
+        return Response(self.service.list_templates(request.user))
+
+    def promote_template(self, request, pk=None):
+        """POST /plans/{id}/promote-template/ — save a plan shape as a template."""
+        serializer = PlanTemplateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = self.service.promote_template(
+                request.user,
+                pk,
+                name=serializer.validated_data["name"],
+                description=serializer.validated_data.get("description", ""),
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(result, status=status.HTTP_201_CREATED)
+
+    def instantiate_template(self, request, template_id=None):
+        """POST /plans/templates/{id}/instantiate/ — new reviewable plan."""
+        try:
+            result = self.service.create_from_template(
+                request.user, template_id
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        return Response(result, status=status.HTTP_201_CREATED)
+
     # ── Execution ─────────────────────────────────────────────────────────
 
     @action(detail=True, methods=["post"], url_path="run", url_name="run-plan")

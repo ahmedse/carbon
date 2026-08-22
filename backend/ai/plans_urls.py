@@ -33,10 +33,27 @@ urlpatterns = [
         PlanViewSet.as_view({"get": "list", "post": "create"}),
         name="ai-plan-list",
     ),
+    # Template routes MUST precede the ``<str:pk>/`` detail route so the
+    # literal ``templates`` segment wins over a plan id.
+    path(
+        "templates/",
+        PlanViewSet.as_view({"get": "list_templates"}),
+        name="ai-plan-template-list",
+    ),
+    path(
+        "templates/<str:template_id>/instantiate/",
+        PlanViewSet.as_view({"post": "instantiate_template"}),
+        name="ai-plan-template-instantiate",
+    ),
     path(
         "<str:pk>/",
         PlanViewSet.as_view({"get": "retrieve", "patch": "partial_update"}),
         name="ai-plan-detail",
+    ),
+    path(
+        "<str:pk>/promote-template/",
+        PlanViewSet.as_view({"post": "promote_template"}),
+        name="ai-plan-promote-template",
     ),
     path(
         "<str:pk>/approve/",

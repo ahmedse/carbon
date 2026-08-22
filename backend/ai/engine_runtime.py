@@ -362,6 +362,50 @@ def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list
                 "summary": "Review, approve and run the plan",
             })
 
+        if data.get("action") == "plan_approved":
+            # approve_plan outcome — the plan is now a real runnable task.
+            # Surface the Tasks panel so the user can run it (execution is a
+            # separate, explicit user action — never auto-run from chat).
+            plan_id = str(data.get("plan_id") or "").strip()
+            actions.append({
+                "type": "open_panel",
+                "panel": "tasks",
+                "plan_id": plan_id,
+                "label": "Run the plan",
+                "summary": "Approved — open Tasks to run and observe each step",
+            })
+
+        if data.get("action") == "plan_edited":
+            # edit_plan outcome — re-open the Tasks panel on the revised plan
+            # so the user can review the step diff and (re-)approve.
+            plan_id = str(data.get("plan_id") or "").strip()
+            actions.append({
+                "type": "open_panel",
+                "panel": "tasks",
+                "plan_id": plan_id,
+                "label": "Review revised plan",
+                "summary": "Check the changed steps and approve when settled",
+            })
+
+        # export_document outcome — one download link per generated file.
+        if data.get("action") == "download":
+            files = data.get("files") or []
+            if not isinstance(files, list) or not files:
+                files = [{"filename": data.get("filename") or "document"}]
+            for f in files:
+                if not isinstance(f, dict):
+                    continue
+                filename = str(f.get("filename") or "").strip()
+                if not filename:
+                    continue
+                actions.append({
+                    "type": "download",
+                    "path": str(f.get("path") or f"/media/ai_exports/{filename}"),
+                    "filename": filename,
+                    "label": str(f.get("label") or f"Download {filename}"),
+                    "summary": str(f.get("format") or "").upper(),
+                })
+
         # Capability listing (list_my_capabilities): emit one navigate action
         # per scoped page link — the UI renders these as small buttons under
         # the listing reply.
@@ -560,6 +604,33 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
                 intent = str(s.get("intent") or "").strip()
                 if intent:
                     lines.append(f"  • {intent}")
+        elif data.get("action") == "plan_edited":
+            plan_id = str(data.get("plan_id") or "").strip()
+            short_id = plan_id[:8] if plan_id else ""
+            steps = data.get("steps") or []
+            diff = data.get("diff") or {}
+            step_copy = f"{len(steps)} step{'s' if len(steps) != 1 else ''}"
+            lines.append(
+                f"✅ Plan {short_id} updated ({step_copy}; "
+                f"added {len(diff.get('added', []))}, "
+                f"removed {len(diff.get('removed', []))}, "
+                f"changed {len(diff.get('changed', []))}) — still awaiting "
+                "your approval before anything runs."
+            )
+        elif data.get("action") == "plan_approved":
+            plan_id = str(data.get("plan_id") or "").strip()
+            short_id = plan_id[:8] if plan_id else ""
+            steps = data.get("steps") or []
+            step_copy = f"{len(steps)} step{'s' if len(steps) != 1 else ''}"
+            lines.append(
+                f"✅ Plan {short_id} approved ({step_copy}) — it is now a "
+                "runnable task. Open the Tasks panel to run it."
+            )
+        elif data.get("action") == "download":
+            files = data.get("files") or []
+            if isinstance(files, list) and files:
+                names = ", ".join(str(f.get("filename") or "") for f in files)
+                lines.append(f"✅ Generated: {names} — download below.")
     return "\n\n".join(lines)
 
 
@@ -2800,7 +2871,25 @@ async def _run_action_stream(
                 )
             )
             try:
-                result = await executor_fn(call_args)
+                # Dispatch by signature: static tools declare named params and
+                # accept **kwargs; plugin/MCP executors take the args dict
+                # positionally. Unpack kwargs when the function accepts them.
+                import inspect as _inspect
+
+                try:
+                    _sig = _inspect.signature(executor_fn)
+                    _has_var_kw = any(
+                        p.kind == _inspect.Parameter.VAR_KEYWORD
+                        for p in _sig.parameters.values()
+                    )
+                    _all_named = all(k in _sig.parameters for k in call_args)
+                except (TypeError, ValueError):
+                    _has_var_kw, _all_named = False, False
+
+                if _has_var_kw or _all_named:
+                    result = await executor_fn(**call_args)
+                else:
+                    result = await executor_fn(call_args)
             except Exception as exc:  # noqa: BLE001 - fail-visible
                 logger.exception("tool %s failed during action run", step_tool)
                 result = {"error": str(exc)}

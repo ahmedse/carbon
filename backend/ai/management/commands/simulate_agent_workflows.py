@@ -47,6 +47,8 @@ BASE = "http://localhost:8009/carbon-api"
 REPORT_PATH = Path(__file__).resolve().parents[4] / "docs" / (
     f"TASK-RESULTS-SIMULATION-{datetime.now().strftime('%Y-%m-%d')}.md"
 )
+REPORT_JSON_PATH = REPORT_PATH.with_suffix(".json")
+GOLDEN_PATH = Path(__file__).resolve().parents[4] / "docs" / "SIMULATION-GOLDEN.json"
 
 OK, WARN, FAIL = "✅", "⚠️", "❌"
 
@@ -209,16 +211,29 @@ def a03_mutation_claim(ctx):
     plan = r.json()
     pid = plan.get("id")
     checks = [("create 201", r.status_code == 201)]
-    checks.append(("needs_confirmation flagged", bool(plan.get("needs_confirmation"))))
 
     L.post(f"/ai/plans/{pid}/approve/")
     sse = L.sse(f"/ai/plans/{pid}/run/")
     types = [f.get("type") for f in sse["frames"]]
     done = next((f for f in sse["frames"] if f.get("type") == "done"), {})
     detail = {"frames": types, "final_status": done.get("status")}
-    checks.append(("run completes", done.get("status") == "completed"))
     checks.append(("consent gate reached", "step_confirm" in types))
-    checks.append(("done not paused", done.get("status") != "paused"))
+    checks.append(("mutation gated (paused)", done.get("status") == "paused"))
+
+    # Extract the staged step and confirm it through the live consent gate.
+    confirm = next((f for f in sse["frames"] if f.get("type") == "step_confirm"), {})
+    step_id = confirm.get("step_id")
+    if step_id is None:
+        checks.append(("confirm accepted", False))
+    else:
+        cr = L.post(f"/ai/plans/{pid}/steps/confirm/", json={"step_id": step_id})
+        checks.append(("confirm accepted", cr.ok and (cr.json().get("status") == "confirmed")))
+
+    # Resume the paused run; the confirmed step now executes the mutation.
+    resume_sse = L.sse(f"/ai/plans/{pid}/resume/")
+    r_done = next((f for f in resume_sse["frames"] if f.get("type") == "done"), {})
+    checks.append(("resume completed", r_done.get("status") == "completed"))
+    detail["resume_frames"] = [f.get("type") for f in resume_sse["frames"]]
 
     # Truth check: was the rule actually created?
     rules_resp = L.get("/dq/rules/")
@@ -232,8 +247,8 @@ def a03_mutation_claim(ctx):
         )
     checks.append(("rule actually created", found))
     detail["rule_created"] = found
-    detail["claimed"] = "created" in ((done.get("final_response") or "").lower())
-    detail["final_response"] = (done.get("final_response") or "")[:160]
+    detail["claimed"] = "created" in ((r_done.get("final_response") or "").lower())
+    detail["final_response"] = (r_done.get("final_response") or "")[:160]
     return pid, checks, detail
 
 
@@ -1106,10 +1121,19 @@ class Command(BaseCommand):
         parser.add_argument("--part", choices=["A", "B", "AB"], default="AB",
                             help="Which scenario layer to run (default AB).")
         parser.add_argument("--tag", default="", help="Optional run tag for plan briefs.")
+        parser.add_argument("--json", action="store_true",
+                            help="Print a one-line JSON summary to stdout.")
+        parser.add_argument("--record-golden", action="store_true",
+                            help="Write docs/SIMULATION-GOLDEN.json from currently-passing checks.")
+        parser.add_argument("--check-golden", action="store_true",
+                            help="Fail if any expect_pass:true check from SIMULATION-GOLDEN.json regresses.")
 
     def handle(self, *args, **opts):
         part = opts["part"]
         run_tag = (opts.get("tag") or "").strip()
+        json_flag = opts.get("json")
+        record_golden = opts.get("record_golden")
+        check_golden = opts.get("check_golden")
 
         live = Live("ahmed")
         ctx = {"live": live, "svc": None, "run_tag": run_tag}
@@ -1181,12 +1205,77 @@ class Command(BaseCommand):
         REPORT_PATH.write_text(report)
         self.stdout.write(self.style.SUCCESS(f"\nReport written → {REPORT_PATH}"))
 
+        ok_n = len([r for r in rows if r["verdict"] == OK])
+
+        # ── JSON report ──────────────────────────────────────────────────
+        payload = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "scenarios": [
+                {"id": r["id"], "part": r["part"], "title": r["title"],
+                 "verdict": r["verdict"], "highlight": r["highlight"], "plan_id": r["plan_id"],
+                 "checks": [{"name": n, "pass": bool(ok)} for n, ok in r["checks"]],
+                 "detail": r["detail"]}
+                for r in rows
+            ],
+            "totals": {"passed": ok_n, "failed": len(rows) - ok_n, "total": len(rows)},
+        }
+        REPORT_JSON_PATH.write_text(json.dumps(payload, indent=2, default=str))
+        self.stdout.write(self.style.SUCCESS(f"JSON report written → {REPORT_JSON_PATH}"))
+
+        # ── Golden expectations ──────────────────────────────────────────
+        golden_regressions: list[str] = []
+        if record_golden:
+            golden = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "scenarios": [
+                    {"id": r["id"], "part": r["part"], "title": r["title"],
+                     "checks": [{"name": n, "expect_pass": bool(ok)} for n, ok in r["checks"]]}
+                    for r in rows
+                ],
+            }
+            GOLDEN_PATH.write_text(json.dumps(golden, indent=2))
+            self.stdout.write(self.style.SUCCESS(f"Golden file written → {GOLDEN_PATH}"))
+
+        if check_golden:
+            if GOLDEN_PATH.exists():
+                golden_data = json.loads(GOLDEN_PATH.read_text())
+                current = {}
+                for r in rows:
+                    for name, ok in r["checks"]:
+                        current[(r["id"], name)] = bool(ok)
+                for gs in golden_data.get("scenarios", []):
+                    sid = gs["id"]
+                    for c in gs.get("checks", []):
+                        if not c.get("expect_pass"):
+                            continue
+                        name = c["name"]
+                        ok = current.get((sid, name))
+                        if ok is None or not ok:
+                            golden_regressions.append(f"{sid}/{name}")
+            else:
+                self.stdout.write(
+                    self.style.WARNING("Golden file absent — skipping golden check.")
+                )
+
+        if golden_regressions:
+            with REPORT_PATH.open("a") as fh:
+                fh.write("\n## Golden regression\n\n")
+                for line in golden_regressions:
+                    fh.write(f"- {line}\n")
+            self.stdout.write(
+                self.style.ERROR(
+                    f"{len(golden_regressions)} golden regression(s) — see report."
+                )
+            )
+        elif check_golden and GOLDEN_PATH.exists():
+            self.stdout.write(self.style.SUCCESS("Golden check passed — 0 regressions."))
+
+        # ── Summary ──────────────────────────────────────────────────────
         self.stdout.write("\n── Summary ──")
         for row in rows:
             self.stdout.write(
                 f"  {row['verdict']} {row['part']}{row['idx']:02d} {row['title']}"
             )
-        ok_n = len([r for r in rows if r["verdict"] == OK])
         self.stdout.write(
             self.style.SUCCESS(f"\n{ok_n}/{len(rows)} scenarios passed.")
         )
@@ -1197,6 +1286,17 @@ class Command(BaseCommand):
                     "Deep findings section for the disconnect analysis."
                 )
             )
+
+        if json_flag:
+            self.stdout.write(json.dumps(payload, default=str))
+
+        exit_code = 0
+        if any(r["verdict"] == FAIL for r in rows):
+            exit_code = 1
+        if check_golden and golden_regressions:
+            exit_code = 2
+        if exit_code:
+            raise SystemExit(exit_code)
 
 
 def _collect_findings(rows):

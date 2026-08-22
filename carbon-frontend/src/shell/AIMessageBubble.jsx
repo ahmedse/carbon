@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -34,6 +35,7 @@ import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
 import { formatContextLines } from '../utils/aiProvenance';
 import { isSafeInternalRoute } from '../utils/navigation';
+import { resolveBackendUrl } from '../config';
 import {
   cleanPlainText,
   collectMediaItems,
@@ -663,13 +665,18 @@ function AIMessageBubble({
   const navigateActions = rawActions.filter(
     (a) => a?.type === 'navigate' && isSafeInternalRoute(a.route),
   );
+  // download action → a generated file (Word/Excel) the user can download.
+  const downloadActions = rawActions.filter((a) => a?.type === 'download');
   // open_panel action → switch the workspace to a panel (e.g. Tasks) and
   // focus the referenced object (plan created from chat). Rendered as a
   // button (NOT a route Link — the panel is a workspace surface).
   const panelActions = rawActions.filter((a) => a?.type === 'open_panel');
   const pendingActions = Array.isArray(metadata.pending_actions) ? metadata.pending_actions : [];
   const showActionRow = Boolean(
-    !isUser && (navigateActions.length > 0 || pendingActions.length > 0 || panelActions.length > 0),
+    !isUser && (
+      navigateActions.length > 0 || downloadActions.length > 0 ||
+      pendingActions.length > 0 || panelActions.length > 0
+    ),
   );
 
   // ── Pending-action proposal review ────────────────────────────────────
@@ -845,6 +852,29 @@ function AIMessageBubble({
               {nav.label || 'Open'}
             </Button>
           ))}
+        </Box>
+      )}
+      {downloadActions.length > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+          {downloadActions.map((dl, idx) => {
+            const href = resolveBackendUrl(dl.path);
+            return (
+              <Button
+                key={`${dl.filename || dl.path}-${idx}`}
+                size="small"
+                variant={downloadActions.length === 1 ? 'contained' : 'outlined'}
+                component="a"
+                href={href}
+                download={dl.filename || true}
+                target="_blank"
+                rel="noreferrer noopener"
+                startIcon={<DownloadIcon sx={{ fontSize: 16 }} />}
+                aria-label={dl.label || 'Download'}
+              >
+                {dl.label || 'Download'}
+              </Button>
+            );
+          })}
         </Box>
       )}
       {panelActions.length > 0 && (

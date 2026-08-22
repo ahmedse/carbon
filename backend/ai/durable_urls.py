@@ -17,6 +17,11 @@ from ai.durable_api import RunViewSet
 
 urlpatterns = [
     path(
+        "compare/",
+        RunViewSet.as_view({"get": "compare"}),
+        name="ai-run-compare",
+    ),
+    path(
         "<str:pk>/timeline/",
         RunViewSet.as_view({"get": "timeline"}),
         name="ai-run-timeline",

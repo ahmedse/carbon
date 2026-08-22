@@ -21,8 +21,12 @@ from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from django.db.models import Q
+
 from accounts.ai_scoping import scope_ai_queryset
+from accounts.constants import ADMIN_ROLES
 from accounts.permissions import AdminOrSuperuserOnly
+from accounts.rbac_utils import get_allowed_org_unit_ids, user_is_global_admin
 from ai.models.core import (
     Agent,
     AgentHandoff,
@@ -53,6 +57,7 @@ from ai.models.core import (
     Trajectory,
     TurnLedgerRow,
 )
+from ai.models.feedback import DqFeedbackEvent
 from ai.models.knowledge_graph import (
     KgBootstrapRun,
     KgFeedbackRecord,
@@ -93,6 +98,7 @@ PANEL_REGISTRY = {
     "skills": [Skill, SkillAdmissionLog],
     "prompts": [PromptVersion, PromptEval, PlaybookBlock],
     "feedback": [Feedback, KgFeedbackRecord, KgQueryFeedback, KgReviewItem, KgGoldenPair],
+    "quality": [KgQualityScore, KgFeedbackRecord, DqFeedbackEvent],
     "learning": [OpsRun, Run, RunStep, Trajectory, KgQualityScore, KgRecoveryLog],
     "monitoring": [SystemSnapshot, Notification, Insight, KgProactiveTrigger, KgProactiveInsight],
     "audit": [AuditLog],
@@ -109,6 +115,7 @@ PANEL_LABELS = {
     "skills": "Skills Catalog",
     "prompts": "Prompts & Playbook",
     "feedback": "Feedback Review",
+    "quality": "Output Quality",
     "learning": "Learning Jobs",
     "monitoring": "Monitoring",
     "audit": "AI Audit Trail",
@@ -283,3 +290,117 @@ class PulseArchetypesView(APIView):
         except Exception as exc:  # noqa: BLE001 — never 500 the console
             logger.exception("archetypes listing failed")
             return Response({"bundles": [], "error": str(exc)})
+
+
+# ── Output-quality drift ─────────────────────────────────────────────────────
+
+# Day-over-day average drop at or beyond this magnitude is flagged as drift.
+_QUALITY_DRIFT_THRESHOLD = 0.15
+
+
+def _scoped_quality_rows(user):
+    """Collect ``(day, score, signal)`` tuples across the three quality ledgers.
+
+    Scoping matches the read-layer contract: superusers/global admins see all
+    rows; everyone else sees shared/global rows plus their own private rows
+    (AppScopeMixin models) or their own + org-scoped feedback (DqFeedbackEvent,
+    which lacks the visibility/host_user_id partition).
+    """
+    rows: list[tuple] = []
+
+    for record in scope_ai_queryset(KgQualityScore.objects, user).iterator():
+        day = (record.date or "")[:10]
+        rows.append((day, float(record.score), record.dimension or "kg"))
+
+    for record in scope_ai_queryset(KgFeedbackRecord.objects, user).iterator():
+        day = record.created_at.date().isoformat() if record.created_at else ""
+        rows.append((day, float(record.quality_score), record.signal_type or "kg"))
+
+    dq_qs = DqFeedbackEvent.objects.filter(app_identifier="carbon")
+    if not (user.is_superuser or user_is_global_admin(user)):
+        allowed = get_allowed_org_unit_ids(user, ADMIN_ROLES)
+        scope = Q(user_id=user.id)
+        scope |= (
+            Q(org_unit_id__in=allowed) | Q(org_unit_id__isnull=True)
+            if allowed
+            else Q(org_unit_id__isnull=True)
+        )
+        dq_qs = dq_qs.filter(scope)
+    for record in dq_qs.iterator():
+        day = record.created_at.date().isoformat() if record.created_at else ""
+        rows.append((day, float(record.quality_score), record.signal_type or "dq"))
+
+    return rows
+
+
+class OutputQualityTrendView(APIView):
+    """GET quality-trend/ — daily output-quality signal + drift flags.
+
+    Aggregates ``KgQualityScore``, ``KgFeedbackRecord`` and ``DqFeedbackEvent``
+    into a per-day average so operators can see output-quality drift over time.
+    Read-only: no mutation, no engine access.
+    """
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
+
+    def get(self, request):
+        try:
+            rows = _scoped_quality_rows(request.user)
+        except Exception as exc:  # noqa: BLE001 — never 500 the console
+            logger.exception("quality trend aggregation failed")
+            return Response({"error": str(exc)}, status=503)
+
+        # Bucket scores by day, tracking per-signal breakdown.
+        by_day: dict[str, list[float]] = {}
+        by_signal: dict[str, list[float]] = {}
+        for day, score, signal in rows:
+            if not day:
+                continue
+            by_day.setdefault(day, []).append(score)
+            by_signal.setdefault(signal, []).append(score)
+
+        trend = [
+            {
+                "date": day,
+                "avg": round(sum(scores) / len(scores), 4),
+                "count": len(scores),
+            }
+            for day, scores in sorted(by_day.items())
+        ]
+
+        # Day-over-day drift flags (simple, deterministic, no thresholds beyond
+        # the drop magnitude).
+        drift = []
+        for prev, curr in zip(trend, trend[1:]):
+            delta = round(curr["avg"] - prev["avg"], 4)
+            if delta <= -_QUALITY_DRIFT_THRESHOLD:
+                drift.append(
+                    {"date": curr["date"], "delta": delta,
+                     "avg": curr["avg"]}
+                )
+
+        all_scores = [score for _, score, _ in rows]
+        current = {
+            "avg": round(sum(all_scores) / len(all_scores), 4)
+            if all_scores else None,
+            "count": len(all_scores),
+        }
+        signals = [
+            {"signal": signal, "avg": round(sum(scores) / len(scores), 4),
+             "count": len(scores)}
+            for signal, scores in sorted(
+                by_signal.items(),
+                key=lambda item: sum(item[1]) / len(item[1]),
+                reverse=True,
+            )
+        ]
+
+        return Response(
+            {
+                "current": current,
+                "by_day": trend,
+                "by_signal": signals,
+                "drift": drift,
+            }
+        )

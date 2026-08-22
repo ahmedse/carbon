@@ -135,3 +135,13 @@ if settings.IS_DEVELOPMENT:
         path('__debug__/', include(debug_toolbar.urls)),
         path('silk/', include('silk.urls', namespace='silk')),
     ]
+
+# ── Media serving (dev only) ─────────────────────────────────────────────
+# Generated artifacts (AI study exports under MEDIA_ROOT/ai_exports, CSV
+# exports, evidence uploads) are served by nginx in production. In development
+# there is no proxy, so serve them from Django so chat download links resolve.
+if settings.IS_DEVELOPMENT:
+    from django.conf.urls.static import static
+    urlpatterns += static(
+        settings.MEDIA_URL, document_root=settings.MEDIA_ROOT
+    )

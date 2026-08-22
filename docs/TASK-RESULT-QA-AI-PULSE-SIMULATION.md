@@ -185,6 +185,8 @@ The platform is structurally sound (L1 GATE PASSED, 549 tests, clean build, no s
 
 **Status: PARTIALLY EXECUTED — live API phases BLOCKED by P1C regressions (F-21, F-22).**
 
+**NEW SCENARIO ADDED (2026-08-22):** `docs/TASK-QA-AGENTIC-WORKFLOW-SIMULATION.md` — comprehensive test of multi-agent workflow orchestration using "create platform documentation (Word+Excel)" as the validation scenario. Tests full lifecycle: discovery → plan → approve → execute → monitor → pause/resume → deliver artifacts. Identifies 7 implementation gaps (F-23 to F-29) blocking enterprise-grade agentic workflow execution.
+
 ### 10.1 Unit layer (executed — GREEN)
 
 | Layer | Suite | Result |

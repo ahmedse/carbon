@@ -2486,6 +2486,568 @@ Append to `TASK-RESULTS.md`.
 
 ---
 
+## AGENTIC WORKFLOW COMPLETION TRACK (W4)
+
+The W1–W3 work built the *surface* (plans, panels, audit). W4 completes the
+*live agentic loop* end-to-end. Root-cause research identified **5 surgical
+disconnects** between the Carbon-owned product wrapper and the in-process
+engine seams:
+
+1. **LLM decompose unreachable** — `plans_service.py:_decompose` builds
+   `SkillAwarePlanner(model=…)` with no `llm_client`; `planner.decompose()`
+   guards the LLM fallback on `client is not None`, so every plan collapses to
+   `single_step`.
+2. **Draft never gets tools** — `loop.py:_execute_step` calls `dw.draft(…)`
+   without `tools=`, so the planner can never emit `tool_calls`.
+3. **Execute never gets tool_calls** — `_execute_step` calls
+   `ex.execute(draft.text, stream_callback, progress_callback)` — *positional
+   mis-argument* (callbacks land in `tool_calls`/`stream_callback` slots) and
+   `tool_calls` is never passed.
+4. **Consent gate unreachable** — consequence of 2+3 (`result.tool_output` is
+   always `None` because no tool ever ran).
+5. **No evaluation harness** — only the ad-hoc `simulate_agent_workflows` cmd.
+
+**Dispatch order:** **W4-A → W4-B** (W4-B is the harness that proves W4-A; W4-C
+through W4-E build on the now-live loop). W4-A is the single critical path —
+~30 lines of glue that unblocks every later phase.
+
+---
+
+### Phase W4-A — Make the real loop real (wire tools + tool_calls + executor + LLM)
+**Date:** 2026-08-20
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE ✅
+**Depends on:** W3-A (plans endpoints), W3-C (lifecycle) — ✅ DONE.
+
+### Files to Read First
+- `backend/ai/plans_service.py` — `_decompose` (~L209), `_run_plan_frames` (~L742).
+- `backend/ai/engine/cognition/plan/loop.py` — `run()` (~L120, where `ex = self.executor or ExecuteWitness()`), `_execute_step` (~L409).
+- `backend/ai/engine/cognition/turn/runner.py` — `__init__` (~L62, the curated `_draft_tools` allow-set) + `run` (~L414, the GROUNDING RULES block). This is the **reference pattern** the loop must mirror.
+- `backend/ai/engine/cognition/turn/draft.py` — `DraftWitness.draft(…, tools=None, …)`.
+- `backend/ai/engine/cognition/turn/execute.py` — `ExecuteWitness.__init__(executor, hook_pipeline, hook_ctx_defaults, run_id, instance_id)` + `execute(text, tool_calls, stream_callback, progress_callback)`.
+- `backend/ai/engine/llm/provider.py` — `get_llm_client()`.
+- `backend/ai/engine/agent/tools.py` — `get_tool_definitions()` (READ ONLY).
+
+### Files to Change
+- `backend/ai/plans_service.py` — pass `llm_client` into the planner; build an
+  `ExecuteWitness` with `executor` + `hook_ctx_defaults` and pass it as
+  `executor=` to `ReActLoop`.
+- `backend/ai/engine/cognition/plan/loop.py` — in `_execute_step`, build the
+  step's tool set and pass `tools=` to `dw.draft(...)`; fix the `ex.execute(...)`
+  call to keyword args with `tool_calls=draft.tool_calls`.
+
+### Implementation (exact seams — edit these and nothing else)
+
+**1. `_decompose` (plans_service.py) — make LLM decompose reachable:**
+```python
+from ai.engine.llm.provider import get_llm_client
+# ...
+planner = SkillAwarePlanner(llm_client=get_llm_client(), model=settings.LLM_MODEL)
+```
+(`decompose()` already resolves `client = llm_client or self.llm_client` — no
+other change needed here.)
+
+**2. `_run_plan_frames` (plans_service.py) — arm the ExecuteWitness:**
+After `executor = CarbonHostExecutor(...)` is built (inside the `async with
+get_session_factory(...)() as db:` block), construct an `ExecuteWitness` with the
+host context and hand it to `ReActLoop`:
+```python
+from ai.engine.cognition.turn.execute import ExecuteWitness
+# ...
+execute_witness = ExecuteWitness(
+    executor=executor,
+    run_id=str(run.id),
+    instance_id=PLAN_INSTANCE_ID,
+    hook_ctx_defaults={
+        "instance_id": PLAN_INSTANCE_ID,
+        "conversation_id": conversation_id,
+        "host_user_id": user_pk,
+        "run_id": str(run.id),
+        "instance_config": instance_config,
+    },
+)
+loop = ReActLoop(
+    draft_witness=DraftWitness(executor=executor),
+    critic_witness=CriticWitness(),
+    executor=execute_witness,
+    db=db,
+)
+```
+`host_user_id=user_pk` is **already** passed to `loop.run(...)` — leave it.
+
+**3. `_execute_step` (loop.py) — give the draft tools + fix the execute call:**
+
+(a) Near the top of `_execute_step`, compute the step's tool set:
+```python
+from ai.engine.agent.tools import get_tool_definitions
+
+step_tools: list[dict] | None = None
+if step.tool_name:
+    step_tools = [
+        d for d in get_tool_definitions()
+        if d.get("function", {}).get("name") == step.tool_name
+    ] or None
+else:
+    # Single-step passthrough: mirror runner.py's curated allow-set so a
+    # plain imperative request ("create a dq rule…") still dispatches a tool.
+    _allow = {"create_dq_rule", "search_knowledge", "get_entity_details",
+              "list_my_capabilities", "plan_task"}
+    step_tools = [
+        d for d in get_tool_definitions()
+        if d.get("function", {}).get("name") in _allow
+    ] or None
+```
+
+(b) Pass `tools=step_tools` to the draft (and, when `step_tools` is non-empty,
+append the same GROUNDING RULES to `system_prompt` that `runner.py:run` uses —
+copy that f-string verbatim so the planner actually *calls* the tool instead of
+answering in prose):
+```python
+draft = await dw.draft(
+    instance_id=instance_id,
+    conversation_id=conversation_id,
+    user_message=enriched_prompt,
+    system_prompt=system_prompt,
+    conversation_history=conversation_history,
+    instance_config=instance_config,
+    user_info=user_info,
+    tools=step_tools,
+)
+```
+
+(c) Fix the execute call (the current positional call is a latent bug):
+```python
+execution = await ex.execute(
+    text=draft.text,
+    tool_calls=draft.tool_calls,
+    stream_callback=stream_callback,
+    progress_callback=progress_callback,
+)
+```
+
+### DO NOT TOUCH
+- `backend/ai/engine/agent/tools.py`, `backend/ai/engine/agent/plugins.py`,
+  `backend/ai/engine/agent/executor.py` (vendored engine — READ ONLY).
+- `backend/ai/plugins/**` (create_dq_rule, plan_task, list_capabilities) — already correct.
+- `backend/ai/engine/cognition/turn/draft.py`, `execute.py`, `runner.py` — no signature changes; the loop only *calls* them.
+- Frontend files (this phase is backend-only).
+
+### Verification Gate (copy-paste; capture terminal output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check                     # → "System check identified no issues (0 silenced)"
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run   # → "No changes detected" (engine stays stateless)
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider   # → all green (esp. test_plan_task, test_create_dq_rule, test_plugins)
+/home/ahmed/aast/carbon/.venv/bin/python manage.py simulate_agent_workflows  # → A02 ✅ AND A03 ✅ (18/18)
+```
+**Acceptance:** the simulation report now shows A02 (multi-step decompose) and
+A03 (create_dq_rule mutation → consent gate) both pass. If A03 still reports
+"text-only claim", the single-step `tools=` allow-set is not reaching the draft —
+re-check seam 3(a)/(b).
+
+### Verification Result (2026-08-20) — DONE ✅
+
+Two **additional** production bugs surfaced during the verification gate and
+were fixed (both are the "real loop" consequence of the 5 disconnects):
+
+- **`confirm_step` / `decline_step` str-vs-dict crash** (`plans_service.py`).
+  The live engine persists `RunStep.tool_output_json` as a **JSON string** (the
+  engine's SQLAlchemy `RunStep` maps it to a `Text` column), while the Django
+  `RunStep.tool_output_json` is a `JSONField` and the deterministic seam writes
+  a native dict. The consent endpoints called `.get(...)` on the raw value and
+  500'd with `AttributeError: 'str' object has no attribute 'get'`. Fixed with
+  a `_parse_tool_output_json` normalizer that accepts dict-or-string.
+- **Resume re-executes the confirmed step** (`loop.py`). The resume path built
+  `completed_ids` but never actually filtered already-completed/skipped steps
+  out of `remaining` (the `_partition_ready` dependency check doesn't drop a
+  completed step). The confirmed step was re-run and re-triggered the consent
+  gate, leaving the run `paused` forever. Fixed by filtering
+  `remaining = [s for s in plan.steps if s.step_id not in completed_ids]`.
+
+**Evidence:**
+- `manage.py check` → clean.
+- `makemigrations --check --dry-run` → "No changes detected".
+- `pytest ai` → 639 passed (4 pre-existing `test_catalog.py` username-unique
+  ordering errors; `test_catalog.py` passes 15/15 in isolation — unrelated to
+  this phase).
+- `simulate_agent_workflows` → **18/18** (A02 multi-step decompose ✅, A03
+  mutation→consent→confirm→resume→rule-created ✅).
+
+---
+
+### Phase W4-B — Evaluation harness (prove the loop, not just simulate)
+**Date:** 2026-08-20
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE ✅
+**Depends on:** W4-A (live loop) — ✅ DONE (18/18 sim green).
+
+Make `backend/ai/management/commands/simulate_agent_workflows.py` a
+**deterministic, CI-runnable harness**. The scenario assertions are already
+per-scenario `(name, bool)` tuples (decompose → source, step `tool_name`,
+tool executed, consent gate for mutations). What's missing is the **CI
+contract**: a machine-readable `--json` reporter, a **pinned golden-expectation
+file written by the harness itself**, and **non-zero exit codes** so CI can fail
+the build on a regression. Backend-only — no schema, no engine changes.
+
+### Files to Read First
+- `backend/ai/management/commands/simulate_agent_workflows.py` — the whole
+  harness: `SCENARIOS_A/B` registries (~L55), `Live` HTTP helper (~L68), the
+  `@scenario_a`/`@scenario_b` functions, `_verdict` (~L1018),
+  `_render_checks` (~L1025), `_render_detail` (~L1032), `build_report`
+  (~L1036), `Command.handle` (~L1115) which loops both parts, aggregates
+  `rows`, writes `REPORT_PATH` (`docs/TASK-RESULTS-SIMULATION-<date>.md`) and
+  prints the human summary. `_collect_findings` (~L1215) derives the "Deep
+  findings" section.
+- `docs/TASK-RESULTS-SIMULATION-*.md` — the report the harness already writes
+  (human-readable; keep it, don't hand-edit expectations there).
+
+### Files to Change
+- `backend/ai/management/commands/simulate_agent_workflows.py` — **the only
+  file.** Add the CI contract below; do not rewrite scenario logic.
+
+### Implementation (exact seams)
+
+**1. Always write a machine-readable JSON report alongside the Markdown.**
+Next to `REPORT_PATH` define `REPORT_JSON_PATH = REPORT_PATH.with_suffix(".json")`.
+After `build_report(...)` is written, serialize the same `rows` plus a summary
+header to JSON and write it:
+
+```python
+payload = {
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "scenarios": [
+        {
+            "id": r["id"], "part": r["part"], "title": r["title"],
+            "verdict": r["verdict"], "highlight": r["highlight"],
+            "plan_id": r["plan_id"],
+            "checks": [{"name": n, "pass": bool(ok)} for n, ok in r["checks"]],
+            "detail": r["detail"],
+        }
+        for r in rows
+    ],
+    "totals": {"passed": ok_n, "failed": len(rows) - ok_n, "total": len(rows)},
+}
+REPORT_JSON_PATH.write_text(json.dumps(payload, indent=2, default=str))
+```
+
+**2. `--json` flag → print the one-line compact JSON to stdout.** In
+`add_arguments` add `parser.add_argument("--json", action="store_true", ...)`.
+When set, after the summary, `self.stdout.write(json.dumps(payload))` (a single
+line) so CI can pipe it. (`json.dumps` the same `payload` above; `default=str`
+for the `detail` field.)
+
+**3. Golden expectations — recorded by the harness, not hand-written.**
+- New module constant `GOLDEN_PATH = Path(__file__).resolve().parents[4] /
+  "docs" / "SIMULATION-GOLDEN.json"`.
+- `--record-golden` flag: after the run, write a **pinned** golden file from the
+  *currently passing* checks (so green is the contract):
+
+```python
+golden = {
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "scenarios": [
+        {"id": r["id"], "part": r["part"], "title": r["title"],
+         "checks": [{"name": n, "expect_pass": bool(ok)} for n, ok in r["checks"]]}
+        for r in rows
+    ],
+}
+GOLDEN_PATH.write_text(json.dumps(golden, indent=2))
+```
+  Note: record `expect_pass` for **every** check (including currently-failing
+  ones with `expect_pass: false`), so the file is a faithful snapshot; only
+  `expect_pass: true` checks are enforced on `--check-golden`.
+
+- `--check-golden` flag: load `GOLDEN_PATH`; for each scenario in the golden
+  file, for each check with `expect_pass: true`, assert the current run's
+  same `(scenario id, check name)` check is present **and passing**. Collect
+  any mismatch into `golden_regressions: list[str]` (e.g. `"A03/resume
+  completed"`). If the golden file is absent, print a warning and skip (no
+  failure).
+
+**4. Exit codes (CI contract).**
+At the end of `handle()`:
+```python
+exit_code = 0
+if any(r["verdict"] == FAIL for r in rows):
+    exit_code = 1
+if getattr(..., "check_golden") and golden_regressions:
+    exit_code = 2
+# print a final line naming the exit code, then:
+if exit_code:
+    raise SystemExit(exit_code)
+```
+  `1` = a scenario failed; `2` = a pinned golden check regressed (even if all
+  scenarios happened to pass). Both are fail-the-build.
+
+**5. Surface golden regressions in the Markdown report.** Append a
+"## Golden regression" section to `build_report` output (or emit it after) when
+`golden_regressions` is non-empty, listing each. Keep the existing "Deep
+findings" section untouched.
+
+### DO NOT TOUCH
+- Scenario functions and their assertion tuples (`a01_*` … `b06_*`) — the
+  checks ARE the spec; do not weaken or reword them.
+- `_install_fake_seams`, `_FakeHostExecutor`, `Live` — deterministic seams.
+- Any engine file (`backend/ai/engine/**`), `plans_service.py`, frontend.
+- `pytest` suite — this phase extends the *simulation command*, not the tests.
+
+### Verification Gate (copy-paste; capture terminal output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py simulate_agent_workflows --part B   # → 6/6 B scenarios, exit 0
+/home/ahmed/aast/carbon/.venv/bin/python manage.py simulate_agent_workflows --part B --record-golden   # → writes docs/SIMULATION-GOLDEN.json
+/home/ahmed/aast/carbon/.venv/bin/python manage.py simulate_agent_workflows --part B --check-golden     # → exit 0, "0 golden regressions"
+/home/ahmed/aast/carbon/.venv/bin/python manage.py simulate_agent_workflows --part B --json             # → prints one-line JSON to stdout
+ls -la /home/ahmed/aast/carbon/docs/SIMULATION-GOLDEN.json /home/ahmed/aast/carbon/docs/TASK-RESULTS-SIMULATION-*.json
+```
+**Acceptance:** `--part B` exits 0 with all 6 B scenarios green; `--record-golden`
+writes the pinned file; `--check-golden` reports 0 regressions and exits 0; a
+deliberately-broken check (worker temporarily flips one to `False`) makes
+`--check-golden` exit 2 — then revert.
+
+### Verification Result (2026-08-20) — DONE ✅
+
+- `manage.py simulate_agent_workflows --part B` → 6/6 B scenarios, `exit=0`.
+- `--record-golden` → writes `docs/SIMULATION-GOLDEN.json` (6 scenarios, all
+  `expect_pass: true`).
+- `--check-golden` → "Golden check passed — 0 regressions.", `exit=0`.
+- `--json` → one-line JSON payload printed to stdout, `exit=0`.
+- Negative probe: injected a bogus `expect_pass: true` check → `exit=2` with
+  "1 golden regression(s)" (golden file then restored).
+
+---
+
+### Phase W4-C — Multi-agent orchestration (worker dispatch + task DAG)
+**Date:** 2026-08-20
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE — VERIFIED (4 tests `test_plan_loop_parallel.py`; ai suite 653 passed; `simulate_agent_workflows --part B` 6/6; `--check-golden` 0 regressions; verified 2026-08-21)
+**Depends on:** W4-A (loop live ✅), W4-B (harness ✅).
+
+**Goal (scoped to the two concrete seams that are actually live):** the plan
+loop already decomposes into a `depends_on` DAG and already runs the *same*
+orchestrator witness for every step. Two things are missing: (1) **independent
+steps run serially** (`for step in ready:`), and (2) the per-step **`agent_role`
+is never threaded into the `HookContext`**, so `readonly_worker_hook` can never
+fire for worker-role steps. This phase closes both. **It does NOT build the
+`WorkerPool` fan-out path** — `workers.py` already implements that; the loop is
+the orchestrator's in-process parallel executor. Capability-gating is already
+enforced by `readonly_worker_hook` (CBAC via `ctx.db`) once `is_worker=True`
+reaches it.
+
+### Files to Read First
+- `backend/ai/engine/cognition/plan/planner.py` — `PlanStep` dataclass (~L22).
+- `backend/ai/engine/cognition/plan/loop.py` — `run()` (~L225-405, the
+  `while remaining:` / `for step in ready:` serial loop + fold-back),
+  `_execute_step` (~L409-580).
+- `backend/ai/engine/cognition/turn/execute.py` — `execute()` (~L33-160, builds
+  `HookContext` from `self.hook_ctx_defaults`) and `_execute_single_tool`
+  (~L176-265).
+- `backend/ai/engine/agent/guardrails.py` — `HookContext` (~L36) + 
+  `readonly_worker_hook` (~L213, fires only when `ctx.is_worker`).
+- `backend/ai/plans_service.py` — `_rebuild_plan` (~L377), the
+  `ExecuteWitness(... hook_ctx_defaults={...})` construction (~L851).
+
+### Files to Change
+- `backend/ai/engine/cognition/plan/planner.py` — add one field.
+- `backend/ai/engine/cognition/turn/execute.py` — additive override params.
+- `backend/ai/engine/cognition/plan/loop.py` — parallelize `ready` batch + pass role.
+- `backend/ai/plans_service.py` — read `agent_role` in `_rebuild_plan`.
+- `backend/ai/tests/test_plans.py` (or new `test_plan_loop_parallel.py`) — tests.
+
+### Implementation (exact seams)
+
+**1. `PlanStep.agent_role` (planner.py).** Add
+`agent_role: str = "orchestrator"` to the `PlanStep` dataclass (default keeps
+every existing plan behaving as today). Update the `_DECOMPOSE_AGENT_PROMPT`
+JSON schema to mention `"agent_role": "orchestrator"` (optional, no LLM
+behaviour change required — leave it out of the emitted steps by default).
+
+**2. Read it back (`plans_service.py:_rebuild_plan`).** In the `PlanStep(...)`
+constructor add `agent_role=s.get("agent_role", "orchestrator")`. Do not change
+the `Plan(...)` construction or the `hook_ctx_defaults` dict.
+
+**3. `ExecuteWitness.execute` additive overrides (`execute.py`).** Extend the
+signature with `agent_role: str | None = None` and `is_worker: bool | None =
+None`. At the top of `execute()`, build a per-call defaults dict:
+
+```python
+ctx_defaults = dict(self.hook_ctx_defaults or {})
+if agent_role is not None:
+    ctx_defaults["agent_role"] = agent_role
+if is_worker is not None:
+    ctx_defaults["is_worker"] = is_worker
+```
+
+Then pass `ctx_defaults` (instead of `self.hook_ctx_defaults`) to **both**
+`_execute_single_tool(...)` call sites (the independent `asyncio.gather` batch
+and the dependent sequential loop). `_execute_single_tool` already reads
+`agent_role`/`is_worker` from `hook_ctx_defaults` via
+`ctx_defaults.get("agent_role", "orchestrator")` and
+`ctx_defaults.get("is_worker", False)` — no change needed there. This is
+strictly additive: callers that pass nothing get today's behaviour.
+
+**4. Parallelize the `ready` batch + thread role (`loop.py`).**
+
+(a) `_execute_step`: accept the role on the call and forward it. Add
+`agent_role: str | None = None` to the signature, and in the `ex.execute(...)`
+call add `agent_role=agent_role or step.agent_role,
+is_worker=(step.agent_role not in ("orchestrator", "", None))`.
+
+(b) `run()`: replace the serial `for step in ready:` **execution** with a
+parallel gather, but **keep the fold-back loop**. Structure it in three phases:
+
+```python
+# Phase 1 — broadcast started for every ready step (preserves event order)
+for step in ready:
+    await _get_broadcast()(instance_id, "run.step.started", {...})
+
+# Phase 2 — execute in parallel (sequential fast-path when len==1)
+async def _run_one(step):
+    t0 = time.monotonic()
+    result = await self._execute_step(step=step, ..., step_contexts=step_contexts)
+    return step, result, (time.monotonic() - t0) * 1000
+
+if len(ready) == 1:
+    executed = [await _run_one(ready[0])]
+else:
+    executed = await asyncio.gather(*[_run_one(s) for s in ready])
+
+# Phase 3 — fold back IN ORDER, reusing the existing post-step logic verbatim
+for step, result, step_latency in executed:
+    step_results.append(result)
+    total_llm_calls += 1
+    ...  # broadcast completed/failed, consent-gate pause+break, persist,
+         # veto/replan+break, mutation counter, completed_ids.add,
+         # step_contexts[step_id] = draft_text  (unchanged from today)
+```
+
+Preserve the exact `break` semantics: if a paused or vetoed step `break`s the
+fold-back, later (already-executed, independent) results in that batch are
+simply discarded — same "stop the whole loop" contract as today. The
+`asyncio` import is already present in `loop.py`.
+
+Concurrency-safety note (worker does not need to "fix" anything, just verify):
+`dw.draft` / `cw.review` / `ex.execute` are stateless per call (LLM + executor
++ contextvars), and `step_contexts` is read-only during the gather (deps are
+already in `completed_ids`). The shared `stream_callback`/`progress_callback`
+may interleave — acceptable.
+
+**5. Tests (`backend/ai/tests/test_plans.py` or a new file).** Two focused,
+deterministic unit tests (fake executor, no HTTP):
+- *Parallel overlap*: build a `Plan` with two `depends_on=[]` steps; use a fake
+  executor whose tool call records `started_at`/`ended_at` timestamps with a
+  small `asyncio.sleep`; assert the two execution intervals **overlap** (i.e.
+  the run is not serial). (If the fake seam makes overlap hard to assert,
+  instead assert both steps complete and each ran exactly once — but prefer the
+  overlap assertion.)
+- *Worker readonly guardrail*: a step with `agent_role="worker"` executing a
+  mutation tool is cancelled by `readonly_worker_hook` (result carries a
+  guardrail/cancel error), while the same step with `agent_role="orchestrator"`
+  (default) proceeds. Patch the engine seams at their lazy import points as
+  `test_plans.py` already does.
+
+### DO NOT TOUCH
+- `backend/ai/engine/agent/workers.py`, `guardrails.py`, `tools.py`,
+  `plugins.py`, `executor.py`, `runner.py` — the fan-out + guardrail machinery
+  already exists and is correct; this phase only routes the loop's context into it.
+- `_partition_ready`, `_synthesise`, `_replan_step`, `_persist_run_step`,
+  `_pause_run`, `_finalize_run` — untouched.
+- `simulate_agent_workflows.py` scenario functions — do not reword existing
+  checks. (Adding a `b07` end-to-end scenario is **optional** and only after
+  the unit tests pass; if added, re-record golden with `--record-golden`.)
+- `pytest` suite partitioning rules (RULE: one app at a time, `python -m pytest
+  ai -q --maxfail=5 --disable-warnings -p no:cacheprovider`).
+
+### Verification Gate (copy-paste; capture terminal output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python manage.py simulate_agent_workflows --part B
+/home/ahmed/aast/carbon/.venv/bin/python manage.py simulate_agent_workflows --part B --check-golden
+```
+**Acceptance:** `manage.py check` clean; `pytest ai` green (all prior + the two
+new tests); `--part B` still 6/6 and `--check-golden` still 0 regressions
+(no behaviour change to existing scenarios). Then mark W4-C DONE below.
+
+---
+
+### Phase W4-D — Learning flywheel (Reflexion-style step feedback)
+**Date:** 2026-08-20
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** PLANNED
+**Depends on:** W4-A, W4-C.
+
+Feed critic verdicts + tool outcomes back into the SkillRegistry as learnt
+signals (successful plans promote skills; vetoed steps adjust scoring) so
+decomposition quality improves with use. Spec pending W4-B's metrics.
+
+---
+
+### Phase W4-E — Observability & governance (run ledger → audit surface)
+**Date:** 2026-08-20
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** PLANNED
+**Depends on:** W4-A (durable Run/RunStep rows now carry real tool_output).
+
+Surface tool_output + consent events in the W3-G admin timeline; add
+cross-run cost/quality rollups (total_llm_calls, confirmations_required).
+Spec pending W4-A.
+
+---
+
+### Phase W4-F — Skills-vs-reasoning decompose + deterministic mutation + plan-graph UX (DONE 2026-08-21)
+**Date:** 2026-08-21
+**Worker Role:** backend-worker + frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE — VERIFIED (652 ai/tests; live decompose; E2E consent cycle 11/11; 31/31 graph tests + 9/9 card tests; browser-verified pan/zoom + expand modal)
+
+**Part 1 — Planner: skills are capabilities, reasoning is the LLM's job (user design principle)**
+- `planner.py` `_DECOMPOSE_AGENT_PROMPT`: now injects `{tools_list}/{skills_list}/{task}`; rules — `invoke_skill` only exact registered names, NEVER invent; reasoning steps get `tool_name: null` + `agent_role: "domain_specialist"`. Post-parse: unknown tool → `tool_name=None`; unregistered `invoke_skill` → downgraded to reasoning.
+- `loop.py` `_execute_step`: `plan_source` param; named-tool step → that tool only; `single_step` → curated allow set; multi-step reasoning → `step_tools=None` (pure LLM).
+- LIVE decompose proof: 4-step plan — [0][1] web_research parallel, [2] tool=None domain_specialist compare (depends_on 0,1), [3] export_document. No invented skill.
+
+**Part 2 — Deterministic mutation classification (closes Fix-A regression)**
+- LLM marked export `is_mutation=False` → would bypass the consent gate entirely. Fix: `planner._MUTATION_TOOL_NAMES = {"export_document"}` (capability fact) forced in BOTH `_llm_decompose` and `_parse_skill_plan`. Self-staging tools excluded (avoid double-gating): non-GET `call_host_api`, `create_dq_rule`, `learn_fact`, `forget_fact`, `run_ops_workflow`.
+- Chain (deterministic): planner forces `is_mutation=True` → critic vetoes `mutation_not_confirmed` when `is_mutation and not confirmation_token and not dry_run` → loop converts veto → consent pause (token uuid4, paused=True, executed=False).
+- Tests: `test_planner_reasoning_skills.py` 11 total (8 + 3 mutation). ai suite 652 passed. Live: `NEEDS_CONFIRMATION: True`, export `mutation=True`.
+- E2E consent cycle (fresh plan `1845c38a-…`): 11/11 PASS — create → approve → run paused at export (no file) → confirm → resume → docx `comparison-of-top-carbon-footprint-accounting-systems-20260821-111356.docx` written to `backend/mediafiles/ai_exports/` only AFTER consent.
+
+**Part 3 — Plan graph → directed EXECUTION graph (user feedback)**
+- User: *"visual graph is not execution graph, like tensor flow thing. no directions, no detailed pane, etc."*
+- `planGraph.js`: `layoutExecutionGraph(plan)` — longest-path ranks FROM sources (sources rank 0, edges always left→right), per-rank vertical centering, `EXEC_LAYOUT` consts, returns `{nodes(x/y/rank/phase_id), edges(sourceX/sourceY/targetX/targetY), width, height, phaseBands}`.
+- `PlanDagGraph.jsx`: full rewrite — pure SVG, `<marker id="plan-arrow">` arrowheads (`marker-end` on every edge), bezier edges right-edge→left-edge, phase band lanes, node rects + status dot + tool label, click → detailed inspection pane (`data-testid="plan-step-detail"`: step #, status chip, intent, phase, tool or "None — pure reasoning step (LLM)", agent_role, depends-on, feeds-into, error), wheel zoom + Reset view. `ForceGraph.jsx` UNTOUCHED.
+- Tests: `PlanDagGraph.test.jsx` (6) + `planGraph.test.js` (+4 `layoutExecutionGraph`) = 21/21 pass; `AITaskPlanCard.controls` 9/9; eslint 0 errors; browser DOM-verified (4 nodes ranks x=28/28/252/476, 3 edges all arrowheaded, 3 phase bands, detail pane works).
+
+**Part 3b — Graph UX round 2: movable + resizable canvas, docked info card, full-screen expand (user feedback)**
+- User: *"graph, not movable, resizable, no free style, info card not float. add expand to take the graph to max modal to see details"* → clarified: **"i want them, not no!"** — they DO want pan/zoom, just NOT free-form node dragging.
+- `PlanDagGraph.jsx`: new shared `GraphCanvas` (inline + modal) — **drag-to-pan** (`pan` state, 3px threshold, `moved` ref suppresses node-click after drag) + **wheel-to-zoom** (native non-passive listener, clamp 0.35–2.2), cursor grab/grabbing, transform `translate(pan + centering) scale(zoom)`. Strict auto-layout kept (no node dragging — "no free style").
+- **Info card DOCKED** (not floating): `renderDetailPane` shared inline (w 236) + modal (w 300) — flexShrink 0, borderLeft, own scroll.
+- **Expand → full-screen modal**: `Dialog fullScreen` (`plan-graph-modal`) with own header (title/counts/Reset view/Close `plan-graph-modal-close`), canvas column (legend + `GraphCanvas fill markerId="plan-arrow-modal"`) + docked pane (`plan-step-detail-modal`). Unique marker id per SVG (no DOM collision). Reset view restores `zoom=1, pan=0` in both views.
+- Tests: `PlanDagGraph.test.jsx` now 8 (+Reset view control, +expand modal flow with unique markers) → 23/23 graph tests, 9/9 card tests, eslint 0 errors; browser-verified live (node click → docked pane x=795 w=236; expand → full-screen 628×595; wheel scale 1→1.12; drag pan deltas; reset → translate(0,0) scale(1); modal close; 0 console errors).
+
+**Part 3c — Graph UX round 3: one reusable ENTERPRISE graph surface (movable/resizable nodes, maximize/export, refined look)**
+- User: *"the nodes them selves and the graph: i want it rich, not bulky, enterprise and professional, beautiful, no huge margins and fonts, check top systems and make it like"* → extract ONE shared surface; nodes THEMSELVES movable + resizable; status visible during execution; enterprise/Linear/Temporal density (not "rich but bulky").
+- `EnterpriseGraph.jsx` (ADD, Layer-2 primitive): owns ALL interaction — canvas pan, **movable + resizable nodes** (per-node `{x,y,w,h}` overrides, bottom-right 9×9 handle, `DRAG_THRESHOLD` 3, `NODE_MIN/MAX` clamps), wheel + toolbar zoom in/out/fit (`clamp 0.25–3`), **redraw** (drops overrides + re-layout), **reset** (zoom=1/pan=0), **PNG export** (SVG→canvas 2×, jsdom no-op), **full-screen maximize modal**, **live status pulse** (`<animate>` on `running` nodes). Theme tokens only (RULE_8).
+- `PlanDagGraph.jsx` (REWRITE as thin domain adapter): supplies `renderNode`/`sidebar`/`nodeColor`/`nodeAriaLabel`/legend/title/summary/marker ids. Node interior = **3px status accent bar** + intent (truncated) + **UPPERCASE status label** (right-aligned) + tool/kind meta. Detail pane now also shows `latency_ms`, `draft_text`, `critic_verdict`. `planStepStatusColor`/`planStepStatusLabel` exports unchanged.
+- `planGraph.js`: `layoutExecutionGraph` now emits `w`/`h` per node (rides `EXEC_LAYOUT`); layout tightened — `nodeW 176, nodeH 44, colGap 48, rowGap 28, padX 24, padTop 36, padBottom 20`.
+- **Enterprise look (top-systems density):** hairline `divider` border `rx=6` (primary 2px when selected), neutral `action.selected` fill on select, edges `divider` 1.25px, phase bands 9px label at opacity 0.05 — replaces the thick status border + 52×13 status pill.
+- Toolkit: **ADR-0012** (`decisions/0012-enterprise-graph-canvas.md`) + `shared/design-patterns.md` Composite note (compose `EnterpriseGraph`, never hand-roll SVG pan/zoom/export). No new deps (extends ADR-0011).
+- Tests: `planGraph.test.js` (+1 w/h) + `PlanDagGraph.test.jsx` (+7 `EnterpriseGraph interactions` describe: full toolbar, zoom changes transform, node drag moves, resize via `plan-dag-graph-resize-0` handle, redraw restores, running `<animate>`/completed none, RUNNING/FINISHED status labels) → **31/31 graph tests**, eslint 0 errors (2 pre-existing react-refresh warnings on the exported helpers).
+
+**Files changed:** `backend/ai/engine/cognition/plan/planner.py`, `backend/ai/engine/cognition/plan/loop.py`, `backend/ai/tests/test_planner_reasoning_skills.py`, `backend/ai/tests/test_plan_loop_parallel.py`, `carbon-frontend/src/utils/planGraph.js`, `carbon-frontend/src/components/graph/PlanDagGraph.jsx`, `carbon-frontend/src/components/graph/EnterpriseGraph.jsx` (new), `carbon-frontend/src/__tests__/PlanDagGraph.test.jsx`, `carbon-frontend/src/__tests__/planGraph.test.js`, `.ai-toolkit/decisions/0012-enterprise-graph-canvas.md` (new), `.ai-toolkit/decisions/README.md`, `.ai-toolkit/shared/design-patterns.md`.
+
+**DO NOT TOUCH:** `backend/ai/engine/agent/tools.py`, `agent/plugins.py`.
+
+**Carry-forward (next):** resume-token investigation — fresh E2E showed resume re-executed ALL steps incl. completed ones (hypothesis: single shared `pending_steps[0].confirmation_token`; completed steps should feed `completed_ids` and be skipped on resume). Then W4-D (learning flywheel) + W4-E (observability).
+
+---
+
 ## PLATFORM EXPANSION TRACK
 
 Strict build order: **P1 → P2 → P4** (P3 may run in parallel with P2). Full

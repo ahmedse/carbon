@@ -163,6 +163,8 @@ async def broadcast_cognition_event(
 
 RUN_EVENT_TYPES: frozenset[str] = frozenset({
     "run.started",
+    "run.phase.started",
+    "run.phase.completed",
     "run.step.started",
     "run.step.completed",
     "run.step.failed",

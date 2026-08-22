@@ -50,12 +50,15 @@ import {
   getPlan,
   getPlanLedger,
   listPlans,
+  listPlanTemplates,
+  instantiatePlanTemplate,
   pausePlan,
+  promotePlanTemplate,
   resumePlanStream,
   runPlanStream,
   stopPlan,
 } from '../api/aiWorkspace';
-import { summarizePlanDiff } from '../utils/planGraph';
+import { buildPlanPhases, summarizePlanDiff } from '../utils/planGraph';
 import AITaskPlanCard from './AITaskPlanCard';
 import AITaskAuditCard from './AITaskAuditCard';
 import PlanDiffReviewDialog from './PlanDiffReviewDialog';
@@ -93,7 +96,7 @@ function StepStatusIcon({ status }) {
 
 StepStatusIcon.propTypes = { status: PropTypes.string };
 
-function StepCard({ step, confirming, onConfirm, onDecline }) {
+function StepCard({ step, phaseName, confirming, onConfirm, onDecline }) {
   const [open, setOpen] = useState(true);
   const meta = STEP_STATUS_ICON[step.status] || { label: 'Pending', color: 'default' };
   const showBody = open || step.status === 'awaiting_approval' || step.status === 'failed';
@@ -144,6 +147,12 @@ function StepCard({ step, confirming, onConfirm, onDecline }) {
         <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {step.intent || `Step ${step.step_id}`}
         </Typography>
+        {phaseName && (
+          <Chip size="small" variant="outlined" label={phaseName} sx={{ height: 16, fontSize: '0.5625rem' }} />
+        )}
+        {step.agent_role && step.agent_role !== 'orchestrator' && (
+          <Chip size="small" variant="outlined" color="secondary" label={step.agent_role.replace(/_/g, ' ')} sx={{ height: 16, fontSize: '0.5625rem' }} />
+        )}
         {step.tool_name && (
           <Chip size="small" variant="outlined" label={step.tool_name} sx={{ height: 16, fontSize: '0.5625rem' }} />
         )}
@@ -205,6 +214,7 @@ function StepCard({ step, confirming, onConfirm, onDecline }) {
 
 StepCard.propTypes = {
   step: PropTypes.object.isRequired,
+  phaseName: PropTypes.string,
   confirming: PropTypes.bool,
   onConfirm: PropTypes.func,
   onDecline: PropTypes.func,
@@ -253,6 +263,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }
   const [mutating, setMutating] = useState(false);
   const [editStepTarget, setEditStepTarget] = useState(null);
   const [diffReview, setDiffReview] = useState(null); // { diff, plan }
+
+  // W3-D — plan templates (Gap #3)
+  const [templates, setTemplates] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
+  const [templateSaving, setTemplateSaving] = useState(false);
 
   const runPhaseRef = useRef(phase);
   runPhaseRef.current = phase;
@@ -315,6 +332,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }
             tool_args: s.tool_args,
             depends_on: s.depends_on || [],
             instructions: s.instructions || '',
+            agent_role: s.agent_role || 'orchestrator',
             status: s.status || 'pending',
             tool_output: null,
             error: null,
@@ -598,6 +616,53 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }
     }
   };
 
+  // ── W3-D — plan templates (Gap #3) ─────────────────────────────────────
+  const loadTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    try {
+      const data = await listPlanTemplates(token);
+      setTemplates(Array.isArray(data?.templates) ? data.templates : []);
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not load templates');
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (tab === 'templates') loadTemplates();
+  }, [tab, loadTemplates]);
+
+  const handleSaveTemplate = async () => {
+    if (!selectedPlan || !templateName.trim()) return;
+    setTemplateSaving(true);
+    try {
+      await promotePlanTemplate(token, selectedPlan.id, {
+        name: templateName.trim(),
+        description: templateDescription.trim(),
+      });
+      setTemplateName('');
+      setTemplateDescription('');
+      await loadTemplates();
+      notifyRef.current('Saved as a template.', 'success');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not save the template');
+    } finally {
+      setTemplateSaving(false);
+    }
+  };
+
+  const handleInstantiateTemplate = async (templateId) => {
+    try {
+      const plan = await instantiatePlanTemplate(token, templateId);
+      await loadPlans();
+      await openPlan(plan.id);
+      notifyRef.current('Created from template — review and approve to run.', 'info');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not create from the template');
+    }
+  };
+
   // ── Tasks tab: composer + list ────────────────────────────────────────
   const renderTasks = () => (
     <Stack spacing={1.25}>
@@ -691,6 +756,16 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }
         </Typography>
       );
     }
+
+    // step_id → phase name for step chips in the live run stream.
+    const phaseView = buildPlanPhases(selectedPlan);
+    const phaseNameByStep = {};
+    phaseView.phases.forEach((p) => {
+      p.step_ids.forEach((id) => {
+        phaseNameByStep[id] = p.name;
+      });
+    });
+    const phaseNameFor = (stepId) => phaseNameByStep[stepId] || null;
     return (
       <Stack spacing={1.25}>
         <AITaskPlanCard
@@ -730,6 +805,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }
                 <StepCard
                   key={step.step_id}
                   step={step}
+                  phaseName={phaseNameFor(step.step_id)}
                   confirming={confirmingId === step.step_id}
                   onConfirm={handleConfirmStep}
                   onDecline={handleDeclineStep}
@@ -760,6 +836,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }
                 <StepCard
                   key={step.step_id}
                   step={step}
+                  phaseName={phaseNameFor(step.step_id)}
                   confirming={confirmingId === step.step_id}
                   onConfirm={handleConfirmStep}
                   onDecline={handleDeclineStep}
@@ -809,6 +886,95 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }
     );
   };
 
+  // ── Templates tab: save current plan + reuse a saved template ──────────
+  const renderTemplates = () => (
+    <Stack spacing={1.25}>
+      {/* Save current plan as a template */}
+      <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem', mb: 0.25 }}>
+          Save current plan as a template
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.6875rem', mb: 0.75 }}>
+          {selectedPlan
+            ? 'Captures the plan steps so you can reuse this workflow later.'
+            : 'Open a task from the Tasks tab, then save its plan shape here.'}
+        </Typography>
+        <TextField
+          size="small"
+          fullWidth
+          placeholder="Template name"
+          value={templateName}
+          onChange={(e) => setTemplateName(e.target.value)}
+          disabled={!selectedPlan || templateSaving}
+          inputProps={{ 'aria-label': 'Template name' }}
+          sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
+        />
+        <TextField
+          size="small"
+          fullWidth
+          placeholder="Description (optional)"
+          value={templateDescription}
+          onChange={(e) => setTemplateDescription(e.target.value)}
+          disabled={!selectedPlan || templateSaving}
+          sx={{ mt: 0.75, '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
+        />
+        <Button
+          size="small"
+          variant="contained"
+          disabled={!selectedPlan || templateSaving || !templateName.trim()}
+          onClick={handleSaveTemplate}
+          sx={{ mt: 1, fontSize: '0.6875rem', textTransform: 'none' }}
+        >
+          {templateSaving ? 'Saving…' : 'Save template'}
+        </Button>
+      </Paper>
+
+      {/* Template list */}
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary' }}>
+          Saved templates
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+          {templates.length}
+        </Typography>
+      </Stack>
+
+      {templatesLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={20} /></Box>
+      ) : templates.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" sx={{ py: 2, fontSize: '0.75rem' }}>
+          No templates yet — save a plan as a template to reuse it.
+        </Typography>
+      ) : (
+        <Stack spacing={0.75}>
+          {templates.map((tpl) => (
+            <Paper key={tpl.id} variant="outlined" sx={{ p: 1 }}>
+              <Stack direction="row" alignItems="center" spacing={0.75}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {tpl.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.625rem', mt: 0.25 }}>
+                    {tpl.step_count} step{(tpl.step_count || 0) === 1 ? '' : 's'}
+                    {tpl.description ? ` · ${tpl.description}` : ''}
+                  </Typography>
+                </Box>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => handleInstantiateTemplate(tpl.id)}
+                  sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
+                >
+                  Use
+                </Button>
+              </Stack>
+            </Paper>
+          ))}
+        </Stack>
+      )}
+    </Stack>
+  );
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, bgcolor: 'background.default' }}>
       {/* Internal views — one Tasks icon, two tabs (RULE_17) */}
@@ -825,12 +991,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed }
         >
           <Tab value="tasks" label="Tasks" />
           <Tab value="run" label="Run" />
+          <Tab value="templates" label="Templates" />
         </Tabs>
       </Box>
 
       {/* Tab content */}
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 1 }}>
-        {tab === 'tasks' ? renderTasks() : renderRun()}
+        {tab === 'tasks' ? renderTasks() : tab === 'run' ? renderRun() : renderTemplates()}
       </Box>
 
       {/* W3-F — diff-review consent gate + step edit dialog (survive tab switches) */}

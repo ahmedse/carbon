@@ -67,6 +67,8 @@ class TurnPipelineRunner:
                 allow = {
                     "create_dq_rule", "search_knowledge", "get_entity_details",
                     "list_my_capabilities", "plan_task",
+                    "edit_plan", "approve_plan",
+                    "web_research", "export_document",
                 }
                 self._draft_tools = [
                     d for d in get_tool_definitions()
@@ -420,20 +422,46 @@ class TurnPipelineRunner:
                 "of guessing. When a tool matches the user's request, call it "
                 "right away — do not answer in prose instead of using it, and "
                 "do not say you cannot run/execute tasks.\n"
-                "- When the user asks you to plan, orchestrate, or run a task "
-                "(e.g. 'run agent planner', 'plan a data quality audit'), call "
-                "plan_task IMMEDIATELY with their request as the brief — do "
-                "not ask for more details first.\n"
+                "- PLAN FIRST, CONVERT ON CONFIRMATION: when the user asks you "
+                "to plan, study, research, audit, orchestrate, or 'make a "
+                "multi-agent workflow' for something, DO NOT call plan_task "
+                "and DO NOT create any task yet. Instead, think it through and "
+                "PROPOSE a plan directly in chat: a short numbered list of "
+                "steps, each naming the tool or agent that would do it and the "
+                "deliverable it produces. Then invite the user to discuss, add, "
+                "remove, or reword steps. This proposal lives only in the chat "
+                "— it is NOT a task yet. A plain question (e.g. 'what is the "
+                "GHG Protocol?') should just be answered directly, with no "
+                "plan proposal at all.\n"
+                "- Iterate the proposal in chat as the user gives feedback. "
+                "Re-present the revised numbered plan after each change and ask "
+                "whether it is settled.\n"
+                "- ONLY when the user explicitly confirms the plan is settled "
+                "(e.g. 'settled', 'go', 'convert it to a task', 'create the "
+                "task', 'make it a task', 'yes build it'), call plan_task with "
+                "the final agreed brief. That single call turns the agreed plan "
+                "into a real pending_approval task. Never call plan_task before "
+                "this confirmation, and never auto-create a task on detection.\n"
+                "- The plan_task tool DRAFTS a plan and returns a plan id in "
+                "pending_approval; it does not execute anything. After calling "
+                "it, tell the user the plan id and that it awaits approval in "
+                "the Tasks panel. Never claim a task ran or completed.\n"
+                "- After plan_task has created the task, if the user asks to "
+                "change a step of that task, use edit_plan. If the user asks to "
+                "run/approve it, use approve_plan. Never approve or run without "
+                "the user's confirmation.\n"
                 "- NEVER claim an action succeeded (e.g. 'rule created') unless "
                 "a tool result confirms it.\n"
                 "- The create_dq_rule tool only STAGES a proposal — it returns "
                 "a confirmation execution. Nothing is written until the user "
                 "confirms. Tell the user a confirmation button appeared; do "
                 "NOT say the rule was created.\n"
-                "- The plan_task tool DRAFTS a plan and returns a plan id in "
-                "pending_approval; it does not execute anything. After calling "
-                "it, tell the user the plan id and that it awaits approval in "
-                "the Tasks panel. Never claim a task ran or completed.\n"
+                "- Use web_research when the task needs internet facts (e.g. a "
+                "study comparing carbon standards) — cite its results; never "
+                "invent sources.\n"
+                "- Use export_document to produce a downloadable Word/Excel "
+                "artifact when the user wants the findings as a document; tell "
+                "them the download link appeared.\n"
                 "- If a tool errors, report the error plainly.\n"
                 "- When the user asks what you can do, use the capability-list "
                 "tool so the app can attach the matching page links as small "
@@ -824,7 +852,7 @@ class TurnPipelineRunner:
             return None
 
         # Check orchestrator has valid workers
-        workers = registry.get_workers_for(orchestrator.id)
+        workers = await registry.get_workers_for(orchestrator.id)
         active_workers = [(a, h) for a, h in workers if a.is_active]
         if not active_workers:
             logger.debug("TurnPipelineRunner: orchestrator has no active workers")

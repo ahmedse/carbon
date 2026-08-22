@@ -1,3 +1,163 @@
+## [2026-08-21] Frontend Worker — Graph UX round 3: enterprise graph primitive (movable/resizable nodes, maximize/export, refined look)
+
+### Summary
+User feedback round 3: *"the nodes them selves and the graph: i want it rich, not bulky, enterprise and professional, beautiful, no huge margins and fonts, check top systems and make it like"*. Extracted ONE reusable Layer-2 surface `EnterpriseGraph.jsx` that owns ALL graph interaction (canvas pan, **nodes THEMSELVES movable + resizable**, wheel/toolbar zoom + fit, redraw, reset, PNG export, full-screen maximize, live status pulse), refactored `PlanDagGraph.jsx` into a thin domain adapter, and applied a **Linear/Temporal-density node** — hairline `divider` border, 3px status accent bar, compact UPPERCASE status label, tighter layout — replacing the previous "rich but bulky" thick border + 52×13 status pill. Recorded as ADR-0012. 31/31 graph tests pass, eslint 0 errors.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `src/components/graph/EnterpriseGraph.jsx` (ADD) | ✅ | Layer-2 primitive owning all interaction: canvas pan, per-node move/resize (`{x,y,w,h}` overrides + bottom-right handle, `NODE_MIN/MAX` clamps), wheel zoom + toolbar zoom in/out/fit (`clamp 0.25–3`), redraw (drops overrides + re-layout), reset, PNG export (SVG→canvas 2×, jsdom no-op), full-screen maximize modal, live `<animate>` pulse on `running` nodes |
+| 2 | `PlanDagGraph.jsx` (REWRITE → adapter) | ✅ | Thin domain adapter over `EnterpriseGraph`: supplies `renderNode`/`sidebar`/`nodeColor`/`nodeAriaLabel`/legend/title/summary/marker ids. Node interior = 3px accent bar + truncated intent + UPPERCASE status label (right-aligned) + tool/kind. Detail pane now also shows `latency_ms`/`draft_text`/`critic_verdict`. Exports `planStepStatusColor`/`planStepStatusLabel` unchanged |
+| 3 | `planGraph.js` — node geometry + tighter layout | ✅ | `layoutExecutionGraph` emits `w`/`h` per node; `EXEC_LAYOUT` → `nodeW 176, nodeH 44, colGap 48, rowGap 28, padX 24, padTop 36, padBottom 20` |
+| 4 | Enterprise look (top-systems density) | ✅ | Hairline `divider` border `rx=6` (primary 2px selected), neutral `action.selected` fill on select, edges `divider` 1.25px, phase bands 9px label @ opacity 0.05 — replaces thick status border + fat pill |
+| 5 | Tests | ✅ | `planGraph.test.js` (+1 w/h); `PlanDagGraph.test.jsx` (+7 `EnterpriseGraph interactions`: toolbar, zoom transform, node drag, resize via `plan-dag-graph-resize-0`, redraw restore, running `<animate>`/completed none, RUNNING/FINISHED labels) → **31/31** |
+| 6 | Toolkit | ✅ | **ADR-0012** (`decisions/0012-enterprise-graph-canvas.md`) + index row + `shared/design-patterns.md` Composite note. No new deps (extends ADR-0011) |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| CREATE | `src/components/graph/EnterpriseGraph.jsx` | Shared enterprise graph surface (pan/zoom/move/resize/redraw/reset/export/maximize/live pulse) |
+| REWRITE | `src/components/graph/PlanDagGraph.jsx` | Thin domain adapter over `EnterpriseGraph` |
+| MODIFY | `src/utils/planGraph.js` | Node `w`/`h` + tighter `EXEC_LAYOUT` |
+| MODIFY | `src/__tests__/PlanDagGraph.test.jsx`, `src/__tests__/planGraph.test.js` | +8 tests (31 total) |
+| CREATE | `.ai-toolkit/decisions/0012-enterprise-graph-canvas.md` | ADR-0012 |
+| MODIFY | `.ai-toolkit/decisions/README.md`, `.ai-toolkit/shared/design-patterns.md` | index row + Composite note |
+
+### Verification Output
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/PlanDagGraph.test.jsx src/__tests__/planGraph.test.js
+# Test Files  2 passed (2)      Tests  31 passed (31)
+npx eslint src/components/graph/EnterpriseGraph.jsx src/components/graph/PlanDagGraph.jsx src/utils/planGraph.js
+# 0 errors, 2 warnings (react-refresh/only-export-components — pre-existing)
+```
+
+### Deviations / Assumptions
+- Node status label kept as full UPPERCASE words (`FINISHED`/`RUNNING`/…) so the existing "status on node" test contract holds; `Needs approval` → compact `APPROVAL` on the node (full label still used in legend + detail pane).
+- Universal `patterns/UP-0009` **not** promoted — the promotion contract requires the same root-cause class in ≥2 projects; the trap→correct→detectable content is captured in ADR-0012's "Do NOT re-try" clause + `design-patterns.md` instead.
+- Browser verification of the live graph deferred: no plan with steps currently exists in the DB (0 plans), so there is no DAG to render — behavior is covered by the 31 jsdom tests.
+
+---
+
+## [2026-08-21] Frontend Worker — Plan graph UX: movable + resizable canvas, docked info card, full-screen expand (user feedback round 2)
+
+### Summary
+User feedback round 2 on the execution graph: *"graph, not movable, resizable, no free style, info card not float. add expand to take the graph to max modal to see details"* — then explicitly corrected my first reading: **"i want them, not no!"** (they DO want move/zoom, just NOT free-form node dragging). Result: `PlanDagGraph.jsx` refactored so the **canvas is movable (drag-to-pan) and resizable (wheel-to-zoom, 0.35–2.2)** via a shared `GraphCanvas` component, strict auto-layout kept (nodes auto-placed by execution rank — no free-style dragging), the **info card is DOCKED** (right rail, `flexShrink 0`, never floating) in both inline and modal views, and an **Expand button** (`data-testid="plan-graph-expand"`) opens a **full-screen modal** (`data-testid="plan-graph-modal"`) with its own larger canvas + docked pane. All verified live in the browser.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `src/components/graph/PlanDagGraph.jsx` — add `GraphCanvas` | ✅ | Shared movable/resizable canvas used inline AND in modal. `boxRef` + `drag` ref + `moved` ref (suppresses node-click after a drag), native **non-passive** `wheel` listener → `onZoomChange(z → clamp(z * 1.12|0.89, 0.35–2.2))`, mouse down/move/up/leave pan (3px drag threshold), transform `translate(pan.x + (viewW − width·zoom)/2, pan.y + (viewH − layoutHeight·zoom)/2) scale(zoom)`, cursor `grab`/`grabbing`, `userSelect: none` |
+| 2 | `PlanDagGraph.jsx` — docked detail pane | ✅ | `renderDetailPane({width, maxHeight, paneTestId})` shared inline + modal: **docked** (flexShrink 0, borderLeft, width 236 inline / 300 modal, overflowY auto) — never floating per user feedback |
+| 3 | `PlanDagGraph.jsx` — expand full-screen modal | ✅ | `<Dialog fullScreen>` with own header (title + counts + Reset view + Close `plan-graph-modal-close`), canvas column (`renderLegend()` + `GraphCanvas fill markerId="plan-arrow-modal"`) + docked pane (`plan-step-detail-modal`). Unique marker id per SVG instance (no DOM collision — `markerCount === 2` verified in browser) |
+| 4 | Header controls | ✅ | Reset view Button (restores `zoom=1`, `pan={0,0}` — works in both inline + modal), expand IconButton `aria-label="Expand plan graph"` |
+| 5 | `src/__tests__/PlanDagGraph.test.jsx` (EXTEND) | ✅ | 8 component tests: + Reset view control present, + expand → full-screen modal (own canvas `plan-dag-graph-modal`, unique `marker#plan-arrow-modal`, inline `marker#plan-arrow` still exactly 1, modal node click → `plan-step-detail-modal`, close dismisses). matchMedia polyfill added (`beforeAll`) for MUI Dialog in jsdom |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `src/components/graph/PlanDagGraph.jsx` | +`GraphCanvas` (movable/resizable), docked `renderDetailPane`, full-screen modal, Reset view + Expand buttons, unique marker ids |
+| MODIFY | `src/__tests__/PlanDagGraph.test.jsx` | +2 tests (Reset view, expand modal), matchMedia polyfill, `waitFor` |
+
+### How the movable/resizable canvas works
+`GraphCanvas` renders the SVG with a `transform` group: `translate(pan.x + (viewW − width·zoom)/2, pan.y + (viewH − layoutHeight·zoom)/2) scale(zoom)`. Wheel (native, non-passive so the page doesn't scroll) zooms about the canvas center; drag pans by updating `pan` — the `moved` ref distinguishes drags from clicks so a node click still opens the docked pane after panning. Strict auto-layout is untouched: nodes stay placed by `layoutExecutionGraph` execution ranks — "free style" (node dragging) is intentionally NOT provided.
+
+### Verification Output
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/PlanDagGraph.test.jsx src/__tests__/planGraph.test.js
+# Test Files  2 passed (2)      Tests  23 passed (23)
+npx vitest run src/__tests__/AITaskPlanCard.controls.test.jsx
+# Test Files  1 passed (1)      Tests  9 passed (9)
+npx eslint src/components/graph/PlanDagGraph.jsx src/__tests__/PlanDagGraph.test.jsx
+# 0 errors, 2 warnings (react-refresh/only-export-components — pre-existing)
+# Browser (live /admin/ai/workspace, plan 5b740a62, 5 steps · 4 links):
+#   node click → docked pane (x=795, w=236, right rail, NOT floating) with Step # / status / intent / phase / tool / agent role / depends-on / feeds-into
+#   expand → full-screen modal (628×595 = viewport), own canvas + `marker#plan-arrow-modal`, marker count 2 (no collision)
+#   modal node click → docked pane inside modal (`plan-step-detail-modal`)
+#   wheel zoom: scale 1 → 1.12 (inline + modal); drag pan: translate deltas applied (inline + modal)
+#   Reset view: transform → translate(0,0) scale(1) (inline + modal); Close dismisses; console 0 errors, 0 page errors
+```
+
+### Deviations / Assumptions
+- Kept "movable + resizable" per user's explicit correction ("i want them, not no!") while honoring "no free style" (auto-layout only, no node dragging).
+- Detail pane docked (not floating) in both inline and modal views.
+- Marker ids unique per SVG instance (`plan-arrow` inline, `plan-arrow-modal` modal) to avoid DOM id collisions.
+
+---
+
+## [2026-08-21] Frontend Worker — Plan DAG → Directed EXECUTION graph (user feedback, W3-F upgrade)
+
+### Summary
+User feedback: *"the visual graph is not execution graph, like tensor flow thing. no directions, no detailed pane, etc"*. Rebuilt the plan graph from a force-directed blob into a **layered DIRECTED execution graph** (TensorFlow-style): dependencies always flow left→right with **arrowheads** (SVG `<marker>`), nodes are ranked by longest-path layering (sources rank 0), phase bands render as vertical lanes, and clicking a node opens a **detailed inspection pane** (intent, tool, agent role, phase, status, depends-on, feeds-into, error). Pure layout logic added to `planGraph.js` (`layoutExecutionGraph`); `PlanDagGraph.jsx` fully rewritten (no d3-force — pure SVG); `ForceGraph.jsx` untouched (still used by `AgentTopologyGraph`/`KnowledgeGraphPanel`). 21/21 graph tests pass; lint clean (2 pre-existing react-refresh warnings); verified live in the browser via a temporary preview page.
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `src/utils/planGraph.js` + `layoutExecutionGraph` | ✅ | New pure helper: longest-path ranks FROM sources (Sugiyama layering — sources rank 0, edges always left→right), per-rank vertical centering, `EXEC_LAYOUT` consts (nodeW 168, nodeH 48, colGap 56, rowGap 40), returns `{nodes(x/y/rank/phase_id), edges(sourceX/sourceY/targetX/targetY), width, height, phaseBands}`. Keeps `buildPlanGraph`/`buildPlanPhases`/`planDagMermaid` intact |
+| 2 | `src/components/graph/PlanDagGraph.jsx` (REWRITE) | ✅ | No d3-force. SVG: `<marker id="plan-arrow">` arrowhead (`orient=auto-start-reverse`, `marker-end` on every edge), bezier edges exiting source right-edge → entering target left-edge, phase band lanes (chartPalette tokens, `(parallel)` label), node rects (status dot + truncated intent + tool name or "Reasoning (LLM)"), click → detailed inspection pane (`data-testid="plan-step-detail"`), zoom via wheel (0.35–2.2) + Reset view. Exports `planStepStatusColor` + `planStepStatusLabel` |
+| 3 | `src/__tests__/PlanDagGraph.test.jsx` (EXTEND) | ✅ | 6 component tests: header/counts/legend, arrowhead marker + 3 `marker-end` edges, left→right rank x-coordinate assertion, detail-pane open/close (`fireEvent` + `within`, SVG nodes need `fireEvent.click` — no DOM `.click()`), Live badge, empty state; + `planStepStatusColor` + `planStepStatusLabel` |
+| 4 | `src/__tests__/planGraph.test.js` (EXTEND) | ✅ | 4 new `layoutExecutionGraph` tests: ranks 0/1/2 for diamond deps, phase ids + phase bands covering owned nodes, directed edges with `targetX > sourceX`, empty-plan tolerance; existing `buildPlanGraph` node assert loosened to `toMatchObject` (nodes now carry `agent_role`/`phase_id`) |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `src/utils/planGraph.js` | +`layoutExecutionGraph` + `EXEC_LAYOUT` (appended after `buildPlanPhases`) |
+| REWRITE | `src/components/graph/PlanDagGraph.jsx` | Force-directed → layered directed execution graph with arrowheads + detail pane |
+| MODIFY | `src/__tests__/PlanDagGraph.test.jsx` | +2 tests (arrows, detail pane), +`planStepStatusLabel`, `fireEvent` for SVG clicks |
+| MODIFY | `src/__tests__/planGraph.test.js` | +4 `layoutExecutionGraph` tests, `toMatchObject` on node |
+
+### How the execution graph works
+`layoutExecutionGraph(plan)` builds nodes/edges via `buildPlanGraph`, then assigns **longest-path ranks measured from sources**: `rank(v) = 0` if no predecessors, else `1 + max(rank(preds))`. Edges therefore always point from lower rank → higher rank, i.e. **left→right** in screen space. Within a rank, nodes stack top→bottom by `step_id` and the group is vertically centered. Phase bands are computed per phase from the x-span of its owned nodes. `PlanDagGraph` renders this as pure SVG: each edge is a cubic bezier leaving the source node's right edge (`sourceX = x + nodeW`) and entering the target's left edge (`targetX = x`), with an arrowhead marker at the end — direction is explicit, exactly like a TensorFlow computation graph. The detail pane shows: step id + status chip, intent, phase (name + strategy), tool (or "None — pure reasoning step (LLM)" for reasoning steps), agent role, depends-on list, feeds-into list, and any error.
+
+### Verification Output
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/PlanDagGraph.test.jsx src/__tests__/planGraph.test.js
+# Test Files  2 passed (2)      Tests  21 passed (21)
+npx vitest run src/__tests__/AITaskPlanCard.controls.test.jsx
+# Test Files  1 passed (1)      Tests  9 passed (9)
+npx eslint src/components/graph/PlanDagGraph.jsx src/utils/planGraph.js src/__tests__/PlanDagGraph.test.jsx src/__tests__/planGraph.test.js
+# 0 errors, 2 warnings (react-refresh/only-export-components — pre-existing pattern for exported helpers)
+# Browser (temporary /graph-preview.html entry, removed after):
+#   nodes 4, ranks x = 28/28/252/476 (left→right), edges 3 all marker-end=url(#plan-arrow),
+#   phase bands Research (parallel)/Analysis/Report Generation, detail pane DOM verified
+```
+
+### Deviations / Assumptions
+- `ForceGraph.jsx` intentionally untouched — it remains the shared primitive for `AgentTopologyGraph` + `KnowledgeGraphPanel`; only the plan graph became a layered directed SVG.
+- Full frontend suite: 64 files passed; 3 files failed with 9 tests (`AISharedThreads` 4, `AIMessageBubble.feedback` 3, `AIArtifacts` 2, `LoadoutSheetPage` 1) — **verified pre-existing** (stash of my 4 files → same failures; they reference the Sprint-18 DOM rewrite in unrelated components).
+- The plan graph keeps its W3-F contract: `data-testid="plan-dag-graph"`, "Plan graph" header, step/link counts, Live badge, legend chips, and the empty state string are unchanged.
+
+---
+
+## [2026-08-21] Backend Worker — Deterministic mutation classification + E2E consent-cycle proof (Fix-A regression)
+
+### Summary
+Closed a consent-model gap found during E2E verification: the LLM was marking the `export_document` step `is_mutation=False`, which would bypass the Fix-A consent gate entirely. Made mutation classification **deterministic** — `_MUTATION_TOOL_NAMES = {"export_document"}` is a capability fact of the tool, not an LLM judgment — forced in BOTH `_llm_decompose` post-parse validation and `_parse_skill_plan` step construction. Self-staging tools (non-GET `call_host_api`, `create_dq_rule`, `learn_fact`, `forget_fact`, `run_ops_workflow`) are excluded from the set to avoid double-gating. Verified end-to-end: full `ai/tests` suite (652 passed), live decompose (`NEEDS_CONFIRMATION: True`, export `mutation=True`), and a fresh E2E consent cycle 11/11 PASS (create → approve → run pauses at the export step with no file written → confirm → resume → docx written to `backend/mediafiles/ai_exports/` only AFTER consent).
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | `planner.py` — `_MUTATION_TOOL_NAMES` | ✅ | Capability-fact set; forced `is_mutation=True` for `export_document` in `_llm_decompose` (post-parse) and `_parse_skill_plan` (step construction) |
+| 2 | `test_planner_reasoning_skills.py` +3 tests | ✅ | `test_llm_under_marked_export_is_forced_mutation`, `test_mutation_tool_set_excludes_self_staging_tools`, `test_skill_plan_export_forced_mutation` — 11 total in file, all pass |
+| 3 | Full `ai/tests` suite | ✅ | 652 passed (92s) |
+| 4 | Live decompose check | ✅ | Plan persisted with export step `is_mutation=True`, `NEEDS_CONFIRMATION: True` |
+| 5 | Fresh E2E consent cycle | ✅ | `/tmp/e2e_consent_cycle.py` 11/11 PASS on plan `1845c38a-5bf0-4036-b35b-77291f37d3bd`; file `comparison-of-top-carbon-footprint-accounting-systems-20260821-111356.docx` written to `backend/mediafiles/ai_exports/` only after consent |
+
+### Files Changed
+| Action | File | What |
+|--------|------|------|
+| MODIFY | `backend/ai/engine/cognition/plan/planner.py` | +`_MUTATION_TOOL_NAMES`; forced `is_mutation=True` in `_llm_decompose` + `_parse_skill_plan` |
+| MODIFY | `backend/ai/tests/test_planner_reasoning_skills.py` | +3 deterministic-mutation tests |
+
+### Notes
+- Chain (unchanged, deterministic): planner forces `is_mutation=True` → critic.py vetoes `mutation_not_confirmed` when `is_mutation and not confirmation_token and not dry_run` → loop.py `_execute_step` converts the veto to a consent pause (token uuid4, paused=True, executed=False) → `confirm_step` → resume executes with consent.
+- Resume re-ran ALL steps (including completed) in the fresh E2E — tracked as the resume-token investigation (Task 6), separate from this fix.
+- DO NOT TOUCH: `backend/ai/engine/agent/tools.py`, `agent/plugins.py`.
+
+---
+
 ## [2026-08-20] Frontend Worker — Phase W3-G: AI Admin catalog + topology + run timeline
 
 ### Summary

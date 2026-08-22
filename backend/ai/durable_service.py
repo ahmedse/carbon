@@ -210,6 +210,72 @@ class DurableExecutionService:
 
         return {"run_id": run.id, "status": run.status, "events": events}
 
+    # ── Run comparison (Gap #4) ──────────────────────────────────────────
+
+    def compare_runs(self, user, run_a_id: str, run_b_id: str) -> dict:
+        """Side-by-side diff of two runs' step ledgers (read-only, fail-visible).
+
+        Reuses the same durable facts as ``timeline`` — ``Run`` status +
+        ``RunStep`` rows — and aligns them by ``step_index`` so an operator
+        can see exactly where two runs of the same plan diverged (a step
+        added/removed, or whose terminal status/error differs).
+        """
+        from ai.models.core import RunStep
+
+        run_a = self._get_owned_run(user, run_a_id)
+        run_b = self._get_owned_run(user, run_b_id)
+
+        steps_a = {
+            s.step_index: s
+            for s in RunStep.objects.filter(run_id=run_a.id)
+        }
+        steps_b = {
+            s.step_index: s
+            for s in RunStep.objects.filter(run_id=run_b.id)
+        }
+
+        step_diff = []
+        for idx in sorted(set(steps_a) | set(steps_b)):
+            sa = steps_a.get(idx)
+            sb = steps_b.get(idx)
+            entry = {
+                "step_index": idx,
+                "intent": sa.intent if sa else sb.intent,
+                "a_status": sa.status if sa else None,
+                "b_status": sb.status if sb else None,
+                "only_in": (
+                    "a" if (sa and not sb) else ("b" if (sb and not sa) else None)
+                ),
+            }
+            if sa and sb and sa.status != sb.status:
+                entry["status_changed"] = True
+            if sa and sa.error:
+                entry["a_error"] = sa.error
+            if sb and sb.error:
+                entry["b_error"] = sb.error
+            step_diff.append(entry)
+
+        return {
+            "a": {
+                "run_id": run_a.id,
+                "status": run_a.status,
+                "brief": run_a.user_message,
+                "step_count": len(steps_a),
+            },
+            "b": {
+                "run_id": run_b.id,
+                "status": run_b.status,
+                "brief": run_b.user_message,
+                "step_count": len(steps_b),
+            },
+            "status_changed": run_a.status != run_b.status,
+            "step_diff": step_diff,
+            "diverged_steps": [
+                e for e in step_diff
+                if e.get("status_changed") or e.get("only_in")
+            ],
+        }
+
     @staticmethod
     def _step_status_event(step):
         """Current step state → ``(kind, detail)`` product event, or None.

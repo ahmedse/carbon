@@ -4,6 +4,7 @@ ReActLoop — Iterates a Plan step-by-step with critic gating + re-plan on failu
 PR-20: Executes each PlanStep through draft → critic → execute → observe,
 with mutation confirmation gates, dry-run previews, and up to 2 replans.
 """
+import asyncio
 import json
 import logging
 import time
@@ -29,6 +30,14 @@ def _get_broadcast():
 
 
 # ── Dataclasses ────────────────────────────────────────────────────────────────
+
+def _phase_name(plan, phase_id: int) -> str:
+    """Human label for a phase id — falls back to a neutral name."""
+    for p in getattr(plan, "phases", []) or []:
+        if p.phase_id == phase_id and p.name:
+            return p.name
+    return f"Phase {phase_id + 1}"
+
 
 @dataclass
 class StepResult:
@@ -227,25 +236,116 @@ class ReActLoop:
             })
 
         # ── Topological sort: respect depends_on ──────────────────────────
-        remaining = list(plan.steps)
-        # Filter out already-completed steps for resumed runs
+        # Filter out already-completed/skipped steps for resumed runs — the
+        # consent confirm/decline path marks a step ``completed``/``skipped``
+        # in Django before the run resumes, and the loop must not re-execute
+        # it (which would otherwise re-trigger the consent gate).
+        remaining = [
+            s for s in plan.steps if s.step_id not in completed_ids
+        ]
+
+        # ── Phase bookkeeping (workflow stages) ───────────────────────────
+        # plan.phases gives each step a stage. Phases run in order (phase i
+        # steps wait for all earlier phases); within a "sequential" phase the
+        # steps run in listed order, within a "parallel" phase they run
+        # concurrently (still subject to depends_on). Steps not listed in any
+        # phase are treated as an implicit trailing phase so nothing stalls.
+        _step_phase: dict[int, int] = {}
+        _phase_steps: dict[int, list[int]] = {}
+        for _p in getattr(plan, "phases", []) or []:
+            _phase_steps.setdefault(_p.phase_id, [])
+            for _sid in _p.step_ids or []:
+                _step_phase[_sid] = _p.phase_id
+                _phase_steps[_p.phase_id].append(_sid)
+        _phase_strategy: dict[int, str] = {
+            _p.phase_id: (_p.strategy if _p.strategy in ("sequential", "parallel") else "sequential")
+            for _p in (getattr(plan, "phases", []) or [])
+        }
+        # Unlisted steps → implicit trailing phase (id = max+1)
+        _unlisted = [s.step_id for s in plan.steps if s.step_id not in _step_phase]
+        if _unlisted:
+            _implicit_phase = (max(_phase_steps) + 1) if _phase_steps else 0
+            _phase_steps[_implicit_phase] = _unlisted
+            _phase_strategy[_implicit_phase] = "sequential"
+            for _sid in _unlisted:
+                _step_phase[_sid] = _implicit_phase
+        _phase_ids_ordered = sorted(_phase_steps.keys())
+        # step_id → index within its phase (for sequential ordering)
+        _step_seq_index: dict[int, int] = {}
+        for _pid, _sids in _phase_steps.items():
+            for _idx, _sid in enumerate(_sids):
+                _step_seq_index[_sid] = _idx
+
+        _started_phases: set[int] = set()
+
+        def _step_is_phase_ready(step_id: int, done: set[int]) -> bool:
+            """Phase barrier: earlier phases complete first; sequential
+            phases run their steps in listed order; parallel phases only
+            require depends_on (checked by the caller's topo pass)."""
+            pid = _step_phase.get(step_id)
+            if pid is None:
+                return True
+            pid_idx = _phase_ids_ordered.index(pid)
+            for _earlier_pid in _phase_ids_ordered[:pid_idx]:
+                if not all(s in done for s in _phase_steps[_earlier_pid]):
+                    return False
+            if _phase_strategy.get(pid) == "sequential":
+                _idx = _step_seq_index.get(step_id, 0)
+                _phase_ids = _phase_steps[pid]
+                for _prior in _phase_ids[:_idx]:
+                    if _prior not in done:
+                        return False
+            return True
 
         while remaining:
             ready, remaining = self._partition_ready(remaining, completed_ids)
+            # Phase barrier filter — sequential phases must not jump ahead.
+            # Steps blocked by an earlier phase stay in the pool (they are
+            # pushed back into ``remaining``) so they run once their phase is
+            # unblocked — never silently dropped.
+            _blocked: list[PlanStep] = []
+            _filtered: list[PlanStep] = []
+            for _s in ready:
+                if _step_is_phase_ready(_s.step_id, completed_ids):
+                    _filtered.append(_s)
+                else:
+                    _blocked.append(_s)
+            ready = _filtered
+            remaining = _blocked + remaining
             if not ready:
-                # Circular dependency — execute remaining sequentially
-                logger.warning("ReActLoop: possible circular dependency; executing remaining sequentially")
-                ready = remaining
-                remaining = []
+                # Circular dependency or phase barrier blocking — surface as
+                # sequentially-run remaining so execution never stalls.
+                if remaining:
+                    logger.warning(
+                        "ReActLoop: phase barrier/circular deps block ready set; "
+                        "running remaining sequentially"
+                    )
+                    ready, remaining = remaining[:1], remaining[1:]
+                else:
+                    break
 
+            # Phase 1 — broadcast started for every ready step (preserves event order)
             for step in ready:
-                step_t0 = time.monotonic()
+                _pid = _step_phase.get(step.step_id)
+                if _pid is not None and _pid not in _started_phases:
+                    _started_phases.add(_pid)
+                    await _get_broadcast()(instance_id, "run.phase.started", {
+                        "run_id": run_id,
+                        "phase_id": _pid,
+                        "name": _phase_name(plan, _pid),
+                        "strategy": _phase_strategy.get(_pid, "sequential"),
+                        "step_ids": _phase_steps.get(_pid, []),
+                    })
                 await _get_broadcast()(instance_id, "run.step.started", {
                     "run_id": run_id,
                     "step_index": step.step_id,
                     "intent": step.intent,
                 })
-                result = await self._execute_step(
+
+            # Phase 2 — execute in parallel (sequential fast-path when len==1)
+            async def _run_one(step):
+                _t0 = time.monotonic()
+                _res = await self._execute_step(
                     step=step,
                     dw=dw,
                     cw=cw,
@@ -263,13 +363,25 @@ class ReActLoop:
                     dry_run=dry_run,
                     confirmation_token=confirmation_token,
                     step_contexts=step_contexts,
+                    agent_role=step.agent_role,
+                    plan_source=plan.source,
                 )
-                step_latency = (time.monotonic() - step_t0) * 1000
+                return step, _res, (time.monotonic() - _t0) * 1000
+
+            if len(ready) == 1:
+                executed = [await _run_one(ready[0])]
+            else:
+                executed = await asyncio.gather(*[_run_one(s) for s in ready])
+
+            # Phase 3 — fold back IN ORDER (same post-step logic as today)
+            for step, result, step_latency in executed:
                 step_results.append(result)
                 total_llm_calls += 1  # each step involves at least one LLM call
 
                 # ── Step event based on result ────────────────────────
-                if result.error and result.critic_verdict == "veto":
+                # Any error (critic veto OR lifted tool error) fails the step;
+                # only genuinely successful steps broadcast completed.
+                if result.error:
                     await _get_broadcast()(instance_id, "run.step.failed", {
                         "run_id": run_id,
                         "step_index": step.step_id,
@@ -343,9 +455,24 @@ class ReActLoop:
                 if result.draft_text:
                     step_contexts[step.step_id] = result.draft_text
 
+                # ── Phase completed? (all steps in the phase are done) ──
+                # Runs AFTER completed_ids.update so single-step phases fire.
+                _pid = _step_phase.get(step.step_id)
+                if _pid is not None and _pid in _started_phases:
+                    _phase_done = all(
+                        s in completed_ids for s in _phase_steps[_pid]
+                    )
+                    if _phase_done:
+                        await _get_broadcast()(instance_id, "run.phase.completed", {
+                            "run_id": run_id,
+                            "phase_id": _pid,
+                            "name": _phase_name(plan, _pid),
+                            "strategy": _phase_strategy.get(_pid, "sequential"),
+                            "step_ids": _phase_steps.get(_pid, []),
+                        })
+
         # ── Check for pause (consent gate hit) ────────────────────────────
         is_paused = bool(step_results and step_results[-1].paused)
-
         if is_paused:
             # Don't synthesize — return the confirmation prompt
             last = step_results[-1]
@@ -425,6 +552,8 @@ class ReActLoop:
         dry_run: bool,
         confirmation_token: str | None,
         step_contexts: dict[int, str],
+        agent_role: str | None = None,
+        plan_source: str = "",
     ) -> StepResult:
         """Execute one plan step: draft → critic → execute → observe."""
 
@@ -432,6 +561,60 @@ class ReActLoop:
         enriched_prompt = self._build_step_prompt(
             step, user_message, system_prompt, step_contexts,
         )
+
+        # Tool-aware drafting: expose the step's tool set (or the curated
+        # single-step allow-set) so the LLM can emit real tool_calls, and
+        # append the anti-fabrication grounding rules (mirrors runner.py:run).
+        from ai.engine.agent.tools import get_tool_definitions
+
+        step_tools: list[dict] | None = None
+        if step.tool_name:
+            step_tools = [
+                d for d in get_tool_definitions()
+                if d.get("function", {}).get("name") == step.tool_name
+            ] or None
+        elif plan_source == "single_step":
+            # Single-step passthrough: mirror runner.py's curated allow-set so
+            # a plain imperative request still dispatches a tool.
+            _allow = {"create_dq_rule", "search_knowledge", "get_entity_details",
+                      "list_my_capabilities", "plan_task"}
+            step_tools = [
+                d for d in get_tool_definitions()
+                if d.get("function", {}).get("name") in _allow
+            ] or None
+        else:
+            # Multi-step REASONING step (no tool): pure LLM reasoning from the
+            # prior step results (depends_on) — comparison, synthesis,
+            # analysis are the model's job, NOT a skill or a tool call.
+            step_tools = None
+
+        if step_tools:
+            system_prompt = (
+                f"{system_prompt}\n\n"
+                "GROUNDING RULES — follow them exactly:\n"
+                "- You have tools available. Use them to do real work instead "
+                "of guessing. When a tool matches the user's request, call it "
+                "right away — do not answer in prose instead of using it, and "
+                "do not say you cannot run/execute tasks.\n"
+                "- When the user asks you to plan, orchestrate, or run a task "
+                "(e.g. 'run agent planner', 'plan a data quality audit'), call "
+                "plan_task IMMEDIATELY with their request as the brief — do "
+                "not ask for more details first.\n"
+                "- NEVER claim an action succeeded (e.g. 'rule created') unless "
+                "a tool result confirms it.\n"
+                "- The create_dq_rule tool only STAGES a proposal — it returns "
+                "a confirmation execution. Nothing is written until the user "
+                "confirms. Tell the user a confirmation button appeared; do "
+                "NOT say the rule was created.\n"
+                "- The plan_task tool DRAFTS a plan and returns a plan id in "
+                "pending_approval; it does not execute anything. After calling "
+                "it, tell the user the plan id and that it awaits approval in "
+                "the Tasks panel. Never claim a task ran or completed.\n"
+                "- If a tool errors, report the error plainly.\n"
+                "- When the user asks what you can do, use the capability-list "
+                "tool so the app can attach the matching page links as small "
+                "buttons under your reply."
+            )
 
         # Draft
         draft = await dw.draft(
@@ -442,6 +625,7 @@ class ReActLoop:
             conversation_history=conversation_history,
             instance_config=instance_config,
             user_info=user_info,
+            tools=step_tools,
         )
 
         # Critic
@@ -463,16 +647,63 @@ class ReActLoop:
         )
 
         if critic.verdict == "veto":
+            # ── Consent gate (RULE_21) ─────────────────────────────────────
+            # A mutation step vetoed for lack of a confirmation token must
+            # PAUSE for user consent — never veto→replan: _replan_step
+            # rebuilds the step and re-executes it, and without this gate the
+            # replanned mutation ran WITHOUT consent (sprint-18 bypass: the
+            # critic vetoed, the replan stripped is_mutation, and the export
+            # files were written). Convert the veto into a consent pause —
+            # run()'s existing ``if result.paused:`` branch persists the step
+            # as awaiting_approval, pauses the Run, broadcasts run.paused and
+            # stops. On resume the step re-executes WITH the token and the
+            # critic passes.
+            if (
+                step.is_mutation
+                and "mutation_not_confirmed" in critic.flags
+                and not confirmation_token
+                and not dry_run
+            ):
+                from uuid import uuid4
+                result.paused = True
+                result.confirmation_token = str(uuid4())
+                result.executed = False
+                result.error = None
+                result.critic_verdict = "pass"
+                logger.info(
+                    "ReActLoop: consent gate hit step=%d tool=%s token=%s "
+                    "(mutation requires confirmation)",
+                    step.step_id, step.tool_name or "?",
+                    result.confirmation_token[:8],
+                )
+                return result
+
             result.error = critic.veto_reason or "Step vetoed by critic"
             return result
 
         # Execute (only if not vetoed)
         if not dry_run:
             execution = await ex.execute(
-                draft.text, stream_callback, progress_callback,
+                text=draft.text,
+                tool_calls=draft.tool_calls,
+                stream_callback=stream_callback,
+                progress_callback=progress_callback,
+                agent_role=agent_role or step.agent_role,
+                is_worker=(step.agent_role not in ("orchestrator", "", None)),
             )
             result.executed = True
             result.tool_output = execution.completed_tools[0] if execution.completed_tools else None
+
+            # ── Tool-error propagation ────────────────────────────────────
+            # Tool-level failures ride inside result.tool_output (dict with an
+            # "error" key); without this lift, failed steps were persisted as
+            # "completed" and the run could finish "completed" with silent
+            # failures. Promote tool errors to step errors so _persist_run_step
+            # marks the step failed and _finalize_run fails the run honestly.
+            if result.tool_output and isinstance(result.tool_output, dict):
+                _tool_err = result.tool_output.get("error")
+                if _tool_err:
+                    result.error = str(_tool_err)
 
             # ── P1.3: Consent gate — pause if tool requires confirmation ──
             if result.tool_output:
@@ -554,7 +785,13 @@ class ReActLoop:
             tool_name=failed_step.tool_name,
             tool_args=failed_step.tool_args,
             depends_on=failed_step.depends_on,
-            is_mutation=False,  # strip mutation on retry — safer
+            # Keep is_mutation on retry — stripping it let replanned mutation
+            # steps re-execute WITHOUT user consent (sprint-18 bypass, RULE_21
+            # violation). With the consent gate in _execute_step, a mutation
+            # without a token pauses for confirmation instead of executing;
+            # preserving the flag guarantees a mutation can never run
+            # unconfirmed, no matter how many times it is replanned.
+            is_mutation=failed_step.is_mutation,
         )]
 
     # ── P1.1: Durable run persistence helpers ─────────────────────────────

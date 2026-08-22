@@ -426,3 +426,23 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Regression guard: `backend/ai/tests/test_tool_execution_actions.py::test_create_pending_execution_stages_via_django_store`
   (drives `CarbonHostExecutor.create_pending_execution()` end-to-end through the Django store).
 - First seen: 2026-08-18.
+
+### PB-40 — EnterpriseGraph node collapses to 0×0 / invisible after drag or resize
+- Symptom: dragging a node collapses its body to 0×0; resizing a node makes it
+  disappear entirely (SVG `transform="translate(NaN, NaN)"`).
+- Layer: frontend
+- Root cause: `EnterpriseGraph.jsx` `effectiveNodes` copied the override onto the
+  layout node **field-by-field** (`x: o.x, y: o.y, w: o.w, h: o.h`). A pure drag
+  stores only `{x, y}` and a pure resize only `{w, h}`; the missing field was copied
+  as `undefined`, overwriting the layout's real value.
+- Fix: merge the override ON TOP of the layout node (`{ ...n, ...o }`) so missing
+  fields fall back to the layout geometry. See
+  `carbon-frontend/src/components/graph/EnterpriseGraph.jsx` → `effectiveNodes`.
+- Best practice note: when layered state (auto-layout + user overrides) is merged,
+  ALWAYS spread, never copy field-by-field — a partial record must inherit the
+  fields it doesn't specify. Also: E2E tests must assert the **orthogonal** dimension
+  (w/h after a drag, x/y after a resize), not just the one being changed, or a
+  cross-field regression passes silently.
+- Regression guard: `journey-12-task-run.spec.ts` S6.8 (w/h preserved after drag)
+  and S6.12 (x/y preserved after resize).
+- First seen: 2026-08-21.

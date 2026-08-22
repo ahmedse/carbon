@@ -30,6 +30,7 @@ Design contracts (TASKS.md W3-A — backend):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import queue
@@ -62,6 +63,15 @@ STEP_SKIPPED = "skipped"
 # Statuses from which a plan may (re)enter execution.
 _RUNNABLE_STATUSES = {STATUS_APPROVED, STATUS_PAUSED}
 
+# Bounded, deterministic retry policy for transient tool failures (Gap #2).
+# A failed step is re-queued (pending) and the loop re-entered with a fixed
+# exponential backoff schedule — no jitter, so replays stay reproducible.
+# Retries never bypass a consent gate: if any step is awaiting approval the
+# run pauses for review instead of retrying (RULE_21).
+RETRY_MAX_ATTEMPTS = 3
+RETRY_BASE_DELAY_SECONDS = 1.0
+RETRY_MAX_DELAY_SECONDS = 8.0
+
 
 class PlanNotAccessibleError(Exception):
     """Raised when the plan does not belong to the requesting user."""
@@ -92,6 +102,27 @@ def _run_async(coro):
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         return pool.submit(asyncio.run, coro).result()
+
+
+def _parse_tool_output_json(tool_output_json):
+    """Normalize a ``RunStep.tool_output_json`` value to a dict.
+
+    The live engine path persists this field as a JSON string (the engine's
+    SQLAlchemy ``RunStep`` maps it to a ``Text`` column), while the
+    deterministic seam and Django ORM writes store a native dict. The consent
+    endpoints must accept both shapes.
+    """
+    if not tool_output_json:
+        return {}
+    if isinstance(tool_output_json, dict):
+        return tool_output_json
+    if isinstance(tool_output_json, str):
+        try:
+            parsed = json.loads(tool_output_json)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
 
 
 class PlansService:
@@ -152,6 +183,16 @@ class PlansService:
             "source": plan_json.get("source", "single_step"),
             "skill_name": plan_json.get("skill_name"),
             "synthesis_instruction": plan_json.get("synthesis_instruction"),
+            "phases": [
+                {
+                    "phase_id": p.get("phase_id", i),
+                    "name": p.get("name", f"Phase {i + 1}"),
+                    "goal": p.get("goal", ""),
+                    "strategy": p.get("strategy", "sequential"),
+                    "step_ids": p.get("step_ids") or [],
+                }
+                for i, p in enumerate(plan_json.get("phases") or [])
+            ],
             "conversation_id": run.conversation_id,
             "created_at": run.created_at.isoformat() if run.created_at else None,
             "updated_at": run.updated_at.isoformat() if run.updated_at else None,
@@ -165,6 +206,11 @@ class PlansService:
                     "depends_on": s.depends_on_json or [],
                     "instructions": (
                         (step_meta.get(s.step_index) or {}).get("instructions")
+                    ),
+                    "agent_role": (
+                        (step_meta.get(s.step_index) or {}).get(
+                            "agent_role", "orchestrator"
+                        )
                     ),
                     "status": s.status,
                     "draft_text": s.draft_text,
@@ -184,6 +230,9 @@ class PlansService:
         Steps become plain dicts (NOT dataclass reprs) so edit / replan /
         run all operate on structured data. ``instructions`` (service-owned
         review text from step edits) is an extra key the engine ignores.
+        Phases + per-step agent roles ride along so the workflow shape and
+        agent assignments survive persistence and round-trip through
+        ``_rebuild_plan``.
         """
         return {
             "pattern": plan.pattern,
@@ -197,8 +246,19 @@ class PlansService:
                     "depends_on": s.depends_on or [],
                     "is_mutation": bool(s.is_mutation),
                     "dry_run_supported": bool(s.dry_run_supported),
+                    "agent_role": s.agent_role or "orchestrator",
                 }
                 for s in plan.steps
+            ],
+            "phases": [
+                {
+                    "phase_id": p.phase_id,
+                    "name": p.name,
+                    "goal": p.goal,
+                    "strategy": p.strategy,
+                    "step_ids": p.step_ids or [],
+                }
+                for p in getattr(plan, "phases", []) or []
             ],
             "synthesis_instruction": plan.synthesis_instruction,
             "source": plan.source,
@@ -217,10 +277,14 @@ class PlansService:
         user_pk = str(user.pk)
 
         async def _decompose():
+            from ai.engine.llm.provider import get_llm_client
+
             factory = get_session_factory(PLAN_INSTANCE_ID)
             async with factory() as db:
                 registry = SkillRegistry(db)
-                planner = SkillAwarePlanner(model=settings.LLM_MODEL)
+                planner = SkillAwarePlanner(
+                    llm_client=get_llm_client(), model=settings.LLM_MODEL
+                )
                 return await planner.decompose(
                     utterance=brief,
                     skill_registry=registry,
@@ -355,7 +419,7 @@ class PlansService:
         The approved plan is the executed plan — no re-decomposition at run
         time (review contract).
         """
-        from ai.engine.cognition.plan.planner import Plan, PlanStep
+        from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
 
         plan_json = run.plan_json or {}
         steps = [
@@ -368,8 +432,19 @@ class PlansService:
                 depends_on=s.get("depends_on") or [],
                 is_mutation=bool(s.get("is_mutation", False)),
                 dry_run_supported=bool(s.get("dry_run_supported", False)),
+                agent_role=s.get("agent_role", "orchestrator"),
             )
             for s in plan_json.get("steps", [])
+        ]
+        phases = [
+            PlanPhase(
+                phase_id=int(p.get("phase_id", i)),
+                name=p.get("name", ""),
+                goal=p.get("goal", ""),
+                strategy=p.get("strategy", "sequential"),
+                step_ids=[int(x) for x in (p.get("step_ids") or [])],
+            )
+            for i, p in enumerate(plan_json.get("phases") or [])
         ]
         return Plan(
             pattern=plan_json.get("pattern", "custom"),
@@ -378,6 +453,7 @@ class PlansService:
             source=plan_json.get("source", "custom"),
             skill_name=plan_json.get("skill_name"),
             needs_confirmation=bool(plan_json.get("needs_confirmation", False)),
+            phases=phases,
         )
 
     # ── Create / read ─────────────────────────────────────────────────────
@@ -685,6 +761,245 @@ class PlansService:
         )
         return self.get_plan(user, fork_id)
 
+    # ── W3-D: plan templates (Gap #3) ─────────────────────────────────────
+
+    @staticmethod
+    def _serialize_template(tpl) -> dict:
+        """Product-facing template payload (RULE_23 — outcome terms only)."""
+        plan_json = tpl.plan_json or {}
+        steps = [s for s in plan_json.get("steps", []) if isinstance(s, dict)]
+        return {
+            "id": tpl.id,
+            "name": tpl.name,
+            "description": tpl.description or "",
+            "source_plan_id": tpl.source_plan_id,
+            "pattern": plan_json.get("pattern", "custom"),
+            "skill_name": plan_json.get("skill_name"),
+            "step_count": len(steps),
+            "created_at": tpl.created_at.isoformat() if tpl.created_at else None,
+            "updated_at": tpl.updated_at.isoformat() if tpl.updated_at else None,
+        }
+
+    def promote_template(
+        self, user, plan_id: str, name: str, description: str = ""
+    ) -> dict:
+        """Promote a plan's ``plan_json`` into a reusable template.
+
+        Saving a template is a durable *read-only copy* of the plan shape —
+        it never mutates domain data, so no step-level consent gate applies
+        (the plan itself was already reviewed). The template captures the
+        approved/executed step structure, not execution state.
+        """
+        from ai.models.core import PlanTemplate, generate_uuid
+
+        source = self._get_owned_run(user, plan_id)
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("name is required.")
+        if len(name) > 200:
+            raise ValueError("name is too long (max 200 characters).")
+
+        tpl = PlanTemplate(
+            id=generate_uuid(),
+            host_user_id=str(user.pk),
+            name=name,
+            description=(description or "").strip(),
+            plan_json=json.loads(json.dumps(source.plan_json or {})),
+            source_plan_id=source.id,
+        )
+        tpl.save()
+        logger.info(
+            "Plan template created id=%s from=%s user=%s",
+            tpl.id, source.id, str(user.pk),
+        )
+        return self._serialize_template(tpl)
+
+    def list_templates(self, user) -> dict:
+        """List the requesting user's templates, newest first."""
+        from ai.models.core import PlanTemplate
+
+        templates = list(
+            PlanTemplate.objects.filter(host_user_id=str(user.pk)).order_by(
+                "-created_at"
+            )
+        )
+        return {
+            "templates": [self._serialize_template(t) for t in templates],
+            "count": len(templates),
+        }
+
+    def create_from_template(self, user, template_id: str) -> dict:
+        """Instantiate a template into a NEW reviewable plan (``pending_approval``).
+
+        Reuses the ``fork_plan`` clone path (fresh Run + fresh pending RunStep
+        rows) with ``from_template`` provenance — instantiation never
+        auto-approves or executes (RULE_21).
+        """
+        from ai.models.core import PlanTemplate, Run, RunStep, generate_uuid
+
+        try:
+            tpl = PlanTemplate.objects.get(
+                id=template_id, host_user_id=str(user.pk)
+            )
+        except PlanTemplate.DoesNotExist:
+            raise PlanNotAccessibleError(f"Template {template_id} not found.")
+
+        plan_json = json.loads(json.dumps(tpl.plan_json or {}))
+        steps = [s for s in plan_json.get("steps", []) if isinstance(s, dict)]
+
+        run_id = generate_uuid()
+        run = Run(
+            id=run_id,
+            instance_id=PLAN_INSTANCE_ID,
+            conversation_id="",
+            host_user_id=str(user.pk),
+            user_message=tpl.name,
+            status=STATUS_PENDING_APPROVAL,
+            plan_json=plan_json,
+            working_notes={"from_template": tpl.id},
+        )
+        run.save()
+        for step in steps:
+            RunStep.objects.create(
+                run_id=run_id,
+                step_index=int(step.get("step_id", 0)),
+                intent=step.get("intent", ""),
+                tool_name=step.get("tool_name"),
+                tool_args_json=step.get("tool_args") or {},
+                depends_on_json=step.get("depends_on") or [],
+                status=STEP_PENDING,
+            )
+        logger.info(
+            "Plan instantiated id=%s from_template=%s user=%s",
+            run_id, tpl.id, str(user.pk),
+        )
+        return self.get_plan(user, run_id)
+
+    # ── Bounded retry helpers (Gap #2) ────────────────────────────────────
+
+    @staticmethod
+    def _retry_backoff_delay(attempt: int) -> float:
+        """Fixed exponential backoff: 1s, 2s, 4s … capped at 8s. No jitter."""
+        return min(
+            RETRY_BASE_DELAY_SECONDS * (2 ** max(attempt - 1, 0)),
+            RETRY_MAX_DELAY_SECONDS,
+        )
+
+    @staticmethod
+    def _mark_run_paused(run) -> None:
+        """Mark a run paused (engine re-entry state) before a retry attempt."""
+        run.status = STATUS_PAUSED
+        run.save(update_fields=["status", "updated_at"])
+
+    @staticmethod
+    def _append_retry_audit(run, attempt: int, step_indexes: list) -> None:
+        """Record a retry attempt in ``working_notes.audit`` (durable provenance)."""
+        notes = dict(run.working_notes or {})
+        audit = list(notes.get("audit") or [])
+        audit.append(
+            {
+                "t": timezone.now().isoformat(),
+                "kind": "run_retried",
+                "step_id": step_indexes[0] if len(step_indexes) == 1 else None,
+                "detail": {"attempt": attempt, "re_queued_steps": step_indexes},
+            }
+        )
+        notes["audit"] = audit
+        run.working_notes = notes
+        run.save(update_fields=["working_notes", "updated_at"])
+
+    async def _execute_plan_once(
+        self,
+        run,
+        plan,
+        user_pk: str,
+        conversation_id: str,
+        instance_config: dict,
+        user_info,
+    ) -> None:
+        """Run the ReAct loop once in a fresh engine session.
+
+        Extracted from ``_run_plan_frames`` so the retry loop can re-enter the
+        engine with a *fresh* SQLAlchemy session per attempt (the same pattern
+        as ``DurableExecutionService.resume_run``). Step statuses are written
+        durably by the loop; the caller re-reads them via the Django ORM.
+        """
+        from asgiref.sync import sync_to_async
+
+        from ai.models.core import RunStep
+        from ai.engine.core.database import get_session_factory
+        from ai.engine.cognition.plan.loop import ReActLoop
+        from ai.engine.cognition.turn.draft import DraftWitness
+        from ai.engine.cognition.turn.critic import CriticWitness
+        from ai.engine.cognition.turn.execute import ExecuteWitness
+        from ai.engine.llm.prompts import build_chat_prompt
+        from ai.host_executor import CarbonHostExecutor
+
+        config = instance_config or {}
+        async with get_session_factory(PLAN_INSTANCE_ID)() as db:
+            executor = CarbonHostExecutor(
+                db=db,
+                instance_config=instance_config,
+                user_token=f"inproc:carbon:{user_pk}",
+                host_user_id=user_pk,
+            )
+            system_prompt = await build_chat_prompt(
+                instance_name=config.get("display_name", "Carbon"),
+                system_description=config.get("description", ""),
+                user_info=user_info,
+                persona=config.get("persona"),
+                api_catalog=config.get("api_catalog"),
+                navigation_routes=config.get("navigation_routes"),
+                domain_topics=config.get("domain_topics"),
+                instance_config=config,
+                conversation_id=conversation_id,
+                instance_id=PLAN_INSTANCE_ID,
+            )
+            execute_witness = ExecuteWitness(
+                executor=executor,
+                run_id=str(run.id),
+                instance_id=PLAN_INSTANCE_ID,
+                hook_ctx_defaults={
+                    "instance_id": PLAN_INSTANCE_ID,
+                    "conversation_id": conversation_id,
+                    "host_user_id": user_pk,
+                    "run_id": str(run.id),
+                    "instance_config": instance_config,
+                },
+            )
+            loop = ReActLoop(
+                draft_witness=DraftWitness(executor=executor),
+                critic_witness=CriticWitness(),
+                executor=execute_witness,
+                db=db,
+            )
+            # P1.3: a paused consent step resumes WITH its stored token so the
+            # mutation re-executes (critic passes → tool runs). The loop
+            # generated the token when it paused the step; without this the
+            # resumed mutation would be vetoed again and loop forever.
+            resume_token = None
+            pending_steps = await sync_to_async(
+                lambda: list(
+                    RunStep.objects.filter(
+                        run_id=run.id, status=STEP_AWAITING_APPROVAL
+                    )
+                )
+            )()
+            if pending_steps:
+                resume_token = pending_steps[0].confirmation_token
+            await loop.run(
+                plan=plan,
+                instance_id=PLAN_INSTANCE_ID,
+                conversation_id=conversation_id,
+                user_message=run.user_message,
+                system_prompt=system_prompt,
+                instance_config=instance_config,
+                user_info=user_info,
+                host_user_id=user_pk,
+                resume_run_id=run.id,
+                confirmation_token=resume_token,
+            )
+
     # ── Execution: SSE streamed run ───────────────────────────────────────
 
     def run_plan_stream(self, user, plan_id: str):
@@ -744,16 +1059,10 @@ class PlansService:
         from asgiref.sync import sync_to_async
 
         from ai.models.core import RunStep
-        from ai.engine.core.database import get_session_factory
-        from ai.engine.cognition.plan.loop import ReActLoop
-        from ai.engine.cognition.turn.draft import DraftWitness
-        from ai.engine.cognition.turn.critic import CriticWitness
-        from ai.engine.llm.prompts import build_chat_prompt
         from ai.engine_runtime import (
             _build_chat_user_info,
             _carbon_instance_config,
         )
-        from ai.host_executor import CarbonHostExecutor
 
         # Django ORM is sync-only — inside this async generator every ORM
         # touchpoint runs through thread-sensitive sync_to_async (same
@@ -802,41 +1111,37 @@ class PlansService:
             },
         }
 
-        config = instance_config or {}
-        async with get_session_factory(PLAN_INSTANCE_ID)() as db:
-            executor = CarbonHostExecutor(
-                db=db,
-                instance_config=instance_config,
-                user_token=f"inproc:carbon:{user_pk}",
-                host_user_id=user_pk,
+        # First attempt (fresh engine session).
+        await self._execute_plan_once(
+            run, plan, user_pk, conversation_id, instance_config, user_info
+        )
+
+        # Bounded, deterministic retry for transient tool failures.
+        for attempt in range(1, RETRY_MAX_ATTEMPTS + 1):
+            await sync_to_async(run.refresh_from_db)()
+            steps = await sync_to_async(
+                lambda: list(
+                    RunStep.objects.filter(run_id=run.id).order_by("step_index")
+                )
+            )()
+            failed_steps = [s for s in steps if s.status == STEP_FAILED]
+            awaiting = [s for s in steps if s.status == STEP_AWAITING_APPROVAL]
+            # Never retry past a consent gate (RULE_21); surface it instead.
+            if not failed_steps or awaiting:
+                break
+            await asyncio.sleep(self._retry_backoff_delay(attempt))
+            for step in failed_steps:
+                step.status = STEP_PENDING
+                step.error = None
+                await sync_to_async(step.save)(
+                    update_fields=["status", "error", "updated_at"]
+                )
+            await sync_to_async(self._mark_run_paused)(run)
+            await sync_to_async(self._append_retry_audit)(
+                run, attempt, [s.step_index for s in failed_steps]
             )
-            system_prompt = await build_chat_prompt(
-                instance_name=config.get("display_name", "Carbon"),
-                system_description=config.get("description", ""),
-                user_info=user_info,
-                persona=config.get("persona"),
-                api_catalog=config.get("api_catalog"),
-                navigation_routes=config.get("navigation_routes"),
-                domain_topics=config.get("domain_topics"),
-                instance_config=config,
-                conversation_id=conversation_id,
-                instance_id=PLAN_INSTANCE_ID,
-            )
-            loop = ReActLoop(
-                draft_witness=DraftWitness(executor=executor),
-                critic_witness=CriticWitness(),
-                db=db,
-            )
-            result = await loop.run(
-                plan=plan,
-                instance_id=PLAN_INSTANCE_ID,
-                conversation_id=conversation_id,
-                user_message=run.user_message,
-                system_prompt=system_prompt,
-                instance_config=instance_config,
-                user_info=user_info,
-                host_user_id=user_pk,
-                resume_run_id=run.id,
+            await self._execute_plan_once(
+                run, plan, user_pk, conversation_id, instance_config, user_info
             )
 
         # Re-read the durable row the loop finalized.
@@ -927,7 +1232,7 @@ class PlansService:
                 f"(status: {step.status})."
             )
 
-        tool_output = step.tool_output_json or {}
+        tool_output = _parse_tool_output_json(step.tool_output_json)
         raw = tool_output.get("result", "")
         parsed = {}
         try:
@@ -939,9 +1244,27 @@ class PlansService:
             or tool_output.get("execution_id")
         )
         if not execution_id:
-            raise PlanStepError(
-                f"Step {step.step_index} has no staged execution to confirm."
+            # Plan-level mutation consent (Fix A): the tool never staged an
+            # execution — this is the PRE-execution consent pause. Confirming
+            # here only GRANTS consent; nothing executes yet. The step stays
+            # awaiting_approval with its confirmation_token so the next resume
+            # re-executes it WITH the token (critic passes → tool runs → row
+            # persists completed). Declining the same step marks it skipped
+            # (see decline_step). Idempotent: a second confirm is a no-op.
+            if not step.confirmation_token:
+                from uuid import uuid4
+                step.confirmation_token = str(uuid4())
+            step.save(update_fields=["confirmation_token", "updated_at"])
+            logger.info(
+                "Plan step consent recorded (unstaged) plan=%s step=%s user=%s",
+                plan_id, step.step_index, str(user.pk),
             )
+            return {
+                "status": "confirmed",
+                "plan_id": plan_id,
+                "step_id": step.step_index,
+                "unstaged": True,
+            }
 
         user_pk = str(user.pk)
         instance_config = _carbon_instance_config(user_pk)
@@ -1001,7 +1324,7 @@ class PlansService:
                 f"(status: {step.status})."
             )
 
-        tool_output = step.tool_output_json or {}
+        tool_output = _parse_tool_output_json(step.tool_output_json)
         raw = tool_output.get("result", "")
         parsed = {}
         try:

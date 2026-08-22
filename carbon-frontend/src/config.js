@@ -12,6 +12,23 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localho
 // API timeout (milliseconds)
 export const API_TIMEOUT = parseInt(import.meta.env.VITE_API_TIMEOUT || "30000", 10);
 
+/**
+ * Resolve a backend-relative path (e.g. a generated download at
+ * `/media/ai_exports/report.xlsx`) to an absolute URL against the backend
+ * origin. `API_BASE_URL` looks like `http://localhost:8009/carbon-api/`; the
+ * `new URL(path, base)` trick yields `http://localhost:8009/media/...`.
+ * Falls back to the path unchanged (the browser will treat it as same-origin).
+ */
+export function resolveBackendUrl(path) {
+  if (!path) return path;
+  if (/^https?:\/\//i.test(path)) return path; // already absolute
+  try {
+    return new URL(path, API_BASE_URL).href;
+  } catch {
+    return path;
+  }
+}
+
 // Validate configuration on load
 if (!import.meta.env.VITE_API_BASE_URL) {
   console.error("❌ CRITICAL: VITE_API_BASE_URL not set in .env - using fallback URL");

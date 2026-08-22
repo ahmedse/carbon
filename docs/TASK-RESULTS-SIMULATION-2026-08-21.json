@@ -1,0 +1,313 @@
+{
+  "generated_at": "2026-08-21T10:05:23.824054+00:00",
+  "scenarios": [
+    {
+      "id": "B01",
+      "part": "B",
+      "title": "B01 Agent Chain Dag",
+      "verdict": "\u2705",
+      "highlight": "ok",
+      "plan_id": "6860ef20-27a8-4fe6-aa12-7799aed006a3",
+      "checks": [
+        {
+          "name": "3 steps started in order",
+          "pass": true
+        },
+        {
+          "name": "protocol intact",
+          "pass": true
+        },
+        {
+          "name": "run completed",
+          "pass": true
+        },
+        {
+          "name": "ledger 3 completed steps",
+          "pass": true
+        }
+      ],
+      "detail": {
+        "types": [
+          "plan_start",
+          "step_start",
+          "step_result",
+          "step_end",
+          "step_start",
+          "step_result",
+          "step_end",
+          "step_start",
+          "step_result",
+          "step_end",
+          "done"
+        ],
+        "step_ids": [
+          0,
+          1,
+          2
+        ],
+        "pattern": "skill_chain",
+        "source": "llm_decompose"
+      }
+    },
+    {
+      "id": "B02",
+      "part": "B",
+      "title": "B02 Parallel Fan Out",
+      "verdict": "\u2705",
+      "highlight": "ok",
+      "plan_id": "832073d6-8580-4e56-a27b-84122d0f9fea",
+      "checks": [
+        {
+          "name": "all 3 steps started",
+          "pass": true
+        },
+        {
+          "name": "run completed",
+          "pass": true
+        },
+        {
+          "name": "ledger all completed",
+          "pass": true
+        }
+      ],
+      "detail": {
+        "types": [
+          "plan_start",
+          "step_start",
+          "step_result",
+          "step_end",
+          "step_start",
+          "step_result",
+          "step_end",
+          "step_start",
+          "step_result",
+          "step_end",
+          "done"
+        ],
+        "pattern": "fan_out"
+      }
+    },
+    {
+      "id": "B03",
+      "part": "B",
+      "title": "B03 Consent Gate Confirm",
+      "verdict": "\u2705",
+      "highlight": "ok",
+      "plan_id": "2ac56e12-c0a8-4866-b9f5-89eb01ca2608",
+      "checks": [
+        {
+          "name": "consent frame emitted",
+          "pass": true
+        },
+        {
+          "name": "run paused at gate",
+          "pass": true
+        },
+        {
+          "name": "confirm accepted",
+          "pass": true
+        },
+        {
+          "name": "staged mutation executed",
+          "pass": true
+        },
+        {
+          "name": "resume completed",
+          "pass": true
+        }
+      ],
+      "detail": {
+        "gate_frames": [
+          "plan_start",
+          "step_start",
+          "step_confirm",
+          "step_start",
+          "step_result",
+          "step_end",
+          "done"
+        ],
+        "resume_frames": [
+          "plan_start",
+          "step_start",
+          "step_result",
+          "step_end",
+          "step_start",
+          "step_result",
+          "step_end",
+          "done"
+        ],
+        "confirmed": [
+          [
+            "exec-0",
+            "1"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "B04",
+      "part": "B",
+      "title": "B04 Consent Gate Decline",
+      "verdict": "\u2705",
+      "highlight": "ok",
+      "plan_id": "2c77cb3c-442f-41b1-a9c5-1bcdec825ead",
+      "checks": [
+        {
+          "name": "consent frame emitted",
+          "pass": true
+        },
+        {
+          "name": "run paused at gate",
+          "pass": true
+        },
+        {
+          "name": "decline accepted",
+          "pass": true
+        },
+        {
+          "name": "mutation NOT executed",
+          "pass": true
+        },
+        {
+          "name": "decline recorded",
+          "pass": true
+        },
+        {
+          "name": "resume completed",
+          "pass": true
+        }
+      ],
+      "detail": {
+        "gate_frames": [
+          "plan_start",
+          "step_start",
+          "step_confirm",
+          "step_start",
+          "step_result",
+          "step_end",
+          "done"
+        ],
+        "resume_frames": [
+          "plan_start",
+          "step_start",
+          "step_result",
+          "step_end",
+          "done"
+        ],
+        "declined": [
+          [
+            "exec-0",
+            "1"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "B05",
+      "part": "B",
+      "title": "B05 Veto Failure Surface",
+      "verdict": "\u2705",
+      "highlight": "ok",
+      "plan_id": "c0709687-e805-42ed-af64-e188850f5357",
+      "checks": [
+        {
+          "name": "failed step surfaced",
+          "pass": true
+        },
+        {
+          "name": "failure honest (error present)",
+          "pass": true
+        },
+        {
+          "name": "run status failed",
+          "pass": true
+        },
+        {
+          "name": "ledger steps_failed=1",
+          "pass": true
+        },
+        {
+          "name": "edit returns diff",
+          "pass": true
+        },
+        {
+          "name": "recovery run completed",
+          "pass": true
+        }
+      ],
+      "detail": {
+        "fail_frames": [
+          "plan_start",
+          "step_start",
+          "step_result",
+          "step_end",
+          "step_start",
+          "step_result",
+          "step_end",
+          "done"
+        ],
+        "failed_error": "Step failed (simulated critic veto)",
+        "diff": {
+          "added": 1,
+          "removed": 2,
+          "changed": 0
+        },
+        "recovery_frames": [
+          "plan_start",
+          "step_start",
+          "step_result",
+          "step_end",
+          "done"
+        ]
+      }
+    },
+    {
+      "id": "B06",
+      "part": "B",
+      "title": "B06 Pause Resume Ledger",
+      "verdict": "\u2705",
+      "highlight": "ok",
+      "plan_id": "52a4f485-ac76-4257-8f6e-2d26985594e3",
+      "checks": [
+        {
+          "name": "pause \u2192 paused",
+          "pass": true
+        },
+        {
+          "name": "resume pre-flight ok",
+          "pass": true
+        },
+        {
+          "name": "resumed run completed",
+          "pass": true
+        }
+      ],
+      "detail": {
+        "types": [
+          "plan_start",
+          "step_start",
+          "step_result",
+          "step_end",
+          "step_start",
+          "step_result",
+          "step_end",
+          "step_start",
+          "step_result",
+          "step_end",
+          "done"
+        ],
+        "ledger_status": "completed",
+        "steps": [
+          "completed",
+          "completed",
+          "completed"
+        ]
+      }
+    }
+  ],
+  "totals": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6
+  }
+}

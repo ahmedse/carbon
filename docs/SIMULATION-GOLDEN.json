@@ -1,0 +1,155 @@
+{
+  "generated_at": "2026-08-20T20:42:11.669776+00:00",
+  "scenarios": [
+    {
+      "id": "B01",
+      "part": "B",
+      "title": "B01 Agent Chain Dag",
+      "checks": [
+        {
+          "name": "3 steps started in order",
+          "expect_pass": true
+        },
+        {
+          "name": "protocol intact",
+          "expect_pass": true
+        },
+        {
+          "name": "run completed",
+          "expect_pass": true
+        },
+        {
+          "name": "ledger 3 completed steps",
+          "expect_pass": true
+        }
+      ]
+    },
+    {
+      "id": "B02",
+      "part": "B",
+      "title": "B02 Parallel Fan Out",
+      "checks": [
+        {
+          "name": "all 3 steps started",
+          "expect_pass": true
+        },
+        {
+          "name": "run completed",
+          "expect_pass": true
+        },
+        {
+          "name": "ledger all completed",
+          "expect_pass": true
+        }
+      ]
+    },
+    {
+      "id": "B03",
+      "part": "B",
+      "title": "B03 Consent Gate Confirm",
+      "checks": [
+        {
+          "name": "consent frame emitted",
+          "expect_pass": true
+        },
+        {
+          "name": "run paused at gate",
+          "expect_pass": true
+        },
+        {
+          "name": "confirm accepted",
+          "expect_pass": true
+        },
+        {
+          "name": "staged mutation executed",
+          "expect_pass": true
+        },
+        {
+          "name": "resume completed",
+          "expect_pass": true
+        }
+      ]
+    },
+    {
+      "id": "B04",
+      "part": "B",
+      "title": "B04 Consent Gate Decline",
+      "checks": [
+        {
+          "name": "consent frame emitted",
+          "expect_pass": true
+        },
+        {
+          "name": "run paused at gate",
+          "expect_pass": true
+        },
+        {
+          "name": "decline accepted",
+          "expect_pass": true
+        },
+        {
+          "name": "mutation NOT executed",
+          "expect_pass": true
+        },
+        {
+          "name": "decline recorded",
+          "expect_pass": true
+        },
+        {
+          "name": "resume completed",
+          "expect_pass": true
+        }
+      ]
+    },
+    {
+      "id": "B05",
+      "part": "B",
+      "title": "B05 Veto Failure Surface",
+      "checks": [
+        {
+          "name": "failed step surfaced",
+          "expect_pass": true
+        },
+        {
+          "name": "failure honest (error present)",
+          "expect_pass": true
+        },
+        {
+          "name": "run status failed",
+          "expect_pass": true
+        },
+        {
+          "name": "ledger steps_failed=1",
+          "expect_pass": true
+        },
+        {
+          "name": "edit returns diff",
+          "expect_pass": true
+        },
+        {
+          "name": "recovery run completed",
+          "expect_pass": true
+        }
+      ]
+    },
+    {
+      "id": "B06",
+      "part": "B",
+      "title": "B06 Pause Resume Ledger",
+      "checks": [
+        {
+          "name": "pause \u2192 paused",
+          "expect_pass": true
+        },
+        {
+          "name": "resume pre-flight ok",
+          "expect_pass": true
+        },
+        {
+          "name": "resumed run completed",
+          "expect_pass": true
+        }
+      ]
+    }
+  ]
+}

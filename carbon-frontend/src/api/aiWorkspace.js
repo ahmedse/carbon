@@ -1042,3 +1042,44 @@ export async function resumePlanStream(token, planId, { onFrame, onDone, onError
     onError: (message) => onError?.(message),
   });
 }
+
+// ── W3-D — plan templates (Gap #3) ───────────────────────────────────────
+// Promote a plan shape → reusable template; instantiate a template → new
+// reviewable plan. Instantiation NEVER auto-approves or executes (RULE_21).
+
+/**
+ * Save a plan's shape as a reusable template.
+ * @param {string} token - JWT access token
+ * @param {string} planId - UUID
+ * @param {object} params - { name, description? }
+ * @returns {Promise<object>} Template payload
+ */
+export function promotePlanTemplate(token, planId, { name, description = '' }) {
+  return apiFetch(`${PLANS_BASE}${planId}/promote-template/`, {
+    token,
+    method: 'POST',
+    body: { name, description },
+  });
+}
+
+/**
+ * List the requesting user's templates, newest first.
+ * @param {string} token - JWT access token
+ * @returns {Promise<object>} { templates: Array, count }
+ */
+export function listPlanTemplates(token) {
+  return apiFetch(`${PLANS_BASE}templates/`, { token });
+}
+
+/**
+ * Instantiate a template into a NEW reviewable plan (pending_approval).
+ * @param {string} token - JWT access token
+ * @param {string} templateId - UUID
+ * @returns {Promise<object>} New plan payload
+ */
+export function instantiatePlanTemplate(token, templateId) {
+  return apiFetch(`${PLANS_BASE}templates/${templateId}/instantiate/`, {
+    token,
+    method: 'POST',
+  });
+}

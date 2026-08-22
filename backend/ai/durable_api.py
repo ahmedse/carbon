@@ -74,6 +74,26 @@ class RunViewSet(viewsets.GenericViewSet):
         except Exception as exc:  # noqa: BLE001 - fail-visible contract
             return self._unavailable(exc)
 
+    def compare(self, request):
+        """GET /runs/compare/?a=<id>&b=<id> — side-by-side run diff (read-only)."""
+        run_a = request.query_params.get("a")
+        run_b = request.query_params.get("b")
+        if not run_a or not run_b:
+            return Response(
+                {"error": "Provide ?a=<run_id>&b=<run_id>."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            return Response(
+                self.service.compare_runs(request.user, run_a, run_b)
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as exc:  # noqa: BLE001 - fail-visible contract
+            return self._unavailable(exc)
+
     @action(detail=True, methods=["post"], url_path="resume",
             url_name="run-resume")
     def resume(self, request, pk=None):

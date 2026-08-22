@@ -35,6 +35,8 @@ class ExecuteWitness:
         tool_calls: list[dict] | None = None,
         stream_callback=None,
         progress_callback=None,
+        agent_role: str | None = None,
+        is_worker: bool | None = None,
     ) -> ExecutionResult:
         """Execute tool calls from S3 draft, streaming text as it completes.
 
@@ -43,7 +45,15 @@ class ExecuteWitness:
             tool_calls: Tool calls from S3 draft result. None or empty list = text-only.
             stream_callback: Async fn(delta: str) — called for each text chunk.
             progress_callback: Async fn(message: str) — called for progress updates.
+            agent_role: Optional per-call agent role override (threaded into HookContext).
+            is_worker: Optional per-call worker flag override (threaded into HookContext).
         """
+        ctx_defaults = dict(self.hook_ctx_defaults or {})
+        if agent_role is not None:
+            ctx_defaults["agent_role"] = agent_role
+        if is_worker is not None:
+            ctx_defaults["is_worker"] = is_worker
+
         t0 = time.monotonic()
         per_tool_latency_ms: dict[str, float] = {}
         completed_tools: list[dict] = []
@@ -65,7 +75,7 @@ class ExecuteWitness:
                 await _broadcast_tool_events("tool.started", independent, self.run_id, self.instance_id)
 
                 results = await asyncio.gather(*[
-                    _execute_single_tool(tc, self.executor, self.hook_pipeline, self.hook_ctx_defaults)
+                    _execute_single_tool(tc, self.executor, self.hook_pipeline, ctx_defaults)
                     for tc in independent
                 ], return_exceptions=True)
 
@@ -107,7 +117,7 @@ class ExecuteWitness:
                 # Wave 8A: broadcast tool.started
                 await _broadcast_single_tool_event("tool.started", self.run_id, self.instance_id, tool_name, tc_id)
 
-                result = await _execute_single_tool(tc, self.executor, self.hook_pipeline, self.hook_ctx_defaults)
+                result = await _execute_single_tool(tc, self.executor, self.hook_pipeline, ctx_defaults)
                 if isinstance(result, dict) and "tool_call_id" not in result:
                     result["tool_call_id"] = tc_id
                 completed_tools.append(result)
@@ -274,7 +284,43 @@ async def _execute_single_tool(
             host_api=executor_override,
         ))
 
-        result = await executor_fn(args)
+        # ── Dispatch convention (heterogeneous executors) ────────────────
+        # Plugins (make_executor) and MCP executors take the args dict
+        # positionally; static tools declare named params (query, skill_name,
+        # api_name, ...). Calling `executor_fn(args)` positionally bound the
+        # whole dict to the first named param and crashed static tools
+        # (e.g. invoke_skill: 'dict' object has no attribute 'strip').
+        # Dispatch by signature: kwargs when the function accepts them,
+        # positional otherwise.
+        import inspect as _inspect
+
+        _call_args = dict(args) if isinstance(args, dict) else {}
+        # Inject turn context for static tools that need it (call_host_api,
+        # invoke_skill, ...) — mirror engine_runtime._run_action_stream so a
+        # plan step can actually reach the host executor and instance.
+        _hook_defaults = hook_ctx_defaults or {}
+        if executor_override is not None and "executor" not in _call_args:
+            _call_args["executor"] = executor_override
+        if _hook_defaults.get("instance_id") and "instance_id" not in _call_args:
+            _call_args["instance_id"] = _hook_defaults["instance_id"]
+        if _hook_defaults.get("conversation_id") and "conversation_id" not in _call_args:
+            _call_args["conversation_id"] = _hook_defaults["conversation_id"]
+        try:
+            _sig = _inspect.signature(executor_fn)
+            _has_var_kw = any(
+                p.kind == _inspect.Parameter.VAR_KEYWORD
+                for p in _sig.parameters.values()
+            )
+            _all_named = bool(_call_args) and all(
+                k in _sig.parameters for k in _call_args
+            )
+        except (TypeError, ValueError):
+            _has_var_kw, _all_named = False, False
+
+        if _has_var_kw or _all_named:
+            result = await executor_fn(**_call_args)
+        else:
+            result = await executor_fn(_call_args)
         elapsed = (time.monotonic() - t_exec) * 1000
 
         # ── P3.3: After-hook pipeline ───────────────────────────────────
@@ -288,6 +334,27 @@ async def _execute_single_tool(
                     logger.debug("Guardrail redacted result for tool=%s", tool_name)
             except Exception as exc:
                 logger.exception("After-hook pipeline error for tool=%s: %s", tool_name, exc)
+
+        # ── Nested tool-error promotion ───────────────────────────────────
+        # Heterogeneous executors may return {"error": ...} as their RESULT
+        # (e.g. invoke_skill's "No skill named X found — try draft_skill
+        # first."). Without this lift the wrapper's top-level "error" stays
+        # None, the failure is serialized into ``result``, and loop.py's
+        # tool-error propagation misses it — the step persists "completed"
+        # with a silent failure. Promote inner dict errors so loop.py marks
+        # the step failed honestly.
+        if isinstance(result, dict) and result.get("error"):
+            _inner_err = result["error"]
+            logger.warning(
+                "Tool %s returned error result: %s", tool_name, _inner_err,
+            )
+            return {
+                "tool_name": tool_name,
+                "result": _safe_serialize(result),
+                "error": str(_inner_err),
+                "latency_ms": elapsed,
+                "guardrail_flags": guardrail_flags,
+            }
 
         result_str = _safe_serialize(result)
 

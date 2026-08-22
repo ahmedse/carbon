@@ -41,6 +41,8 @@ redis==5.0.1                          # Memory cache / message broker
 
 # Reporting
 xlsxwriter==3.2.2                     # Excel export for GHG reports (E3-1)
+python-docx==1.1.2                    # Word (.docx) generation for AI study exports
+openpyxl==3.1.5                       # Excel (.xlsx) generation for AI study exports
 
 # ── Vendored Pulse Engine (backend/ai/engine) — INERT, import-only (ADR-0009) ──
 sqlalchemy[asyncio]>=2.0.36,<2.1    # Engine ORM (Phase 1 inert; Phase 2 swaps to Django Store)

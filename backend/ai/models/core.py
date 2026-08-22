@@ -357,6 +357,27 @@ class RunStep(AppScopeMixin):
         app_label = "ai"
 
 
+class PlanTemplate(AppScopeMixin):
+    """Reusable plan template (Gap #3) — a promoted, named ``plan_json``.
+
+    A template is NOT an execution ledger row: it captures a plan's
+    ``plan_json`` (steps/phases/synthesis) plus a user-facing name and
+    description. Instantiating a template clones it into a fresh ``Run``
+    (``pending_approval``) via the same clone path as ``fork_plan``.
+    """
+
+    id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
+    name = models.TextField()
+    description = models.TextField(null=True, blank=True)
+    plan_json = models.JSONField(null=True, blank=True)
+    source_plan_id = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "ai"
+
+
 class Trajectory(AppScopeMixin):
     id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
     run_id = models.TextField(db_index=True)

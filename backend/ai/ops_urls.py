@@ -6,6 +6,7 @@ from ai.activation_api import PulseSettingsView, PulseUsageView
 from ai.graph_api import GraphDataView
 from ai.learning_api import LearningRunView, LearningStatusView
 from ai.observability_api import (
+    OutputQualityTrendView,
     PulseArchetypesView,
     PulseDataView,
     PulseInventoryView,
@@ -42,6 +43,7 @@ urlpatterns = [
     path("inventory/", PulseInventoryView.as_view(), name="ai-pulse-inventory"),
     path("data/<str:key>/", PulseDataView.as_view(), name="ai-pulse-data"),
     path("archetypes/", PulseArchetypesView.as_view(), name="ai-pulse-archetypes"),
+    path("quality-trend/", OutputQualityTrendView.as_view(), name="ai-pulse-quality-trend"),
     path("graph/", GraphDataView.as_view(), name="ai-pulse-graph"),
     path("usage/", PulseUsageView.as_view(), name="ai-pulse-usage"),
     path("settings/", PulseSettingsView.as_view(), name="ai-pulse-settings"),

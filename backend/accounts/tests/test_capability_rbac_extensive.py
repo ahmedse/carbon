@@ -196,10 +196,15 @@ class TestCapabilityDefinitions:
         assert len(ALL_CAPABILITIES) == len({c.key for c in ALL_CAPABILITIES.values()})
 
     def test_capability_count(self):
-        """Sanity check: we expect ~38 capabilities."""
+        """Sanity check: we expect ~38 capabilities.
+
+        The registry grew across sprints (ai, datahub, turnkey, appregistry,
+        healthy, dataschema, evidence domains) — 52 as of Sprint 23. The
+        bounds track deliberate growth, not a strict contract.
+        """
         count = len(ALL_CAPABILITIES)
         assert count >= 30, f"Expected at least 30 capabilities, got {count}"
-        assert count <= 50, f"Expected at most 50 capabilities, got {count}"
+        assert count <= 60, f"Expected at most 60 capabilities, got {count}"
 
     @pytest.mark.parametrize("domain,min_count", [
         ("carbon", 15),

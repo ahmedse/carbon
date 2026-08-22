@@ -33,6 +33,7 @@ import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import { PLAN_STATUS, STEP_STATUS } from './aiTaskStatus';
 import PlanDagGraph from '../components/graph/PlanDagGraph';
 import PlanMermaidPreview from '../components/graph/PlanMermaidPreview';
+import { buildPlanPhases } from '../utils/planGraph';
 
 function JsonPreview({ title, value }) {
   if (value === null || value === undefined) return null;
@@ -101,6 +102,7 @@ function AITaskPlanCard({
 
   const statusMeta = PLAN_STATUS[plan.status] || PLAN_STATUS.pending_approval;
   const steps = Array.isArray(plan.steps) ? plan.steps : [];
+  const { phases } = buildPlanPhases(plan);
   const reviewable = plan.status === 'pending_approval';
   const runnable = plan.status === 'approved' || plan.status === 'paused';
   const showRun = runnable && !running;
@@ -202,54 +204,101 @@ function AITaskPlanCard({
 
         <Divider sx={{ my: 0.25 }} />
 
-        {/* Step list with dry-run previews */}
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Steps ({steps.length})
-        </Typography>
+        {/* Workflow stages (phases) with steps + agent assignments */}
+        <Stack direction="row" alignItems="center" spacing={0.5}>
+          <Typography variant="caption" color="text.secondary" sx={{ flex: 1, fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Workflow · {steps.length} step{steps.length === 1 ? '' : 's'}
+          </Typography>
+          {phases.length > 1 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${phases.length} stages`}
+              sx={{ height: 16, fontSize: '0.5625rem' }}
+            />
+          )}
+        </Stack>
         <Stack spacing={0.75}>
-          {steps.map((step) => {
-            const stepMeta = STEP_STATUS[step.status] || STEP_STATUS.pending;
-            return (
-              <Paper key={step.step_id} variant="outlined" sx={{ borderRadius: 1 }}>
-                <Stack direction="row" alignItems="center" spacing={0.75} sx={{ px: 0.875, py: 0.5 }}>
-                  <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {step.intent || `Step ${step.step_id}`}
+          {phases.map((phase) => (
+            <Box key={phase.phase_id}>
+              <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.375 }}>
+                <Typography variant="caption" sx={{ flex: 1, fontSize: '0.6875rem', fontWeight: 600, color: 'text.primary' }}>
+                  {phase.name}
+                </Typography>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color={phase.strategy === 'parallel' ? 'primary' : 'default'}
+                  label={phase.strategy === 'parallel' ? 'Parallel' : 'Sequential'}
+                  sx={{ height: 15, fontSize: '0.5625rem' }}
+                />
+              </Stack>
+              {phase.goal && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.375, fontSize: '0.625rem' }}>
+                  {phase.goal}
+                </Typography>
+              )}
+              <Stack spacing={0.5}>
+                {phase.steps.map((step) => {
+                  const stepMeta = STEP_STATUS[step.status] || STEP_STATUS.pending;
+                  return (
+                    <Paper key={step.step_id} variant="outlined" sx={{ borderRadius: 1 }}>
+                      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ px: 0.875, py: 0.5 }}>
+                        <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {step.intent || `Step ${step.step_id}`}
+                        </Typography>
+                        {step.agent_role && step.agent_role !== 'orchestrator' && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            color="secondary"
+                            label={step.agent_role.replace(/_/g, ' ')}
+                            sx={{ height: 16, fontSize: '0.5625rem' }}
+                          />
+                        )}
+                        {step.tool_name && (
+                          <Chip size="small" variant="outlined" label={step.tool_name} sx={{ height: 16, fontSize: '0.5625rem' }} />
+                        )}
+                        <Chip size="small" variant="outlined" label={stepMeta.label} color={stepMeta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
+                        {editable && onEditStep && (
+                          <Tooltip title="Edit this step">
+                            <IconButton
+                              size="small"
+                              onClick={() => onEditStep(step)}
+                              aria-label={`Edit step ${step.step_id}`}
+                              sx={{ p: 0.125 }}
+                            >
+                              <EditOutlinedIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Stack>
+                      {step.tool_args !== null && step.tool_args !== undefined && Object.keys(step.tool_args).length > 0 && (
+                        <Box sx={{ px: 1.25, pb: 0.75 }}>
+                          <JsonPreview title="Inputs (dry-run preview)" value={step.tool_args} />
+                        </Box>
+                      )}
+                      {step.status === 'awaiting_approval' && (
+                        <Typography variant="caption" color="warning.main" sx={{ display: 'block', px: 1.25, pb: 0.75, fontSize: '0.6875rem' }}>
+                          This step writes to Carbon — it is waiting for your approval.
+                        </Typography>
+                      )}
+                      {step.status === 'failed' && step.error && (
+                        <Typography variant="caption" color="error.main" sx={{ display: 'block', px: 1.25, pb: 0.75, fontSize: '0.6875rem' }}>
+                          {step.error}
+                        </Typography>
+                      )}
+                    </Paper>
+                  );
+                })}
+                {phase.steps.length === 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+                    No steps in this stage.
                   </Typography>
-                  {step.tool_name && (
-                    <Chip size="small" variant="outlined" label={step.tool_name} sx={{ height: 16, fontSize: '0.5625rem' }} />
-                  )}
-                  <Chip size="small" variant="outlined" label={stepMeta.label} color={stepMeta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
-                  {editable && onEditStep && (
-                    <Tooltip title="Edit this step">
-                      <IconButton
-                        size="small"
-                        onClick={() => onEditStep(step)}
-                        aria-label={`Edit step ${step.step_id}`}
-                        sx={{ p: 0.125 }}
-                      >
-                        <EditOutlinedIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                </Stack>
-                {step.tool_args !== null && step.tool_args !== undefined && Object.keys(step.tool_args).length > 0 && (
-                  <Box sx={{ px: 1.25, pb: 0.75 }}>
-                    <JsonPreview title="Inputs (dry-run preview)" value={step.tool_args} />
-                  </Box>
                 )}
-                {step.status === 'awaiting_approval' && (
-                  <Typography variant="caption" color="warning.main" sx={{ display: 'block', px: 1.25, pb: 0.75, fontSize: '0.6875rem' }}>
-                    This step writes to Carbon — it is waiting for your approval.
-                  </Typography>
-                )}
-                {step.status === 'failed' && step.error && (
-                  <Typography variant="caption" color="error.main" sx={{ display: 'block', px: 1.25, pb: 0.75, fontSize: '0.6875rem' }}>
-                    {step.error}
-                  </Typography>
-                )}
-              </Paper>
-            );
-          })}
+              </Stack>
+            </Box>
+          ))}
         </Stack>
 
         {steps.length === 0 && (

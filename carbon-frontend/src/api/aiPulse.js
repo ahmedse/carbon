@@ -34,6 +34,16 @@ export function getPulseArchetypes(token) {
 }
 
 /**
+ * Fetch the daily output-quality trend + drift flags (read-only).
+ * @param {string} token - JWT access token
+ * @returns {Promise<{current: {avg, count}, by_day: Array<{date, avg, count}>,
+ *                    by_signal: Array<{signal, avg, count}>, drift: Array<{date, delta, avg}>}>}
+ */
+export function getQualityTrend(token) {
+  return apiFetch(`${BASE}quality-trend/`, { token });
+}
+
+/**
  * Fetch LLM usage aggregates (budget, spend, tokens, per-model, 7-day).
  * @param {string} token - JWT access token
  * @returns {Promise<{budget_usd, spent_today_usd, tokens_today, calls_today,

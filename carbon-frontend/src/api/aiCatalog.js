@@ -141,3 +141,15 @@ export function replayRun(token, runId) {
     body: { confirm: true },
   });
 }
+
+/**
+ * Side-by-side diff of two runs' step ledgers (read-only).
+ * @param {string} token
+ * @param {string} runAId
+ * @param {string} runBId
+ * @returns {Promise<{a: object, b: object, status_changed: boolean, step_diff: Array, diverged_steps: Array}>}
+ */
+export function compareRuns(token, runAId, runBId) {
+  const qs = new URLSearchParams({ a: runAId, b: runBId });
+  return apiFetch(`${BASE_RUNS}compare/?${qs.toString()}`, { token });
+}

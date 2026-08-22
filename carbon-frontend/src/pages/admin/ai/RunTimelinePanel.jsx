@@ -27,12 +27,13 @@ import {
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
 import PageContainer from '../../../components/layout/PageContainer';
 import RunTimeline from '../../../components/graph/RunTimeline';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
-import { getRunTimeline, resumeRun, replayRun } from '../../../api/aiCatalog';
+import { getRunTimeline, resumeRun, replayRun, compareRuns } from '../../../api/aiCatalog';
 
 export default function RunTimelinePanel() {
   useDocumentTitle('Run Timeline');
@@ -44,6 +45,13 @@ export default function RunTimelinePanel() {
   const [loading, setLoading] = useState(false);
   const [offline, setOffline] = useState(false);
   const [searched, setSearched] = useState(false);
+
+  // Run comparison state (Gap #4).
+  const [runBId, setRunBId] = useState('');
+  const [compare, setCompare] = useState(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareOffline, setCompareOffline] = useState(false);
+  const [compareSearched, setCompareSearched] = useState(false);
 
   // RULE_21 confirm gates — the action executes only after explicit consent.
   const [confirmAction, setConfirmAction] = useState(null); // 'resume' | 'replay'
@@ -68,6 +76,28 @@ export default function RunTimelinePanel() {
     const id = runId.trim();
     if (!id) return;
     fetchTimeline(id);
+  };
+
+  const fetchCompare = async (a, b) => {
+    setCompareLoading(true);
+    setCompareOffline(false);
+    setCompareSearched(true);
+    try {
+      const payload = await compareRuns(token, a, b);
+      setCompare(payload);
+    } catch {
+      setCompare(null);
+      setCompareOffline(true);
+    } finally {
+      setCompareLoading(false);
+    }
+  };
+
+  const onCompare = () => {
+    const a = runId.trim();
+    const b = runBId.trim();
+    if (!a || !b) return;
+    fetchCompare(a, b);
   };
 
   const onConfirm = async () => {
@@ -108,7 +138,7 @@ export default function RunTimelinePanel() {
 
         {/* Run id entry */}
         <Paper variant="outlined" sx={{ p: 1.25 }}>
-          <Stack direction="row" spacing={1} alignItems="flex-start">
+          <Stack direction="row" spacing={1} alignItems="flex-start" flexWrap="wrap" useFlexGap>
             <TextField
               size="small"
               label="Run / plan id"
@@ -118,7 +148,7 @@ export default function RunTimelinePanel() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') onLookup();
               }}
-              sx={{ flex: 1, maxWidth: 360, '& .MuiInputBase-input': { fontSize: '0.8125rem' } }}
+              sx={{ flex: 1, maxWidth: 300, '& .MuiInputBase-input': { fontSize: '0.8125rem' } }}
             />
             <Button
               variant="contained"
@@ -154,6 +184,40 @@ export default function RunTimelinePanel() {
           </Stack>
         </Paper>
 
+        {/* Run comparison entry (Gap #4) */}
+        <Paper variant="outlined" sx={{ p: 1.25 }}>
+          <Stack direction="row" spacing={1} alignItems="flex-start" flexWrap="wrap" useFlexGap>
+            <TextField
+              size="small"
+              label="Run A"
+              placeholder="e.g. 7f3a9c21-…"
+              value={runId}
+              onChange={(e) => setRunId(e.target.value)}
+              sx={{ flex: 1, minWidth: 200, maxWidth: 300, '& .MuiInputBase-input': { fontSize: '0.8125rem' } }}
+            />
+            <TextField
+              size="small"
+              label="Run B"
+              placeholder="e.g. 9c21f3a7-…"
+              value={runBId}
+              onChange={(e) => setRunBId(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onCompare();
+              }}
+              sx={{ flex: 1, minWidth: 200, maxWidth: 300, '& .MuiInputBase-input': { fontSize: '0.8125rem' } }}
+            />
+            <Button
+              size="small"
+              startIcon={<CompareArrowsIcon sx={{ fontSize: 15 }} />}
+              onClick={onCompare}
+              disabled={compareLoading || !runId.trim() || !runBId.trim()}
+              sx={{ fontSize: '0.75rem' }}
+            >
+              Compare
+            </Button>
+          </Stack>
+        </Paper>
+
         {loading && (
           <Paper variant="outlined" sx={{ p: 4, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             <CircularProgress size={28} />
@@ -186,6 +250,92 @@ export default function RunTimelinePanel() {
             )}
             <RunTimeline timeline={timeline} />
           </Box>
+        )}
+
+        {compareLoading && (
+          <Paper variant="outlined" sx={{ p: 4, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <CircularProgress size={28} />
+          </Paper>
+        )}
+
+        {!compareLoading && compareSearched && compareOffline && (
+          <Paper variant="outlined" sx={{ p: 3 }}>
+            <Stack spacing={1} alignItems="flex-start">
+              <Stack direction="row" spacing={1} alignItems="center">
+                <CloudOffIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8125rem' }}>
+                  Comparison unavailable
+                </Typography>
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                One or both runs were not accessible (or do not exist). Check the ids — the
+                backend returns 404 when a run is not accessible.
+              </Typography>
+            </Stack>
+          </Paper>
+        )}
+
+        {!compareLoading && compare && (
+          <Paper variant="outlined" sx={{ p: 1.5 }}>
+            <Stack spacing={1.5}>
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.8125rem' }}>
+                  Run comparison
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                  A: {compare.a.status} · {compare.a.step_count} step(s)
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                  B: {compare.b.status} · {compare.b.step_count} step(s)
+                </Typography>
+                {compare.status_changed && (
+                  <Alert severity="info" sx={{ py: 0, fontSize: '0.75rem' }}>
+                    Run status differs ({compare.a.status} vs {compare.b.status})
+                  </Alert>
+                )}
+              </Stack>
+
+              {(!compare.diverged_steps || compare.diverged_steps.length === 0) ? (
+                <Alert severity="success" sx={{ fontSize: '0.75rem' }}>
+                  No diverging steps — both ledgers match.
+                </Alert>
+              ) : (
+                <Stack spacing={0.75}>
+                  <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.75rem' }}>
+                    Diverging steps ({compare.diverged_steps.length})
+                  </Typography>
+                  {compare.diverged_steps.map((d) => (
+                    <Paper key={d.step_index} variant="outlined" sx={{ p: 1 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                        <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.75rem' }}>
+                          Step {d.step_index}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem', flex: 1, minWidth: 160 }}>
+                          {d.intent || '—'}
+                        </Typography>
+                        {d.only_in ? (
+                          <Alert severity="warning" sx={{ py: 0, fontSize: '0.75rem' }}>
+                            only in run {d.only_in.toUpperCase()}
+                          </Alert>
+                        ) : (
+                          <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
+                            {d.a_status} <CompareArrowsIcon sx={{ fontSize: 12, verticalAlign: 'middle' }} /> {d.b_status}
+                          </Typography>
+                        )}
+                      </Stack>
+                      {(d.a_error || d.b_error) && (
+                        <Typography variant="caption" color="error" sx={{ fontSize: '0.6875rem', display: 'block', mt: 0.5 }}>
+                          {d.a_error ? `A: ${d.a_error}` : ''}
+                          {d.a_error && d.b_error ? ' · ' : ''}
+                          {d.b_error ? `B: ${d.b_error}` : ''}
+                        </Typography>
+                      )}
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </Paper>
         )}
 
         {/* RULE_21 consent dialog — API is not called until this is confirmed. */}

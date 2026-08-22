@@ -23,7 +23,14 @@ def register_builtin_plugins() -> None:
     from .create_dq_rule import CreateDQRule
     from .list_capabilities import ListCapabilities
     from .plan_task import PlanTask
+    from .plan_lifecycle import ApprovePlan, EditPlan
+    from .web_research import WebResearch
+    from .export_document import ExportDocument
 
     register_plugin(CreateDQRule())
     register_plugin(ListCapabilities())
     register_plugin(PlanTask())
+    register_plugin(EditPlan())
+    register_plugin(ApprovePlan())
+    register_plugin(WebResearch())
+    register_plugin(ExportDocument())

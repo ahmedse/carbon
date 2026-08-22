@@ -1,4 +1,4 @@
-# Agent Workflow Simulation — 2026-08-20 20:42:45 UTC
+# Agent Workflow Simulation — 2026-08-21 10:05:23 UTC
 
 Deep multi-scenario simulation of the agent task-orchestration (plans) system.
 
@@ -282,7 +282,3 @@ _No findings recorded._
 - Part B (designed): 6
 - Passed: 6
 - Failed: 0
-
-## Golden regression
-
-- B01/BOGUS regression probe

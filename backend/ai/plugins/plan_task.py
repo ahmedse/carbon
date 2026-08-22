@@ -100,7 +100,13 @@ class PlanTask(ToolPlugin):
 
         service = PlansService()
         try:
-            plan = await sync_to_async(service.create_plan, thread_sensitive=True)(
+            # NOTE: thread_sensitive=False (the thread pool, NOT the single
+            # main-thread executor) is required here. create_plan internally
+            # re-enters the async engine via _run_async, whose own DB calls use
+            # sync_to_async(thread_sensitive=True). Nesting both on the same
+            # single-thread executor deadlocks ("Single thread executor already
+            # being used") and silently collapses the plan to one step.
+            plan = await sync_to_async(service.create_plan, thread_sensitive=False)(
                 user, brief, conversation_id=ctx.conversation_id or ""
             )
         except ValueError as exc:

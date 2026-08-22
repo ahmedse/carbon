@@ -1,8 +1,14 @@
 // src/__tests__/planGraph.test.js
 // W3-F — pure helpers: plan → DAG (nodes=steps, edges=depends_on), outcome
-// diff summaries, and the Mermaid graph source.
+// diff summaries, the Mermaid graph source, and the layered execution-graph
+// layout (TensorFlow-style ranks + phase bands).
 import { describe, it, expect } from 'vitest';
-import { buildPlanGraph, summarizePlanDiff, planDagMermaid } from '../utils/planGraph';
+import {
+  buildPlanGraph,
+  summarizePlanDiff,
+  planDagMermaid,
+  layoutExecutionGraph,
+} from '../utils/planGraph';
 
 const PLAN = {
   id: 'plan-1',
@@ -20,7 +26,7 @@ describe('buildPlanGraph', () => {
     const { nodes, edges } = buildPlanGraph(PLAN);
 
     expect(nodes).toHaveLength(3);
-    expect(nodes[0]).toEqual({
+    expect(nodes[0]).toMatchObject({
       id: 0,
       label: 'Search for duplicate records',
       status: 'pending',
@@ -103,5 +109,75 @@ describe('planDagMermaid', () => {
 
   it('handles a plan with no steps', () => {
     expect(planDagMermaid({ steps: [] })).toContain('No steps yet');
+  });
+});
+
+describe('layoutExecutionGraph', () => {
+  it('computes longest-path ranks so execution flows left→right', () => {
+    const { nodes } = layoutExecutionGraph(PLAN);
+
+    expect(nodes).toHaveLength(3);
+    const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+
+    // step 0 is a source (rank 0); step 1 depends on 0 (rank 1);
+    // step 2 depends on 0 AND 1 → longest path → rank 2.
+    expect(byId[0].rank).toBe(0);
+    expect(byId[1].rank).toBe(1);
+    expect(byId[2].rank).toBe(2);
+
+    // Coordinates follow the rank: deeper rank → strictly larger x.
+    expect(byId[2].x).toBeGreaterThan(byId[1].x);
+    expect(byId[1].x).toBeGreaterThan(byId[0].x);
+    expect(byId[0].y).toBe(byId[2].y); // vertical centering per rank
+  });
+
+  it('assigns phase ids and emits phase bands', () => {
+    const plan = {
+      ...PLAN,
+      phases: [
+        { phase_id: 1, name: 'Investigate', goal: '', strategy: 'sequential', step_ids: [0] },
+        { phase_id: 2, name: 'Act', goal: '', strategy: 'parallel', step_ids: [1, 2] },
+      ],
+    };
+    const { nodes, phaseBands } = layoutExecutionGraph(plan);
+
+    const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+    expect(byId[0].phase_id).toBe(1);
+    expect(byId[1].phase_id).toBe(2);
+
+    expect(phaseBands.some((b) => b.name === 'Investigate')).toBe(true);
+    expect(phaseBands.some((b) => b.name === 'Act' && b.strategy === 'parallel')).toBe(true);
+    // A band's x-span must cover the nodes it owns.
+    const act = phaseBands.find((b) => b.name === 'Act');
+    expect(act.x + act.width).toBeGreaterThanOrEqual(byId[2].x + 168);
+  });
+
+  it('emits directed edges with left→right anchor points', () => {
+    const { edges } = layoutExecutionGraph(PLAN);
+
+    expect(edges).toHaveLength(3);
+    edges.forEach((e) => {
+      // Source exits the right edge of its node; target enters the left edge.
+      expect(e.sourceX).toBeGreaterThan(e.sourceY ? 0 : 0); // x present
+      expect(e.targetX).toBeGreaterThan(e.sourceX); // always flows right
+      expect(e.targetY).toBeCloseTo(e.sourceY); // same baseline, horizontal flow
+    });
+  });
+
+  it('carries per-node width/height so nodes can be rendered and resized generically', () => {
+    const { nodes } = layoutExecutionGraph(PLAN);
+    nodes.forEach((n) => {
+      expect(n.w).toBeGreaterThan(0);
+      expect(n.h).toBeGreaterThan(0);
+    });
+  });
+
+  it('handles a plan with no steps', () => {
+    const layout = layoutExecutionGraph({ id: 'x', steps: [] });
+    expect(layout.nodes).toEqual([]);
+    expect(layout.edges).toEqual([]);
+    expect(layout.phaseBands).toEqual([]);
+    expect(layout.width).toBeGreaterThan(0);
+    expect(layout.height).toBeGreaterThan(0);
   });
 });
