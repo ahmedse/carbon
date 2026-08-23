@@ -3458,3 +3458,80 @@ pytest dq -q --maxfail=5                                                # 326 pa
 2. **`stale_id` recorded as string** — `record_repair` got `str(v)` instead of the typed id.
    Fix: `_validate_ref(..., original_value=...)` passes the original typed value through.
 Both fixes are covered by the existing 25 tests (now 25/25 green).
+
+## Phase 25-C — Acceptance checks + repair + QoS endpoints ✅
+
+**Date:** 2026-08-25 · **Worker:** backend-worker · **Status:** IMPLEMENTED (gate commands below — not executable in-session: no terminal tool available to this worker; static verification passed)
+
+**Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §3.4–§3.6 + §4 (qos/flight routes) · **Depends on:** 25-A (`b177d88`), 25-B (`61248c1`)
+
+### Deliverables (per task brief — "You are expected to WRITE CODE")
+1. **Acceptance templates + checks** in `flight_director.py` — `run_acceptance_checks(plan, run, ledger, executor, step_statuses=None, step_runner=None)` re-queries read-only host state via the executor for every criterion; evidence = the query + matched rows. `table_fields` asserts the **EXACT** field set ("exactly the 4 planned fields, no others") — mismatch → `partial` + actual `missing`/`extra` diff; table absent → `missed`. Criterion templates reuse `_suggest_criterion` (deterministic §3.4): `created_entity` (rule/table → list GET re-query; host → api-name-resolved kind; binding/read → ledger+step-status), `table_fields`, `artifact` (durable `RunArtifact` rows), `read_ok` (step status). Reasoning steps and user-declined (`skipped`) steps are excluded.
+2. **Repair loop** — per-criterion `met|partial|missed`; `missed` on a **non-mutation** step → `_repair_instructions` built from the ACTUAL diff → bounded re-execution via the injectable `step_runner` (`AI_FLIGHT_DIRECTOR_MAX_REPAIRS`, default 2) → re-check after each attempt → still failing → `_escalate` (escalations +1, `escalated_steps` flagged) and verdict becomes `partial`. **Mutation steps are NEVER auto re-run (RULE_21)** — their misses surface as `missed`; no runner available → `missed` surfaces, never silently.
+3. **`build_acceptance_report(run, results, metrics)`** — idempotent `AcceptanceReport` row per run (`filter(run_id=...).first()`, update-on-reclosure, never duplicates): `report_json = {"requirements": [...]}`, `metrics_json` (retries/rewrites/vetoes/escalations/fidelity_failures/latency/llm_calls/steps_*), narrative = `run.final_response`, status from `_overall_status` (all met → `met`; any partial → `partial`; any missed → `missed`; empty → `met`). Outcome summary also appended to `working_notes.flight.acceptance`. Serialization helper `serialize_acceptance_report(run, row)` is shared with the QoS endpoint.
+4. **`plans_service`** — `_run_plan_frames` runs acceptance + writes the report **after** the flight-state persistence/learning-flywheel and **before** frame emission, guarded on terminal status and wrapped in try/except (closure never fails the run; existing SSE tests stay green — verified by trace: patched seams make the block a no-op for reasoning-only plans). `_write_acceptance_report` rebuilds the ledger from `working_notes.flight` via `FlightDirector._ledger_from_state`, re-queries through a fresh `CarbonHostExecutor` (in-process, read-only), wires a read-only `step_runner` (GET-only re-execution; mutations `skipped: true`). New **`get_qos_report(user, plan_id)`** (stored row or `_compute_legacy_report` on-the-fly for legacy runs — deterministic reconstruction from flight state, evidence labelled `reconstructed-from-flight-state`) and **`get_flight_state(user, plan_id)`** (`working_notes.flight`).
+5. **API** — `GET .../qos/` and `GET .../flight/` actions on `PlanViewSet` + explicit routes registered after `ledger/`, before `artifacts/`.
+
+### Files changed
+| File | Change |
+|------|--------|
+| `backend/ai/flight_director.py` | +`_criterion_for_step` (explicit `acceptance_criteria` override → plan_json merge → `_suggest_criterion` templates), `_kind_from_step` (host→real kind), `_status_for_step` (status map / ORM fallback), `run_acceptance_checks` (repair loop + RULE_21 guard), `_check_criterion`, `_check_created_entity`, `_check_table_fields`, `_check_artifact`, `_check_read_ok`, `_repair_instructions` (ACTUAL-diff guidance), `_ledger_from_state`, `build_acceptance_report`, module helpers `_overall_status`, `serialize_acceptance_report`, `_STEP_COMPLETED`/`_STEP_SKIPPED`. Docstring updated. No signature changes to any 25-B API. |
+| `backend/ai/plans_service.py` | +`PlanForbiddenError` (403 for authenticated outsider), `_resolve_plan_access` (distinguishes missing 404 from outsider 403), `_step_http_method`, `_readonly_step_runner` (GET-only repair), `_build_qos_metrics`, `_write_acceptance_report`, `get_qos_report`, `get_flight_state`, `_compute_legacy_report`. `_run_plan_frames` acceptance block after the learning flywheel. |
+| `backend/ai/plans_api.py` | +`qos`/`flight` GET actions (404 `PlanNotAccessibleError` / 403 `PlanForbiddenError`); docstring updated. |
+| `backend/ai/plans_urls.py` | +`<str:pk>/qos/` (`ai-plan-qos`) and `<str:pk>/flight/` (`ai-plan-flight`) after `ledger/`; docstring updated. |
+| `backend/ai/host_executor.py` | ADDITIVE read-only `_table_detail_in_process` (GET `carbon-api/dataschema/tables/detail?id=N` → table + active `fields` [{id,name,label}], CBAC-scoped via `get_visible_module_ids`, 404 when missing) registered in `_IN_PROCESS_ENDPOINTS`. |
+| `backend/ai/tests/test_flight_acceptance.py` | NEW — 11 tests: `created_entity` met via re-query evidence (+ fresh GET recorded) / missed when absent on host; `table_fields` EXACT-set mismatch → partial + `missing`/`extra` diff / exact match → met; repair succeeds within 2 attempts (healing runner, `no matching rule` instructions, no escalation); repair exhausts → bounded attempts + escalated + `escalations`/`escalated_steps`; **mutation step never auto re-run (RULE_21 — runner never called, surfaces as missed)**; escalation metric lands in `metrics_json` via `build_acceptance_report`; report idempotency (re-closure count == 1); artifact criterion met from durable `RunArtifact`; reasoning step no requirement; skipped step excluded; `_overall_status` derivation (incl. partial-precedence). |
+| `backend/ai/tests/test_flight_api.py` | NEW — 9 tests: qos §4 shape (status/requirements-with-evidence/metrics/final_response/supervision); partial report surfaces diff; **legacy run reconstructed on-the-fly** (no row → `reconstructed-from-flight-state` evidence); flight supervision shape; **outsider → 403** (both endpoints); **unauthenticated → 401** (both); **missing plan → 404** (both). |
+
+### Endpoints (spec §4)
+| Route | Returns |
+|------|---------|
+| `GET /carbon-api/ai/plans/{id}/qos/` | `{"report": {status, requirements[], metrics, final_response, supervision}}` — owner 200 · authenticated outsider 403 · unauthenticated 401 · missing plan 404 |
+| `GET /carbon-api/ai/plans/{id}/flight/` | `{"supervision": {ledger, repairs, escalations, fidelity, contract}}` — same auth matrix |
+
+`requirements[]` item: `{step_id, intent, criterion, verdict: met|partial|missed, evidence: {query, matches[, diff]}, repairs[], escalated}` — outcome copy only (RULE_23).
+
+### Verification gate (printed — worker has no terminal tool in this session)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run          # expect: No changes detected
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_flight_acceptance.py ai/tests/test_flight_api.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest dq -q --maxfail=5 --disable-warnings -p no:cacheprovider   # → 38 passed (unchanged)
+```
+Static verification performed in-session: `get_errors` → **No errors found** on all 5 modified files + both new test files (and workspace-wide). Runtime gate execution + test-count capture is pending a terminal-enabled run (commands above).
+
+### Executed gate results (orchestrator, terminal-enabled) — ✅ GREEN
+```bash
+$ manage.py check
+System check identified no issues (0 silenced).
+
+$ manage.py makemigrations --check --dry-run
+No changes detected
+
+$ pytest ai/tests/test_flight_acceptance.py ai/tests/test_flight_api.py -q
+23 passed in 3.73s          # initial run: 21 passed, 2 failed (fixed, see below)
+
+$ pytest ai -q --maxfail=5
+1 failed, 930 passed in 105.59s    # ONLY the known pre-existing order-dependent rollups failure
+
+$ pytest ai/tests/test_observability_api.py::test_rollups_totals_and_per_run_shape -q   # isolation proof
+1 passed in 1.49s                  # → confirmed pre-existing, unrelated to 25-C
+
+$ pytest dq -q --maxfail=5
+326 passed, 14 subtests passed in 31.02s
+```
+**Two real failures found & fixed by the orchestrator during the gate:**
+1. `SynchronousOnlyOperation: You cannot call this from an async context` in `test_artifact_criterion_met_from_durable_run_artifact` — `_status_for_step` / `_check_artifact` / `_check_read_ok` did sync ORM reads inside the async `run_acceptance_checks` chain. Fix: converted all three to `async def` with the ORM reads wrapped in `sync_to_async` (call sites updated: `_check_created_entity`, `_check_criterion`, `_check_read_ok`).
+2. `test_qos_returns_report_shape` — report payload had an extra `plan_id` key; spec §4 shape is exactly `{status, requirements, metrics, final_response, supervision}`. Fix: removed `plan_id` from both `serialize_acceptance_report` and `_compute_legacy_report`.
+After fixes: 25-C tests **23 passed**; full `ai` 930 passed; `dq` 326 passed.
+
+### Issues / decisions
+- **403 vs 404 (intentional deviation from the ledger pattern):** the existing `ledger`/`get_plan` endpoints treat an authenticated outsider as 404 (`_get_owned_run` → `PlanNotAccessibleError`). The 25-C spec §4 explicitly requires **403 for an outsider** and **404 for a missing plan** on `qos/`/`flight/`. Implemented via a new `PlanForbiddenError` + `_resolve_plan_access` (plan resolved first → 404 if absent; ownership checked second → 403 if another user's). The legacy `ledger`/`get_plan`/`run` behavior is unchanged.
+- **No new migrations:** only code touched; `makemigrations --check --dry-run` must stay clean.
+- **`host_executor.py` additive change:** table-detail GET was the only missing read-only seam for the `table_fields` re-query; it is NOT in the DO-NOT-TOUCH list and is strictly additive (new endpoint key + handler, existing handlers untouched).
+- **Production repair seam is conservative:** `_write_acceptance_report` wires a GET-only runner (re-executes read-only steps; mutations return `skipped: true`). Anything else misses → surfaces as `missed`/escalates — the supervisor records, never forces success (RULE_21).
+- **Legacy QoS** is deterministic (flight state + step rows), no host round-trips, evidence explicitly labelled `reconstructed-from-flight-state`.
+- **Known pre-existing failure** (`test_observability_api.py::test_rollups_totals_and_per_run_shape`, order-dependent) is unrelated to 25-C files — unchanged, do not fix.
+- **DO-NOT-TOUCH respected:** `ai/engine/**`, `dq/**`, `dataschema/**`, `feedback/skill_flywheel.py`, frontend, docker untouched.

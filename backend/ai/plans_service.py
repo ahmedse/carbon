@@ -148,6 +148,15 @@ class PlanNotAccessibleError(Exception):
     """Raised when the plan does not belong to the requesting user."""
 
 
+class PlanForbiddenError(Exception):
+    """Raised when the plan exists but belongs to a different user.
+
+    Distinguishes an authenticated outsider (HTTP 403) from a missing plan
+    (HTTP 404, ``PlanNotAccessibleError``) on the QoS/supervision endpoints
+    (Phase 25-C, spec §4).
+    """
+
+
 class PlanNotRunnableError(Exception):
     """Raised when a plan cannot be executed in its current state."""
 
@@ -322,6 +331,27 @@ class PlansService:
             run = Run.objects.get(id=plan_id, host_user_id=str(user.pk))
         except Run.DoesNotExist:
             raise PlanNotAccessibleError(f"Plan {plan_id} not found.")
+        return run
+
+    @staticmethod
+    def _resolve_plan_access(user, plan_id):
+        """Fetch a plan distinguishing missing (404) from outsider (403).
+
+        QoS/supervision endpoints must tell an authenticated outsider apart
+        from a genuinely missing plan (spec §4): the plan row is resolved
+        first (missing → ``PlanNotAccessibleError``), then ownership is
+        checked (outsider → ``PlanForbiddenError``).
+        """
+        from ai.models.core import Run
+
+        try:
+            run = Run.objects.get(id=plan_id)
+        except (Run.DoesNotExist, ValueError, TypeError):
+            raise PlanNotAccessibleError(f"Plan {plan_id} not found.")
+        if str(run.host_user_id) != str(user.pk):
+            raise PlanForbiddenError(
+                f"You do not have access to plan {plan_id}."
+            )
         return run
 
     @staticmethod
@@ -1982,6 +2012,143 @@ class PlansService:
                 set_current_plan_run(None)
             return flight_director.state()
 
+    # ── W4-D/25-C: post-run acceptance closure ───────────────────────────
+
+    @staticmethod
+    def _step_http_method(step) -> str:
+        """HTTP verb of a step's tool call (args override, api_name inference)."""
+        args = getattr(step, "tool_args", None) or {}
+        method = str(args.get("method", "")).upper()
+        if method:
+            return method
+        api_name = str(args.get("api_name") or "").lower()
+        if any(v in api_name for v in (
+            "list", "get", "search", "read", "fetch",
+        )):
+            return "GET"
+        return "POST"
+
+    async def _readonly_step_runner(self, step, criterion, instructions,
+                                    executor) -> dict:
+        """Best-effort repair runner: re-executes a READ-ONLY step only.
+
+        Mutation steps are NEVER auto re-run (RULE_21). Read-only steps
+        (``call_host_api`` GET) are re-executed through the host executor; the
+        repair instructions ride along in the outcome so the acceptance loop
+        records exactly what was attempted and why.
+        """
+        if self._step_http_method(step) != "GET":
+            return {
+                "ok": False,
+                "skipped": True,
+                "reason": "mutation_step_not_rerun",
+                "instructions": instructions,
+            }
+        endpoint = str((getattr(step, "tool_args", None) or {}).get("endpoint") or "")
+        params = dict((getattr(step, "tool_args", None) or {}).get("params") or {})
+        try:
+            resp = await executor._call_api("GET", endpoint, params)
+            return {
+                "ok": resp.get("status_code") == 200,
+                "status_code": resp.get("status_code"),
+                "instructions": instructions,
+            }
+        except Exception as exc:  # noqa: BLE001 - a repair attempt never fails the run
+            return {"ok": False, "error": str(exc)[:200],
+                    "instructions": instructions}
+
+    @staticmethod
+    def _build_qos_metrics(run, results: list, flight_state: dict) -> dict:
+        """Aggregate QoS metrics (spec §2 ``metrics_json`` shape).
+
+        Derived from durable run rows + the persisted flight supervision state
+        (retries from ``working_notes.audit``, rewrites from the ledger's
+        repaired references, vetoes from step critic verdicts).
+        """
+        from ai.models.core import RunStep
+
+        notes = run.working_notes or {}
+        flight = dict(flight_state) if flight_state else dict(notes.get("flight") or {})
+        audit = notes.get("audit") or []
+        vetoes = RunStep.objects.filter(
+            run_id=run.id, critic_verdict="veto"
+        ).count()
+        return {
+            "retries": sum(
+                1 for a in audit
+                if isinstance(a, dict) and a.get("kind") == "run_retried"
+            ),
+            "rewrites": len(flight.get("repairs") or []),
+            "vetoes": vetoes,
+            "escalations": int(flight.get("escalations") or 0),
+            "fidelity_failures": int(
+                (flight.get("fidelity") or {}).get("failures") or 0
+            ),
+            "total_latency_ms": run.total_latency_ms,
+            "total_llm_calls": run.total_llm_calls,
+            "steps_total": len(results),
+            "steps_met": sum(1 for r in results if r.get("verdict") == "met"),
+            "steps_partial": sum(
+                1 for r in results if r.get("verdict") == "partial"
+            ),
+            "steps_missed": sum(
+                1 for r in results if r.get("verdict") == "missed"
+            ),
+        }
+
+    async def _write_acceptance_report(self, run, plan, user_pk: str,
+                                       flight_state: dict) -> dict:
+        """Run post-run acceptance checks and write the durable report.
+
+        Rebuilds the in-loop ledger from the persisted flight state, re-queries
+        read-only host state through a fresh ``CarbonHostExecutor``, and writes
+        the ``AcceptanceReport`` row via ``FlightDirector.build_acceptance_report``.
+        The caller wraps this in try/except — closure never fails the run.
+        """
+        from asgiref.sync import sync_to_async
+
+        from ai.models.core import RunStep
+        from ai.flight_director import FlightDirector
+        from ai.engine_runtime import _carbon_instance_config
+        from ai.engine.core.database import get_session_factory
+        from ai.host_executor import CarbonHostExecutor
+
+        flight = dict(flight_state or {})
+        fd = FlightDirector(run=run)
+        ledger = FlightDirector._ledger_from_state(flight)
+        step_statuses = await sync_to_async(
+            lambda: {
+                s.step_index: s.status
+                for s in RunStep.objects.filter(run_id=run.id)
+            }
+        )()
+        async with get_session_factory(PLAN_INSTANCE_ID)() as db:
+            executor = CarbonHostExecutor(
+                db=db,
+                instance_config=_carbon_instance_config(user_pk),
+                user_token=f"inproc:carbon:{user_pk}",
+                host_user_id=user_pk,
+            )
+            results = await fd.run_acceptance_checks(
+                plan, run, ledger, executor,
+                step_statuses=step_statuses,
+                step_runner=(
+                    lambda step, criterion, instructions:
+                    self._readonly_step_runner(
+                        step, criterion, instructions, executor
+                    )
+                ),
+            )
+        metrics = self._build_qos_metrics(run, results, flight)
+        report = await sync_to_async(fd.build_acceptance_report)(
+            run, results, metrics
+        )
+        logger.info(
+            "acceptance closure run=%s status=%s requirements=%d",
+            run.id, report.get("status"), len(results),
+        )
+        return report
+
     # ── Execution: SSE streamed run ───────────────────────────────────────
 
     def run_plan_stream(self, user, plan_id: str):
@@ -2178,6 +2345,20 @@ class PlansService:
                 logger.info("skill flywheel: %s", feed_result)
         except Exception:  # BLE001 — learning must never fail a plan run
             logger.exception("skill flywheel failed for run %s", run.id)
+
+        # W4-D/25-C Flight Director: post-run acceptance checks + durable QoS
+        # report (spec §3.5–§3.6). Re-queries read-only host state and never
+        # fails the run; non-terminal runs skip closure (mirrors the
+        # feed_run_feedback terminal guard).
+        if run.status in (STATUS_COMPLETED, STATUS_FAILED):
+            try:
+                await self._write_acceptance_report(
+                    run, plan, user_pk, flight_state
+                )
+            except Exception:  # noqa: BLE001 - closure never fails the run
+                logger.exception(
+                    "acceptance report failed for run %s", run.id
+                )
 
         for step in steps:
             if step.status in (STEP_SKIPPED,):
@@ -2522,4 +2703,88 @@ class PlansService:
                 1 for s in steps if (s.critic_verdict or "") == "veto"
             ),
             "final_response": run.final_response,
+        }
+
+    # ── W4-D/25-C: QoS + supervision endpoints ───────────────────────────
+
+    def get_qos_report(self, user, plan_id: str) -> dict:
+        """Acceptance QoS report for a plan (owner-scoped; 404 missing / 403 outsider).
+
+        Returns the durable ``AcceptanceReport`` row when one exists; legacy
+        runs without a row are reconstructed deterministically from the
+        durable flight state (spec §4 — outcome terms only).
+        """
+        from ai.models.core import AcceptanceReport, RunStep
+
+        run = self._resolve_plan_access(user, plan_id)
+        row = (
+            AcceptanceReport.objects.filter(run_id=run.id)
+            .order_by("-created_at")
+            .first()
+        )
+        if row is not None:
+            from ai.flight_director import serialize_acceptance_report
+
+            report = serialize_acceptance_report(run, row)
+        else:
+            steps = list(
+                RunStep.objects.filter(run_id=run.id).order_by("step_index")
+            )
+            report = self._compute_legacy_report(run, steps)
+        return {"report": report}
+
+    def get_flight_state(self, user, plan_id: str) -> dict:
+        """Supervision state for a plan (owner-scoped; 404 missing / 403 outsider)."""
+        run = self._resolve_plan_access(user, plan_id)
+        flight = (run.working_notes or {}).get("flight") or {}
+        return {"supervision": flight}
+
+    @staticmethod
+    def _compute_legacy_report(run, steps: list) -> dict:
+        """Reconstruct an acceptance report for a legacy run with no row.
+
+        Deterministic reconstruction from the durable flight state (contract
+        criteria + fidelity escalations) and the step rows — no host
+        re-queries, so evidence is explicitly labelled ``reconstructed``.
+        """
+        from ai.flight_director import _overall_status
+
+        notes = run.working_notes or {}
+        flight = notes.get("flight") or {}
+        contract = flight.get("contract") or {}
+        suggested = contract.get("suggested_criteria") or {}
+        escalated_steps = set(
+            (flight.get("fidelity") or {}).get("escalated_steps") or []
+        )
+        requirements: list[dict] = []
+        for s in steps:
+            criterion = suggested.get(str(s.step_index))
+            if criterion is None:
+                continue
+            if s.step_index in escalated_steps:
+                verdict = "partial"
+            elif s.status == "completed":
+                verdict = "met"
+            else:
+                verdict = "missed"
+            requirements.append({
+                "step_id": s.step_index,
+                "intent": s.intent,
+                "criterion": criterion,
+                "verdict": verdict,
+                "evidence": {
+                    "query": "reconstructed-from-flight-state",
+                    "matches": {"step_status": s.status},
+                },
+                "repairs": [],
+                "escalated": s.step_index in escalated_steps,
+            })
+        status = _overall_status(requirements)
+        metrics = PlansService._build_qos_metrics(run, requirements, flight)
+        return {
+            "status": status,
+            "requirements": requirements,
+            "metrics": metrics,
+            "final_response": run.final_response,
+            "supervision": flight,
         }

@@ -18,6 +18,8 @@ below is relative to ``/carbon-api/ai/plans/``:
     POST   /{id}/steps/decline/     decline a paused consent step
     POST   /{id}/stop/              cancel a run
     GET    /{id}/ledger/            audit ledger
+    GET    /{id}/qos/               acceptance QoS report (W4-D/25-C)
+    GET    /{id}/flight/            supervision state (W4-D/25-C)
     GET    /{id}/artifacts/         list plan artifacts (W5-C)
     GET    /{id}/artifacts/{aid}/download/   download an artifact (W5-C)
 
@@ -133,6 +135,16 @@ urlpatterns = [
         "<str:pk>/ledger/",
         PlanViewSet.as_view({"get": "ledger"}),
         name="ai-plan-ledger",
+    ),
+    path(
+        "<str:pk>/qos/",
+        PlanViewSet.as_view({"get": "qos"}),
+        name="ai-plan-qos",
+    ),
+    path(
+        "<str:pk>/flight/",
+        PlanViewSet.as_view({"get": "flight"}),
+        name="ai-plan-flight",
     ),
     path(
         "<str:pk>/artifacts/",

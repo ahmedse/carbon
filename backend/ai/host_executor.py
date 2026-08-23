@@ -53,6 +53,7 @@ def _canonical_endpoint(endpoint: str) -> str:
 _IN_PROCESS_ENDPOINTS: dict[str, str] = {
     "carbon-api/dq/rules": "dq_rules",
     "carbon-api/dataschema/tables": "tables",
+    "carbon-api/dataschema/tables/detail": "table_detail",
     "carbon-api/dq/rule-assignments": "rule_assignments",
 }
 
@@ -267,6 +268,69 @@ class CarbonHostExecutor(HostAPIExecutor):
             logger.exception("In-process data table listing failed")
             raise ToolExecutionError(f"Table listing failed: {exc}") from exc
         return {"status_code": 200, "data": {"results": data}}
+
+    async def _table_detail_in_process(
+        self, method: str = "GET", params: dict | None = None, body: dict | None = None
+    ) -> dict:
+        """GET /carbon-api/dataschema/tables/detail/?id=N — read-only detail.
+
+        Returns one table with its active fields (id/name/label). Added for
+        the Flight Director acceptance re-query (Phase 25-C, spec §3.5: the
+        ``table_fields`` criterion asserts the EXACT field set vs the brief).
+        Read-only — never stages or mutates; visibility-scoped exactly like
+        ``_list_tables_in_process`` (CBAC via ``get_visible_module_ids``).
+        """
+        from asgiref.sync import sync_to_async
+
+        user = await self._resolve_user()
+        if user is None:
+            raise ToolExecutionError(
+                "No authenticated user for table detail — please refresh the page."
+            )
+
+        table_id = (params or {}).get("id") or (params or {}).get("table_id")
+        if not table_id:
+            return {
+                "status_code": 400,
+                "data": {"detail": "table id is required"},
+            }
+
+        def _detail() -> dict | None:
+            from dataschema.models import DataTable
+            from accounts.rbac_utils import get_visible_module_ids
+
+            try:
+                table = DataTable.objects.select_related("module").get(
+                    pk=table_id, is_archived=False
+                )
+            except (DataTable.DoesNotExist, ValueError, TypeError):
+                return None
+            visible = get_visible_module_ids(user)
+            if visible is not None and table.module_id not in visible:
+                return None
+            fields = [
+                {"id": f.pk, "name": f.name, "label": f.label}
+                for f in table.fields.filter(is_active=True, is_archived=False)
+            ]
+            return {
+                "id": table.pk,
+                "title": table.title,
+                "name": table.name,
+                "module": table.module_id,
+                "module_name": getattr(table.module, "name", None),
+                "description": table.description,
+                "is_locked": table.is_locked,
+                "fields": fields,
+            }
+
+        try:
+            data = await sync_to_async(_detail, thread_sensitive=True)()
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("In-process table detail lookup failed")
+            raise ToolExecutionError(f"Table detail lookup failed: {exc}") from exc
+        if data is None:
+            return {"status_code": 404, "data": {"detail": "Table not found"}}
+        return {"status_code": 200, "data": data}
 
     async def _create_table_in_process(self, body: dict) -> dict:
         """POST /carbon-api/dataschema/tables/ — create table + optional fields."""

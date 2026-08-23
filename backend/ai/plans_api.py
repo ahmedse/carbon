@@ -18,6 +18,8 @@ Endpoints (all owner-scoped, CBAC via ``host_user_id``):
     POST   /carbon-api/ai/plans/{id}/steps/decline/   decline a paused consent step
     POST   /carbon-api/ai/plans/{id}/stop/            cancel a run
     GET    /carbon-api/ai/plans/{id}/ledger/          audit ledger
+    GET    /carbon-api/ai/plans/{id}/qos/             acceptance QoS report (W4-D/25-C)
+    GET    /carbon-api/ai/plans/{id}/flight/          supervision state (W4-D/25-C)
 
 No engine internals are touched — everything delegates to
 :mod:`ai.plans_service`.
@@ -34,6 +36,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ai.plans_service import (
+    PlanForbiddenError,
     PlanNotAccessibleError,
     PlanNotRunnableError,
     PlanStepError,
@@ -579,6 +582,44 @@ class PlanViewSet(viewsets.GenericViewSet):
         provenance, actor."""
         try:
             return Response(self.service.get_ledger(request.user, pk))
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+
+    # ── W4-D/25-C: QoS + supervision ─────────────────────────────────────
+
+    @action(detail=True, methods=["get"], url_path="qos", url_name="plan-qos")
+    def qos(self, request, pk=None):
+        """Acceptance QoS report for a plan (owner-scoped).
+
+        Returns ``{"report": {status, requirements[], metrics,
+        final_response, supervision}}`` — outcome copy only (RULE_23).
+        """
+        try:
+            return Response(self.service.get_qos_report(request.user, pk))
+        except PlanForbiddenError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_403_FORBIDDEN
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(detail=True, methods=["get"], url_path="flight", url_name="plan-flight")
+    def flight(self, request, pk=None):
+        """Supervision state for a plan (owner-scoped).
+
+        Returns ``{"supervision": {ledger, repairs, escalations, fidelity,
+        contract}}`` from ``working_notes.flight``.
+        """
+        try:
+            return Response(self.service.get_flight_state(request.user, pk))
+        except PlanForbiddenError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_403_FORBIDDEN
+            )
         except PlanNotAccessibleError as exc:
             return Response(
                 {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND

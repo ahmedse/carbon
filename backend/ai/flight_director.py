@@ -1,5 +1,5 @@
 """
-Flight Director — in-loop supervisor (Phase 25-B).
+Flight Director — in-loop supervisor (Phase 25-B) + acceptance closure (25-C).
 
 Additive supervision layered over the ReAct loop:
 
@@ -11,6 +11,12 @@ Additive supervision layered over the ReAct loop:
   * ``prepare_step`` — per-step prep: corrected tool args, extra
     instructions, escalation model override.
   * ``on_step_completed`` — ledger update + worker-fidelity guard.
+  * ``run_acceptance_checks`` — post-run re-queries (read-only host GETs) of
+    every step's acceptance criterion (spec §3.5) with the bounded repair
+    loop: ``missed`` → repair instructions with the ACTUAL diff → re-execute
+    non-mutation steps (≤ ``AI_FLIGHT_DIRECTOR_MAX_REPAIRS``) → escalate.
+  * ``build_acceptance_report`` — idempotent ``AcceptanceReport`` row per run
+    (spec §3.6) + outcome summary appended to ``working_notes.flight``.
 
 Every engine hook is guarded on ``flight_director is not None`` in the loop, so
 the loop behaves identically when the director is absent (additive-only,
@@ -349,6 +355,43 @@ def contract_gate(plan: Any, brief: str) -> dict:
     return {"findings": findings, "suggested_criteria": suggested_criteria}
 
 
+# ── Acceptance report helpers (spec §3.5–§3.6) ───────────────────────────
+
+# RunStep statuses relevant to acceptance (engine set, no engine import).
+_STEP_COMPLETED = "completed"
+_STEP_SKIPPED = "skipped"
+
+
+def _overall_status(results: list[dict]) -> str:
+    """Derive the run-level acceptance status (spec §3.5).
+
+    All met → ``met``; any partial → ``partial``; any (unrepaired) missed →
+    ``missed``; no requirements → ``met`` (nothing to accept).
+    """
+    verdicts = [r.get("verdict") for r in results]
+    if not verdicts:
+        return "met"
+    if "partial" in verdicts:
+        return "partial"
+    if "missed" in verdicts:
+        return "missed"
+    return "met"
+
+
+def serialize_acceptance_report(run: Any, row: Any) -> dict:
+    """Product-facing acceptance payload (spec §4 — outcome terms only)."""
+    report_json = row.report_json or {}
+    metrics = row.metrics_json or {}
+    supervision = (run.working_notes or {}).get("flight") or {}
+    return {
+        "status": row.status,
+        "requirements": report_json.get("requirements", []),
+        "metrics": metrics,
+        "final_response": row.narrative or run.final_response,
+        "supervision": supervision,
+    }
+
+
 # ── FlightDirector ─────────────────────────────────────────────────────────────
 
 
@@ -641,3 +684,467 @@ class FlightDirector:
             },
             "contract": self.contract,
         }
+
+    # ── Acceptance criteria resolution (spec §3.4) ───────────────────────
+
+    def _criterion_for_step(self, step: Any) -> dict | None:
+        """Resolve the acceptance criterion for a step.
+
+        Explicit ``acceptance_criteria`` supplied by the planner/user (either
+        in the step's ``tool_args`` or merged into the persisted
+        ``plan_json.steps[i]``) override the deterministic templates from
+        §3.4; a reasoning step (no tool) has no criterion and is skipped.
+        """
+        explicit = (step.tool_args or {}).get("acceptance_criteria")
+        if explicit is not None:
+            return explicit
+        if self.run is not None:
+            try:
+                for s in (self.run.plan_json or {}).get("steps", []):
+                    if not isinstance(s, dict):
+                        continue
+                    if str(s.get("step_id")) == str(step.step_id):
+                        ac = s.get("acceptance_criteria")
+                        return ac if ac is not None else _suggest_criterion(step)
+            except Exception:  # noqa: BLE001 - criteria resolution never fails the run
+                pass
+        return _suggest_criterion(step)
+
+    def _kind_from_step(self, step: Any) -> str:
+        """Best-effort ledger-kind for a step when the criterion says ``host``."""
+        tool = (step.tool_name or "").lower()
+        if "dq_rule" in tool or tool == "create_dq_rule":
+            return "rule"
+        if "table" in tool:
+            return "table"
+        api_name = str((step.tool_args or {}).get("api_name") or "").lower()
+        if "rule-assign" in api_name or "bind" in api_name or "assign" in api_name:
+            return "binding"
+        if "rule" in api_name:
+            return "rule"
+        if "table" in api_name:
+            return "table"
+        if "export" in api_name or "artifact" in api_name:
+            return "artifact"
+        if "list" in api_name or "get" in api_name or "search" in api_name:
+            return "read"
+        return "host"
+
+    @staticmethod
+    @staticmethod
+    async def _status_for_step(step: Any, step_statuses: dict | None,
+                               run: Any) -> str | None:
+        """Step status from the caller-supplied map, else a read-only ORM read."""
+        if step_statuses is not None:
+            return step_statuses.get(step.step_id)
+        try:
+            from asgiref.sync import sync_to_async
+            from ai.models.core import RunStep
+            get_status = sync_to_async(
+                lambda: RunStep.objects.get(
+                    run_id=run.id, step_index=step.step_id
+                ).status
+            )
+            return await get_status()
+        except Exception:  # noqa: BLE001 - best-effort status lookup
+            return None
+
+    # ── Acceptance checks (spec §3.5) ─────────────────────────────────────
+
+    async def run_acceptance_checks(
+        self,
+        plan: Any,
+        run: Any,
+        ledger: WorkingMemoryLedger,
+        executor: Any,
+        step_statuses: dict | None = None,
+        step_runner=None,
+    ) -> list[dict]:
+        """Post-run acceptance verification for a plan (spec §3.4–§3.5).
+
+        Re-queries read-only host state through the executor for every step
+        that has an acceptance criterion and returns one requirement result
+        per checked step::
+
+            {step_id, intent, criterion, verdict: met|partial|missed,
+             evidence, repairs, escalated}
+
+        A ``missed`` criterion on a NON-mutation step is repaired through the
+        injectable ``step_runner`` (async ``(step, criterion, instructions)
+        -> dict``) up to ``AI_FLIGHT_DIRECTOR_MAX_REPAIRS`` attempts; a step
+        that still fails is escalated (``escalations`` +1, flagged). Mutation
+        steps are NEVER auto re-run (RULE_21) — their misses surface as
+        ``missed`` for human review. Steps the user declined (``skipped``) are
+        excluded from acceptance.
+        """
+        max_repairs = getattr(settings, "AI_FLIGHT_DIRECTOR_MAX_REPAIRS", 2)
+        results: list[dict] = []
+        for step in getattr(plan, "steps", []) or []:
+            if step_statuses is not None:
+                status = step_statuses.get(step.step_id)
+                if status == _STEP_SKIPPED:
+                    continue  # user-declined consent step — not an acceptance miss
+            criterion = self._criterion_for_step(step)
+            if criterion is None:
+                continue  # reasoning step — no acceptance contract
+            check = await self._check_criterion(
+                step, criterion, run, ledger, executor, step_statuses
+            )
+            verdict = check["verdict"]
+            repairs: list[dict] = []
+            escalated = False
+            if verdict == "missed":
+                if step.is_mutation or step_runner is None:
+                    # RULE_21 (mutation) / no safe re-execution seam — the miss
+                    # surfaces as ``missed``; it is never auto-re-run.
+                    pass
+                else:
+                    for attempt in range(max_repairs):
+                        instructions = self._repair_instructions(
+                            step, criterion, check
+                        )
+                        outcome = await step_runner(step, criterion, instructions)
+                        repairs.append({
+                            "attempt": attempt + 1,
+                            "instructions": instructions,
+                            "outcome": outcome,
+                        })
+                        recheck = await self._check_criterion(
+                            step, criterion, run, ledger, executor,
+                            step_statuses,
+                        )
+                        check = recheck
+                        verdict = recheck["verdict"]
+                        if verdict == "met":
+                            break
+                    if verdict != "met":
+                        # Repair exhausted → escalate for human review.
+                        self._escalate(
+                            step, StepFlightVerdict(),
+                            f"acceptance missed after {len(repairs)} repair attempt(s)",
+                        )
+                        escalated = True
+                        verdict = "partial"
+            results.append({
+                "step_id": step.step_id,
+                "intent": step.intent,
+                "criterion": criterion,
+                "verdict": verdict,
+                "evidence": check.get("evidence", {}),
+                "repairs": repairs,
+                "escalated": escalated,
+            })
+        return results
+
+    async def _check_criterion(self, step: Any, criterion: dict, run: Any,
+                               ledger: WorkingMemoryLedger, executor: Any,
+                               step_statuses: dict | None) -> dict:
+        ctype = criterion.get("type")
+        if ctype == "created_entity":
+            return await self._check_created_entity(
+                step, criterion, ledger, executor, step_statuses
+            )
+        if ctype == "table_fields":
+            return await self._check_table_fields(
+                step, criterion, ledger, executor
+            )
+        if ctype == "artifact":
+            return await self._check_artifact(step, criterion, run)
+        if ctype == "read_ok":
+            return await self._check_read_ok(step, criterion, step_statuses, run)
+        # Unknown criterion type — never blocks closure.
+        return {"verdict": "met", "evidence": {"query": "no-op", "matches": True}}
+
+    async def _check_created_entity(self, step: Any, criterion: dict,
+                                    ledger: WorkingMemoryLedger,
+                                    executor: Any,
+                                    step_statuses: dict | None) -> dict:
+        """Re-query host state and assert the created entity exists.
+
+        Evidence = the read-only query + the matched host rows. When the
+        criterion kind is ``host`` the step's api_name resolves the real kind
+        (rule/table/binding/…) so the check re-queries the right endpoint.
+        """
+        kind = criterion.get("kind") or "host"
+        effective = self._kind_from_step(step) if kind == "host" else kind
+        step_entities = [
+            e for e in ledger.entities
+            if str(e.step_index) == str(step.step_id)
+            and (effective == "host" or e.kind == effective)
+        ]
+
+        if effective in _LISTABLE_KINDS:
+            query = (
+                "GET /carbon-api/dq/rules/"
+                if effective == "rule"
+                else "GET /carbon-api/dataschema/tables/"
+            )
+            rows: list[dict] = []
+            if executor is not None:
+                try:
+                    if effective == "rule":
+                        resp = await executor._call_api(
+                            "GET", "/carbon-api/dq/rules/", {}
+                        )
+                    else:
+                        resp = await executor._call_api(
+                            "GET", "/carbon-api/dataschema/tables/", {}
+                        )
+                    rows = _extract_results(resp)
+                except Exception:  # noqa: BLE001 - acceptance never fails the run
+                    logger.exception(
+                        "acceptance re-query failed kind=%s step=%s",
+                        effective, step.step_id,
+                    )
+                    rows = []
+            if step_entities:
+                ids = {str(e.id) for e in step_entities}
+                matched = [
+                    r for r in rows if str(r.get("id")) in ids
+                ]
+                if matched:
+                    return {"verdict": "met",
+                            "evidence": {"query": query, "matches": matched}}
+                return {"verdict": "missed",
+                        "evidence": {"query": query, "matches": []}}
+            # No ledger id — best-effort name-overlap against fresh host rows.
+            if rows:
+                candidates = [
+                    r for r in rows
+                    if _name_overlaps_intent(
+                        str(r.get("name") or r.get("title") or ""), step.intent
+                    )
+                ]
+                if candidates:
+                    return {"verdict": "met",
+                            "evidence": {"query": query, "matches": candidates}}
+            return {"verdict": "missed",
+                    "evidence": {"query": query, "matches": []}}
+
+        # Non-listable kinds (binding/artifact/host) — no generic list GET.
+        # Best available evidence: the in-run ledger + the step's outcome.
+        status = await self._status_for_step(step, step_statuses, run)
+        if step_entities or status == _STEP_COMPLETED:
+            return {"verdict": "met", "evidence": {
+                "query": "ledger+step_status",
+                "matches": (
+                    [{"kind": e.kind, "id": e.id} for e in step_entities]
+                    or [{"step_id": step.step_id, "status": status}]
+                ),
+            }}
+        return {"verdict": "missed", "evidence": {
+            "query": "ledger+step_status", "matches": [],
+        }}
+
+    async def _check_table_fields(self, step: Any, criterion: dict,
+                                  ledger: WorkingMemoryLedger,
+                                  executor: Any) -> dict:
+        """Assert the EXACT field set the brief demanded (water lesson).
+
+        Mismatch (missing OR extra fields) → ``partial`` with the actual
+        diff; a table that does not exist → ``missed``.
+        """
+        planned = [str(f) for f in (criterion.get("fields") or [])]
+        table_entities = [
+            e for e in ledger.entities
+            if e.kind == "table" and str(e.step_index) == str(step.step_id)
+        ]
+        table_id = table_entities[0].id if table_entities else None
+        if table_id is None:
+            args = step.tool_args or {}
+            table_id = (
+                (args.get("body") or {}).get("data_table")
+                or args.get("data_table")
+                or (args.get("body") or {}).get("table_id")
+            )
+        query = (
+            f"GET /carbon-api/dataschema/tables/detail/?id={table_id}"
+            if table_id is not None
+            else "GET /carbon-api/dataschema/tables/detail/ (no table id)"
+        )
+        actual_names: list[str] = []
+        if table_id is not None and executor is not None:
+            try:
+                resp = await executor._call_api(
+                    "GET", "/carbon-api/dataschema/tables/detail/",
+                    {"id": table_id},
+                )
+                data = (resp or {}).get("data") or {}
+                actual_names = [
+                    str(f.get("name")) for f in (data.get("fields") or [])
+                    if isinstance(f, dict) and f.get("name")
+                ]
+            except Exception:  # noqa: BLE001 - acceptance never fails the run
+                logger.exception(
+                    "acceptance table detail query failed id=%s", table_id
+                )
+        if table_id is None or not actual_names:
+            return {"verdict": "missed", "evidence": {
+                "query": query,
+                "matches": {"planned": planned, "actual": actual_names},
+                "diff": {
+                    "missing": sorted(set(planned)),
+                    "extra": [],
+                    "table_id": table_id,
+                },
+            }}
+        planned_set = set(planned)
+        actual_set = set(actual_names)
+        missing = sorted(planned_set - actual_set)
+        extra = sorted(actual_set - planned_set)
+        if not missing and not extra:
+            return {"verdict": "met", "evidence": {
+                "query": query,
+                "matches": {"planned": planned, "actual": actual_names},
+                "diff": {"missing": [], "extra": [], "table_id": table_id},
+            }}
+        return {"verdict": "partial", "evidence": {
+            "query": query,
+            "matches": {"planned": planned, "actual": actual_names},
+            "diff": {
+                "missing": missing, "extra": extra, "table_id": table_id,
+            },
+        }}
+
+    @staticmethod
+    async def _check_artifact(step: Any, criterion: dict, run: Any) -> dict:
+        """Assert at least one durable ``RunArtifact`` row for the step."""
+        from asgiref.sync import sync_to_async
+        from ai.models.core import RunArtifact
+
+        artifacts = await sync_to_async(
+            lambda: list(
+                RunArtifact.objects.filter(
+                    run_id=run.id, step_index=step.step_id
+                )
+            )
+        )()
+        if artifacts:
+            return {"verdict": "met", "evidence": {
+                "query": "RunArtifact(run_id, step_index)",
+                "matches": [{"id": a.id, "name": a.name} for a in artifacts],
+            }}
+        return {"verdict": "missed", "evidence": {
+            "query": "RunArtifact(run_id, step_index)", "matches": [],
+        }}
+
+    @staticmethod
+    async def _check_read_ok(step: Any, criterion: dict,
+                             step_statuses: dict | None, run: Any) -> dict:
+        status = await FlightDirector._status_for_step(
+            step, step_statuses, run
+        )
+        if status == _STEP_COMPLETED:
+            return {"verdict": "met", "evidence": {
+                "query": "step.status",
+                "matches": {"status": status},
+            }}
+        return {"verdict": "missed", "evidence": {
+            "query": "step.status",
+            "matches": {"status": status},
+        }}
+
+    def _repair_instructions(self, step: Any, criterion: dict, check: dict) -> str:
+        """Deterministic repair guidance built from the ACTUAL check diff."""
+        evidence = check.get("evidence") or {}
+        diff = evidence.get("diff") or {}
+        missing = diff.get("missing") or []
+        extra = diff.get("extra") or []
+        parts = [f"requirement not met for step '{step.intent}'"]
+        if missing:
+            parts.append(f"missing: {', '.join(str(m) for m in missing)}")
+        if extra:
+            parts.append(f"unexpected: {', '.join(str(m) for m in extra)}")
+        if evidence.get("matches") == [] and not diff:
+            kind = criterion.get("kind") or "entity"
+            if kind == "host":
+                # Resolve the generic ``host`` kind to the real kind so the
+                # guidance names what is actually missing (rule/table/binding).
+                kind = self._kind_from_step(step)
+            parts.append(f"no matching {kind} found on the host")
+        return " — ".join(parts)
+
+    @staticmethod
+    def _ledger_from_state(flight_state: dict) -> WorkingMemoryLedger:
+        """Rebuild a working-memory ledger from persisted flight state."""
+        ledger = WorkingMemoryLedger()
+        for e in (flight_state or {}).get("ledger") or []:
+            if not isinstance(e, dict):
+                continue
+            ledger.add(
+                e.get("kind"), e.get("id"),
+                name=e.get("name"), step_index=e.get("step_index"),
+            )
+        for r in (flight_state or {}).get("repairs") or []:
+            if isinstance(r, dict):
+                ledger.repaired_refs.append(dict(r))
+        return ledger
+
+    # ── Acceptance report closure (spec §3.6) ────────────────────────────
+
+    def build_acceptance_report(self, run: Any, results: list[dict],
+                                metrics: dict) -> dict:
+        """Write the durable ``AcceptanceReport`` row (idempotent per run).
+
+        ``report_json`` carries the per-requirement results; ``metrics_json``
+        the aggregate metrics; ``narrative`` the run's ``final_response``;
+        ``status`` is derived from the per-requirement verdicts. Reuses the
+        existing row when one is present so re-closure never duplicates.
+        """
+        from ai.models.core import AcceptanceReport
+
+        status = _overall_status(results)
+        narrative = run.final_response or ""
+        report_json = {"requirements": results}
+
+        # Append an outcome summary to the flight supervision state.
+        try:
+            notes = dict(run.working_notes or {})
+            flight = dict(notes.get("flight") or {})
+            flight["acceptance"] = {
+                "status": status,
+                "requirements_total": len(results),
+                "requirements_met": sum(
+                    1 for r in results if r.get("verdict") == "met"
+                ),
+                "requirements_partial": sum(
+                    1 for r in results if r.get("verdict") == "partial"
+                ),
+                "requirements_missed": sum(
+                    1 for r in results if r.get("verdict") == "missed"
+                ),
+            }
+            notes["flight"] = flight
+            run.working_notes = notes
+            run.save(update_fields=["working_notes", "updated_at"])
+        except Exception:  # noqa: BLE001 - closure persistence never fails the run
+            logger.exception(
+                "flight acceptance summary persistence failed run=%s", run.id
+            )
+
+        row = (
+            AcceptanceReport.objects.filter(run_id=run.id)
+            .order_by("-created_at")
+            .first()
+        )
+        if row is None:
+            row = AcceptanceReport.objects.create(
+                run_id=run.id,
+                status=status,
+                report_json=report_json,
+                metrics_json=metrics,
+                narrative=narrative,
+            )
+        else:
+            row.status = status
+            row.report_json = report_json
+            row.metrics_json = metrics
+            row.narrative = narrative
+            row.save(update_fields=[
+                "status", "report_json", "metrics_json", "narrative",
+            ])
+        logger.info(
+            "acceptance report written run=%s status=%s requirements=%d",
+            run.id, status, len(results),
+        )
+        return serialize_acceptance_report(run, row)
