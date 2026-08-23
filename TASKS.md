@@ -4273,3 +4273,373 @@ Confirm your role and begin. Model: DeepSeek V4-Flash.
 Can be run in parallel with W5-D.
 ```
 
+---
+
+## FLIGHT DIRECTOR TRACK
+
+Supervisor layer for the plan-execution pipeline (Pulse): validates QoS against
+the brief, reconciles cross-step state, repairs gracefully, collects verified
+results, closes with evidence. Full design (authoritative):
+`docs/DESIGN-FLIGHT-DIRECTOR.md` — read it FIRST before any phase below.
+
+Dispatch order: **25-A → 25-B → 25-C → 25-D → 25-E** (each phase's green gate
+must pass and be reviewed before the next dispatches). **26** (frontend) is
+optional — dispatch only after 25-E passes and budget allows.
+
+Every phase keeps the existing suite green: `pytest dq -q --maxfail=5` (38
+tests in `dq/tests/test_api.py`) + `pytest ai -q --maxfail=5` + `manage.py
+check` + `makemigrations --check --dry-run`. NEVER docker, NEVER `source
+venv`; run from `backend` with `/home/ahmed/aast/carbon/.venv/bin/python`.
+
+---
+
+### Phase 25-A — FlightDirector schema (AcceptanceReport + LearningOutcome)
+
+**Date:** 2026-08-24
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Kind:** Backend-only. Small.
+**Depends on:** — (schema first)
+**Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §2
+
+#### Files to Read First
+- `backend/ai/models/core.py` — existing `Run`, `RunStep`, `PlanTemplate` models (field conventions, `AppScopeMixin`, `generate_uuid`)
+- `backend/ai/models/__init__.py` — re-export pattern
+- `backend/ai/admin.py` — registration pattern
+- `backend/ai/migrations/` — latest migration number (expect 0021 → create 0022)
+- `docs/DESIGN-FLIGHT-DIRECTOR.md` §2 (model table)
+- `.ai-toolkit/shared/data-layer.md` + `base-rules.md`
+
+#### Files to Change
+- `backend/ai/models/core.py` — ADD `AcceptanceReport(AppScopeMixin)` and `LearningOutcome(AppScopeMixin)` exactly per spec §2 (fields, FKs, `UniqueConstraint(run, pattern)` on LearningOutcome, `app_label = "ai"`)
+- `backend/ai/models/__init__.py` — re-export both models
+- `backend/ai/admin.py` — register both (read-only list views)
+- `backend/ai/migrations/0022_flight_director.py` — GENERATED (never hand-write)
+- `backend/ai/tests/test_flight_models.py` — ADD
+
+#### Implementation
+1. Define the two models per spec §2. Use `timezone-aware` datetimes via `auto_now_add` (project rule: never `datetime.now()`).
+2. Generate + apply the migration:
+   ```bash
+   cd /home/ahmed/aast/carbon/backend
+   /home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations ai
+   /home/ahmed/aast/carbon/.venv/bin/python manage.py migrate ai
+   ```
+3. Tests (`test_flight_models.py`): create a `Run` + `AcceptanceReport` (defaults, FK cascade); create `LearningOutcome`; assert the `(run, pattern)` unique constraint rejects a duplicate; assert `app_label="ai"`.
+
+#### DO NOT TOUCH
+- `backend/ai/engine/**` — nothing.
+- Existing models/fields; `backend/dq/**`; `backend/dataschema/**`; frontend; docker files.
+- Do NOT edit the generated migration by hand.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check                        # → 0 issues
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run   # → "No changes detected"
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_flight_models.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest dq -q --maxfail=5 --disable-warnings -p no:cacheprovider   # → 38 passed
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider   # → all green
+```
+
+#### Output contract
+Append to `TASK-RESULTS.md`: files changed, migration output, test output (terminal proof), issues.
+
+---
+
+### Phase 25-B — FlightDirector core + additive engine hooks
+
+**Date:** 2026-08-24
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Kind:** Backend-only. Large.
+**Depends on:** 25-A (models)
+**Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §1, §3.1–§3.3
+
+#### Files to Read First
+- `docs/DESIGN-FLIGHT-DIRECTOR.md` (whole doc)
+- `backend/ai/engine/cognition/plan/loop.py` — `_execute_step` (lines ~540–780), `run()` (~150–450), `_build_step_prompt`, `_persist_run_step`
+- `backend/ai/engine/cognition/turn/witnesses.py` — `DraftResult.tool_calls`, `ExecutionResult.completed_tools`
+- `backend/ai/engine/cognition/turn/draft.py` — `draft(..., model=...)` param
+- `backend/ai/plans_service.py` — `_execute_plan_once` (~1870–1990), `_run_plan_frames` (~1990–2180)
+- `backend/ai/host_executor.py` — read-only GET handlers (`_list_dq_rules_in_process`, `_list_tables_in_process`)
+- `backend/ai/models/core.py` — `Run.working_notes` (flight state JSON home)
+- `.ai-toolkit/shared/base-rules.md` (RULE_21, RULE_23)
+
+#### Files to Change
+- `backend/ai/flight_director.py` — ADD (core; see Implementation)
+- `backend/ai/engine/cognition/plan/loop.py` — MODIFY additive-only: optional `flight_director=None` on `__init__` + `run()` + `_execute_step`; guarded call sites; NO behavior change when `None`
+- `backend/ai/plans_service.py` — MODIFY: `_execute_plan_once` constructs + passes a `FlightDirector`; `_run_plan_frames` runs the contract gate before the first attempt and stores `working_notes.flight`
+- `backend/ai/tests/test_flight_director.py` — ADD (unit)
+- `backend/ai/tests/test_flight_director_integration.py` — ADD (integration)
+
+#### Implementation
+1. **`FlightDirector`** with:
+   - `WorkingMemoryLedger` — `parse_output(tool_output)` extracts created entities (`{"id": N}`, `{"data": {"id": N}}`, `{"status_code": 201, "data": ...}`, `{"bindings": [...]}`); kind inferred from endpoint/tool; `validate_references(step, ledger)` uses read-only GET existence checks via a passed executor; returns corrected args when a stale id maps unambiguously to an earlier created entity (name overlap with step intent), else an instruction to re-list and use real ids.
+   - `contract_gate(plan, brief)` — deterministic artifact-noun coverage check + auto-suggest `acceptance_criteria` per step (templates in spec §3.4). Never blocks; records findings + suggestions.
+   - `prepare_step(step, ledger, attempts) -> StepPrep` — returns `corrected_tool_args`, `extra_instructions`, `model_override`, `repair_kind`, `repair_detail`.
+   - `on_step_completed(step, draft, execution, result, ledger) -> StepFlightVerdict` — ledger update + fidelity guard (spec §3.3): `declared=len(draft.tool_calls)` vs `executed=len(execution.completed_tools)`; request re-run (read-only steps) or escalate (mutation steps → report partial + human-review flag, never auto re-run, RULE_21); per-step `model_override` from `getattr(settings, "AI_FLIGHT_DIRECTOR_ESCALATION_MODEL", "gpt-4o")`.
+2. **Loop hooks (additive-only):** `__init__(..., flight_director=None)`; in `_execute_step`: (a) call `prepare_step` after building the step prompt, apply corrected args + extra instructions to the prompt and pass `model=prep.model_override` to `dw.draft(...)`; (b) after execution + result built, call `on_step_completed`; honor a bounded fidelity re-run INSIDE `_execute_step` (≤1 re-run for read-only steps; never for mutations). All hooks wrapped in `if self.flight_director is not None:`.
+3. **plans_service:** `_execute_plan_once` builds `FlightDirector(executor=..., run=...)` and passes it to `ReActLoop`; `_run_plan_frames` calls `contract_gate` before `_execute_plan_once` and persists `working_notes["flight"]` after.
+4. **Tests:**
+   - `test_flight_director.py` (unit, no DB where possible): ledger parse of all output shapes; stale-id rewrite (125→129) with no false positive on pre-existing ids; contract gate finds missing artifacts + suggests criteria; fidelity verdict on 1-of-2; `prepare_step` model_override on escalation.
+   - `test_flight_director_integration.py`: (a) **the water-consumption scenario** — create table step → create rule step (returns id 129) → binding step whose tool_args reference 125 → assert the binding step's args are corrected to 129 pre-staging and the run completes WITHOUT a 500/FK error; (b) a run with `flight_director=None` behaves identically to today (assert no new events/rows).
+
+#### DO NOT TOUCH
+- `backend/ai/engine/**` except `loop.py` — and there only additive optional-param hooks.
+- `backend/dq/**`, `backend/dataschema/**` — read-only via existing host-executor GETs.
+- `backend/ai/feedback/skill_flywheel.py`; frontend; docker files.
+- No behavior change to any existing plan lifecycle path when the director is absent.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_flight_director.py ai/tests/test_flight_director_integration.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_plans.py ai/tests/test_durable.py ai/tests/test_plan_task.py -q --maxfail=5 --disable-warnings -p no:cacheprovider   # → UNCHANGED + green (loop default proof)
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest dq -q --maxfail=5 --disable-warnings -p no:cacheprovider   # → 38 passed
+```
+
+#### Output contract
+Append to `TASK-RESULTS.md`: files changed, loop diff summary (additive-only proof), test output, issues.
+
+---
+
+### Phase 25-C — Acceptance checks + repair + QoS endpoints
+
+**Date:** 2026-08-24
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Kind:** Backend-only. Large.
+**Depends on:** 25-B
+**Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §3.4–§3.6, §4
+
+#### Files to Read First
+- `docs/DESIGN-FLIGHT-DIRECTOR.md` §3.4–§3.6, §4
+- `backend/ai/flight_director.py` (from 25-B)
+- `backend/ai/plans_service.py` — `_run_plan_frames` tail (frames after the retry loop), `get_ledger`, `_serialize_run`
+- `backend/ai/plans_api.py` + `backend/ai/plans_urls.py` — route pattern for `<str:pk>/ledger/`
+- `backend/ai/models/core.py` — `AcceptanceReport` (25-A)
+- `.ai-toolkit/shared/api-contract.md` + `qa-framework.md`
+
+#### Files to Change
+- `backend/ai/flight_director.py` — MODIFY: acceptance criteria templates (§3.4), `run_acceptance_checks` (§3.5) with the repair loop (`AI_FLIGHT_DIRECTOR_MAX_REPAIRS`, default 2 → escalate), `build_acceptance_report` (§3.6)
+- `backend/ai/plans_service.py` — MODIFY: after the retry loop in `_run_plan_frames`, run acceptance checks + write `AcceptanceReport`; add `get_qos_report(user, plan_id)` (row or computed-on-the-fly for legacy runs) and `get_flight_state(user, plan_id)`
+- `backend/ai/plans_api.py` — MODIFY: `qos` and `flight` actions on `PlanViewSet`
+- `backend/ai/plans_urls.py` — MODIFY: `qos/` + `flight/` routes (before the `steps/` pattern, after `ledger/`)
+- `backend/ai/tests/test_flight_acceptance.py` — ADD
+- `backend/ai/tests/test_flight_api.py` — ADD
+
+#### Implementation
+1. Acceptance criteria templates + checks per spec §3.4–§3.5 (re-query read-only via host executor GETs; evidence = query + matches; `table_fields` asserts the EXACT field set).
+2. Repair loop: `missed` → repair instructions with actual diff → re-draft/re-execute (read-only/non-mutation only) → ≤2 → escalate. Report per-step `met|partial|missed` + evidence + repairs + escalated flag.
+3. `build_acceptance_report` writes the `AcceptanceReport` row (report_json, metrics_json, narrative = `run.final_response`, status).
+4. `get_qos_report` returns the spec §4 shape (owner-scoped; 404 on missing plan; computed on the fly when no row). `get_flight_state` returns `working_notes.flight`.
+5. **Tests:**
+   - `test_flight_acceptance.py`: criterion met; `table_fields` exact-set mismatch → partial + diff; repair succeeds within 2 attempts; repair exhausts → escalate + `escalations` metric; mutation step fidelity failure never re-runs (RULE_21).
+   - `test_flight_api.py`: `GET qos/` returns report shape (met/partial/missed); `GET flight/` returns supervision; outsider (different org/user) → 403; unauthenticated → 401; missing plan → 404.
+
+#### DO NOT TOUCH
+- `backend/ai/engine/**` — nothing in this phase.
+- `backend/dq/**`, `backend/dataschema/**` — read-only.
+- Frontend files; docker files.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_flight_acceptance.py ai/tests/test_flight_api.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest dq -q --maxfail=5 --disable-warnings -p no:cacheprovider   # → 38 passed
+```
+
+#### Output contract
+Append to `TASK-RESULTS.md`: endpoints + payload shapes, test output, curl-style API evidence with a real JWT (403/401/200 paths).
+
+---
+
+### Phase 25-D — Grow loop: outcome → learning + playbook
+
+**Date:** 2026-08-24
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Kind:** Backend-only. Small-Medium.
+**Depends on:** 25-C (report)
+**Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §3.6, §6
+
+#### Files to Read First
+- `docs/DESIGN-FLIGHT-DIRECTOR.md` §3.6
+- `backend/ai/flight_director.py` (25-B/25-C)
+- `backend/ai/models/core.py` — `LearningOutcome` (25-A), `PlaybookBlock`
+- `backend/ai/feedback/skill_flywheel.py` — terminal-status guard pattern to mirror
+
+#### Files to Change
+- `backend/ai/flight_director.py` — MODIFY: `enqueue_learning_from_report(report)` (deterministic matchers, dedup, `PlaybookBlock` upsert with `version=N+1`, `provenance=run.id`, mark `LearningOutcome` applied) — wire it after `build_acceptance_report` in `plans_service`
+- `backend/ai/plans_service.py` — MODIFY: call `enqueue_learning_from_report` after the report is written; never fail a run on learning errors (try/except, log)
+- `backend/ai/tests/test_flight_learning.py` — ADD
+
+#### Implementation
+1. Matchers per spec §3.6 (missing criteria → planner pattern; fidelity_failures>0 → worker pattern; repaired_refs non-empty → planner ids pattern).
+2. Dedup via the `(run, pattern)` unique constraint; idempotent re-call = no-op.
+3. `PlaybookBlock(block_type="flight_director")` upsert: existing block → bump `version`, update `content`/`provenance`; new → create. Mark outcome `applied` + `applied_at`; terminal-status guard mirrors `feed_run_feedback` (`completed`/`failed` only).
+4. **Tests** (`test_flight_learning.py`): each matcher fires on the right report; dedup (second call no-op); playbook version bump; non-terminal run → no outcomes.
+
+#### DO NOT TOUCH
+- `backend/ai/engine/**`; `backend/ai/feedback/skill_flywheel.py`; `backend/dq/**`; frontend; docker files.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_flight_learning.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest dq -q --maxfail=5 --disable-warnings -p no:cacheprovider   # → 38 passed
+```
+
+#### Output contract
+Append to `TASK-RESULTS.md`: matcher/dedup/playbook evidence, test output.
+
+---
+
+### Phase 25-E — QA validation (4-layer evidence)
+
+**Date:** 2026-08-24
+**Worker Role:** qa-validator
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY (after 25-A..25-D all green)
+**Kind:** QA. Evidence-gathering.
+**Depends on:** 25-A..25-D
+**Spec:** `.ai-toolkit/shared/qa-framework.md` (4-layer) + `docs/DESIGN-FLIGHT-DIRECTOR.md` §7
+
+#### Files to Read First
+- `.ai-toolkit/shared/qa-framework.md` (4-layer evidence model)
+- `docs/DESIGN-FLIGHT-DIRECTOR.md`
+- `backend/ai/tests/test_flight_*.py` (all 5 test files)
+- `backend/ai/plans_api.py` (qos/flight endpoints)
+
+#### What to Validate (evidence, not claims)
+- **L1 Structural:** `manage.py check` clean; `makemigrations --check --dry-run` clean; migration `0020` applied.
+- **L2 Security (API):** real JWT — `GET /carbon-api/ai/plans/{id}/qos/` and `.../flight/` → 200 for owner; 403 for a user in a different org who doesn't own the plan; 401 unauthenticated; 404 missing plan.
+- **L3 Functional (integration journey):** drive the water-consumption scenario — create table step → create rule step (id returned) → binding step with a STALE rule id in args → assert the FlightDirector corrects the reference and the run finishes with `completed` (no FK/500), and `GET qos/` returns `met` (or `partial` with repairs listed). Also validate an acceptance-miss path: a `table_fields` criterion with a wrong field set → repair → escalate → `partial` + `escalations` metric.
+- **L4 UI:** not in scope unless Phase 26 shipped — state that explicitly.
+- **Regression:** `pytest dq -q` (38) + `pytest ai -q` all green.
+
+#### Output Contract
+Append `TASK-RESULTS-16-FLIGHT-DIRECTOR.md` at repo root: per-layer evidence table (ID | severity | symptom | evidence | owner), exact commands + terminal output, PASS/FAIL verdict per layer, and overall verdict.
+
+---
+
+### Phase 26 — Frontend: QoS report panel (OPTIONAL)
+
+**Date:** 2026-08-24
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED (optional — dispatch only after 25-E passes and budget allows)
+**Kind:** Frontend-only. Medium.
+**Depends on:** 25-C endpoints (`qos/`, `flight/`)
+**Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §4, §8
+
+#### Files to Change
+- `carbon-frontend/src/api/aiWorkspace.js` — ADD `getPlanQos(planId)`, `getPlanFlight(planId)`
+- `carbon-frontend/src/shell/AITaskPanel.jsx` — MODIFY: add an "Acceptance report" view (or extend the Results tab) rendering the QoS report: status chip (`met/partial/missed`), per-requirement rows (verdict + evidence ids + repairs), metrics, and the supervision ledger; RULE_23 outcome copy only ("3 of 4 requirements met" — never engine terms); RULE_16/17 (PageContainer + Tabs pattern), theme tokens only (RULE_8)
+- `carbon-frontend/src/__tests__/AITaskPanel.qos.test.jsx` — ADD (render met/partial/missed states, empty state, loading, error)
+
+#### DO NOT TOUCH
+- Backend files; `EnterpriseGraph.jsx`; `AIInputBar.jsx`; docker files.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/AITaskPanel.qos.test.jsx
+npm run build
+```
+
+#### Output contract
+Append to `TASK-RESULTS.md`: lint/test/build output.
+
+---
+
+## Flight Director — Worker Activation Prompts
+
+### 25-A: Backend Worker
+```
+Your role is backend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/backend-worker.md
+4. Read docs/DESIGN-FLIGHT-DIRECTOR.md
+5. Read TASKS.md — Phase 25-A (FlightDirector schema)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+Never docker, never `source venv`; run pytest from backend with /home/ahmed/aast/carbon/.venv/bin/python.
+```
+
+### 25-B: Backend Worker
+```
+Your role is backend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/backend-worker.md
+4. Read docs/DESIGN-FLIGHT-DIRECTOR.md
+5. Read TASKS.md — Phase 25-B (FlightDirector core + additive loop hooks)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+Engine edits are ADDITIVE-ONLY: optional flight_director=None, no behavior change when absent.
+Never docker, never `source venv`; pytest from backend with /home/ahmed/aast/carbon/.venv/bin/python.
+```
+
+### 25-C: Backend Worker
+```
+Your role is backend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/backend-worker.md
+4. Read docs/DESIGN-FLIGHT-DIRECTOR.md
+5. Read TASKS.md — Phase 25-C (acceptance checks + repair + QoS endpoints)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+Never docker, never `source venv`; pytest from backend with /home/ahmed/aast/carbon/.venv/bin/python.
+```
+
+### 25-D: Backend Worker
+```
+Your role is backend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/backend-worker.md
+4. Read docs/DESIGN-FLIGHT-DIRECTOR.md
+5. Read TASKS.md — Phase 25-D (grow loop: outcome → learning + playbook)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+Never docker, never `source venv`; pytest from backend with /home/ahmed/aast/carbon/.venv/bin/python.
+```
+
+### 25-E: QA Validator
+```
+Your role is qa-validator for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/shared/qa-framework.md
+4. Read .ai-toolkit/roles/qa-validator.md
+5. Read docs/DESIGN-FLIGHT-DIRECTOR.md
+6. Read TASKS.md — Phase 25-E (QA validation, 4-layer evidence)
+Validate with real JWTs and terminal output; write TASK-RESULTS-16-FLIGHT-DIRECTOR.md.
+Model: DeepSeek V4-Flash.
+```
+
+### 26: Frontend Worker (only after 25-E passes)
+```
+Your role is frontend-worker for Carbon.
+1. Read .ai-toolkit/project.config.md
+2. Read .ai-toolkit/shared/base-rules.md
+3. Read .ai-toolkit/roles/frontend-worker.md
+4. Read docs/DESIGN-FLIGHT-DIRECTOR.md
+5. Read TASKS.md — Phase 26 (QoS report panel)
+Confirm your role and begin. Model: DeepSeek V4-Flash.
+RULE_23: outcome copy only. lint + vitest + build must all pass.
+```
+
