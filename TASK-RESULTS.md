@@ -3606,3 +3606,56 @@ $ pytest dq -q --maxfail=5
 - **Playbook scoping:** the upsert filters `instance_id="carbon"` (matches `plans_service.PLAN_INSTANCE_ID` + the engine's `upsert_block` semantics) — single-tenant Carbon, equivalent to type+title scoping.
 - **No new migrations:** no model touched; `makemigrations --check --dry-run` stays clean.
 - **DO-NOT-TOUCH respected:** `ai/engine/**`, `dq/**`, `dataschema/**`, `feedback/skill_flywheel.py` (read-only mirrored, never modified), frontend, docker untouched.
+
+## Phase 25-E — QA validation report (4-layer evidence) ✅ `ba5acfd`
+
+QA validator authored `TASK-RESULTS-16-FLIGHT-DIRECTOR.md` (273 lines) from live orchestrator evidence gathered 2026-08-23. Verdict: **PASS** — 0 × P0/P1/P2/P3; 1 known-debt carry-forward.
+
+### Executed gate results (orchestrator, terminal-enabled)
+```bash
+# L1 structural
+$ python manage.py check
+System check identified no issues (0 silenced).
+$ python manage.py makemigrations --check --dry-run
+No changes detected
+
+# L2 API/auth matrix (live, plan 161c6268-a083-46b7-92a7-156b7bfe10f7)
+$ curl -o /dev/null -w "%{http_code}" .../ai/plans/{id}/qos/          # owner JWT  → 200
+$ curl -o /dev/null -w "%{http_code}" .../ai/plans/{id}/qos/          # no token   → 401
+$ curl -o /dev/null -w "%{http_code}" .../ai/plans/00000000-.../qos/  # random UUID → 404
+$ curl -o /dev/null -w "%{http_code}" .../ai/plans/{id}/qos/          # outsider   → 403
+# flight/ mirrors the same matrix.
+
+# L3 functional: live 7-step water-consumption plan → completed
+#   steps 0,1 completed; step 2 declined (host rejected LLM draft: title/module required);
+#   steps 3,4,5 completed via two-phase consent (created DQ rules 130/132/135,
+#   ground truth GET /carbon-api/dq/rules/?search=Water);
+#   step 6 declined (rule builder rejected invalid allowed_values proposal).
+#   QoS → status missed; 5 requirements (3 met, 2 missed);
+#   metrics {retries: 4, steps_total: 5, steps_met: 3, steps_missed: 2, fidelity_failures: 0};
+#   supervision {contract, escalations, fidelity, ledger, repairs} all present.
+#   flight/ → supervision.contract.suggested_criteria for steps 2..6 (created_entity 201).
+#   Legacy plan d58b2df5 → qos met / 0 requirements / empty supervision (deterministic
+#   reconstruction, NO supervision — as designed for pre-25-B runs).
+
+# Regression
+$ pytest ai -q
+1 failed, 943 passed in 106.32s     # ONLY the known pre-existing order-dependent
+                                    # test_observability rollups failure
+$ pytest ai/tests/test_observability_api.py::test_rollups_totals_and_per_run_shape -q
+1 passed in 1.52s                   # isolation proof → pre-existing, NOT this track
+$ pytest dq -q
+326 passed, 14 subtests passed in 30.92s
+```
+
+### L3 findings = expected behaviors (NOT defects)
+- Host `DataTableSerializer` honestly rejects invalid LLM draft (`title`/`module` required) → error surfaced in step tool_output; nothing written.
+- DQ rule builder honestly rejects malformed proposal (`Proposed DQ rule is invalid — nothing was written.`).
+- Human-decline flow (`POST /steps/decline/`) marks steps `skipped`; plan completes when all steps terminal.
+- Two-phase consent verified live: confirm (unstaged token) → resume (stages `execution_id`) → confirm (executes) → completed.
+
+### Known issues (carry-forward, pre-existing)
+- `test_observability_api.py::test_rollups_totals_and_per_run_shape` — order-dependent, isolation-proven, identical at 25-C/25-D gates; not caused by Flight Director; do not fix in this track.
+
+### Deliverable
+- `TASK-RESULTS-16-FLIGHT-DIRECTOR.md` (repo root) — full 4-layer evidence tables + reproducibility appendix.
