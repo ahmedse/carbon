@@ -95,9 +95,20 @@ class RuleFieldAssignmentSerializer(serializers.ModelSerializer):
     def validate(self, data):
         # Cross-check: a field-level binding must target a field of the same
         # table, and a field cannot be bound twice to the same rule.
+        from dataschema.models import DataTable
+        from .models import DQRule
+
         data_table = data.get('data_table')
         data_field = data.get('data_field')
         rule = data.get('rule')
+        if rule and not DQRule.objects.filter(pk=rule.pk).exists():
+            raise serializers.ValidationError(
+                {'rule': 'Referenced DQ rule does not exist'}
+            )
+        if data_table and not DataTable.objects.filter(pk=data_table.pk).exists():
+            raise serializers.ValidationError(
+                {'data_table': 'Referenced data table does not exist'}
+            )
         if data_field and data_table and data_field.data_table_id != data_table.id:
             raise serializers.ValidationError(
                 {'data_field': 'data_field must belong to the given data_table'}
