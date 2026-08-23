@@ -1946,19 +1946,12 @@ class PlansService:
                 db=db,
             )
             # P1.3: a paused consent step resumes WITH its stored token so the
-            # mutation re-executes (critic passes → tool runs). The loop
-            # generated the token when it paused the step; without this the
-            # resumed mutation would be vetoed again and loop forever.
-            resume_token = None
-            pending_steps = await sync_to_async(
-                lambda: list(
-                    RunStep.objects.filter(
-                        run_id=run.id, status=STEP_AWAITING_APPROVAL
-                    )
-                )
-            )()
-            if pending_steps:
-                resume_token = pending_steps[0].confirmation_token
+            # mutation re-executes (critic passes → tool runs). The token is
+            # resolved PER STEP inside the loop's resume path
+            # (``resume_tokens`` built from each ``awaiting_approval``
+            # RunStep's own ``confirmation_token``) — a single shared token is
+            # deliberately NOT forwarded here (RULE_21: it would let later
+            # mutation steps skip their own consent gate).
             # Publish the plan run id for plugins (W5-C): the frozen engine
             # ToolContext has no ``run_id``, so export_document resolves its
             # owning plan from this thread-local during execution.
@@ -1974,7 +1967,6 @@ class PlansService:
                     user_info=user_info,
                     host_user_id=user_pk,
                     resume_run_id=run.id,
-                    confirmation_token=resume_token,
                 )
             finally:
                 set_current_plan_run(None)

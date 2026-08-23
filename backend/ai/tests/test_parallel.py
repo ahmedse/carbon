@@ -459,3 +459,58 @@ def test_consent_gate_halts_entire_run_no_steps_after_gate_execute(
     assert any(
         f["type"] == "done" and f["status"] == "paused" for f in frames
     ), frames
+
+
+# ── Gate 5: a confirmed mutation's token must NOT leak to later mutations ─
+# RULE_21 regression. ``_execute_plan_once`` used to read a SINGLE shared
+# ``pending_steps[0].confirmation_token`` and hand it to the WHOLE loop, so
+# every later mutation step inherited the confirmed step's token and skipped
+# its own consent gate (fresh E2E: "resume re-executed ALL steps incl. the
+# ones that should have re-paused for their own consent"). Each
+# ``awaiting_approval`` step now resumes with its OWN token only.
+
+
+@pytest.mark.django_db(transaction=True)
+def test_confirmed_mutation_token_does_not_leak_to_later_mutation(
+    user, tmp_path, run_cleanup
+):
+    steps = [
+        _export_step(0, is_mutation=True),     # mutation A → consent gate
+        _export_step(1, is_mutation=True),     # mutation B → its OWN gate
+    ]
+    run = _make_parallel_run(user, steps, [])
+    run_cleanup.append(run.id)
+
+    # First run: step 0 pauses for consent, step 1 never executes.
+    _drive(user, run, tmp_path)
+    rows = {s.step_index: s for s in RunStep.objects.filter(run_id=run.id)}
+    assert rows[0].status == "awaiting_approval", rows[0].status
+    assert rows[1].status == "pending", rows[1].status
+    step0_token = rows[0].confirmation_token
+    assert step0_token, "no token stored for the gated step"
+
+    # Grant consent ONLY on step 0, then resume.
+    PlansService().confirm_step(user, run.id, 0)
+    _drive(user, run, tmp_path)
+
+    rows = {s.step_index: s for s in RunStep.objects.filter(run_id=run.id)}
+    # Step 0 resumes with its own token and completes.
+    assert rows[0].status == "completed", rows[0].status
+    # Step 1 is a DIFFERENT mutation — it must NOT inherit step 0's token.
+    # It pauses for its own consent (a fresh, distinct token).
+    assert rows[1].status == "awaiting_approval", (
+        f"RULE_21 violation: later mutation ran without its own consent "
+        f"(status={rows[1].status!r}, tool_output={rows[1].tool_output_json!r})"
+    )
+    assert rows[1].confirmation_token, "gated step 1 has no token"
+    assert rows[1].confirmation_token != step0_token, (
+        "later mutation inherited the confirmed step's token"
+    )
+
+    # Only step 0 produced an artifact (step 1 still gated, never executed).
+    artifacts = list(RunArtifact.objects.filter(run_id=run.id))
+    assert {a.step_index for a in artifacts} == {0}, artifacts
+
+    # Run stays paused — awaiting step 1's own consent.
+    run.refresh_from_db()
+    assert run.status == "paused", run.status

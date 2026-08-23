@@ -126,7 +126,10 @@ class ReActLoop:
             progress_callback: optional progress reporter
             stream_callback: optional streaming output
             dry_run: if True, skip real mutations — preview only
-            confirmation_token: user-confirmed token for mutation steps
+            confirmation_token: legacy single token (deprecated). On resume the
+                token is resolved PER STEP from each ``awaiting_approval``
+                RunStep's own ``confirmation_token`` (see ``resume_tokens``) —
+                a single shared token must never flow into every mutation step.
             db: optional Store session for durable Run/RunStep persistence
             host_user_id: optional host user for tenancy
             resume_run_id: P1.3 — if set, resume an existing paused run
@@ -161,6 +164,12 @@ class ReActLoop:
         from ai.engine.core.models import Run, RunStep, generate_uuid
 
         completed_ids: set[int] = set()
+        # Per-step confirmation tokens (P1.3): each ``awaiting_approval`` step
+        # carries its OWN token; on resume that token is handed to THAT step
+        # only. A single shared token must never flow into every mutation step
+        # (RULE_21 — a confirmed step's token would otherwise let later
+        # mutation steps skip their own consent gate).
+        resume_tokens: dict[int, str] = {}
 
         if resume_run_id:
             run_id = resume_run_id
@@ -185,6 +194,8 @@ class ReActLoop:
                 existing_steps = await _db.select(RunStep, ("run_id", run_id))
                 existing_steps.sort(key=lambda s: s.step_index)
                 for s in existing_steps:
+                    if s.status == "awaiting_approval" and s.confirmation_token:
+                        resume_tokens[s.step_index] = s.confirmation_token
                     if s.status in ("completed", "skipped"):
                         completed_ids.add(s.step_index)
                         if s.draft_text:
@@ -361,7 +372,7 @@ class ReActLoop:
                     progress_callback=progress_callback,
                     stream_callback=stream_callback,
                     dry_run=dry_run,
-                    confirmation_token=confirmation_token,
+                    confirmation_token=resume_tokens.get(step.step_id),
                     step_contexts=step_contexts,
                     agent_role=step.agent_role,
                     plan_source=plan.source,
@@ -456,7 +467,7 @@ class ReActLoop:
                         )
                         # Continue to final synthesis — failure surfaced honestly
 
-                if step.is_mutation and not dry_run and not confirmation_token:
+                if step.is_mutation and not dry_run and not resume_tokens.get(step.step_id):
                     confirmations_required += 1
 
                 completed_ids.add(step.step_id)
