@@ -294,3 +294,68 @@ class RunDQValidationViewTests(APIBaseTestCase):
         self.client.force_authenticate(self.outsider)
         r = self.client.post(f'{BASE}/run-validation/', {'data_table': self.table.id}, format='json')
         self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+
+
+# ── POST /dq/rule-assignments/ (create binding) ──
+
+class RuleAssignmentCreateTests(APIBaseTestCase):
+    """Regression: POST /dq/rule-assignments/ used to 500 (IntegrityError).
+
+    The serializer omitted `rule`, so the field was dropped on create and the
+    rule_id NOT NULL constraint blew up. The endpoint must create a binding.
+    """
+
+    def test_admin_can_create_field_binding(self):
+        self.client.force_authenticate(self.admin)
+        fresh = DataField.objects.create(
+            data_table=self.table, name='phone', label='Phone', type='string')
+        r = self.client.post(
+            f'{BASE}/rule-assignments/',
+            {'rule': self.rule.id, 'data_table': self.table.id, 'data_field': fresh.id},
+            format='json',
+        )
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+        self.assertEqual(r.data['rule'], self.rule.id)
+        self.assertEqual(r.data['data_field'], fresh.id)
+        self.assertEqual(r.data['data_table'], self.table.id)
+
+    def test_admin_can_create_table_binding(self):
+        self.client.force_authenticate(self.admin)
+        r = self.client.post(
+            f'{BASE}/rule-assignments/',
+            {'rule': self.rule.id, 'data_table': self.table.id},
+            format='json',
+        )
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+        self.assertEqual(r.data['data_field'], None)
+
+    def test_duplicate_field_binding_rejected_400(self):
+        # cls.rule is already bound to cls.field in the fixture
+        self.client.force_authenticate(self.admin)
+        r = self.client.post(
+            f'{BASE}/rule-assignments/',
+            {'rule': self.rule.id, 'data_table': self.table.id, 'data_field': self.field.id},
+            format='json',
+        )
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_field_from_other_table_rejected_400(self):
+        self.client.force_authenticate(self.admin)
+        other = DataTable.objects.create(
+            title='Other Table', name='other_table', module=self.module)
+        other_field = DataField.objects.create(
+            data_table=other, name='other_col', label='Other Col', type='string')
+        r = self.client.post(
+            f'{BASE}/rule-assignments/',
+            {'rule': self.rule.id, 'data_table': self.table.id, 'data_field': other_field.id},
+            format='json',
+        )
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_unauthenticated_gets_401(self):
+        r = self.client.post(
+            f'{BASE}/rule-assignments/',
+            {'rule': self.rule.id, 'data_table': self.table.id},
+            format='json',
+        )
+        self.assertEqual(r.status_code, status.HTTP_401_UNAUTHORIZED)
