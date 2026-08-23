@@ -694,3 +694,60 @@ class CognitionSweepRun(AppScopeMixin):
 
     class Meta:
         app_label = "ai"
+
+
+class AcceptanceReport(AppScopeMixin):
+    """Flight Director closure — one row per finalized run (Phase 25-A).
+
+    Written by ``FlightDirector.finalize_report`` after run acceptance
+    checks: per-requirement verdicts (``report_json``), aggregate run
+    metrics (``metrics_json``), and the run's ``final_response`` narrative.
+    """
+
+    id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
+    run = models.ForeignKey(
+        Run, on_delete=models.CASCADE, related_name="acceptance_reports"
+    )
+    status = models.TextField(default="met")  # met | partial | missed
+    report_json = models.JSONField(default=dict)
+    metrics_json = models.JSONField(default=dict)
+    narrative = models.TextField(default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "ai"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"AcceptanceReport {self.id} ({self.status})"
+
+
+class LearningOutcome(AppScopeMixin):
+    """Flight Director outcome→learning mapping (Phase 25-A).
+
+    One row per deterministic learning pattern detected from a run's
+    acceptance report; deduped per (``run``, ``pattern``) so each pattern is
+    recorded at most once per run. Target: ``playbook`` | ``prompts``.
+    """
+
+    id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
+    run = models.ForeignKey(Run, on_delete=models.CASCADE)
+    pattern = models.TextField()
+    target = models.TextField(default="playbook")
+    payload_json = models.JSONField(default=dict)
+    status = models.TextField(default="queued")  # queued | applied | skipped
+    applied_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "ai"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "pattern"],
+                name="uq_learningoutcome_run_pattern",
+            ),
+        ]
+
+    def __str__(self):
+        return f"LearningOutcome {self.pattern} ({self.status})"

@@ -15,6 +15,7 @@ from .workspace import (
     ConversationCheckpoint,
 )
 from .core import (
+    AcceptanceReport,
     Agent,
     AgentHandoff,
     AuditLog,
@@ -29,6 +30,7 @@ from .core import (
     KgNode,
     KgProvenance,
     KnowledgeEntity,
+    LearningOutcome,
     LLMCallLog,
     MemoryEpisodic,
     MemoryLongTerm,
@@ -85,6 +87,7 @@ __all__ = [
     "generate_uuid",
     "ModelCatalog",
     # core
+    "AcceptanceReport",
     "Agent",
     "AgentHandoff",
     "AuditLog",
@@ -99,6 +102,7 @@ __all__ = [
     "KgNode",
     "KgProvenance",
     "KnowledgeEntity",
+    "LearningOutcome",
     "LLMCallLog",
     "MemoryEpisodic",
     "MemoryLongTerm",

@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from .models import AIConversation, AIMessage
+from .models import AcceptanceReport, AIConversation, AIMessage, LearningOutcome
 
 
 @admin.register(AIConversation)
@@ -18,3 +18,38 @@ class AIMessageAdmin(admin.ModelAdmin):
     list_display = ("id", "conversation", "role", "created_at")
     list_filter = ("role",)
     readonly_fields = ("id", "created_at")
+
+
+@admin.register(AcceptanceReport)
+class AcceptanceReportAdmin(admin.ModelAdmin):
+    """Read-only list view for Flight Director acceptance reports."""
+
+    list_display = ("id", "run", "status", "created_at")
+    list_filter = ("status",)
+    readonly_fields = (
+        "id",
+        "run",
+        "status",
+        "report_json",
+        "metrics_json",
+        "narrative",
+        "created_at",
+    )
+
+
+@admin.register(LearningOutcome)
+class LearningOutcomeAdmin(admin.ModelAdmin):
+    """Read-only list view for Flight Director learning outcomes."""
+
+    list_display = ("id", "run", "pattern", "target", "status", "created_at")
+    list_filter = ("status", "target")
+    readonly_fields = (
+        "id",
+        "run",
+        "pattern",
+        "target",
+        "payload_json",
+        "status",
+        "applied_at",
+        "created_at",
+    )
