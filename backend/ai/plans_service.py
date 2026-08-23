@@ -1888,13 +1888,16 @@ class PlansService:
         conversation_id: str,
         instance_config: dict,
         user_info,
-    ) -> None:
+    ) -> dict:
         """Run the ReAct loop once in a fresh engine session.
 
         Extracted from ``_run_plan_frames`` so the retry loop can re-enter the
         engine with a *fresh* SQLAlchemy session per attempt (the same pattern
         as ``DurableExecutionService.resume_run``). Step statuses are written
         durably by the loop; the caller re-reads them via the Django ORM.
+
+        Returns the FlightDirector supervision state (ledger/repairs/fidelity)
+        for persistence into ``working_notes.flight``.
         """
         from asgiref.sync import sync_to_async
 
@@ -1906,6 +1909,7 @@ class PlansService:
         from ai.engine.cognition.turn.execute import ExecuteWitness
         from ai.engine.llm.prompts import build_chat_prompt
         from ai.host_executor import CarbonHostExecutor
+        from ai.flight_director import FlightDirector
 
         config = instance_config or {}
         async with get_session_factory(PLAN_INSTANCE_ID)() as db:
@@ -1939,11 +1943,16 @@ class PlansService:
                     "instance_config": instance_config,
                 },
             )
+            # W4-D Flight Director (additive): in-loop supervisor wired onto
+            # the loop. It validates reference args via read-only host GETs and
+            # runs the worker-fidelity guard; it never blocks the run.
+            flight_director = FlightDirector(executor=executor, run=run)
             loop = ReActLoop(
                 draft_witness=DraftWitness(executor=executor),
                 critic_witness=CriticWitness(),
                 executor=execute_witness,
                 db=db,
+                flight_director=flight_director,
             )
             # P1.3: a paused consent step resumes WITH its stored token so the
             # mutation re-executes (critic passes → tool runs). The token is
@@ -1967,9 +1976,11 @@ class PlansService:
                     user_info=user_info,
                     host_user_id=user_pk,
                     resume_run_id=run.id,
+                    flight_director=flight_director,
                 )
             finally:
                 set_current_plan_run(None)
+            return flight_director.state()
 
     # ── Execution: SSE streamed run ───────────────────────────────────────
 
@@ -2082,8 +2093,15 @@ class PlansService:
             },
         }
 
+        # W4-D Flight Director: deterministic contract gate (artifact-noun
+        # coverage + per-step acceptance-criteria suggestions). Never blocks —
+        # recorded into the flight state for later acceptance checks (25-C).
+        from ai.flight_director import contract_gate
+
+        contract = contract_gate(plan, run.user_message or "")
+
         # First attempt (fresh engine session).
-        await self._execute_plan_once(
+        flight_state = await self._execute_plan_once(
             run, plan, user_pk, conversation_id, instance_config, user_info
         )
 
@@ -2111,9 +2129,21 @@ class PlansService:
             await sync_to_async(self._append_retry_audit)(
                 run, attempt, [s.step_index for s in failed_steps]
             )
-            await self._execute_plan_once(
+            flight_state = await self._execute_plan_once(
                 run, plan, user_pk, conversation_id, instance_config, user_info
             )
+
+        # W4-D Flight Director: persist supervision state + contract gate into
+        # ``working_notes.flight`` (additive — never clobbers existing keys).
+        try:
+            _flight = dict(flight_state or {})
+            _flight["contract"] = contract
+            _notes = dict(run.working_notes or {})
+            _notes["flight"] = _flight
+            run.working_notes = _notes
+            await sync_to_async(run.save)(update_fields=["working_notes", "updated_at"])
+        except Exception:  # noqa: BLE001 - flight persistence never fails the run
+            logger.exception("flight state persistence failed for run %s", run.id)
 
         # Re-read the durable row the loop finalized.
         await sync_to_async(run.refresh_from_db)()

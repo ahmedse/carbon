@@ -3363,3 +3363,98 @@ npm run build   # ✓ built in ~27s
 Manual browser check (Agent mode): move node → resize → move again → no visual
 break; resize after move → no visual break. (`fill=false` keeps the fixed 420px
 viewport in Run view; no layout changes to EnterpriseGraph.)
+
+---
+
+## Phase 25-A — FlightDirector schema (AcceptanceReport + LearningOutcome) ✅
+
+**Date:** 2026-08-24 · **Worker:** backend-worker · **Status:** COMPLETE (gate green)
+
+### Files changed
+| File | Change |
+|------|--------|
+| `backend/ai/models/core.py` | +`AcceptanceReport(AppScopeMixin)` (run FK CASCADE `related_name="acceptance_reports"`, status default `met`, `report_json`/`metrics_json` dict defaults, `narrative`, timezone-aware `auto_now_add`), +`LearningOutcome(AppScopeMixin)` (`UniqueConstraint(run, pattern)`, target default `playbook`, `payload_json`, status default `queued`, `applied_at` nullable), both `app_label="ai"` |
+| `backend/ai/models/__init__.py` | re-exported both models |
+| `backend/ai/admin.py` | registered both as read-only list views |
+| `backend/ai/migrations/0022_acceptancereport_learningoutcome.py` | GENERATED (not hand-written) + applied |
+| `backend/ai/tests/test_flight_models.py` | NEW — 5 tests: AcceptanceReport defaults + related_name, FK cascade, LearningOutcome defaults, `(run, pattern)` unique constraint → IntegrityError, app_label=="ai" |
+
+### Verification output
+```bash
+manage.py check                                   # System check identified no issues (0 silenced).
+manage.py makemigrations --check --dry-run        # No changes detected
+pytest ai/tests/test_flight_models.py -q          # 5 passed in 1.15s
+pytest dq -q --maxfail=5                          # 326 passed, 14 subtests passed (38 DQ API tests included)
+pytest ai -q --maxfail=5                          # 882 passed, 1 failed
+```
+
+### One pre-existing failure (NOT caused by 25-A — proven)
+`ai/tests/test_observability_api.py::test_rollups_totals_and_per_run_shape` fails in the full suite
+(`assert totals["runs"] == 4` → `11 == 4`) but **passes in isolation**. Root cause: pre-existing
+test-isolation bug — earlier test files (`test_artifact_e2e`, `test_catalog`, etc.) use
+`@pytest.mark.django_db(transaction=True)` and COMMIT `Run` rows that the superuser-visible
+`/carbon-api/ai/pulse/rollups/` totals count (superuser sees all runs via `scope_ai_queryset`).
+Proof: the failure reproduces running ONLY pre-existing files
+`test_artifact_e2e test_artifacts test_catalog test_cognition_scheduler test_observability_api`
+(no Phase 25-A files) → `1 failed, 22 passed`; and passes when run alone. Phase 25-A adds no
+`transaction=True` tests (`test_flight_models.py` uses plain `db` fixtures → rollback, 0 leakage).
+Fix suggestion (deferred): scope the rollups test to a non-superuser user or clean committed Runs
+in a fixture. Not a blocker for 25-A.
+
+### Commit
+`b177d88` feat(ai): Flight Director schema (Phase 25-A) — AcceptanceReport + LearningOutcome (working tree clean)
+
+---
+
+## Phase 25-B — FlightDirector core + additive engine hooks ✅
+
+**Date:** 2026-08-24 · **Worker:** backend-worker · **Status:** IMPLEMENTED (gate commands below — not executable in-session: no terminal tool available to this worker; static verification passed)
+
+**Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §1, §3.1–§3.3 · **Depends on:** 25-A (models, `b177d88`)
+
+### Files changed
+| File | Change |
+|------|--------|
+| `backend/ai/flight_director.py` | CORE (present from prior work; this phase hardened it): `WorkingMemoryLedger` (parse of every created-entity shape; read-only `results` shapes deliberately ignored), `contract_gate` (deterministic artifact-noun coverage + per-step criterion templates, never blocks), `FlightDirector` (`prepare_step` → `StepPrep` with corrected args / extra instructions / escalation `model_override`; `on_step_completed` → ledger + fidelity guard §3.3; `state()` → `working_notes.flight` shape). **This phase's targeted fixes:** ① `prepare_step` now walks ref keys **recursively** (fixes the real water-incident shape `{"body": {"rule": 125, "data_table": T}}` — previously only top-level keys were validated); ② `_validate_ref`/`_entity_exists` gated to `_LISTABLE_KINDS = {rule, table}` — non-listable kinds (field/module/binding) are ledger-only, eliminating false-positive "invalid ref" instructions for ids the host legitimately owns; ③ `_infer_kind` maps `call_host_api` `api_name` to rule/table/binding/artifact kinds; ④ `_suggest_criterion` infers POST/GET from `api_name` verbs and prefers the `table_fields` template for table creation |
+| `backend/ai/engine/cognition/plan/loop.py` | ADDITIVE-ONLY (pre-existing): optional `flight_director=None` on `__init__` + `run()` + `_execute_step`; `prepare_step` called after the step prompt is built (corrected args + extra instructions appended, `model=prep.model_override` passed to `dw.draft`); `on_step_completed` after execution; bounded fidelity re-run (≤1, read-only only, `escalation_model()`), all wrapped in `try/except` and only active when the director is present — **zero behavior change when `None`** |
+| `backend/ai/plans_service.py` | ADDITIVE-ONLY (pre-existing): `_execute_plan_once` constructs `FlightDirector(executor=..., run=run)` and passes it to `ReActLoop`; `_run_plan_frames` runs `contract_gate` before the first attempt and persists `working_notes["flight"] = {**flight_state, "contract": contract}` |
+| `backend/ai/tests/test_flight_director.py` | NEW — 16 unit tests (pure logic, fake async executor, no DB except one real-executor case): ledger parse of ALL output shapes + dedupe + read-only-list exclusion; stale-rule rewrite **125→129** (water incident) with **no false positive on pre-existing ids**; ambiguity (2 candidates) / name-mismatch → never rewrite, instruct to re-list; in-ledger ids skip the host round-trip; nested `{"table_id", "dq_rule_ids": [125]}` list refs corrected; escalation `model_override` (`AI_FLIGHT_DIRECTOR_ESCALATION_MODEL` setting + default `gpt-4o`); contract gate findings + criteria templates; fidelity 1-of-2 re-run, mutation escalate never re-run (RULE_21), no-op prose guard, reasoning-step exemption, re-run-persisted escalate; `state()` serialization; REAL `CarbonHostExecutor` existence check (`django_db`, `async_to_sync`) |
+| `backend/ai/tests/test_flight_director_integration.py` | NEW — 2 integration tests (scripted DraftWitness, REAL CriticWitness + REAL ExecuteWitness + REAL in-process `CarbonHostExecutor`, no LLM): ① **water-consumption scenario end-to-end** — POST table → POST rule (real rows) → binding step referencing stale 125 → `prepare_step` rewrites to the real rule id **pre-staging** → binding POST with corrected body returns 201 (no FK 500); the raw stale body raises `ToolExecutionError` (the FK-500 source) proving the correction is what saves the run; ② **additive-default proof** — same read-only plan through the real loop with `flight_director=None` vs wired director: identical outcomes, no FLIGHT DIRECTOR guidance without the director, guidance present with it, `Run` row count unchanged, no repairs/escalations |
+
+### Loop diff summary (additive-only proof)
+- `loop.py` changes are purely **optional-parameter + guarded call sites**: `flight_director=None` threaded through `__init__` → `run()` → `_execute_step`; `prepare_step`/`on_step_completed` invoked only `if flight_director is not None`, each in its own `try/except` so supervision can never fail a run; the fidelity re-run is a self-contained block inside `_execute_step` bounded to one attempt for read-only steps. When the director is absent (`None`), every branch is skipped — verified by integration test ② (identical step outcomes, no guidance, no extra rows) and by the unchanged green set of `test_plans.py`/`test_durable.py`/`test_plan_task.py` (loop default path).
+- `flight_director.py` is a NEW module (no pre-existing behavior to change); it imports only `django.conf.settings` + stdlib — no engine imports (RULE_20 clean), never mutates host data itself (existence checks are read-only GETs).
+
+### Verification gate (printed — worker has no terminal tool in this session)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run          # expect: No changes detected
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_flight_director.py ai/tests/test_flight_director_integration.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_plans.py ai/tests/test_durable.py ai/tests/test_plan_task.py -q --maxfail=5 --disable-warnings -p no:cacheprovider   # UNCHANGED + green (loop default proof)
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest dq -q --maxfail=5 --disable-warnings -p no:cacheprovider   # → 38 passed
+```
+Static verification performed in-session: `get_errors` → **No errors found** on `flight_director.py`, `loop.py`, `plans_service.py`, and both new test files. Runtime gate execution + test-count capture is pending a terminal-enabled run (commands above).
+
+### Issues
+- **None open.** No settings change required (`AI_FLIGHT_DIRECTOR_ESCALATION_MODEL` reads with `getattr(..., "gpt-4o")` default — only referenced in `flight_director.py`; `AI_FLIGHT_DIRECTOR_MAX_REPAIRS` is 25-C's concern). The known 25-A rollups test-isolation failure is unrelated (proven in 25-A) and does not involve any 25-B file.
+- **Tooling note:** this session's toolset had no `run_in_terminal`; the verification gate must be executed by a terminal-enabled run or the user. No code was changed under `DO NOT TOUCH` paths (`dq/**`, `dataschema/**`, `feedback/skill_flywheel.py`, frontend, docker, `ai/engine/**` except the additive `loop.py` hooks).
+
+### Gate execution (terminal) — 2026-08-24 ✅
+```bash
+manage.py check                                        # 0 issues
+manage.py makemigrations --check --dry-run             # No changes detected
+pytest test_flight_director.py test_flight_director_integration.py -q   # 25 passed in 2.84s
+pytest test_plans.py test_durable.py test_plan_task.py -q               # 74 passed in 14.57s (loop default proof)
+pytest dq -q --maxfail=5                                                # 326 passed, 14 subtests
+```
+
+### Post-review fixes (2 bugs caught by the tests at gate time)
+1. **String-coercion false "changes"/rewrites** — `prepare_step._walk` assigned the
+   stringified ref back onto valid int ids (`data_table: 100` → `'100'`, `rule: 3099` → `'3099'`),
+   making `corrected_tool_args` non-None and rewriting valid refs. Fix: only assign
+   `node[key] = rep["corrected_to"]` when an actual rewrite exists; otherwise preserve the
+   original value/type.
+2. **`stale_id` recorded as string** — `record_repair` got `str(v)` instead of the typed id.
+   Fix: `_validate_ref(..., original_value=...)` passes the original typed value through.
+Both fixes are covered by the existing 25 tests (now 25/25 green).

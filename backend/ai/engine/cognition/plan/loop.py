@@ -83,6 +83,7 @@ class ReActLoop:
         knowledge_store=None,
         memory_manager=None,
         db=None,                  # Store session for durable run persistence
+        flight_director=None,     # FlightDirector — additive in-loop supervisor
     ):
         self.draft_witness = draft_witness
         self.critic_witness = critic_witness
@@ -91,6 +92,7 @@ class ReActLoop:
         self.knowledge_store = knowledge_store
         self.memory_manager = memory_manager
         self.db = db
+        self.flight_director = flight_director
 
     async def run(
         self,
@@ -110,6 +112,7 @@ class ReActLoop:
         db=None,                  # Store session for durable run persistence (P1.1)
         host_user_id: str | None = None,
         resume_run_id: str | None = None,  # P1.3: resume from a paused run
+        flight_director=None,     # FlightDirector — additive in-loop supervisor
     ) -> ReActResult:
         """Execute the plan through the ReAct loop.
 
@@ -152,6 +155,9 @@ class ReActLoop:
 
         # Use self.db or passed db
         _db = db or self.db
+
+        # Flight Director (additive): instance attr wins; per-run kwarg overrides.
+        fd = flight_director if flight_director is not None else self.flight_director
 
         step_results: list[StepResult] = []
         replans_used = 0
@@ -376,6 +382,7 @@ class ReActLoop:
                     step_contexts=step_contexts,
                     agent_role=step.agent_role,
                     plan_source=plan.source,
+                    flight_director=fd,
                 )
                 return step, _res, (time.monotonic() - _t0) * 1000
 
@@ -576,6 +583,7 @@ class ReActLoop:
         step_contexts: dict[int, str],
         agent_role: str | None = None,
         plan_source: str = "",
+        flight_director=None,   # FlightDirector — additive in-loop supervisor
     ) -> StepResult:
         """Execute one plan step: draft → critic → execute → observe."""
 
@@ -583,6 +591,33 @@ class ReActLoop:
         enriched_prompt = self._build_step_prompt(
             step, user_message, system_prompt, step_contexts,
         )
+
+        # ── Flight Director: prepare_step (additive, never fails the run) ─
+        attempts = 0
+        prep = None
+        if flight_director is not None:
+            try:
+                prep = await flight_director.prepare_step(
+                    step, flight_director.ledger, attempts=attempts,
+                )
+            except Exception:  # noqa: BLE001 - supervision must never fail the run
+                logger.exception(
+                    "FlightDirector.prepare_step failed step=%d", step.step_id,
+                )
+                prep = None
+            if prep is not None:
+                _guidance = []
+                if prep.corrected_tool_args:
+                    _guidance.append(
+                        "Corrected tool arguments (use these exact ids): "
+                        + json.dumps(prep.corrected_tool_args)
+                    )
+                if prep.extra_instructions:
+                    _guidance.append(prep.extra_instructions)
+                if _guidance:
+                    enriched_prompt = (
+                        enriched_prompt + "\n\nFLIGHT DIRECTOR:\n" + "\n".join(_guidance)
+                    )
 
         # Tool-aware drafting: expose the step's tool set (or the curated
         # single-step allow-set) so the LLM can emit real tool_calls, and
@@ -639,7 +674,7 @@ class ReActLoop:
             )
 
         # Draft
-        draft = await dw.draft(
+        _draft_kwargs = dict(
             instance_id=instance_id,
             conversation_id=conversation_id,
             user_message=enriched_prompt,
@@ -649,6 +684,9 @@ class ReActLoop:
             user_info=user_info,
             tools=step_tools,
         )
+        if prep is not None and prep.model_override:
+            _draft_kwargs["model"] = prep.model_override
+        draft = await dw.draft(**_draft_kwargs)
 
         # Critic
         retrieval_stub = retrieval or RetrievalResult()
@@ -755,6 +793,99 @@ class ReActLoop:
                         step.step_id, _to.get("tool_name", "?"), result.confirmation_token[:8],
                     )
                     return result
+
+            # ── Flight Director: on_step_completed + bounded fidelity re-run ─
+            # Additive supervisor. Read-only/idempotent steps may be re-run
+            # ONCE when the worker's declared tool calls outnumber what actually
+            # executed. Mutation steps are NEVER auto re-run (RULE_21) — those
+            # escalate for human review instead.
+            if flight_director is not None:
+                try:
+                    verdict = flight_director.on_step_completed(
+                        step, draft, execution, result,
+                        flight_director.ledger, attempts=attempts,
+                    )
+                except Exception:  # noqa: BLE001 - supervision never fails the run
+                    logger.exception(
+                        "FlightDirector.on_step_completed failed step=%d", step.step_id,
+                    )
+                    verdict = None
+
+                if (
+                    verdict is not None
+                    and verdict.requests_rerun
+                    and attempts == 0
+                    and not step.is_mutation
+                ):
+                    attempts += 1
+                    _retry_prompt = enriched_prompt
+                    if verdict.extra_instructions:
+                        _retry_prompt = (
+                            enriched_prompt + "\n\n" + verdict.extra_instructions
+                        )
+                    logger.info(
+                        "FlightDirector: fidelity re-run step=%d (%s)",
+                        step.step_id, verdict.repair_kind,
+                    )
+                    try:
+                        _draft2 = await dw.draft(
+                            instance_id=instance_id,
+                            conversation_id=conversation_id,
+                            user_message=_retry_prompt,
+                            system_prompt=system_prompt,
+                            conversation_history=conversation_history,
+                            instance_config=instance_config,
+                            user_info=user_info,
+                            tools=step_tools,
+                            model=flight_director.escalation_model(),
+                        )
+                        _critic2 = await cw.review(
+                            draft=_draft2,
+                            retrieval=retrieval_stub,
+                            is_mutation=step.is_mutation,
+                            dry_run=dry_run,
+                            confirmation_token=confirmation_token,
+                        )
+                        if _critic2.verdict != "veto":
+                            set_current_step_index(step.step_id)
+                            try:
+                                _execution2 = await ex.execute(
+                                    text=_draft2.text,
+                                    tool_calls=_draft2.tool_calls,
+                                    stream_callback=stream_callback,
+                                    progress_callback=progress_callback,
+                                    agent_role=agent_role or step.agent_role,
+                                    is_worker=(step.agent_role not in ("orchestrator", "", None)),
+                                )
+                            finally:
+                                set_current_step_index(None)
+                            result.executed = True
+                            result.draft_text = _draft2.text
+                            result.tool_output = (
+                                _execution2.completed_tools[0]
+                                if _execution2.completed_tools else None
+                            )
+                            if (
+                                result.tool_output
+                                and isinstance(result.tool_output, dict)
+                                and result.tool_output.get("error")
+                            ):
+                                result.error = str(result.tool_output["error"])
+                            try:
+                                flight_director.on_step_completed(
+                                    step, _draft2, _execution2, result,
+                                    flight_director.ledger, attempts=attempts,
+                                )
+                            except Exception:  # noqa: BLE001
+                                logger.exception(
+                                    "FlightDirector.on_step_completed (re-run) failed step=%d",
+                                    step.step_id,
+                                )
+                    except Exception:  # noqa: BLE001 - re-run failure must not crash the run
+                        logger.exception(
+                            "FlightDirector fidelity re-run failed step=%d", step.step_id,
+                        )
+
         elif step.dry_run_supported or step.is_mutation:
             # Dry-run preview: no actual execution
             result.executed = False
