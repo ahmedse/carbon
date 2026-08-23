@@ -3535,3 +3535,74 @@ After fixes: 25-C tests **23 passed**; full `ai` 930 passed; `dq` 326 passed.
 - **Legacy QoS** is deterministic (flight state + step rows), no host round-trips, evidence explicitly labelled `reconstructed-from-flight-state`.
 - **Known pre-existing failure** (`test_observability_api.py::test_rollups_totals_and_per_run_shape`, order-dependent) is unrelated to 25-C files — unchanged, do not fix.
 - **DO-NOT-TOUCH respected:** `ai/engine/**`, `dq/**`, `dataschema/**`, `feedback/skill_flywheel.py`, frontend, docker untouched.
+
+## Phase 25-D — Grow loop: outcome → learning + playbook ✅
+
+**Date:** 2026-08-24 · **Worker:** backend-worker · **Status:** IMPLEMENTED (gate commands below — not executable in-session: no terminal tool available to this worker; static verification passed via `get_errors`)
+
+**Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §3.6 + §6 · **Depends on:** 25-A (`b177d88`), 25-B (`61248c1`), 25-C (`5d9772a`)
+
+### Deliverables (per task brief — "You are expected to WRITE CODE")
+1. **`enqueue_learning_from_report(report, flight_state=None, run=None)`** in `flight_director.py` — deterministic pattern matchers (no LLM, no randomness, unit-testable without a live run):
+   - any requirement in `report["requirements"]` missing/`None` `acceptance_criteria` → `"planner: always emit acceptance_criteria"` (target `playbook`)
+   - `report["metrics"]["fidelity_failures"] > 0` (fallback: `flight_state["fidelity"]["failures"]`) → `"worker: never stop before all declared calls run"` (target `playbook`)
+   - non-empty `repaired_refs` — `flight_state["repairs"]` (fallback: `report["supervision"]["repairs"]`) → `"planner: resolve created ids from prior step outputs"` (target `playbook`)
+   - **Terminal-status guard mirrors `feed_run_feedback`** — only `completed`/`failed` runs create anything; `paused`/`cancelled`/`pending_approval` → no-op. `run=None` → no-op. Learning errors never propagate (pattern-detection and per-pattern apply are individually try/except'd).
+2. **Apply = upsert + outcome mark:** `PlaybookBlock(block_type="flight_director", title=pattern, content=guidance, version=N+1 if exists, provenance=run.id)` — new block → version 1; existing block (scoped `instance_id="carbon"` + `block_type` + `title`) → version+1 with `content`/`provenance` updated (single row, never a duplicate). `LearningOutcome` created via `get_or_create(run, pattern)` → `status="applied"`, `applied_at=timezone.now()`; `payload_json` carries `{pattern, target, guidance, provenance, source}`. **Dedup via the `(run, pattern)` unique constraint** — a second call for the same (run, pattern) is a no-op (no new outcome, no version bump).
+3. **`plans_service` wiring:** in `_run_plan_frames`, the 25-C terminal-status block now captures the report from `_write_acceptance_report` and calls `sync_to_async(enqueue_learning_from_report)(report, flight_state=flight_state, run=run)` inside try/except — logged, never fails the run.
+
+### Files changed
+| File | Change |
+|------|--------|
+| `backend/ai/flight_director.py` | +`from django.utils import timezone`; +`_PLAYBOOK_INSTANCE_ID` (`"carbon"`, matches `ai.plans_service.PLAN_INSTANCE_ID`); +`_TERMINAL_STATUSES = ("completed", "failed")` (mirrors `skill_flywheel._TERMINAL_STATUSES`); +`_PATTERN_GUIDANCE` (stable per-pattern guidance text); +`_detect_patterns(report, flight_state)` (3 deterministic matchers with fallbacks); +`_apply_playbook_block(pattern, guidance, run_id)` (upsert, version N+1, `provenance=run.id`); +`enqueue_learning_from_report(report, flight_state=None, run=None)` (terminal guard → detect → get_or_create dedup → playbook upsert → mark applied). Module-level (no signature changes to any 25-A/B/C API). |
+| `backend/ai/plans_service.py` | `_run_plan_frames` terminal block: capture `report = await self._write_acceptance_report(...)`; when non-None, `sync_to_async(enqueue_learning_from_report)(report, flight_state=flight_state, run=run)` in try/except (log, never fail the run). |
+| `backend/ai/tests/test_flight_learning.py` | NEW — 13 test cases (see below). |
+
+### Test summary (`backend/ai/tests/test_flight_learning.py` — 13 cases)
+1. missing `acceptance_criteria` (absent key + explicit `None`) → planner-criteria pattern, outcome `applied` + `applied_at`, block v1 `provenance=run.id`, guidance content
+2. `metrics.fidelity_failures=2` → worker-fidelity pattern, applied outcome + block v1
+3. fidelity fallback: report metrics omit it → `flight_state.fidelity.failures=1` fires
+4. `flight_state.repairs` non-empty → planner-ids pattern, applied outcome + block v1
+5. repaired_refs fallback: no flight_state → `report.supervision.repairs` fires
+6. all three signals → 3 outcomes (all `applied`) + 3 blocks
+7. **dedup:** second call same (run, pattern) → `[]`, still 1 outcome + 1 block, block version unchanged
+8. **playbook version bump:** pre-existing `flight_director` block v3 → after apply v4, content + provenance updated, still 1 row
+9. **non-terminal guard** (parametrized `paused`/`cancelled`/`pending_approval`) → no outcomes, no blocks
+10. `run=None` → `[]` no-op
+11. no signals (criteria present, fidelity 0, no repairs) → no outcomes, no blocks
+
+### Verification gate (printed — worker has no terminal tool in this session)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run          # expect: No changes detected
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_flight_learning.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest dq -q --maxfail=5 --disable-warnings -p no:cacheprovider   # → green (unchanged)
+```
+Static verification performed in-session: `get_errors` → **No errors found** on all 3 touched files (and workspace-wide `ai` app). Runtime gate execution + test-count capture is pending a terminal-enabled run (commands above). Expected: `test_flight_learning.py` 13 passed; full `ai` green except the one **known pre-existing order-dependent** `test_observability_api.py::test_rollups_totals_and_per_run_shape` (proven in 25-A/25-C, passes in isolation, NOT caused by this phase — do not fix); `dq` unchanged.
+
+### Executed gate results (orchestrator, terminal-enabled) — ✅ GREEN
+```bash
+$ manage.py check
+System check identified no issues (0 silenced).
+
+$ manage.py makemigrations --check --dry-run
+No changes detected
+
+$ pytest ai/tests/test_flight_learning.py -q
+13 passed in 2.14s
+
+$ pytest ai -q --maxfail=5
+1 failed, 943 passed in 107.04s    # ONLY the known pre-existing order-dependent rollups failure
+
+$ pytest dq -q --maxfail=5
+326 passed, 14 subtests passed in 30.96s
+```
+
+### Assumptions / deviations
+- **Matcher-1 signal definition:** "report has any step missing `acceptance_criteria`" is read from the report's per-requirement entries — a requirement dict whose `criterion` key is absent or `None` fires the planner-criteria pattern. This is the deterministic, unit-testable reading of spec §3.6 on the `build_acceptance_report` payload; the current acceptance pipeline records a criterion for every checked step, so this matcher is conservative (it fires on reports that genuinely carry a criteria-less requirement).
+- **`flight_state` param:** the signature is `enqueue_learning_from_report(report, flight_state=None, run=None)` — `run` is the Django `Run` row (needed for the FK, the terminal-status guard, and `provenance=run.id`). The `(run, pattern)` unique constraint makes re-calls idempotent; `get_or_create` is used (SELECT-first), so no IntegrityError on the normal dedup path.
+- **Playbook scoping:** the upsert filters `instance_id="carbon"` (matches `plans_service.PLAN_INSTANCE_ID` + the engine's `upsert_block` semantics) — single-tenant Carbon, equivalent to type+title scoping.
+- **No new migrations:** no model touched; `makemigrations --check --dry-run` stays clean.
+- **DO-NOT-TOUCH respected:** `ai/engine/**`, `dq/**`, `dataschema/**`, `feedback/skill_flywheel.py` (read-only mirrored, never modified), frontend, docker untouched.

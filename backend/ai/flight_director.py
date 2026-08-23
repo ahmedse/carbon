@@ -33,8 +33,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from django.conf import settings
+from django.utils import timezone
 
 logger = logging.getLogger("carbon.ai.flight_director")
+
+# Engine instance namespace for playbook rows — matches
+# ``ai.plans_service.PLAN_INSTANCE_ID`` (single-tenant Carbon).
+_PLAYBOOK_INSTANCE_ID = "carbon"
 
 # Reference arg keys whose values are host entity ids the director validates.
 _REFERENCE_ARG_KEYS = (
@@ -1148,3 +1153,196 @@ class FlightDirector:
             run.id, status, len(results),
         )
         return serialize_acceptance_report(run, row)
+
+
+# ── Grow loop: outcome → learning + playbook (spec §3.6) ────────────────
+
+# Terminal run states — mirrors ``ai.feedback.skill_flywheel``: learning only
+# fires after the run is final, so the retry loop never double-enqueues.
+_TERMINAL_STATUSES = ("completed", "failed")
+
+# Deterministic guidance text per learning pattern — the content written to
+# ``PlaybookBlock``. Kept stable so re-detection of the same pattern on a
+# later run bumps the block version with identical guidance (the lesson is
+# re-proven, not silently changed).
+_PATTERN_GUIDANCE = {
+    "planner: always emit acceptance_criteria": (
+        "Every plan step that performs a tool action must declare an explicit "
+        "acceptance_criteria (created_entity / table_fields / artifact / "
+        "read_ok) so the run's outcome can be verified after execution "
+        "instead of assumed."
+    ),
+    "worker: never stop before all declared calls run": (
+        "A worker step that declares tool calls must execute every declared "
+        "call in the same turn — stopping early is a fidelity failure that "
+        "escalates the step for human review."
+    ),
+    "planner: resolve created ids from prior step outputs": (
+        "When a step references an entity created by an earlier step, resolve "
+        "the id from the earlier step's output ledger — never a stale or "
+        "hard-coded id."
+    ),
+}
+
+
+def _detect_patterns(report: dict, flight_state: dict | None = None) -> list[tuple[str, str]]:
+    """Deterministic ``(pattern, target)`` detections (spec §3.6).
+
+    Three ordered matchers — no LLM, no randomness, unit-testable:
+      1. any requirement recorded WITHOUT ``acceptance_criteria`` →
+         ``("planner: always emit acceptance_criteria", "playbook")``
+      2. ``metrics.fidelity_failures > 0`` (fallback: the persisted flight
+         state's ``fidelity.failures``) →
+         ``("worker: never stop before all declared calls run", "playbook")``
+      3. non-empty ``repaired_refs`` from the flight ledger (fallback: the
+         report's ``supervision.repairs``) →
+         ``("planner: resolve created ids from prior step outputs",
+         "playbook")``
+    """
+    report = report or {}
+    flight = dict(flight_state or {})
+    patterns: list[tuple[str, str]] = []
+
+    requirements = report.get("requirements") or []
+    if any(
+        not isinstance(r, dict) or r.get("criterion") is None
+        for r in requirements
+    ):
+        patterns.append(("planner: always emit acceptance_criteria", "playbook"))
+
+    metrics = report.get("metrics") or {}
+    fidelity_failures = int(metrics.get("fidelity_failures") or 0)
+    if fidelity_failures <= 0:
+        fidelity_failures = int(
+            ((flight.get("fidelity") or {}).get("failures") or 0)
+        )
+    if fidelity_failures > 0:
+        patterns.append(("worker: never stop before all declared calls run", "playbook"))
+
+    repaired_refs = flight.get("repairs")
+    if not repaired_refs:
+        repaired_refs = ((report.get("supervision") or {}).get("repairs") or [])
+    if repaired_refs:
+        patterns.append(("planner: resolve created ids from prior step outputs", "playbook"))
+
+    return patterns
+
+
+def _apply_playbook_block(pattern: str, guidance: str, run_id: str):
+    """Upsert a ``flight_director`` playbook block (version N+1 if exists).
+
+    New block → version 1. An existing block with the same title → version+1
+    with ``content`` + ``provenance`` updated. ``provenance`` records the run
+    that produced the lesson.
+    """
+    from ai.models.core import PlaybookBlock
+
+    existing = (
+        PlaybookBlock.objects.filter(
+            instance_id=_PLAYBOOK_INSTANCE_ID,
+            block_type="flight_director", title=pattern,
+        )
+        .order_by("-version")
+        .first()
+    )
+    if existing is None:
+        return PlaybookBlock.objects.create(
+            instance_id=_PLAYBOOK_INSTANCE_ID,
+            block_type="flight_director",
+            title=pattern,
+            content=guidance,
+            version=1,
+            provenance=run_id,
+        )
+    existing.version = (existing.version or 1) + 1
+    existing.content = guidance
+    existing.provenance = run_id
+    existing.is_active = True
+    existing.save(update_fields=[
+        "version", "content", "provenance", "is_active", "updated_at",
+    ])
+    return existing
+
+
+def enqueue_learning_from_report(report: dict, flight_state: dict | None = None,
+                                 run: Any = None) -> list[dict]:
+    """Deterministic outcome→learning for a finalized run (spec §3.6).
+
+    Matches the report (from ``FlightDirector.build_acceptance_report``) and
+    the persisted flight state against the three deterministic patterns and
+    applies each one: upsert a ``PlaybookBlock(block_type="flight_director",
+    title=pattern, version=N+1 if exists, provenance=run.id)`` and mark the
+    ``LearningOutcome`` ``applied`` with ``applied_at``.
+
+    Idempotent: the ``(run, pattern)`` unique constraint means a second call
+    for the same (run, pattern) is a no-op. Terminal-status guard mirrors
+    ``feed_run_feedback`` — non-terminal runs (``paused``/``stopped``/…) and
+    runs with none of the three signals create nothing. Learning errors never
+    propagate (one pattern's failure does not block the rest) — the caller
+    also wraps this in try/except so a plan run is never failed by learning.
+
+    Returns a list of applied-outcome dicts ``{"pattern", "target",
+    "outcome_id", "applied": True}`` (empty when nothing was learned).
+    """
+    from ai.models.core import LearningOutcome
+
+    if run is None:
+        logger.info("flight learning: no run provided — no-op")
+        return []
+    if run.status not in _TERMINAL_STATUSES:
+        logger.info(
+            "flight learning: run %s not terminal (%s) — no-op",
+            run.id, run.status,
+        )
+        return []
+
+    try:
+        detections = _detect_patterns(report, flight_state)
+    except Exception:  # noqa: BLE001 - learning never fails the run
+        logger.exception("flight learning: pattern detection failed run=%s", run.id)
+        return []
+
+    outcomes: list[dict] = []
+    for pattern, target in detections:
+        try:
+            guidance = _PATTERN_GUIDANCE.get(pattern, pattern)
+            payload = {
+                "pattern": pattern,
+                "target": target,
+                "guidance": guidance,
+                "provenance": run.id,
+                "source": "acceptance_report",
+            }
+            outcome, created = LearningOutcome.objects.get_or_create(
+                run=run, pattern=pattern,
+                defaults={
+                    "target": target,
+                    "payload_json": payload,
+                    "status": "queued",
+                },
+            )
+            if not created:
+                logger.info(
+                    "flight learning: %r already recorded for run %s — no-op",
+                    pattern, run.id,
+                )
+                continue
+            _apply_playbook_block(pattern, guidance, str(run.id))
+            outcome.status = "applied"
+            outcome.applied_at = timezone.now()
+            outcome.save(update_fields=["status", "applied_at"])
+            outcomes.append({
+                "pattern": pattern,
+                "target": target,
+                "outcome_id": outcome.id,
+                "applied": True,
+            })
+        except Exception:  # noqa: BLE001 - one pattern's failure never blocks the rest
+            logger.exception(
+                "flight learning: apply failed for %r run=%s", pattern, run.id
+            )
+    logger.info(
+        "flight learning: run=%s applied=%s",
+        run.id, [o["pattern"] for o in outcomes],
+    )
+    return outcomes

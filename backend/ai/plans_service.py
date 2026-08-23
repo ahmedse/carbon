@@ -2351,14 +2351,33 @@ class PlansService:
         # fails the run; non-terminal runs skip closure (mirrors the
         # feed_run_feedback terminal guard).
         if run.status in (STATUS_COMPLETED, STATUS_FAILED):
+            report = None
             try:
-                await self._write_acceptance_report(
+                report = await self._write_acceptance_report(
                     run, plan, user_pk, flight_state
                 )
             except Exception:  # noqa: BLE001 - closure never fails the run
                 logger.exception(
                     "acceptance report failed for run %s", run.id
                 )
+
+            # 25-D grow loop: outcome → learning + playbook (spec §3.6). Fires
+            # only on the report just written — deterministic matchers, dedup
+            # via (run, pattern), PlaybookBlock upsert. Learning never fails a
+            # run: any error is logged and swallowed.
+            if report is not None:
+                try:
+                    from ai.flight_director import enqueue_learning_from_report
+
+                    applied = await sync_to_async(enqueue_learning_from_report)(
+                        report, flight_state=flight_state, run=run
+                    )
+                    if applied:
+                        logger.info("flight learning: %s", applied)
+                except Exception:  # noqa: BLE001 - learning never fails the run
+                    logger.exception(
+                        "flight learning failed for run %s", run.id
+                    )
 
         for step in steps:
             if step.status in (STEP_SKIPPED,):
