@@ -469,4 +469,4 @@ When building a new app, follow this pattern (all from `healthy/`):
 - `backend/accounts/capabilities.py` — CBAC
 - `docs/DESIGN-PLATFORM.md` — Platform architecture
 - `docs/DESIGN-AGENT-CATALOG.md` — Agent catalog + domain protocol
-- `.ai-toolkit/decisions/0010-domain-app-ai-contract.md` — Domain AI contract (if exists)
+- `.ai-toolkit/decisions/0016-domain-app-ai-contract.md` — Domain AI contract

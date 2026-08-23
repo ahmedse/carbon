@@ -47,6 +47,23 @@ urlpatterns = [
         PlanViewSet.as_view({"post": "instantiate_template"}),
         name="ai-plan-template-instantiate",
     ),
+    # Schedule routes MUST precede the ``<str:pk>/`` detail route so the
+    # literal ``schedules`` segment wins over a plan id.
+    path(
+        "schedules/",
+        PlanViewSet.as_view({"get": "list_schedules", "post": "create_schedule"}),
+        name="ai-plan-schedule-list",
+    ),
+    path(
+        "schedules/<str:schedule_id>/",
+        PlanViewSet.as_view({"patch": "edit_schedule", "delete": "delete_schedule"}),
+        name="ai-plan-schedule-detail",
+    ),
+    path(
+        "schedules/<str:schedule_id>/pause/",
+        PlanViewSet.as_view({"post": "pause_schedule"}),
+        name="ai-plan-schedule-pause",
+    ),
     path(
         "<str:pk>/",
         PlanViewSet.as_view({"get": "retrieve", "patch": "partial_update"}),

@@ -223,7 +223,87 @@ def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
             "internals (components, databases, technologies, or how the assistant "
             "works)."
         ),
-        "api_catalog": [],
+        "api_catalog": [
+            {
+                "name": "get_data_product_details",
+                "method": "GET",
+                "path": "/carbon-api/dataschema/tables/?module_id={id}",
+                "description": (
+                    "Get the data tables belonging to a data product (module). "
+                    "Path param {id} is the module/data-product id."
+                ),
+                "requires_auth": True,
+                "requires_confirmation": False,
+            },
+            {
+                "name": "list_data_tables",
+                "method": "GET",
+                "path": "/carbon-api/dataschema/tables/",
+                "description": (
+                    "List data tables visible to the user, optionally filtered "
+                    "by query param module_id."
+                ),
+                "requires_auth": True,
+                "requires_confirmation": False,
+            },
+            {
+                "name": "list_dq_rules",
+                "method": "GET",
+                "path": "/carbon-api/dq/rules/",
+                "description": (
+                    "List data-quality rules so an existing rule can be reused "
+                    "instead of creating a duplicate."
+                ),
+                "requires_auth": True,
+                "requires_confirmation": False,
+            },
+            {
+                "name": "create_table",
+                "method": "POST",
+                "path": "/carbon-api/dataschema/tables/",
+                "description": (
+                    "Create a new data table (schema change). Body: "
+                    "{\"title\": str, \"description\": str, \"module\": <module id>, "
+                    "\"fields\": [{\"name\": str, \"label\": str, \"type\": "
+                    "\"string|number|date|boolean|select|multiselect\", "
+                    "\"required\": bool, \"description\": str}]}"
+                ),
+                "requires_auth": True,
+                "requires_confirmation": True,
+            },
+            {
+                "name": "create_dq_rule",
+                "method": "POST",
+                "path": "/carbon-api/dq/rules/",
+                "description": (
+                    "Create a new data-quality rule. Body: "
+                    "{\"name\": str, \"rule_level\": \"business|field\", "
+                    "\"rule_type\": str, \"severity\": \"error|warn|info\", "
+                    "\"description\": str, \"dimension\": "
+                    "\"accuracy|completeness|consistency|integrity|reasonability|"
+                    "timeliness|uniqueness|validity\", \"definition\": {"
+                    "\"schema_version\": 1, \"name\": str, \"type\": str, "
+                    "\"level\": \"business|field\", \"dimension\": str, "
+                    "\"severity\": \"error|warn|info\", \"active\": true, "
+                    "\"params\": {}}}"
+                ),
+                "requires_auth": True,
+                "requires_confirmation": True,
+            },
+            {
+                "name": "bind_dq_rules",
+                "method": "POST",
+                "path": "/carbon-api/dq/rule-assignments/",
+                "description": (
+                    "Bind a DQ rule to a data table. Body: "
+                    "{\"rule\": <rule id>, \"data_table\": <table id>, "
+                    "\"data_field\": <field id|null>}. "
+                    "Alternatively pass {\"table_id\": <id>, \"dq_rule_ids\": [<ids>]}."
+                ),
+                "requires_auth": True,
+                "requires_confirmation": True,
+            },
+        ],
         "navigation_routes": [
             {
                 "name": "dq_rule_detail",

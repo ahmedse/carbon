@@ -132,6 +132,14 @@ function AITaskPlanCard({
   const runnable = plan.status === 'approved' || plan.status === 'paused';
   const showRun = runnable && !running;
   const editable = plan.status !== 'running' && !running;
+  // F-28 — steer a paused run: only `pending` steps are editable; completed /
+  // in_flight steps are locked (W7-A `runnable_state`). Legacy plans without
+  // the field keep the plan-level `editable` gate.
+  const isStepEditable = (step) =>
+    step.runnable_state !== undefined ? step.runnable_state === 'pending' : true;
+  const pendingRunnableCount = steps.filter((s) =>
+    s.runnable_state !== undefined ? s.runnable_state === 'pending' : true,
+  ).length;
   // W5-E: while a run is live the graph is promoted ABOVE the step stream at a
   // taller fixed height (progress at a glance); when reviewing a non-live plan
   // it stays compact below the step list.
@@ -158,7 +166,15 @@ function AITaskPlanCard({
         </Stack>
         <Box sx={{ mt: 0.75 }}>
           {previewMode === 'graph' ? (
-            <PlanDagGraph plan={plan} height={graphHeight} live={live} fill={false} />
+            <PlanDagGraph
+              plan={plan}
+              height={graphHeight}
+              live={live}
+              fill={false}
+              onConfirmStep={onConfirmStep}
+              onDeclineStep={onDeclineStep}
+              confirmingId={confirmingId}
+            />
           ) : (
             <PlanMermaidPreview plan={plan} />
           )}
@@ -278,6 +294,15 @@ function AITaskPlanCard({
               sx={{ height: 16, fontSize: '0.5625rem' }}
             />
           )}
+          {editable && onEditStep && pendingRunnableCount === 0 && (
+            <Tooltip title="No upcoming steps to adjust.">
+              <span>
+                <IconButton size="small" disabled aria-label="No upcoming steps to adjust" sx={{ p: 0.125 }}>
+                  <EditOutlinedIcon sx={{ fontSize: 12, color: 'text.disabled' }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+          )}
         </Stack>
         <Stack spacing={0.75}>
           {phases.map((phase) => (
@@ -322,16 +347,31 @@ function AITaskPlanCard({
                         )}
                         <Chip size="small" variant="outlined" label={stepMeta.label} color={stepMeta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
                         {editable && onEditStep && (
-                          <Tooltip title="Edit this step">
-                            <IconButton
-                              size="small"
-                              onClick={() => onEditStep(step)}
-                              aria-label={`Edit step ${step.step_id}`}
-                              sx={{ p: 0.125 }}
-                            >
-                              <EditOutlinedIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
-                            </IconButton>
-                          </Tooltip>
+                          isStepEditable(step) ? (
+                            <Tooltip title="Edit this step">
+                              <IconButton
+                                size="small"
+                                onClick={() => onEditStep(step)}
+                                aria-label={`Edit step ${step.step_id}`}
+                                sx={{ p: 0.125 }}
+                              >
+                                <EditOutlinedIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
+                              </IconButton>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip title="This step is locked — it has already run">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  disabled
+                                  aria-label={`Step ${step.step_id} locked`}
+                                  sx={{ p: 0.125 }}
+                                >
+                                  <EditOutlinedIcon sx={{ fontSize: 12, color: 'text.disabled' }} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )
                         )}
                       </Stack>
                       {step.tool_args !== null && step.tool_args !== undefined && Object.keys(step.tool_args).length > 0 && (

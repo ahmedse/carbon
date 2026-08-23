@@ -17,9 +17,22 @@
 // only (RULE_23).
 import React, { useCallback, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Button, Chip, Divider, Stack, Typography, useTheme } from '@mui/material';
+import {
+  Box,
+  Button,
+  Chip,
+  Collapse,
+  Divider,
+  IconButton,
+  Paper,
+  Stack,
+  Typography,
+  useTheme,
+} from '@mui/material';
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import EnterpriseGraph from './EnterpriseGraph';
 import { layoutExecutionGraph } from '../../utils/planGraph';
@@ -74,6 +87,161 @@ const NODE_STATUS = {
   pending: 'PENDING',
 };
 
+/** Step status → MUI Chip color (RULE 5 — chip carries a text label too). */
+export function planStepStatusChipColor(status) {
+  switch (status) {
+    case 'completed':
+      return 'success';
+    case 'running':
+      return 'primary';
+    case 'awaiting_approval':
+      return 'warning';
+    case 'failed':
+      return 'error';
+    case 'skipped':
+      return 'default';
+    default:
+      return 'default';
+  }
+}
+
+/**
+ * Group steps into parallel lanes (F-26). A lane = steps sharing a non-null
+ * `parallel_group` whose enclosing phase declared `strategy === "parallel"`.
+ * Steps outside any parallel phase are excluded (they render as ordinary DAG
+ * nodes). Lanes are returned in ascending group order for a stable render.
+ * @param {Array} steps - serialized plan steps (W7-A contract)
+ * @returns {Array<{groupId:number, steps:Array<object>}>}
+ */
+export function parallelLaneGroups(steps) {
+  const lanes = new Map();
+  (Array.isArray(steps) ? steps : []).forEach((s) => {
+    if (!s || s.strategy !== 'parallel' || s.parallel_group == null) return;
+    const key = s.parallel_group;
+    if (!lanes.has(key)) lanes.set(key, []);
+    lanes.get(key).push(s);
+  });
+  return [...lanes.entries()]
+    .map(([groupId, laneSteps]) => ({ groupId, steps: laneSteps }))
+    .sort((a, b) => a.groupId - b.groupId);
+}
+
+/**
+ * Partial-attention header copy for a parallel lane (RULE_23 outcome words).
+ * Returns "1 of 3 steps needs attention" when some (not necessarily all)
+ * siblings failed — a precise signal that never collapses to a blanket
+ * "failed". Returns null when nothing in the lane needs attention.
+ * @param {Array} steps
+ * @returns {string|null}
+ */
+export function laneAttentionLabel(steps) {
+  const list = Array.isArray(steps) ? steps : [];
+  const failed = list.filter((s) => s.status === 'failed').length;
+  if (failed === 0) return null;
+  const n = list.length;
+  return `${failed} of ${n} step${n === 1 ? '' : 's'} ${failed === 1 ? 'needs' : 'need'} attention`;
+}
+
+/**
+ * Collapsible parallel-lane band (F-26). Groups sibling steps that "run
+ * together" into ONE band; each step keeps its own status chip (RULE 5),
+ * consent action (Approve/Decline, never blocking siblings), and a persistent
+ * failed chip + Retry. Theme tokens only (RULE_8).
+ */
+function ParallelLaneBand({ groupId, name, steps, onConfirmStep, onDeclineStep, onRetryStep, confirmingId }) {
+  const [open, setOpen] = useState(true);
+  const attention = laneAttentionLabel(steps);
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: 1 }} data-testid={`parallel-lane-${groupId}`}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={0.5}
+        sx={{ px: 0.75, py: 0.5, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <IconButton size="small" sx={{ p: 0, m: 0 }} aria-label={`Toggle parallel lane ${name}`}>
+          {open ? <ExpandMoreIcon sx={{ fontSize: 15 }} /> : <ChevronRightIcon sx={{ fontSize: 15 }} />}
+        </IconButton>
+        <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {name}
+        </Typography>
+        <Chip size="small" variant="outlined" label="Runs together" sx={{ height: 16, fontSize: '0.5625rem' }} />
+        {attention && (
+          <Chip size="small" color="warning" variant="outlined" label={attention} sx={{ height: 16, fontSize: '0.5625rem' }} />
+        )}
+      </Stack>
+      <Collapse in={open}>
+        <Stack spacing={0.5} sx={{ px: 0.75, pb: 0.75 }}>
+          {steps.map((s) => {
+            const chipColor = planStepStatusChipColor(s.status);
+            const label = planStepStatusLabel(s.status);
+            return (
+              <Stack key={s.step_id} direction="row" alignItems="center" spacing={0.5} sx={{ px: 0.5, flexWrap: 'wrap', rowGap: 0.5 }}>
+                <Typography
+                  variant="body2"
+                  sx={{ flex: 1, minWidth: 0, fontSize: '0.6875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                  {s.intent || `Step ${s.step_id}`}
+                </Typography>
+                <Chip size="small" variant="outlined" label={label} color={chipColor} sx={{ height: 16, fontSize: '0.5625rem' }} />
+                {s.status === 'awaiting_approval' && (onConfirmStep || onDeclineStep) && (
+                  <Stack direction="row" spacing={0.5}>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      disabled={confirmingId === s.step_id}
+                      onClick={() => onConfirmStep?.(s.step_id)}
+                      sx={{ fontSize: '0.625rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={confirmingId === s.step_id}
+                      onClick={() => onDeclineStep?.(s.step_id)}
+                      sx={{ fontSize: '0.625rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
+                    >
+                      Decline
+                    </Button>
+                  </Stack>
+                )}
+                {s.status === 'failed' && onRetryStep && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="warning"
+                    onClick={() => onRetryStep?.(s.step_id)}
+                    sx={{ fontSize: '0.625rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
+                  >
+                    Retry
+                  </Button>
+                )}
+                {s.status === 'failed' && s.error && (
+                  <Typography variant="caption" color="error.main" sx={{ fontSize: '0.625rem', flexBasis: '100%' }}>
+                    {s.error}
+                  </Typography>
+                )}
+              </Stack>
+            );
+          })}
+        </Stack>
+      </Collapse>
+    </Paper>
+  );
+}
+
+ParallelLaneBand.propTypes = {
+  groupId: PropTypes.number.isRequired,
+  name: PropTypes.string.isRequired,
+  steps: PropTypes.array.isRequired,
+  onConfirmStep: PropTypes.func,
+  onDeclineStep: PropTypes.func,
+  onRetryStep: PropTypes.func,
+  confirmingId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+};
+
 /**
  * Live plan execution graph.
  * @param {object} props
@@ -82,8 +250,22 @@ const NODE_STATUS = {
  * @param {boolean} [props.live] - show the "Live" badge (parent is running)
  * @param {boolean} [props.fill] - render to fill the container (full-screen modal)
  * @param {string} [props.testId] - data-testid
+ * @param {function} [props.onConfirmStep] - (stepId) => void, consent inside a lane
+ * @param {function} [props.onDeclineStep] - (stepId) => void, skip inside a lane
+ * @param {function} [props.onRetryStep] - (stepId) => void, retry a failed lane step
+ * @param {number|string|null} [props.confirmingId] - step currently consenting
  */
-export default function PlanDagGraph({ plan, height = 380, live = false, fill = false, testId = 'plan-dag-graph' }) {
+export default function PlanDagGraph({
+  plan,
+  height = 380,
+  live = false,
+  fill = false,
+  testId = 'plan-dag-graph',
+  onConfirmStep,
+  onDeclineStep,
+  onRetryStep,
+  confirmingId = null,
+}) {
   const theme = useTheme();
   const [selected, setSelected] = useState(null);
 
@@ -93,6 +275,23 @@ export default function PlanDagGraph({ plan, height = 380, live = false, fill = 
   );
 
   const steps = useMemo(() => (Array.isArray(plan?.steps) ? plan.steps : []), [plan]);
+
+  // F-26 — parallel lanes: sibling steps that "run together" become one
+  // collapsible band (MUI Collapse/Stack), each keeping its own status chip.
+  const parallelLanes = useMemo(() => parallelLaneGroups(steps), [steps]);
+  const laneNameByGroup = useMemo(() => {
+    const m = new Map();
+    (Array.isArray(phaseBands) ? phaseBands : []).forEach((b) => {
+      if (b.strategy === 'parallel') m.set(b.phase_id, b.name);
+    });
+    return m;
+  }, [phaseBands]);
+  const attentionSummary = useMemo(() => {
+    const counts = parallelLanes
+      .map((lane) => laneAttentionLabel(lane.steps))
+      .filter(Boolean);
+    return counts[0] || null;
+  }, [parallelLanes]);
 
   // feeds-into: which steps depend on a given step (reverse depends_on).
   const feedsInto = useMemo(() => {
@@ -368,38 +567,58 @@ export default function PlanDagGraph({ plan, height = 380, live = false, fill = 
     );
   };
 
-  const summary = `${nodes.length} step${nodes.length !== 1 ? 's' : ''} · ${edges.length} link${edges.length !== 1 ? 's' : ''}`;
+  const summary = `${nodes.length} step${nodes.length !== 1 ? 's' : ''} · ${edges.length} link${edges.length !== 1 ? 's' : ''}${
+    attentionSummary ? ` · ${attentionSummary}` : ''
+  }`;
 
   return (
-    <EnterpriseGraph
-      nodes={nodes}
-      edges={edges}
-      width={width}
-      layoutHeight={layoutHeight}
-      height={height}
-      phaseBands={phaseBands}
-      phaseColor={phaseColor}
-      nodeColor={(n) => colorFor(n.status)}
-      renderNode={renderNode}
-      selected={selected}
-      onSelect={setSelected}
-      legend={legendEl}
-      sidebar={renderDetailPane}
-      title="Plan graph"
-      modalTitle="Plan graph — full view"
-      summary={summary}
-      live={live}
-      emptyMessage="This plan has no steps to graph yet."
-      nodeAriaLabel={nodeAriaLabel}
-      markerId="plan-arrow"
-      modalMarkerId="plan-arrow-modal"
-      testId={testId}
-      modalTestId="plan-graph-modal"
-      modalCloseTestId="plan-graph-modal-close"
-      expandTestId="plan-graph-expand"
-      exportFileName="plan-graph"
-      fill={fill}
-    />
+    <>
+      {parallelLanes.length > 0 && (
+        <Stack spacing={0.75} sx={{ mb: 0.75 }} data-testid="parallel-lanes">
+          {parallelLanes.map((lane) => (
+            <ParallelLaneBand
+              key={lane.groupId}
+              groupId={lane.groupId}
+              name={laneNameByGroup.get(lane.groupId) || 'Runs together'}
+              steps={lane.steps}
+              onConfirmStep={onConfirmStep}
+              onDeclineStep={onDeclineStep}
+              onRetryStep={onRetryStep}
+              confirmingId={confirmingId}
+            />
+          ))}
+        </Stack>
+      )}
+      <EnterpriseGraph
+        nodes={nodes}
+        edges={edges}
+        width={width}
+        layoutHeight={layoutHeight}
+        height={height}
+        phaseBands={phaseBands}
+        phaseColor={phaseColor}
+        nodeColor={(n) => colorFor(n.status)}
+        renderNode={renderNode}
+        selected={selected}
+        onSelect={setSelected}
+        legend={legendEl}
+        sidebar={renderDetailPane}
+        title="Plan graph"
+        modalTitle="Plan graph — full view"
+        summary={summary}
+        live={live}
+        emptyMessage="This plan has no steps to graph yet."
+        nodeAriaLabel={nodeAriaLabel}
+        markerId="plan-arrow"
+        modalMarkerId="plan-arrow-modal"
+        testId={testId}
+        modalTestId="plan-graph-modal"
+        modalCloseTestId="plan-graph-modal-close"
+        expandTestId="plan-graph-expand"
+        exportFileName="plan-graph"
+        fill={fill}
+      />
+    </>
   );
 }
 
@@ -409,4 +628,8 @@ PlanDagGraph.propTypes = {
   live: PropTypes.bool,
   fill: PropTypes.bool,
   testId: PropTypes.string,
+  onConfirmStep: PropTypes.func,
+  onDeclineStep: PropTypes.func,
+  onRetryStep: PropTypes.func,
+  confirmingId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
 };

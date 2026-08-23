@@ -11,9 +11,10 @@ class AccountsConfig(AppConfig):
     verbose_name = "Accounts and RBAC"
 
     def ready(self):
-        """Configure email backend from DB-stored EmailConfig at startup."""
+        """Configure email + platform settings from DB singletons at startup."""
         try:
             from .email_config import configure_email
+            from .platform_config import configure_platform
             with warnings.catch_warnings():
                 warnings.filterwarnings(
                     'ignore',
@@ -21,5 +22,6 @@ class AccountsConfig(AppConfig):
                     category=RuntimeWarning,
                 )
                 configure_email()
+                configure_platform()
         except Exception:
             pass  # Pre-migration / import failures are non-fatal

@@ -646,6 +646,8 @@ export function AIWorkspace({ onClose }) {
                   conversationId={activeConversation.id}
                   showContextPanel={false}
                   onOpenPanel={handleOpenPanel}
+                  onForked={handleForked}
+                  onConversationUpdated={handleConversationUpdated}
                 />
               ) : (
                 <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />

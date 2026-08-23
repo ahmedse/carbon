@@ -39,6 +39,14 @@ const stopPlan = vi.fn();
 const getPlanLedger = vi.fn();
 const listPlanArtifacts = vi.fn();
 const downloadArtifact = vi.fn();
+const listPlanTemplates = vi.fn();
+const instantiatePlanTemplate = vi.fn();
+const promotePlanTemplate = vi.fn();
+const listSchedules = vi.fn();
+const createSchedule = vi.fn();
+const editSchedule = vi.fn();
+const deleteSchedule = vi.fn();
+const pauseSchedule = vi.fn();
 
 vi.mock('../api/aiWorkspace', () => ({
   listPlans: (...args) => listPlans(...args),
@@ -60,6 +68,14 @@ vi.mock('../api/aiWorkspace', () => ({
   getPlanLedger: (...args) => getPlanLedger(...args),
   listPlanArtifacts: (...args) => listPlanArtifacts(...args),
   downloadArtifact: (...args) => downloadArtifact(...args),
+  listPlanTemplates: (...args) => listPlanTemplates(...args),
+  instantiatePlanTemplate: (...args) => instantiatePlanTemplate(...args),
+  promotePlanTemplate: (...args) => promotePlanTemplate(...args),
+  listSchedules: (...args) => listSchedules(...args),
+  createSchedule: (...args) => createSchedule(...args),
+  editSchedule: (...args) => editSchedule(...args),
+  deleteSchedule: (...args) => deleteSchedule(...args),
+  pauseSchedule: (...args) => pauseSchedule(...args),
 }));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -96,6 +112,14 @@ beforeEach(() => {
   declinePlanStep.mockResolvedValue({ status: 'declined', plan_id: 'plan-1', step_id: 1 });
   getPlanLedger.mockResolvedValue({ plan_id: 'plan-1', status: 'completed', runs: [] });
   listPlanArtifacts.mockResolvedValue({ plan_id: 'plan-1', artifacts: [], count: 0 });
+  listPlanTemplates.mockResolvedValue({ templates: [], count: 0 });
+  listSchedules.mockResolvedValue({ schedules: [], count: 0 });
+  instantiatePlanTemplate.mockResolvedValue({ ...PLAN, id: 'plan-from-tpl' });
+  promotePlanTemplate.mockResolvedValue({ id: 7, name: 'Tpl' });
+  createSchedule.mockResolvedValue({ id: 1, name: 'S', preview: 'Every day at 9:00 AM' });
+  editSchedule.mockResolvedValue({ id: 1, name: 'S', preview: 'Every day at 9:00 AM' });
+  deleteSchedule.mockResolvedValue({ deleted: true, schedule_id: 1 });
+  pauseSchedule.mockResolvedValue({ id: 1, enabled: false });
   runPlanStream.mockImplementation(async (token, planId, handlers) => {
     streamHandlers.run = handlers;
   });
@@ -464,5 +488,163 @@ describe('AITaskPanel — W5-D Results tab', () => {
     expect(await screen.findByText('report.csv')).toBeInTheDocument();
     expect(screen.getByText('2.0 KB')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Download' }).length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ── F-28 — steer a paused run (banner + lock/edit + resume) ──────────────
+describe('AITaskPanel — F-28 steer a paused run', () => {
+  const PAUSED_PLAN = {
+    ...PLAN,
+    status: 'paused',
+    steps: [
+      { step_id: 0, intent: 'Search for duplicate records', tool_name: 'search_entity', tool_args: {}, status: 'completed', depends_on: [], runnable_state: 'completed' },
+      { step_id: 1, intent: 'Create a rule to prevent duplicates', tool_name: 'create_dq_rule', tool_args: {}, status: 'pending', depends_on: [0], runnable_state: 'pending' },
+      { step_id: 2, intent: 'Report the findings', tool_name: 'search_entity', tool_args: {}, status: 'pending', depends_on: [1], runnable_state: 'pending' },
+    ],
+  };
+
+  it('shows a persistent paused banner with completed/to-go counts', async () => {
+    currentPlan = PAUSED_PLAN;
+    await openPlanForReview();
+
+    expect(await screen.findByTestId('paused-banner')).toBeInTheDocument();
+    expect(screen.getByText(/Paused — 1 step completed, 2 to go/)).toBeInTheDocument();
+  });
+
+  it('locks completed steps and leaves pending steps editable', async () => {
+    currentPlan = PAUSED_PLAN;
+    await openPlanForReview();
+    await screen.findByTestId('paused-banner');
+
+    // Completed step is locked (disabled edit affordance).
+    expect(screen.getByRole('button', { name: 'Step 0 locked' })).toBeDisabled();
+    // Pending steps remain editable (enabled edit affordances).
+    expect(screen.getByRole('button', { name: 'Edit step 1' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Edit step 2' })).toBeEnabled();
+  });
+
+  it('disables the edit affordance with a tooltip when no upcoming steps remain', async () => {
+    currentPlan = {
+      ...PAUSED_PLAN,
+      steps: [
+        { step_id: 0, intent: 'Search for duplicate records', tool_name: 'search_entity', tool_args: {}, status: 'completed', depends_on: [], runnable_state: 'completed' },
+        { step_id: 1, intent: 'Create a rule to prevent duplicates', tool_name: 'create_dq_rule', tool_args: {}, status: 'completed', depends_on: [0], runnable_state: 'completed' },
+      ],
+    };
+    await openPlanForReview();
+    await screen.findByTestId('paused-banner');
+
+    expect(screen.getByRole('button', { name: 'No upcoming steps to adjust' })).toBeDisabled();
+    expect(screen.getByText(/Paused — 2 steps completed, 0 to go/)).toBeInTheDocument();
+  });
+
+  it('resumes a paused plan through the W7-A resume stream', async () => {
+    currentPlan = PAUSED_PLAN;
+    await openPlanForReview();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume run' }));
+    await waitFor(() =>
+      expect(resumePlanStream).toHaveBeenCalledWith(
+        'test-token',
+        'plan-1',
+        expect.objectContaining({ onFrame: expect.any(Function), onDone: expect.any(Function) }),
+      ),
+    );
+    expect(runPlanStream).not.toHaveBeenCalled();
+  });
+});
+
+// ── F-29 — scheduled runs (6th tab: list + create dialog + delete) ───────
+describe('AITaskPanel — F-29 scheduled runs', () => {
+  const TPL = { id: 7, name: 'Audit template', description: 'audit' };
+  const SCHEDULE = {
+    id: 1,
+    name: 'Nightly audit',
+    description: '',
+    cron_expr: '0 21 * * *',
+    run_at: null,
+    enabled: true,
+    owner: 'ahmed',
+    preview: 'Every day at 9:00 PM',
+    template_id: 7,
+    created_at: '2026-08-20T10:00:00Z',
+  };
+
+  it('shows the Scheduled tab with an empty state', async () => {
+    listSchedules.mockResolvedValue({ schedules: [], count: 0 });
+    render(<AITaskPanel conversationId="conv-1" />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Scheduled' }));
+
+    await waitFor(() => expect(listSchedules).toHaveBeenCalledWith('test-token'));
+    expect(await screen.findByTestId('schedules-empty')).toBeInTheDocument();
+  });
+
+  it('lists schedules with preview, owner, and enabled state', async () => {
+    listSchedules.mockResolvedValue({ schedules: [SCHEDULE], count: 1 });
+    render(<AITaskPanel conversationId="conv-1" />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Scheduled' }));
+
+    expect(await screen.findByText('Nightly audit')).toBeInTheDocument();
+    expect(screen.getByText('Every day at 9:00 PM')).toBeInTheDocument();
+    expect(screen.getByText('Owner: ahmed')).toBeInTheDocument();
+    expect(screen.getByText('Enabled')).toBeInTheDocument();
+  });
+
+  it('opens the Schedule dialog from a template row and saves a once schedule', async () => {
+    listPlanTemplates.mockResolvedValue({ templates: [TPL], count: 1 });
+    render(<AITaskPanel conversationId="conv-1" />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Templates' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Schedule Audit template' }));
+
+    expect(await screen.findByText('Schedule a plan')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-preview')).toBeInTheDocument();
+    // Name pre-filled from the template (outcome copy, RULE_23).
+    expect(screen.getByLabelText('Schedule name')).toHaveValue('Audit template');
+
+    // Save is disabled until a valid future time is chosen (once default).
+    const saveBtn = screen.getByRole('button', { name: 'Save schedule' });
+    expect(saveBtn).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Run at'), { target: { value: '2030-01-01T09:00' } });
+    expect(saveBtn).toBeEnabled();
+
+    fireEvent.click(saveBtn);
+    await waitFor(() =>
+      expect(createSchedule).toHaveBeenCalledWith('test-token', {
+        name: 'Audit template',
+        cron_expr: null,
+        run_at: expect.any(String),
+        template_id: 7,
+      }),
+    );
+    expect(notify).toHaveBeenCalledWith('Schedule saved.', 'success');
+  });
+
+  it('validates a past-time one-off inline and disables Save', async () => {
+    listPlanTemplates.mockResolvedValue({ templates: [TPL], count: 1 });
+    render(<AITaskPanel conversationId="conv-1" />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Templates' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Schedule Audit template' }));
+
+    await screen.findByText('Schedule a plan');
+    fireEvent.change(screen.getByLabelText('Run at'), { target: { value: '2020-01-01T09:00' } });
+
+    expect(screen.getByText('Choose a time in the future.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save schedule' })).toBeDisabled();
+  });
+
+  it('deletes a schedule after a confirm dialog naming the consequence', async () => {
+    listSchedules.mockResolvedValue({ schedules: [SCHEDULE], count: 1 });
+    render(<AITaskPanel conversationId="conv-1" />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Scheduled' }));
+    await screen.findByText('Nightly audit');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Nightly audit' }));
+    expect(await screen.findByText('Delete schedule?')).toBeInTheDocument();
+    expect(screen.getByText(/will stop running on its own/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(deleteSchedule).toHaveBeenCalledWith('test-token', 1));
+    expect(notify).toHaveBeenCalledWith('Schedule deleted.', 'success');
   });
 });

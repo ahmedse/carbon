@@ -593,3 +593,269 @@ def test_create_pending_execution_stages_via_django_store(user, conversation):
     # Store writes commit on their own connection; remove the staged row so
     # the --reuse-db test database stays clean across runs.
     DjangoToolExecution.objects.filter(pk=execution_id).delete()
+
+
+# ── Regression (QA water-consumption plan): catalog + in-process transport ─
+
+# QA found the multi-agent "water consumption table + DQ rules" plan stuck:
+# ``call_host_api`` returned "Unknown API endpoint" because the Carbon
+# ``api_catalog`` was hardcoded empty and the in-process executor only
+# dispatched POST ``carbon-api/dq/rules``.  These tests pin the fix:
+# the catalog must resolve every endpoint the plan uses, and the executor must
+# serve them in-process for both GET and POST.
+
+
+def test_carbon_instance_config_catalog_resolves_plan_endpoints():
+    """RULE_11 regression: the plan's ``call_host_api`` endpoints must resolve."""
+    config = _carbon_instance_config(None)
+    catalog = {e["name"]: e for e in config["api_catalog"]}
+    assert "create_table" in catalog
+    assert catalog["create_table"]["method"] == "POST"
+    assert catalog["create_table"]["requires_confirmation"] is True
+    assert "bind_dq_rules" in catalog
+    assert catalog["bind_dq_rules"]["method"] == "POST"
+    assert catalog["bind_dq_rules"]["requires_confirmation"] is True
+    # "reuse or create" rules needs discovery — otherwise the LLM duplicates.
+    assert "list_dq_rules" in catalog
+    assert catalog["list_dq_rules"]["method"] == "GET"
+    assert "create_dq_rule" in catalog
+    assert catalog["create_dq_rule"]["method"] == "POST"
+    assert catalog["create_dq_rule"]["requires_confirmation"] is True
+    # Data-product discovery used by the plan's earlier steps.
+    assert "get_data_product_details" in catalog
+    assert catalog["get_data_product_details"]["method"] == "GET"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_in_process_create_table_and_bind_via_confirm(conversation):
+    """Full consent-gate path for the plan's mutation steps:
+    ``create_pending_execution`` → ``confirm_execution`` → in-process handler
+    → real Django rows (DataTable + RuleFieldAssignment), no HTTP loopback.
+
+    Uses ``transaction=True`` because the DjangoStore's ``sync_to_async`` runs
+    on a worker thread whose connection cannot see pytest's uncommitted
+    transaction-wrapped rows (the user/module/rule must be committed).
+    """
+    import asyncio
+
+    from django.test import override_settings
+
+    from accounts.models import User
+    from ai.engine.core.database import get_session_factory
+    from ai.host_executor import CarbonHostExecutor
+    from ai.models import ToolExecution as DjangoToolExecution
+    from ai.store import reset_store
+    from core.models import Module
+    from dataschema.models import DataTable, DataField
+    from dq.models import DQRule, RuleFieldAssignment
+
+    actor = User.objects.create_user(username="qa-actor-1", password="secret123")
+    module = Module.objects.create(name="QA Water Module")
+    rule = DQRule.objects.create(
+        name="qa-water-range",
+        rule_type="range",
+        rule_level="field_validation",
+        severity="error",
+        dimension="validity",
+        definition={
+            "schema_version": 1,
+            "name": "qa-water-range",
+            "type": "range",
+            "level": "field",
+            "dimension": "validity",
+            "severity": "error",
+            "active": True,
+            "params": {"min": 0, "max": 10000},
+        },
+    )
+    table_id = None
+    try:
+        with override_settings(AI_STORE_BACKEND="django"):
+            reset_store()
+
+            async def _drive() -> tuple:
+                factory = get_session_factory("carbon")
+                async with factory() as db:
+                    executor = CarbonHostExecutor(
+                        db=db,
+                        instance_config={},
+                        user_token="inproc:carbon:1",
+                        host_user_id=str(actor.pk),
+                    )
+                    # Step: create_table
+                    create_exec = await executor.create_pending_execution(
+                        conversation_id=str(conversation.id),
+                        tool_name="call_host_api:create_table",
+                        method="POST",
+                        endpoint="/carbon-api/dataschema/tables/",
+                        body={
+                            "title": "Water Consumption QA",
+                            "description": "QA regression table",
+                            "module": module.pk,
+                            "fields": [
+                                {
+                                    "name": "consumption_m3",
+                                    "label": "Consumption (m3)",
+                                    "type": "number",
+                                    "required": True,
+                                },
+                            ],
+                        },
+                    )
+                    create_result = await executor.confirm_execution(create_exec.id)
+                    # Step: bind_dq_rules
+                    bind_exec = await executor.create_pending_execution(
+                        conversation_id=str(conversation.id),
+                        tool_name="call_host_api:bind_dq_rules",
+                        method="POST",
+                        endpoint="/carbon-api/dq/rule-assignments/",
+                        body={
+                            "table_id": create_result["data"]["id"],
+                            "dq_rule_ids": [rule.pk],
+                        },
+                    )
+                    bind_result = await executor.confirm_execution(bind_exec.id)
+                    return create_result, bind_result
+
+            create_result, bind_result = asyncio.run(_drive())
+            reset_store()
+
+        assert create_result["status_code"] == 201
+        table_id = create_result["data"]["id"]
+        table = DataTable.objects.get(pk=table_id)
+        assert table.module_id == module.pk
+        assert table.fields.filter(name="consumption_m3").exists()
+
+        assert bind_result["status_code"] == 201
+        assert bind_result["data"]["count"] == 1
+        assert RuleFieldAssignment.objects.filter(
+            rule=rule, data_table_id=table_id, data_field__isnull=True
+        ).exists()
+    finally:
+        DjangoToolExecution.objects.filter(conversation_id=str(conversation.id)).delete()
+        if table_id:
+            DataField.objects.filter(data_table_id=table_id).delete()
+            DataTable.objects.filter(pk=table_id).delete()
+        RuleFieldAssignment.objects.filter(rule=rule).delete()
+        rule.delete()
+        module.delete()
+        actor.delete()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_in_process_get_tables_and_rules_list():
+    """GET endpoints dispatch in-process too (catalog ``list_data_tables`` /
+    ``list_dq_rules`` / ``get_data_product_details``) — the old code was
+    POST-only and read steps failed with ToolExecutionError."""
+    import asyncio
+
+    from django.test import override_settings
+
+    from accounts.models import User
+    from ai.engine.core.database import get_session_factory
+    from ai.host_executor import CarbonHostExecutor
+    from ai.store import reset_store
+    from core.models import Module
+    from dataschema.models import DataTable
+
+    actor = User.objects.create_user(username="qa-actor-2", password="secret123")
+    actor.is_superuser = True
+    actor.save()
+    module = Module.objects.create(name="QA Water Module GET")
+    table = DataTable.objects.create(
+        title="Water Consumption QA GET", module=module, created_by=actor
+    )
+    try:
+        with override_settings(AI_STORE_BACKEND="django"):
+            reset_store()
+
+            async def _drive() -> tuple:
+                factory = get_session_factory("carbon")
+                async with factory() as db:
+                    executor = CarbonHostExecutor(
+                        db=db,
+                        instance_config={},
+                        user_token="inproc:carbon:1",
+                        host_user_id=str(actor.pk),
+                    )
+                    tables = await executor.call_api_direct(
+                        "GET", "/carbon-api/dataschema/tables/", {}, {}
+                    )
+                    # get_data_product_details — query string on the path
+                    by_module = await executor.call_api_direct(
+                        "GET",
+                        f"/carbon-api/dataschema/tables/?module_id={module.pk}",
+                        {},
+                        {},
+                    )
+                    rules = await executor.call_api_direct(
+                        "GET", "/carbon-api/dq/rules/", {}, {}
+                    )
+                    return tables, by_module, rules
+
+            tables, by_module, rules = asyncio.run(_drive())
+            reset_store()
+
+        assert tables["status_code"] == 200
+        titles = [t["title"] for t in tables["data"]["results"]]
+        assert "Water Consumption QA GET" in titles
+        assert by_module["status_code"] == 200
+        assert all(
+            t["module"] == module.pk for t in by_module["data"]["results"]
+        )
+        assert rules["status_code"] == 200
+        assert isinstance(rules["data"]["results"], list)
+    finally:
+        DataTable.objects.filter(pk=table.pk).delete()
+        module.delete()
+        actor.delete()
+
+
+@pytest.mark.django_db
+def test_in_process_unknown_endpoint_fails_honestly(user, conversation):
+    """Uncatalogued endpoint → ToolExecutionError, execution marked ``failed``
+    (a step fails honestly instead of looping on ``unstaged`` confirms)."""
+    import asyncio
+
+    from django.test import override_settings
+
+    from ai.engine.core.database import get_session_factory
+    from ai.engine.core.exceptions import ToolExecutionError
+    from ai.host_executor import CarbonHostExecutor
+    from ai.models import ToolExecution as DjangoToolExecution
+    from ai.store import reset_store
+
+    with override_settings(AI_STORE_BACKEND="django"):
+        reset_store()
+
+        async def _drive() -> str:
+            factory = get_session_factory("carbon")
+            async with factory() as db:
+                executor = CarbonHostExecutor(
+                    db=db,
+                    instance_config={},
+                    user_token="inproc:carbon:1",
+                    host_user_id=str(user.pk),
+                )
+                execution = await executor.create_pending_execution(
+                    conversation_id=str(conversation.id),
+                    tool_name="call_host_api:unknown",
+                    method="POST",
+                    endpoint="/carbon-api/unknown/",
+                    body={},
+                )
+                try:
+                    await executor.confirm_execution(execution.id)
+                except ToolExecutionError as exc:
+                    return f"{execution.id}:{exc}"
+                return f"{execution.id}:NO_ERROR"
+
+        outcome = asyncio.run(_drive())
+        reset_store()
+
+    execution_id, error = outcome.split(":", 1)
+    assert "NO_ERROR" not in error
+    assert "not available" in error
+    row = DjangoToolExecution.objects.get(pk=execution_id)
+    assert row.status == "failed"
+    DjangoToolExecution.objects.filter(pk=execution_id).delete()

@@ -171,6 +171,77 @@ def test_timeline_merges_audit_trail(user, run_ids_cleanup):
     assert resumed["detail"]["crash_recovery"] is True
 
 
+@pytest.mark.django_db
+def test_timeline_step_completed_includes_redacted_tool_output(user, run_ids_cleanup):
+    plan = _make_plan(user, status="paused")
+    _make_step(
+        plan,
+        step_index=0,
+        status="completed",
+        tool_output={"api_token": "sekrit", "result": {"execution_id": "exec-1"}},
+    )
+    run_ids_cleanup.append(plan.id)
+
+    service = DurableExecutionService()
+    timeline = service.timeline(user, plan.id)
+
+    completed = next(
+        e for e in timeline["events"] if e["kind"] == "step_completed"
+    )
+    assert completed["detail"]["verdict"] == "pass"
+    tool_output = completed["detail"]["tool_output"]
+    assert tool_output["api_token"] == "[REDACTED]"
+    assert tool_output["result"]["execution_id"] == "exec-1"
+
+
+@pytest.mark.django_db
+def test_timeline_step_completed_omits_empty_tool_output(user, run_ids_cleanup):
+    plan = _make_plan(user, status="paused")
+    _make_step(plan, step_index=0, status="completed", tool_output=None)
+    run_ids_cleanup.append(plan.id)
+
+    service = DurableExecutionService()
+    timeline = service.timeline(user, plan.id)
+
+    completed = next(
+        e for e in timeline["events"] if e["kind"] == "step_completed"
+    )
+    assert "tool_output" not in completed["detail"]
+
+
+@pytest.mark.django_db
+def test_timeline_consent_events_confirmed_and_declined(user, run_ids_cleanup):
+    plan = _make_plan(user, status="paused")
+    _make_step(plan, step_index=0, status="completed", token="tok-0")
+    _make_step(plan, step_index=1, status="skipped", token="tok-1")
+    run_ids_cleanup.append(plan.id)
+
+    service = DurableExecutionService()
+    timeline = service.timeline(user, plan.id)
+
+    confirmed = next(
+        e for e in timeline["events"] if e["kind"] == "step_confirmed"
+    )
+    assert confirmed["detail"] == {"step_id": 0, "choice": "confirmed"}
+    declined = next(e for e in timeline["events"] if e["kind"] == "step_declined")
+    assert declined["detail"] == {"step_id": 1, "choice": "declined"}
+
+
+@pytest.mark.django_db
+def test_timeline_no_consent_event_without_token(user, run_ids_cleanup):
+    plan = _make_plan(user, status="paused")
+    _make_step(plan, step_index=0, status="completed")  # no confirmation_token
+    _make_step(plan, step_index=1, status="skipped")
+    run_ids_cleanup.append(plan.id)
+
+    service = DurableExecutionService()
+    timeline = service.timeline(user, plan.id)
+
+    kinds = _kinds(timeline)
+    assert "step_confirmed" not in kinds
+    assert "step_declined" not in kinds
+
+
 # ── Crash-safe resume ────────────────────────────────────────────────────
 
 

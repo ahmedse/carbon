@@ -1184,3 +1184,93 @@ def test_api_pause_resume_fork_lifecycle(
     assert fork["status"] == "pending_approval"
     assert fork["forked_from"] == plan.id
     run_ids_cleanup.append(fork["id"])
+
+
+# ── W7-A: serialized execution contract (F-26 / F-28) ───────────────────
+
+
+@pytest.mark.django_db
+def test_serialized_steps_carry_execution_contract(user, run_ids_cleanup):
+    """F-26/F-28: every serialized step carries ``strategy``,
+    ``parallel_group`` and ``runnable_state`` (frozen for W7-B)."""
+    run = Run.objects.create(
+        id=str(uuid.uuid4()),
+        instance_id="carbon",
+        conversation_id="conv-serialized",
+        host_user_id=str(user.pk),
+        user_message="Parallel plan",
+        status="paused",
+        plan_json={
+            "pattern": "custom",
+            "source": "llm_decompose",
+            "synthesis_instruction": "Summarize.",
+            "phases": [
+                {
+                    "phase_id": 0,
+                    "name": "Gather",
+                    "strategy": "parallel",
+                    "step_ids": [0, 1],
+                },
+                {
+                    "phase_id": 1,
+                    "name": "Report",
+                    "strategy": "sequential",
+                    "step_ids": [2],
+                },
+            ],
+            "steps": [
+                {"step_id": 0, "intent": "Gather A", "tool_name": None,
+                 "tool_args": {}, "depends_on": []},
+                {"step_id": 1, "intent": "Gather B", "tool_name": None,
+                 "tool_args": {}, "depends_on": []},
+                {"step_id": 2, "intent": "Report", "tool_name": None,
+                 "tool_args": {}, "depends_on": [0, 1]},
+            ],
+        },
+    )
+    run_ids_cleanup.append(run.id)
+    RunStep.objects.create(
+        run_id=run.id, step_index=0, intent="Gather A", status="running"
+    )
+    RunStep.objects.create(
+        run_id=run.id, step_index=1, intent="Gather B", status="completed"
+    )
+    RunStep.objects.create(
+        run_id=run.id, step_index=2, intent="Report", status="awaiting_approval"
+    )
+
+    result = PlansService().get_plan(user, run.id)
+    steps = {s["step_id"]: s for s in result["steps"]}
+
+    # Parallel phase siblings share the phase's strategy + a stable group key.
+    assert steps[0]["strategy"] == "parallel"
+    assert steps[0]["parallel_group"] == 0
+    assert steps[0]["runnable_state"] == "in_flight"
+
+    assert steps[1]["strategy"] == "parallel"
+    assert steps[1]["parallel_group"] == 0
+    assert steps[1]["runnable_state"] == "completed"
+
+    # Sequential phase → no parallel group (key omitted, not null).
+    assert steps[2]["strategy"] == "sequential"
+    assert "parallel_group" not in steps[2]
+    assert steps[2]["runnable_state"] == "pending"
+
+
+def test_runnable_state_derivation():
+    """F-28: ``runnable_state`` is a deterministic product enum, not a guess."""
+    from ai.plans_service import (
+        RUNNABLE_COMPLETED,
+        RUNNABLE_IN_FLIGHT,
+        RUNNABLE_PENDING,
+        _runnable_state,
+    )
+
+    assert _runnable_state("completed") == RUNNABLE_COMPLETED
+    assert _runnable_state("skipped") == RUNNABLE_COMPLETED
+    assert _runnable_state("running") == RUNNABLE_IN_FLIGHT
+    assert _runnable_state("pending") == RUNNABLE_PENDING
+    assert _runnable_state("awaiting_approval") == RUNNABLE_PENDING
+    # A failed step is terminal and locked (never editable in place) — the raw
+    # ``status`` still carries "failed" for the UI chip / retry affordance.
+    assert _runnable_state("failed") == RUNNABLE_COMPLETED

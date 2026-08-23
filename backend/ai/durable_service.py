@@ -68,6 +68,7 @@ from ai.plans_service import (
     STEP_PENDING,
     STEP_SKIPPED,
 )
+from ai.observability_api import _redact_secrets
 
 logger = logging.getLogger("carbon.ai.durable_service")
 
@@ -193,6 +194,12 @@ class DurableExecutionService:
                     self._ev(idx, updated, state_event[0],
                              step_id=step.step_index, detail=state_event[1])
                 )
+            consent_event = self._consent_event(step)
+            if consent_event:
+                events.append(
+                    self._ev(idx, updated, consent_event[0],
+                             step_id=step.step_index, detail=consent_event[1])
+                )
 
         # Run-level current-status event.
         run_event = self._run_status_event(run)
@@ -284,7 +291,11 @@ class DurableExecutionService:
         """
         status = step.status
         if status == STEP_COMPLETED:
-            return ("step_completed", {"verdict": step.critic_verdict or "pass"})
+            detail = {"verdict": step.critic_verdict or "pass"}
+            tool_output = _redact_secrets(step.tool_output_json)
+            if tool_output:
+                detail["tool_output"] = tool_output
+            return ("step_completed", detail)
         if status == STEP_FAILED:
             return ("step_failed",
                     {"error": step.error or "The step did not complete."})
@@ -300,6 +311,31 @@ class DurableExecutionService:
             return ("step_started",
                     {"detail": "Execution was interrupted — re-queue this "
                                "step with resume."})
+        return None
+
+    @staticmethod
+    def _consent_event(step):
+        """Consent transition → ``(kind, detail)`` product event, or None.
+
+        A step that reached the consent gate carries a ``confirmation_token``
+        (set by the engine before pausing on ``awaiting_approval``). Confirming
+        advances it to ``completed``; declining skips it. Both retain the token,
+        so the token's presence plus the terminal status is the durable marker
+        that a consent decision was consumed (RULE_21). Event kinds are product
+        terms — never engine class names (RULE_23).
+        """
+        if not step.confirmation_token:
+            return None
+        if step.status == STEP_COMPLETED:
+            return (
+                "step_confirmed",
+                {"step_id": step.step_index, "choice": "confirmed"},
+            )
+        if step.status == STEP_SKIPPED:
+            return (
+                "step_declined",
+                {"step_id": step.step_index, "choice": "declined"},
+            )
         return None
 
     @staticmethod

@@ -1128,6 +1128,95 @@ export function instantiatePlanTemplate(token, templateId) {
   });
 }
 
+// ── W6-E F-29 — scheduling ───────────────────────────────────────────────
+// Schedules are owner-scoped `RunSchedule` rows: a recurring `cron_expr` or a
+// one-off `run_at`, each targeting an owned template. The server supplies a
+// plain-language `preview` string (RULE_23 — the single source of truth in the
+// UI; never surface the raw cron as the default view).
+
+/**
+ * List the requesting user's schedules, soonest next-run first.
+ * GET /ai/plans/schedules/
+ * @param {string} token - JWT access token
+ * @returns {Promise<object>} { schedules: Array<{id,name,description,cron_expr,run_at,enabled,last_run_at,next_run_at,template_id,preview,created_at}>, count }
+ */
+export function listSchedules(token) {
+  return apiFetch(`${PLANS_BASE}schedules/`, { token });
+}
+
+/**
+ * Create a schedule — recurring `cron_expr` OR one-off `run_at` (exactly one).
+ * POST /ai/plans/schedules/
+ * @param {string} token - JWT access token
+ * @param {object} params - { name, description?, template_id?, cron_expr?, run_at? }
+ * @returns {Promise<object>} Serialized schedule (includes server `preview`)
+ */
+export function createSchedule(
+  token,
+  { name, description = '', template_id, cron_expr, run_at } = {},
+) {
+  const body = { name };
+  if (description) body.description = description;
+  if (template_id) body.template_id = template_id;
+  if (cron_expr) body.cron_expr = cron_expr;
+  if (run_at) body.run_at = run_at;
+  return apiFetch(`${PLANS_BASE}schedules/`, { token, method: 'POST', body });
+}
+
+/**
+ * Edit a schedule's name/description/trigger (PATCH semantics).
+ * PATCH /ai/plans/schedules/{id}/
+ * @param {string} token - JWT access token
+ * @param {string} scheduleId - schedule UUID
+ * @param {object} params - { name?, description?, cron_expr?, run_at? }
+ * @returns {Promise<object>} Serialized schedule (includes server `preview`)
+ */
+export function editSchedule(
+  token,
+  scheduleId,
+  { name, description, cron_expr, run_at } = {},
+) {
+  const body = {};
+  if (name !== undefined) body.name = name;
+  if (description !== undefined) body.description = description;
+  if (cron_expr !== undefined) body.cron_expr = cron_expr;
+  if (run_at !== undefined) body.run_at = run_at;
+  return apiFetch(`${PLANS_BASE}schedules/${scheduleId}/`, {
+    token,
+    method: 'PATCH',
+    body,
+  });
+}
+
+/**
+ * Delete an owned schedule (hard delete — the consequence is surfaced in the
+ * confirm dialog before this is called).
+ * DELETE /ai/plans/schedules/{id}/
+ * @param {string} token - JWT access token
+ * @param {string} scheduleId - schedule UUID
+ * @returns {Promise<object>} { deleted: true, schedule_id }
+ */
+export function deleteSchedule(token, scheduleId) {
+  return apiFetch(`${PLANS_BASE}schedules/${scheduleId}/`, {
+    token,
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Toggle a schedule's `enabled` flag (pause without deletion).
+ * POST /ai/plans/schedules/{id}/pause/
+ * @param {string} token - JWT access token
+ * @param {string} scheduleId - schedule UUID
+ * @returns {Promise<object>} Serialized schedule (with the flipped `enabled`)
+ */
+export function pauseSchedule(token, scheduleId) {
+  return apiFetch(`${PLANS_BASE}schedules/${scheduleId}/pause/`, {
+    token,
+    method: 'POST',
+  });
+}
+
 // ── W5-C — artifact delivery ─────────────────────────────────────────────
 // Steps can produce durable artifacts (docx/xlsx/csv) stored in MEDIA_ROOT.
 // These helpers list a plan's artifacts and stream one down as a blob.

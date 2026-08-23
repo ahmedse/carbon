@@ -5,10 +5,16 @@
 // resizable canvas (pan/zoom), a detailed inspection pane (docked, never
 // floating), and an expand button that opens the graph in a full-screen modal
 // (jsdom-safe, no d3).
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import PlanDagGraph, { planStepStatusColor, planStepStatusLabel } from '../components/graph/PlanDagGraph';
+import PlanDagGraph, {
+  planStepStatusColor,
+  planStepStatusLabel,
+  planStepStatusChipColor,
+  parallelLaneGroups,
+  laneAttentionLabel,
+} from '../components/graph/PlanDagGraph';
 
 const theme = createTheme();
 
@@ -315,5 +321,139 @@ describe('planStepStatusLabel', () => {
     expect(planStepStatusLabel('failed')).toBe('Failed');
     expect(planStepStatusLabel('skipped')).toBe('Skipped');
     expect(planStepStatusLabel('pending')).toBe('Pending');
+  });
+});
+
+describe('planStepStatusChipColor', () => {
+  it('maps statuses to MUI chip color tokens (RULE_5 chip + label)', () => {
+    expect(planStepStatusChipColor('completed')).toBe('success');
+    expect(planStepStatusChipColor('running')).toBe('primary');
+    expect(planStepStatusChipColor('awaiting_approval')).toBe('warning');
+    expect(planStepStatusChipColor('failed')).toBe('error');
+    expect(planStepStatusChipColor('skipped')).toBe('default');
+    expect(planStepStatusChipColor('pending')).toBe('default');
+  });
+});
+
+describe('parallelLaneGroups', () => {
+  it('groups only parallel steps sharing a non-null parallel_group, ascending', () => {
+    const steps = [
+      { step_id: 0, strategy: 'parallel', parallel_group: 2 },
+      { step_id: 1, strategy: 'parallel', parallel_group: 1 },
+      { step_id: 2, strategy: 'sequential', parallel_group: 1 },
+      { step_id: 3, strategy: 'parallel', parallel_group: null },
+      { step_id: 4, strategy: 'parallel', parallel_group: 1 },
+    ];
+    const lanes = parallelLaneGroups(steps);
+    expect(lanes.map((l) => l.groupId)).toEqual([1, 2]);
+    expect(lanes[0].steps.map((s) => s.step_id)).toEqual([1, 4]);
+    expect(lanes[1].steps.map((s) => s.step_id)).toEqual([0]);
+  });
+
+  it('returns an empty list when nothing is parallel', () => {
+    expect(parallelLaneGroups([])).toEqual([]);
+    expect(parallelLaneGroups([{ step_id: 0, strategy: 'sequential', parallel_group: 0 }])).toEqual([]);
+  });
+});
+
+describe('laneAttentionLabel', () => {
+  it('is null when no sibling failed', () => {
+    expect(laneAttentionLabel([{ status: 'completed' }, { status: 'pending' }])).toBeNull();
+  });
+
+  it('uses precise partial copy — never a blanket "failed" (RULE_23)', () => {
+    expect(laneAttentionLabel([{ status: 'failed' }, { status: 'completed' }, { status: 'completed' }])).toBe(
+      '1 of 3 steps needs attention',
+    );
+    expect(laneAttentionLabel([{ status: 'failed' }, { status: 'failed' }, { status: 'completed' }])).toBe(
+      '2 of 3 steps need attention',
+    );
+    expect(laneAttentionLabel([{ status: 'failed' }])).toBe('1 of 1 step needs attention');
+  });
+});
+
+describe('F-26 — parallel lane band rendering', () => {
+  const PARALLEL_PLAN = {
+    id: 'plan-par',
+    status: 'running',
+    brief: 'Match and merge entities in parallel.',
+    phases: [{ phase_id: 0, name: 'Ingest & match', goal: '', strategy: 'parallel', step_ids: [0, 1, 2] }],
+    steps: [
+      { step_id: 0, intent: 'Match records', tool_name: 'search_entity', status: 'failed', error: 'No matches found', strategy: 'parallel', parallel_group: 0, depends_on: [] },
+      { step_id: 1, intent: 'Merge duplicates', tool_name: 'merge_entity', status: 'awaiting_approval', strategy: 'parallel', parallel_group: 0, depends_on: [] },
+      { step_id: 2, intent: 'Normalize names', tool_name: 'search_entity', status: 'completed', strategy: 'parallel', parallel_group: 0, depends_on: [] },
+    ],
+  };
+
+  it('renders a collapsible lane with the phase name + "Runs together" chip', () => {
+    renderGraph({ plan: PARALLEL_PLAN });
+
+    expect(screen.getByTestId('parallel-lanes')).toBeInTheDocument();
+    expect(screen.getByTestId('parallel-lane-0')).toBeInTheDocument();
+    expect(screen.getByText('Ingest & match')).toBeInTheDocument();
+    expect(screen.getByText('Runs together')).toBeInTheDocument();
+  });
+
+  it('keeps each step its own status chip (RULE_5)', () => {
+    renderGraph({ plan: PARALLEL_PLAN });
+
+    // All three steps are visible inside the expanded lane with their chips.
+    // Scope to the lane band so the same intent labels in the SVG DAG don't
+    // make the query ambiguous.
+    const lane = screen.getByTestId('parallel-lanes');
+    expect(within(lane).getByText('Match records')).toBeInTheDocument();
+    expect(within(lane).getByText('Merge duplicates')).toBeInTheDocument();
+    expect(within(lane).getByText('Normalize names')).toBeInTheDocument();
+    // Chips: failed step + completed step + awaiting-approval step.
+    expect(within(lane).getByText('Failed')).toBeInTheDocument();
+    expect(within(lane).getByText('Finished')).toBeInTheDocument();
+    expect(within(lane).getByText('Needs approval')).toBeInTheDocument();
+  });
+
+  it('shows precise attention copy (1 of 3) instead of blanket "failed"', () => {
+    renderGraph({ plan: PARALLEL_PLAN });
+    // Lane header chip carries the partial-attention signal…
+    expect(screen.getByText('1 of 3 steps needs attention')).toBeInTheDocument();
+    // …and the graph header summary appends the same precise copy (no blanket
+    // "failed" rollup when only one sibling failed).
+    expect(screen.getByText('3 steps · 0 links · 1 of 3 steps needs attention')).toBeInTheDocument();
+  });
+
+  it('renders Approve/Decline for the awaiting-approval step inside the lane', () => {
+    const onConfirmStep = vi.fn();
+    const onDeclineStep = vi.fn();
+    renderGraph({ plan: PARALLEL_PLAN, onConfirmStep, onDeclineStep });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(onConfirmStep).toHaveBeenCalledWith(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
+    expect(onDeclineStep).toHaveBeenCalledWith(1);
+  });
+
+  it('keeps a persistent failed chip + Retry affordance for a failed sibling', () => {
+    const onRetryStep = vi.fn();
+    renderGraph({ plan: PARALLEL_PLAN, onRetryStep });
+
+    expect(screen.getByText('No matches found')).toBeInTheDocument(); // error preserved
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(onRetryStep).toHaveBeenCalledWith(0);
+  });
+
+  it('collapses and expands the lane band', () => {
+    renderGraph({ plan: PARALLEL_PLAN });
+    const lane = screen.getByTestId('parallel-lane-0');
+    const toggle = () =>
+      within(lane).getByRole('button', { name: 'Toggle parallel lane Ingest & match' });
+
+    // Expanded by default (ExpandMore icon shown).
+    expect(within(lane).getByTestId('ExpandMoreIcon')).toBeInTheDocument();
+
+    fireEvent.click(toggle());
+    // Collapsed: chevron-right icon replaces the expand-more icon.
+    expect(within(lane).queryByTestId('ExpandMoreIcon')).not.toBeInTheDocument();
+    expect(within(lane).getByTestId('ChevronRightIcon')).toBeInTheDocument();
+
+    fireEvent.click(toggle());
+    expect(within(lane).getByTestId('ExpandMoreIcon')).toBeInTheDocument();
   });
 });

@@ -84,5 +84,5 @@ justified, and the two-surface split (user-facing Workspace vs admin-facing
 - `backend/ai/migrations/0019_plan_template.py`
 - `carbon-frontend/src/pages/admin/ai/{OutputQualityPanel,RunTimelinePanel}.jsx`
 - `carbon-frontend/src/shell/AITaskPanel.jsx` (Templates tab)
-- ADR-0008 (no new apps), ADR-0010 (domain-neutral manifest seam),
+- ADR-0008 (no new apps), ADR-0016 (domain-neutral manifest seam),
   ADR-0012 (thin domain adapters)

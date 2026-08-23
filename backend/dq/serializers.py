@@ -77,14 +77,39 @@ class RuleTagSerializer(serializers.ModelSerializer):
 
 
 class RuleFieldAssignmentSerializer(serializers.ModelSerializer):
-    """Read-only serializer for field assignments embedded in rule responses."""
+    """Field assignments for a DQ rule.
+
+    Used read-only when embedded in rule responses, and writable for the
+    dedicated create/delete endpoint (POST/DELETE /dq/rule-assignments/).
+    `rule` is required on create; omitting it used to drop the field and
+    cause a rule_id NOT NULL IntegrityError on POST.
+    """
     field_name = serializers.CharField(source='data_field.name', read_only=True, allow_null=True)
     table_name = serializers.CharField(source='data_table.name', read_only=True)
 
     class Meta:
         model = RuleFieldAssignment
-        fields = ['id', 'data_field', 'field_name', 'data_table', 'table_name']
+        fields = ['id', 'rule', 'data_field', 'field_name', 'data_table', 'table_name']
         read_only_fields = ['id']
+
+    def validate(self, data):
+        # Cross-check: a field-level binding must target a field of the same
+        # table, and a field cannot be bound twice to the same rule.
+        data_table = data.get('data_table')
+        data_field = data.get('data_field')
+        rule = data.get('rule')
+        if data_field and data_table and data_field.data_table_id != data_table.id:
+            raise serializers.ValidationError(
+                {'data_field': 'data_field must belong to the given data_table'}
+            )
+        if rule and data_field:
+            if RuleFieldAssignment.objects.filter(
+                rule=rule, data_field=data_field
+            ).exists():
+                raise serializers.ValidationError(
+                    {'data_field': 'This rule is already bound to this field'}
+                )
+        return data
 
 
 class DQRuleSerializer(serializers.ModelSerializer):

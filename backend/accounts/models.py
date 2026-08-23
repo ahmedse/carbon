@@ -6,6 +6,8 @@ from django.contrib.auth.models import AbstractUser, Group
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 # --- USER ---
 
 class User(AbstractUser):
@@ -355,6 +357,67 @@ class APIConfig(models.Model):
     def load(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+# ── Phase 1.4b: General Platform Configuration ────────────────────────────────
+
+class GeneralConfig(models.Model):
+    """Singleton — general platform-wide settings, admin-configurable.
+
+    Currently holds the display timezone. Storage remains UTC (USE_TZ); this
+    drives how times are rendered for humans (schedule previews, admin
+    timestamps, form defaults) without a code redeploy.
+    """
+
+    # Curated IANA zones relevant to AASTMT + common deployments. A value
+    # outside this list is still accepted at the DB level; rendering falls
+    # back gracefully to Django's default when a zone is unknown.
+    TIMEZONE_CHOICES = [
+        ('Africa/Cairo', 'Africa/Cairo (Egypt, UTC+2)'),
+        ('UTC', 'UTC (Coordinated Universal Time)'),
+        ('Europe/London', 'Europe/London (UTC+0/+1)'),
+        ('Europe/Berlin', 'Europe/Berlin (CET, UTC+1/+2)'),
+        ('Asia/Riyadh', 'Asia/Riyadh (UTC+3)'),
+        ('Asia/Dubai', 'Asia/Dubai (UTC+4)'),
+        ('America/New_York', 'America/New_York (UTC-5/-4)'),
+    ]
+
+    timezone = models.CharField(
+        max_length=64,
+        choices=TIMEZONE_CHOICES,
+        default='Africa/Cairo',
+        help_text='Display timezone for schedule previews and timestamps.',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'General Configuration'
+        verbose_name_plural = 'General Configuration'
+
+    def __str__(self):
+        return f"General Config (timezone={self.timezone})"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    @classmethod
+    def get_timezone(cls) -> ZoneInfo:
+        """Return the configured display timezone as a ``ZoneInfo``.
+
+        Falls back to Django's default timezone when the stored value is
+        unknown or the singleton is unavailable (e.g. pre-migration).
+        """
+        try:
+            return ZoneInfo(cls.load().timezone)
+        except (ZoneInfoNotFoundError, KeyError, ValueError):
+            from django.utils import timezone as _tz
+            return _tz.get_default_timezone()
 
 
 # ── Phase 1.6: Notification System ────────────────────────────────────────────

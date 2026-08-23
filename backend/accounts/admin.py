@@ -9,7 +9,7 @@ from django.shortcuts import redirect
 from .models import (
     User, ScopedRole, RoleAssignmentAuditLog, PlatformAppConfig,
     EmailConfig, PasswordPolicy, BackupConfig, BackupRecord,
-    LogConfig, APIConfig,
+    LogConfig, APIConfig, GeneralConfig,
     UserAlert, NotificationChannel, NotificationRule,
 )
 
@@ -176,6 +176,20 @@ class APIConfigAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return not APIConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(GeneralConfig)
+class GeneralConfigAdmin(admin.ModelAdmin):
+    list_display = ['timezone', 'updated_at']
+    list_display_links = ['updated_at']
+    list_editable = ['timezone']
+    readonly_fields = ['updated_at']
+
+    def has_add_permission(self, request):
+        return not GeneralConfig.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False

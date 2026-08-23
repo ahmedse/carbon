@@ -3168,12 +3168,279 @@ DONE.
 **Date:** 2026-08-20
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash (RULE_24)
-**Status:** PLANNED
-**Depends on:** W4-A (durable Run/RunStep rows now carry real tool_output).
+**Status:** DONE (verified 2026-08-23: 36 tests pass, migrations clean)
+**Depends on:** W4-A (durable Run/RunStep rows now carry real tool_output) — DONE.
 
-Surface tool_output + consent events in the W3-G admin timeline; add
-cross-run cost/quality rollups (total_llm_calls, confirmations_required).
-Spec pending W4-A.
+Surface `tool_output` + consent events in the W3-G admin timeline; add
+cross-run cost/quality rollups (`total_llm_calls`, `confirmations_required`).
+
+### Files to Read First
+- `backend/ai/durable_service.py` — `timeline()` (~L113, the event builder), `_step_status_event` (~L280), `_run_status_event`, `_audit_events`. Events are derived from `Run` + `RunStep` rows + `working_notes`; `step_completed` today carries only `{verdict}`, and no consent transition event exists.
+- `backend/ai/durable_api.py` — `RunViewSet` (timeline / compare / resume / replay), `_unavailable` fail-visible envelope.
+- `backend/ai/durable_urls.py` — routes (`compare/`, `{pk}/timeline/`, `{pk}/resume/`, `{pk}/replay/`).
+- `backend/ai/observability_api.py` — `OutputQualityTrendView` (~L340), `_redact_secrets`, `_scoped_quality_rows`; the admin read-layer pattern to mirror.
+- `backend/ai/ops_urls.py` — route registry (`quality-trend/`, `data/<key>/`).
+- `backend/ai/models/core.py` — `Run` (~L312: `total_llm_calls`, `total_latency_ms`, `status`), `RunStep` (~L337: `tool_output_json` L349, `confirmation_token`, `critic_verdict`, `status`).
+- `backend/ai/tests/test_durable.py` + `backend/ai/tests/test_observability_api.py` — existing test patterns + fixtures (`user`, `other_user`, `auth_client`, `_make_plan`, `_make_step`).
+
+### Files to Change
+- `backend/ai/durable_service.py` — enrich `step_completed` events with redacted `tool_output`; add `step_confirmed` / `step_declined` consent-transition events.
+- `backend/ai/observability_api.py` — add a cross-run rollup view.
+- `backend/ai/ops_urls.py` — mount the rollup route.
+- `backend/ai/tests/test_durable.py` + `backend/ai/tests/test_observability_api.py` — new tests.
+
+### Implementation (exact seams — edit these and nothing else)
+
+**1. Tool output in the timeline (`durable_service.py`).** In `_step_status_event`, the `step_completed` branch returns `("step_completed", {"verdict": ...})`. Extend it to also carry the step's `tool_output` (redacted): reuse `observability_api._redact_secrets` on `step.tool_output_json` and include it as `detail["tool_output"]` **only when non-empty** (never emit an empty/null key). Keep `verdict` intact.
+
+**2. Consent-transition events.** The current timeline never surfaces a step *leaving* `awaiting_approval`. Add, per step, a consent event when its `confirmation_token` was consumed: derive `step_confirmed` (or `step_declined`) from the durable step state the worker inspects in `plans_api.confirm_step` / `decline_step` (they update `RunStep.status` and/or `working_notes.audit`). Emit it as a product-term event with `detail: {step_id, choice}` — never engine class names (RULE_23). If the confirm/decline path does **not** persist a durable marker, add one to `working_notes.audit` via the existing `_append_audit` helper (no schema change, no new migration).
+
+**3. Cross-run cost/quality rollups (`observability_api.py`).** Add `RunRollupView` (GET-only `APIView`, `AdminOrSuperuserOnly`, `ai:view_console`) returning:
+```python
+{
+  "totals": {
+     "runs": N,
+     "total_llm_calls": N,
+     "confirmations_required": N,   # count of RunStep rows still awaiting approval
+     "total_latency_ms": N | None,
+     "completed": N, "failed": N, "paused": N, "running": N,
+  },
+  "per_run": [ { "run_id", "status", "total_llm_calls", "latency_ms",
+                 "confirmations_required", "step_count", "completed_at" } ]
+}
+```
+`confirmations_required` per run = `RunStep.objects.filter(run_id=..., status="awaiting_approval").count()` (the exact status literal lives in `plans_service.STEP_AWAITING_APPROVAL` — import it, do not re-string). Scope every queryset with `scope_ai_queryset(..., request.user)` and cap `per_run` at 200 most-recent (reuse `_timestamp_field` ordering). Mount at `ai/pulse/rollups/` in `ops_urls.py`.
+
+### DO NOT TOUCH
+- `backend/ai/engine/**` — read-only callers only; no engine internals.
+- No new migrations — everything rides existing `Run`/`RunStep` columns + `working_notes`.
+- `carbon-frontend/**` — this phase is backend-only (the timeline payload the frontend already renders via `eventDetailText` picks up the new detail fields automatically; richer rendering is out of scope here).
+
+### Verification Gate
+```bash
+cd backend && ../.venv/bin/python -m pytest ai/tests/test_durable.py ai/tests/test_observability_api.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run   # clean (no new migrations)
+./.ai-toolkit/scripts/verify.sh
+```
+Plus `get_errors` on the changed files.
+
+### Output contract
+- `timeline/` payload now carries `tool_output` (redacted) on completed steps and `step_confirmed`/`step_declined` consent events.
+- New `GET /carbon-api/ai/pulse/rollups/` returns the aggregate + per-run cost/quality rollup above.
+- Tests green; a concise results note with test counts, migration status, and any deviations.
+
+---
+
+### Phase W7-A — Agent Execution Control: backend contract (F-26 / F-28 / F-29)
+**Date:** 2026-08-23
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE (verified 2026-08-23: 57 tests pass, migrations clean, `owner` added to schedule payload)
+**Depends on:** W6-D (F-26 parallel), W6-E (F-28 pause→steer→resume, F-29 RunSchedule + `run_due_schedules`) — DONE. Design doc: `docs/DESIGN-AGENT-EXECUTION-CONTROL.md`.
+
+Freeze the backend contract the frontend (W7-B) composes against: serialized
+`strategy`/`parallel_group` + `runnable_state` on steps, and the schedules
+REST CRUD + server-side `preview` string.
+
+### Files to Read First
+- `backend/ai/plans_service.py` — step serialization (`_serialize` ~L376 and ~L442-460; phase `strategy` already serialized at L457/645), step-edit (`edit_step` ~L545-635), schedule service (`create_schedule` ~L1389, `_serialize_schedule` ~L1448, `list_schedules` ~L1476, `delete_schedule` ~L1490, `materialize_due_schedules` ~L1506), `_cron_trigger`.
+- `backend/ai/plans_api.py` + `backend/ai/plans_urls.py` — `PlanViewSet` actions + explicit `as_view` route list (note: `templates/` routes MUST precede `<str:pk>/`).
+- `backend/ai/models/core.py` — `RunSchedule` (~L405: `enabled`, `cron_expr`, `run_at`, `template`, `plan_json`, `next_run_at`, `last_run_at`), `RunStep` (~L337), `Run.status` literals.
+- `backend/ai/engine/cognition/plan/planner.py` — `PlanPhase.strategy` ("sequential"|"parallel", ~L49) and step `phase`/`strategy` relationship (read-only; the engine already emits `strategy` on phases).
+- `backend/ai/tests/test_schedule_steering.py`, `test_plans.py` — existing schedule + step serialization test patterns.
+
+### Files to Change
+- `backend/ai/plans_service.py` — add `parallel_group` + `runnable_state` to serialized steps; add `edit_schedule`, `pause_schedule`, `_schedule_preview`.
+- `backend/ai/plans_api.py` + `backend/ai/plans_urls.py` — schedule REST routes + view methods.
+- `backend/ai/tests/test_plans.py` + `backend/ai/tests/test_schedule_steering.py` — new tests.
+
+### Implementation (exact seams — edit these and nothing else)
+
+**1. F-26 / F-28 — serialized step fields (`plans_service.py`).** In the step serializer(s) (~L376 and ~L442-460), add two fields to every serialized step:
+- `"strategy"`: the enclosing phase's strategy (already computed at phase level — propagate it, default `"sequential"`).
+- `"parallel_group"`: `None` when the phase `strategy != "parallel"`; otherwise a stable group key (use the phase id/ordinal so sibling steps in the same parallel phase share it). Optional — do not emit when absent.
+- `"runnable_state"`: derived from `RunStep.status` → `"completed"` (`completed`/`skipped`), `"in_flight"` (`running`), `"pending"` (`pending`/`awaiting_approval`). Never derive from status *strings* the UI would need to guess — emit this explicit enum.
+
+**2. F-28 — pause→steer contract.** Confirm `edit_step` (~L545) already accepts a PATCH on a `pending` step while the run is `paused` (the W6-E1 path). If it blocks pending-step edits during `paused`, relax the guard so **only** `pending` steps are editable while `paused` (completed/`in_flight` steps stay locked). Do **not** change `resume` semantics.
+
+**3. F-29 — schedules REST API.** Add to `PlanViewSet` (or a thin sibling) and route in `plans_urls.py` (place `schedules/` routes BEFORE `<str:pk>/`, same as `templates/`):
+- `GET    /ai/plans/schedules/` → `list_schedules` (owner-scoped, soonest first)
+- `POST   /ai/plans/schedules/` → create (reuse `PlansService.create_schedule`)
+- `PATCH  /ai/plans/schedules/<id>/` → `edit_schedule` (name/description/cron_expr/run_at; recompute `next_run_at`)
+- `DELETE /ai/plans/schedules/<id>/` → `delete_schedule`
+- `POST   /ai/plans/schedules/<id>/pause/` → `pause_schedule` (toggle `enabled`; does **not** delete)
+
+**4. F-29 — server-side `preview`.** Add `PlansService._schedule_preview(schedule) -> str` and include `"preview"` in `_serialize_schedule`. Produce plain-language outcome copy (RULE_23): one-off → `"Once on 2026-08-25 at 2:00 PM"`; recurring → `"Every day at 9:00 AM"` / `"Every Monday at 9:00 AM"` / `"Every 1st of the month at 9:00 AM"`. Never emit a bare `cron` string as the default human text (the raw `cron_expr` stays in the payload for power users). Times in Africa/Cairo (`timezone.now()` / `localtime`).
+
+### DO NOT TOUCH
+- `backend/ai/engine/**` — the engine already emits phase `strategy`; consume it, do not modify it.
+- `RunSchedule` model fields — the model is complete; no migration for W7-A.
+- `materialize_due_schedules` / `run_due_schedules` command — already correct (RULE_21 pending_approval, atomic claim).
+- `carbon-frontend/**` — this phase is backend-only.
+
+### Verification Gate
+```bash
+cd backend && ../.venv/bin/python -m pytest ai/tests/test_plans.py ai/tests/test_schedule_steering.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run   # clean
+./.ai-toolkit/scripts/verify.sh
+```
+Plus `get_errors` on the changed files.
+
+### Output contract
+- Serialized steps carry `strategy`, `parallel_group`, `runnable_state` (frozen for W7-B).
+- `schedules/` list/create/edit/delete/pause REST surface with a server-side `preview` string per schedule.
+- Tests green; concise results note with test counts, migration status, and the exact serialized-step + schedule JSON shape the frontend must consume.
+
+---
+
+### Phase W7-B — Agent Execution Control: frontend UX (F-26 / F-28 / F-29)
+**Date:** 2026-08-23
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE (verified 2026-08-23: 842 tests pass, lint 0 errors, build clean)
+**Depends on:** W7-A (frozen step + schedule contract) — DONE. Design doc: `docs/DESIGN-AGENT-EXECUTION-CONTROL.md` (acceptance criteria are the source of truth).
+
+Compose the three Enterprise features against the W7-A contract, all in the
+Agent-mode surface. No new routes/sidebar entries; RULE_21 consent never
+auto-bypassed; RULE_23 outcome copy only; RULE_8 theme tokens only.
+
+### Files to Read First
+- `docs/DESIGN-AGENT-EXECUTION-CONTROL.md` — §F-26 / §F-28 / §F-29 acceptance (happy/empty/error/permission/boundary scenarios) + §3 cross-feature rules.
+- `carbon-frontend/src/shell/AITaskPanel.jsx` — tabs (`tasks | run | monitor | results | templates`, localStorage `carbon-ai-task-tab`), plan controls.
+- `carbon-frontend/src/components/graph/PlanDagGraph.jsx` — step DAG (nodes = steps, edges = `depends_on`, status-colored); add the parallel-lane concept here.
+- `carbon-frontend/src/components/` — `StepEditDialog.jsx`, `PlanDiffReviewDialog.jsx` (consent gate).
+- `carbon-frontend/src/api/aiWorkspace.js` — `pausePlan`, `resumePlanStream`, `stopPlan`, `forkPlan`, `editPlan`, `editPlanStep`, `listPlanTemplates`, `instantiatePlanTemplate`, `promotePlanTemplate` (add schedule wrappers here).
+- `carbon-frontend/src/__tests__/` — existing AITaskPanel / PlanDagGraph test patterns.
+
+### Files to Change
+- `carbon-frontend/src/components/graph/PlanDagGraph.jsx` — parallel-lane grouping (F-26).
+- `carbon-frontend/src/shell/AITaskPanel.jsx` — paused banner + per-pending-step edit + `scheduled` tab (F-28 / F-29).
+- `carbon-frontend/src/components/` — schedule dialog + schedule list + any small presentational additions (F-29).
+- `carbon-frontend/src/api/aiWorkspace.js` — schedule API wrappers (F-29).
+- `carbon-frontend/src/__tests__/` — new unit tests per feature.
+
+### Implementation (exact seams — edit these and nothing else)
+
+**1. F-26 — parallel lane.** In `PlanDagGraph.jsx`, group steps sharing a non-null `parallel_group` (and `strategy === "parallel"`) into a collapsible **parallel lane** band (MUI `Collapse`/`Stack`, theme `status` colors). Each step inside still renders its own status `Chip` (RULE 5: chip + label, never color alone). A mutation step at `awaiting_approval` shows Approve/Decline **inside the lane** without blocking its siblings; a failed step keeps a persistent `failed` chip + Retry while siblings stay `done`; the plan header shows "1 of 3 steps needs attention" (not a blanket "failed") when only some siblings failed. Lane copy = outcome words ("Gathering the data", "Drafting the report") — never "thread"/"fan-out"/"concurrency" (RULE_23).
+
+**2. F-28 — steer a paused run.** In `AITaskPanel.jsx`: on `paused`, show a persistent banner ("Paused — N steps completed, M to go"). Lock completed/`in_flight` steps (read-only, using `runnable_state`); render an edit affordance (`IconButton` + tooltip) on `pending` steps only. Edit → `StepEditDialog` → `PlanDiffReviewDialog` consent gate (RULE_21) → save re-approves only that step. Disable the edit affordance with tooltip "No upcoming steps to adjust." when there are 0 pending steps. Resume continues from the first pending step (completed steps are never re-run).
+
+**3. F-29 — scheduling.** Add a 6th tab `scheduled` (persist to the same `carbon-ai-task-tab` key, RULE_17). Templates tab gains a per-row **Schedule** action opening a `Dialog` with: cadence preset picker (once/daily/weekly/monthly via `Autocomplete`) + a plain-language `preview` (use the server-side `preview` string from W7-A — single source of truth) + raw cron progressive-disclosed for power users. The Scheduled list shows each schedule with its `preview`, owner, `enabled` status, and edit/pause/delete (delete = confirm dialog naming the consequence). Past-time one-off → inline validation error + disabled Save. Handle all 4 data states (loading/error/empty/loaded).
+
+### DO NOT TOUCH
+- `backend/**` — consume the W7-A contract only.
+- No new routes/sidebar entries (IA lives entirely in `AITaskPanel.jsx` tabs).
+- No raw hex / inline spacing magic numbers (RULE_8) — theme tokens only.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm test -- --run          # all green (new + existing)
+npm run lint               # 0 new errors
+npm run build              # clean
+```
+Plus `get_errors` on the changed files.
+
+### Output contract
+- Parallel lanes render in the plan DAG; paused-run steering (edit pending → diff-review → resume) works; a `scheduled` tab with schedule dialog + list + server `preview`.
+- New unit tests per feature (F-26 lane grouping, F-28 lock/edit/resume, F-29 schedule list/dialog).
+- Results note: test counts, lint/build status, and any contract mismatches with W7-A (report, do not silently fix backend).
+
+---
+
+### Phase W8-A — Pulse composer slash-command menu (`/` popup)
+**Date:** 2026-08-23
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE (verified 2026-08-23: browser-verified all 7 commands, 30 AIInputBar tests pass, ESLint clean)
+**Depends on:** W5-A (ADR-0014 mode header), W2-C (context lifecycle actions), Sprint 17 (`#`-mention picker in `AIInputBar`).
+
+Add a `/` command menu to the Pulse composer, mirroring the existing `#`-mention
+picker. Commands are client-side: **directives** insert a prompt fragment the user
+completes and sends; **actions** trigger an existing workspace action via a new
+`onCommand` callback. Every command maps to functionality that already exists —
+nothing backend is invented.
+
+### Files to Read First
+- `carbon-frontend/src/shell/AIInputBar.jsx` — the shared composer. Has a two-stage `#` picker (`stage: null | 'kind' | 'entity'`, `KIND_TRIGGER_RE`/`ENTITY_TRIGGER_RE`, `closePicker`, `handleChange`, `handleKeyDown` (Escape closes the picker, Enter submits when no stage), `popperOpen`, the absolute-positioned `Paper` listboxes). This is where the `/` trigger slots in.
+- `carbon-frontend/src/shell/AIConversationView.jsx` — the main chat parent (already owns `exportConversation` ~L900; passes `mode`/`onModeChange`/`onMentionsChange` to `AIInputBar` ~L1381).
+- `carbon-frontend/src/shell/DiscoveryComposer.jsx` — the agent-mode parent (reuses `AIInputBar`).
+- `carbon-frontend/src/api/aiWorkspace.js` — `clearContext`, `checkpointConversation`, `forkConversation`, `exportConversation`, `summarizeConversation` (all already exist).
+- `carbon-frontend/src/shell/KeyboardShortcutsHelp.jsx` — help surface for `/help`.
+- `carbon-frontend/src/__tests__/AIInputBar.mentions.test.jsx` — the `#`-picker test pattern to mirror.
+
+### Files to Change
+- `carbon-frontend/src/shell/AIInputBar.jsx` — add the `/` trigger + command registry + listbox.
+- `carbon-frontend/src/shell/AIConversationView.jsx` — wire `onCommand` to the existing context actions.
+- `carbon-frontend/src/__tests__/AIInputBar.slash.test.jsx` (NEW) — command-menu tests.
+
+### Command registry (source of truth in `AIInputBar.jsx`)
+```js
+const SLASH_COMMANDS = [
+  { name: 'summarize',  kind: 'directive', label: 'Summarize this conversation so far', description: 'Ask for a summary of the thread' },
+  { name: 'plan',       kind: 'directive', label: 'Plan a task to ',                  description: 'Draft a plan before anything runs' },
+  { name: 'clear',      kind: 'action',    label: 'Clear working context',            description: 'Drop the in-progress context, keep history' },
+  { name: 'checkpoint', kind: 'action',    label: 'Save a checkpoint',                description: 'Snapshot the current context' },
+  { name: 'fork',       kind: 'action',    label: 'Fork this conversation',           description: 'Branch from a saved checkpoint' },
+  { name: 'export',     kind: 'action',    label: 'Export conversation',              description: 'Download this thread as JSON' },
+  { name: 'help',       kind: 'action',    label: 'Keyboard shortcuts',               description: 'Show Pulse shortcuts' },
+];
+```
+
+### Implementation (exact seams — edit these and nothing else)
+
+**1. `/` trigger + menu (`AIInputBar.jsx`).** Add a `slash` stage alongside the
+existing mention stages. Trigger regex: `/(^|[\s\n])\/([a-zA-Z]*)$/` (a `/` at the
+start of the input or after whitespace, followed by optional letters). On match:
+set `stage='slash'`, record the partial query, clear mention state. Filter
+`SLASH_COMMANDS` by `name.startsWith(query)` (case-insensitive). Render a `Paper`
+`role="listbox"` (`aria-label="Commands"`) above the composer (same absolute
+positioning as the `#` picker), listing each match as a `ListItemButton role="option"`
+with the command label + `description` as secondary text. Keyboard parity with the
+`#` picker: `Escape` closes, `Enter` selects when a command is highlighted — and
+`Enter` still submits normally when no `/` menu is open. Selection:
+- **directive** → replace the trailing `/partial` with the command `label` + a
+  trailing space, keep focus in the textarea (user then types arguments + Enter).
+- **action** → call `onCommand?.(name)`, clear the input, close the menu, refocus.
+New optional prop `onCommand(name)`. When `onCommand` is absent, action commands
+still render but selection is a no-op (graceful degradation) — do NOT crash.
+
+**2. Wire actions (`AIConversationView.jsx`).** Pass `onCommand` to `AIInputBar`
+that dispatches on `name` to the already-available API (all need `token` +
+`conversationId`, both in scope): `clear` → `clearContext`, `checkpoint` →
+`checkpointConversation(token, conversationId, {})`, `fork` →
+`forkConversation(token, conversationId, null)`, `export` →
+`exportConversation(token, conversationId, 'json')`, `help` → toggle a local
+shortcuts dialog (render `KeyboardShortcutsHelp`). Wrap each in try/catch via
+`notifyFromError` (already imported). `DiscoveryComposer` stays as-is (no `onCommand`;
+its slash menu shows directives and no-ops actions).
+
+**3. No backend, no new routes.** Everything is client-side; the `#` picker is
+untouched and still works (the two triggers are mutually exclusive — a `/` match
+must not also match a `#` match, and vice versa).
+
+### DO NOT TOUCH
+- `backend/**` — no changes.
+- `#`-mention picker behavior — preserve it exactly (existing tests must stay green).
+- No raw hex / inline spacing magic numbers (RULE_8) — theme tokens only.
+- RULE_23 — command labels/descriptions are outcome copy, never engine terms.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/AIInputBar.slash.test.jsx src/__tests__/AIInputBar.mentions.test.jsx   # new + # regression
+npm test -- --run          # all green
+npm run lint               # 0 new errors
+npm run build              # clean
+```
+Plus `get_errors` on the changed files.
+
+### Output contract
+- Typing `/` in the Pulse composer opens the command menu; directives insert text,
+  actions trigger the existing context actions; `/` and `#` do not conflict.
+- New unit tests: menu opens on `/`, filters by partial, directive inserts label,
+  action calls `onCommand` and clears input, Escape closes, `/`+`#` are independent.
+- Results note: test counts, lint/build status, any deviations.
 
 ---
 

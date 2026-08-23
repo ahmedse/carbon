@@ -11,11 +11,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
+  Alert,
   Box,
   Button,
   Chip,
   CircularProgress,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   IconButton,
   Paper,
   Stack,
@@ -43,24 +49,31 @@ import { useNotification } from '../components/NotificationProvider';
 import {
   approvePlan,
   confirmPlanStep,
+  createSchedule,
   declinePlan,
   declinePlanStep,
+  deleteSchedule,
   downloadArtifact,
   editPlan,
   editPlanStep,
+  editSchedule,
   forkPlan,
   getPlan,
   getPlanLedger,
   listPlanArtifacts,
   listPlans,
   listPlanTemplates,
+  listSchedules,
   instantiatePlanTemplate,
   pausePlan,
+  pauseSchedule,
   promotePlanTemplate,
   resumePlanStream,
   runPlanStream,
   stopPlan,
 } from '../api/aiWorkspace';
+import ScheduleDialog from '../components/ai/ScheduleDialog';
+import ScheduleList from '../components/ai/ScheduleList';
 import { buildPlanPhases, summarizePlanDiff } from '../utils/planGraph';
 import { agentRoleLabel, toolLabel } from './aiTaskStatus';
 import AITaskPlanCard from './AITaskPlanCard';
@@ -539,6 +552,15 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   const [templateDescription, setTemplateDescription] = useState('');
   const [templateSaving, setTemplateSaving] = useState(false);
 
+  // W6-E F-29 — schedules (6th tab). `scheduleDialog` is null when closed, or
+  // `{ template }` (create from a template row) / `{ schedule }` (edit).
+  const [schedules, setSchedules] = useState([]);
+  const [schedulesLoading, setSchedulesLoading] = useState(false);
+  const [schedulesError, setSchedulesError] = useState(null);
+  const [scheduleDialog, setScheduleDialog] = useState(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
   const runPhaseRef = useRef(phase);
   runPhaseRef.current = phase;
 
@@ -568,7 +590,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   useEffect(() => {
     if (prevExternalTabRef.current === externalTab) return;
     prevExternalTabRef.current = externalTab;
-    if (externalTab === 'tasks' || externalTab === 'monitor' || externalTab === 'results') {
+    if (externalTab === 'tasks' || externalTab === 'monitor' || externalTab === 'results' || externalTab === 'scheduled') {
       setTab(externalTab);
     }
   }, [externalTab]);
@@ -629,6 +651,11 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             output_type: s.output_type ?? null,
             artifacts: s.artifacts ?? [],
             error: s.error ?? null,
+            // W7-A execution contract (F-26 / F-28): parallel lane grouping
+            // + the runnable_state enum the UI locks/edits on.
+            strategy: s.strategy || 'sequential',
+            parallel_group: s.parallel_group ?? null,
+            runnable_state: s.runnable_state ?? (s.status === 'pending' || s.status === 'awaiting_approval' ? 'pending' : 'completed'),
           }))
         : [],
     );
@@ -907,7 +934,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     }
   };
 
-  // User reviewed the diff and keeps the revised plan — it stays
+  // User reviewed the diff and keeps the revised plan. For a paused run the
+  // plan stays paused (only the edited step is re-approved server-side, so the
+  // user still controls when to resume). For a reviewable plan it returns to
   // pending_approval and needs the plan consent gate again before running.
   const confirmDiff = () => {
     if (!diffReview) return;
@@ -915,7 +944,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     setPlans((prev) =>
       prev.map((p) => (p.id === diffReview.plan.id ? { ...p, status: diffReview.plan.status } : p)),
     );
-    notifyRef.current('Changes kept — the plan needs your approval again.', 'info');
+    const isPaused = diffReview.plan.status === 'paused';
+    notifyRef.current(
+      isPaused
+        ? 'Step updated — the run stays paused. Resume when ready.'
+        : 'Changes kept — the plan needs your approval again.',
+      'info',
+    );
     setDiffReview(null);
   };
 
@@ -924,7 +959,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     setMutating(true);
     try {
       const updated = await pausePlan(token, selectedPlan.id);
-      setSelectedPlan(updated);
+      // F-28 — re-sync steps so `runnable_state` drives the paused banner and
+      // per-step lock/edit affordances (completed/in_flight locked, pending editable).
+      applyPlanToView(updated);
       setPhase('paused');
       setPlans((prev) =>
         prev.map((p) => (p.id === updated.id ? { ...p, status: updated.status } : p)),
@@ -995,6 +1032,75 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       notifyRef.current('Created from template — review and approve to run.', 'info');
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not create from the template');
+    }
+  };
+
+  // ── W6-E F-29 — schedules (list/create/edit/delete/pause) ──────────────
+  const loadSchedules = useCallback(async () => {
+    setSchedulesLoading(true);
+    setSchedulesError(null);
+    try {
+      const data = await listSchedules(token);
+      setSchedules(Array.isArray(data?.schedules) ? data.schedules : []);
+    } catch (err) {
+      setSchedulesError(err?.message || 'Could not load schedules');
+      notifyFromErrorRef.current(err, 'Could not load schedules');
+    } finally {
+      setSchedulesLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (tab === 'scheduled') loadSchedules();
+  }, [tab, loadSchedules]);
+
+  const openScheduleCreate = (template) => setScheduleDialog({ template });
+  const openScheduleEdit = (schedule) => setScheduleDialog({ schedule });
+  const closeScheduleDialog = () => {
+    if (!scheduleSaving) setScheduleDialog(null);
+  };
+
+  const handleScheduleSave = async (fields) => {
+    setScheduleSaving(true);
+    try {
+      if (scheduleDialog?.schedule) {
+        await editSchedule(token, scheduleDialog.schedule.id, fields);
+        notifyRef.current('Schedule updated.', 'success');
+      } else {
+        await createSchedule(token, {
+          ...fields,
+          template_id: scheduleDialog?.template?.id,
+        });
+        notifyRef.current('Schedule saved.', 'success');
+      }
+      setScheduleDialog(null);
+      await loadSchedules();
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not save the schedule');
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
+  const handleSchedulePause = async (schedule) => {
+    try {
+      await pauseSchedule(token, schedule.id);
+      await loadSchedules();
+      notifyRef.current(schedule.enabled ? 'Schedule paused.' : 'Schedule resumed.', 'success');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not update the schedule');
+    }
+  };
+
+  const handleScheduleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteSchedule(token, deleteTarget.id);
+      setDeleteTarget(null);
+      await loadSchedules();
+      notifyRef.current('Schedule deleted.', 'success');
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not delete the schedule');
     }
   };
 
@@ -1072,6 +1178,11 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       });
     });
     const phaseNameFor = (stepId) => phaseNameByStep[stepId] || null;
+
+    // F-28 — paused progress counts (runnable_state enum from W7-A).
+    const completedCount = runSteps.filter((s) => s.runnable_state === 'completed').length;
+    const pendingCount = runSteps.filter((s) => s.runnable_state === 'pending').length;
+
     return (
       <Stack spacing={1.25}>
         <AITaskPlanCard
@@ -1090,6 +1201,16 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           onDeclineStep={handleDeclineStep}
           confirmingId={confirmingId}
         />
+
+        {phase === 'paused' && (
+          <Alert
+            severity="info"
+            data-testid="paused-banner"
+            sx={{ fontSize: '0.6875rem', py: 0.25, '& .MuiAlert-message': { py: 0 } }}
+          >
+            Paused — {completedCount} step{completedCount === 1 ? '' : 's'} completed, {pendingCount} to go
+          </Alert>
+        )}
 
         {phase === 'working' && (
           <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
@@ -1268,19 +1389,52 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                     {tpl.description ? ` · ${tpl.description}` : ''}
                   </Typography>
                 </Box>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => handleInstantiateTemplate(tpl.id)}
-                  sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
-                >
-                  Use
-                </Button>
+                <Stack direction="row" spacing={0.5}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => handleInstantiateTemplate(tpl.id)}
+                    sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
+                  >
+                    Use
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => openScheduleCreate(tpl)}
+                    aria-label={`Schedule ${tpl.name}`}
+                    sx={{ fontSize: '0.6875rem', textTransform: 'none', minWidth: 0, px: 0.75 }}
+                  >
+                    Schedule
+                  </Button>
+                </Stack>
               </Stack>
             </Paper>
           ))}
         </Stack>
       )}
+    </Stack>
+  );
+
+  // ── Scheduled tab (F-29): list of owned schedules with manage actions ──
+  const renderScheduled = () => (
+    <Stack spacing={1.25}>
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary' }}>
+          Scheduled runs
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+          {schedules.length}
+        </Typography>
+      </Stack>
+      <ScheduleList
+        schedules={schedules}
+        loading={schedulesLoading}
+        error={schedulesError}
+        onEdit={openScheduleEdit}
+        onPause={handleSchedulePause}
+        onDelete={(s) => setDeleteTarget(s)}
+      />
     </Stack>
   );
 
@@ -1519,6 +1673,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           <Tab value="monitor" label="Monitor" />
           <Tab value="results" label="Results" />
           <Tab value="templates" label="Templates" />
+          <Tab value="scheduled" label="Scheduled" />
         </Tabs>
       </Box>
 
@@ -1532,7 +1687,9 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
               ? renderMonitor()
               : tab === 'results'
                 ? renderResults()
-                : renderTemplates()}
+                : tab === 'templates'
+                  ? renderTemplates()
+                  : renderScheduled()}
       </Box>
 
       {/* W3-F — diff-review consent gate + step edit dialog (survive tab switches) */}
@@ -1551,6 +1708,37 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         onSave={saveStepEdit}
         onClose={() => setEditStepTarget(null)}
       />
+
+      {/* F-29 — schedule create/edit dialog (cadence + plain-language preview) */}
+      <ScheduleDialog
+        open={!!scheduleDialog}
+        schedule={scheduleDialog?.schedule}
+        template={scheduleDialog?.template}
+        busy={scheduleSaving}
+        onSave={handleScheduleSave}
+        onClose={closeScheduleDialog}
+      />
+
+      {/* F-29 — delete confirm names the consequence before removing (RULE_21) */}
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontSize: '0.875rem', fontWeight: 700, py: 1.5 }}>
+          Delete schedule?
+        </DialogTitle>
+        <DialogContent dividers>
+          <DialogContentText sx={{ fontSize: '0.75rem' }}>
+            “{deleteTarget?.name || 'This schedule'}” will stop running on its own. This removes the
+            schedule permanently — it cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 2, py: 1 }}>
+          <Button size="small" onClick={() => setDeleteTarget(null)} sx={{ fontSize: '0.6875rem', textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button size="small" variant="contained" color="error" onClick={handleScheduleDelete} sx={{ fontSize: '0.6875rem', textTransform: 'none' }}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -1560,7 +1748,7 @@ AITaskPanel.propTypes = {
   focusPlanId: PropTypes.string,
   onFocusPlanConsumed: PropTypes.func,
   onLifecycleStateChange: PropTypes.func,
-  externalTab: PropTypes.oneOf(['tasks', 'run', 'monitor', 'results', 'templates']),
+  externalTab: PropTypes.oneOf(['tasks', 'run', 'monitor', 'results', 'templates', 'scheduled']),
 };
 
 export default AITaskPanel;

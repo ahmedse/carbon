@@ -7,15 +7,24 @@ import {
   Chip,
   CircularProgress,
   IconButton,
-  List,
-  ListItemButton,
-  Paper,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
+import { PickerMenu, PickerOption } from '../components/ai/PickerMenu';
 import SendIcon from '@mui/icons-material/Send';
 import StopCircleIcon from '@mui/icons-material/StopCircle';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import ClearAllIcon from '@mui/icons-material/ClearAll';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import CallSplitIcon from '@mui/icons-material/CallSplit';
+import DownloadIcon from '@mui/icons-material/Download';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import RuleIcon from '@mui/icons-material/Rule';
+import TextFieldsIcon from '@mui/icons-material/TextFields';
+import ExtensionIcon from '@mui/icons-material/Extension';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../api/api';
 import { API_ROUTES } from '../config';
@@ -36,6 +45,43 @@ const MENTION_KINDS = ['table', 'rule', 'field', 'module'];
 // Stage 2: /(^|\s)#(table|rule|field|module) ([^#]*)$/ — entity search within a kind
 const KIND_TRIGGER_RE = /(^|[\s\n])#([a-zA-Z]*)$/;
 const ENTITY_TRIGGER_RE = /(^|[\s\n])#(table|rule|field|module) ([^#\n]*)$/;
+
+// Slash-command menu: a '/' at the start of the input or after whitespace,
+// followed by optional letters. Directives insert prompt text the user completes;
+// actions trigger an existing workspace action via the optional onCommand callback.
+const SLASH_TRIGGER_RE = /(^|[\s\n])\/([a-zA-Z]*)$/;
+
+// Source of truth for the '/' command menu (W8-A). `kind` separates directives
+// (insert text) from actions (call onCommand). Labels/descriptions are outcome
+// copy, never engine terms (RULE_23).
+const SLASH_COMMANDS = [
+  { name: 'summarize',  kind: 'directive', label: 'Summarize this conversation so far', description: 'Ask for a summary of the thread' },
+  { name: 'plan',       kind: 'directive', label: 'Plan a task to',                   description: 'Draft a plan before anything runs' },
+  { name: 'clear',      kind: 'action',    label: 'Clear working context',            description: 'Drop the in-progress context, keep history' },
+  { name: 'checkpoint', kind: 'action',    label: 'Save a checkpoint',                description: 'Snapshot the current context' },
+  { name: 'fork',       kind: 'action',    label: 'Fork this conversation',           description: 'Branch from a saved checkpoint' },
+  { name: 'export',     kind: 'action',    label: 'Export conversation',              description: 'Download this thread as Markdown' },
+  { name: 'help',       kind: 'action',    label: 'Keyboard shortcuts',               description: 'Show Pulse shortcuts' },
+];
+
+// Icon-led rows to match ShellSidebar (icon + 0.65rem label, left-bar active
+// indicator). Slash commands and mention kinds share the same visual language.
+const COMMAND_ICONS = {
+  summarize: <AutoAwesomeIcon />,
+  plan: <AssignmentIcon />,
+  clear: <ClearAllIcon />,
+  checkpoint: <BookmarkIcon />,
+  fork: <CallSplitIcon />,
+  export: <DownloadIcon />,
+  help: <HelpOutlineIcon />,
+};
+
+const KIND_ICONS = {
+  table: <TableChartIcon />,
+  rule: <RuleIcon />,
+  field: <TextFieldsIcon />,
+  module: <ExtensionIcon />,
+};
 
 // Map kind → API route + label/value keys
 const KIND_CONFIG = {
@@ -61,12 +107,32 @@ function replaceEntityTrigger(text, kind, displayName) {
   return text.replace(ENTITY_TRIGGER_RE, `$1@${displayName} `);
 }
 
+// ---------------------------------------------------------------------------
+// Picker rows match ShellSidebar (W8-A polish): icon + 0.65rem label, left-bar
+// active indicator, dense keyboard-navigable rows. The PickerMenu/PickerOption
+// listbox lives in components/ai/PickerMenu.jsx.
+// ---------------------------------------------------------------------------
+const MENTION_KIND_LABELS = {
+  table: 'Data table',
+  rule: 'DQ rule',
+  field: 'Field',
+  module: 'Module',
+};
+
+const MENTION_KIND_DESCRIPTIONS = {
+  table: 'Reference a data table',
+  rule: 'Reference a DQ rule',
+  field: 'Reference a field',
+  module: 'Reference a module',
+};
+
 function AIInputBar({
   onSend,
   working,
   onStop,
   conversationStatus,
   onMentionsChange,
+  onCommand,
 }) {
   const { token } = useAuth();
   const { executeMode } = useExecuteMode();
@@ -78,11 +144,14 @@ function AIInputBar({
   // is no feedback loop between growth and measurement.
   const [maxRows, setMaxRows] = useState(10);
   const [value, setValue] = useState('');
-  // Stage: null | 'kind' | 'entity'
+  // Stage: null | 'kind' | 'entity' | 'slash'
   const [stage, setStage] = useState(null);
   const [kindQuery, setKindQuery] = useState('');
   const [activeKind, setActiveKind] = useState(null);
   const [entityQuery, setEntityQuery] = useState('');
+  const [slashQuery, setSlashQuery] = useState('');
+  // Keyboard highlight within the open picker (ArrowUp/Down + Enter).
+  const [activeIndex, setActiveIndex] = useState(0);
   const [entities, setEntities] = useState([]);
   const [entityLoading, setEntityLoading] = useState(false);
   // Resolved mention objects: { kind, id, name }
@@ -91,6 +160,12 @@ function AIInputBar({
   const visibleKinds = useMemo(
     () => MENTION_KINDS.filter((k) => k.startsWith(kindQuery)),
     [kindQuery],
+  );
+
+  // Slash-command matches (case-insensitive prefix on the registered name).
+  const visibleCommands = useMemo(
+    () => SLASH_COMMANDS.filter((c) => c.name.startsWith(slashQuery.toLowerCase())),
+    [slashQuery],
   );
 
   // Notify parent of mention changes.
@@ -138,17 +213,36 @@ function AIInputBar({
     return () => { cancelled = true; };
   }, [stage, activeKind, entityQuery, token]);
 
+  // Reset the keyboard highlight whenever the menu contents change.
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [stage, slashQuery, kindQuery, entityQuery]);
+
   const closePicker = useCallback(() => {
     setStage(null);
     setKindQuery('');
     setActiveKind(null);
     setEntityQuery('');
     setEntities([]);
+    setSlashQuery('');
   }, []);
 
   const handleChange = useCallback((event) => {
     const next = event.target.value;
     setValue(next);
+
+    // Slash-command menu: a '/' at the start or after whitespace + optional letters.
+    // Mutually exclusive with '#' — a '/' token can never also be a '#' token.
+    const slashMatch = SLASH_TRIGGER_RE.exec(next);
+    if (slashMatch) {
+      setStage('slash');
+      setSlashQuery(slashMatch[2]);
+      setKindQuery('');
+      setActiveKind(null);
+      setEntityQuery('');
+      setEntities([]);
+      return;
+    }
 
     // Check entity stage first (more specific match).
     const entityMatch = ENTITY_TRIGGER_RE.exec(next);
@@ -196,6 +290,22 @@ function AIInputBar({
     inputRef.current?.focus();
   }, [closePicker]);
 
+  const handleSelectCommand = useCallback((command) => {
+    if (command.kind === 'directive') {
+      // Replace the trailing /partial with the command label + a trailing space,
+      // so the user keeps typing the rest of the prompt and presses Enter.
+      setValue((prev) => prev.replace(SLASH_TRIGGER_RE, `$1${command.label} `));
+      closePicker();
+      inputRef.current?.focus();
+      return;
+    }
+    // Action → dispatch to the parent (no-op when onCommand is absent).
+    onCommand?.(command.name);
+    setValue('');
+    closePicker();
+    inputRef.current?.focus();
+  }, [closePicker, onCommand]);
+
   const handleSubmit = useCallback(() => {
     const val = value.trim();
     if (!val) return;
@@ -212,17 +322,58 @@ function AIInputBar({
 
   const handleKeyDown = useCallback(
     (event) => {
-      if (event.key === 'Escape' && stage) {
+      // No picker open → Enter submits (Shift+Enter inserts a newline).
+      if (!stage) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          handleSubmit();
+        }
+        return;
+      }
+
+      const items = stage === 'slash' ? visibleCommands
+        : stage === 'kind' ? visibleKinds
+        : stage === 'entity' ? entities
+        : [];
+
+      if (event.key === 'Escape') {
         event.preventDefault();
         closePicker();
         return;
       }
-      if (event.key === 'Enter' && !event.shiftKey && !stage) {
+      if (event.key === 'ArrowDown' && items.length > 0) {
         event.preventDefault();
-        handleSubmit();
+        setActiveIndex((i) => (i + 1) % items.length);
+        return;
       }
+      if (event.key === 'ArrowUp' && items.length > 0) {
+        event.preventDefault();
+        setActiveIndex((i) => (i - 1 + items.length) % items.length);
+        return;
+      }
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        const item = items[activeIndex];
+        if (!item) return;
+        if (stage === 'slash') handleSelectCommand(item);
+        else if (stage === 'kind') handleSelectKind(item);
+        else if (stage === 'entity') handleSelectEntity(activeKind, item);
+      }
+      // Shift+Enter falls through → newline in the multiline textarea.
     },
-    [handleSubmit, stage, closePicker],
+    [
+      stage,
+      visibleCommands,
+      visibleKinds,
+      entities,
+      activeKind,
+      activeIndex,
+      handleSubmit,
+      closePicker,
+      handleSelectCommand,
+      handleSelectKind,
+      handleSelectEntity,
+    ],
   );
 
   const placeholder = working
@@ -325,92 +476,68 @@ function AIInputBar({
           inputProps={{ 'aria-label': 'Message input' }}
         />
 
+        {/* Slash command menu (ShellSidebar-style, compact + keyboard navigable) */}
+        {stage === 'slash' && visibleCommands.length > 0 && (
+          <PickerMenu label="Commands" minWidth={300} maxHeight={220}>
+            {visibleCommands.map((cmd, i) => (
+              <PickerOption
+                key={cmd.name}
+                active={i === activeIndex}
+                ariaLabel={cmd.label}
+                icon={COMMAND_ICONS[cmd.name]}
+                title={cmd.label}
+                description={cmd.description}
+                onClick={() => handleSelectCommand(cmd)}
+                onHover={() => setActiveIndex(i)}
+              />
+            ))}
+          </PickerMenu>
+        )}
+
         {/* Stage 1: kind picker */}
         {stage === 'kind' && visibleKinds.length > 0 && (
-          <Paper
-            elevation={2}
-            role="listbox"
-            aria-label="Mention kinds"
-            sx={{
-              position: 'absolute',
-              bottom: '100%',
-              left: 0,
-              mb: 0.5,
-              zIndex: 10,
-              minWidth: 180,
-              maxHeight: 200,
-              overflowY: 'auto',
-            }}
-          >
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ display: 'block', px: 1.5, py: 0.5 }}
-            >
-              Mention an entity kind
-            </Typography>
-            <List dense disablePadding>
-              {visibleKinds.map((kind) => (
-                <ListItemButton
-                  key={kind}
-                  role="option"
-                  onClick={() => handleSelectKind(kind)}
-                  sx={{ fontSize: '0.8125rem' }}
-                >
-                  #{kind}
-                </ListItemButton>
-              ))}
-            </List>
-          </Paper>
+          <PickerMenu label="Mention kinds" minWidth={220} maxHeight={180}>
+            {visibleKinds.map((kind, i) => (
+              <PickerOption
+                key={kind}
+                active={i === activeIndex}
+                ariaLabel={`#${kind}`}
+                icon={KIND_ICONS[kind]}
+                title={MENTION_KIND_LABELS[kind]}
+                description={MENTION_KIND_DESCRIPTIONS[kind]}
+                onClick={() => handleSelectKind(kind)}
+                onHover={() => setActiveIndex(i)}
+              />
+            ))}
+          </PickerMenu>
         )}
 
         {/* Stage 2: entity search */}
         {stage === 'entity' && popperOpen && (
-          <Paper
-            elevation={2}
-            role="listbox"
-            aria-label={`${activeKind} search results`}
-            sx={{
-              position: 'absolute',
-              bottom: '100%',
-              left: 0,
-              mb: 0.5,
-              zIndex: 10,
-              minWidth: 220,
-              maxHeight: 220,
-              overflowY: 'auto',
-            }}
-          >
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ display: 'block', px: 1.5, py: 0.5 }}
-            >
-              Select a {activeKind}
-            </Typography>
+          <PickerMenu label={`${activeKind} search results`} minWidth={240} maxHeight={200}>
             {entityLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-                <CircularProgress size={16} />
+                <CircularProgress size={14} />
               </Box>
             ) : entities.length === 0 ? (
-              <Typography variant="caption" color="text.disabled" sx={{ display: 'block', px: 1.5, pb: 1 }}>
+              <Typography variant="caption" color="text.disabled" sx={{ display: 'block', px: 1.25, py: 1 }}>
                 No matches
               </Typography>
             ) : (
-              <List dense disablePadding>
-                {entities.map((item) => (
-                  <ListItemButton
-                    key={item.id}
-                    role="option"
-                    onClick={() => handleSelectEntity(activeKind, item)}
-                    sx={{ fontSize: '0.8125rem' }}
-                  >
-                    {entityLabel(activeKind, item)}
-                  </ListItemButton>
-                ))}
-              </List>
+              entities.map((item, i) => (
+                <PickerOption
+                  key={item.id}
+                  active={i === activeIndex}
+                  ariaLabel={entityLabel(activeKind, item)}
+                  icon={KIND_ICONS[activeKind]}
+                  title={entityLabel(activeKind, item)}
+                  description={`#${activeKind}`}
+                  onClick={() => handleSelectEntity(activeKind, item)}
+                  onHover={() => setActiveIndex(i)}
+                />
+              ))
             )}
-          </Paper>
+          </PickerMenu>
         )}
       </Box>
 
@@ -444,6 +571,7 @@ AIInputBar.propTypes = {
   onStop: PropTypes.func,
   conversationStatus: PropTypes.string,
   onMentionsChange: PropTypes.func,
+  onCommand: PropTypes.func,
 };
 
 export default AIInputBar;

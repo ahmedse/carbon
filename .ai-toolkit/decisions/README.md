@@ -29,11 +29,12 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | # | Title | Status |
 |---|-------|--------|
 | [0001](0001-pattern-architecture.md) | Pattern architecture (Strategy/Command) | Accepted |
-| [0010](0010-data-product-domain-neutral.md) | Data Product must not carry GHG `scope` (domain vocabulary stays out of the generic core) | Proposed |
+| [0010](0010-data-product-domain-neutral.md) | Data Product must not carry GHG `scope` (domain vocabulary stays out of the generic core) | Accepted |
 | [0011](0011-agent-catalog-graph-reuse.md) | Unified Agent Catalog + graph visualization reuse (extract `ForceGraph.jsx`; no new deps) | Accepted |
 | [0012](0012-enterprise-graph-canvas.md) | Enterprise Graph Canvas primitive — one shared surface (pan/zoom/move/resize/export/maximize/live status); thin domain adapters; no new deps | Accepted |
 | [0013](0013-ai-agent-platform-gap-closure.md) | Next-Gen AI Agent Platform gap closure — output-quality drift, bounded retry/backoff, plan templates, run comparison, non-data domain adapters | Accepted |
 | [0014](0014-pulse-chat-agent-mode-split.md) | Pulse Chat / Agent mode split — mode is workspace-level, safety contract always visible | Accepted |
 | [0015](0015-multi-instance-single-tenant-deployment.md) | Multi-instance single-tenant deployment — one codebase, N isolated deployments; no fork, no tenant_id | Accepted |
+| [0016](0016-domain-app-ai-contract.md) | Domain App AI Contract — manifest-driven extension model (`DomainAIOperations` ABC) | Accepted |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

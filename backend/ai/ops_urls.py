@@ -10,6 +10,7 @@ from ai.observability_api import (
     PulseArchetypesView,
     PulseDataView,
     PulseInventoryView,
+    RunRollupView,
 )
 from ai.ops_api import (
     AccessAssistAnomaliesView,
@@ -44,6 +45,7 @@ urlpatterns = [
     path("data/<str:key>/", PulseDataView.as_view(), name="ai-pulse-data"),
     path("archetypes/", PulseArchetypesView.as_view(), name="ai-pulse-archetypes"),
     path("quality-trend/", OutputQualityTrendView.as_view(), name="ai-pulse-quality-trend"),
+    path("rollups/", RunRollupView.as_view(), name="ai-pulse-rollups"),
     path("graph/", GraphDataView.as_view(), name="ai-pulse-graph"),
     path("usage/", PulseUsageView.as_view(), name="ai-pulse-usage"),
     path("settings/", PulseSettingsView.as_view(), name="ai-pulse-settings"),

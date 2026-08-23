@@ -36,6 +36,7 @@ import json
 import logging
 import queue
 import threading
+from datetime import datetime
 
 from django.conf import settings
 from django.core.files.base import ContentFile
@@ -60,12 +61,78 @@ STATUS_CANCELLED = "cancelled"
 # completed|failed|skipped).
 STEP_PENDING = "pending"
 STEP_AWAITING_APPROVAL = "awaiting_approval"
+STEP_RUNNING = "running"
 STEP_COMPLETED = "completed"
 STEP_FAILED = "failed"
 STEP_SKIPPED = "skipped"
 
+# Serialized step runnable-state enum (F-28) — the product-level lock/edit
+# contract the frontend consumes. Derived from ``RunStep.status`` so the UI
+# never has to guess from engine status strings.
+RUNNABLE_COMPLETED = "completed"
+RUNNABLE_IN_FLIGHT = "in_flight"
+RUNNABLE_PENDING = "pending"
+
+_RUNNABLE_STATE_BY_STATUS = {
+    STEP_COMPLETED: RUNNABLE_COMPLETED,
+    STEP_SKIPPED: RUNNABLE_COMPLETED,
+    STEP_RUNNING: RUNNABLE_IN_FLIGHT,
+    STEP_PENDING: RUNNABLE_PENDING,
+    STEP_AWAITING_APPROVAL: RUNNABLE_PENDING,
+}
+
+# Cron day-of-week names, indexed 0-6 (Sunday-first; cron 7 == Sunday).
+_CRON_WEEKDAY_NAMES = (
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+)
+
 # Statuses from which a plan may (re)enter execution.
 _RUNNABLE_STATUSES = {STATUS_APPROVED, STATUS_PAUSED}
+
+
+def _runnable_state(status: str) -> str:
+    """Map a ``RunStep.status`` to the serialized ``runnable_state`` enum.
+
+    Terminal non-success statuses (``failed``) and any unknown status fall
+    back to ``completed`` (locked) — they are never editable in place and
+    still carry their raw ``status`` for the UI chip / retry affordance.
+    """
+    return _RUNNABLE_STATE_BY_STATUS.get(status, RUNNABLE_COMPLETED)
+
+
+def _step_execution_fields(step_phase, step_index, status):
+    """Serialized execution-contract fields for one step (F-26 / F-28).
+
+    ``strategy`` is the enclosing phase's strategy (propagated from the phase,
+    default ``sequential``). ``parallel_group`` is a stable key shared by
+    sibling steps in the same parallel phase; it is OMITTED for sequential
+    steps (never emitted as ``null``) so the frontend keys on its presence.
+    ``runnable_state`` is the product enum the UI locks/edits on, derived from
+    the RunStep status.
+    """
+    strategy, phase_id = step_phase.get(step_index, ("sequential", None))
+    fields = {
+        "strategy": strategy,
+        "runnable_state": _runnable_state(status),
+    }
+    if strategy == "parallel":
+        fields["parallel_group"] = phase_id
+    return fields
+
+
+def _display_timezone():
+    """Resolve the admin-configurable display timezone for human-facing times.
+
+    Reads ``accounts.GeneralConfig.timezone`` (default ``Africa/Cairo``) at
+    call time so schedule previews and other render paths honor the value an
+    admin sets in Django admin — without a redeploy. Falls back to Django's
+    default timezone when the config or zone is unavailable.
+    """
+    try:
+        from accounts.models import GeneralConfig
+        return GeneralConfig.get_timezone()
+    except Exception:  # noqa: BLE001 - pre-migration / import failure
+        return timezone.get_default_timezone()
 
 # Bounded, deterministic retry policy for transient tool failures (Gap #2).
 # A failed step is re-queued (pending) and the loop re-entered with a fixed
@@ -348,6 +415,19 @@ class PlansService:
             for s in plan_json.get("steps", [])
             if isinstance(s, dict)
         }
+        # F-26: map each step id to its enclosing phase so serialized steps
+        # carry the phase strategy + a stable parallel group key.
+        step_phase: dict = {}
+        for i, phase in enumerate(plan_json.get("phases") or []):
+            if not isinstance(phase, dict):
+                continue
+            strategy = phase.get("strategy", "sequential")
+            phase_id = phase.get("phase_id", i)
+            for sid in phase.get("step_ids") or []:
+                try:
+                    step_phase[int(sid)] = (strategy, phase_id)
+                except (TypeError, ValueError):
+                    continue
         if steps is None:
             steps = list(
                 RunStep.objects.filter(run_id=run.id).order_by("step_index")
@@ -389,6 +469,7 @@ class PlansService:
                     "tool_name": s.tool_name,
                     "tool_args": s.tool_args_json or {},
                     "depends_on": s.depends_on_json or [],
+                    **_step_execution_fields(step_phase, s.step_index, s.status),
                     "instructions": (
                         (step_meta.get(s.step_index) or {}).get("instructions")
                     ),
@@ -1447,12 +1528,99 @@ class PlansService:
         return self._serialize_schedule(schedule)
 
     @staticmethod
+    def _format_clock(hour: int, minute: int) -> str:
+        """Format an hour/minute as ``9:00 AM`` / ``2:00 PM`` (12-hour)."""
+        ampm = "AM" if hour < 12 else "PM"
+        h12 = hour % 12
+        if h12 == 0:
+            h12 = 12
+        return f"{h12}:{minute:02d} {ampm}"
+
+    @staticmethod
+    def _ordinal(n: int) -> str:
+        """English ordinal for a day-of-month (``1`` → ``1st``)."""
+        n = int(n)
+        if 11 <= (n % 100) <= 13:
+            return f"{n}th"
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+        return f"{n}{suffix}"
+
+    @staticmethod
+    def _schedule_preview(schedule) -> str:
+        """Plain-language outcome copy for a schedule (RULE_23).
+
+        One-off → ``"Once on 2026-08-25 at 2:00 PM"``; recurring → ``"Every day
+        at 9:00 AM"`` / ``"Every Monday at 9:00 AM"`` / ``"Every 1st of the
+        month at 9:00 AM"``. Raw ``cron_expr`` stays in the payload for power
+        users — never surfaced here, and never engine/thread/fan-out terms.
+        Times are rendered in the project's configured display timezone
+        (admin-configurable via ``accounts.GeneralConfig.timezone``), default
+        ``Africa/Cairo``.
+        """
+        if schedule.run_at:
+            local = timezone.localtime(
+                schedule.run_at, timezone=_display_timezone()
+            )
+            return (
+                f"Once on {local.strftime('%Y-%m-%d')} at "
+                f"{PlansService._format_clock(local.hour, local.minute)}"
+            )
+        expr = (schedule.cron_expr or "").strip()
+        if not expr:
+            return "Once"
+        fields = expr.split()
+        if len(fields) != 5:
+            return "On a recurring schedule"
+        minute, hour, dom, month, dow = fields
+        try:
+            h = int(hour)
+            m = int(minute)
+        except ValueError:
+            # Sub-daily / non-clock cadence — keep outcome copy generic.
+            return "On a recurring schedule"
+        time_str = PlansService._format_clock(h, m)
+        if dom == "*" and month == "*":
+            if dow == "*":
+                return f"Every day at {time_str}"
+            if dow.isdigit() and 0 <= int(dow) <= 7:
+                name = _CRON_WEEKDAY_NAMES[0 if int(dow) == 7 else int(dow)]
+                return f"Every {name} at {time_str}"
+        if dow == "*" and month == "*" and dom.isdigit():
+            return (
+                f"Every {PlansService._ordinal(int(dom))} of the month "
+                f"at {time_str}"
+            )
+        return f"On a recurring schedule at {time_str}"
+
+    @staticmethod
+    def _schedule_owner(schedule) -> str:
+        """Resolve a schedule's owner to a display name (best-effort).
+
+        Returns ``display_name`` → ``full name`` → ``username``, or ``""`` when
+        the owner is unresolvable (deleted user). Never leaks a raw PK.
+        """
+        if not schedule.host_user_id:
+            return ""
+        try:
+            from django.contrib.auth import get_user_model
+
+            owner = get_user_model().objects.get(pk=schedule.host_user_id)
+            return (
+                getattr(owner, "display_name", "")
+                or owner.get_full_name()
+                or owner.username
+            )
+        except Exception:  # noqa: BLE001 - best-effort owner resolution
+            return ""
+
+    @staticmethod
     def _serialize_schedule(schedule) -> dict:
         """Product-facing schedule payload (RULE_23 — outcome terms only)."""
         return {
             "id": schedule.id,
             "name": schedule.name,
             "description": schedule.description,
+            "owner": PlansService._schedule_owner(schedule),
             "cron_expr": schedule.cron_expr,
             "run_at": schedule.run_at.isoformat() if schedule.run_at else None,
             "enabled": schedule.enabled,
@@ -1465,6 +1633,7 @@ class PlansService:
                 if schedule.next_run_at else None
             ),
             "template_id": schedule.template_id,
+            "preview": PlansService._schedule_preview(schedule),
             "created_at": (
                 schedule.created_at.isoformat()
                 if schedule.created_at else None
@@ -1496,6 +1665,91 @@ class PlansService:
             raise PlanNotAccessibleError(f"Schedule {schedule_id} not found.")
         logger.info("RunSchedule deleted id=%s user=%s", schedule_id, str(user.pk))
         return {"deleted": True, "schedule_id": schedule_id}
+
+    def edit_schedule(
+        self,
+        user,
+        schedule_id: str,
+        *,
+        name=None,
+        description=None,
+        cron_expr=None,
+        run_at=None,
+    ) -> dict:
+        """Edit a schedule's name/description/trigger, recomputing ``next_run_at``.
+
+        PATCH semantics: only supplied fields change. Supplying ``run_at``
+        switches to a one-off trigger; supplying ``cron_expr`` switches to a
+        recurring trigger. ``next_run_at`` is recomputed eagerly so
+        ``run_due_schedules`` stays a pure timestamp comparison.
+        """
+        from ai.models.core import RunSchedule
+
+        try:
+            schedule = RunSchedule.objects.get(
+                id=schedule_id, host_user_id=str(user.pk)
+            )
+        except RunSchedule.DoesNotExist:
+            raise PlanNotAccessibleError(f"Schedule {schedule_id} not found.")
+
+        update_fields = ["updated_at"]
+        if name is not None:
+            name = str(name).strip()
+            if not name:
+                raise ValueError("name is required.")
+            schedule.name = name
+            update_fields.append("name")
+        if description is not None:
+            schedule.description = str(description).strip()
+            update_fields.append("description")
+
+        # Trigger swap — a caller supplies at most one of cron_expr / run_at.
+        if run_at is not None:
+            schedule.run_at = run_at
+            schedule.cron_expr = None
+            update_fields += ["run_at", "cron_expr"]
+        elif cron_expr is not None:
+            schedule.cron_expr = cron_expr
+            schedule.run_at = None
+            update_fields += ["cron_expr", "run_at"]
+
+        # Recompute next_run_at from the (possibly updated) trigger.
+        now = timezone.now()
+        if schedule.run_at is not None:
+            schedule.next_run_at = schedule.run_at
+        elif schedule.cron_expr:
+            schedule.next_run_at = self._cron_trigger(
+                schedule.cron_expr
+            ).get_next_fire_time(None, now)
+        else:
+            schedule.next_run_at = None
+        update_fields.append("next_run_at")
+
+        schedule.save(update_fields=update_fields)
+        logger.info(
+            "RunSchedule edited id=%s user=%s next=%s",
+            schedule_id, str(user.pk), schedule.next_run_at,
+        )
+        return self._serialize_schedule(schedule)
+
+    def pause_schedule(self, user, schedule_id: str) -> dict:
+        """Toggle a schedule's ``enabled`` flag (pause without deletion)."""
+        from ai.models.core import RunSchedule
+
+        try:
+            schedule = RunSchedule.objects.get(
+                id=schedule_id, host_user_id=str(user.pk)
+            )
+        except RunSchedule.DoesNotExist:
+            raise PlanNotAccessibleError(f"Schedule {schedule_id} not found.")
+
+        schedule.enabled = not schedule.enabled
+        schedule.save(update_fields=["enabled", "updated_at"])
+        logger.info(
+            "RunSchedule pause toggled id=%s user=%s enabled=%s",
+            schedule_id, str(user.pk), schedule.enabled,
+        )
+        return self._serialize_schedule(schedule)
 
     def materialize_due_schedules(self, *, dry_run: bool = False) -> dict:
         """Materialize every due schedule into a fresh ``pending_approval`` Run.

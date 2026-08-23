@@ -34,8 +34,15 @@ logger = logging.getLogger("carbon.ai.host_executor")
 
 
 def _canonical_endpoint(endpoint: str) -> str:
-    """Normalize an endpoint path for the in-process route table."""
+    """Normalize an endpoint path for the in-process route table.
+
+    Strips the leading scheme-ish slash(es), any trailing slash, and any
+    query string so ``/carbon-api/dataschema/tables/?module_id=31`` maps to
+    ``carbon-api/dataschema/tables``.
+    """
     path = (endpoint or "").strip()
+    if "?" in path:
+        path = path.split("?", 1)[0]
     while path.startswith("/"):
         path = path[1:]
     return path.rstrip("/")
@@ -45,6 +52,8 @@ def _canonical_endpoint(endpoint: str) -> str:
 #: private ``_<name>_in_process`` coroutines on :class:`CarbonHostExecutor`.
 _IN_PROCESS_ENDPOINTS: dict[str, str] = {
     "carbon-api/dq/rules": "dq_rules",
+    "carbon-api/dataschema/tables": "tables",
+    "carbon-api/dq/rule-assignments": "rule_assignments",
 }
 
 
@@ -76,26 +85,49 @@ class CarbonHostExecutor(HostAPIExecutor):
         params: dict | None = None,
         body: dict | None = None,
     ) -> dict:
-        """Execute a host API call in-process (no HTTP, no JWT)."""
+        """Execute a host API call in-process (no HTTP, no JWT).
+
+        Both GET (read-only, no confirmation) and POST (mutation, staged via
+        ``create_pending_execution``) dispatch through this method so the LLM's
+        ``call_host_api`` tool sees a uniform transport.
+        """
         key = _canonical_endpoint(endpoint)
-        handler_name = _IN_PROCESS_ENDPOINTS.get(key) if method.upper() == "POST" else None
+        handler_name = _IN_PROCESS_ENDPOINTS.get(key)
         if handler_name:
             handler = getattr(self, f"_{handler_name}_in_process", None)
             if handler is not None:
-                return await handler(body or {})
+                # Merge query-string params (e.g. the `?module_id={id}` baked
+                # into a catalog path) into the explicit params dict so
+                # in-process handlers see a uniform view.
+                merged = dict(params or {})
+                if "?" in (endpoint or ""):
+                    from urllib.parse import parse_qs, urlsplit
+
+                    for qk, qv in parse_qs(urlsplit(endpoint).query).items():
+                        merged.setdefault(qk, qv[0] if len(qv) == 1 else qv)
+                return await handler(
+                    method=method.upper(), params=merged, body=body or {}
+                )
         raise ToolExecutionError(
             f"Host API endpoint {method} {endpoint} is not available for "
             "in-process execution from the AI workspace."
         )
 
-    async def _dq_rules_in_process(self, body: dict) -> dict:
-        """POST /carbon-api/dq/rules/ executed directly against DQRuleSerializer.
+    async def _dq_rules_in_process(
+        self, method: str = "POST", params: dict | None = None, body: dict | None = None
+    ) -> dict:
+        """GET/POST /carbon-api/dq/rules/ executed directly in-process.
 
-        Returns the same ``{"status_code": 201, "data": {...}}`` shape the HTTP
-        transport would, so ``confirm_execution`` stays uniform.
+        - ``POST`` creates a rule via ``DQRuleSerializer`` and returns the same
+          ``{"status_code": 201, "data": {...}}`` shape the HTTP transport would.
+        - ``GET`` lists rules (used by ``list_dq_rules`` so the LLM can reuse an
+          existing rule instead of duplicating it).
         """
         from asgiref.sync import sync_to_async
         from django.contrib.auth import get_user_model
+
+        if method == "GET":
+            return await self._list_dq_rules_in_process(params or {})
 
         user = await self._resolve_user()
         if user is None:
@@ -130,6 +162,224 @@ class CarbonHostExecutor(HostAPIExecutor):
         except Exception as exc:  # noqa: BLE001 - fail-visible
             logger.exception("In-process DQ rule creation failed")
             raise ToolExecutionError(f"Rule creation failed: {exc}") from exc
+        return {"status_code": 201, "data": data}
+
+    async def _list_dq_rules_in_process(self, params: dict) -> dict:
+        """GET /carbon-api/dq/rules/ — list non-archived rules visible to the user."""
+        from asgiref.sync import sync_to_async
+
+        user = await self._resolve_user()
+        if user is None:
+            raise ToolExecutionError(
+                "No authenticated user for rule listing — please refresh the page."
+            )
+
+        def _list() -> list[dict]:
+            from dq.models import DQRule
+            from dq.views import _get_user_org_units
+
+            qs = DQRule.objects.filter(archived=False)
+            if not (user.is_superuser or user.is_staff):
+                org_units = list(_get_user_org_units(user))
+                if not org_units:
+                    return []
+                qs = qs.filter(
+                    field_assignments__data_table__module__org_unit_id__in=org_units
+                ).distinct()
+            search = params.get("search")
+            if search:
+                qs = qs.filter(name__icontains=search)
+            return [
+                {
+                    "id": r.pk,
+                    "name": r.name,
+                    "rule_type": r.rule_type,
+                    "rule_level": r.rule_level,
+                    "severity": r.severity,
+                    "dimension": r.dimension,
+                    "is_active": r.is_active,
+                }
+                for r in qs[:200]
+            ]
+
+        try:
+            data = await sync_to_async(_list, thread_sensitive=True)()
+        except ToolExecutionError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("In-process DQ rule listing failed")
+            raise ToolExecutionError(f"Rule listing failed: {exc}") from exc
+        return {"status_code": 200, "data": {"results": data}}
+
+    async def _tables_in_process(
+        self, method: str = "GET", params: dict | None = None, body: dict | None = None
+    ) -> dict:
+        """GET/POST /carbon-api/dataschema/tables/ executed directly in-process.
+
+        - ``GET`` lists tables (optionally filtered by ``module_id``) — backs
+          ``get_data_product_details`` / ``list_data_tables``.
+        - ``POST`` creates a table with optional nested ``fields`` (schema
+          change) and mirrors ``DataTableViewSet.perform_create`` logging.
+        """
+        if method == "GET":
+            return await self._list_tables_in_process(params or {})
+        return await self._create_table_in_process(body or {})
+
+    async def _list_tables_in_process(self, params: dict) -> dict:
+        """GET /carbon-api/dataschema/tables/ — tables visible to the user."""
+        from asgiref.sync import sync_to_async
+
+        user = await self._resolve_user()
+        if user is None:
+            raise ToolExecutionError(
+                "No authenticated user for table listing — please refresh the page."
+            )
+
+        def _list() -> list[dict]:
+            from dataschema.models import DataTable
+            from accounts.rbac_utils import get_visible_module_ids
+
+            qs = DataTable.objects.select_related("module").filter(is_archived=False)
+            visible = get_visible_module_ids(user)
+            if visible is not None:
+                qs = qs.filter(module_id__in=visible)
+            module_id = params.get("module_id")
+            if module_id:
+                qs = qs.filter(module_id=module_id)
+            return [
+                {
+                    "id": t.pk,
+                    "title": t.title,
+                    "name": t.name,
+                    "module": t.module_id,
+                    "module_name": getattr(t.module, "name", None),
+                    "description": t.description,
+                    "is_locked": t.is_locked,
+                }
+                for t in qs[:200]
+            ]
+
+        try:
+            data = await sync_to_async(_list, thread_sensitive=True)()
+        except ToolExecutionError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("In-process data table listing failed")
+            raise ToolExecutionError(f"Table listing failed: {exc}") from exc
+        return {"status_code": 200, "data": {"results": data}}
+
+    async def _create_table_in_process(self, body: dict) -> dict:
+        """POST /carbon-api/dataschema/tables/ — create table + optional fields."""
+        from asgiref.sync import sync_to_async
+
+        user = await self._resolve_user()
+        if user is None:
+            raise ToolExecutionError(
+                "No authenticated user for table creation — please refresh the page."
+            )
+
+        def _create() -> dict:
+            from dataschema.models import DataTable
+            from dataschema.serializers import DataFieldSerializer, DataTableSerializer
+            from dataschema.views import _log_schema_change
+
+            serializer = DataTableSerializer(data=body)
+            if not serializer.is_valid():
+                raise ToolExecutionError(
+                    "Table validation failed: "
+                    + json.dumps(serializer.errors, default=str)[:1200]
+                )
+            table = serializer.save(created_by=user)
+            fields = []
+            for i, raw in enumerate(body.get("fields") or []):
+                field_body = dict(raw)
+                field_body.setdefault("data_table", table.pk)
+                field_body.setdefault("order", i)
+                fser = DataFieldSerializer(data=field_body)
+                if not fser.is_valid():
+                    raise ToolExecutionError(
+                        "Field validation failed: "
+                        + json.dumps(fser.errors, default=str)[:1200]
+                    )
+                field = fser.save(created_by=user)
+                fields.append({"id": field.pk, "name": field.name, "label": field.label})
+            _log_schema_change(
+                user, "add", data_table=table, after=DataTableSerializer(table).data
+            )
+            return {
+                "id": table.pk,
+                "title": table.title,
+                "name": table.name,
+                "module": table.module_id,
+                "module_name": getattr(table.module, "name", None),
+                "description": table.description,
+                "is_locked": table.is_locked,
+                "fields": fields,
+            }
+
+        try:
+            data = await sync_to_async(_create, thread_sensitive=True)()
+        except ToolExecutionError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("In-process data table creation failed")
+            raise ToolExecutionError(f"Table creation failed: {exc}") from exc
+        return {"status_code": 201, "data": data}
+
+    async def _rule_assignments_in_process(
+        self, method: str = "POST", params: dict | None = None, body: dict | None = None
+    ) -> dict:
+        """POST /carbon-api/dq/rule-assignments/ — bind rule(s) to a table.
+
+        Accepts either ``{"rule": <id>, "data_table": <id>, "data_field": <id|null>}``
+        or ``{"table_id": <id>, "dq_rule_ids": [<ids>]}``.
+        """
+        from asgiref.sync import sync_to_async
+
+        if method != "POST":
+            raise ToolExecutionError(
+                "Rule assignments only support POST via call_host_api."
+            )
+        user = await self._resolve_user()
+        if user is None:
+            raise ToolExecutionError(
+                "No authenticated user for rule binding — please refresh the page."
+            )
+
+        def _bind() -> dict:
+            from dq.models import RuleFieldAssignment
+
+            table_id = body.get("data_table") or body.get("table_id")
+            rule_ids = body.get("dq_rule_ids")
+            if not rule_ids and body.get("rule"):
+                rule_ids = [body.get("rule")]
+            if not table_id or not rule_ids:
+                raise ToolExecutionError(
+                    "Rule binding requires 'data_table'/'table_id' and "
+                    "'rule'/'dq_rule_ids'."
+                )
+            data_field = body.get("data_field")
+            created = []
+            for rid in rule_ids:
+                # Guard against the unique_rule_table constraint when the LLM
+                # retries or reuses an existing binding.
+                if RuleFieldAssignment.objects.filter(
+                    rule_id=rid, data_table_id=table_id, data_field_id=data_field
+                ).exists():
+                    continue
+                assn = RuleFieldAssignment.objects.create(
+                    rule_id=rid, data_table_id=table_id, data_field_id=data_field
+                )
+                created.append({"id": assn.pk, "rule": assn.rule_id, "data_table": assn.data_table_id})
+            return {"bindings": created, "count": len(created)}
+
+        try:
+            data = await sync_to_async(_bind, thread_sensitive=True)()
+        except ToolExecutionError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("In-process rule binding failed")
+            raise ToolExecutionError(f"Rule binding failed: {exc}") from exc
         return {"status_code": 201, "data": data}
 
     async def _resolve_user(self):

@@ -100,6 +100,32 @@ class PlanTemplateSerializer(serializers.Serializer):
     )
 
 
+class ScheduleCreateSerializer(serializers.Serializer):
+    """POST /plans/schedules/ — recurring ``cron_expr`` or one-off ``run_at``.
+
+    ``template_id`` (an owned template) or a ``plan_json`` snapshot supplies
+    the plan shape; exactly one of ``cron_expr`` / ``run_at`` is required.
+    """
+
+    name = serializers.CharField(required=True, allow_blank=False, max_length=200)
+    description = serializers.CharField(
+        required=False, allow_blank=True, default=""
+    )
+    template_id = serializers.CharField(required=False, allow_blank=True)
+    plan_json = serializers.DictField(required=False)
+    cron_expr = serializers.CharField(required=False, allow_blank=True)
+    run_at = serializers.DateTimeField(required=False)
+
+
+class ScheduleEditSerializer(serializers.Serializer):
+    """PATCH /plans/schedules/{id}/ — all fields optional (PATCH semantics)."""
+
+    name = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    description = serializers.CharField(required=False, allow_blank=True)
+    cron_expr = serializers.CharField(required=False, allow_blank=True)
+    run_at = serializers.DateTimeField(required=False)
+
+
 class PlanViewSet(viewsets.GenericViewSet):
     """Agentic task orchestration — reviewable plan lifecycle."""
 
@@ -378,6 +404,77 @@ class PlanViewSet(viewsets.GenericViewSet):
                 {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
             )
         return Response(result, status=status.HTTP_201_CREATED)
+
+    # ── W6-E F-29: scheduling ─────────────────────────────────────────────
+
+    def list_schedules(self, request):
+        """GET /plans/schedules/ — the requesting user's schedules, soonest first."""
+        return Response(self.service.list_schedules(request.user))
+
+    def create_schedule(self, request):
+        """POST /plans/schedules/ — create a recurring/one-off schedule."""
+        serializer = ScheduleCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = self.service.create_schedule(
+                request.user,
+                serializer.validated_data["name"],
+                template_id=serializer.validated_data.get("template_id"),
+                plan_json=serializer.validated_data.get("plan_json"),
+                cron_expr=serializer.validated_data.get("cron_expr"),
+                run_at=serializer.validated_data.get("run_at"),
+                description=serializer.validated_data.get("description"),
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(result, status=status.HTTP_201_CREATED)
+
+    def edit_schedule(self, request, schedule_id=None):
+        """PATCH /plans/schedules/{id}/ — edit name/description/trigger."""
+        serializer = ScheduleEditSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = self.service.edit_schedule(
+                request.user,
+                schedule_id,
+                name=serializer.validated_data.get("name"),
+                description=serializer.validated_data.get("description"),
+                cron_expr=serializer.validated_data.get("cron_expr"),
+                run_at=serializer.validated_data.get("run_at"),
+            )
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(result)
+
+    def delete_schedule(self, request, schedule_id=None):
+        """DELETE /plans/schedules/{id}/ — delete an owned schedule."""
+        try:
+            return Response(self.service.delete_schedule(request.user, schedule_id))
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
+
+    def pause_schedule(self, request, schedule_id=None):
+        """POST /plans/schedules/{id}/pause/ — toggle ``enabled`` (no deletion)."""
+        try:
+            return Response(self.service.pause_schedule(request.user, schedule_id))
+        except PlanNotAccessibleError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
 
     # ── Execution ─────────────────────────────────────────────────────────
 

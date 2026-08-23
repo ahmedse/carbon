@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.utils import timezone
@@ -552,3 +553,210 @@ def test_create_schedule_validates_inputs(user, cleanup):
             template_id="nope",  # both sources
             cron_expr="0 * * * *",
         )
+
+
+# ── W7-A: schedules REST contract (F-29) ─────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_schedule_list_create_edit_pause_delete(user, other_user, cleanup):
+    _, schedule_ids = cleanup
+    service = PlansService()
+
+    s1 = service.create_schedule(
+        user, "Alpha",
+        plan_json=json.loads(json.dumps(_PLAN_JSON_2)),
+        run_at=timezone.now() + timedelta(days=2),
+    )
+    s2 = service.create_schedule(
+        user, "Beta",
+        plan_json=json.loads(json.dumps(_PLAN_JSON_2)),
+        run_at=timezone.now() + timedelta(days=1),
+    )
+    schedule_ids += [s1["id"], s2["id"]]
+
+    # List is owner-scoped and soonest-first.
+    listed = service.list_schedules(user)
+    assert [s["id"] for s in listed["schedules"]] == [s2["id"], s1["id"]]
+
+    # Edit name + description (PATCH semantics — only supplied fields change).
+    edited = service.edit_schedule(
+        user, s1["id"], name="Alpha edited", description="Nightly"
+    )
+    assert edited["name"] == "Alpha edited"
+    assert edited["description"] == "Nightly"
+    assert edited["run_at"] == s1["run_at"]  # untouched
+    # F-29: owner resolves to a display name (design-doc acceptance), never
+    # a raw host_user_id.
+    assert edited["owner"] == "w6e-worker"
+
+    # Switching to a recurring trigger recomputes next_run_at.
+    edited2 = service.edit_schedule(user, s1["id"], cron_expr="0 9 * * *")
+    assert edited2["cron_expr"] == "0 9 * * *"
+    assert edited2["run_at"] is None
+    assert edited2["next_run_at"] is not None
+    assert edited2["preview"] == "Every day at 9:00 AM"
+
+    # Pause toggles enabled (does not delete).
+    paused = service.pause_schedule(user, s1["id"])
+    assert paused["enabled"] is False
+    resumed = service.pause_schedule(user, s1["id"])
+    assert resumed["enabled"] is True
+
+    # Owner scoping on edit/pause.
+    with pytest.raises(PlanNotAccessibleError):
+        service.edit_schedule(other_user, s1["id"], name="hack")
+    with pytest.raises(PlanNotAccessibleError):
+        service.pause_schedule(other_user, s1["id"])
+
+    # Delete removes the row (owner-scoped).
+    service.delete_schedule(user, s1["id"])
+    assert not RunSchedule.objects.filter(id=s1["id"]).exists()
+    assert service.list_schedules(user)["count"] == 1
+
+
+@pytest.mark.django_db
+def test_schedule_preview_one_off_and_recurring(user, cleanup):
+    """F-29: server-side ``preview`` is plain-language outcome copy."""
+    _, schedule_ids = cleanup
+    service = PlansService()
+
+    oneoff = service.create_schedule(
+        user, "One-off",
+        plan_json=json.loads(json.dumps(_PLAN_JSON_2)),
+        # 14:00 Cairo (the platform's admin-configured display timezone).
+        run_at=datetime(2026, 8, 25, 14, 0, tzinfo=ZoneInfo("Africa/Cairo")),
+    )
+    schedule_ids.append(oneoff["id"])
+    assert oneoff["preview"] == "Once on 2026-08-25 at 2:00 PM"
+
+    daily = service.create_schedule(
+        user, "Daily",
+        plan_json=json.loads(json.dumps(_PLAN_JSON_2)),
+        cron_expr="0 9 * * *",
+    )
+    schedule_ids.append(daily["id"])
+    assert daily["preview"] == "Every day at 9:00 AM"
+
+    weekly = service.create_schedule(
+        user, "Weekly",
+        plan_json=json.loads(json.dumps(_PLAN_JSON_2)),
+        cron_expr="0 9 * * 1",
+    )
+    schedule_ids.append(weekly["id"])
+    assert weekly["preview"] == "Every Monday at 9:00 AM"
+
+    monthly = service.create_schedule(
+        user, "Monthly",
+        plan_json=json.loads(json.dumps(_PLAN_JSON_2)),
+        cron_expr="0 9 1 * *",
+    )
+    schedule_ids.append(monthly["id"])
+    assert monthly["preview"] == "Every 1st of the month at 9:00 AM"
+
+    # Raw cron stays available for power users (data, not user-facing text).
+    assert monthly["cron_expr"] == "0 9 1 * *"
+
+
+@pytest.mark.django_db
+def test_schedule_preview_respects_admin_timezone(user, cleanup):
+    """F-29: the preview renders in the admin-configurable display timezone.
+
+    ``accounts.GeneralConfig.timezone`` (default ``Africa/Cairo``) drives the
+    human-facing one-off preview; storage stays UTC.
+    """
+    from accounts.models import GeneralConfig
+
+    _, schedule_ids = cleanup
+    service = PlansService()
+
+    cfg = GeneralConfig.load()
+    cfg.timezone = "UTC"
+    cfg.save()
+
+    run_at = datetime(2026, 8, 25, 14, 0, tzinfo=ZoneInfo("UTC"))
+    s_utc = service.create_schedule(
+        user, "UTC-sched",
+        plan_json=json.loads(json.dumps(_PLAN_JSON_2)),
+        run_at=run_at,
+    )
+    schedule_ids.append(s_utc["id"])
+    assert s_utc["preview"] == "Once on 2026-08-25 at 2:00 PM"
+
+    cfg.timezone = "Africa/Cairo"
+    cfg.save()
+    s_cairo = service.create_schedule(
+        user, "Cairo-sched",
+        plan_json=json.loads(json.dumps(_PLAN_JSON_2)),
+        run_at=run_at,
+    )
+    schedule_ids.append(s_cairo["id"])
+    # 14:00 UTC == 17:00 Africa/Cairo (UTC+3 — Egypt DST is active in August).
+    assert s_cairo["preview"] == "Once on 2026-08-25 at 5:00 PM"
+
+
+# ── W7-A: schedules REST contract (F-29) — HTTP surface ─────────────────
+
+
+@pytest.mark.django_db
+def test_schedule_rest_routes_lifecycle(api_client, get_token_for_user, user, cleanup):
+    """F-29: the schedules REST surface the frontend composes against works
+    end-to-end — list/create/edit/pause/delete over HTTP (owner-scoped)."""
+    _, schedule_ids = cleanup
+    token = get_token_for_user(user)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    # POST /schedules/ — create (cron trigger, preview present server-side).
+    resp = api_client.post(
+        "/carbon-api/ai/plans/schedules/",
+        {
+            "name": "Nightly digest",
+            "plan_json": json.loads(json.dumps(_PLAN_JSON_2)),
+            "cron_expr": "0 9 * * *",
+        },
+        format="json",
+    )
+    assert resp.status_code == 201, resp.content
+    created = resp.json()
+    schedule_ids.append(created["id"])
+    assert created["preview"] == "Every day at 9:00 AM"
+    assert created["enabled"] is True
+
+    # GET /schedules/ — list is owner-scoped and returns the created row.
+    listed = api_client.get("/carbon-api/ai/plans/schedules/")
+    assert listed.status_code == 200
+    assert listed.json()["count"] == 1
+    assert listed.json()["schedules"][0]["id"] == created["id"]
+
+    # PATCH /schedules/{id}/ — edit name, recompute preview/next_run_at.
+    resp = api_client.patch(
+        f"/carbon-api/ai/plans/schedules/{created['id']}/",
+        {"name": "Renamed digest", "cron_expr": "0 9 * * 1"},
+        format="json",
+    )
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["name"] == "Renamed digest"
+    assert resp.json()["preview"] == "Every Monday at 9:00 AM"
+    assert resp.json()["next_run_at"] is not None
+
+    # POST /schedules/{id}/pause/ — toggle enabled (does not delete).
+    resp = api_client.post(
+        f"/carbon-api/ai/plans/schedules/{created['id']}/pause/"
+    )
+    assert resp.status_code == 200
+    assert resp.json()["enabled"] is False
+
+    # DELETE /schedules/{id}/ — remove the row.
+    resp = api_client.delete(
+        f"/carbon-api/ai/plans/schedules/{created['id']}/"
+    )
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] is True
+    assert api_client.get("/carbon-api/ai/plans/schedules/").json()["count"] == 0
+
+
+@pytest.mark.django_db
+def test_schedule_rest_requires_auth(api_client):
+    """F-29: the schedules routes reject anonymous callers."""
+    assert api_client.get("/carbon-api/ai/plans/schedules/").status_code == 401
+    assert api_client.post("/carbon-api/ai/plans/schedules/", {}, format="json").status_code == 401

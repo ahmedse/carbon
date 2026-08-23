@@ -21,7 +21,7 @@ from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
 
 from accounts.ai_scoping import scope_ai_queryset
 from accounts.constants import ADMIN_ROLES
@@ -73,6 +73,8 @@ from ai.models.knowledge_graph import (
     KnowledgeEdge,
     KnowledgeNode,
 )
+
+from ai.plans_service import STEP_AWAITING_APPROVAL
 
 logger = logging.getLogger("carbon.ai.observability_api")
 
@@ -404,3 +406,93 @@ class OutputQualityTrendView(APIView):
                 "drift": drift,
             }
         )
+
+
+class RunRollupView(APIView):
+    """GET rollups/ — cross-run cost/quality rollup for the console.
+
+    Aggregates the scoped ``Run`` ledger into run-level totals plus a
+    most-recent ``per_run`` breakdown (capped at 200). ``confirmations_required``
+    counts ``RunStep`` rows still ``awaiting_approval`` (the consent pause) —
+    the exact status literal is imported from ``plans_service`` (never
+    re-stringed). Read-only: no mutation, no engine access.
+    """
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
+
+    def get(self, request):
+        try:
+            runs_qs = scope_ai_queryset(Run.objects, request.user)
+            ts_field = _timestamp_field(Run) or "created_at"
+
+            status_counts = dict(
+                runs_qs.values("status")
+                .annotate(n=Count("id"))
+                .values_list("status", "n")
+            )
+            totals = {
+                "runs": runs_qs.count(),
+                "total_llm_calls": runs_qs.aggregate(
+                    total=Sum("total_llm_calls")
+                )["total"]
+                or 0,
+                "confirmations_required": 0,
+                "total_latency_ms": runs_qs.aggregate(
+                    total=Sum("total_latency_ms")
+                )["total"],
+                "completed": status_counts.get("completed", 0),
+                "failed": status_counts.get("failed", 0),
+                "paused": status_counts.get("paused", 0),
+                "running": status_counts.get("running", 0),
+            }
+
+            steps_qs = scope_ai_queryset(RunStep.objects, request.user)
+            totals["confirmations_required"] = steps_qs.filter(
+                status=STEP_AWAITING_APPROVAL
+            ).count()
+
+            run_ids = list(
+                runs_qs.order_by(f"-{ts_field}")
+                .values_list("id", flat=True)[:200]
+            )
+
+            step_counts = dict(
+                steps_qs.filter(run_id__in=run_ids)
+                .values("run_id")
+                .annotate(n=Count("id"))
+                .values_list("run_id", "n")
+            )
+            confirmations_by_run = dict(
+                steps_qs.filter(
+                    run_id__in=run_ids, status=STEP_AWAITING_APPROVAL
+                )
+                .values("run_id")
+                .annotate(n=Count("id"))
+                .values_list("run_id", "n")
+            )
+
+            per_run = []
+            for run in runs_qs.filter(id__in=run_ids).order_by(f"-{ts_field}"):
+                per_run.append(
+                    {
+                        "run_id": run.id,
+                        "status": run.status,
+                        "total_llm_calls": run.total_llm_calls,
+                        "latency_ms": run.total_latency_ms,
+                        "confirmations_required": confirmations_by_run.get(
+                            run.id, 0
+                        ),
+                        "step_count": step_counts.get(run.id, 0),
+                        "completed_at": (
+                            run.completed_at.isoformat()
+                            if run.completed_at
+                            else None
+                        ),
+                    }
+                )
+
+            return Response({"totals": totals, "per_run": per_run})
+        except Exception as exc:  # noqa: BLE001 — never 500 the console
+            logger.exception("run rollup aggregation failed")
+            return Response({"error": str(exc)}, status=503)

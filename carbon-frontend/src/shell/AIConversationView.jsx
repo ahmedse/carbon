@@ -14,11 +14,13 @@ import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
   acceptSuggestion,
+  clearContext,
   confirmToolExecution,
   createArtifact,
   declineToolExecution,
   deleteMessage,
   exportConversation,
+  forkConversation,
   getConversation,
   listMessages,
   recordFeedback,
@@ -40,9 +42,11 @@ import AIWorkingIndicator from './AIWorkingIndicator';
 import AIOfflineBanner from './AIOfflineBanner';
 import AIStatusBar from './AIStatusBar';
 import AIModelSelect from './AIModelSelect';
+import { KeyboardShortcutsHelp } from './KeyboardShortcutsHelp';
 import { useAITaskTransfer } from './useAITaskTransfer';
 import { useExecuteMode } from './useExecuteMode';
 import { DQ_MANAGE_RULES } from '../capabilities';
+import { CheckpointPickerDialog, SaveCheckpointDialog } from '../components/ai/CheckpointDialogs';
 
 // Phase 21-C — long threads open at the most recent messages; older messages
 // collapse behind a "Show N older messages" toggle (Copilot-style density).
@@ -59,7 +63,7 @@ function normalizeConversationShape(payload) {
   };
 }
 
-function AIConversationView({ conversationId, onOpenPanel }) {
+function AIConversationView({ conversationId, onOpenPanel, onForked, onConversationUpdated }) {
   const { token, user, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const { executeMode, setExecuteMode } = useExecuteMode();
@@ -86,6 +90,12 @@ function AIConversationView({ conversationId, onOpenPanel }) {
   const [transientError, setTransientError] = useState(false);
   const [exportAnchorEl, setExportAnchorEl] = useState(null);
   const [sharing, setSharing] = useState(false);
+  // Slash-command /help → KeyboardShortcutsHelp dialog visibility.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Slash-command /checkpoint → SaveCheckpointDialog; /fork → checkpoint picker.
+  const [saveCheckpointOpen, setSaveCheckpointOpen] = useState(false);
+  const [checkpointPickerOpen, setCheckpointPickerOpen] = useState(false);
+  const [checkpointPickerMode, setCheckpointPickerMode] = useState('fork');
   // Resolved mention objects from the input bar: [{ kind, id, name }, …]
   const [mentions, setMentions] = useState([]);
   // Transient assistant text accumulated while a chat response streams in.
@@ -953,6 +963,53 @@ function AIConversationView({ conversationId, onOpenPanel }) {
     }
   }, [conversation, sharing, token, notify, notifyFromError]);
 
+  // Slash-command actions (W8-A). Directives never reach here — they insert
+  // text in the composer. `checkpoint`/`fork` need real user input (a name /
+  // checkpoint id), so they open the SAME reusable dialogs the header kebab
+  // uses — never a fire-and-forget API call with a null/empty payload.
+  const handleCommand = useCallback(
+    async (name) => {
+      if (name === 'help') {
+        setShortcutsOpen((prev) => !prev);
+        return;
+      }
+      if (!conversationId) return;
+      try {
+        if (name === 'clear') {
+          const updated = await clearContext(token, conversationId);
+          onConversationUpdated?.(updated);
+          notify({ message: 'Working context cleared', type: 'success' });
+        } else if (name === 'checkpoint') {
+          setSaveCheckpointOpen(true);
+        } else if (name === 'fork') {
+          setCheckpointPickerMode('fork');
+          setCheckpointPickerOpen(true);
+        } else if (name === 'export') {
+          await handleExport('markdown');
+        }
+      } catch (err) {
+        notifyFromError(err, 'Could not run command');
+      }
+    },
+    [token, conversationId, notify, notifyFromError, onConversationUpdated, handleExport],
+  );
+
+  // Slash-command /fork → user picked a checkpoint → fork immediately.
+  const handleCheckpointPick = useCallback(
+    async (checkpoint) => {
+      if (!checkpoint || !conversationId) return;
+      setCheckpointPickerOpen(false);
+      try {
+        const forked = await forkConversation(token, conversationId, checkpoint.id);
+        notify({ message: 'Forked a new chat from this point', type: 'success' });
+        onForked?.(forked);
+      } catch (err) {
+        notifyFromError(err, 'Could not fork conversation');
+      }
+    },
+    [conversationId, token, notify, notifyFromError, onForked],
+  );
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -1384,6 +1441,7 @@ function AIConversationView({ conversationId, onOpenPanel }) {
           onStop={handleStop}
           conversationStatus={convStatus}
           onMentionsChange={setMentions}
+          onCommand={handleCommand}
           mode={sendMode === 'steer' ? 'agent' : 'ask'}
           onModeChange={(nextMode) => {
             setSendMode(nextMode === 'agent' ? 'steer' : 'queue');
@@ -1436,12 +1494,29 @@ function AIConversationView({ conversationId, onOpenPanel }) {
       </Box>
       </Box>  {/* inner column */}
     </Box>
+      <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
+      {/* Slash-command dialogs — reuse the header kebab's checkpoint surfaces. */}
+      <SaveCheckpointDialog
+        open={saveCheckpointOpen}
+        conversationId={conversationId}
+        onClose={() => setSaveCheckpointOpen(false)}
+      />
+      <CheckpointPickerDialog
+        open={checkpointPickerOpen}
+        mode={checkpointPickerMode}
+        conversationId={conversationId}
+        onClose={() => setCheckpointPickerOpen(false)}
+        onPick={handleCheckpointPick}
+      />
     </>
   );
 }
 
 AIConversationView.propTypes = {
   conversationId: PropTypes.string.isRequired,
+  onForked: PropTypes.func,
+  onConversationUpdated: PropTypes.func,
 };
 
 export default AIConversationView;

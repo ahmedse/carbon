@@ -117,3 +117,77 @@ Running 29 tests using 1 worker
 - **F1** is confirmed fixed (Journey-10 29/29).
 - **A1** is confirmed fixed (Part A clears `newChat` and reaches A4).
 - **B5** is **NOT** fixed: the E2E "Pass rate" card still fails to render, and the promised unit coverage is missing. Per the Phase 14 "Notes for the Master", the leading hypothesis is a suggestion whose `nl` resolves empty (fallback `definition?.name`) so the `nl_rule_test` auto-send never fires — producing no `NLRuleTestCard`. This is recorded for the Debugger/Fixer; **no code was changed** (RULE_11).
+
+---
+
+# ═══ RE-VALIDATION RUN — 2026-08-23 ═══
+
+Date: 2026-08-23 · Role: QA/Validator · Phase: Phase 14 (re-run) · Source: `TASKS.md` §Phase 14
+
+## Executive Summary
+
+**Verdict: FAILED (not signed off).** The four required test gates could **not be executed** in this session — no terminal/command-execution tool is available — so no fresh runtime evidence could be produced. Static (Layer 1) verification confirms all three in-scope fixes are **present in source**, but two defects remain that block sign-off:
+
+1. **B5 unit coverage is absent.** Spec claims "2 new unit tests (10 total)"; the file actually has **15 tests and zero `nl_rule_test` auto-send cases** (RULE_11 regression gap).
+2. **The B5 fix has a data-flow fragility** that matches the prior E2E failure: `nl = suggestion?.prompt || definition?.name || name || ''` can resolve empty, so the `nl_rule_test` auto-send never fires and the "Pass rate" card never renders.
+
+The prior run (above, 2026-08-18) reported **FAILED** with B5 still broken at E2E and the same missing coverage. Nothing in the current source contradicts that; the B5 root cause is still present.
+
+### Issue counts by severity
+
+| Severity | Count | Notes |
+|----------|-------|-------|
+| P0 | 0 | — |
+| P1 | 1 | R14-5 — B5 `nl`-resolution fragility (root cause of "Pass rate" never rendering) |
+| P2 | 2 | R14-6 missing B5 coverage · R14-7 spec drift (10 vs 15 tests) |
+| Env | 1 | R14-8 — terminal execution unavailable (blocker, not a product defect) |
+
+## Task Results
+
+| # | Gate | Command | Expected | Actual | Result |
+|---|------|---------|----------|--------|--------|
+| 0 | Preconditions | `./manage.sh status` + curl health | both 200 | Services RUNNING (`./manage.sh start` exited 0; backend :8009, frontend :5179). HTTP not re-checked (no exec). | ⚠️ |
+| 1 | Unit — B5 | `npx vitest run src/__tests__/AITaskTransferContext.test.jsx` | 10 passed | **NOT RUN** (no exec). Static: 15 `it()` blocks, 0 `nl_rule_test`. | ❌ |
+| 2 | Unit — full | `npm test -- --run` | all green | **NOT RUN** (no exec). | ❌ |
+| 3 | E2E — Journey-11 | `npx playwright test … journey-11-ai-coworker-dq` | ALL PASS | **NOT RUN** (no exec). | ❌ |
+| 4 | E2E — Journey-10 | `npx playwright test … journey-10-ai-workspace` | 29/29 PASS | **NOT RUN** (no exec). Last known: 29/29 (08-18). | ❌ |
+
+## Files Changed
+
+**NONE.** Pure validation — no code edits, no commits. (This appended re-validation section is the only artifact.)
+
+## Verification Output
+
+### Structural verification (Layer 1 — static, no execution)
+- **F1** ✅ — `backend/ai/protocol.py:94` `current_view: str = ""` default present; `to_prompt_prefix` guards `if self.current_view`.
+- **A1** ✅ — `journey-11` `newChat` helper uses `getByRole('button', { name: 'New chat' }).first()` + `toBeVisible({ timeout: 15_000 })`.
+- **B5 (source)** ✅ — `AITaskTransferContext.jsx:164` `if (type === 'nl_rule_test' && normalizedPayload.nl) sendMessage(...)`.
+- **Diagnostics** ✅ — `get_errors` on `AITaskTransferContext.jsx`, `AITaskTransferContext.test.jsx`, `journey-11-ai-coworker-dq.spec.ts` → all "No errors found".
+
+### Gate commands — NOT EXECUTED (no terminal tool in this session)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/AITaskTransferContext.test.jsx   # expected 10 passed
+npm test -- --run                                             # expected all green
+npx playwright test --config e2e/playwright.config.ts journey-11-ai-coworker-dq   # expected ALL PASS
+npx playwright test --config e2e/playwright.config.ts journey-10-ai-workspace     # expected 29/29
+```
+`terminal_last_command` shows only `./manage.sh start`; no run/execute tool is available, so these could not be re-run.
+
+## Deviations
+
+- **B5 unit coverage absent (spec drift).** Spec claims 2 new `nl_rule_test` unit tests (10 total). Actual: **15 tests** (grep: 15 `it()` blocks) and **zero `nl_rule_test` auto-send cases**.
+- **Terminal execution unavailable** — gates not re-run; environment limitation, not a product defect.
+
+## Issues Found
+
+| ID | Severity | Symptom | Repro | Owner |
+|----|----------|---------|-------|-------|
+| R14-5 (B5) | P1 | "Pass rate" card never renders — `nl` can resolve empty so the auto-send never fires | `AIConversationView.jsx:459` `handleTestLive`: `nl = suggestion?.prompt || suggestion?.definition?.name || suggestion?.name || ''`; empty → `AITaskTransferContext.jsx:164` skips `sendMessage` → no `nl_rule_test` turn → no `NLRuleTestCard`. Matches 08-18 E2E failure + task "Notes for the Master" hypothesis. Runtime re-confirmation blocked (no exec). | frontend-worker (or backend-worker if `dq_suggest` omits `prompt`) |
+| R14-6 (B5) | P2 | B5 regression coverage missing — 15 tests, zero `nl_rule_test` auto-send cases (RULE_11) | `src/__tests__/AITaskTransferContext.test.jsx` — none of the 15 `it()` blocks exercise the `nl_rule_test` auto-send | frontend-worker |
+| R14-7 | P2 | Spec drift — "10 tests" vs actual 15 (Phase 16 resume tests landed after the 08-18 report) | static grep of the file shows 15 `it()` blocks | master-architect (spec) |
+| R14-8 | — | Blocker: terminal/command execution unavailable → 4 gates not re-run; no fresh runtime evidence | n/a (environment) | n/a |
+
+## Verdict
+
+**FAILED (not signed off).** The F1/A1/B5 source fixes are present, but (a) the four required test gates could not be executed in this session, and (b) the B5 fix still lacks regression coverage and carries a data-flow fragility consistent with the prior E2E failure. Hand to Debugger/Fixer (R14-5) and frontend-worker (R14-6) before re-validating.

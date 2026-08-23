@@ -1191,7 +1191,7 @@ Workers must not submit a phase without all 6 commands passing. The browser chec
 
 ## 19. Domain App AI Contract — Platform Extension Model
 
-> **See ADR-0010** in `.ai-toolkit/decisions/0010-domain-app-ai-contract.md` for the
+> **See ADR-0016** in `.ai-toolkit/decisions/0016-domain-app-ai-contract.md` for the
 > full decision rationale, trade-offs, and rejected alternatives.
 
 Carbon is a **general platform** that hosts domain apps. The AI workspace is a
