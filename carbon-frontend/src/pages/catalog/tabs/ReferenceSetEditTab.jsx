@@ -3,6 +3,7 @@
 // plus lifecycle transition controls.
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { 
   Box, TextField, Button, CircularProgress, Alert, 
@@ -22,6 +23,7 @@ import {
 
 
 export default function ReferenceSetEditTab({ entityData, additionalProps = {} }) {
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
   const navigate = useNavigate();
@@ -59,7 +61,7 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
         token,
         body: { state: targetState },
       });
-      notify({ message: `Lifecycle state changed to ${LIFECYCLE_LABELS[targetState] || targetState}`, type: 'success' });
+      notify({ message: t('lifecycleStateChangedTo', { state: LIFECYCLE_LABELS[targetState] || targetState }), type: 'success' });
       if (targetState === 'archived') {
         // Archived sets are hidden from all endpoints; return to the MDM list.
         navigate('/catalog/mdm');
@@ -70,7 +72,7 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
       }
     } catch (err) {
       const errData = err.data;
-      const message = errData?.state?.[0] || errData?.detail || err.message || 'Failed to change lifecycle state';
+      const message = errData?.state?.[0] || errData?.detail || err.message || t('failedToChangeLifecycle');
       setTransitionError(message);
       notify({ message, type: 'error' });
     } finally {
@@ -83,7 +85,7 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      setError('Name is required');
+      setError(t('nameRequiredShort'));
       return;
     }
 
@@ -114,14 +116,14 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
         is_active: updatedRefSet.is_active !== undefined ? updatedRefSet.is_active : true,
       });
 
-      notify({ message: 'Reference set updated successfully', type: 'success' });
+      notify({ message: t('referenceSetUpdated'), type: 'success' });
       
       // Call parent callback to refresh data
       if (onRefSetUpdated) {
         onRefSetUpdated();
       }
     } catch (err) {
-      const message = err.message || 'Failed to save reference set';
+      const message = err.message || t('failedToSaveReferenceSet');
       setError(message);
       notify({ message, type: 'error' });
     } finally {
@@ -134,23 +136,23 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
       <Box sx={{ maxWidth: '800px' }}>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-        <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>Basic Information</Typography>
+        <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>{t('basicInformation')}</Typography>
 
         <TextField
           fullWidth
-          label="Name"
+          label={t('name')}
           name="name"
           value={formData.name}
           onChange={handleChange}
           margin="normal"
           variant="outlined"
           required
-          helperText="Unique identifier for this reference set"
+          helperText={t('uniqueIdentifierHelper')}
         />
 
         <TextField
           fullWidth
-          label="Description"
+          label={t('description')}
           name="description"
           value={formData.description}
           onChange={handleChange}
@@ -158,21 +160,21 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
           variant="outlined"
           multiline
           rows={3}
-          helperText="Purpose and usage guidance for this reference set"
+          helperText={t('purposeUsageHelper')}
         />
 
-        <Typography variant="subtitle2" sx={{ mb: 2, mt: 3, fontWeight: 600 }}>Governance</Typography>
+        <Typography variant="subtitle2" sx={{ mb: 2, mt: 3, fontWeight: 600 }}>{t('governance')}</Typography>
 
         <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>Domain</InputLabel>
+          <InputLabel>{t('domain')}</InputLabel>
           <Select
             name="domain"
             value={formData.domain}
             onChange={handleChange}
-            label="Domain"
+            label={t('domain')}
           >
             <MenuItem value="">
-              <em>None</em>
+              <em>{t('none')}</em>
             </MenuItem>
             {(selectOptions.domains || []).map((domain) => (
               <MenuItem key={domain.id} value={domain.id}>
@@ -180,19 +182,19 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
               </MenuItem>
             ))}
           </Select>
-          <FormHelperText>Data domain for governance and access control</FormHelperText>
+          <FormHelperText>{t('domainHelper')}</FormHelperText>
         </FormControl>
 
         <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>Steward</InputLabel>
+          <InputLabel>{t('steward')}</InputLabel>
           <Select
             name="steward"
             value={formData.steward}
             onChange={handleChange}
-            label="Steward"
+            label={t('steward')}
           >
             <MenuItem value="">
-              <em>None</em>
+              <em>{t('none')}</em>
             </MenuItem>
             {(selectOptions.users || []).map((user) => (
               <MenuItem key={user.id} value={user.id}>
@@ -200,11 +202,11 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
               </MenuItem>
             ))}
           </Select>
-          <FormHelperText>User responsible for maintaining this reference set</FormHelperText>
+          <FormHelperText>{t('stewardHelper')}</FormHelperText>
         </FormControl>
 
         {/* Lifecycle */}
-        <Typography variant="subtitle2" sx={{ mb: 1, mt: 2, fontWeight: 600 }}>Lifecycle</Typography>
+        <Typography variant="subtitle2" sx={{ mb: 1, mt: 2, fontWeight: 600 }}>{t('lifecycle')}</Typography>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
           <Chip
             label={LIFECYCLE_LABELS[lifecycleState] || lifecycleState}
@@ -214,11 +216,11 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
           />
           {validTransitions.length === 0 ? (
             <Typography variant="caption" color="text.secondary">
-              Archived — no further transitions allowed
+              {t('archivedNoTransitions')}
             </Typography>
           ) : (
             <Typography variant="caption" color="text.secondary">
-              Move to:
+              {t('moveTo')}
             </Typography>
           )}
         </Stack>
@@ -253,14 +255,14 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
               size="small"
             />
           }
-          label="Enabled in lists"
+          label={t('enabledInLists')}
           sx={{ mt: 2 }}
         />
         <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4, mt: -0.5 }}>
-          When disabled, this reference set is hidden from selection lists
+          {t('disabledHiddenFromLists')}
         </Typography>
         <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2 }}>
-          Lifecycle: Draft → Active → Deprecated → Archived (deprecated may return to active)
+          {t('lifecycleFlowHint')}
         </Typography>
 
         <Box sx={{ mt: 3, display: 'flex', gap: 1 }}>
@@ -269,7 +271,7 @@ export default function ReferenceSetEditTab({ entityData, additionalProps = {} }
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? <CircularProgress size={24} /> : 'Save Changes'}
+            {saving ? <CircularProgress size={24} /> : t('saveChanges')}
           </Button>
         </Box>
       </Box>

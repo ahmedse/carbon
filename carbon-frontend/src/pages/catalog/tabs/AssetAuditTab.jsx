@@ -2,6 +2,7 @@
 // Asset Audit Tab: Timeline of governance events for the asset
 
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box, Table, TableHead, TableBody, TableRow, TableCell, Typography, Chip,
   Accordion, AccordionSummary, AccordionDetails, Alert,
@@ -20,15 +21,16 @@ const ACTION_COLOR = {
 };
 
 function JsonDiff({ before, after }) {
+  const { t } = useTranslation('catalog');
   if (before == null && after == null) {
-    return <Typography variant="caption">No details</Typography>;
+    return <Typography variant="caption">{t('noDetails')}</Typography>;
   }
   return (
     <Box sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
       {before != null && (
         <Box sx={{ mb: 1 }}>
           <Typography variant="caption" color="error.main" fontWeight={600}>
-            Before
+            {t('before')}
           </Typography>
           <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             {JSON.stringify(before, null, 2)}
@@ -38,7 +40,7 @@ function JsonDiff({ before, after }) {
       {after != null && (
         <Box>
           <Typography variant="caption" color="success.main" fontWeight={600}>
-            After
+            {t('after')}
           </Typography>
           <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             {JSON.stringify(after, null, 2)}
@@ -50,6 +52,7 @@ function JsonDiff({ before, after }) {
 }
 
 export default function AssetAuditTab({ additionalProps = {} }) {
+  const { t } = useTranslation('catalog');
   const { events = [] } = additionalProps;
 
   // Sort events by timestamp, most recent first
@@ -65,23 +68,23 @@ export default function AssetAuditTab({ additionalProps = {} }) {
   if (sortedEvents.length === 0) {
     return (
       <DetailTabContent>
-        <Alert severity="info">No governance events recorded for this asset.</Alert>
+        <Alert severity="info">{t('noGovernanceEventsForAsset')}</Alert>
       </DetailTabContent>
     );
   }
 
   return (
     <DetailTabContent>
-      <Typography variant="h6" gutterBottom>Governance Event Timeline</Typography>
+      <Typography variant="h6" gutterBottom>{t('governanceEventTimeline')}</Typography>
       <Box sx={{ overflowX: 'auto' }}>
         <Table size="small">
           <TableHead>
             <TableRow sx={{ bgcolor: 'grey.100' }}>
-              <TableCell sx={{ fontWeight: 600 }}>Date & Time</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Action</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Entity Type</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>User</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Details</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('dateTime')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('action')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('entityType')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('user')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('details')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -115,7 +118,7 @@ export default function AssetAuditTab({ additionalProps = {} }) {
                       sx={{ px: 0, minHeight: 0 }}
                     >
                       <Typography variant="caption">
-                        {event.notes || 'View changes'}
+                        {event.notes || t('viewChanges')}
                       </Typography>
                     </AccordionSummary>
                     <AccordionDetails sx={{ px: 0, pt: 1 }}>

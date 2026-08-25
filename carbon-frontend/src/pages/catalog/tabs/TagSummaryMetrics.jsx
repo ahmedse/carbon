@@ -1,5 +1,6 @@
 // src/pages/catalog/tabs/TagSummaryMetrics.jsx
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Typography } from '@mui/material';
 import DetailMetricsPanel, {
   MetricCard,
@@ -10,6 +11,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import ColorLensIcon from '@mui/icons-material/ColorLens';
 
 export default function TagSummaryMetrics({ entityData }) {
+  const { t } = useTranslation('catalog');
   if (!entityData) return null;
 
   const createdDate = entityData.created_at 
@@ -18,16 +20,16 @@ export default function TagSummaryMetrics({ entityData }) {
 
   return (
     <DetailMetricsPanel>
-      <MetricsSection title="Tag Information">
+      <MetricsSection title={t('tagInformation')}>
         <MetricsGrid>
           <MetricCard
-            label="ID"
+            label={t('id')}
             value={entityData.id}
             icon={<InfoIcon />}
             color="primary"
           />
           <MetricCard
-            label="Created"
+            label={t('created')}
             value={createdDate}
             icon={<InfoIcon />}
             color="success"
@@ -35,7 +37,7 @@ export default function TagSummaryMetrics({ entityData }) {
         </MetricsGrid>
       </MetricsSection>
 
-      <MetricsSection title="Styling">
+      <MetricsSection title={t('styling')}>
         <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box
             sx={{
@@ -48,9 +50,9 @@ export default function TagSummaryMetrics({ entityData }) {
           />
           <Box>
             <Typography variant="caption" sx={{ textTransform: 'uppercase', color: 'text.secondary' }}>
-              Color
+              {t('color')}
             </Typography>
-            <Typography variant="body2">{entityData.color || 'Not set'}</Typography>
+            <Typography variant="body2">{entityData.color || t('notSet')}</Typography>
           </Box>
         </Box>
       </MetricsSection>

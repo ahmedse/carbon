@@ -2,6 +2,7 @@
 // Data Product Metrics: table count, total rows, quality pass rate, last modified,
 // plus governance summary. Follows ReferenceSetMetricsPanel pattern.
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Typography, Chip, Divider } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import TableChartIcon from '@mui/icons-material/TableChart';
@@ -16,6 +17,7 @@ function formatDate(value) {
 }
 
 export default function DataProductMetricsPanel({ entityData, additionalProps = {} }) {
+  const { t } = useTranslation('catalog');
   const {
     tables = [],
     qualitySummary = null,
@@ -25,7 +27,7 @@ export default function DataProductMetricsPanel({ entityData, additionalProps = 
   if (!entityData) {
     return (
       <DetailTabContent>
-        <Typography variant="body2" color="text.secondary">No metrics available</Typography>
+        <Typography variant="body2" color="text.secondary">{t('noMetricsAvailable')}</Typography>
       </DetailTabContent>
     );
   }
@@ -41,22 +43,22 @@ export default function DataProductMetricsPanel({ entityData, additionalProps = 
   });
 
   const metrics = [
-    { label: 'Tables', value: entityData.table_count ?? tables.length, color: 'primary', icon: <TableChartIcon fontSize="small" /> },
-    { label: 'Total Rows', value: totalRows, color: 'info', icon: <StorageIcon fontSize="small" /> },
+    { label: t('tables'), value: entityData.table_count ?? tables.length, color: 'primary', icon: <TableChartIcon fontSize="small" /> },
+    { label: t('totalRows'), value: totalRows, color: 'info', icon: <StorageIcon fontSize="small" /> },
     {
-      label: 'Quality Pass Rate',
+      label: t('qualityPassRate'),
       value: passRate != null ? `${passRate}%` : '—',
       color: passRate != null && passRate >= 80 ? 'success' : passRate != null ? 'warning' : 'default',
       icon: <CheckCircleIcon fontSize="small" />,
     },
-    { label: 'Avg Score', value: summary.avg_score != null ? `${Number(summary.avg_score).toFixed(1)}%` : '—', color: 'default' },
-    { label: 'Last Modified', value: formatDate(lastModified), color: 'default', icon: <ScheduleIcon fontSize="small" /> },
+    { label: t('avgScore'), value: summary.avg_score != null ? `${Number(summary.avg_score).toFixed(1)}%` : '—', color: 'default' },
+    { label: t('lastModified'), value: formatDate(lastModified), color: 'default', icon: <ScheduleIcon fontSize="small" /> },
   ];
 
   return (
     <DetailTabContent>
       <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-        Product Statistics
+        {t('productStatistics')}
       </Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
@@ -76,29 +78,29 @@ export default function DataProductMetricsPanel({ entityData, additionalProps = 
       <Divider sx={{ my: 3 }} />
 
       <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-        Governance
+        {t('governance')}
       </Typography>
 
       <Box sx={{ mt: 2 }}>
         <Typography variant="caption" color="text.secondary" display="block">
-          Org Unit
+          {t('orgUnit')}
         </Typography>
         <Typography variant="body2" sx={{ mb: 2 }}>
-          {entityData.org_unit_name || 'Not assigned'}
+          {entityData.org_unit_name || t('notAssigned')}
         </Typography>
 
         <Typography variant="caption" color="text.secondary" display="block">
-          Lock Status
+          {t('lockStatus')}
         </Typography>
         <Typography variant="body2" sx={{ mb: 2 }}>
-          {entityData.is_locked ? 'Locked' : 'Unlocked'}
+          {entityData.is_locked ? t('locked') : t('unlocked')}
         </Typography>
 
         <Typography variant="caption" color="text.secondary" display="block">
-          Audit Events
+          {t('auditEvents')}
         </Typography>
         <Typography variant="body2">
-          {auditEvents.length} recorded
+          {auditEvents.length} {t('recorded')}
         </Typography>
       </Box>
     </DetailTabContent>

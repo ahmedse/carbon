@@ -1,5 +1,6 @@
 // src/pages/catalog/tabs/TagEditTab.jsx
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, TextField, Button, CircularProgress, Alert } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import { useAuth } from '../../../auth/AuthContext';
@@ -7,6 +8,7 @@ import { useNotification } from '../../../components/NotificationProvider';
 import { apiFetch } from '../../../api/api';
 
 export default function TagEditTab({ entityData }) {
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
   const [formData, setFormData] = useState({
@@ -24,7 +26,7 @@ export default function TagEditTab({ entityData }) {
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      setError('Name is required');
+      setError(t('nameRequiredShort'));
       return;
     }
 
@@ -38,9 +40,9 @@ export default function TagEditTab({ entityData }) {
         body: formData,
       }); // update tag
 
-      notify({ message: 'Tag updated successfully', type: 'success' });
+      notify({ message: t('tagUpdated'), type: 'success' });
     } catch (err) {
-      const message = err.message || 'Failed to save tag';
+      const message = err.message || t('failedToSaveTag');
       setError(message);
       notify({ message, type: 'error' });
     } finally {
@@ -55,7 +57,7 @@ export default function TagEditTab({ entityData }) {
 
         <TextField
           fullWidth
-          label="Name"
+          label={t('name')}
           name="name"
           value={formData.name}
           onChange={handleChange}
@@ -65,7 +67,7 @@ export default function TagEditTab({ entityData }) {
 
         <TextField
           fullWidth
-          label="Description"
+          label={t('description')}
           name="description"
           value={formData.description}
           onChange={handleChange}
@@ -77,7 +79,7 @@ export default function TagEditTab({ entityData }) {
 
         <TextField
           fullWidth
-          label="Color"
+          label={t('color')}
           name="color"
           type="color"
           value={formData.color}
@@ -92,7 +94,7 @@ export default function TagEditTab({ entityData }) {
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? <CircularProgress size={24} /> : 'Save Changes'}
+            {saving ? <CircularProgress size={24} /> : t('saveChanges')}
           </Button>
         </Box>
       </Box>

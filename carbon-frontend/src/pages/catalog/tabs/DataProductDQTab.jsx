@@ -5,6 +5,7 @@ import React, { useMemo } from 'react';
 import {
   Box, Card, CardContent, Chip, Typography, Table, TableHead, TableRow, TableCell, TableBody, Alert,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 
@@ -12,6 +13,7 @@ const QUALITY_COLOR = { passing: 'success', warning: 'warning', failing: 'error'
 
 export default function DataProductDQTab({ entityData, additionalProps = {} }) {
   const navigate = useNavigate();
+  const { t } = useTranslation('catalog');
   const { qualitySummary = null, tables = [], assets = {} } = additionalProps;
 
   const tableRows = useMemo(
@@ -22,7 +24,7 @@ export default function DataProductDQTab({ entityData, additionalProps = {} }) {
   if (!entityData) {
     return (
       <DetailTabContent>
-        <Typography variant="body2" color="text.secondary">No data available</Typography>
+        <Typography variant="body2" color="text.secondary">{t('noDataAvailable')}</Typography>
       </DetailTabContent>
     );
   }
@@ -31,19 +33,19 @@ export default function DataProductDQTab({ entityData, additionalProps = {} }) {
   const passRate = summary.total > 0 ? Math.round((summary.passing / summary.total) * 100) : null;
 
   const statCards = [
-    { label: 'Tables Checked', value: summary.total },
-    { label: 'Passing', value: summary.passing, color: 'success' },
-    { label: 'Warning', value: summary.warning, color: 'warning' },
-    { label: 'Failing', value: summary.failing, color: 'error' },
-    { label: 'Pass Rate', value: passRate != null ? `${passRate}%` : '—' },
-    { label: 'Avg Score', value: summary.avg_score != null ? `${Number(summary.avg_score).toFixed(1)}%` : '—' },
+    { label: t('tablesChecked'), value: summary.total },
+    { label: t('passing'), value: summary.passing, color: 'success' },
+    { label: t('warning'), value: summary.warning, color: 'warning' },
+    { label: t('failing'), value: summary.failing, color: 'error' },
+    { label: t('passRate'), value: passRate != null ? `${passRate}%` : '—' },
+    { label: t('avgScore'), value: summary.avg_score != null ? `${Number(summary.avg_score).toFixed(1)}%` : '—' },
   ];
 
   return (
     <DetailTabContent>
       {summary.total === 0 ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          No quality checks have been run for this data product yet.
+          {t('noQualityChecksRun')}
         </Alert>
       ) : (
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 2, mb: 3 }}>
@@ -63,19 +65,19 @@ export default function DataProductDQTab({ entityData, additionalProps = {} }) {
       )}
 
       <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
-        Per-Table Quality
+        {t('perTableQuality')}
       </Typography>
 
       {tableRows.length === 0 ? (
-        <Alert severity="info">No tables in this data product.</Alert>
+        <Alert severity="info">{t('noTablesInProduct')}</Alert>
       ) : (
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.100' }}>
-                <TableCell sx={{ fontWeight: 600 }}>Table</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Score</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('table')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('status')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('score')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -92,7 +94,7 @@ export default function DataProductDQTab({ entityData, additionalProps = {} }) {
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={row.quality}
+                      label={t(row.quality)}
                       size="small"
                       color={QUALITY_COLOR[row.quality] || 'default'}
                       variant="outlined"

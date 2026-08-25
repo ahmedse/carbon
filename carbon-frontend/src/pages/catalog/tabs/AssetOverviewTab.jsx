@@ -2,14 +2,16 @@
 // Asset Overview Tab: Display read-only asset metadata and governance information
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Table, TableHead, TableRow, TableCell, TableBody, Typography, Chip, Grid, Paper } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 
 export default function AssetOverviewTab({ entityData }) {
+  const { t } = useTranslation('catalog');
   if (!entityData) {
     return (
       <DetailTabContent>
-        <Typography color="textSecondary">No data available</Typography>
+        <Typography color="textSecondary">{t('noDataAvailable')}</Typography>
       </DetailTabContent>
     );
   }
@@ -32,16 +34,16 @@ export default function AssetOverviewTab({ entityData }) {
 
   // Primary attributes (always displayed)
   const primaryAttributes = [
-    { label: 'ID', value: entityData.id },
-    { label: 'Name', value: entityData.title || entityData.name || '—' },
-    { label: 'Description', value: entityData.description || '—' },
-    { label: 'Asset Type', value: entityData.asset_type || '—' },
+    { label: t('id'), value: entityData.id },
+    { label: t('name'), value: entityData.title || entityData.name || '—' },
+    { label: t('description'), value: entityData.description || '—' },
+    { label: t('assetType'), value: entityData.asset_type || '—' },
   ];
 
   // Governance attributes (from AssetProfile model)
   const governanceAttributes = [
-    { label: 'Domain', value: entityData.domain_name || '—' },
-    { label: 'Classification', value: entityData.classification ? (
+    { label: t('domain'), value: entityData.domain_name || '—' },
+    { label: t('classification'), value: entityData.classification ? (
       <Chip 
         label={entityData.classification} 
         color={getClassificationColor(entityData.classification)}
@@ -49,27 +51,27 @@ export default function AssetOverviewTab({ entityData }) {
         variant="outlined"
       />
     ) : '—' },
-    { label: 'Quality Status', value: entityData.quality_status ? (
+    { label: t('qualityStatus'), value: entityData.quality_status ? (
       <Chip 
         label={entityData.quality_status} 
         color={getQualityColor(entityData.quality_status)}
         size="small"
       />
     ) : '—' },
-    { label: 'Quality Score', value: entityData.quality_score ? `${entityData.quality_score.toFixed(1)}%` : '—' },
+    { label: t('qualityScore'), value: entityData.quality_score ? `${entityData.quality_score.toFixed(1)}%` : '—' },
   ];
 
   // Owner and Steward
   const ownershipAttributes = [
-    { label: 'Owner', value: entityData.owner_name || entityData.owner || '—' },
-    { label: 'Steward', value: entityData.steward_name || entityData.steward || '—' },
+    { label: t('owner'), value: entityData.owner_name || entityData.owner || '—' },
+    { label: t('steward'), value: entityData.steward_name || entityData.steward || '—' },
   ];
 
   // Semantic and classification attributes
   const semanticAttributes = [
-    { label: 'Semantic Type', value: entityData.semantic_type || '—' },
-    { label: 'Glossary Term', value: entityData.glossary_term_name || entityData.glossary_term || '—' },
-    { label: 'Tags', value: entityData.tags && entityData.tags.length > 0 ? (
+    { label: t('semanticType'), value: entityData.semantic_type || '—' },
+    { label: t('glossaryTerm'), value: entityData.glossary_term_name || entityData.glossary_term || '—' },
+    { label: t('tags'), value: entityData.tags && entityData.tags.length > 0 ? (
       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
         {entityData.tags.map((tag, idx) => (
           <Chip key={idx} label={tag} size="small" variant="outlined" />
@@ -80,8 +82,8 @@ export default function AssetOverviewTab({ entityData }) {
 
   // Timestamps
   const timestampAttributes = [
-    { label: 'Created At', value: entityData.created_at ? new Date(entityData.created_at).toLocaleDateString() : '—' },
-    { label: 'Updated At', value: entityData.updated_at ? new Date(entityData.updated_at).toLocaleDateString() : '—' },
+    { label: t('createdAt'), value: entityData.created_at ? new Date(entityData.created_at).toLocaleDateString() : '—' },
+    { label: t('updatedAt'), value: entityData.updated_at ? new Date(entityData.updated_at).toLocaleDateString() : '—' },
   ];
 
   const renderTable = (attributes, title) => (
@@ -105,11 +107,11 @@ export default function AssetOverviewTab({ entityData }) {
   return (
     <DetailTabContent>
       <Box sx={{ maxWidth: '100%' }}>
-        {renderTable(primaryAttributes, 'Basic Information')}
-        {renderTable(governanceAttributes, 'Governance & Quality')}
-        {renderTable(ownershipAttributes, 'Ownership')}
-        {renderTable(semanticAttributes, 'Semantic & Classification')}
-        {renderTable(timestampAttributes, 'Timestamps')}
+        {renderTable(primaryAttributes, t('basicInformation'))}
+        {renderTable(governanceAttributes, t('governanceQuality'))}
+        {renderTable(ownershipAttributes, t('ownership'))}
+        {renderTable(semanticAttributes, t('semanticClassification'))}
+        {renderTable(timestampAttributes, t('timestamps'))}
       </Box>
     </DetailTabContent>
   );

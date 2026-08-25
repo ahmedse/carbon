@@ -2,6 +2,7 @@
 // Data Product Audit Tab: governance events for the module and its tables
 // (backend /audit_trail/ endpoint). Action-colored chips + timestamp formatting.
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Chip, Typography, Alert } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
@@ -22,19 +23,20 @@ function formatDate(value) {
 }
 
 export default function DataProductAuditTab({ entityData, additionalProps = {} }) {
+  const { t } = useTranslation('catalog');
   const { auditEvents = [] } = additionalProps;
 
   const columns = useMemo(() => [
     {
       field: 'timestamp',
-      headerName: 'Timestamp',
+      headerName: t('timestamp'),
       width: 180,
       valueGetter: (value, row) => row.timestamp || null,
       valueFormatter: (value) => formatDate(value),
     },
     {
       field: 'action',
-      headerName: 'Action',
+      headerName: t('action'),
       width: 140,
       renderCell: (params) => (
         <Chip
@@ -47,7 +49,7 @@ export default function DataProductAuditTab({ entityData, additionalProps = {} }
     },
     {
       field: 'entity_type',
-      headerName: 'Entity',
+      headerName: t('entity'),
       width: 130,
       valueGetter: (value, row) => {
         const type = row.entity_type || '—';
@@ -55,20 +57,20 @@ export default function DataProductAuditTab({ entityData, additionalProps = {} }
         return id != null ? `${type} #${id}` : type;
       },
     },
-    { field: 'username', headerName: 'User', width: 150, valueGetter: (value, row) => row.username || '—' },
+    { field: 'username', headerName: t('user'), width: 150, valueGetter: (value, row) => row.username || '—' },
     {
       field: 'message',
-      headerName: 'Details',
+      headerName: t('details'),
       flex: 1,
       minWidth: 240,
       valueGetter: (value, row) => row.message || row.action || '—',
     },
-  ], []);
+  ], [t]);
 
   if (!entityData) {
     return (
       <DetailTabContent>
-        <Typography variant="body2" color="text.secondary">No data available</Typography>
+        <Typography variant="body2" color="text.secondary">{t('noDataAvailable')}</Typography>
       </DetailTabContent>
     );
   }
@@ -76,11 +78,11 @@ export default function DataProductAuditTab({ entityData, additionalProps = {} }
   return (
     <DetailTabContent>
       <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 2 }}>
-        Governance Events ({auditEvents.length})
+        {t('governanceEvents')} ({auditEvents.length})
       </Typography>
 
       {auditEvents.length === 0 ? (
-        <Alert severity="info">No governance events recorded for this data product.</Alert>
+        <Alert severity="info">{t('noGovernanceEvents')}</Alert>
       ) : (
         <Box sx={{ height: 420, width: '100%' }}>
           <DataGrid

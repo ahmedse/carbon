@@ -2,6 +2,7 @@
 // DQ rules ASSIGNED to this table. Rules are authored and run in the DQ Workspace;
 // this tab only manages assignments — attach, detach, toggle, and view status.
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box, Button, Table, TableHead, TableBody, TableRow, TableCell,
   IconButton, Chip, CircularProgress, Alert, Typography, Tooltip, Stack,
@@ -28,8 +29,6 @@ import {
   FIELD_TYPE_LABELS, RULE_FIELD_TYPE_COMPAT, isRuleCompatibleWithField,
 } from '../../dq/constants';
 
-const STATUS_LABEL = { passed: 'Passed', failed: 'Failed', skipped_unavailable: 'Skipped' };
-
 function unwrap(data) {
   if (Array.isArray(data)) return data;
   if (data && Array.isArray(data.results)) return data.results;
@@ -39,6 +38,7 @@ function unwrap(data) {
 export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
   const { token } = useAuth();
   const { notify } = useNotification();
+  const { t } = useTranslation('catalog');
 
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,12 +77,12 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
       const data = await listDQRules(token, { data_table: tableId });
       setRules(unwrap(data));
     } catch (err) {
-      setError(err.message || 'Failed to load DQ rules');
-      notify({ message: err.message || 'Failed to load DQ rules', type: 'error' });
+      setError(err.message || t('failedToLoadRules'));
+      notify({ message: err.message || t('failedToLoadRules'), type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, tableId, notify]);
+  }, [token, tableId, notify, t]);
 
   // Latest run status per applied rule (Status column).
   const loadLatestResults = useCallback(async () => {
@@ -113,6 +113,12 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
     return f ? f.label || f.name : id;
   };
 
+  const statusLabel = (s) => ({
+    passed: t('passed'),
+    failed: t('failed'),
+    skipped_unavailable: t('skipped'),
+  })[s] || s;
+
   const openAttach = async () => {
     setAttachOpen(true);
     setSearch('');
@@ -129,7 +135,7 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
       // field-validation rules attach per field — exclude what is already applied.
       setCandidates(all.filter((r) => !appliedIds.has(r.id)));
     } catch (err) {
-      notify({ message: err.message || 'Failed to load available rules', type: 'error' });
+      notify({ message: err.message || t('failedToLoadAvailableRules'), type: 'error' });
       setCandidates([]);
     } finally {
       setCandidatesLoading(false);
@@ -172,7 +178,7 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
       );
       if (duplicate) {
         notify({
-          message: isBusiness ? 'Rule is already applied to this table' : 'Rule is already applied to this field',
+          message: isBusiness ? t('ruleAlreadyOnTable') : t('ruleAlreadyOnField'),
           type: 'warning',
         });
         setAttachOpen(false);
@@ -184,14 +190,16 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
       ];
       await updateDQRule(token, selectedRule.id, { field_assignments_write: next });
       notify({
-        message: `"${selectedRule.name}" ${isBusiness ? 'applied to this table' : `applied to field "${fieldLabel(dataField)}"`}`,
+        message: isBusiness
+          ? t('ruleAppliedToTable', { name: selectedRule.name })
+          : t('ruleAppliedToField', { name: selectedRule.name, field: fieldLabel(dataField) }),
         type: 'success',
       });
       setAttachOpen(false);
       loadRules();
       loadLatestResults();
     } catch (err) {
-      notify({ message: err?.message || 'Could not apply rule', type: 'error' });
+      notify({ message: err?.message || t('couldNotApplyRule'), type: 'error' });
     } finally {
       setAttaching(false);
     }
@@ -207,10 +215,10 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
         payload.definition = { ...rule.definition, active: next };
       }
       await updateDQRule(token, rule.id, payload);
-      notify({ message: `"${rule.name}" ${next ? 'activated' : 'deactivated'}`, type: 'success' });
+      notify({ message: next ? t('ruleActivated', { name: rule.name }) : t('ruleDeactivated', { name: rule.name }), type: 'success' });
       loadRules();
     } catch (err) {
-      notify({ message: err?.message || 'Could not update rule', type: 'error' });
+      notify({ message: err?.message || t('couldNotUpdateRule'), type: 'error' });
     } finally {
       setActionBusyId(null);
     }
@@ -230,12 +238,12 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
         field_assignments_write: next,
         replace_assignments: true,
       });
-      notify({ message: `"${detachTarget.name}" removed from this table`, type: 'success' });
+      notify({ message: t('ruleRemovedFromTable', { name: detachTarget.name }), type: 'success' });
       setDetachTarget(null);
       loadRules();
       loadLatestResults();
     } catch (err) {
-      notify({ message: err?.message || 'Could not detach rule', type: 'error' });
+      notify({ message: err?.message || t('couldNotDetachRule'), type: 'error' });
     } finally {
       setActionBusyId(null);
     }
@@ -252,38 +260,36 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
   return (
     <DetailTabContent>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Typography variant="h6">Assigned Rules</Typography>
+        <Typography variant="h6">{t('assignedRules')}</Typography>
         <Stack direction="row" spacing={1}>
           <Button variant="contained" startIcon={<AddIcon />} onClick={openAttach}>
-            Assign Rule
+            {t('assignRule')}
           </Button>
         </Stack>
       </Box>
 
       <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mb: 1.5 }}>
-        Unified DQ assignments for this table — business rules apply to the whole table,
-        field-validation rules attach to specific fields. Rules are authored in the DQ Workspace
-        and run from My Data; this tab only manages which rules are attached here.
+        {t('dqAssignmentsHint')}
       </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {rules.length === 0 ? (
-        <Alert severity="info">No rules assigned to this table yet — click Assign Rule to attach rules created in the DQ Workspace.</Alert>
+        <Alert severity="info">{t('noRulesAssigned')}</Alert>
       ) : (
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.100' }}>
-                <TableCell sx={{ fontWeight: 600 }}>Rule</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Dimension</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Scope</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Severity</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 600 }} align="right">Runs</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Active</TableCell>
-                <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('rule')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('type')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('dimension')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('scope')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('severity')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('status')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }} align="right">{t('runs')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('active')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }} align="right">{t('actions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -305,7 +311,7 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                     <TableCell>
                       <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
                         <Chip
-                          label={rule.rule_level === 'business_rule' ? 'Table' : 'Field'}
+                          label={rule.rule_level === 'business_rule' ? t('table') : t('field')}
                           size="small"
                           variant="outlined"
                           color={rule.rule_level === 'business_rule' ? 'secondary' : 'info'}
@@ -329,7 +335,7 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                       {latest ? (
                         <Stack direction="row" spacing={0.5} alignItems="center">
                           <Chip
-                            label={STATUS_LABEL[latest.status] || latest.status}
+                            label={statusLabel(latest.status)}
                             size="small"
                             color={RESULT_STATUS_COLORS[latest.status] || 'default'}
                           />
@@ -340,26 +346,26 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                           )}
                         </Stack>
                       ) : (
-                        <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled' }}>Never run</Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled' }}>{t('neverRun')}</Typography>
                       )}
                     </TableCell>
                     <TableCell align="right">{rule.results_count ?? 0}</TableCell>
                     <TableCell>
                       <Chip
-                        label={rule.is_active ? 'Active' : 'Inactive'}
+                        label={rule.is_active ? t('active') : t('inactive')}
                         size="small"
                         color={rule.is_active ? 'success' : 'default'}
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip title={rule.is_active ? 'Deactivate' : 'Activate'}>
+                      <Tooltip title={rule.is_active ? t('deactivate') : t('activate')}>
                         <span>
                           <IconButton size="small" disabled={actionBusyId === `toggle-${rule.id}`} onClick={() => handleToggleActive(rule)}>
                             {rule.is_active ? <ToggleOnIcon fontSize="small" color="success" /> : <ToggleOffIcon fontSize="small" />}
                           </IconButton>
                         </span>
                       </Tooltip>
-                      <Tooltip title="Remove from this table">
+                      <Tooltip title={t('removeFromTable')}>
                         <span>
                           <IconButton size="small" disabled={actionBusyId === `detach-${rule.id}`} onClick={() => setDetachTarget(rule)}>
                             <LinkOffIcon fontSize="small" />
@@ -378,10 +384,10 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
       {/* ── Assign DQ Rule — pick an existing rule (business or field-validation) from the DQ workspace ── */}
       <SystemDialog
         open={attachOpen}
-        title="Assign DQ Rule"
+        title={t('assignDqRule')}
         onClose={() => { if (!attaching) setAttachOpen(false); }}
         onCancel={() => { if (!attaching) setAttachOpen(false); }}
-        cancelLabel="Cancel"
+        cancelLabel={t('common:cancel')}
         width={640}
         height={520}
         minWidth={520}
@@ -396,22 +402,21 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
             disabled={attaching || !selectedRule || (selectedRule.rule_level === 'field_validation' && !selectedFieldId)}
           >
             {attaching
-              ? 'Assigning…'
+              ? t('assigning')
               : selectedRule?.rule_level === 'business_rule'
-                ? 'Assign to Table'
-                : 'Assign to Field'}
+                ? t('assignToTable')
+                : t('assignToField')}
           </Button>
         }
       >
         <Stack spacing={1.5}>
           <Typography variant="caption" color="text.secondary">
-            Pick a rule authored in the DQ Workspace — business rules apply to the whole table,
-            field-validation rules attach to a specific field of this table. Use the Scope filter to narrow the list.
+            {t('pickRuleHint')}
           </Typography>
           <TextField
             size="small"
             fullWidth
-            placeholder="Search rules by name, type…"
+            placeholder={t('searchRulesPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             InputProps={{
@@ -420,21 +425,21 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
           />
           <Stack direction="row" spacing={1}>
             <FormControl size="small" fullWidth>
-              <InputLabel>Scope</InputLabel>
+              <InputLabel>{t('scope')}</InputLabel>
               <Select
-                label="Scope"
+                label={t('scope')}
                 value={scopeFilter}
                 onChange={(e) => { setScopeFilter(e.target.value); setSelectedFieldId(''); }}
               >
-                <MenuItem value="all">All scopes</MenuItem>
-                <MenuItem value="table">Table (business rule)</MenuItem>
-                <MenuItem value="field">Field (field validation)</MenuItem>
+                <MenuItem value="all">{t('allScopes')}</MenuItem>
+                <MenuItem value="table">{t('tableBusinessRule')}</MenuItem>
+                <MenuItem value="field">{t('fieldValidation')}</MenuItem>
               </Select>
             </FormControl>
             <FormControl size="small" fullWidth>
-              <InputLabel>Dimension</InputLabel>
-              <Select label="Dimension" value={dimensionFilter} onChange={(e) => setDimensionFilter(e.target.value)}>
-                <MenuItem value="">All dimensions</MenuItem>
+              <InputLabel>{t('dimension')}</InputLabel>
+              <Select label={t('dimension')} value={dimensionFilter} onChange={(e) => setDimensionFilter(e.target.value)}>
+                <MenuItem value="">{t('allDimensions')}</MenuItem>
                 {Object.entries(DIMENSION_LABELS).map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
               </Select>
             </FormControl>
@@ -443,7 +448,7 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
           {candidatesLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}><CircularProgress size={24} /></Box>
           ) : filteredCandidates.length === 0 ? (
-            <Alert severity="info">No matching rules. Create rules first in the DQ Workspace, then apply them here.</Alert>
+            <Alert severity="info">{t('noMatchingRules')}</Alert>
           ) : (
             <List dense sx={{ maxHeight: 200, overflowY: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
               {filteredCandidates.map((r) => (
@@ -461,7 +466,7 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                     secondary={(
                       <Stack direction="row" spacing={0.5} flexWrap="wrap">
                         <Chip
-                          label={r.rule_level === 'business_rule' ? 'Table' : 'Field'}
+                          label={r.rule_level === 'business_rule' ? t('table') : t('field')}
                           size="small"
                           variant="outlined"
                           color={r.rule_level === 'business_rule' ? 'secondary' : 'info'}
@@ -479,9 +484,9 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
 
           {selectedRule && selectedRule.rule_level === 'field_validation' && (
             <FormControl size="small" fullWidth>
-              <InputLabel>Field</InputLabel>
+              <InputLabel>{t('field')}</InputLabel>
               <Select
-                label="Field"
+                label={t('field')}
                 value={selectedFieldId}
                 onChange={(e) => setSelectedFieldId(e.target.value)}
               >
@@ -492,7 +497,7 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: 2 }}>
                         <span>{f.label || f.name || f.id}</span>
                         <Typography component="span" variant="caption" color="text.secondary">
-                          {FIELD_TYPE_LABELS[f.type] || f.type}{compatible ? '' : ' · incompatible'}
+                          {FIELD_TYPE_LABELS[f.type] || f.type}{compatible ? '' : ` · ${t('incompatible')}`}
                         </Typography>
                       </Box>
                     </MenuItem>
@@ -504,9 +509,9 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                   const allowed = RULE_FIELD_TYPE_COMPAT[selectedRule.rule_type];
                   const typeLabel = RULE_TYPE_LABELS[selectedRule.rule_type] || selectedRule.rule_type;
                   const target = !allowed
-                    ? 'any field type'
+                    ? t('anyFieldType')
                     : allowed.map((t) => FIELD_TYPE_LABELS[t] || t).join(', ');
-                  return `${typeLabel} rules apply to ${target}.`;
+                  return t('rulesApplyTo', { type: typeLabel, target });
                 })()}
               </FormHelperText>
             </FormControl>
@@ -517,9 +522,9 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
       {/* ── Remove-from-table confirmation ── */}
       <ConfirmDialog
         open={!!detachTarget}
-        title="Remove rule from this table?"
-        message={detachTarget ? `Remove "${detachTarget.name}" from this table? The rule itself stays in the DQ workspace.` : ''}
-        confirmLabel="Remove"
+        title={t('removeRuleTitle')}
+        message={detachTarget ? t('removeRuleMessage', { name: detachTarget.name }) : ''}
+        confirmLabel={t('remove')}
         destructive
         onConfirm={confirmDetach}
         onCancel={() => setDetachTarget(null)}

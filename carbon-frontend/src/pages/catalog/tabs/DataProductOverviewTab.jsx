@@ -3,65 +3,67 @@
 // Follows AssetOverviewTab pattern (theme tokens, size="small", Chip values).
 import React from 'react';
 import { Box, Table, TableRow, TableCell, TableBody, Typography, Chip } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import LockIcon from '@mui/icons-material/Lock';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 
 const QUALITY_COLOR = { passing: 'success', warning: 'warning', failing: 'error', unknown: 'default' };
 
-function formatDate(value) {
+function formatDate(value, locale) {
   if (!value) return '—';
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString(locale);
 }
 
 export default function DataProductOverviewTab({ entityData, additionalProps = {} }) {
+  const { t, i18n } = useTranslation('catalog');
   const { qualitySummary = null } = additionalProps;
 
   if (!entityData) {
     return (
       <DetailTabContent>
-        <Typography variant="body2" color="text.secondary">No data available</Typography>
+        <Typography variant="body2" color="text.secondary">{t('noDataAvailable')}</Typography>
       </DetailTabContent>
     );
   }
 
   const basicAttributes = [
-    { label: 'ID', value: entityData.id },
-    { label: 'Name', value: entityData.name || '—' },
-    { label: 'Description', value: entityData.description || '—' },
+    { label: t('id'), value: entityData.id },
+    { label: t('name'), value: entityData.name || '—' },
+    { label: t('description'), value: entityData.description || '—' },
   ];
 
   const governanceAttributes = [
-    { label: 'Org Unit', value: entityData.org_unit_name || '—' },
+    { label: t('orgUnit'), value: entityData.org_unit_name || '—' },
     {
-      label: 'Status',
+      label: t('status'),
       value: entityData.is_locked ? (
         <Chip
           icon={<LockIcon sx={{ fontSize: '0.9rem' }} />}
-          label="Locked"
+          label={t('locked')}
           size="small"
           color="warning"
           variant="outlined"
         />
       ) : (
-        <Chip label="Unlocked" size="small" color="success" variant="outlined" />
+        <Chip label={t('unlocked')} size="small" color="success" variant="outlined" />
       ),
     },
     {
-      label: 'Quality',
+      label: t('quality'),
       value: qualitySummary ? (
         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
           {qualitySummary.failing > 0 && (
-            <Chip label={`${qualitySummary.failing} failing`} size="small" color={QUALITY_COLOR.failing} variant="outlined" />
+            <Chip label={`${qualitySummary.failing} ${t('failing')}`} size="small" color={QUALITY_COLOR.failing} variant="outlined" />
           )}
           {qualitySummary.warning > 0 && (
-            <Chip label={`${qualitySummary.warning} warning`} size="small" color={QUALITY_COLOR.warning} variant="outlined" />
+            <Chip label={`${qualitySummary.warning} ${t('warning')}`} size="small" color={QUALITY_COLOR.warning} variant="outlined" />
           )}
           {qualitySummary.passing > 0 && (
-            <Chip label={`${qualitySummary.passing} passing`} size="small" color={QUALITY_COLOR.passing} variant="outlined" />
+            <Chip label={`${qualitySummary.passing} ${t('passing')}`} size="small" color={QUALITY_COLOR.passing} variant="outlined" />
           )}
           {qualitySummary.total === 0 && (
-            <Chip label="No checks" size="small" color="default" variant="outlined" />
+            <Chip label={t('noChecks')} size="small" color="default" variant="outlined" />
           )}
         </Box>
       ) : '—',
@@ -69,9 +71,9 @@ export default function DataProductOverviewTab({ entityData, additionalProps = {
   ];
 
   const statisticsAttributes = [
-    { label: 'Tables', value: entityData.table_count ?? '—' },
+    { label: t('tables'), value: entityData.table_count ?? '—' },
     {
-      label: 'Quality Score',
+      label: t('qualityScore'),
       value: qualitySummary?.avg_score != null
         ? `${Number(qualitySummary.avg_score).toFixed(1)}%`
         : '—',
@@ -79,8 +81,8 @@ export default function DataProductOverviewTab({ entityData, additionalProps = {
   ];
 
   const timestampAttributes = [
-    { label: 'Created At', value: formatDate(entityData.created_at) },
-    { label: 'Updated At', value: formatDate(entityData.updated_at) },
+    { label: t('createdAt'), value: formatDate(entityData.created_at, i18n.language) },
+    { label: t('updatedAt'), value: formatDate(entityData.updated_at, i18n.language) },
   ];
 
   const renderTable = (attributes, title) => (
@@ -108,10 +110,10 @@ export default function DataProductOverviewTab({ entityData, additionalProps = {
   return (
     <DetailTabContent>
       <Box sx={{ maxWidth: '100%' }}>
-        {renderTable(basicAttributes, 'Basic Information')}
-        {renderTable(governanceAttributes, 'Governance')}
-        {renderTable(statisticsAttributes, 'Statistics')}
-        {renderTable(timestampAttributes, 'Timestamps')}
+        {renderTable(basicAttributes, t('basicInformation'))}
+        {renderTable(governanceAttributes, t('governance'))}
+        {renderTable(statisticsAttributes, t('statistics'))}
+        {renderTable(timestampAttributes, t('timestamps'))}
       </Box>
     </DetailTabContent>
   );

@@ -1,25 +1,27 @@
 // src/pages/catalog/tabs/DomainOverviewTab.jsx
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Table, TableHead, TableRow, TableCell, TableBody, Typography, Paper } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 
 export default function DomainOverviewTab({ entityData }) {
+  const { t } = useTranslation('catalog');
   if (!entityData) {
     return (
       <DetailTabContent>
-        <Typography color="textSecondary">No data available</Typography>
+        <Typography color="textSecondary">{t('noDataAvailable')}</Typography>
       </DetailTabContent>
     );
   }
 
   const attributes = [
-    { label: 'ID', value: entityData.id },
-    { label: 'Name', value: entityData.name },
-    { label: 'Description', value: entityData.description || '—' },
-    { label: 'Owner', value: entityData.owner || '—' },
-    { label: 'Created At', value: entityData.created_at ? new Date(entityData.created_at).toLocaleDateString() : '—' },
-    { label: 'Updated At', value: entityData.updated_at ? new Date(entityData.updated_at).toLocaleDateString() : '—' },
+    { label: t('id'), value: entityData.id },
+    { label: t('name'), value: entityData.name },
+    { label: t('description'), value: entityData.description || '—' },
+    { label: t('owner'), value: entityData.owner || '—' },
+    { label: t('createdAt'), value: entityData.created_at ? new Date(entityData.created_at).toLocaleDateString() : '—' },
+    { label: t('updatedAt'), value: entityData.updated_at ? new Date(entityData.updated_at).toLocaleDateString() : '—' },
   ];
 
   return (
@@ -28,8 +30,8 @@ export default function DomainOverviewTab({ entityData }) {
         <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: 'grey.100' }}>
-              <TableCell sx={{ fontWeight: 600 }}>Property</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Value</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('property')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('value')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert,
@@ -39,6 +40,7 @@ function sortFields(fields = []) {
 }
 
 export default function SchemaStructureTab({ _entityData, tableId, table, fields = [], onChanged, isAdmin, onEditMetadata }) {
+  const { t } = useTranslation('catalog');
   const navigate = useNavigate();
   const { token, user, context } = useAuth();
   const { notify } = useNotification();
@@ -71,16 +73,16 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
     try {
       if (editingField) {
         await updateDataSchemaField(token, editingField.id, payload, context?.project_id || null, table?.module || table?.module_id || null);
-        notify({ message: 'Field updated', type: 'success' });
+        notify({ message: t('fieldUpdated'), type: 'success' });
       } else {
         await createDataSchemaField(token, payload, context?.project_id || null, table?.module || table?.module_id || null);
-        notify({ message: 'Field created', type: 'success' });
+        notify({ message: t('fieldCreated'), type: 'success' });
       }
       setDialogOpen(false);
       setEditingField(null);
       if (onChanged) await onChanged();
     } catch (err) {
-      notify({ message: err.message || 'Failed to save field', type: 'error' });
+      notify({ message: err.message || t('failedToSaveField'), type: 'error' });
     } finally {
       setWorking(false);
     }
@@ -95,16 +97,16 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
       if (deleteTarget.kind === 'field') {
         const field = deleteTarget.item;
         await deleteDataSchemaField(token, field.id, context?.project_id || null, table?.module || table?.module_id || null);
-        notify({ message: 'Field deleted', type: 'success' });
+        notify({ message: t('fieldDeleted'), type: 'success' });
       } else {
         await deleteDataSchemaTable(token, tableId, context?.project_id || null, table?.module || table?.module_id || null);
-        notify({ message: 'Table deleted', type: 'success' });
+        notify({ message: t('tableDeleted'), type: 'success' });
         navigate('/catalog/products');
         return;
       }
       if (onChanged) await onChanged();
     } catch (err) {
-      notify({ message: err.message || 'Failed to delete', type: 'error' });
+      notify({ message: err.message || t('failedToDelete'), type: 'error' });
     } finally {
       setWorking(false);
       setDeleteTarget(null);
@@ -125,10 +127,10 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
     setWorking(true);
     try {
       await updateDataSchemaFieldOrder(token, tableId, normalized, context?.project_id || null, table?.module || table?.module_id || null);
-      notify({ message: 'Field order updated', type: 'success' });
+      notify({ message: t('fieldOrderUpdated'), type: 'success' });
       if (onChanged) await onChanged();
     } catch (err) {
-      notify({ message: err.message || 'Failed to update field order', type: 'error' });
+      notify({ message: err.message || t('failedToUpdateFieldOrder'), type: 'error' });
     } finally {
       setWorking(false);
     }
@@ -142,18 +144,18 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
         <Paper variant="outlined" sx={{ p: 2.5 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
             <Box>
-              <Typography variant="h6">{table?.title || 'Table'}</Typography>
+              <Typography variant="h6">{table?.title || t('table')}</Typography>
               <Typography variant="body2" color="text.secondary">
-                {table?.description || 'No description provided.'}
+                {table?.description || t('noDescriptionProvided')}
               </Typography>
             </Box>
             {effectiveIsAdmin && (
               <Stack direction="row" spacing={1}>
                 <Button variant="outlined" onClick={onEditMetadata} disabled={working}>
-                  Edit Metadata
+                  {t('editMetadata')}
                 </Button>
                 <Button variant="contained" color="error" onClick={handleDeleteTable} disabled={working}>
-                  Delete Table
+                  {t('deleteTable')}
                 </Button>
               </Stack>
             )}
@@ -161,30 +163,30 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
         </Paper>
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="subtitle1" fontWeight={600}>Fields</Typography>
+          <Typography variant="subtitle1" fontWeight={600}>{t('fields')}</Typography>
           {effectiveIsAdmin && (
             <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate} disabled={working}>
-              Add Field
+              {t('addField')}
             </Button>
           )}
         </Box>
 
         {visibleFields.length === 0 ? (
           <Alert severity="info">
-            {effectiveIsAdmin ? 'No fields yet — add the first field.' : 'No fields defined.'}
+            {effectiveIsAdmin ? t('noFieldsYet') : t('noFieldsDefined')}
           </Alert>
         ) : (
           <Paper variant="outlined">
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: 'action.hover' }}>
-                  <TableCell sx={{ fontWeight: 600 }}>Order</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Label</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Required</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Description</TableCell>
-                  {effectiveIsAdmin && <TableCell sx={{ fontWeight: 600 }}>Actions</TableCell>}
+                  <TableCell sx={{ fontWeight: 600 }}>{t('order')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{t('name')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{t('label')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{t('type')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{t('required')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{t('description')}</TableCell>
+                  {effectiveIsAdmin && <TableCell sx={{ fontWeight: 600 }}>{t('actions')}</TableCell>}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -196,31 +198,31 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
                     <TableCell>
                       <Chip label={field.type || 'string'} size="small" variant="outlined" />
                     </TableCell>
-                    <TableCell>{field.required ? 'Yes' : 'No'}</TableCell>
+                    <TableCell>{field.required ? t('yes') : t('no')}</TableCell>
                     <TableCell>{field.description || '—'}</TableCell>
                     {effectiveIsAdmin && (
                       <TableCell>
                         <Stack direction="row" spacing={0.5}>
-                          <Tooltip title="Move up">
+                          <Tooltip title={t('moveUp')}>
                             <span>
                               <IconButton size="small" onClick={() => handleReorder(field, 'up')} disabled={working}>
                                 <ArrowUpwardIcon fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
-                          <Tooltip title="Move down">
+                          <Tooltip title={t('moveDown')}>
                             <span>
                               <IconButton size="small" onClick={() => handleReorder(field, 'down')} disabled={working}>
                                 <ArrowDownwardIcon fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
-                          <Tooltip title="Edit">
+                          <Tooltip title={t('edit')}>
                             <IconButton size="small" onClick={() => handleOpenEdit(field)} disabled={working}>
                               <EditIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Delete">
+                          <Tooltip title={t('delete')}>
                             <IconButton size="small" color="error" onClick={() => handleDeleteField(field)} disabled={working}>
                               <DeleteIcon fontSize="small" />
                             </IconButton>
@@ -246,13 +248,13 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
 
       <ConfirmDialog
         open={!!deleteTarget}
-        title={deleteTarget?.kind === 'table' ? 'Delete table?' : 'Delete field?'}
+        title={deleteTarget?.kind === 'table' ? t('deleteTableTitle') : t('deleteFieldTitle')}
         message={
           deleteTarget?.kind === 'table'
-            ? `Delete table "${table?.title || 'this table'}"? This action cannot be undone.`
-            : `Delete field "${deleteTarget?.item?.label || deleteTarget?.item?.name}"? This action cannot be undone.`
+            ? t('deleteTableMessage', { name: table?.title || t('thisTable') })
+            : t('deleteFieldMessage', { name: deleteTarget?.item?.label || deleteTarget?.item?.name })
         }
-        confirmLabel="Delete"
+        confirmLabel={t('delete')}
         destructive
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}

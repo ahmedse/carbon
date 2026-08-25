@@ -2,6 +2,7 @@
 // Reference Set Values Tab: CRUD management of reference values with temporal validity
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, Button, TextField,
   IconButton, Tooltip, Chip, Typography, Alert
@@ -43,6 +44,7 @@ function mapFieldErrors(err) {
 }
 
 export default function ReferenceSetValuesTab({ entityData, additionalProps = {} }) {
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
   const { values = [], onValuesUpdated = null } = additionalProps;
@@ -97,14 +99,14 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
   const handleSave = async () => {
     // Client-side validation
     const errors = {};
-    if (!formData.code.trim()) errors.code = 'Code is required.';
-    if (!formData.label.trim()) errors.label = 'Label is required.';
+    if (!formData.code.trim()) errors.code = t('codeRequired');
+    if (!formData.label.trim()) errors.label = t('labelRequired');
     if (
       formData.valid_from &&
       formData.valid_to &&
       formData.valid_from.isAfter(formData.valid_to, 'day')
     ) {
-      errors.valid_to = 'Valid To must be on or after Valid From.';
+      errors.valid_to = t('validToOnOrAfter');
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -126,10 +128,10 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
 
       if (editingValue) {
         await updateReferenceValue(token, editingValue.id, payload);
-        notify({ message: 'Reference value updated', type: 'success' });
+        notify({ message: t('referenceValueUpdated'), type: 'success' });
       } else {
         await createReferenceValue(token, payload);
-        notify({ message: 'Reference value created', type: 'success' });
+        notify({ message: t('referenceValueCreated'), type: 'success' });
       }
 
       handleCloseDialog();
@@ -141,7 +143,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
       if (mapped) {
         setFieldErrors(mapped);
       } else {
-        const message = err.message || 'Failed to save reference value';
+        const message = err.message || t('failedToSaveReferenceValue');
         setError(message);
         notify({ message, type: 'error' });
       }
@@ -152,19 +154,19 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
 
   const handleDelete = (row) => {
     setConfirmState({
-      title: 'Delete reference value',
-      message: `Delete value "${row.code}" (${row.label})?\nThis action cannot be undone.`,
+      title: t('deleteReferenceValueTitle'),
+      message: t('deleteReferenceValueMessage', { code: row.code, label: row.label }),
       destructive: true,
-      confirmLabel: 'Delete',
+      confirmLabel: t('delete'),
       onConfirm: async () => {
         try {
           await deleteReferenceValue(token, row.id);
-          notify({ message: 'Reference value deleted', type: 'success' });
+          notify({ message: t('referenceValueDeleted'), type: 'success' });
           if (onValuesUpdated) {
             onValuesUpdated();
           }
         } catch (err) {
-          notify({ message: err.message || 'Failed to delete', type: 'error' });
+          notify({ message: err.message || t('failedToDelete'), type: 'error' });
         }
       },
     });
@@ -173,7 +175,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
   const columns = [
     { 
       field: 'code', 
-      headerName: 'Code', 
+      headerName: t('code'), 
       flex: 1, 
       minWidth: 140,
       renderCell: (params) => (
@@ -182,21 +184,21 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
         </Typography>
       ),
     },
-    { field: 'label', headerName: 'Label', flex: 2, minWidth: 200 },
+    { field: 'label', headerName: t('label'), flex: 2, minWidth: 200 },
     { 
       field: 'description', 
-      headerName: 'Description', 
+      headerName: t('description'), 
       flex: 2, 
       minWidth: 220,
       renderCell: (params) => params.value || '—',
     },
     {
       field: 'is_active',
-      headerName: 'Status',
+      headerName: t('status'),
       width: 100,
       renderCell: (params) => (
         <Chip
-          label={params.value ? 'Active' : 'Inactive'}
+          label={params.value ? t('active') : t('inactive')}
           size="small"
           color={params.value ? 'success' : 'default'}
           variant="outlined"
@@ -205,36 +207,36 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
     },
     {
       field: 'sort_order',
-      headerName: 'Order',
+      headerName: t('order'),
       width: 80,
     },
     {
       field: 'valid_from',
-      headerName: 'Valid From',
+      headerName: t('validFrom'),
       width: 120,
       renderCell: (params) =>
         params.value ? new Date(params.value).toLocaleDateString() : '—',
     },
     {
       field: 'valid_to',
-      headerName: 'Valid To',
+      headerName: t('validTo'),
       width: 120,
       renderCell: (params) =>
         params.value ? new Date(params.value).toLocaleDateString() : '—',
     },
     {
       field: 'actions',
-      headerName: 'Actions',
+      headerName: t('actions'),
       width: 120,
       sortable: false,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="Edit">
+          <Tooltip title={t('edit')}>
             <IconButton size="small" onClick={() => handleOpenEdit(params.row)}>
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Delete">
+          <Tooltip title={t('delete')}>
             <IconButton
               size="small"
               color="error"
@@ -252,7 +254,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
     <DetailTabContent>
       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="subtitle2" fontWeight={600}>
-          Reference Values ({values.length})
+          {t('referenceValues')} ({values.length})
         </Typography>
         <Button
           variant="contained"
@@ -260,7 +262,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
           startIcon={<AddIcon />}
           onClick={handleOpenCreate}
         >
-          Add Value
+          {t('addValue')}
         </Button>
       </Box>
 
@@ -279,10 +281,10 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
       {/* Create/Edit dialog (SystemDialog — design system primitive) */}
       <SystemDialog
         open={openDialog}
-        title={editingValue ? 'Edit Reference Value' : 'Create Reference Value'}
+        title={editingValue ? t('editReferenceValue') : t('createReferenceValue')}
         onClose={handleCloseDialog}
         onCancel={handleCloseDialog}
-        cancelLabel="Cancel"
+        cancelLabel={t('common:cancel')}
         width={520}
         height={560}
         minWidth={440}
@@ -291,7 +293,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
         maxHeight="calc(100vh - 32px)"
         actions={
           <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('saving') : t('common:save')}
           </Button>
         }
       >
@@ -301,33 +303,33 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
           <TextField
             fullWidth
             size="small"
-            label="Code"
+            label={t('code')}
             name="code"
             value={formData.code}
             onChange={handleChange}
             margin="normal"
             required
             error={Boolean(fieldErrors.code)}
-            helperText={fieldErrors.code || 'Alphanumeric identifier (e.g., SCOPE_1)'}
+            helperText={fieldErrors.code || t('alphanumericIdentifierHelper')}
           />
 
           <TextField
             fullWidth
             size="small"
-            label="Label"
+            label={t('label')}
             name="label"
             value={formData.label}
             onChange={handleChange}
             margin="normal"
             required
             error={Boolean(fieldErrors.label)}
-            helperText={fieldErrors.label || 'Human-readable display name'}
+            helperText={fieldErrors.label || t('humanReadableNameHelper')}
           />
 
           <TextField
             fullWidth
             size="small"
-            label="Description"
+            label={t('description')}
             name="description"
             value={formData.description}
             onChange={handleChange}
@@ -341,26 +343,26 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
           <TextField
             fullWidth
             size="small"
-            label="Sort Order"
+            label={t('sortOrder')}
             name="sort_order"
             type="number"
             value={formData.sort_order}
             onChange={handleChange}
             margin="normal"
             error={Boolean(fieldErrors.sort_order)}
-            helperText={fieldErrors.sort_order || 'Display order (lower numbers appear first)'}
+            helperText={fieldErrors.sort_order || t('displayOrderHelper')}
           />
 
           <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
             <DatePicker
-              label="Valid From"
+              label={t('validFrom')}
               value={formData.valid_from}
               onChange={(value) => handleDateChange('valid_from', value)}
               slotProps={{ textField: { error: Boolean(fieldErrors.valid_from), helperText: fieldErrors.valid_from, size: 'small', fullWidth: true } }}
               sx={{ flex: 1 }}
             />
             <DatePicker
-              label="Valid To"
+              label={t('validTo')}
               value={formData.valid_to}
               onChange={(value) => handleDateChange('valid_to', value)}
               slotProps={{ textField: { error: Boolean(fieldErrors.valid_to), helperText: fieldErrors.valid_to, size: 'small', fullWidth: true } }}
@@ -368,7 +370,7 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
             />
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            Leave dates blank for values that are always valid
+            {t('leaveDatesBlank')}
           </Typography>
         </Box>
       </SystemDialog>
@@ -376,10 +378,10 @@ export default function ReferenceSetValuesTab({ entityData, additionalProps = {}
       {/* Confirm delete dialog */}
       <ConfirmDialog
         open={Boolean(confirmState)}
-        title={confirmState?.title || 'Confirm'}
+        title={confirmState?.title || t('common:confirm')}
         message={confirmState?.message || ''}
         destructive={confirmState?.destructive}
-        confirmLabel={confirmState?.confirmLabel || 'Confirm'}
+        confirmLabel={confirmState?.confirmLabel || t('common:confirm')}
         onCancel={() => setConfirmState(null)}
         onConfirm={async () => {
           const { onConfirm } = confirmState || {};

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
@@ -30,6 +31,7 @@ function getStatusColor(status) {
 }
 
 export default function AssetQualityTab({ entityData }) {
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
   const navigate = useNavigate();
@@ -62,12 +64,12 @@ export default function AssetQualityTab({ entityData }) {
       setRules(Array.isArray(rulesData) ? rulesData : rulesData?.results || []);
       setResults(Array.isArray(resultsData) ? resultsData : resultsData?.results || []);
     } catch (err) {
-      setError(err.message || 'Failed to load asset quality metrics');
-      notify({ message: err.message || 'Failed to load asset quality metrics', type: 'error' });
+      setError(err.message || t('failedToLoadAssetQuality'));
+      notify({ message: err.message || t('failedToLoadAssetQuality'), type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [entityData, token, notify]);
+  }, [entityData, token, notify, t]);
 
   useEffect(() => {
     if (!entityData || !token) return;
@@ -98,14 +100,14 @@ export default function AssetQualityTab({ entityData }) {
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Quality Score
+                {t('qualityScore')}
               </Typography>
               <Typography variant="h3" fontWeight={700} color="text.primary">
-                {score != null ? `${score}/100` : 'N/A'}
+                {score != null ? `${score}/100` : t('na')}
               </Typography>
               <Chip label={status} color={getStatusColor(status)} sx={{ mt: 2 }} />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                {lastRun ? `Last evaluated ${new Date(lastRun).toLocaleString()}` : 'No recent evaluation available'}
+                {lastRun ? `${t('lastEvaluated')} ${new Date(lastRun).toLocaleString()}` : t('noRecentEvaluation')}
               </Typography>
               {entityData?.data_table && (
                 <Button
@@ -115,7 +117,7 @@ export default function AssetQualityTab({ entityData }) {
                   sx={{ mt: 3 }}
                   onClick={() => navigate(`/dq?table=${entityData.data_table}`)}
                 >
-                  Manage in DQ Workspace
+                  {t('manageInDqWorkspace')}
                 </Button>
               )}
             </CardContent>
@@ -125,16 +127,16 @@ export default function AssetQualityTab({ entityData }) {
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Rule Coverage
+                {t('ruleCoverage')}
               </Typography>
               <Typography variant="h4" fontWeight={700}>
                 {ruleCount}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Active DQ rules defined for this asset.
+                {t('activeDqRulesForAsset')}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                {passingCount} active rule{passingCount === 1 ? '' : 's'}.
+                {passingCount} {passingCount === 1 ? t('activeRule') : t('activeRules')}.
               </Typography>
             </CardContent>
           </Card>
@@ -143,21 +145,21 @@ export default function AssetQualityTab({ entityData }) {
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Latest Results
+                {t('latestResults')}
               </Typography>
               <Stack spacing={1} sx={{ mt: 1 }}>
                 {results.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
-                    No recent validation results.
+                    {t('noRecentValidationResults')}
                   </Typography>
                 ) : (
                   results.slice(0, 3).map((result) => (
                     <Box key={result.id || result.rule || result.executed_at}>
                       <Typography variant="body2" fontWeight={600}>
-                        {result.rule_name || result.rule || 'Rule'}
+                        {result.rule_name || result.rule || t('rule')}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {result.passed ? 'Passed' : 'Failed'} • {result.executed_at ? new Date(result.executed_at).toLocaleString() : 'Unknown'}
+                        {result.passed ? t('passed') : t('failed')} • {result.executed_at ? new Date(result.executed_at).toLocaleString() : t('unknown')}
                       </Typography>
                     </Box>
                   ))
@@ -175,7 +177,7 @@ export default function AssetQualityTab({ entityData }) {
             startIcon={<LaunchIcon />}
             onClick={() => navigate(`/dq?table=${entityData.data_table}`)}
           >
-            View rules in DQ Workspace
+            {t('viewRulesInDqWorkspace')}
           </Button>
         </Box>
       )}

@@ -1,6 +1,7 @@
 // src/pages/catalog/tabs/DomainEditTab.jsx
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, TextField, Button, CircularProgress, Alert } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import { useAuth } from '../../../auth/AuthContext';
@@ -8,6 +9,7 @@ import { useNotification } from '../../../components/NotificationProvider';
 import { apiFetch } from '../../../api/api';
 
 export default function DomainEditTab({ entityData }) {
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
   const [formData, setFormData] = useState({
@@ -25,7 +27,7 @@ export default function DomainEditTab({ entityData }) {
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      setError('Name is required');
+      setError(t('nameRequiredShort'));
       return;
     }
 
@@ -39,9 +41,9 @@ export default function DomainEditTab({ entityData }) {
         body: formData,
       }); // update domain
 
-      notify({ message: 'Domain updated successfully', type: 'success' });
+      notify({ message: t('domainUpdated'), type: 'success' });
     } catch (err) {
-      const message = err.message || 'Failed to save domain';
+      const message = err.message || t('failedToSaveDomain');
       setError(message);
       notify({ message, type: 'error' });
     } finally {
@@ -56,7 +58,7 @@ export default function DomainEditTab({ entityData }) {
 
         <TextField
           fullWidth
-          label="Name"
+          label={t('name')}
           name="name"
           value={formData.name}
           onChange={handleChange}
@@ -66,7 +68,7 @@ export default function DomainEditTab({ entityData }) {
 
         <TextField
           fullWidth
-          label="Description"
+          label={t('description')}
           name="description"
           value={formData.description}
           onChange={handleChange}
@@ -78,7 +80,7 @@ export default function DomainEditTab({ entityData }) {
 
         <TextField
           fullWidth
-          label="Owner"
+          label={t('owner')}
           name="owner"
           value={formData.owner}
           onChange={handleChange}
@@ -92,7 +94,7 @@ export default function DomainEditTab({ entityData }) {
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? <CircularProgress size={24} /> : 'Save Changes'}
+            {saving ? <CircularProgress size={24} /> : t('saveChanges')}
           </Button>
         </Box>
       </Box>

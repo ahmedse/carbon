@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
@@ -29,6 +30,7 @@ function normalizeOptions(options = []) {
 }
 
 export default function FieldEditorDialog({ open, onClose, onSave, field = null, tableId }) {
+  const { t } = useTranslation('catalog');
   const [formData, setFormData] = useState({
     name: '',
     label: '',
@@ -81,13 +83,13 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
     const trimmedName = formData.name.trim();
     const trimmedLabel = formData.label.trim();
 
-    if (!trimmedName) nextErrors.name = 'Name is required';
-    if (trimmedName.length > 50) nextErrors.name = 'Name must be 50 characters or fewer';
-    if (!trimmedLabel) nextErrors.label = 'Label is required';
+    if (!trimmedName) nextErrors.name = t('nameRequiredShort');
+    if (trimmedName.length > 50) nextErrors.name = t('nameMaxLength');
+    if (!trimmedLabel) nextErrors.label = t('labelRequired');
 
     if (needsOptions) {
       const validOptions = options.filter((option) => option.value?.trim());
-      if (validOptions.length === 0) nextErrors.options = 'Add at least one option';
+      if (validOptions.length === 0) nextErrors.options = t('addAtLeastOneOption');
     }
 
     setErrors(nextErrors);
@@ -119,10 +121,10 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
   return (
     <SystemDialog
       open={open}
-      title={field ? 'Edit Field' : 'Add Field'}
+      title={field ? t('editField') : t('addField')}
       onClose={onClose}
       onCancel={onClose}
-      cancelLabel="Cancel"
+      cancelLabel={t('common:cancel')}
       width={640}
       height={560}
       minWidth={520}
@@ -131,13 +133,13 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
       maxHeight="calc(100vh - 32px)"
       actions={
         <Button variant="contained" size="small" onClick={handleSubmit}>
-          Save Field
+          {t('saveField')}
         </Button>
       }
     >
       <Stack spacing={2} sx={{ pt: 1 }}>
           <TextField
-            label="Name"
+            label={t('name')}
             value={formData.name}
             onChange={(event) => setFormData((prev) => ({ ...prev, name: event.target.value }))}
             required
@@ -146,7 +148,7 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
             inputProps={{ maxLength: 50 }}
           />
           <TextField
-            label="Label"
+            label={t('label')}
             value={formData.label}
             onChange={(event) => setFormData((prev) => ({ ...prev, label: event.target.value }))}
             required
@@ -155,10 +157,10 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
           />
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
             <FormControl fullWidth>
-              <InputLabel>Type</InputLabel>
+              <InputLabel>{t('type')}</InputLabel>
               <Select
                 value={formData.type}
-                label="Type"
+                label={t('type')}
                 onChange={(event) => setFormData((prev) => ({ ...prev, type: event.target.value }))}
               >
                 {FIELD_TYPES.map((fieldType) => (
@@ -169,7 +171,7 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
               </Select>
             </FormControl>
             <TextField
-              label="Order"
+              label={t('order')}
               type="number"
               value={formData.order}
               onChange={(event) => setFormData((prev) => ({ ...prev, order: event.target.value }))}
@@ -178,7 +180,7 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Typography variant="body2" color="text.secondary">
-              Mark this field as required
+              {t('markFieldRequired')}
             </Typography>
             <Switch
               checked={Boolean(formData.required)}
@@ -186,7 +188,7 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
             />
           </Box>
           <TextField
-            label="Description"
+            label={t('description')}
             multiline
             rows={3}
             value={formData.description}
@@ -196,9 +198,9 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
           {needsOptions && (
             <Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="subtitle2">Options</Typography>
+                <Typography variant="subtitle2">{t('options')}</Typography>
                 <Button startIcon={<AddIcon />} onClick={addOption} size="small">
-                  Add option
+                  {t('addOption')}
                 </Button>
               </Box>
               {errors.options && (
@@ -210,12 +212,12 @@ export default function FieldEditorDialog({ open, onClose, onSave, field = null,
                 {options.map((option, index) => (
                   <Box key={`${option.value || 'new'}-${index}`} sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr auto' } }}>
                     <TextField
-                      label="Value"
+                      label={t('value')}
                       value={option.value}
                       onChange={(event) => updateOption(index, 'value', event.target.value)}
                     />
                     <TextField
-                      label="Label"
+                      label={t('label')}
                       value={option.label}
                       onChange={(event) => updateOption(index, 'label', event.target.value)}
                     />

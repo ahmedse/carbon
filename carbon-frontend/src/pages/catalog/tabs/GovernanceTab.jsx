@@ -2,6 +2,7 @@
 // Governance metadata editor for a schema table's catalog AssetProfile.
 // AssetProfiles are auto-provisioned server-side and are PATCH-only.
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box, Button, TextField, FormControl, InputLabel, Select, MenuItem,
   Paper, Typography, Grid, Chip, CircularProgress, Alert, Autocomplete,
@@ -41,6 +42,7 @@ function formatDate(value) {
 }
 
 export default function GovernanceTab({ tableId }) {
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
 
@@ -100,19 +102,19 @@ export default function GovernanceTab({ tableId }) {
         setInitialForm(EMPTY_FORM);
       }
     } catch (err) {
-      setError(err.message || 'Failed to load governance metadata');
-      notify({ message: err.message || 'Failed to load governance metadata', type: 'error' });
+      setError(err.message || t('failedToLoadGovernance'));
+      notify({ message: err.message || t('failedToLoadGovernance'), type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, tableId, notify]);
+  }, [token, tableId, notify, t]);
 
   useEffect(() => { load(); }, [load]);
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   const handleSave = async () => {
-    if (!asset) { notify({ message: 'No asset profile for this table yet', type: 'error' }); return; }
+    if (!asset) { notify({ message: t('noAssetProfileYet'), type: 'error' }); return; }
     setSaving(true);
     setError(null);
     try {
@@ -126,11 +128,11 @@ export default function GovernanceTab({ tableId }) {
         glossary_term: form.glossary_term || null,
         tags: form.tags,
       });
-      notify({ message: 'Governance metadata saved', type: 'success' });
+      notify({ message: t('governanceSaved'), type: 'success' });
       load();
     } catch (err) {
-      setError(err.message || 'Save failed');
-      notify({ message: err.message || 'Save failed', type: 'error' });
+      setError(err.message || t('saveFailed'));
+      notify({ message: err.message || t('saveFailed'), type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -151,7 +153,7 @@ export default function GovernanceTab({ tableId }) {
       <DetailTabContent>
         <Stack spacing={2} alignItems="flex-start">
           <Alert severity="error">{error}</Alert>
-          <Button variant="outlined" size="small" onClick={load}>Retry</Button>
+          <Button variant="outlined" size="small" onClick={load}>{t('retry')}</Button>
         </Stack>
       </DetailTabContent>
     );
@@ -160,39 +162,38 @@ export default function GovernanceTab({ tableId }) {
   return (
     <DetailTabContent>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Typography variant="h6">Governance</Typography>
+        <Typography variant="h6">{t('governance')}</Typography>
         <Button variant="contained" size="small" startIcon={<SaveIcon />} onClick={handleSave}
           disabled={saving || !asset || !isDirty}>
-          {saving ? 'Saving…' : 'Save Changes'}
+          {saving ? t('saving') : t('saveChanges')}
         </Button>
       </Box>
 
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Governance metadata for this table — classification, owning domain, owner, steward, and tags.
-        The quality score is computed by Data Quality and is read-only.
+        {t('governanceMetadataHint')}
       </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {!asset ? (
         <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
-          <Typography variant="body1" gutterBottom>No catalog asset profile found for this table.</Typography>
+          <Typography variant="body1" gutterBottom>{t('noAssetProfileFound')}</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Asset profiles are provisioned automatically. Retry to create one for this table.
+            {t('assetProfilesProvisionedHint')}
           </Typography>
-          <Button variant="contained" size="small" onClick={load}>Retry</Button>
+          <Button variant="contained" size="small" onClick={load}>{t('retry')}</Button>
         </Paper>
       ) : (
         <Grid container spacing={3}>
           <Grid size={{ xs: 12, md: 7 }}>
             <Paper variant="outlined" sx={{ p: 3 }}>
               <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                Classification &amp; Ownership
+                {t('classificationAndOwnership')}
               </Typography>
 
               <FormControl fullWidth margin="normal">
-                <InputLabel>Classification</InputLabel>
-                <Select value={form.classification} label="Classification"
+                <InputLabel>{t('classification')}</InputLabel>
+                <Select value={form.classification} label={t('classification')}
                   onChange={(e) => set('classification', e.target.value)}>
                   {CLASSIFICATIONS.map((c) => (
                     <MenuItem key={c} value={c}>{CLASSIFICATION_LABELS[c]}</MenuItem>
@@ -206,7 +207,7 @@ export default function GovernanceTab({ tableId }) {
                 getOptionLabel={(d) => d.name}
                 isOptionEqualToValue={(opt, val) => opt.id === val.id}
                 onChange={(e, val) => set('domain', val?.id || '')}
-                renderInput={(params) => <TextField {...params} label="Domain" margin="normal" />}
+                renderInput={(params) => <TextField {...params} label={t('domain')} margin="normal" />}
               />
 
               <Autocomplete
@@ -215,8 +216,8 @@ export default function GovernanceTab({ tableId }) {
                 getOptionLabel={userLabel}
                 isOptionEqualToValue={(opt, val) => opt.id === val.id}
                 onChange={(e, val) => set('owner', val?.id || '')}
-                renderInput={(params) => <TextField {...params} label="Owner" margin="normal"
-                  helperText="Accountable for the data in this table." />}
+                renderInput={(params) => <TextField {...params} label={t('owner')} margin="normal"
+                  helperText={t('ownerHelper')} />}
               />
 
               <Autocomplete
@@ -225,8 +226,8 @@ export default function GovernanceTab({ tableId }) {
                 getOptionLabel={userLabel}
                 isOptionEqualToValue={(opt, val) => opt.id === val.id}
                 onChange={(e, val) => set('steward', val?.id || '')}
-                renderInput={(params) => <TextField {...params} label="Steward" margin="normal"
-                  helperText="Day-to-day custodian of data correctness." />}
+                renderInput={(params) => <TextField {...params} label={t('steward')} margin="normal"
+                  helperText={t('stewardCustodianHelper')} />}
               />
 
               <Autocomplete
@@ -235,7 +236,7 @@ export default function GovernanceTab({ tableId }) {
                 getOptionLabel={(o) => o.name}
                 value={tags.filter((t) => form.tags.includes(t.id))}
                 onChange={(e, val) => set('tags', val.map((t) => t.id))}
-                renderInput={(params) => <TextField {...params} label="Tags" margin="normal" />}
+                renderInput={(params) => <TextField {...params} label={t('tags')} margin="normal" />}
                 renderTags={(value, getTagProps) =>
                   value.map((option, index) => (
                     <Chip label={option.name} size="small" {...getTagProps({ index })} />
@@ -244,9 +245,9 @@ export default function GovernanceTab({ tableId }) {
               />
 
               <TextField
-                label="Semantic Type" value={form.semantic_type}
+                label={t('semanticType')} value={form.semantic_type}
                 onChange={(e) => set('semantic_type', e.target.value)}
-                fullWidth margin="normal" helperText="Optional business meaning, e.g. 'GHG emission factor'."
+                fullWidth margin="normal" helperText={t('semanticTypeHelper')}
               />
 
               <Autocomplete
@@ -255,12 +256,12 @@ export default function GovernanceTab({ tableId }) {
                 getOptionLabel={(g) => g.term || g.name}
                 isOptionEqualToValue={(opt, val) => opt.id === val.id}
                 onChange={(e, val) => set('glossary_term', val?.id || '')}
-                renderInput={(params) => <TextField {...params} label="Glossary Term" margin="normal"
-                  helperText="Links this table to a governed business term." />}
+                renderInput={(params) => <TextField {...params} label={t('glossaryTerm')} margin="normal"
+                  helperText={t('glossaryTermHelper')} />}
               />
 
               <TextField
-                label="Description" value={form.description}
+                label={t('description')} value={form.description}
                 onChange={(e) => set('description', e.target.value)}
                 fullWidth margin="normal" multiline rows={3}
               />
@@ -270,11 +271,11 @@ export default function GovernanceTab({ tableId }) {
           <Grid size={{ xs: 12, md: 5 }}>
             <Paper variant="outlined" sx={{ p: 3 }}>
               <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                Quality (read-only)
+                {t('qualityReadOnly')}
               </Typography>
 
               <Box sx={{ mt: 2 }}>
-                <Typography variant="body2" color="text.secondary">Quality Score</Typography>
+                <Typography variant="body2" color="text.secondary">{t('qualityScore')}</Typography>
                 <Typography variant="h4"
                   color={asset.quality_score >= 80 ? 'success.main' : asset.quality_score != null ? 'warning.main' : 'text.secondary'}>
                   {asset.quality_score != null ? asset.quality_score : 'N/A'}
@@ -282,7 +283,7 @@ export default function GovernanceTab({ tableId }) {
               </Box>
 
               <Box sx={{ mt: 3 }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>Quality Status</Typography>
+                <Typography variant="body2" color="text.secondary" gutterBottom>{t('qualityStatus')}</Typography>
                 <Chip
                   label={asset.quality_status || 'unknown'}
                   color={QUALITY_COLOR[asset.quality_status] || 'default'}
@@ -291,12 +292,12 @@ export default function GovernanceTab({ tableId }) {
               </Box>
 
               <Box sx={{ mt: 3 }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>Last Updated</Typography>
+                <Typography variant="body2" color="text.secondary" gutterBottom>{t('lastUpdated')}</Typography>
                 <Typography variant="body2">{formatDate(asset.updated_at)}</Typography>
               </Box>
 
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-                Quality is written by the Data Quality app and cannot be edited here.
+                {t('qualityReadOnlyHint')}
               </Typography>
             </Paper>
           </Grid>

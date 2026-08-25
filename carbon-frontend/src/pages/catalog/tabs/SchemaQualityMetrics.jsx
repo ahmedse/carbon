@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Alert, Box, Chip, CircularProgress, Paper, Stack, Typography } from '@mui/material';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
@@ -20,6 +21,7 @@ function unwrap(data) {
 }
 
 export default function SchemaQualityMetrics({ tableId }) {
+  const { t, i18n } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ export default function SchemaQualityMetrics({ tableId }) {
         setAsset(tableAsset);
         setRules(unwrap(dqRulesData));
       } catch (err) {
-        const message = err.message || 'Failed to load quality metrics';
+        const message = err.message || t('failedToLoadQualityMetrics');
         setError(message);
         notify({ message, type: 'error' });
       } finally {
@@ -50,7 +52,7 @@ export default function SchemaQualityMetrics({ tableId }) {
     };
 
     if (tableId) load();
-  }, [notify, tableId, token]);
+  }, [notify, tableId, token, t]);
 
   const activeRuleCount = useMemo(() => rules.filter((rule) => rule.is_active !== false).length, [rules]);
 
@@ -67,30 +69,30 @@ export default function SchemaQualityMetrics({ tableId }) {
   return (
     <DetailTabContent>
       {error && <Alert severity="warning">{error}</Alert>}
-      {!asset && !error && <Alert severity="info">No quality profile available for this table yet.</Alert>}
+      {!asset && !error && <Alert severity="info">{t('noQualityProfileForTable')}</Alert>}
       <Stack spacing={1.5}>
         <Paper variant="outlined" sx={{ p: 2.5 }}>
-          <Typography variant="caption" color="text.secondary">Quality Status</Typography>
+          <Typography variant="caption" color="text.secondary">{t('qualityStatus')}</Typography>
           <Box sx={{ mt: 1 }}>
-            <Chip label={asset?.quality_status || 'unknown'} color={STATUS_COLOR[asset?.quality_status] || 'default'} />
+            <Chip label={asset?.quality_status || t('unknown')} color={STATUS_COLOR[asset?.quality_status] || 'default'} />
           </Box>
         </Paper>
         <Paper variant="outlined" sx={{ p: 2.5 }}>
-          <Typography variant="caption" color="text.secondary">Quality Score</Typography>
+          <Typography variant="caption" color="text.secondary">{t('qualityScore')}</Typography>
           <Typography variant="h5" sx={{ mt: 1 }}>
-            {asset?.quality_score != null ? `${asset.quality_score}/100` : 'N/A'}
+            {asset?.quality_score != null ? `${asset.quality_score}/100` : t('na')}
           </Typography>
         </Paper>
         <Paper variant="outlined" sx={{ p: 2.5 }}>
-          <Typography variant="caption" color="text.secondary">Active DQ Rules</Typography>
+          <Typography variant="caption" color="text.secondary">{t('activeDqRules')}</Typography>
           <Typography variant="h5" sx={{ mt: 1 }}>
             {activeRuleCount}
           </Typography>
         </Paper>
         <Paper variant="outlined" sx={{ p: 2.5 }}>
-          <Typography variant="caption" color="text.secondary">Last Modified</Typography>
+          <Typography variant="caption" color="text.secondary">{t('lastModified')}</Typography>
           <Typography variant="body1" sx={{ mt: 1 }}>
-            {asset?.updated_at ? new Date(asset.updated_at).toLocaleString() : 'N/A'}
+            {asset?.updated_at ? new Date(asset.updated_at).toLocaleString(i18n.language) : t('na')}
           </Typography>
         </Paper>
       </Stack>

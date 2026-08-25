@@ -2,6 +2,7 @@
 // Asset Edit Tab: Governance form for updating asset profile metadata
 
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Box, TextField, Button, CircularProgress, Alert, 
   MenuItem, Chip, FormControl, InputLabel, Select,
@@ -14,6 +15,7 @@ import { apiFetch } from '../../../api/api';
 
 
 export default function AssetEditTab({ entityData, additionalProps = {} }) {
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
   const { selectOptions = {}, onAssetUpdated = null } = additionalProps;
@@ -48,9 +50,9 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
     if (!Array.isArray(domains)) return [];
     return domains.map(d => ({
       id: d.id,
-      label: d.name || d.title || 'Unknown'
+      label: d.name || d.title || t('unknown')
     }));
-  }, [selectOptions.domains]);
+  }, [selectOptions.domains, t]);
 
   // Build user options (support both array and object with id/username)
   const userOptions = useMemo(() => {
@@ -58,29 +60,29 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
     if (!Array.isArray(users)) return [];
     return users.map(u => ({
       id: u.id,
-      label: u.username || u.email || u.first_name || 'Unknown'
+      label: u.username || u.email || u.first_name || t('unknown')
     }));
-  }, [selectOptions.users]);
+  }, [selectOptions.users, t]);
 
   // Build glossary term options
   const glossaryOptions = useMemo(() => {
     const terms = selectOptions.glossaryTerms || [];
     if (!Array.isArray(terms)) return [];
-    return terms.map(t => ({
-      id: t.id,
-      label: t.name || t.term || 'Unknown'
+    return terms.map(term => ({
+      id: term.id,
+      label: term.name || term.term || t('unknown')
     }));
-  }, [selectOptions.glossaryTerms]);
+  }, [selectOptions.glossaryTerms, t]);
 
   // Build tag options
   const _tagOptions = useMemo(() => {
     const tags = selectOptions.tags || [];
     if (!Array.isArray(tags)) return [];
-    return tags.map(t => ({
-      id: t.id,
-      label: t.name || 'Unknown'
+    return tags.map(tag => ({
+      id: tag.id,
+      label: tag.name || t('unknown')
     }));
-  }, [selectOptions.tags]);
+  }, [selectOptions.tags, t]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -111,7 +113,7 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
 
   const handleSave = async () => {
     if (!formData.title.trim()) {
-      setError('Title is required');
+      setError(t('titleRequired'));
       return;
     }
 
@@ -150,14 +152,14 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
         tags: updatedAsset.tags || [],
       });
 
-      notify({ message: 'Asset updated successfully', type: 'success' });
+      notify({ message: t('assetUpdated'), type: 'success' });
       
       // Call parent callback to refresh data
       if (onAssetUpdated) {
         onAssetUpdated();
       }
     } catch (err) {
-      const message = err.message || 'Failed to save asset';
+      const message = err.message || t('failedToSaveAsset');
       setError(message);
       notify({ message, type: 'error' });
     } finally {
@@ -170,11 +172,11 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
       <Box sx={{ maxWidth: '800px' }}>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-        <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>Basic Information</Typography>
+        <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>{t('basicInformation')}</Typography>
 
         <TextField
           fullWidth
-          label="Title"
+          label={t('title')}
           name="title"
           value={formData.title}
           onChange={handleChange}
@@ -185,7 +187,7 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
 
         <TextField
           fullWidth
-          label="Description"
+          label={t('description')}
           name="description"
           value={formData.description}
           onChange={handleChange}
@@ -195,18 +197,18 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
           rows={3}
         />
 
-        <Typography variant="subtitle2" sx={{ mb: 2, mt: 3, fontWeight: 600 }}>Governance</Typography>
+        <Typography variant="subtitle2" sx={{ mb: 2, mt: 3, fontWeight: 600 }}>{t('governance')}</Typography>
 
         <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>Domain</InputLabel>
+          <InputLabel>{t('domain')}</InputLabel>
           <Select
             name="domain"
             value={formData.domain}
             onChange={handleSelectChange}
-            label="Domain"
+            label={t('domain')}
           >
             <MenuItem value="">
-              <em>None</em>
+              <em>{t('none')}</em>
             </MenuItem>
             {domainOptions.map((domain) => (
               <MenuItem key={domain.id} value={domain.id}>
@@ -214,16 +216,16 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
               </MenuItem>
             ))}
           </Select>
-          <FormHelperText>Select the data domain this asset belongs to</FormHelperText>
+          <FormHelperText>{t('domainSelectHelper')}</FormHelperText>
         </FormControl>
 
         <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>Classification</InputLabel>
+          <InputLabel>{t('classification')}</InputLabel>
           <Select
             name="classification"
             value={formData.classification}
             onChange={handleSelectChange}
-            label="Classification"
+            label={t('classification')}
           >
             {classificationOptions.map((opt) => (
               <MenuItem key={opt.value} value={opt.value}>
@@ -231,19 +233,19 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
               </MenuItem>
             ))}
           </Select>
-          <FormHelperText>Security/sensitivity classification level</FormHelperText>
+          <FormHelperText>{t('classificationHelper')}</FormHelperText>
         </FormControl>
 
         <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>Owner</InputLabel>
+          <InputLabel>{t('owner')}</InputLabel>
           <Select
             name="owner"
             value={formData.owner}
             onChange={handleSelectChange}
-            label="Owner"
+            label={t('owner')}
           >
             <MenuItem value="">
-              <em>None</em>
+              <em>{t('none')}</em>
             </MenuItem>
             {userOptions.map((user) => (
               <MenuItem key={user.id} value={user.id}>
@@ -251,19 +253,19 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
               </MenuItem>
             ))}
           </Select>
-          <FormHelperText>Business owner responsible for this asset</FormHelperText>
+          <FormHelperText>{t('ownerBusinessHelper')}</FormHelperText>
         </FormControl>
 
         <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>Steward</InputLabel>
+          <InputLabel>{t('steward')}</InputLabel>
           <Select
             name="steward"
             value={formData.steward}
             onChange={handleSelectChange}
-            label="Steward"
+            label={t('steward')}
           >
             <MenuItem value="">
-              <em>None</em>
+              <em>{t('none')}</em>
             </MenuItem>
             {userOptions.map((user) => (
               <MenuItem key={user.id} value={user.id}>
@@ -271,33 +273,33 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
               </MenuItem>
             ))}
           </Select>
-          <FormHelperText>Data steward responsible for governance</FormHelperText>
+          <FormHelperText>{t('stewardGovernanceHelper')}</FormHelperText>
         </FormControl>
 
-        <Typography variant="subtitle2" sx={{ mb: 2, mt: 3, fontWeight: 600 }}>Semantic & Classification</Typography>
+        <Typography variant="subtitle2" sx={{ mb: 2, mt: 3, fontWeight: 600 }}>{t('semanticAndClassification')}</Typography>
 
         <TextField
           fullWidth
-          label="Semantic Type"
+          label={t('semanticType')}
           name="semantic_type"
           value={formData.semantic_type}
           onChange={handleChange}
           margin="normal"
           variant="outlined"
-          placeholder="e.g., Customer, Transaction, Product"
-          helperText="Entity type or semantic concept"
+          placeholder={t('semanticTypePlaceholder')}
+          helperText={t('entityTypeHelper')}
         />
 
         <FormControl fullWidth margin="normal" variant="outlined">
-          <InputLabel>Glossary Term</InputLabel>
+          <InputLabel>{t('glossaryTerm')}</InputLabel>
           <Select
             name="glossary_term"
             value={formData.glossary_term}
             onChange={handleSelectChange}
-            label="Glossary Term"
+            label={t('glossaryTerm')}
           >
             <MenuItem value="">
-              <em>None</em>
+              <em>{t('none')}</em>
             </MenuItem>
             {glossaryOptions.map((term) => (
               <MenuItem key={term.id} value={term.id}>
@@ -305,15 +307,15 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
               </MenuItem>
             ))}
           </Select>
-          <FormHelperText>Link to standard business glossary term</FormHelperText>
+          <FormHelperText>{t('glossaryTermLinkHelper')}</FormHelperText>
         </FormControl>
 
         <Box sx={{ mt: 2, mb: 2 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Tags</Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>{t('tags')}</Typography>
           <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
             <TextField
               size="small"
-              placeholder="Enter a tag"
+              placeholder={t('enterTagPlaceholder')}
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyPress={(e) => {
@@ -329,7 +331,7 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
               onClick={handleAddTag}
               disabled={!tagInput.trim()}
             >
-              Add
+              {t('add')}
             </Button>
           </Box>
           {formData.tags.length > 0 && (
@@ -352,7 +354,7 @@ export default function AssetEditTab({ entityData, additionalProps = {} }) {
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? <CircularProgress size={24} /> : 'Save Changes'}
+            {saving ? <CircularProgress size={24} /> : t('saveChanges')}
           </Button>
         </Box>
       </Box>

@@ -2,6 +2,7 @@
 // Data Product Edit Tab: admin-gated metadata editing using the shared ProductForm
 // plus destructive delete with table-count warning (ConfirmDialog — no window.confirm).
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Button, Alert, Typography, Stack } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -15,6 +16,7 @@ import { updateModule, deleteModule } from '../../../api/modules';
 import { DATA_PRODUCT } from '../../../constants/terminology';
 
 export default function DataProductEditTab({ entityData, additionalProps = {} }) {
+  const { t } = useTranslation('catalog');
   const navigate = useNavigate();
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
@@ -37,13 +39,13 @@ export default function DataProductEditTab({ entityData, additionalProps = {} })
   if (!entityData) {
     return (
       <DetailTabContent>
-        <Typography variant="body2" color="text.secondary">No data available</Typography>
+        <Typography variant="body2" color="text.secondary">{t('noDataAvailable')}</Typography>
       </DetailTabContent>
     );
   }
 
   const handleSave = async () => {
-    if (!form.name.trim()) { setError('Name is required'); return; }
+    if (!form.name.trim()) { setError(t('nameRequiredShort')); return; }
     setSaving(true);
     setError(null);
     try {
@@ -53,11 +55,11 @@ export default function DataProductEditTab({ entityData, additionalProps = {} })
         org_unit: form.org_unit === '' ? null : Number(form.org_unit),
         is_locked: form.is_locked,
       });
-      notify({ message: `${DATA_PRODUCT} updated`, type: 'success' });
+      notify({ message: `${DATA_PRODUCT} ${t('updated')}`, type: 'success' });
       if (onDataChanged) await onDataChanged();
     } catch (err) {
-      setError(err.message || 'Save failed');
-      notify({ message: err.message || 'Save failed', type: 'error' });
+      setError(err.message || t('saveFailed'));
+      notify({ message: err.message || t('saveFailed'), type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -66,25 +68,25 @@ export default function DataProductEditTab({ entityData, additionalProps = {} })
   const handleDelete = async () => {
     try {
       await deleteModule(token, entityData.id);
-      notify({ message: `${DATA_PRODUCT} deleted`, type: 'success' });
+      notify({ message: `${DATA_PRODUCT} ${t('deleted')}`, type: 'success' });
       navigate('/catalog/products');
     } catch (err) {
-      notifyFromError(err, 'Delete failed');
+      notifyFromError(err, t('delete'));
       setDeleteOpen(false);
     }
   };
 
   const tableCount = entityData.table_count ?? 0;
   const deleteMessage = tableCount > 0
-    ? `"${entityData.name}" has ${tableCount} table${tableCount !== 1 ? 's' : ''}. Deleting it may remove associated data. This action cannot be undone.`
-    : `Delete ${DATA_PRODUCT} "${entityData.name}"? This action cannot be undone.`;
+    ? t('deleteWarningTables', { name: entityData.name, count: tableCount })
+    : t('deleteWarningSimple', { type: DATA_PRODUCT, name: entityData.name });
 
   return (
     <DetailTabContent>
       <Box sx={{ maxWidth: 800 }}>
         {!isAdmin && (
           <Alert severity="warning" sx={{ mb: 2 }}>
-            You don't have permission to edit this {DATA_PRODUCT.toLowerCase()}.
+            {t('permissionDeniedEdit')} {DATA_PRODUCT.toLowerCase()}.
           </Alert>
         )}
 
@@ -105,7 +107,7 @@ export default function DataProductEditTab({ entityData, additionalProps = {} })
             onClick={handleSave}
             disabled={saving || !isAdmin}
           >
-            {saving ? 'Saving…' : 'Save Changes'}
+            {saving ? t('saving') : t('saveChanges')}
           </Button>
           {isAdmin && (
             <Button
@@ -115,16 +117,16 @@ export default function DataProductEditTab({ entityData, additionalProps = {} })
               startIcon={<DeleteIcon />}
               onClick={() => setDeleteOpen(true)}
             >
-              Delete {DATA_PRODUCT}
+              {t('delete')} {DATA_PRODUCT}
             </Button>
           )}
         </Stack>
 
         <ConfirmDialog
           open={deleteOpen}
-          title={`Delete ${DATA_PRODUCT}?`}
+          title={t('deleteConfirmation', { type: DATA_PRODUCT })}
           message={deleteMessage}
-          confirmLabel="Delete"
+          confirmLabel={t('delete')}
           destructive
           onConfirm={handleDelete}
           onCancel={() => setDeleteOpen(false)}

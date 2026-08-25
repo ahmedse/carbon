@@ -1,6 +1,7 @@
 // src/pages/catalog/tabs/DomainSummaryMetrics.jsx
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import DetailMetricsPanel, {
   MetricCard,
   MetricsGrid,
@@ -11,6 +12,7 @@ import UpdateIcon from '@mui/icons-material/Update';
 import PersonIcon from '@mui/icons-material/Person';
 
 export default function DomainSummaryMetrics({ entityData }) {
+  const { t } = useTranslation('catalog');
   if (!entityData) return null;
 
   const createdDate = entityData.created_at 
@@ -22,33 +24,33 @@ export default function DomainSummaryMetrics({ entityData }) {
 
   return (
     <DetailMetricsPanel>
-      <MetricsSection title="Domain Information">
+      <MetricsSection title={t('domainInformation')}>
         <MetricsGrid>
           <MetricCard
-            label="ID"
+            label={t('id')}
             value={entityData.id}
             icon={<InfoIcon />}
             color="primary"
           />
           <MetricCard
-            label="Owner"
-            value={entityData.owner || 'Unassigned'}
+            label={t('owner')}
+            value={entityData.owner || t('unassigned')}
             icon={<PersonIcon />}
             color="info"
           />
         </MetricsGrid>
       </MetricsSection>
 
-      <MetricsSection title="Timestamps">
+      <MetricsSection title={t('timestamps')}>
         <MetricsGrid>
           <MetricCard
-            label="Created"
+            label={t('created')}
             value={createdDate}
             icon={<InfoIcon />}
             color="success"
           />
           <MetricCard
-            label="Modified"
+            label={t('modified')}
             value={updatedDate}
             icon={<UpdateIcon />}
             color="warning"

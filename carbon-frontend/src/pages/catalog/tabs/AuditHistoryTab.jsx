@@ -1,6 +1,7 @@
 // src/pages/catalog/tabs/AuditHistoryTab.jsx
 // Audit history: schema changes (SchemaChangeLog) + governance events.
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box, Table, TableHead, TableBody, TableRow, TableCell, Typography, Chip,
   CircularProgress, Alert, Tabs, Tab, Accordion, AccordionSummary, AccordionDetails,
@@ -26,18 +27,19 @@ function unwrap(data) {
 }
 
 function JsonDiff({ before, after }) {
-  if (before == null && after == null) return <Typography variant="caption">No details</Typography>;
+  const { t } = useTranslation('catalog');
+  if (before == null && after == null) return <Typography variant="caption">{t('noDetails')}</Typography>;
   return (
     <Box sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
       {before != null && (
         <Box sx={{ mb: 1 }}>
-          <Typography variant="caption" color="error.main" fontWeight={600}>Before</Typography>
+          <Typography variant="caption" color="error.main" fontWeight={600}>{t('before')}</Typography>
           <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(before, null, 2)}</pre>
         </Box>
       )}
       {after != null && (
         <Box>
-          <Typography variant="caption" color="success.main" fontWeight={600}>After</Typography>
+          <Typography variant="caption" color="success.main" fontWeight={600}>{t('after')}</Typography>
           <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(after, null, 2)}</pre>
         </Box>
       )}
@@ -46,6 +48,7 @@ function JsonDiff({ before, after }) {
 }
 
 export default function AuditHistoryTab({ tableId }) {
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
 
@@ -64,7 +67,7 @@ export default function AuditHistoryTab({ tableId }) {
         const logs = await fetchSchemaChangeLogs(token, { data_table: tableId });
         setSchemaLogs(unwrap(logs));
       } catch (err) {
-        setSchemaError(err.message || 'Schema change log unavailable (admin only)');
+        setSchemaError(err.message || t('schemaChangeLogUnavailable'));
         setSchemaLogs([]);
       }
 
@@ -78,11 +81,11 @@ export default function AuditHistoryTab({ tableId }) {
       const events = unwrap(eventsData);
       setGovEvents(asset ? events.filter((e) => e.asset === asset.id) : []);
     } catch (err) {
-      notify({ message: err.message || 'Failed to load audit history', type: 'error' });
+      notify({ message: err.message || t('failedToLoadAuditHistory'), type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, tableId, notify]);
+  }, [token, tableId, notify, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -96,28 +99,28 @@ export default function AuditHistoryTab({ tableId }) {
 
   return (
     <DetailTabContent>
-      <Typography variant="h6" gutterBottom>Audit History</Typography>
+      <Typography variant="h6" gutterBottom>{t('auditHistory')}</Typography>
 
       <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab label={`Schema Changes (${schemaLogs.length})`} />
-        <Tab label={`Governance Events (${govEvents.length})`} />
+        <Tab label={`${t('schemaChanges')} (${schemaLogs.length})`} />
+        <Tab label={`${t('governanceEvents')} (${govEvents.length})`} />
       </Tabs>
 
       {tab === 0 && (
         <>
           {schemaError && <Alert severity="info" sx={{ mb: 2 }}>{schemaError}</Alert>}
           {schemaLogs.length === 0 && !schemaError ? (
-            <Alert severity="info">No schema changes recorded for this table.</Alert>
+            <Alert severity="info">{t('noSchemaChanges')}</Alert>
           ) : schemaLogs.length > 0 && (
             <Box sx={{ overflowX: 'auto' }}>
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'grey.100' }}>
-                    <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Action</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Field</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>User</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Details</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('date')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('action')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('field')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('user')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{t('details')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -132,7 +135,7 @@ export default function AuditHistoryTab({ tableId }) {
                       <TableCell sx={{ minWidth: 220 }}>
                         <Accordion disableGutters elevation={0} sx={{ '&:before': { display: 'none' } }}>
                           <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 0, minHeight: 0 }}>
-                            <Typography variant="caption">{log.notes || 'View changes'}</Typography>
+                            <Typography variant="caption">{log.notes || t('viewChanges')}</Typography>
                           </AccordionSummary>
                           <AccordionDetails sx={{ px: 0 }}>
                             <JsonDiff before={log.before} after={log.after} />
@@ -150,17 +153,17 @@ export default function AuditHistoryTab({ tableId }) {
 
       {tab === 1 && (
         govEvents.length === 0 ? (
-          <Alert severity="info">No governance events recorded for this table.</Alert>
+          <Alert severity="info">{t('noGovernanceEventsForTable')}</Alert>
         ) : (
           <Box sx={{ overflowX: 'auto' }}>
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: 'grey.100' }}>
-                  <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Action</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Entity</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>User</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Details</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{t('date')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{t('action')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{t('entity')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{t('user')}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{t('details')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -175,7 +178,7 @@ export default function AuditHistoryTab({ tableId }) {
                     <TableCell sx={{ minWidth: 220 }}>
                       <Accordion disableGutters elevation={0} sx={{ '&:before': { display: 'none' } }}>
                         <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 0, minHeight: 0 }}>
-                          <Typography variant="caption">View changes</Typography>
+                          <Typography variant="caption">{t('viewChanges')}</Typography>
                         </AccordionSummary>
                         <AccordionDetails sx={{ px: 0 }}>
                           <JsonDiff before={ev.before} after={ev.after} />

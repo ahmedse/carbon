@@ -1,5 +1,6 @@
 // src/pages/catalog/tabs/AssetSummaryMetrics.jsx
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, LinearProgress, Typography } from '@mui/material';
 import DetailMetricsPanel, {
   MetricCard,
@@ -10,6 +11,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import UpdateIcon from '@mui/icons-material/Update';
 
 export default function AssetSummaryMetrics({ entityData }) {
+  const { t } = useTranslation('catalog');
   if (!entityData) return null;
 
   const createdDate = entityData.created_at 
@@ -33,27 +35,27 @@ export default function AssetSummaryMetrics({ entityData }) {
 
   return (
     <DetailMetricsPanel>
-      <MetricsSection title="Asset Information">
+      <MetricsSection title={t('assetInformation')}>
         <MetricsGrid>
           <MetricCard
-            label="ID"
+            label={t('id')}
             value={entityData.id}
             icon={<InfoIcon />}
             color="primary"
           />
           <MetricCard
-            label="Type"
-            value={entityData.asset_type || 'Unknown'}
+            label={t('type')}
+            value={entityData.asset_type || t('unknown')}
             icon={<InfoIcon />}
             color="info"
           />
         </MetricsGrid>
       </MetricsSection>
 
-      <MetricsSection title="Quality Metrics">
+      <MetricsSection title={t('qualityMetrics')}>
         <Box sx={{ p: 2 }}>
           <Typography variant="caption" sx={{ textTransform: 'uppercase', color: 'text.secondary', display: 'block', mb: 1 }}>
-            Quality Score
+            {t('qualityScore')}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
             <Box sx={{ flex: 1 }}>
@@ -85,22 +87,22 @@ export default function AssetSummaryMetrics({ entityData }) {
             }}
           >
             <Typography variant="caption" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
-              Status: {entityData.quality_status || 'Unknown'}
+              {t('status')}: {entityData.quality_status || t('unknown')}
             </Typography>
           </Box>
         </Box>
       </MetricsSection>
 
-      <MetricsSection title="Timestamps">
+      <MetricsSection title={t('timestamps')}>
         <MetricsGrid>
           <MetricCard
-            label="Created"
+            label={t('created')}
             value={createdDate}
             icon={<InfoIcon />}
             color="success"
           />
           <MetricCard
-            label="Modified"
+            label={t('modified')}
             value={updatedDate}
             icon={<UpdateIcon />}
             color="warning"

@@ -6,6 +6,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Box, Button, Chip, IconButton, Tooltip, Typography, Alert, TextField,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { DataGrid } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -21,18 +22,19 @@ import { createDataSchemaTable, updateDataSchemaTable, deleteDataSchemaTable } f
 
 const QUALITY_COLOR = { passing: 'success', warning: 'warning', failing: 'error', unknown: 'default' };
 
-function formatDate(value) {
+function formatDate(value, locale) {
   if (!value) return '—';
   const d = new Date(value);
   return Number.isNaN(d.getTime())
     ? '—'
-    : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    : d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function DataProductTablesTab({ entityData, additionalProps = {} }) {
   const navigate = useNavigate();
   const { token } = useAuth();
   const { notify } = useNotification();
+  const { t, i18n } = useTranslation('catalog');
   const {
     tables = [],
     assets = {},
@@ -63,7 +65,7 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
   const columns = useMemo(() => [
     {
       field: 'title',
-      headerName: 'Title',
+      headerName: t('titleLabel'),
       flex: 1.4,
       minWidth: 180,
       renderCell: (params) => (
@@ -78,14 +80,14 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
     },
     {
       field: 'description',
-      headerName: 'Description',
+      headerName: t('description'),
       flex: 1.6,
       minWidth: 200,
       valueGetter: (value, row) => row.description || '—',
     },
     {
       field: 'row_count',
-      headerName: 'Rows',
+      headerName: t('rows'),
       width: 90,
       align: 'right',
       headerAlign: 'right',
@@ -93,38 +95,38 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
     },
     {
       field: 'quality',
-      headerName: 'Quality',
+      headerName: t('quality'),
       width: 120,
       renderCell: (params) => (
-        <Chip label={params.value} size="small" color={QUALITY_COLOR[params.value] || 'default'} variant="outlined" />
+        <Chip label={t(params.value)} size="small" color={QUALITY_COLOR[params.value] || 'default'} variant="outlined" />
       ),
     },
     {
       field: 'updated_at',
-      headerName: 'Modified',
+      headerName: t('modified'),
       width: 160,
       valueGetter: (value, row) => row.updated_at || null,
-      valueFormatter: (value) => formatDate(value),
+      valueFormatter: (value) => formatDate(value, i18n.language),
     },
     ...(isAdmin
       ? [{
           field: 'actions',
-          headerName: 'Actions',
+          headerName: t('actions'),
           width: 130,
           sortable: false,
           renderCell: (params) => (
             <Box sx={{ display: 'flex', gap: 0.5 }}>
-              <Tooltip title="Open table">
+              <Tooltip title={t('openTable')}>
                 <IconButton size="small" onClick={() => navigate(`/catalog/tables/${params.row.id}`)}>
                   <VisibilityIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Edit metadata">
+              <Tooltip title={t('editMetadata')}>
                 <IconButton size="small" onClick={() => openEdit(params.row)}>
                   <EditIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Delete">
+              <Tooltip title={t('common:delete')}>
                 <IconButton size="small" onClick={() => setDeleteTarget(params.row)} sx={{ color: 'error.main' }}>
                   <DeleteIcon fontSize="small" />
                 </IconButton>
@@ -133,12 +135,12 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
           ),
         }]
       : []),
-  ], [navigate, isAdmin]);
+  ], [navigate, isAdmin, t, i18n]);
 
   if (!entityData) {
     return (
       <DetailTabContent>
-        <Typography variant="body2" color="text.secondary">No data available</Typography>
+        <Typography variant="body2" color="text.secondary">{t('noDataAvailable')}</Typography>
       </DetailTabContent>
     );
   }
@@ -162,7 +164,7 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
   };
 
   const handleSave = async () => {
-    if (!formData.title.trim()) { setFormError('Title is required'); return; }
+    if (!formData.title.trim()) { setFormError(t('titleRequired')); return; }
     setSubmitting(true);
     setFormError(null);
     try {
@@ -173,18 +175,18 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
       };
       if (editingTable) {
         await updateDataSchemaTable(token, editingTable.id, payload, null, Number(entityData.id));
-        notify({ message: 'Table updated', type: 'success' });
+        notify({ message: t('tableUpdated'), type: 'success' });
       } else {
         const created = await createDataSchemaTable(token, payload, null, Number(entityData.id));
-        notify({ message: 'Table created', type: 'success' });
+        notify({ message: t('tableCreated'), type: 'success' });
         closeDialog();
         if (created?.id) { navigate(`/catalog/tables/${created.id}`); return; }
       }
       closeDialog();
       if (onDataChanged) await onDataChanged();
     } catch (err) {
-      setFormError(err.message || 'Save failed');
-      notify({ message: err.message || 'Save failed', type: 'error' });
+      setFormError(err.message || t('saveFailed'));
+      notify({ message: err.message || t('saveFailed'), type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -194,11 +196,11 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
     if (!deleteTarget) return;
     try {
       await deleteDataSchemaTable(token, deleteTarget.id, null, Number(entityData.id));
-      notify({ message: 'Table deleted', type: 'success' });
+      notify({ message: t('tableDeleted'), type: 'success' });
       setDeleteTarget(null);
       if (onDataChanged) await onDataChanged();
     } catch (err) {
-      notify({ message: err.message || 'Delete failed', type: 'error' });
+      notify({ message: err.message || t('deleteFailed'), type: 'error' });
     }
   };
 
@@ -206,26 +208,26 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
     <DetailTabContent>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 2, flexWrap: 'wrap' }}>
         <Typography variant="subtitle2" fontWeight={600}>
-          Tables ({tables.length})
+          {t('tables')} ({tables.length})
         </Typography>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           <TextField
             size="small"
-            placeholder="Search tables…"
+            placeholder={t('searchTables')}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             sx={{ width: 240 }}
           />
           {isAdmin && (
             <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreate}>
-              New Table
+              {t('newTable')}
             </Button>
           )}
         </Box>
       </Box>
 
       {tables.length === 0 ? (
-        <Alert severity="info" sx={{ mb: 2 }}>No tables in this data product yet.</Alert>
+        <Alert severity="info" sx={{ mb: 2 }}>{t('noTablesInProduct')}</Alert>
       ) : (
         <Box sx={{ height: 420, width: '100%' }}>
           <DataGrid
@@ -242,10 +244,10 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
       {/* Create/Edit table dialog (SystemDialog — CB-14) */}
       <SystemDialog
         open={dialogOpen}
-        title={editingTable ? 'Edit Table' : 'New Table'}
+        title={editingTable ? t('editTable') : t('newTable')}
         onClose={closeDialog}
         onCancel={closeDialog}
-        cancelLabel="Cancel"
+        cancelLabel={t('common:cancel')}
         width={480}
         height={320}
         minWidth={400}
@@ -254,20 +256,20 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
         maxHeight="calc(100vh - 32px)"
         actions={
           <Button variant="contained" size="small" onClick={handleSave} disabled={submitting}>
-            {submitting ? 'Saving…' : 'Save'}
+            {submitting ? t('saving') : t('common:save')}
           </Button>
         }
       >
         <Box px={2} py={1}>
           {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
           <TextField
-            fullWidth label="Title" size="small" autoFocus required
+            fullWidth label={t('titleLabel')} size="small" autoFocus required
             value={formData.title}
             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
             sx={{ mb: 2 }}
           />
           <TextField
-            fullWidth label="Description" size="small" multiline rows={3}
+            fullWidth label={t('description')} size="small" multiline rows={3}
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
           />
@@ -277,9 +279,9 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
       {/* Delete confirmation */}
       <ConfirmDialog
         open={!!deleteTarget}
-        title="Delete table?"
-        message={`Delete table "${deleteTarget?.title}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title={t('deleteTableTitle')}
+        message={t('deleteTableMessage', { name: deleteTarget?.title })}
+        confirmLabel={t('common:delete')}
         destructive
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}

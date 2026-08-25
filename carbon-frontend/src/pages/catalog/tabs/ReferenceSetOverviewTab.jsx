@@ -2,6 +2,7 @@
 // Reference Set Overview Tab: Display read-only metadata
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Table, TableBody, TableRow, TableCell, Typography, Chip } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import {
@@ -10,29 +11,30 @@ import {
 } from '../../../constants/referenceSetLifecycle';
 
 export default function ReferenceSetOverviewTab({ entityData }) {
+  const { t } = useTranslation('catalog');
   if (!entityData) {
     return (
       <DetailTabContent>
-        <Typography color="textSecondary">No data available</Typography>
+        <Typography color="textSecondary">{t('noDataAvailable')}</Typography>
       </DetailTabContent>
     );
   }
 
   // Primary attributes
   const primaryAttributes = [
-    { label: 'ID', value: entityData.id },
-    { label: 'Name', value: entityData.name || '—' },
-    { label: 'Slug', value: entityData.slug || '—' },
-    { label: 'Description', value: entityData.description || '—' },
+    { label: t('id'), value: entityData.id },
+    { label: t('name'), value: entityData.name || '—' },
+    { label: t('slug'), value: entityData.slug || '—' },
+    { label: t('description'), value: entityData.description || '—' },
   ];
 
   // Governance attributes
   const lifecycleState = entityData.lifecycle_state || 'draft';
   const governanceAttributes = [
-    { label: 'Domain', value: entityData.domain_name || '—' },
-    { label: 'Steward', value: entityData.steward_name || '—' },
+    { label: t('domain'), value: entityData.domain_name || '—' },
+    { label: t('steward'), value: entityData.steward_name || '—' },
     {
-      label: 'Lifecycle',
+      label: t('lifecycle'),
       value: (
         <Chip
           label={LIFECYCLE_LABELS[lifecycleState] || lifecycleState}
@@ -43,28 +45,28 @@ export default function ReferenceSetOverviewTab({ entityData }) {
       ),
     },
     {
-      label: 'List visibility',
+      label: t('listVisibility'),
       value: entityData.is_active ? (
-        <Chip label="Enabled" color="success" size="small" variant="filled" />
+        <Chip label={t('enabled')} color="success" size="small" variant="filled" />
       ) : (
-        <Chip label="Disabled" color="default" size="small" variant="outlined" />
+        <Chip label={t('disabled')} color="default" size="small" variant="outlined" />
       ),
     },
-    { label: 'Version', value: entityData.version || '1' },
+    { label: t('version'), value: entityData.version || '1' },
   ];
 
   // Statistics
   const statisticsAttributes = [
     { 
-      label: 'Value Count', 
+      label: t('valueCount'), 
       value: <Chip label={entityData.value_count || 0} size="small" color="primary" />
     },
   ];
 
   // Timestamps
   const timestampAttributes = [
-    { label: 'Created At', value: entityData.created_at ? new Date(entityData.created_at).toLocaleString() : '—' },
-    { label: 'Updated At', value: entityData.updated_at ? new Date(entityData.updated_at).toLocaleString() : '—' },
+    { label: t('createdAt'), value: entityData.created_at ? new Date(entityData.created_at).toLocaleString() : '—' },
+    { label: t('updatedAt'), value: entityData.updated_at ? new Date(entityData.updated_at).toLocaleString() : '—' },
   ];
 
   const renderTable = (attributes, title) => (
@@ -88,10 +90,10 @@ export default function ReferenceSetOverviewTab({ entityData }) {
   return (
     <DetailTabContent>
       <Box sx={{ maxWidth: '100%' }}>
-        {renderTable(primaryAttributes, 'Basic Information')}
-        {renderTable(governanceAttributes, 'Governance')}
-        {renderTable(statisticsAttributes, 'Statistics')}
-        {renderTable(timestampAttributes, 'Timestamps')}
+        {renderTable(primaryAttributes, t('basicInformation'))}
+        {renderTable(governanceAttributes, t('governance'))}
+        {renderTable(statisticsAttributes, t('statistics'))}
+        {renderTable(timestampAttributes, t('timestamps'))}
       </Box>
     </DetailTabContent>
   );

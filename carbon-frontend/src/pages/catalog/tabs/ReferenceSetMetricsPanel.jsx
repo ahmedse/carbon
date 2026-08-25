@@ -2,19 +2,21 @@
 // Reference Set Metrics: Usage statistics and summary
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Typography, Chip, Divider } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 
 export default function ReferenceSetMetricsPanel({ entityData, additionalProps = {} }) {
+  const { t } = useTranslation('catalog');
   const { values = [] } = additionalProps;
 
   if (!entityData) {
     return (
       <DetailTabContent>
         <Typography variant="body2" color="text.secondary">
-          No metrics available
+          {t('noMetricsAvailable')}
         </Typography>
       </DetailTabContent>
     );
@@ -26,24 +28,24 @@ export default function ReferenceSetMetricsPanel({ entityData, additionalProps =
 
   const metrics = [
     {
-      label: 'Total Values',
+      label: t('totalValues'),
       value: values.length,
       color: 'primary',
     },
     {
-      label: 'Active',
+      label: t('active'),
       value: activeValues.length,
       color: 'success',
       icon: <CheckCircleIcon fontSize="small" />,
     },
     {
-      label: 'Inactive',
+      label: t('inactive'),
       value: inactiveValues.length,
       color: 'default',
       icon: <CancelIcon fontSize="small" />,
     },
     {
-      label: 'Time-Bound',
+      label: t('timeBound'),
       value: withValidityPeriod.length,
       color: 'info',
     },
@@ -52,7 +54,7 @@ export default function ReferenceSetMetricsPanel({ entityData, additionalProps =
   return (
     <DetailTabContent>
       <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-        Value Statistics
+        {t('valueStatistics')}
       </Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
@@ -77,26 +79,26 @@ export default function ReferenceSetMetricsPanel({ entityData, additionalProps =
       <Divider sx={{ my: 3 }} />
 
       <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-        Governance
+        {t('governance')}
       </Typography>
 
       <Box sx={{ mt: 2 }}>
         <Typography variant="caption" color="text.secondary" display="block">
-          Domain
+          {t('domain')}
         </Typography>
         <Typography variant="body2" sx={{ mb: 2 }}>
-          {entityData.domain_name || 'Not assigned'}
+          {entityData.domain_name || t('notAssigned')}
         </Typography>
 
         <Typography variant="caption" color="text.secondary" display="block">
-          Steward
+          {t('steward')}
         </Typography>
         <Typography variant="body2" sx={{ mb: 2 }}>
-          {entityData.steward_name || 'Not assigned'}
+          {entityData.steward_name || t('notAssigned')}
         </Typography>
 
         <Typography variant="caption" color="text.secondary" display="block">
-          Version
+          {t('version')}
         </Typography>
         <Typography variant="body2">
           {entityData.version || '1'}
