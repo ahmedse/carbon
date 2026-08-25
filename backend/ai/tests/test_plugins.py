@@ -16,6 +16,8 @@ from ai.engine.agent.plugins import (
     ToolContext,
     ToolPlugin,
     WorkflowPlugin,
+    capability_claims,
+    chat_tool_names,
     load_plugins,
     register_plugin,
     set_tool_context,
@@ -245,3 +247,86 @@ def test_settings_tools_marks_static_confirmation():
     assert catalog["search_knowledge"]["requires_confirmation"] is False
     assert catalog["search_knowledge"]["capability"] is None
     assert catalog["search_knowledge"]["app_identifier"] is None
+
+
+# ── G-C: registry-driven chat surface + capability claims ────────────────
+
+
+class _HiddenTool(ToolPlugin):
+    name = "internal_secret_tool"
+    chat_visible = False
+
+    async def execute(self, args, *, ctx):
+        return {}
+
+
+class _ClaimedTool(ToolPlugin):
+    name = "claimed_tool"
+    capability_claim = "I can transmute widgets into gadgets."
+    requires_confirmation = False
+
+    async def execute(self, args, *, ctx):
+        return {}
+
+
+def test_chat_tool_names_includes_visible_and_excludes_hidden():
+    register_plugin(EchoPlugin())        # chat_visible defaults True
+    register_plugin(_HiddenTool())        # chat_visible False
+    names = chat_tool_names()
+    assert "echo_test" in names
+    assert "internal_secret_tool" not in names
+
+
+def test_capability_claims_derived_from_registry():
+    register_plugin(_ClaimedTool())
+    register_plugin(EchoPlugin())         # no capability_claim → falls back to description
+    claims = {c["name"]: c for c in capability_claims()}
+    assert claims["claimed_tool"]["claim"] == "I can transmute widgets into gadgets."
+    assert claims["claimed_tool"]["requires_confirmation"] is False
+    assert claims["claimed_tool"]["kind"] == "tool"
+    # fallback to description when capability_claim is empty
+    assert claims["echo_test"]["claim"] == "Echo args and expose the received context."
+
+
+def test_runner_draft_allow_derives_plugin_tools():
+    """G-C proof: the chat allow-set is registry-derived, so a new chat-visible
+    plugin is exposed with zero edits to runner.py's spine constants."""
+    register_plugin(EchoPlugin())
+    from ai.engine.cognition.turn.runner import _CHAT_STATIC_TOOLS
+
+    allow = _CHAT_STATIC_TOOLS | chat_tool_names()
+    assert "echo_test" in allow                      # registry contribution
+    assert "search_knowledge" in allow               # spine static tool
+    assert "internal_secret_tool" not in allow       # hidden plugin excluded
+
+
+def test_unit_converter_plugin_converts_linear_units():
+    from ai.plugins.unit_converter import UnitConverter
+
+    conv = UnitConverter()
+    result = asyncio.run(conv.execute(
+        {"value": 10, "from_unit": "miles", "to_unit": "km"}, ctx=ToolContext(),
+    ))
+    assert result["result"] == pytest.approx(16.09344)
+    assert result["category"] == "length"
+
+
+def test_unit_converter_plugin_converts_temperature():
+    from ai.plugins.unit_converter import UnitConverter
+
+    conv = UnitConverter()
+    result = asyncio.run(conv.execute(
+        {"value": 32, "from_unit": "F", "to_unit": "C"}, ctx=ToolContext(),
+    ))
+    assert result["result"] == pytest.approx(0.0)
+
+
+def test_unit_converter_plugin_fails_visible_on_mismatched_units():
+    from ai.plugins.unit_converter import UnitConverter
+
+    conv = UnitConverter()
+    result = asyncio.run(conv.execute(
+        {"value": 1, "from_unit": "meter", "to_unit": "kilogram"}, ctx=ToolContext(),
+    ))
+    assert "error" in result
+

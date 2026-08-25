@@ -14,8 +14,11 @@ import pytest
 
 from ai.engine_runtime import (
     _carbon_instance_config,
+    _classify_tool_outcomes,
     _extract_tool_actions,
     _grounded_outcome_note,
+    _record_truthfulness_gate,
+    apply_anti_hallucination_gate,
 )
 
 
@@ -74,6 +77,87 @@ def test_extract_tool_actions_pending_confirmation():
     # edit the JSON before confirming.
     assert pending[0]["proposed_body"]["rule_level"] == "field_validation"
     assert pending[0]["proposed_body"]["definition"]["params"] == {"min": 1000, "max": 9999}
+
+
+def test_extract_tool_actions_memory_is_not_a_dq_rule():
+    # Anti-fabrication: learn_fact returns requires_confirmation without a
+    # proposed_rule; the old code fabricated a "DQ rule 'rule'" card with an
+    # empty {} body. It must surface as a memory action instead.
+    tools = [
+        {
+            "tool_name": "learn_fact",
+            "result": json.dumps({
+                "requires_confirmation": True,
+                "execution_id": "ex-mem",
+                "operation": "learn",
+                "method": "MEMORY",
+                "endpoint": "long_term/observation",
+                "fact": "Ahmed is from Egypt, Alexandria",
+                "category": "observation",
+                "confirmation_message": "Remember this observation: Ahmed is from Egypt, Alexandria",
+            }),
+        },
+    ]
+    actions, pending = _extract_tool_actions(tools)
+    assert actions == []
+    assert len(pending) == 1
+    assert pending[0]["kind"] == "memory"
+    assert pending[0]["execution_id"] == "ex-mem"
+    assert pending[0]["operation"] == "learn"
+    assert pending[0]["fact"] == "Ahmed is from Egypt, Alexandria"
+    # No fabricated rule payload.
+    assert "proposed_rule" not in pending[0]
+    assert "proposed_body" not in pending[0]
+
+
+def test_extract_tool_actions_unrecognized_staged_result_is_dropped():
+    # Anti-fabrication: a staged result with no rule definition AND no memory
+    # signals AND no host endpoint must NOT become an empty DQ-rule card.
+    tools = [
+        {
+            "tool_name": "something",
+            "result": json.dumps({
+                "requires_confirmation": True,
+                "execution_id": "ex-unknown",
+            }),
+        },
+    ]
+    actions, pending = _extract_tool_actions(tools)
+    assert actions == []
+    assert pending == []
+
+
+def test_grounded_note_memory_not_labeled_dq_rule():
+    tools = [
+        {
+            "tool_name": "learn_fact",
+            "result": json.dumps({
+                "requires_confirmation": True,
+                "execution_id": "ex-mem",
+                "operation": "learn",
+                "method": "MEMORY",
+                "fact": "Ahmed is from Egypt, Alexandria",
+                "confirmation_message": "Remember this observation: Ahmed is from Egypt, Alexandria",
+            }),
+        },
+    ]
+    note = _grounded_outcome_note(tools)
+    assert "Proposed to remember" in note
+    assert "Ahmed is from Egypt, Alexandria" in note
+    assert "Proposed DQ rule" not in note
+
+
+def test_grounded_note_unrecognized_staged_result_no_fabrication():
+    tools = [
+        {
+            "tool_name": "something",
+            "result": json.dumps({
+                "requires_confirmation": True,
+                "execution_id": "ex-unknown",
+            }),
+        },
+    ]
+    assert _grounded_outcome_note(tools) == ""
 
 
 def test_extract_tool_actions_dedupes_navigate_routes():
@@ -177,6 +261,228 @@ def test_grounded_note_plan_created():
 
 def test_grounded_note_empty():
     assert _grounded_outcome_note([]) == ""
+
+
+# ── Unit: anti-hallucination gate ───────────────────────────────────────
+
+
+def _staged_memory_tool(operation="learn", fact="Ahmed is from Egypt, Alexandria"):
+    return {
+        "tool_name": "learn_fact" if operation == "learn" else "forget_fact",
+        "result": json.dumps({
+            "requires_confirmation": True,
+            "execution_id": "ex-mem",
+            "operation": operation,
+            "method": "MEMORY",
+            "fact": fact,
+            "confirmation_message": f"Remember this observation: {fact}",
+        }),
+    }
+
+
+def test_classify_tool_outcomes_staged_failed_succeeded():
+    tools = [
+        _staged_memory_tool(),
+        {"tool_name": "search_knowledge", "result": json.dumps({"hits": [1]})},
+        {"tool_name": "broken", "result": None, "error": "boom"},
+        {"tool_name": "bad_json", "result": "not-json"},
+        {"tool_name": "errored_result", "result": json.dumps({"error": "inner"})},
+    ]
+    outcomes = _classify_tool_outcomes(tools)
+    assert outcomes["learn_fact"] == "staged"
+    assert outcomes["search_knowledge"] == "succeeded"
+    assert outcomes["broken"] == "failed"
+    assert outcomes["bad_json"] == "failed"
+    assert outcomes["errored_result"] == "failed"
+
+
+def test_apply_anti_hallucination_gate_strips_staged_memory_claim():
+    text = "I've remembered that Ahmed is from Egypt, Alexandria. Anything else?"
+    corrected, flags = apply_anti_hallucination_gate(
+        text, [_staged_memory_tool()]
+    )
+    assert "remembered" not in corrected.lower()
+    assert "Anything else?" in corrected
+    assert "staged_success_claim_corrected:learn_fact" in flags
+
+
+def test_apply_anti_hallucination_gate_strips_staged_dq_rule_claim():
+    tools = [{
+        "tool_name": "create_dq_rule",
+        "result": json.dumps({
+            "requires_confirmation": True,
+            "execution_id": "ex-rule",
+            "proposed_rule": {"name": "employee-number", "type": "range"},
+            "proposed_body": {"name": "employee-number"},
+        }),
+    }]
+    text = "I created the rule employee-number. Confirm it in the panel."
+    corrected, flags = apply_anti_hallucination_gate(text, tools)
+    assert "created" not in corrected.lower()
+    assert "Confirm it in the panel" in corrected
+    assert "staged_success_claim_corrected:create_dq_rule" in flags
+
+
+def test_apply_anti_hallucination_gate_strips_fabricated_reasoning():
+    # No tool succeeded (none called) yet the prose narrates an execution.
+    text = "First I ran the audit, then I completed the validation. All done."
+    corrected, flags = apply_anti_hallucination_gate(text, [])
+    assert "ran the audit" not in corrected.lower()
+    assert "completed the validation" not in corrected.lower()
+    assert "fabricated_reasoning_chain_corrected" in flags
+
+
+def test_apply_anti_hallucination_gate_keeps_truthful_success():
+    tools = [{"tool_name": "search_knowledge", "result": json.dumps({"hits": [1]})}]
+    text = "I found the GHG Protocol definition in your knowledge base."
+    corrected, flags = apply_anti_hallucination_gate(text, tools)
+    assert corrected == text
+    assert flags == []
+
+
+def test_apply_anti_hallucination_gate_passthrough_empty():
+    assert apply_anti_hallucination_gate("", []) == ("", [])
+
+
+def test_apply_anti_hallucination_gate_strips_false_memory_denial():
+    # The LLM staged a memory proposal but its prose claims it has no memory.
+    # That false denial contradicts the tool result and must be stripped.
+    text = (
+        "I currently do not have memory enabled, so I won't retain this "
+        "information. I can still help with other questions."
+    )
+    corrected, flags = apply_anti_hallucination_gate(
+        text, [_staged_memory_tool()]
+    )
+    assert "memory" not in corrected.lower()
+    assert "I can still help with other questions" in corrected
+    assert "false_memory_denial_corrected" in flags
+
+
+def test_apply_anti_hallucination_gate_strips_conditional_future_memory_denial():
+    # The rephrased denial: "If memory is enabled in the future, I can let you
+    # know what I remember." — conditional/future framing still contradicts a
+    # staged learn_fact proposal and must be stripped.
+    text = (
+        "If memory is enabled in the future, I can let you know what I "
+        "remember. Is there anything else you'd like help with?"
+    )
+    corrected, flags = apply_anti_hallucination_gate(
+        text, [_staged_memory_tool()]
+    )
+    assert "memory" not in corrected.lower()
+    assert "let you know what I remember" not in corrected.lower()
+    assert "Is there anything else you'd like help with?" in corrected
+    assert "false_memory_denial_corrected" in flags
+
+
+def test_apply_anti_hallucination_gate_strips_once_memory_becomes_available():
+    # "Once memory becomes available…" variant.
+    text = "Once memory becomes available, I'll be able to recall our chat."
+    corrected, flags = apply_anti_hallucination_gate(
+        text, [_staged_memory_tool()]
+    )
+    assert "memory" not in corrected.lower()
+    assert "recall" not in corrected.lower()
+    assert "false_memory_denial_corrected" in flags
+
+
+def test_apply_anti_hallucination_gate_keeps_memory_denial_when_memory_unused():
+    # Without any memory tool engaged, a (still wrong but) non-contradictory
+    # denial is left untouched — the gate only corrects when a tool result
+    # proves the claim false.
+    text = "I don't have memory enabled for that."
+    corrected, flags = apply_anti_hallucination_gate(text, [])
+    assert corrected == text
+    assert flags == []
+
+
+def test_apply_anti_hallucination_gate_strips_staged_memory_claim_and_denial():
+    # Both a false "I've remembered" success claim AND a false "no memory"
+    # denial in one reply, with a staged learn_fact.
+    text = (
+        "I've remembered that Ahmed is from Egypt. Also I don't have memory "
+        "enabled. Anything else?"
+    )
+    corrected, flags = apply_anti_hallucination_gate(
+        text, [_staged_memory_tool()]
+    )
+    assert "remembered" not in corrected.lower()
+    assert "memory" not in corrected.lower()
+    assert "Anything else?" in corrected
+    assert "staged_success_claim_corrected:learn_fact" in flags
+    assert "false_memory_denial_corrected" in flags
+
+
+# ── G-E: truthfulness gate persistence ───────────────────────────────────
+
+
+def test_record_truthfulness_gate_writes_stage_row():
+    """The F1–F3 gate flags persist as a ``stage="truthfulness_gate"`` row.
+
+    Clean turns (no flags) record ``verdict="pass"`` and ``flags_json=None``;
+    flagged turns record ``verdict="flag"`` and the flag list.
+    """
+    import asyncio
+    from types import SimpleNamespace
+
+    added = []
+
+    class _Ctx:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    class FakeDb:
+        def begin_nested(self):
+            return _Ctx()
+
+        def add(self, row):
+            added.append(row)
+
+        async def flush(self):
+            return None
+
+    ledger = SimpleNamespace(
+        turn_id="t-1",
+        instance_id="inst-1",
+        conversation_id="conv-1",
+        host_user_id="u-1",
+    )
+
+    asyncio.run(
+        _record_truthfulness_gate(
+            FakeDb(), ledger, ["staged_success_claim_corrected:learn_fact"]
+        )
+    )
+    assert len(added) == 1
+    assert added[0].stage == "truthfulness_gate"
+    assert added[0].stage_index == 7
+    assert added[0].verdict == "flag"
+    assert "staged_success_claim_corrected:learn_fact" in added[0].flags_json
+
+    added.clear()
+    asyncio.run(_record_truthfulness_gate(FakeDb(), ledger, []))
+    assert added[0].verdict == "pass"
+    assert added[0].flags_json is None
+
+
+def test_record_truthfulness_gate_never_raises():
+    """Observability is best-effort: a broken db must never fail the turn."""
+    import asyncio
+    from types import SimpleNamespace
+
+    class BrokenDb:
+        def begin_nested(self):
+            raise RuntimeError("db gone")
+
+    ledger = SimpleNamespace(
+        turn_id="t-1", instance_id="i", conversation_id="c", host_user_id="u"
+    )
+    # Should not raise.
+    asyncio.run(_record_truthfulness_gate(BrokenDb(), ledger, ["flag"]))
 
 
 # ── Unit: Carbon instance config ────────────────────────────────────────

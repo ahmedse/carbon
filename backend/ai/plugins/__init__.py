@@ -26,6 +26,7 @@ def register_builtin_plugins() -> None:
     from .plan_lifecycle import ApprovePlan, EditPlan
     from .web_research import WebResearch
     from .export_document import ExportDocument
+    from .unit_converter import UnitConverter
 
     register_plugin(CreateDQRule())
     register_plugin(ListCapabilities())
@@ -34,3 +35,4 @@ def register_builtin_plugins() -> None:
     register_plugin(ApprovePlan())
     register_plugin(WebResearch())
     register_plugin(ExportDocument())
+    register_plugin(UnitConverter())

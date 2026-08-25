@@ -49,10 +49,14 @@ class DraftResult:
 @dataclass
 class CriticVerdict:
     """Output of S4: rules-tier (and optional LLM-tier) safety review."""
-    verdict: str = "pass"         # "pass" | "pass_with_flag" | "rewrite" | "veto"
+    # "pass" | "pass_with_flag" | "rewrite" | "veto" | "knowledge_gap"
+    # knowledge_gap: LLM produced uncertain/empty output on a specific query.
+    # Runner escalates to a better model or returns honest-uncertainty response.
+    verdict: str = "pass"
     flags: list[str] = field(default_factory=list)  # e.g. "ungrounded_claim", "cross_tenancy"
     rewritten_text: str = ""
     veto_reason: str = ""
+    partial_knowledge: str = ""  # what the model DID say before deciding it didn't know
 
 
 # ── S5 — Execute ───────────────────────────────────────────────────────────────

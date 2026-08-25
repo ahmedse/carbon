@@ -1,0 +1,109 @@
+# Carbon Data Trust Platform — Pulse instance configuration.
+#
+# This file is the ONLY place where Carbon-specific domain knowledge is
+# declared for the intelligence layer. engine_runtime.py reads it at boot;
+# the engine core (cognition/, memory/, learning/) never imports from here.
+#
+# To bootstrap Pulse for a new project: copy engine/ to the new project,
+# replace this file with instances/<new_name>/instance.yaml, write a new
+# host_executor.py, and update the api_catalog + navigation_routes below.
+
+display_name: "Carbon Data Trust Platform"
+
+description: >
+  A data trust platform for the organisation's data workflows —
+  the assistant helps with the data areas the user can access.
+
+persona: >
+  A precise, grounded data-platform assistant. Never claim an action
+  succeeded unless a tool result confirmed it. Never mention anything
+  outside the user's access inventory, and never describe platform
+  internals (components, databases, technologies, or how the assistant
+  works). You have long-term memory through the learn_fact tool. When a
+  user asks you to remember or store something, propose it with the
+  learn_fact tool; it is only saved after the user confirms the proposal.
+  Never claim
+  you have already remembered or permanently stored something unless a
+  learn_fact result confirmed it. Never describe in-context recall of
+  earlier turns as 'my memory system'.
+
+domain_topics:
+  - data quality
+  - data catalog
+  - governance
+  - carbon emissions
+  - sustainability reporting
+
+api_catalog:
+  - name: get_data_product_details
+    method: GET
+    path: /carbon-api/dataschema/tables/?module_id={id}
+    description: >
+      Get the data tables belonging to a data product (module).
+      Path param {id} is the module/data-product id.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_data_tables
+    method: GET
+    path: /carbon-api/dataschema/tables/
+    description: >
+      List data tables visible to the user, optionally filtered
+      by query param module_id.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_dq_rules
+    method: GET
+    path: /carbon-api/dq/rules/
+    description: >
+      List data-quality rules so an existing rule can be reused
+      instead of creating a duplicate.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: create_table
+    method: POST
+    path: /carbon-api/dataschema/tables/
+    description: >
+      Create a new data table (schema change). Body:
+      {"title": str, "description": str, "module": <module id>,
+      "fields": [{"name": str, "label": str,
+      "type": "string|number|date|boolean|select|multiselect",
+      "required": bool, "description": str}]}
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: create_dq_rule
+    method: POST
+    path: /carbon-api/dq/rules/
+    description: >
+      Create a new data-quality rule. Body:
+      {"name": str, "rule_level": "business|field",
+      "rule_type": str, "severity": "error|warn|info",
+      "description": str,
+      "dimension": "accuracy|completeness|consistency|integrity|reasonability|timeliness|uniqueness|validity",
+      "definition": {"schema_version": 1, "name": str, "type": str,
+      "level": "business|field", "dimension": str,
+      "severity": "error|warn|info", "active": true, "params": {}}}
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: bind_dq_rules
+    method: POST
+    path: /carbon-api/dq/rule-assignments/
+    description: >
+      Bind a DQ rule to a data table. Body:
+      {"rule": <rule id>, "data_table": <table id>, "data_field": <field id|null>}.
+      Alternatively pass {"table_id": <id>, "dq_rule_ids": [<ids>]}.
+    requires_auth: true
+    requires_confirmation: true
+
+navigation_routes:
+  - name: dq_rule_detail
+    path: /dq/rules/{id}
+    description: Data-quality rule detail page.
+
+  - name: dq_rule_results
+    path: /dq/rules/{id}/results
+    description: Data-quality rule results page.

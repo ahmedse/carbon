@@ -136,7 +136,10 @@ async def _run_chat(
         completed_tools = getattr(getattr(ledger, "execution", None), "completed_tools", None) or []
         actions, pending_actions = _extract_tool_actions(completed_tools)
         grounded_note = _grounded_outcome_note(completed_tools)
-        content = response.text
+        # Anti-hallucination gate: strip false success claims from the LLM
+        # prose BEFORE the truthful grounded note is appended, so a staged
+        # "I remembered X" / "rule created" claim never reaches the user.
+        content, anti_flags = apply_anti_hallucination_gate(response.text, completed_tools)
         if grounded_note:
             content = f"{content}\n\n{grounded_note}" if content else grounded_note
         # Capability listing → unified rich "Your Access" document (GFM table
@@ -144,6 +147,9 @@ async def _run_chat(
         access_table = _grounded_access_table(completed_tools)
         if access_table:
             content = f"{content}\n\n{access_table}" if content else access_table
+        # G-E: persist the F1–F3 gate flags so the §4.3 "truthfulness hit-rate"
+        # metric is measurable from the turn_ledger (observability surface).
+        await _record_truthfulness_gate(db=db, ledger=ledger, anti_flags=anti_flags)
 
         return {
             "status": "completed",
@@ -154,6 +160,10 @@ async def _run_chat(
                 "execution_ms": int(ledger.total_latency_ms or 0),
                 "actions": actions,
                 "pending_actions": pending_actions,
+                # G-E: truthfulness gate signal (F1–F3), surfaced verbatim so
+                # the workspace layer can reflect it and QA can assert on it.
+                "truthfulness_flags": list(anti_flags),
+                "truthful": not anti_flags,
                 # Phase 21-A: surface per-turn usage so the workspace layer
                 # can persist it on the generation at completion (cost is
                 # computed from the ModelCatalog, never here).
@@ -167,25 +177,44 @@ async def _run_chat(
         }
 
 
+async def _record_truthfulness_gate(db, ledger, anti_flags: list[str]) -> None:
+    """Persist the anti-hallucination gate flags as a ``turn_ledger`` stage.
+
+    Writes one extra ``TurnLedgerRow`` (``stage="truthfulness_gate"``,
+    ``stage_index=7``) per turn so the observability layer can compute the
+    §4.3 truthfulness hit-rate (fraction of turns with zero gate flags).
+    A clean turn records ``flags_json=None`` (the runner's convention for
+    "no flags"); a flagged turn records the F1–F3 flag list.
+
+    Best-effort and never-raising: observability must never fail a turn.
+    """
+    try:
+        from ai.engine.cognition.turn.ledger import LedgerWitness
+
+        await LedgerWitness().record_stage(
+            db=db,
+            turn_id=ledger.turn_id,
+            instance_id=ledger.instance_id,
+            conversation_id=ledger.conversation_id,
+            host_user_id=ledger.host_user_id,
+            stage="truthfulness_gate",
+            stage_index=7,
+            verdict="pass" if not anti_flags else "flag",
+            flags=list(anti_flags),
+        )
+    except Exception as exc:  # pragma: no cover — best-effort observability
+        logger.warning("Failed to record truthfulness gate flags: %s", exc)
+
+
 # ── Chat tool-action surfacing (Sprint "fly to rule detail") ──────────────
 
 
 def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
-    """Carbon defaults the engine consumes for the chat turn.
+    """Thin loader — all domain knowledge lives in instances/carbon/instance.yaml.
 
-    Loaded from ``instances/carbon/instance.yaml`` when present, else a
-    built-in Carbon defaults dict.  Supplies the system prompt's
-    display/persona/navigation knowledge and the executor's route table.
-
-    UX/security audit: the platform name is config-driven (Django
-    ``settings.PLATFORM_TITLE``/``PLATFORM_NAME`` — ``DJANGO_PLATFORM_NAME``),
-    never hardcoded, and ``user_access`` carries the *capability-scoped*
-    inventory for ``host_user_id`` so the assistant can only ever mention what
-    the user can actually reach.
-
-    The manifest read touches the ORM, so it is resolved through
-    ``_run_async(sync_to_async(...))`` — safe from both the async chat turn
-    (``_run_chat``, confirm/decline views) and sync unit tests.
+    The engine core (cognition/, memory/, learning/) never imports from here.
+    To bootstrap Pulse for a new project: replace instances/carbon/instance.yaml
+    with instances/<project>/instance.yaml and point this loader at the new name.
     """
     from asgiref.sync import sync_to_async
 
@@ -209,127 +238,17 @@ def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
             "routes": [],
         }
 
-    config: dict[str, Any] = {
-        # Config-driven, not hardcoded — settings.PLATFORM_TITLE when set.
-        "display_name": _platform_display_name(),
-        "description": (
-            "A data trust platform for the organization's data workflows — "
-            "the assistant helps with the data areas the user can access."
-        ),
-        "persona": (
-            "A precise, grounded data-platform assistant. Never claim an action "
-            "succeeded unless a tool result confirmed it. Never mention anything "
-            "outside the user's access inventory, and never describe platform "
-            "internals (components, databases, technologies, or how the assistant "
-            "works)."
-        ),
-        "api_catalog": [
-            {
-                "name": "get_data_product_details",
-                "method": "GET",
-                "path": "/carbon-api/dataschema/tables/?module_id={id}",
-                "description": (
-                    "Get the data tables belonging to a data product (module). "
-                    "Path param {id} is the module/data-product id."
-                ),
-                "requires_auth": True,
-                "requires_confirmation": False,
-            },
-            {
-                "name": "list_data_tables",
-                "method": "GET",
-                "path": "/carbon-api/dataschema/tables/",
-                "description": (
-                    "List data tables visible to the user, optionally filtered "
-                    "by query param module_id."
-                ),
-                "requires_auth": True,
-                "requires_confirmation": False,
-            },
-            {
-                "name": "list_dq_rules",
-                "method": "GET",
-                "path": "/carbon-api/dq/rules/",
-                "description": (
-                    "List data-quality rules so an existing rule can be reused "
-                    "instead of creating a duplicate."
-                ),
-                "requires_auth": True,
-                "requires_confirmation": False,
-            },
-            {
-                "name": "create_table",
-                "method": "POST",
-                "path": "/carbon-api/dataschema/tables/",
-                "description": (
-                    "Create a new data table (schema change). Body: "
-                    "{\"title\": str, \"description\": str, \"module\": <module id>, "
-                    "\"fields\": [{\"name\": str, \"label\": str, \"type\": "
-                    "\"string|number|date|boolean|select|multiselect\", "
-                    "\"required\": bool, \"description\": str}]}"
-                ),
-                "requires_auth": True,
-                "requires_confirmation": True,
-            },
-            {
-                "name": "create_dq_rule",
-                "method": "POST",
-                "path": "/carbon-api/dq/rules/",
-                "description": (
-                    "Create a new data-quality rule. Body: "
-                    "{\"name\": str, \"rule_level\": \"business|field\", "
-                    "\"rule_type\": str, \"severity\": \"error|warn|info\", "
-                    "\"description\": str, \"dimension\": "
-                    "\"accuracy|completeness|consistency|integrity|reasonability|"
-                    "timeliness|uniqueness|validity\", \"definition\": {"
-                    "\"schema_version\": 1, \"name\": str, \"type\": str, "
-                    "\"level\": \"business|field\", \"dimension\": str, "
-                    "\"severity\": \"error|warn|info\", \"active\": true, "
-                    "\"params\": {}}}"
-                ),
-                "requires_auth": True,
-                "requires_confirmation": True,
-            },
-            {
-                "name": "bind_dq_rules",
-                "method": "POST",
-                "path": "/carbon-api/dq/rule-assignments/",
-                "description": (
-                    "Bind a DQ rule to a data table. Body: "
-                    "{\"rule\": <rule id>, \"data_table\": <table id>, "
-                    "\"data_field\": <field id|null>}. "
-                    "Alternatively pass {\"table_id\": <id>, \"dq_rule_ids\": [<ids>]}."
-                ),
-                "requires_auth": True,
-                "requires_confirmation": True,
-            },
-        ],
-        "navigation_routes": [
-            {
-                "name": "dq_rule_detail",
-                "path": "/dq/rules/{id}",
-                "description": "Data-quality rule detail page.",
-            },
-            {
-                "name": "dq_rule_results",
-                "path": "/dq/rules/{id}/results",
-                "description": "Data-quality rule results page.",
-            },
-        ],
-        "domain_topics": ["data quality", "data catalog", "governance"],
-        "host_user_id": host_user_id,
-        # Capability-scoped inventory for this user (empty manifest when the
-        # user cannot be resolved — nothing may be listed).
-        "user_access": user_access,
-    }
-    try:
-        from ai.engine.core.archetypes import load_instance_config
+    from ai.engine.core.archetypes import load_instance_config
 
-        loaded = load_instance_config("carbon")
-        if isinstance(loaded, dict) and loaded.get("display_name"):
-            config.update(loaded)
-    except Exception:  # noqa: BLE001 - fall back to Carbon defaults
-        pass
+    # All Carbon-specific config (persona, api_catalog, navigation_routes,
+    # domain_topics) is declared in instances/carbon/instance.yaml — not here.
+    config: dict[str, Any] = load_instance_config("carbon")
+
+    # Runtime-only fields that cannot live in a static file.
+    config["display_name"] = config.get("display_name") or _platform_display_name()
+    config["host_user_id"] = host_user_id
+    config["user_access"] = user_access
+
     return config
 
 
@@ -390,6 +309,67 @@ def _build_chat_user_info(host_user_id: str | None) -> dict | None:
         return None
 
 
+def _classify_pending(data: dict, item: dict) -> tuple[str | None, dict | None]:
+    """Classify a staged (``requires_confirmation``) tool result by its kind.
+
+    Anti-fabrication gate: a staged proposal must be surfaced under its true
+    kind — a memory write, a DQ rule, or a generic host mutation — and never
+    as an empty "DQ rule" card when the result carries no rule definition.
+
+    (Historical bug: ``learn_fact``/``forget_fact`` return
+    ``requires_confirmation=True`` with NO ``proposed_rule``/``proposed_body``,
+    but the old code treated every staged result as a DQ rule and fabricated
+    ``proposed_rule={}`` + ``proposed_body=None`` — the "Proposed DQ rule
+    'rule' with an empty {} body" card the user saw.)
+    """
+    method = str(data.get("method") or "").upper()
+    operation = str(data.get("operation") or "").lower()
+    tool_name = str(item.get("tool_name") or "").lower()
+
+    # 1. Memory writes (learn_fact / forget_fact → method=MEMORY,
+    #    operation=learn|forget). Surfaced truthfully, never as a DQ rule.
+    if method == "MEMORY" or operation in {"learn", "forget"} or tool_name in {"learn_fact", "forget_fact"}:
+        return "memory", {
+            "execution_id": str(data["execution_id"]),
+            "tool": tool_name,
+            "operation": operation or ("forget" if "forget" in tool_name else "learn"),
+            "confirmation_message": str(data.get("confirmation_message") or ""),
+            "fact": str(data.get("fact") or data.get("content") or ""),
+            "category": str(data.get("category") or ""),
+        }
+
+    # 2. DQ rule — only when there is a REAL rule definition (non-empty name).
+    proposed_rule = data.get("proposed_rule")
+    if isinstance(proposed_rule, dict) and (proposed_rule.get("name") or "").strip():
+        name = str(proposed_rule.get("name") or "").strip()
+        rtype = str(proposed_rule.get("type") or "").strip()
+        return "dq_rule", {
+            "execution_id": str(data["execution_id"]),
+            "tool": tool_name,
+            "confirmation_message": (
+                str(data.get("confirmation_message") or "")
+                or f"Create DQ rule '{name}' ({rtype})?"
+            ),
+            "proposed_rule": proposed_rule,
+            "proposed_body": data.get("proposed_body"),
+            "validation": data.get("validation"),
+        }
+
+    # 3. Generic host mutation (call_host_api) — a real endpoint/method.
+    if method or data.get("endpoint"):
+        return "host", {
+            "execution_id": str(data["execution_id"]),
+            "tool": tool_name,
+            "method": method,
+            "endpoint": str(data.get("endpoint") or ""),
+            "body": data.get("body") or data.get("params") or {},
+            "confirmation_message": str(data.get("confirmation_message") or ""),
+        }
+
+    # 4. Unrecognized — refuse to fabricate a card.
+    return None, None
+
+
 def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list[dict]]:
     """Derive machine-readable actions from the turn's executed tools.
 
@@ -397,7 +377,8 @@ def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list
       * ``actions`` — navigate-style actions (``{"action": "navigate"}`` in a
         tool result); deduped by route, last occurrence wins.
       * ``pending_actions`` — staged, confirmation-gated proposals
-        (``requires_confirmation`` + ``execution_id``) awaiting the user.
+        (``requires_confirmation`` + ``execution_id``) awaiting the user,
+        each tagged with its true ``kind`` (memory / dq_rule / host).
     """
     actions: list[dict] = []
     pending_actions: list[dict] = []
@@ -505,22 +486,10 @@ def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list
                 })
 
         if data.get("requires_confirmation") and data.get("execution_id"):
-            proposed = data.get("proposed_rule") or {}
-            name = str(proposed.get("name") or "").strip() or "rule"
-            rtype = str(proposed.get("type") or "").strip()
-            pending_actions.append({
-                "execution_id": str(data["execution_id"]),
-                "tool": str(item.get("tool_name") or ""),
-                "confirmation_message": (
-                    str(data.get("confirmation_message") or "")
-                    or f"Create DQ rule '{name}' ({rtype})?"
-                ),
-                "proposed_rule": proposed,
-                # Exact host POST body (what ``confirm_execution`` will send) —
-                # lets the UI render the JSON and edit it before confirming.
-                "proposed_body": data.get("proposed_body"),
-                "validation": data.get("validation"),
-            })
+            kind, payload = _classify_pending(data, item)
+            if kind is not None and payload is not None:
+                payload["kind"] = kind
+                pending_actions.append(payload)
 
     return actions, pending_actions
 
@@ -650,12 +619,36 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
             lines.append(_FAILED_ACTION_COPY)
             continue
         if data.get("requires_confirmation"):
-            proposed = data.get("proposed_rule") or {}
-            name = str(proposed.get("name") or "").strip() or "rule"
-            lines.append(
-                f"✅ Proposed DQ rule '{name}' validated and staged — nothing "
-                "was created yet. Confirm with the button below to create it."
-            )
+            kind, payload = _classify_pending(data, item)
+            if kind == "memory":
+                operation = (payload or {}).get("operation") or "learn"
+                fact = (payload or {}).get("fact") or ""
+                if operation == "forget":
+                    lines.append(
+                        f"✅ Proposed to forget: {fact} — nothing was archived "
+                        "yet. Confirm below to archive it."
+                    )
+                else:
+                    lines.append(
+                        f"✅ Proposed to remember: {fact} — nothing was stored "
+                        "yet. Confirm below to save it."
+                    )
+            elif kind == "dq_rule":
+                proposed = data.get("proposed_rule") or {}
+                name = str(proposed.get("name") or "").strip() or "rule"
+                lines.append(
+                    f"✅ Proposed DQ rule '{name}' validated and staged — nothing "
+                    "was created yet. Confirm with the button below to create it."
+                )
+            elif kind == "host":
+                method = str(data.get("method") or "").strip() or "action"
+                endpoint = str(data.get("endpoint") or "").strip()
+                lines.append(
+                    f"✅ Proposed {method} {endpoint} — staged, nothing executed "
+                    "yet. Confirm below to proceed."
+                )
+            # kind is None → unrecognized staged result; emit nothing rather
+            # than fabricate a DQ-rule note (anti-fabrication).
         elif data.get("action") == "navigate":
             summary = str(data.get("summary") or data.get("label") or "").strip()
             if summary:
@@ -712,6 +705,161 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
                 names = ", ".join(str(f.get("filename") or "") for f in files)
                 lines.append(f"✅ Generated: {names} — download below.")
     return "\n\n".join(lines)
+
+
+# ── Anti-hallucination gate (post-S5, deterministic) ──────────────────────
+
+_STAGED = "staged"
+_FAILED = "failed"
+_SUCCEEDED = "succeeded"
+
+# Success-claim patterns per mutation/staging tool. When a tool's true outcome
+# is staged or failed, any matching sentence in the LLM prose is a
+# hallucination and is stripped. The deterministic `_grounded_outcome_note`
+# supplies the truthful replacement, so the user never sees a false "done".
+_CLAIM_PATTERNS: dict[str, "re.Pattern"] = {
+    "learn_fact": re.compile(
+        r"(?:\bI(?:'ve| have)?\s+)?(?:remembered|memorized|stored|saved|noted)\b[^.!?\n]*[.!?]?",
+        re.IGNORECASE,
+    ),
+    "forget_fact": re.compile(
+        r"(?:\bI(?:'ve| have)?\s+)?(?:forgotten|forgot|removed\s+from\s+memory)\b[^.!?\n]*[.!?]?",
+        re.IGNORECASE,
+    ),
+    "create_dq_rule": re.compile(
+        r"(?:\bI(?:'ve| have)?\s+)?(?:created|added)\b[^.!?\n]*\brule\b[^.!?\n]*[.!?]?",
+        re.IGNORECASE,
+    ),
+    "plan_task": re.compile(
+        r"(?:\bI(?:'ve| have)?\s+)?(?:created|generated)\b[^.!?\n]*\b(?:task|plan)\b[^.!?\n]*[.!?]?",
+        re.IGNORECASE,
+    ),
+}
+
+# A concrete-work execution claim ("I ran the audit", "I completed the
+# validation"). Without a successful tool result, this is fabricated reasoning.
+_EXECUTION_NARRATION_RE = re.compile(
+    r"\bI\s+(?:executed|ran|performed|carried\s+out|completed|finished)\s+(?:the\s+)?"
+    r"(?:validation|check|audit|analysis|query|workflow|task|plan|job|rule|test|"
+    r"scan|assessment|comparison|review|report|export|migration|import|sync|cleanup)\b"
+    r"[^.!?\n]*[.!?]?",
+    re.IGNORECASE,
+)
+
+# A false memory-capability DENIAL ("I don't have memory", "I won't retain
+# this"). When learn_fact/forget_fact actually staged a proposal (or stored
+# something), this prose contradicts the tool result — the propose→confirm
+# flow IS the memory system. Stripped so the truthful grounded note stands.
+_MEMORY_DENIAL_RE = re.compile(
+    r"\bI\s+(?:currently\s+)?(?:do\s+not|don'?t)\s+have\s+memory\s+enabled\b[^.!?\n]*[.!?]?"
+    r"|\bI\s+(?:don'?t|do\s+not|cannot|can'?t|won'?t|will\s+not)\s+"
+    r"(?:retain|remember|store|keep)\s+(?:this|that|it|the\s+information|anything)\b[^.!?\n]*[.!?]?"
+    r"|\bI\s+(?:can'?t|cannot)\s+(?:remember|retain|store)\b[^.!?\n]*[.!?]?"
+    r"|\b(?:my\s+)?memory\s+is\s+not\s+(?:enabled|available|on)\b[^.!?\n]*[.!?]?"
+    r"|\b(?:long-?term\s+)?memory\s+is\s+not\s+(?:enabled|available|on)\b[^.!?\n]*[.!?]?"
+    # Conditional / future framing: the LLM hedges that memory might become
+    # available later — but a learn/forget proposal is memory working NOW.
+    r"|\b(?:if|when|once|unless|until|should)\s+(?:my\s+|long-?term\s+|standalone\s+|"
+    r"persistent\s+)?memory\s+(?:is|becomes|gets|were|was|has\s+been)\s+"
+    r"(?:enabled|available|on|activated|turned\s+on|connected)\b[^.!?\n]*[.!?]?"
+    r"|\bI\s+(?:can|could|will|would|may|might)\s+(?:let\s+you\s+know\s+what\s+I\s+"
+    r"(?:remember|recall|retain|store)|tell\s+you\s+what\s+I\s+(?:remember|recall|retain))\b"
+    r"[^.!?\n]*[.!?]?",
+    re.IGNORECASE,
+)
+
+
+def _classify_tool_outcomes(completed_tools: list[dict]) -> dict[str, str]:
+    """Map tool_name → staged/failed/succeeded from executed tool results.
+
+    Grounds the anti-hallucination gate: only a real, non-empty, non-error,
+    non-staged result counts as a success.
+    """
+    outcomes: dict[str, str] = {}
+    for item in completed_tools or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("tool_name") or "")
+        if not name:
+            continue
+        if item.get("error"):
+            outcomes[name] = _FAILED
+            continue
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            outcomes[name] = _FAILED
+            continue
+        if not isinstance(data, dict):
+            # Non-dict, non-error result (bare string/scalar) counts as success
+            # only if truthy; an empty result is a failure.
+            outcomes[name] = _SUCCEEDED if raw else _FAILED
+            continue
+        if data.get("error"):
+            outcomes[name] = _FAILED
+        elif data.get("requires_confirmation"):
+            outcomes[name] = _STAGED
+        else:
+            outcomes[name] = _SUCCEEDED
+    return outcomes
+
+
+def apply_anti_hallucination_gate(
+    text: str,
+    completed_tools: list[dict],
+) -> tuple[str, list[str]]:
+    """Strip false success claims from the LLM prose (deterministic).
+
+    The LLM drafts text before tools run, so it can claim "I remembered X" or
+    "rule created" when the tool only *staged* a proposal (or failed). This
+    gate removes those claims; the deterministic grounded note supplies the
+    truth. It also removes fabricated execution narratives ("I ran the audit")
+    when no tool actually succeeded.
+
+    Returns ``(corrected_text, flags)``.
+    """
+    if not text:
+        return text, []
+
+    outcomes = _classify_tool_outcomes(completed_tools)
+    flags: list[str] = []
+    corrected = text
+
+    # Gate 1 — anti-hallucination: a staged/failed tool's success claim is
+    # removed so the grounded note is the only thing that speaks to the result.
+    for tool_name, outcome in outcomes.items():
+        if outcome == _SUCCEEDED:
+            continue
+        pattern = _CLAIM_PATTERNS.get(tool_name)
+        if pattern is None:
+            continue
+        corrected, removed = pattern.subn("", corrected)
+        if removed:
+            flags.append(f"{outcome}_success_claim_corrected:{tool_name}")
+
+    # Gate 2 — anti-reasoning: no tool succeeded, yet the prose narrates a
+    # concrete execution ("I ran the audit"). That chain is fabricated.
+    if corrected and not any(o == _SUCCEEDED for o in outcomes.values()):
+        corrected, removed = _EXECUTION_NARRATION_RE.subn("", corrected)
+        if removed:
+            flags.append("fabricated_reasoning_chain_corrected")
+
+    # Gate 3 — anti-false-denial: a memory tool actually staged (or stored)
+    # something, yet the prose claims "I don't have memory" / "I won't retain
+    # this". That denial contradicts the tool result and is stripped.
+    memory_engaged = any(
+        name in ("learn_fact", "forget_fact") and outcome in (_STAGED, _SUCCEEDED)
+        for name, outcome in outcomes.items()
+    )
+    if corrected and memory_engaged:
+        corrected, removed = _MEMORY_DENIAL_RE.subn("", corrected)
+        if removed:
+            flags.append("false_memory_denial_corrected")
+
+    # Normalize whitespace left behind by removed sentences.
+    corrected = re.sub(r"\s{2,}", " ", corrected).strip()
+    return corrected, flags
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────

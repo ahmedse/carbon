@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     LLM_EMBEDDING_MODEL: str = "text-embedding-3-small"
     LLM_COGNITION_MODEL: str = "anthropic/claude-haiku-4.5"
     LLM_INTROSPECT_MODEL: str = ""               # schema enrichment; falls back to LLM_MODEL
+    # When set, knowledge-gap responses escalate here instead of admitting ignorance.
+    LLM_ESCALATION_MODEL: str = ""               # e.g. gpt-4o; empty = use honest-uncertainty path
     EVAL_MODEL: str | None = None                # eval/judge model; falls back to LLM_MODEL
     PULSE_ALLOW_EXPENSIVE_MODELS: bool = False  # override cost guardrail
 

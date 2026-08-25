@@ -56,6 +56,7 @@ class ListCapabilities(ToolPlugin):
                 "error": "No authenticated session — the capability list is unavailable.",
             }
         from ai.access_manifest import build_user_access_manifest
+        from ai.engine.agent.plugins import capability_claims
 
         manifest = await sync_to_async(build_user_access_manifest)(ctx.host_user_id)
         return {
@@ -65,4 +66,8 @@ class ListCapabilities(ToolPlugin):
             "capabilities": manifest["capabilities"],
             "modules": manifest["modules"],
             "routes": manifest["routes"],
+            # Registry-derived "what I can do" claims — truthful by construction
+            # (F5). The user's *access* is the manifest above; this is the
+            # agent's *capability* surface, never hardcoded prose.
+            "agent_capabilities": capability_claims(),
         }

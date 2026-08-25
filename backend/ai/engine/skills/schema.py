@@ -60,6 +60,12 @@ class ProcedureBody(BaseModel):
     version: int = 1
     steps: list[ProcedureStep]
     output_schema: dict = {}
+    # GAP-6: coverage and prerequisite declarations (domain-set, core-read)
+    covers: list[str] = []
+    requires: list[str] = []
+    produces: list[str] = []
+    # GAP-5: canonical terminology map — human phrase → platform term
+    terminology: dict[str, str] = {}
 
     @field_validator("steps")
     @classmethod

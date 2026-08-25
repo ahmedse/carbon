@@ -63,7 +63,8 @@ class ArtifactUpdateSerializer(serializers.Serializer):
 
 
 class SendMessageSerializer(serializers.Serializer):
-    content = serializers.CharField(required=True, allow_blank=False)
+    # trim_whitespace ensures " " is treated as blank and rejected.
+    content = serializers.CharField(required=True, allow_blank=False, trim_whitespace=True)
     model = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
 
 

@@ -91,6 +91,12 @@ class ToolPlugin(ABC):
     capability: str | None = None
     #: Bind to a domain app for scope/data-isolation (RULE_20).
     app_identifier: str | None = None
+    #: User-facing "I can …" sentence that feeds ``list_my_capabilities`` (F5).
+    #: Falls back to ``description`` when empty (G-C: truthful by construction).
+    capability_claim: str = ""
+    #: Whether the tool is exposed to the chat S3 planner. Sensitive or
+    #: agent-mode-only tools set False (G-C: registry-driven chat surface).
+    chat_visible: bool = True
 
     @abstractmethod
     async def execute(self, args: dict, *, ctx: ToolContext) -> dict:
@@ -218,3 +224,32 @@ def load_plugins() -> tuple[list[dict], dict[str, object]]:
 def registered_plugins() -> list[ToolPlugin]:
     """Return the currently-registered plugin instances (read-only view)."""
     return list(_PLUGINS)
+
+
+def chat_tool_names() -> frozenset[str]:
+    """Names of registered plugins exposed to the chat planner (``chat_visible``).
+
+    This is the G-C "freeze the spine, grow the periphery" seam: adding a new
+    chat tool is a plugin registration — never an edit to ``tools.py`` or
+    ``runner.py``.
+    """
+    return frozenset(p.name for p in _PLUGINS if p.chat_visible)
+
+
+def capability_claims() -> list[dict]:
+    """Registry-derived capability manifest — truthful by construction (F5).
+
+    Returns one entry per plugin: ``{name, claim, requires_confirmation, kind}``
+    where ``claim`` is ``capability_claim`` (or ``description`` when unset).
+    This feeds ``list_my_capabilities``.
+    """
+    claims: list[dict] = []
+    for p in _PLUGINS:
+        claim = (p.capability_claim or "").strip() or (p.description or "").strip()
+        claims.append({
+            "name": p.name,
+            "claim": claim,
+            "requires_confirmation": bool(p.requires_confirmation),
+            "kind": "workflow" if isinstance(p, WorkflowPlugin) else "tool",
+        })
+    return claims

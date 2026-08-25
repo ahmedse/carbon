@@ -535,11 +535,41 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Persist the created-rule outcome as a grounded assistant message so
-        # the confirmation survives reloads and carries the navigate action to
-        # the frontend.  Runs in the sync view context (no event loop), so
-        # direct ORM writes are safe here.
+        # Persist the confirmed outcome as a grounded assistant message so the
+        # confirmation survives reloads.  Memory writes (learn_fact/forget_fact)
+        # produce a truthful message with no navigate action — they are not DQ
+        # rules.  Runs in the sync view context (no event loop), so direct ORM
+        # writes are safe here.
         data = (result or {}).get("data") or result or {}
+        kind = (result or {}).get("kind")
+        operation = (result or {}).get("operation")
+
+        if kind == "memory":
+            if operation == "forget":
+                self.intelligence._save_assistant_message(
+                    conversation,
+                    "✅ Forgot that fact.",
+                    metadata={},
+                    status="completed",
+                )
+            else:
+                fact_text = data.get("fact") or ""
+                self.intelligence._save_assistant_message(
+                    conversation,
+                    f"✅ Remembered: {fact_text}",
+                    metadata={},
+                    status="completed",
+                )
+            return Response(
+                {
+                    "status": "confirmed",
+                    "kind": "memory",
+                    "operation": operation,
+                    "memory_id": data.get("id") or "",
+                    "action": None,
+                }
+            )
+
         rule_id = data.get("id") or ""
         rule_name = data.get("name") or "rule"
         if rule_id:

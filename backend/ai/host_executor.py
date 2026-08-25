@@ -92,6 +92,14 @@ class CarbonHostExecutor(HostAPIExecutor):
         ``create_pending_execution``) dispatch through this method so the LLM's
         ``call_host_api`` tool sees a uniform transport.
         """
+        # Memory writes (learn_fact / forget_fact) are not host HTTP endpoints
+        # — the engine stages them with method="MEMORY" / endpoint="long_term/*"
+        # and the confirmed proposal is written straight to LongTermMemory.
+        if (method or "").upper() == "MEMORY":
+            return await self._memory_in_process(
+                method=method.upper(), params=params, body=body or {}
+            )
+
         key = _canonical_endpoint(endpoint)
         handler_name = _IN_PROCESS_ENDPOINTS.get(key)
         if handler_name:
@@ -113,6 +121,64 @@ class CarbonHostExecutor(HostAPIExecutor):
             f"Host API endpoint {method} {endpoint} is not available for "
             "in-process execution from the AI workspace."
         )
+
+    async def _memory_in_process(
+        self, method: str = "MEMORY", params: dict | None = None, body: dict | None = None
+    ) -> dict:
+        """MEMORY ``long_term/*`` executed directly in-process (learn / forget).
+
+        Backs the ``learn_fact`` / ``forget_fact`` tools: a *confirmed* proposal
+        writes (or archives) a durable ``MemoryLongTerm`` fact via the engine's
+        ``LongTermMemory`` — no HTTP, no separate memory service.  The tool layer
+        already staged this as a confirmation card; this handler is the confirmed
+        write.  Ownership is inherited from ``self.host_user_id`` so private
+        facts are scoped to the confirming user (RULE_21 / P0-2).
+        """
+        from ai.engine.memory.long_term import LongTermMemory
+
+        body = body or {}
+        operation = body.get("operation", "learn")
+        instance_id = body.get("instance_id") or "carbon"
+        ltm = LongTermMemory(self.db)
+
+        if operation == "forget":
+            memory_id = (body.get("memory_id") or "").strip()
+            archived = bool(memory_id) and await ltm.archive_fact(memory_id)
+            return {
+                "status_code": 200 if archived else 404,
+                "data": {
+                    "id": memory_id,
+                    "name": "forgotten fact",
+                    "archived": archived,
+                },
+                "kind": "memory",
+                "operation": "forget",
+            }
+
+        fact = (body.get("fact") or "").strip()
+        if not fact:
+            raise ToolExecutionError("Cannot remember an empty fact.")
+
+        fact_id = await ltm.store_fact(
+            instance_id=instance_id,
+            category=body.get("category", "observation"),
+            content=fact,
+            source=body.get("source") or "learn_fact",
+            confidence=float(body.get("confidence", 1.0)),
+            host_user_id=self.host_user_id,
+            visibility="private",
+        )
+        return {
+            "status_code": 201,
+            "data": {
+                "id": fact_id,
+                "name": "remembered fact",
+                "fact": fact,
+                "category": body.get("category", "observation"),
+            },
+            "kind": "memory",
+            "operation": "learn",
+        }
 
     async def _dq_rules_in_process(
         self, method: str = "POST", params: dict | None = None, body: dict | None = None

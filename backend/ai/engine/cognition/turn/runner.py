@@ -5,6 +5,7 @@ writing one TurnLedgerRow per stage. PulseAgent.think() has been deleted.
 """
 import asyncio
 import logging
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -18,6 +19,57 @@ logger = logging.getLogger("pulse.cognition.turn.runner")
 
 # Lazy import — avoids circular dependency with notifier
 broadcast_run_event = None
+
+
+# ── GAP-M7: capability-tool salience guard ────────────────────────────────
+
+_CAPABILITY_QUERY_PATTERN = re.compile(
+    r"\b(?:"
+    r"what can you do|"
+    r"what do you have access to|"
+    r"what features|"
+    r"show me capabilities|"
+    r"your capabilities|"
+    r"what are you able to do|"
+    r"what can i use"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_capability_query(text: str) -> bool:
+    """True if the user explicitly asks about capabilities/access (regex)."""
+    if not text:
+        return False
+    return bool(_CAPABILITY_QUERY_PATTERN.search(text))
+
+
+def _filter_draft_tools(
+    draft_tools: list[dict] | None,
+    user_message: str,
+    salience_domain: str,
+) -> list[dict] | None:
+    """Exclude ``list_my_capabilities`` unless the user explicitly asked about
+    capabilities/access or the turn is an identity-domain turn (GAP-M7)."""
+    if (
+        draft_tools
+        and not _is_capability_query(user_message)
+        and salience_domain != "identity"
+    ):
+        return [
+            d for d in draft_tools
+            if d.get("function", {}).get("name") != "list_my_capabilities"
+        ]
+    return draft_tools
+
+
+#: Spine static tools ALWAYS exposed to the chat planner. Registry plugins
+#: contribute the rest via ``chat_tool_names()`` (G-C: freeze the spine, grow
+#: the periphery — new chat tools need zero edits to this module).
+_CHAT_STATIC_TOOLS = frozenset({
+    "search_knowledge", "get_entity_details",
+    "learn_fact", "forget_fact",
+})
 
 
 async def _write_trajectory_own_session(run_id: str) -> None:
@@ -63,13 +115,12 @@ class TurnPipelineRunner:
         if executor is not None:
             try:
                 from ai.engine.agent.tools import get_tool_definitions
+                from ai.engine.agent.plugins import chat_tool_names
 
-                allow = {
-                    "create_dq_rule", "search_knowledge", "get_entity_details",
-                    "list_my_capabilities", "plan_task",
-                    "edit_plan", "approve_plan",
-                    "web_research", "export_document",
-                }
+                # Chat-visible tool set = spine static tools ∪ registry plugins
+                # that opt in (chat_visible=True). New tools arrive by adding a
+                # plugin + registering it — zero edits to this allow-list (G-C).
+                allow = _CHAT_STATIC_TOOLS | chat_tool_names()
                 self._draft_tools = [
                     d for d in get_tool_definitions()
                     if d.get("function", {}).get("name") in allow
@@ -135,6 +186,73 @@ class TurnPipelineRunner:
             "user_message": user_message,
         })
 
+        # ── [GAP-M6] Pre-S1 pending-confirmation short-circuit ───────────
+        # If the user is answering Pulse's own "shall I remember X?" with a
+        # short affirmative, prepare the memory card directly — never route
+        # "yes" through the LLM as a decontextualized query.
+        try:
+            from ai.engine.cognition.dialogue.pending_action import (
+                get_pending_action_store,
+            )
+            _pending_store = get_pending_action_store()
+            _pending = _pending_store.check_confirmation(conversation_id, user_message)
+            if _pending and self.executor is not None and instance_id:
+                from ai.engine.agent.tools import execute_learn_fact
+                await execute_learn_fact(
+                    fact=_pending["fact"],
+                    category=_pending.get("category", "observation"),
+                    instance_id=instance_id,
+                    executor=self.executor,
+                    conversation_id=conversation_id,
+                )
+                _pending_store.clear(conversation_id)
+
+                _confirm_text = (
+                    "Done — I've prepared a memory card for that. "
+                    "Click confirm to save it permanently."
+                )
+                total_latency = (time.monotonic() - t0) * 1000
+                await self._write_ledger_row(
+                    turn_id, instance_id, conversation_id, host_user_id,
+                    "final", 5,
+                    {
+                        "total_latency_ms": total_latency,
+                        "total_tokens": 0,
+                        "total_llm_calls": 0,
+                        "pending_confirmation_shortcircuit": True,
+                    },
+                    total_latency, verdict="pass",
+                )
+                if self.db is not None:
+                    await self.db.commit()
+
+                ledger.final_response = _confirm_text[:500]
+                ledger.total_latency_ms = total_latency
+
+                response = AgentResponse(
+                    text=_confirm_text,
+                    sources_cited=[],
+                    tools_used=[],
+                    confidence=0.8,
+                    total_tokens=0,
+                    llm_calls=0,
+                    model="",
+                )
+                await _broadcast_run(instance_id, "run.completed", {
+                    "run_id": turn_id,
+                    "total_latency_ms": total_latency,
+                    "total_tokens": 0,
+                    "total_llm_calls": 0,
+                    "pending_confirmation_shortcircuit": True,
+                })
+                return response, ledger
+        except Exception:  # noqa: BLE001 - memory hook must never block the turn
+            logger.warning(
+                "[%s] Pending-confirmation short-circuit failed; "
+                "continuing normal pipeline",
+                turn_id[:8], exc_info=True,
+            )
+
         # S1 — Salience
         s1_start = time.monotonic()
         await _broadcast_run(instance_id, "run.step.started", {
@@ -158,6 +276,19 @@ class TurnPipelineRunner:
             "salience", 0, {"domain": salience.domain, "route": salience.route, "weight": salience.weight},
             s1_latency, verdict="pass",
         )
+
+        # [GAP-2] Extract named entity → update working memory
+        # [GAP-4] Detect preference signals → update session preferences
+        from ai.engine.cognition.dialogue.entity_extractor import EntityExtractor
+        from ai.engine.memory.working import get_working_memory
+        from ai.engine.learning.preferences import PreferenceClassifier, get_session_preference_store
+
+        _wm = get_working_memory()
+        _entity = EntityExtractor().extract(user_message)
+        if _entity:
+            _wm.set_focus(conversation_id, _entity.name, _entity.entity_type)
+        _pref_store = get_session_preference_store()
+        _pref_store.update(conversation_id, PreferenceClassifier().classify(user_message))
 
         # S2 — Retrieval
         s2_start = time.monotonic()
@@ -414,6 +545,9 @@ class TurnPipelineRunner:
         # Tool-aware drafting: when an executor is wired, expose the curated
         # tool set to the LLM and append the anti-fabrication grounding rules.
         draft_tools = self._draft_tools if self.executor is not None else None
+        # [GAP-M7] Salience guard: only surface list_my_capabilities when the
+        # user is asking about identity/access, never as a confusion fallback.
+        draft_tools = _filter_draft_tools(draft_tools, user_message, salience.domain)
         if draft_tools:
             system_prompt = (
                 f"{system_prompt}\n\n"
@@ -463,14 +597,67 @@ class TurnPipelineRunner:
                 "artifact when the user wants the findings as a document; tell "
                 "them the download link appeared.\n"
                 "- If a tool errors, report the error plainly.\n"
+                "- You have long-term memory through the learn_fact tool. "
+                "When the user asks you to remember/store something, call "
+                "learn_fact; it proposes a fact and the user confirms before "
+                "it is saved (forget_fact removes a fact). After proposing, "
+                "tell the user a confirmation button appeared — do NOT claim "
+                "the fact is already saved, and do NOT say you lack memory, "
+                "that memory is unavailable/disabled, or that you can only "
+                "remember 'if memory is enabled in the future'. If asked "
+                "whether you can remember things, answer yes: via "
+                "learn_fact/forget_fact, which the user controls.\n"
+                "- Only claim a capability that a tool result in this turn "
+                "just demonstrated. Your native abilities (writing prose, "
+                "general knowledge, arithmetic) are NOT 'Pulse capabilities' "
+                "and must not be listed as such. Use the capability-list tool "
+                "only when the user asks what you/they can do or access — "
+                "never as a fallback when you are unsure.\n"
                 "- When the user asks what you can do, use the capability-list "
                 "tool so the app can attach the matching page links as small "
                 "buttons under your reply."
             )
+
+        # [GAP-3] Resolve anaphora: substitute pronouns with active entity
+        from ai.engine.cognition.dialogue.anaphora import AnaphoraResolver
+        _resolved_user_message = AnaphoraResolver(_wm).resolve(
+            conversation_id, user_message
+        )
+
+        # [GAP-2] Inject active entity context into system prompt
+        _wm_fragment = _wm.to_prompt_fragment(conversation_id)
+        if _wm_fragment:
+            system_prompt = f"{system_prompt}\n\n{_wm_fragment}"
+
+        # [GAP-4] Inject session preference constraints into system prompt
+        _pref_constraints = _pref_store.to_prompt_constraints(conversation_id)
+        if _pref_constraints:
+            system_prompt = f"{system_prompt}\n\n{_pref_constraints}"
+
+        # [GAP-5/6] Load skill terminology + route query to matching skills
+        _skill_terminology: dict[str, str] = {}
+        if self.db is not None:
+            try:
+                from ai.engine.skills.registry import SkillRegistry
+                from ai.engine.skills.router import SkillRouter
+                _registry = SkillRegistry(self.db)
+                _promoted_skills = await _registry.list_promoted(instance_id)
+                _router = SkillRouter()
+                _matched_skills = _router.find_matching_skills(user_message, _promoted_skills)
+                _skill_terminology = _router.get_terminology(_matched_skills)
+            except Exception:
+                logger.warning(
+                    "Skill routing failed; continuing without terminology injection",
+                    exc_info=True,
+                )
+        if _skill_terminology:
+            from ai.engine.knowledge.terminology import TerminologyResolver
+            system_prompt = TerminologyResolver().inject(system_prompt, _skill_terminology)
+
         draft = await draft_witness.draft(
             instance_id=instance_id,
             conversation_id=conversation_id,
-            user_message=user_message,
+            user_message=_resolved_user_message,
             system_prompt=system_prompt,
             conversation_history=conversation_history,
             instance_config=instance_config,
@@ -480,6 +667,18 @@ class TurnPipelineRunner:
             tools=draft_tools,
             temperature=temperature,
         )
+        # [GAP-1] Fallback handler: ensure non-empty response
+        import dataclasses as _dc
+        from ai.engine.cognition.dialogue.fallback import FallbackHandler
+        _fallback_text = FallbackHandler().handle(user_message, draft.text)
+        if _fallback_text != draft.text:
+            draft = _dc.replace(
+                draft,
+                text=_fallback_text,
+                confidence=0.4,
+                model_used=draft.model_used or "fallback",
+            )
+
         ledger.draft = draft
         total_tokens += draft.tokens_used
         total_llm_calls += 1  # S3 is one direct route_chat() call
@@ -523,8 +722,58 @@ class TurnPipelineRunner:
             enable_llm_critic=True,
             instance_id=instance_id,
             conversation_id=conversation_id,
-            user_message=user_message,
+            user_message=_resolved_user_message,
+            salience=salience,
         )
+
+        # [knowledge_gap routing] Escalate or return honest uncertainty — never mask.
+        if critic.verdict == "knowledge_gap":
+            escalation_model = (settings.LLM_ESCALATION_MODEL or "").strip()
+            current_model = draft.model_used or ""
+            if escalation_model and escalation_model != current_model:
+                logger.info(
+                    "[%s] knowledge_gap detected — escalating to %s",
+                    turn_id[:8], escalation_model,
+                )
+                draft = await draft_witness.draft(
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    user_message=_resolved_user_message,
+                    system_prompt=system_prompt,
+                    conversation_history=conversation_history,
+                    instance_config=instance_config,
+                    user_info=user_info,
+                    budget_tracker=budget,
+                    model=escalation_model,
+                    tools=draft_tools,
+                    temperature=temperature,
+                )
+                total_tokens += draft.tokens_used
+                total_llm_calls += 1
+                # Re-run FallbackHandler in case escalated model also returns empty.
+                _fallback_text = FallbackHandler().handle(_resolved_user_message, draft.text)
+                if _fallback_text != draft.text:
+                    import dataclasses as _dc
+                    draft = _dc.replace(draft, text=_fallback_text, confidence=0.4)
+                critic = await critic_witness.review(
+                    draft, retrieval, enable_llm_critic=False,
+                    instance_id=instance_id, conversation_id=conversation_id,
+                    user_message=_resolved_user_message, salience=salience,
+                )
+            else:
+                # No escalation model configured — honest uncertainty, not fake clarification.
+                from ai.engine.cognition.dialogue.fallback import HonestUncertaintyHandler
+                honest_text = HonestUncertaintyHandler().handle(
+                    _resolved_user_message, critic.partial_knowledge
+                )
+                logger.info(
+                    "[%s] knowledge_gap — no escalation model, returning honest uncertainty",
+                    turn_id[:8],
+                )
+                import dataclasses as _dc
+                draft = _dc.replace(draft, text=honest_text, confidence=0.2, model_used="honest_uncertainty")
+                # Critic passes through — this is not a safety issue.
+                critic = _dc.replace(critic, verdict="pass_with_flag", flags=["knowledge_gap"])
         ledger.critic = critic
         s4_latency = (time.monotonic() - s4_start) * 1000
         await _broadcast_run(instance_id, "run.step.completed", {
@@ -664,6 +913,24 @@ class TurnPipelineRunner:
             "total_tokens": total_tokens,
             "total_llm_calls": total_llm_calls,
         })
+
+        # [GAP-M6] Post-response proposal detection: if this turn proposed a
+        # memory action in prose, record it so the next "yes" is recognised.
+        try:
+            from ai.engine.cognition.dialogue.pending_action import (
+                get_pending_action_store,
+            )
+            _pending_store = get_pending_action_store()
+            _proposal = _pending_store.detect_proposal(final_text)
+            if _proposal:
+                _pending_store.set_pending(
+                    conversation_id, _proposal["fact"], _proposal["category"]
+                )
+        except Exception:  # noqa: BLE001 - memory hook must never block the turn
+            logger.warning(
+                "[%s] Pending-action proposal detection failed",
+                turn_id[:8], exc_info=True,
+            )
 
         return response, ledger
 

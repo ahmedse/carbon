@@ -14,11 +14,18 @@ LLM-tier (enable_llm_critic=True, triggered when flags are raised):
 """
 import json
 import logging
+import re
 
-from ai.engine.cognition.turn.witnesses import CriticVerdict, DraftResult, RetrievalResult
+from ai.engine.cognition.turn.witnesses import CriticVerdict, DraftResult, RetrievalResult, SalienceResult
 from ai.engine.llm.router import route_chat
 
 logger = logging.getLogger("pulse.cognition.turn.critic")
+
+# Phrases that indicate the LLM is admitting it doesn't know — not ambiguity, not safety.
+_KNOWLEDGE_GAP_RE = re.compile(
+    r"I('m| am) (not sure|not certain|unable to|not confident)|I don't have (specific|detailed|enough|complete|information|knowledge)|I (cannot|can't) (provide|give|confirm|answer)|I need (more|a bit more|additional) (context|information|detail)|I want to give you the most useful|could you clarify which specific",
+    re.IGNORECASE,
+)
 
 # ── LLM critic prompt ────────────────────────────────────────────────────────
 
@@ -48,6 +55,7 @@ class CriticWitness:
         instance_id: str = "",
         conversation_id: str = "",
         user_message: str = "",
+        salience: "SalienceResult | None" = None,
     ) -> CriticVerdict:
         """Review a draft against retrieval evidence and safety rules.
 
@@ -101,6 +109,17 @@ class CriticWitness:
                                "Please use the confirmation dialog to proceed.",
                 )
 
+        # ── Knowledge gap detection (epistemic, not safety) ────────────────
+        # Fires when: query is specific + LLM hedges/admits ignorance.
+        # Does NOT fire when: query itself was ambiguous (that's the user's job to clarify).
+        knowledge_gap = self._detect_knowledge_gap(draft.text, user_message, salience)
+        if knowledge_gap and not is_mutation:
+            return CriticVerdict(
+                verdict="knowledge_gap",
+                flags=["knowledge_gap"],
+                partial_knowledge=draft.text.strip(),
+            )
+
         # ── Rules-tier verdict (no flags = clean) ──────────────────────────
         if not flags:
             return CriticVerdict(verdict="pass")
@@ -117,6 +136,35 @@ class CriticWitness:
 
         # ── Fallback: rules-only verdict ────────────────────────────────────
         return _rules_only_verdict(flags)
+
+    def _detect_knowledge_gap(
+        self,
+        draft_text: str,
+        user_message: str,
+        salience: "SalienceResult | None",
+    ) -> bool:
+        """True when the LLM explicitly admits it doesn't know (hedging language).
+
+        Short answers alone are NOT a knowledge gap — a one-line confident
+        answer is perfectly valid. Only explicit hedging triggers this.
+        Domain-agnostic: no domain terms.
+        """
+        text = draft_text.strip()
+        if not text:
+            return False  # empty handled separately by FallbackHandler
+
+        # Primary signal: LLM explicitly says it doesn't know.
+        is_hedging = bool(_KNOWLEDGE_GAP_RE.search(text))
+        if not is_hedging:
+            return False
+
+        # Don't flag conversational / trivial queries — they legitimately get short answers.
+        if salience is not None:
+            if salience.domain == "conversational" or salience.weight < 0.35:
+                return False
+
+        # Only fire when the query itself was specific (not a one-liner greeting).
+        return len(user_message.strip()) > 30
 
 
     async def _llm_review(

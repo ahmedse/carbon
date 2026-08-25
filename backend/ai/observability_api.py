@@ -452,6 +452,52 @@ class RunRollupView(APIView):
                 status=STEP_AWAITING_APPROVAL
             ).count()
 
+            # G-E: truthfulness hit-rate (F1–F3 anti-fabrication gate signal).
+            # One ``truthfulness_gate`` ledger row is written per chat turn;
+            # a null/empty ``flags_json`` means the gate found nothing to
+            # correct (a "truthful" turn). Hit-rate = clean / total.
+            truth_qs = scope_ai_queryset(
+                TurnLedgerRow.objects, request.user
+            ).filter(stage="truthfulness_gate")
+            truth_total = truth_qs.count()
+            truth_flagged = (
+                truth_qs.exclude(flags_json__isnull=True)
+                .exclude(flags_json=[])
+                .count()
+            )
+            totals["truthfulness_total"] = truth_total
+            totals["truthfulness_flagged"] = truth_flagged
+            totals["truthfulness_hit_rate"] = (
+                round(1 - (truth_flagged / truth_total), 4)
+                if truth_total
+                else None
+            )
+
+            # G-B: R2 correction rate (episodic feedback flywheel). The
+            # ``KgFeedbackRecord`` ledger is the durable R2 evidence (§4.3);
+            # the explicit user-judgement signals are the denominator and
+            # ``correction`` is the numerator — the "Correction rate" metric
+            # makes the reflection loop measurable (precondition for R3).
+            fb_qs = scope_ai_queryset(KgFeedbackRecord.objects, request.user)
+            fb_explicit = fb_qs.filter(
+                signal_type__in=[
+                    "explicit_positive",
+                    "explicit_negative",
+                    "correction",
+                ]
+            )
+            correction_total = fb_explicit.count()
+            correction_count = fb_explicit.filter(
+                signal_type="correction"
+            ).count()
+            totals["correction_total"] = correction_total
+            totals["correction_count"] = correction_count
+            totals["correction_rate"] = (
+                round(correction_count / correction_total, 4)
+                if correction_total
+                else None
+            )
+
             run_ids = list(
                 runs_qs.order_by(f"-{ts_field}")
                 .values_list("id", flat=True)[:200]

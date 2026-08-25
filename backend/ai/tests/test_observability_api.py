@@ -11,7 +11,8 @@ import json
 
 import pytest
 
-from ai.models.core import Instance, LLMCallLog, Run
+from ai.models.core import Instance, LLMCallLog, Run, TurnLedgerRow
+from ai.models.knowledge_graph import KgFeedbackRecord
 from ai.observability_api import PANEL_REGISTRY
 from ai.tests.test_plans import _make_plan, _make_step
 
@@ -168,6 +169,114 @@ def test_rollups_totals_and_per_run_shape(auth_client, user):
     assert row_a["confirmations_required"] == 1
     assert row_a["step_count"] == 2
     assert "completed_at" in row_a
+
+
+@pytest.mark.django_db
+def test_rollups_truthfulness_hit_rate(auth_client):
+    """G-E: the rollup surfaces the F1–F3 truthfulness hit-rate from the
+    ``truthfulness_gate`` ledger rows (clean turns = null flags).
+
+    A cleanup guard deletes any ``truthfulness_gate`` rows leaked by tests
+    that run the engine on a separate DB connection (the known order-dependent
+    leak in this suite), so the global count is deterministic here.
+    """
+    TurnLedgerRow.objects.filter(stage="truthfulness_gate").delete()
+    for turn_id in ("t1", "t2", "t3"):
+        TurnLedgerRow.objects.create(
+            turn_id=turn_id,
+            instance_id="inst-1",
+            conversation_id="conv-1",
+            stage="truthfulness_gate",
+            stage_index=7,
+            flags_json=None,
+        )
+    TurnLedgerRow.objects.create(
+        turn_id="t4",
+        instance_id="inst-1",
+        conversation_id="conv-1",
+        stage="truthfulness_gate",
+        stage_index=7,
+        flags_json=["staged_success_claim_corrected:learn_fact"],
+    )
+    # Non-gate rows must NOT affect the metric.
+    TurnLedgerRow.objects.create(
+        turn_id="t5",
+        instance_id="inst-1",
+        conversation_id="conv-1",
+        stage="draft",
+        stage_index=3,
+        flags_json=["ungrounded_claim"],
+    )
+
+    resp = auth_client.get(f"{BASE}/rollups/")
+    assert resp.status_code == 200
+    totals = resp.json()["totals"]
+    assert totals["truthfulness_total"] == 4
+    assert totals["truthfulness_flagged"] == 1
+    assert totals["truthfulness_hit_rate"] == 0.75
+
+
+@pytest.mark.django_db
+def test_rollups_truthfulness_hit_rate_none_when_no_turns(auth_client):
+    TurnLedgerRow.objects.filter(stage="truthfulness_gate").delete()
+    resp = auth_client.get(f"{BASE}/rollups/")
+    assert resp.status_code == 200
+    totals = resp.json()["totals"]
+    assert totals["truthfulness_total"] == 0
+    assert totals["truthfulness_hit_rate"] is None
+
+
+# ── G-B: R2 correction-rate metric ────────────────────────────────────────
+
+
+def _clear_explicit_feedback():
+    """Delete leaked explicit-judgement feedback rows so the global count is
+    deterministic (the same cross-connection leak the truthfulness tests guard)."""
+    KgFeedbackRecord.objects.filter(
+        signal_type__in=["explicit_positive", "explicit_negative", "correction"]
+    ).delete()
+
+
+@pytest.mark.django_db
+def test_rollups_correction_rate(auth_client):
+    """G-B: the rollup surfaces the R2 correction rate from KgFeedbackRecord.
+
+    Denominator = explicit user judgements (positive/negative/correction);
+    numerator = corrections. Implicit signals (export/rephrase/contradiction/
+    abandonment) and ``ignored`` must NOT affect the metric.
+    """
+    _clear_explicit_feedback()
+    for signal in ("explicit_positive", "explicit_positive", "explicit_negative", "correction"):
+        KgFeedbackRecord.objects.create(
+            instance_id="inst-1",
+            conversation_id="conv-1",
+            signal_type=signal,
+        )
+    # Non-explicit signals must not affect the metric.
+    KgFeedbackRecord.objects.create(
+        instance_id="inst-1", conversation_id="conv-1", signal_type="rephrase"
+    )
+    KgFeedbackRecord.objects.create(
+        instance_id="inst-1", conversation_id="conv-1", signal_type="abandonment"
+    )
+
+    resp = auth_client.get(f"{BASE}/rollups/")
+    assert resp.status_code == 200
+    totals = resp.json()["totals"]
+    assert totals["correction_total"] == 4
+    assert totals["correction_count"] == 1
+    assert totals["correction_rate"] == 0.25
+
+
+@pytest.mark.django_db
+def test_rollups_correction_rate_none_when_no_feedback(auth_client):
+    _clear_explicit_feedback()
+    resp = auth_client.get(f"{BASE}/rollups/")
+    assert resp.status_code == 200
+    totals = resp.json()["totals"]
+    assert totals["correction_total"] == 0
+    assert totals["correction_count"] == 0
+    assert totals["correction_rate"] is None
 
 
 @pytest.mark.django_db
