@@ -7,6 +7,7 @@
 
 import React from 'react';
 import PropTypes from 'prop-types';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   IconButton,
@@ -21,13 +22,14 @@ import AIContextMenu from './AIContextMenu';
 
 // ADR-0014 §4 — the safety contract is always visible in the header. Exact
 // copy per the decision table; the header must never invent new wording.
-const CONTRACT_TEXT = {
-  chat: '💬 Chat — Answers and advice only. Nothing is created or changed.',
-  idle: '🤖 Agent — Describe an outcome. The AI will plan before doing anything.',
-  plan_pending: '🤖 Agent — Review the plan. Nothing runs until you approve.',
-  running: '🤖 Agent ● Running — Step N of M · Pause anytime.',
-  consent_needed: '🤖 Agent ⏸ Approval needed — A step requires your confirmation.',
-  done: '🤖 Agent ✓ Done — Results are ready.',
+// Keys resolve to the `ai.contract.*` namespace (I18N-5).
+const CONTRACT_TEXT_KEYS = {
+  chat: 'contract.chat',
+  idle: 'contract.idle',
+  plan_pending: 'contract.planPending',
+  running: 'contract.running',
+  consent_needed: 'contract.consentNeeded',
+  done: 'contract.done',
 };
 
 function AIWorkspaceHeader({
@@ -39,8 +41,11 @@ function AIWorkspaceHeader({
   onModeChange,
   agentLifecycleState = 'idle',
 }) {
-  const contractText =
-    mode === 'chat' ? CONTRACT_TEXT.chat : CONTRACT_TEXT[agentLifecycleState] || CONTRACT_TEXT.idle;
+  const { t } = useTranslation('ai');
+  const contractKey =
+    mode === 'chat'
+      ? CONTRACT_TEXT_KEYS.chat
+      : CONTRACT_TEXT_KEYS[agentLifecycleState] || CONTRACT_TEXT_KEYS.idle;
 
   return (
     <Box
@@ -68,20 +73,20 @@ function AIWorkspaceHeader({
           textAlign: 'center',
         }}
       >
-        {contractText}
+        {t(contractKey)}
       </Typography>
       <ToggleButtonGroup
         exclusive
         size="small"
         value={mode}
         onChange={(event, next) => next && onModeChange?.(next)}
-        aria-label="Pulse mode"
+        aria-label={t('pulseMode')}
       >
-        <ToggleButton value="chat" aria-label="Chat mode">
-          💬 Chat
+        <ToggleButton value="chat" aria-label={t('chatMode')}>
+          💬 {t('modeChat')}
         </ToggleButton>
-        <ToggleButton value="agent" aria-label="Agent mode">
-          🤖 Agent
+        <ToggleButton value="agent" aria-label={t('agentMode')}>
+          🤖 {t('modeAgent')}
         </ToggleButton>
       </ToggleButtonGroup>
       <AIContextMenu
@@ -89,8 +94,8 @@ function AIWorkspaceHeader({
         onConversationUpdated={onConversationUpdated}
         onForked={onForked}
       />
-      <Tooltip title="Close Pulse (Ctrl+\)">
-        <IconButton size="small" onClick={onClose} aria-label="Close Pulse">
+      <Tooltip title={t('closePulseShortcut')}>
+        <IconButton size="small" onClick={onClose} aria-label={t('closePulse')}>
           <CloseIcon fontSize="small" />
         </IconButton>
       </Tooltip>

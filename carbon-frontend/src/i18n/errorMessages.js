@@ -1,10 +1,9 @@
-// I18N-2: Minimal error-code -> i18n key mapping.
+// Error-code -> i18n key mapping, wired into `src/utils/errorNormalizer.js`.
 //
-// I18N-5 will complete the full backend error-code -> message mapping and wire it
-// into `src/utils/errorNormalizer.js` (normalizeError) / the apiFetch normalized
-// error envelope. For now this exposes a small, stable helper so callers that
-// surface an error to the user can resolve a translated message without reaching
-// into raw API internals.
+// `normalizeError` attaches a canonical `errorCode` plus the corresponding
+// `messageKey` (namespace-relative to the `errors` namespace). Callers resolve
+// the translated message with `useTranslation('errors')` and `t(messageKey)`,
+// falling back to `t('generic')` when `messageKey` is null.
 //
 // Keys are namespace-relative to the `errors` namespace (useTranslation('errors')).
 
@@ -14,9 +13,11 @@ export const ERROR_CODE_KEYS = {
   not_authenticated: 'sessionExpired',
   permission_denied: 'permissionDenied',
   not_found: 'notFound',
+  validation_error: 'validation',
   timeout: 'timeout',
   network_error: 'network',
   server_error: 'server',
+  unknown_error: 'generic',
 };
 
 // Resolve a translated message for a known error code. Returns null when the

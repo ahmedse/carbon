@@ -2,10 +2,14 @@
 // Normalizes any error (fetch, API, network, auth, validation) into a standard shape.
 // Wired into api.js apiFetch so ALL API errors flow through this normalizer.
 
+import { errorMessageKey } from "../i18n/errorMessages";
+
 /**
  * @typedef {Object} NormalizedError
  * @property {'network'|'auth'|'server'|'validation'|'not_found'|'unknown'} type
- * @property {string} message — human-readable
+ * @property {string} message — human-readable fallback (English)
+ * @property {string} errorCode — canonical machine-readable code (stable across locales)
+ * @property {string|null} messageKey — namespace-relative key for useTranslation('errors'); null if unresolvable
  * @property {boolean} canRetry
  * @property {number|null} status
  * @property {Object|null} feedback — original structured feedback envelope if present
@@ -51,9 +55,12 @@ export function normalizeError(error, context = {}) {
     error?.name === "AbortError" ||
     error?.message === "Request timed out"
   ) {
+    const errorCode = "timeout";
     return {
       type: "network",
       message: "The request timed out. Please try again.",
+      errorCode,
+      messageKey: errorMessageKey(errorCode),
       canRetry: true,
       status: null,
       feedback: null,
@@ -69,9 +76,12 @@ export function normalizeError(error, context = {}) {
       error?.message === "Network error" ||
       error?.name === "TypeError")
   ) {
+    const errorCode = "network_error";
     return {
       type: "network",
       message: "Unable to reach the server. Check your connection and try again.",
+      errorCode,
+      messageKey: errorMessageKey(errorCode),
       canRetry: true,
       status: null,
       feedback: null,
@@ -82,12 +92,15 @@ export function normalizeError(error, context = {}) {
 
   // Auth (401/403)
   if (classifyStatus(status) === "auth") {
+    const errorCode = status === 401 ? "authentication_failed" : "permission_denied";
     return {
       type: "auth",
       message:
         status === 401
           ? feedback?.detail || "Your session has expired. Please sign in again."
           : feedback?.detail || "You don't have permission to perform this action.",
+      errorCode,
+      messageKey: errorMessageKey(errorCode),
       canRetry: false,
       status,
       feedback,
@@ -99,9 +112,12 @@ export function normalizeError(error, context = {}) {
   // Not found / Validation / Server — delegate to classifier
   const type = classifyStatus(status);
   if (type === "not_found") {
+    const errorCode = "not_found";
     return {
       type: "not_found",
       message: feedback?.detail || "The requested resource was not found.",
+      errorCode,
+      messageKey: errorMessageKey(errorCode),
       canRetry: false,
       status,
       feedback,
@@ -111,9 +127,12 @@ export function normalizeError(error, context = {}) {
   }
 
   if (type === "validation") {
+    const errorCode = "validation_error";
     return {
       type: "validation",
       message: feedback?.detail || error?.message || "The request was invalid.",
+      errorCode,
+      messageKey: errorMessageKey(errorCode),
       canRetry: false,
       status,
       feedback,
@@ -123,9 +142,12 @@ export function normalizeError(error, context = {}) {
   }
 
   if (type === "server") {
+    const errorCode = "server_error";
     return {
       type: "server",
       message: "Something went wrong on our end. Our team has been notified.",
+      errorCode,
+      messageKey: errorMessageKey(errorCode),
       canRetry: true,
       status,
       feedback,
@@ -135,9 +157,12 @@ export function normalizeError(error, context = {}) {
   }
 
   // Unknown / fallback
+  const errorCode = "unknown_error";
   return {
     type: "unknown",
     message: error?.message || "An unexpected error occurred.",
+    errorCode,
+    messageKey: errorMessageKey(errorCode),
     canRetry: true,
     status,
     feedback,

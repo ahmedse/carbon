@@ -35,6 +35,7 @@ import ManageSearchIcon from '@mui/icons-material/ManageSearch';
 import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
@@ -72,6 +73,7 @@ const MODE_STORAGE_KEY = 'carbon-ai-mode';
 const MEMORY_TAB_KEY = 'carbon-ai-memory-tab';
 
 export function AIWorkspace({ onClose }) {
+  const { t } = useTranslation('ai');
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
   const { pendingTransferId, clearPendingTransfer } = useAITaskTransfer();
@@ -280,7 +282,7 @@ export function AIWorkspace({ onClose }) {
     try {
       const conv = await apiCreateConversation(token, {
         conversation_type: 'chat',
-        title: 'New Chat',
+        title: t('newChatTitle'),
       });
       setById((prev) => ({ ...prev, [conv.id]: conv }));
       setOrder((prev) => [conv.id, ...prev]);
@@ -289,7 +291,7 @@ export function AIWorkspace({ onClose }) {
     } catch (err) {
       notifyFromError(err, 'Could not create conversation');
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   // Handle a manifest starter chip: open a conversation of the right type and
   // (for prompt-bearing chips) seed the first user message.
@@ -321,7 +323,7 @@ export function AIWorkspace({ onClose }) {
     try {
       const conv = await apiCreateConversation(token, {
         conversation_type: 'investigate',
-        title: 'Investigation',
+        title: t('investigationTitle'),
         task_payload: { type: 'investigate' },
       });
       setById((prev) => ({ ...prev, [conv.id]: conv }));
@@ -332,7 +334,7 @@ export function AIWorkspace({ onClose }) {
     } catch (err) {
       notifyFromError(err, 'Could not create investigation');
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   // Phase 9-B — open an investigate conversation's thread (rendered in chat mode).
   const handleOpenInvestigation = useCallback((convId) => {
@@ -578,7 +580,7 @@ export function AIWorkspace({ onClose }) {
               }}
             >
               <Typography variant="caption" color="text.secondary">
-                Loading…
+                {t('loading')}
               </Typography>
             </Box>
           ) : mode === 'agent' ? (
@@ -609,15 +611,15 @@ export function AIWorkspace({ onClose }) {
                       value={memoryTab}
                       onChange={(e, v) => setMemoryTab(v)}
                       variant="fullWidth"
-                      aria-label="Memory views"
+                      aria-label={t('memoryViews')}
                       sx={{
                         minHeight: 34,
                         '& .MuiTab-root': { minHeight: 34, fontSize: '0.6875rem', py: 0.5 },
                       }}
                     >
-                      <Tab value="episodes" label="Episodes" />
-                      <Tab value="facts" label="Facts" />
-                      <Tab value="relationship" label="Relationship" />
+                      <Tab value="episodes" label={t('memory.episodes')} />
+                      <Tab value="facts" label={t('memory.facts')} />
+                      <Tab value="relationship" label={t('memory.relationship')} />
                     </Tabs>
                   </Box>
                   <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
@@ -666,15 +668,15 @@ export function AIWorkspace({ onClose }) {
               <>
                 <Box sx={{ display: 'flex', alignItems: 'center', px: 1.25, py: 0.625, borderBottom: 1, borderColor: 'divider' }}>
                   <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'text.secondary' }}>
-                    Sessions
+                    {t('sessions')}
                   </Typography>
                   {archivedIds.length > 0 && (
                     <Button size="small" variant={showArchived ? 'outlined' : 'text'} onClick={() => setShowArchived((v) => !v)} sx={{ fontSize: '0.65rem', minWidth: 0, px: 0.75, py: 0 }}>
-                      {archivedIds.length} archived
+                      {t('archivedCount', { count: archivedIds.length })}
                     </Button>
                   )}
-                  <Tooltip title="Collapse">
-                    <IconButton size="small" onClick={() => setActivePanel(null)} sx={{ p: 0.25, ml: 0.25 }} aria-label="Collapse sessions panel">
+                  <Tooltip title={t('collapse')}>
+                    <IconButton size="small" onClick={() => setActivePanel(null)} sx={{ p: 0.25, ml: 0.25 }} aria-label={t('collapseSessions')}>
                       <ChevronRightIcon sx={{ fontSize: 14 }} />
                     </IconButton>
                   </Tooltip>
@@ -700,10 +702,10 @@ export function AIWorkspace({ onClose }) {
               <Box sx={{ flex: 1, overflowY: 'auto' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', px: 1.25, py: 0.625, borderBottom: 1, borderColor: 'divider', position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
                   <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'text.secondary' }}>
-                    Context
+                    {t('context')}
                   </Typography>
-                  <Tooltip title="Collapse">
-                    <IconButton size="small" onClick={() => setActivePanel(null)} sx={{ p: 0.25 }} aria-label="Collapse context panel">
+                  <Tooltip title={t('collapse')}>
+                    <IconButton size="small" onClick={() => setActivePanel(null)} sx={{ p: 0.25 }} aria-label={t('collapseContext')}>
                       <ChevronRightIcon sx={{ fontSize: 14 }} />
                     </IconButton>
                   </Tooltip>
@@ -717,7 +719,7 @@ export function AIWorkspace({ onClose }) {
                   />
                 ) : (
                   <Typography variant="caption" color="text.disabled" sx={{ display: 'block', p: 1.5, fontSize: '0.75rem' }}>
-                    Open a conversation to see its context.
+                    {t('openConversationForContext')}
                   </Typography>
                 )}
               </Box>
@@ -744,9 +746,9 @@ export function AIWorkspace({ onClose }) {
         >
           {mode === 'agent'
             ? [
-                { id: 'tasks',   icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />,          label: 'Tasks'   },
-                { id: 'monitor', icon: <LeaderboardOutlinedIcon sx={{ fontSize: 16 }} />,      label: 'Monitor' },
-                { id: 'results', icon: <HistoryOutlinedIcon sx={{ fontSize: 16 }} />,          label: 'Results' },
+                { id: 'tasks',   icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />,          label: t('agent.tasks')   },
+                { id: 'monitor', icon: <LeaderboardOutlinedIcon sx={{ fontSize: 16 }} />,      label: t('agent.monitor') },
+                { id: 'results', icon: <HistoryOutlinedIcon sx={{ fontSize: 16 }} />,          label: t('agent.results') },
               ].map(({ id, icon, label }) => (
                 <Tooltip key={id} title={label} placement="left">
                   <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: agentView === id ? 'primary.main' : 'transparent' }}>
@@ -764,13 +766,13 @@ export function AIWorkspace({ onClose }) {
                 </Tooltip>
               ))
             : [
-                { id: 'sessions',    icon: <ForumOutlinedIcon sx={{ fontSize: 16 }} />,             label: 'Sessions'    },
-                { id: 'context',     icon: <InfoOutlinedIcon sx={{ fontSize: 16 }} />,               label: 'Context'     },
-                { id: 'investigate', icon: <ManageSearchIcon sx={{ fontSize: 16 }} />,               label: 'Investigate' },
-                { id: 'artifacts',   icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />,         label: 'Artifacts'   },
-                { id: 'memory',      icon: <PsychologyOutlinedIcon sx={{ fontSize: 16 }} />,         label: 'Memory'      },
-                { id: 'usage',       icon: <DataUsageIcon sx={{ fontSize: 16 }} />,                  label: 'Usage'       },
-                { id: 'settings',    icon: <SettingsOutlinedIcon sx={{ fontSize: 16 }} />,           label: 'Settings'    },
+                { id: 'sessions',    icon: <ForumOutlinedIcon sx={{ fontSize: 16 }} />,             label: t('panel.sessions')    },
+                { id: 'context',     icon: <InfoOutlinedIcon sx={{ fontSize: 16 }} />,               label: t('panel.context')     },
+                { id: 'investigate', icon: <ManageSearchIcon sx={{ fontSize: 16 }} />,               label: t('panel.investigate') },
+                { id: 'artifacts',   icon: <Inventory2OutlinedIcon sx={{ fontSize: 16 }} />,         label: t('panel.artifacts')   },
+                { id: 'memory',      icon: <PsychologyOutlinedIcon sx={{ fontSize: 16 }} />,         label: t('panel.memory')      },
+                { id: 'usage',       icon: <DataUsageIcon sx={{ fontSize: 16 }} />,                  label: t('panel.usage')       },
+                { id: 'settings',    icon: <SettingsOutlinedIcon sx={{ fontSize: 16 }} />,           label: t('panel.settings')    },
               ].map(({ id, icon, label }) => (
                 <Tooltip key={id} title={label} placement="left">
                   <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', borderRight: 2, borderColor: activePanel === id ? 'primary.main' : 'transparent' }}>
@@ -789,8 +791,8 @@ export function AIWorkspace({ onClose }) {
               ))}
           <Box sx={{ flex: 1 }} />
           {mode === 'chat' && (
-            <Tooltip title="New chat" placement="left">
-              <IconButton size="small" onClick={handleNewChat} aria-label="New chat" sx={{ p: 0.875 }}>
+            <Tooltip title={t('newChat')} placement="left">
+              <IconButton size="small" onClick={handleNewChat} aria-label={t('newChat')} sx={{ p: 0.875 }}>
                 <AddCommentOutlinedIcon sx={{ fontSize: 16 }} />
               </IconButton>
             </Tooltip>
@@ -798,13 +800,13 @@ export function AIWorkspace({ onClose }) {
         </Box>
 
         <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)}>
-          <DialogTitle>Delete conversation?</DialogTitle>
+          <DialogTitle>{t('delete.title')}</DialogTitle>
           <DialogContent>
-            <DialogContentText>This permanently removes the conversation and its messages.</DialogContentText>
+            <DialogContentText>{t('delete.body')}</DialogContentText>
           </DialogContent>
           <DialogActions>
-            <Button size="small" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button size="small" color="error" variant="contained" onClick={confirmDelete}>Delete</Button>
+            <Button size="small" onClick={() => setDeleteTarget(null)}>{t('delete.cancel')}</Button>
+            <Button size="small" color="error" variant="contained" onClick={confirmDelete}>{t('delete.confirm')}</Button>
           </DialogActions>
         </Dialog>
       </Box>

@@ -8,5 +8,6 @@
   "notFound": "The requested resource was not found.",
   "permissionDenied": "You don't have permission to perform this action.",
   "timeout": "The request timed out. Please try again.",
-  "invalidCredentials": "Invalid credentials"
+  "invalidCredentials": "Invalid credentials",
+  "validation": "Please check the information you entered and try again."
 }

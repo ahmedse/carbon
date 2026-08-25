@@ -17,15 +17,16 @@ import enCommon from '../i18n/locales/en/common.json';
 import enShell from '../i18n/locales/en/shell.json';
 import enAuth from '../i18n/locales/en/auth.json';
 import enErrors from '../i18n/locales/en/errors.json';
+import enAi from '../i18n/locales/en/ai.json';
 
 const i18n = i18next.createInstance();
 i18n.init({
   resources: {
-    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors },
+    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi },
   },
   lng: 'en',
   fallbackLng: 'en',
-  ns: ['common', 'shell', 'auth', 'errors'],
+  ns: ['common', 'shell', 'auth', 'errors', 'ai'],
   defaultNS: 'common',
   interpolation: {
     // React already escapes — no double escaping.

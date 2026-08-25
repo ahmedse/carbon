@@ -1,0 +1,56 @@
+{
+  "loading": "Loading…",
+  "newChat": "New chat",
+  "newChatTitle": "New Chat",
+  "investigationTitle": "Investigation",
+  "collapse": "Collapse",
+  "collapseSessions": "Collapse sessions panel",
+  "collapseContext": "Collapse context panel",
+  "memoryViews": "Memory views",
+  "sessions": "Sessions",
+  "context": "Context",
+  "openConversationForContext": "Open a conversation to see its context.",
+  "archivedCount": "{{count}} archived",
+  "retry": "Retry",
+  "retryAIConnection": "Retry AI connection",
+  "pulseMode": "Pulse mode",
+  "chatMode": "Chat mode",
+  "agentMode": "Agent mode",
+  "modeChat": "Chat",
+  "modeAgent": "Agent",
+  "closePulse": "Close Pulse",
+  "closePulseShortcut": "Close Pulse (Ctrl+\\)",
+  "memory": {
+    "episodes": "Episodes",
+    "facts": "Facts",
+    "relationship": "Relationship"
+  },
+  "agent": {
+    "tasks": "Tasks",
+    "monitor": "Monitor",
+    "results": "Results"
+  },
+  "panel": {
+    "sessions": "Sessions",
+    "context": "Context",
+    "investigate": "Investigate",
+    "artifacts": "Artifacts",
+    "memory": "Memory",
+    "usage": "Usage",
+    "settings": "Settings"
+  },
+  "delete": {
+    "title": "Delete conversation?",
+    "body": "This permanently removes the conversation and its messages.",
+    "cancel": "Cancel",
+    "confirm": "Delete"
+  },
+  "contract": {
+    "chat": "💬 Chat — Answers and advice only. Nothing is created or changed.",
+    "idle": "🤖 Agent — Describe an outcome. The AI will plan before doing anything.",
+    "planPending": "🤖 Agent — Review the plan. Nothing runs until you approve.",
+    "running": "🤖 Agent ● Running — Step N of M · Pause anytime.",
+    "consentNeeded": "🤖 Agent ⏸ Approval needed — A step requires your confirmation.",
+    "done": "🤖 Agent ✓ Done — Results are ready."
+  }
+}

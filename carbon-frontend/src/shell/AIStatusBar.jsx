@@ -1,6 +1,7 @@
 // src/shell/AIStatusBar.jsx
 import React from 'react';
 import PropTypes from 'prop-types';
+import { useTranslation } from 'react-i18next';
 import { Box, Button, Typography } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
@@ -14,6 +15,7 @@ const DOT_COLORS = {
 };
 
 function AIStatusBar({ variant = 'ready', label = 'Ready', onRetry }) {
+  const { t } = useTranslation('ai');
   const color = DOT_COLORS[variant] || DOT_COLORS.ready;
   const retryable = variant === 'transient' || variant === 'offline';
 
@@ -45,7 +47,7 @@ function AIStatusBar({ variant = 'ready', label = 'Ready', onRetry }) {
           size="small"
           startIcon={<RefreshIcon sx={{ fontSize: 13 }} />}
           onClick={onRetry}
-          aria-label="Retry AI connection"
+          aria-label={t('retryAIConnection')}
           sx={{
             minWidth: 0,
             px: 0.75,
@@ -55,7 +57,7 @@ function AIStatusBar({ variant = 'ready', label = 'Ready', onRetry }) {
             lineHeight: 1,
           }}
         >
-          Retry
+          {t('retry')}
         </Button>
       )}
     </Box>

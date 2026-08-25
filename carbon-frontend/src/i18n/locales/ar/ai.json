@@ -1,0 +1,56 @@
+{
+  "loading": "جارٍ التحميل…",
+  "newChat": "محادثة جديدة",
+  "newChatTitle": "محادثة جديدة",
+  "investigationTitle": "تحقيق",
+  "collapse": "طيّ",
+  "collapseSessions": "طيّ لوحة الجلسات",
+  "collapseContext": "طيّ لوحة السياق",
+  "memoryViews": "عروض الذاكرة",
+  "sessions": "الجلسات",
+  "context": "السياق",
+  "openConversationForContext": "افتح محادثة لعرض سياقها.",
+  "archivedCount": "{{count}} مؤرشف",
+  "retry": "إعادة المحاولة",
+  "retryAIConnection": "إعادة الاتصال بالذكاء الاصطناعي",
+  "pulseMode": "وضع Pulse",
+  "chatMode": "وضع المحادثة",
+  "agentMode": "وضع الوكيل",
+  "modeChat": "محادثة",
+  "modeAgent": "وكيل",
+  "closePulse": "إغلاق Pulse",
+  "closePulseShortcut": "إغلاق Pulse (Ctrl+\\)",
+  "memory": {
+    "episodes": "الأحداث",
+    "facts": "الحقائق",
+    "relationship": "العلاقات"
+  },
+  "agent": {
+    "tasks": "المهام",
+    "monitor": "المراقبة",
+    "results": "النتائج"
+  },
+  "panel": {
+    "sessions": "الجلسات",
+    "context": "السياق",
+    "investigate": "تحقيق",
+    "artifacts": "المخرجات",
+    "memory": "الذاكرة",
+    "usage": "الاستخدام",
+    "settings": "الإعدادات"
+  },
+  "delete": {
+    "title": "حذف المحادثة؟",
+    "body": "يؤدي هذا إلى حذف المحادثة ورسائلها نهائيًا.",
+    "cancel": "إلغاء",
+    "confirm": "حذف"
+  },
+  "contract": {
+    "chat": "💬 محادثة — إجابات ونصائح فقط. لا يتم إنشاء أو تغيير أي شيء.",
+    "idle": "🤖 وكيل — صِف النتيجة المطلوبة. سيخطط الذكاء الاصطناعي قبل تنفيذ أي شيء.",
+    "planPending": "🤖 وكيل — راجع الخطة. لن يتم تنفيذ أي شيء حتى توافق.",
+    "running": "🤖 وكيل ● قيد التنفيذ — الخطوة N من M · يمكنك الإيقاف المؤقت في أي وقت.",
+    "consentNeeded": "🤖 وكيل ⏸ مطلوب موافقة — تتطلب إحدى الخطوات تأكيدك.",
+    "done": "🤖 وكيل ✓ تم — النتائج جاهزة."
+  }
+}
