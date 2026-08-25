@@ -223,6 +223,24 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem("access", access);
       localStorage.setItem("refresh", refresh);
 
+      // I18N-5: sync any pre-login language choice (localStorage `carbon.lang`)
+      // up to the account so the post-login reconciliation effect doesn't
+      // revert the user to the server default on the next full reload. Only
+      // runs when the user has an explicit local choice — fresh devices leave
+      // localStorage unset and let the server preference win (cross-device).
+      try {
+        const uiLang = localStorage.getItem('carbon.lang');
+        if (uiLang === 'ar' || uiLang === 'en') {
+          await apiFetch('accounts/me/preferences/', {
+            method: 'PATCH',
+            token: access,
+            body: { language: uiLang },
+          });
+        }
+      } catch {
+        // Best-effort — reconciliation will fall back to localStorage.
+      }
+
       // Build context + get landing path for smart redirect.
       const ctx = await buildContext(userObj);
 

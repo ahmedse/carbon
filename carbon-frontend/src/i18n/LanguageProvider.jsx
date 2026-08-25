@@ -56,6 +56,20 @@ export default function LanguageProvider({ children }) {
       });
     }
     applyDocumentLanguage(target);
+
+    // I18N-5 write-through: keep the server `User.language` preference in sync
+    // so the reconciliation effect on the next full reload doesn't revert to a
+    // stale server default ('en'). Best-effort — localStorage stays
+    // authoritative for the current session if the PATCH fails.
+    if (localStorage.getItem('access')) {
+      apiFetch('accounts/me/preferences/', {
+        method: 'PATCH',
+        body: { language: target },
+      }).catch(() => {
+        // Silent — the next reconciliation keeps using localStorage until the
+        // server is reachable again.
+      });
+    }
   }, []);
 
   // Sync <html lang/dir> on mount and whenever the language changes.
