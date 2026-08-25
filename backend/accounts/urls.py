@@ -5,8 +5,8 @@ from django.urls import path
 from .views import (
     UserViewSet, GroupViewSet,
     ScopedRoleViewSet, RoleAssignmentAuditLogViewSet,
-    LogoutView, my_roles, me_context, change_password, role_registry,
-    platform_apps, capability_matrix,
+    LogoutView, my_roles, me_context, me_preferences, change_password,
+    role_registry, platform_apps, capability_matrix,
 )
 from .notification_views import NotificationViewSet
 from .pulse_auth import pulse_auth_view, pulse_provision_view
@@ -23,6 +23,7 @@ router.register(r'notifications', NotificationViewSet, basename='user-alert')
 urlpatterns = [
     path('my-roles/', my_roles, name='my-roles'),
     path('me/context/', me_context, name='me-context'),
+    path('me/preferences/', me_preferences, name='me-preferences'),
     path('role-registry/', role_registry, name='role-registry'),
     path('change-password/', change_password, name='change-password'),
     path('logout/', LogoutView.as_view(), name='logout'),

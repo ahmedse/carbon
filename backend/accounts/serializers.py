@@ -13,7 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'is_active', 'is_staff', 'password']
+        fields = ['id', 'username', 'email', 'is_active', 'is_staff', 'language', 'password']
         read_only_fields = ['id']
 
     def create(self, validated_data):
@@ -34,6 +34,22 @@ class UserSerializer(serializers.ModelSerializer):
             instance.set_password(password)
         instance.save()
         return instance
+
+class MePreferencesSerializer(serializers.ModelSerializer):
+    """I18N-5: read/write the current user's UI preferences (language only
+    for now). Used by `GET/PATCH /accounts/me/preferences/`."""
+
+    class Meta:
+        model = User
+        fields = ['language']
+
+    def validate_language(self, value):
+        if value not in User.Language.values:
+            raise serializers.ValidationError(
+                f"Unsupported language '{value}'. Choose 'en' or 'ar'."
+            )
+        return value
+
 
 class GroupSerializer(serializers.ModelSerializer):
     permissions_count = serializers.SerializerMethodField()

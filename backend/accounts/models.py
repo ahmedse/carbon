@@ -15,6 +15,21 @@ class User(AbstractUser):
     Custom user model.
     """
 
+    class Language(models.TextChoices):
+        ENGLISH = 'en', 'English'
+        ARABIC = 'ar', 'العربية'
+
+    # I18N-5: per-user UI language preference (ADR-0018). Defaults to English;
+    # never auto-detected from the browser. Persisted server-side so the
+    # preference survives across devices and is reconciled on login.
+    language = models.CharField(
+        max_length=10,
+        choices=Language.choices,
+        default=Language.ENGLISH,
+        blank=False,
+        help_text='UI language preference (en/ar).',
+    )
+
     def __str__(self):
         return self.username
 

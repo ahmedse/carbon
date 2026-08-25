@@ -12,7 +12,8 @@ from .models import User, ScopedRole, RoleAssignmentAuditLog, PlatformAppConfig
 from .serializers import (
     UserSerializer, GroupSerializer,
     ScopedRoleSerializer, ScopedRoleCreateSerializer,
-    RoleAssignmentAuditLogSerializer, PlatformAppConfigSerializer
+    RoleAssignmentAuditLogSerializer, PlatformAppConfigSerializer,
+    MePreferencesSerializer,
 )
 from .permissions import AdminOrSuperuserOnly
 from .rbac_utils import user_is_global_admin, get_steward_org_unit_ids
@@ -203,6 +204,7 @@ def me_context(request):
             'id': user.id,
             'username': user.username,
             'email': user.email,
+            'language': user.language,
             'full_name': f"{user.first_name} {user.last_name}".strip() or user.username,
         },
         'roles': role_names,
@@ -215,6 +217,26 @@ def me_context(request):
         'scoped_roles': scoped_roles_data,
         'module_count': module_count,
     })
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def me_preferences(request):
+    """I18N-5: read/write the current user's UI preferences.
+
+    GET returns the stored language preference; PATCH updates it (partial
+    update semantics — only the provided keys are changed). Invalid language
+    values are rejected with a 400 by the serializer.
+    """
+    user = request.user
+    if request.method == 'PATCH':
+        serializer = MePreferencesSerializer(instance=user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+    else:
+        serializer = MePreferencesSerializer(instance=user)
+    return Response(serializer.data)
+
 
 class IsSuperuser(BasePermission):
     """
