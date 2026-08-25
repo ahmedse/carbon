@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
@@ -66,16 +67,6 @@ import {
   LIFECYCLE_STATES,
 } from '../../constants/referenceSetLifecycle';
 
-const ORG_TYPES = [
-  { value: 'university', label: 'University' },
-  { value: 'campus', label: 'Campus' },
-  { value: 'college', label: 'College' },
-  { value: 'department', label: 'Department' },
-  { value: 'division', label: 'Division' },
-  { value: 'team', label: 'Team' },
-  { value: 'facility', label: 'Facility' },
-  { value: 'other', label: 'Other' },
-];
 
 // Map DRF field-error payload ({field: [msg]}) to {field: msg} for per-field display.
 function mapFieldErrors(err) {
@@ -100,9 +91,21 @@ function TabPanel({ children, value, index }) {
 
 export default function MDMPage() {
   useDocumentTitle("Master Data");
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
   const navigate = useNavigate();
+
+  const ORG_TYPES = [
+    { value: 'university', label: t('university') },
+    { value: 'campus', label: t('campus') },
+    { value: 'college', label: t('college') },
+    { value: 'department', label: t('department') },
+    { value: 'division', label: t('division') },
+    { value: 'team', label: t('team') },
+    { value: 'facility', label: t('facility') },
+    { value: 'other', label: t('other') },
+  ];
 
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -156,13 +159,13 @@ export default function MDMPage() {
       setUsers(Array.isArray(usersData) ? usersData : usersData.results || []);
       setOrgUnits(Array.isArray(unitsData) ? unitsData : unitsData.results || []);
     } catch (_err) {
-      const msg = _err.message || 'Failed to load MDM data';
+      const msg = _err.message || t('failedToLoadMdmData');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, notify]);
+  }, [token, notify, t]);
 
   useEffect(() => {
     loadData();
@@ -193,7 +196,7 @@ export default function MDMPage() {
   const handleSaveRefSet = async () => {
     // Client-side validation
     const errors = {};
-    if (!refSetForm.name.trim()) errors.name = 'Name is required.';
+    if (!refSetForm.name.trim()) errors.name = t('nameRequired');
     setRefSetFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
@@ -208,10 +211,10 @@ export default function MDMPage() {
       };
       if (refSetEditing) {
         await updateReferenceSet(token, refSetEditing.id, payload);
-        notify({ message: 'Reference set updated', type: 'success' });
+        notify({ message: t('referenceSetUpdated'), type: 'success' });
       } else {
         await createReferenceSet(token, payload);
-        notify({ message: 'Reference set created', type: 'success' });
+        notify({ message: t('referenceSetCreated'), type: 'success' });
       }
       closeRefSetDialog();
       await loadData();
@@ -220,7 +223,7 @@ export default function MDMPage() {
       if (fieldErrors) {
         setRefSetFieldErrors(fieldErrors);
       } else {
-        notify({ message: err.message || 'Failed to save reference set', type: 'error' });
+        notify({ message: err.message || t('failedToSaveReferenceSet'), type: 'error' });
       }
     } finally {
       setRefSetSaving(false);
@@ -253,9 +256,9 @@ export default function MDMPage() {
   const handleSaveOrgUnit = async () => {
     // Client-side validation
     const errors = {};
-    if (!orgUnitForm.name.trim()) errors.name = 'Name is required.';
+    if (!orgUnitForm.name.trim()) errors.name = t('nameRequired');
     if (orgUnitForm.parent && orgUnitEditing && String(orgUnitForm.parent) === String(orgUnitEditing.id)) {
-      errors.parent = 'A unit cannot be its own parent.';
+      errors.parent = t('orgUnitSelfParent');
     }
     setOrgUnitFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -272,10 +275,10 @@ export default function MDMPage() {
       };
       if (orgUnitEditing) {
         await updateOrgUnit(token, orgUnitEditing.id, payload);
-        notify({ message: 'Org unit updated', type: 'success' });
+        notify({ message: t('orgUnitUpdated'), type: 'success' });
       } else {
         await createOrgUnit(token, payload);
-        notify({ message: 'Org unit created', type: 'success' });
+        notify({ message: t('orgUnitCreated'), type: 'success' });
       }
       closeOrgUnitDialog();
       await loadData();
@@ -284,7 +287,7 @@ export default function MDMPage() {
       if (fieldErrors) {
         setOrgUnitFieldErrors(fieldErrors);
       } else {
-        notify({ message: err.message || 'Failed to save org unit', type: 'error' });
+        notify({ message: err.message || t('failedToSaveOrgUnit'), type: 'error' });
       }
     } finally {
       setOrgUnitSaving(false);
@@ -294,17 +297,17 @@ export default function MDMPage() {
   // ---- Delete handlers (ConfirmDialog) ----
   const handleDeleteRefSet = (row) => {
     setConfirmState({
-      title: 'Delete reference set',
-      message: `Delete "${row.name}"?\nThis will also delete all of its values. This action cannot be undone.`,
+      title: t('deleteReferenceSetTitle'),
+      message: t('deleteReferenceSetMessage', { name: row.name }),
       destructive: true,
-      confirmLabel: 'Delete',
+      confirmLabel: t('common:delete'),
       onConfirm: async () => {
         try {
           await deleteReferenceSet(token, row.id);
-          notify({ message: 'Reference set deleted', type: 'success' });
+          notify({ message: t('referenceSetDeleted'), type: 'success' });
           await loadData();
         } catch (err) {
-          notify({ message: err.message || 'Failed to delete reference set', type: 'error' });
+          notify({ message: err.message || t('failedToDeleteReferenceSet'), type: 'error' });
         }
       },
     });
@@ -312,17 +315,17 @@ export default function MDMPage() {
 
   const handleDeleteOrgUnit = (row) => {
     setConfirmState({
-      title: 'Delete org unit',
-      message: `Delete "${row.name}"?\nChild units will be detached (set to no parent). This action cannot be undone.`,
+      title: t('deleteOrgUnitTitle'),
+      message: t('deleteOrgUnitMessage', { name: row.name }),
       destructive: true,
-      confirmLabel: 'Delete',
+      confirmLabel: t('common:delete'),
       onConfirm: async () => {
         try {
           await deleteOrgUnit(token, row.id);
-          notify({ message: 'Org unit deleted', type: 'success' });
+          notify({ message: t('orgUnitDeleted'), type: 'success' });
           await loadData();
         } catch (err) {
-          notify({ message: err.message || 'Failed to delete org unit', type: 'error' });
+          notify({ message: err.message || t('failedToDeleteOrgUnit'), type: 'error' });
         }
       },
     });
@@ -394,7 +397,7 @@ export default function MDMPage() {
   const refSetsColumns = [
     {
       field: 'name',
-      headerName: 'Name',
+      headerName: t('name'),
       flex: 1,
       minWidth: 200,
       renderCell: (params) => (
@@ -409,7 +412,7 @@ export default function MDMPage() {
     },
     {
       field: 'description',
-      headerName: 'Description',
+      headerName: t('description'),
       flex: 2,
       minWidth: 250,
       renderCell: (params) => (
@@ -420,19 +423,19 @@ export default function MDMPage() {
     },
     {
       field: 'domain_name',
-      headerName: 'Domain',
+      headerName: t('domain'),
       width: 150,
       renderCell: (params) => params.value || '—',
     },
     {
       field: 'steward_name',
-      headerName: 'Steward',
+      headerName: t('steward'),
       width: 130,
       renderCell: (params) => params.value || '—',
     },
     {
       field: 'lifecycle_state',
-      headerName: 'Lifecycle',
+      headerName: t('lifecycle'),
       width: 120,
       type: 'singleSelect',
       valueOptions: ['draft', 'active', 'deprecated', 'archived'],
@@ -447,10 +450,10 @@ export default function MDMPage() {
     },
     {
       field: 'value_count',
-      headerName: 'Values',
+      headerName: t('values'),
       width: 90,
       renderCell: (params) => (
-        <Tooltip title="View values">
+        <Tooltip title={t('viewValues')}>
           <Chip
             label={params.value || 0}
             size="small"
@@ -464,7 +467,7 @@ export default function MDMPage() {
     },
     {
       field: 'updated_at',
-      headerName: 'Modified',
+      headerName: t('modified'),
       width: 130,
       renderCell: (params) => (
         <Typography variant="body2" color="text.secondary">
@@ -474,13 +477,13 @@ export default function MDMPage() {
     },
     {
       field: 'actions',
-      headerName: 'Actions',
+      headerName: t('actions'),
       width: 150,
       sortable: false,
       filterable: false,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="View Details">
+          <Tooltip title={t('viewDetails')}>
             <IconButton
               size="small"
               onClick={() => navigate(`/catalog/mdm/reference-sets/${params.row.id}`)}
@@ -488,12 +491,12 @@ export default function MDMPage() {
               <VisibilityIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Edit">
+          <Tooltip title={t('common:edit')}>
             <IconButton size="small" onClick={() => openRefSetDialog(params.row)}>
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Delete">
+          <Tooltip title={t('common:delete')}>
             <IconButton
               size="small"
               color="error"
@@ -511,7 +514,7 @@ export default function MDMPage() {
   const orgUnitsColumns = [
     {
       field: 'name',
-      headerName: 'Name',
+      headerName: t('name'),
       flex: 1,
       minWidth: 200,
       renderCell: (params) => (
@@ -522,33 +525,33 @@ export default function MDMPage() {
     },
     {
       field: 'org_type',
-      headerName: 'Type',
+      headerName: t('type'),
       width: 130,
       renderCell: (params) => (
-        <Chip label={params.value || 'other'} size="small" variant="outlined" />
+        <Chip label={params.value || t('other')} size="small" variant="outlined" />
       ),
     },
     {
       field: 'code',
-      headerName: 'Code',
+      headerName: t('code'),
       width: 110,
       renderCell: (params) => params.value || '—',
     },
     {
       field: 'parent_name',
-      headerName: 'Parent',
+      headerName: t('parent'),
       width: 160,
       renderCell: (params) => params.value || '—',
     },
     {
       field: 'children_count',
-      headerName: 'Children',
+      headerName: t('children'),
       width: 100,
       renderCell: (params) => <Chip label={params.value || 0} size="small" />,
     },
     {
       field: 'updated_at',
-      headerName: 'Modified',
+      headerName: t('modified'),
       width: 130,
       renderCell: (params) => (
         <Typography variant="body2" color="text.secondary">
@@ -558,18 +561,18 @@ export default function MDMPage() {
     },
     {
       field: 'actions',
-      headerName: 'Actions',
+      headerName: t('actions'),
       width: 120,
       sortable: false,
       filterable: false,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="Edit">
+          <Tooltip title={t('common:edit')}>
             <IconButton size="small" onClick={() => openOrgUnitDialog(params.row)}>
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Delete">
+          <Tooltip title={t('common:delete')}>
             <IconButton
               size="small"
               color="error"
@@ -593,16 +596,16 @@ export default function MDMPage() {
     <PageContainer>
       <PageHeader
         icon={AccountTreeIcon}
-        title="Master Data Management"
-        subtitle="Controlled vocabularies and organizational hierarchy"
-        description="Manage reference sets (values live on the set's detail page) and the organizational unit tree that anchors RBAC and governance."
+        title={t('masterDataManagement')}
+        subtitle={t('mdmSubtitle')}
+        description={t('mdmDescription')}
         actions={
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => (tabValue === 0 ? openRefSetDialog() : openOrgUnitDialog())}
           >
-            {tabValue === 0 ? 'New Reference Set' : 'New Org Unit'}
+            {tabValue === 0 ? t('newReferenceSet') : t('newOrgUnit')}
           </Button>
         }
       />
@@ -610,8 +613,8 @@ export default function MDMPage() {
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 0.75 }}>
         <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)} sx={{ minHeight: 32, '& .MuiTab-root': { minHeight: 32, py: 0.5, fontSize: '0.6875rem' } }}>
-          <Tab label={`Reference Sets (${refSets.length})`} />
-          <Tab label={`Org Units (${orgUnits.length})`} />
+          <Tab label={`${t('referenceSets')} (${refSets.length})`} />
+          <Tab label={`${t('orgUnits')} (${orgUnits.length})`} />
         </Tabs>
       </Box>
 
@@ -623,7 +626,7 @@ export default function MDMPage() {
               <TextField
                 fullWidth
                 size="small"
-                placeholder="Search reference sets..."
+                placeholder={t('searchReferenceSets')}
                 value={searchRefSets}
                 onChange={(e) => setSearchRefSets(e.target.value)}
                 InputProps={{
@@ -637,13 +640,13 @@ export default function MDMPage() {
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Domain</InputLabel>
+                <InputLabel>{t('domain')}</InputLabel>
                 <Select
                   value={filterDomain}
                   onChange={(e) => setFilterDomain(e.target.value)}
-                  label="Domain"
+                  label={t('domain')}
                 >
-                  <MenuItem value="">All Domains</MenuItem>
+                  <MenuItem value="">{t('allDomains')}</MenuItem>
                   {domains.map((d) => (
                     <MenuItem key={d.id} value={d.id}>
                       {d.name}
@@ -654,13 +657,13 @@ export default function MDMPage() {
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Steward</InputLabel>
+                <InputLabel>{t('steward')}</InputLabel>
                 <Select
                   value={filterSteward}
                   onChange={(e) => setFilterSteward(e.target.value)}
-                  label="Steward"
+                  label={t('steward')}
                 >
-                  <MenuItem value="">All Stewards</MenuItem>
+                  <MenuItem value="">{t('allStewards')}</MenuItem>
                   {users.map((u) => (
                     <MenuItem key={u.id} value={u.id}>
                       {u.username}
@@ -671,13 +674,13 @@ export default function MDMPage() {
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 2 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Lifecycle</InputLabel>
+                <InputLabel>{t('lifecycle')}</InputLabel>
                 <Select
                   value={filterLifecycle}
                   onChange={(e) => setFilterLifecycle(e.target.value)}
-                  label="Lifecycle"
+                  label={t('lifecycle')}
                 >
-                  <MenuItem value="">All</MenuItem>
+                  <MenuItem value="">{t('all')}</MenuItem>
                   {(LIFECYCLE_STATES || []).map((state) => (
                     <MenuItem key={state.value} value={state.value}>
                       {state.label}
@@ -694,7 +697,7 @@ export default function MDMPage() {
                 onClick={handleClearRefSetsFilters}
                 disabled={!searchRefSets && !filterDomain && !filterSteward && !filterLifecycle}
               >
-                Clear
+                {t('clear')}
               </Button>
             </Grid>
           </Grid>
@@ -707,13 +710,13 @@ export default function MDMPage() {
         ) : filteredRefSets.length === 0 ? (
           <EmptyState
             icon={<CategoryIcon />}
-            title="No reference sets found"
+            title={t('noReferenceSetsFound')}
             description={
               refSets.length === 0
-                ? 'Create your first reference set to start building controlled vocabularies.'
-                : 'No reference sets match the current filters.'
+                ? t('createFirstReferenceSet')
+                : t('noReferenceSetsMatch')
             }
-            actionLabel={refSets.length === 0 ? 'New Reference Set' : undefined}
+            actionLabel={refSets.length === 0 ? t('newReferenceSet') : undefined}
             onAction={refSets.length === 0 ? () => openRefSetDialog() : undefined}
           />
         ) : (
@@ -729,7 +732,7 @@ export default function MDMPage() {
               <TextField
                 fullWidth
                 size="small"
-                placeholder="Search org units..."
+                placeholder={t('searchOrgUnits')}
                 value={searchOrgUnits}
                 onChange={(e) => setSearchOrgUnits(e.target.value)}
                 InputProps={{
@@ -743,13 +746,13 @@ export default function MDMPage() {
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 4 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Type</InputLabel>
+                <InputLabel>{t('type')}</InputLabel>
                 <Select
                   value={filterOrgType}
                   onChange={(e) => setFilterOrgType(e.target.value)}
-                  label="Type"
+                  label={t('type')}
                 >
-                  <MenuItem value="">All Types</MenuItem>
+                  <MenuItem value="">{t('allTypes')}</MenuItem>
                   {ORG_TYPES.map((t) => (
                     <MenuItem key={t.value} value={t.value}>
                       {t.label}
@@ -766,7 +769,7 @@ export default function MDMPage() {
                 onClick={handleClearOrgUnitsFilters}
                 disabled={!searchOrgUnits && !filterOrgType}
               >
-                Clear
+                {t('clear')}
               </Button>
             </Grid>
           </Grid>
@@ -779,13 +782,13 @@ export default function MDMPage() {
         ) : filteredOrgUnits.length === 0 ? (
           <EmptyState
             icon={<AccountTreeIcon />}
-            title="No org units found"
+            title={t('noOrgUnitsFound')}
             description={
               orgUnits.length === 0
-                ? 'Create your first org unit to start building the organizational tree.'
-                : 'No org units match the current filters.'
+                ? t('createFirstOrgUnit')
+                : t('noOrgUnitsMatch')
             }
-            actionLabel={orgUnits.length === 0 ? 'New Org Unit' : undefined}
+            actionLabel={orgUnits.length === 0 ? t('newOrgUnit') : undefined}
             onAction={orgUnits.length === 0 ? () => openOrgUnitDialog() : undefined}
           />
         ) : (
@@ -796,7 +799,7 @@ export default function MDMPage() {
       {/* Reference Set create/edit dialog */}
       <SystemDialog
         open={refSetDialogOpen}
-        title={refSetEditing ? 'Edit Reference Set' : 'New Reference Set'}
+        title={refSetEditing ? t('editReferenceSet') : t('newReferenceSet')}
         width={520}
         height={560}
         onClose={closeRefSetDialog}
@@ -808,7 +811,7 @@ export default function MDMPage() {
             disabled={refSetSaving}
             startIcon={refSetSaving ? <CircularProgress size={16} /> : null}
           >
-            {refSetSaving ? 'Saving…' : refSetEditing ? 'Save Changes' : 'Create'}
+            {refSetSaving ? t('saving') : refSetEditing ? t('saveChanges') : t('create')}
           </Button>
         }
       >
@@ -818,7 +821,7 @@ export default function MDMPage() {
           )}
           <TextField
             fullWidth
-            label="Name"
+            label={t('name')}
             required
             value={refSetForm.name}
             onChange={(e) => setRefSetForm({ ...refSetForm, name: e.target.value })}
@@ -828,7 +831,7 @@ export default function MDMPage() {
           />
           <TextField
             fullWidth
-            label="Description"
+            label={t('description')}
             multiline
             rows={2}
             value={refSetForm.description}
@@ -843,7 +846,7 @@ export default function MDMPage() {
             isOptionEqualToValue={(o, v) => o.id === v.id}
             onChange={(_, v) => setRefSetForm({ ...refSetForm, domain: v ? v.id : '' })}
             renderInput={(params) => (
-              <TextField {...params} label="Domain" error={Boolean(refSetFieldErrors.domain)} helperText={refSetFieldErrors.domain} />
+              <TextField {...params} label={t('domain')} error={Boolean(refSetFieldErrors.domain)} helperText={refSetFieldErrors.domain} />
             )}
           />
           <Autocomplete
@@ -853,7 +856,7 @@ export default function MDMPage() {
             isOptionEqualToValue={(o, v) => o.id === v.id}
             onChange={(_, v) => setRefSetForm({ ...refSetForm, steward: v ? v.id : '' })}
             renderInput={(params) => (
-              <TextField {...params} label="Steward" error={Boolean(refSetFieldErrors.steward)} helperText={refSetFieldErrors.steward} />
+              <TextField {...params} label={t('steward')} error={Boolean(refSetFieldErrors.steward)} helperText={refSetFieldErrors.steward} />
             )}
           />
         </Stack>
@@ -862,7 +865,7 @@ export default function MDMPage() {
       {/* Org Unit create/edit dialog */}
       <SystemDialog
         open={orgUnitDialogOpen}
-        title={orgUnitEditing ? 'Edit Org Unit' : 'New Org Unit'}
+        title={orgUnitEditing ? t('editOrgUnit') : t('newOrgUnit')}
         width={520}
         height={620}
         onClose={closeOrgUnitDialog}
@@ -874,7 +877,7 @@ export default function MDMPage() {
             disabled={orgUnitSaving}
             startIcon={orgUnitSaving ? <CircularProgress size={16} /> : null}
           >
-            {orgUnitSaving ? 'Saving…' : orgUnitEditing ? 'Save Changes' : 'Create'}
+            {orgUnitSaving ? t('saving') : orgUnitEditing ? t('saveChanges') : t('create')}
           </Button>
         }
       >
@@ -884,7 +887,7 @@ export default function MDMPage() {
           )}
           <TextField
             fullWidth
-            label="Name"
+            label={t('name')}
             required
             value={orgUnitForm.name}
             onChange={(e) => setOrgUnitForm({ ...orgUnitForm, name: e.target.value })}
@@ -894,20 +897,20 @@ export default function MDMPage() {
           />
           <TextField
             fullWidth
-            label="Code"
+            label={t('code')}
             value={orgUnitForm.code}
             onChange={(e) => setOrgUnitForm({ ...orgUnitForm, code: e.target.value })}
             error={Boolean(orgUnitFieldErrors.code)}
             helperText={orgUnitFieldErrors.code}
           />
           <FormControl fullWidth error={Boolean(orgUnitFieldErrors.org_type)}>
-            <InputLabel>Type</InputLabel>
+            <InputLabel>{t('type')}</InputLabel>
             <Select
               value={orgUnitForm.org_type}
-              label="Type"
+              label={t('type')}
               onChange={(e) => setOrgUnitForm({ ...orgUnitForm, org_type: e.target.value })}
             >
-              <MenuItem value="">— None —</MenuItem>
+              <MenuItem value="">{t('none')}</MenuItem>
               {ORG_TYPES.map((t) => (
                 <MenuItem key={t.value} value={t.value}>
                   {t.label}
@@ -927,12 +930,12 @@ export default function MDMPage() {
             isOptionEqualToValue={(o, v) => o.id === v.id}
             onChange={(_, v) => setOrgUnitForm({ ...orgUnitForm, parent: v ? v.id : '' })}
             renderInput={(params) => (
-              <TextField {...params} label="Parent" error={Boolean(orgUnitFieldErrors.parent)} helperText={orgUnitFieldErrors.parent} />
+              <TextField {...params} label={t('parent')} error={Boolean(orgUnitFieldErrors.parent)} helperText={orgUnitFieldErrors.parent} />
             )}
           />
           <TextField
             fullWidth
-            label="Description"
+            label={t('description')}
             multiline
             rows={2}
             value={orgUnitForm.description}
@@ -946,10 +949,10 @@ export default function MDMPage() {
       {/* Confirm delete dialog */}
       <ConfirmDialog
         open={Boolean(confirmState)}
-        title={confirmState?.title || 'Confirm'}
+        title={confirmState?.title || t('confirm')}
         message={confirmState?.message || ''}
         destructive={confirmState?.destructive}
-        confirmLabel={confirmState?.confirmLabel || 'Confirm'}
+        confirmLabel={confirmState?.confirmLabel || t('confirm')}
         onCancel={() => setConfirmState(null)}
         onConfirm={async () => {
           const { onConfirm } = confirmState || {};

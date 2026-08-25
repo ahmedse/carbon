@@ -1,6 +1,7 @@
 // src/pages/catalog/ImportsDetailPage.jsx
 // Imports: Import job history and upload wizard
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
@@ -35,6 +36,7 @@ import HomeIcon from '@mui/icons-material/Home';
 
 export default function ImportsDetailPage() {
   useDocumentTitle("Imports");
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
 
@@ -61,13 +63,13 @@ export default function ImportsDetailPage() {
       setJobs(Array.isArray(jobsData) ? jobsData : (jobsData?.results || []));
       setTables(Array.isArray(tablesData) ? tablesData : (tablesData?.results || []));
     } catch (err) {
-      const msg = err.message || 'Failed to load imports';
+      const msg = err.message || t('importsLoadError');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, notify]);
+  }, [token, notify, t]);
 
   useEffect(() => {
     loadData();
@@ -79,11 +81,11 @@ export default function ImportsDetailPage() {
 
   const handleUpload = async () => {
     if (!uploadForm.table_id) {
-      notify({ message: 'Please select a table', type: 'error' });
+      notify({ message: t('selectTable'), type: 'error' });
       return;
     }
     if (!uploadForm.file) {
-      notify({ message: 'Please select a file', type: 'error' });
+      notify({ message: t('selectFile'), type: 'error' });
       return;
     }
 
@@ -95,11 +97,11 @@ export default function ImportsDetailPage() {
         file: uploadForm.file,
         format: uploadForm.format
       });
-      notify({ message: 'Import started', type: 'success' });
+      notify({ message: t('importStarted'), type: 'success' });
       setUploadForm({ table_id: '', file: null, format: 'excel' });
       loadData();
     } catch (err) {
-      const msg = err.message || 'Upload failed';
+      const msg = err.message || t('uploadFailed');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
@@ -110,10 +112,10 @@ export default function ImportsDetailPage() {
   const UploadTab = () => (
     <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <FormControl fullWidth>
-              <InputLabel>Target Table</InputLabel>
+              <InputLabel>{t('targetTable')}</InputLabel>
               <Select
                 value={uploadForm.table_id}
-                label="Target Table"
+                label={t('targetTable')}
                 onChange={(e) => setUploadForm({ ...uploadForm, table_id: e.target.value })}
               >
                 {tables.map((t) => (
@@ -123,14 +125,14 @@ export default function ImportsDetailPage() {
             </FormControl>
 
             <FormControl fullWidth>
-              <InputLabel>Format</InputLabel>
+              <InputLabel>{t('format')}</InputLabel>
               <Select
                 value={uploadForm.format}
-                label="Format"
+                label={t('format')}
                 onChange={(e) => setUploadForm({ ...uploadForm, format: e.target.value })}
               >
-                <MenuItem value="excel">Excel</MenuItem>
-                <MenuItem value="csv">CSV</MenuItem>
+                <MenuItem value="excel">{t('excel')}</MenuItem>
+                <MenuItem value="csv">{t('csv')}</MenuItem>
               </Select>
             </FormControl>
 
@@ -143,7 +145,7 @@ export default function ImportsDetailPage() {
               />
               {uploadForm.file && (
                 <Typography variant="caption" color="success.main">
-                  ✓ {uploadForm.file.name} selected
+                  ✓ {t('fileSelected', { name: uploadForm.file.name })}
                 </Typography>
               )}
             </Box>
@@ -154,7 +156,7 @@ export default function ImportsDetailPage() {
               onClick={handleUpload}
               disabled={uploading || !uploadForm.file || !uploadForm.table_id}
             >
-              {uploading ? 'Uploading...' : 'Upload File'}
+              {uploading ? t('uploading') : t('uploadFile')}
             </Button>
           </Box>
   );
@@ -162,27 +164,27 @@ export default function ImportsDetailPage() {
   const HistoryTab = () => (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h6" fontWeight={700}>Import History</Typography>
+        <Typography variant="h6" fontWeight={700}>{t('importHistory')}</Typography>
         <Button variant="outlined" startIcon={<RefreshIcon />} onClick={loadData}>
-          Refresh
+          {t('refresh')}
         </Button>
       </Box>
       <Paper variant="outlined">
         <Table>
           <TableHead>
             <TableRow sx={{ backgroundColor: 'action.hover' }}>
-              <TableCell fontWeight={600}>Table</TableCell>
-              <TableCell fontWeight={600}>Status</TableCell>
-              <TableCell fontWeight={600}>Rows</TableCell>
-              <TableCell fontWeight={600}>Errors</TableCell>
-              <TableCell fontWeight={600}>Date</TableCell>
+              <TableCell fontWeight={600}>{t('table')}</TableCell>
+              <TableCell fontWeight={600}>{t('status')}</TableCell>
+              <TableCell fontWeight={600}>{t('rows')}</TableCell>
+              <TableCell fontWeight={600}>{t('errors')}</TableCell>
+              <TableCell fontWeight={600}>{t('date')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {jobs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
-                  <Typography color="text.secondary">No import jobs</Typography>
+                  <Typography color="text.secondary">{t('noImportJobs')}</Typography>
                 </TableCell>
               </TableRow>
             ) : (
@@ -215,12 +217,12 @@ export default function ImportsDetailPage() {
 
   const summaryCards = useMemo(
     () => [
-      { title: 'Jobs', value: jobs.length },
-      { title: 'Tables', value: tables.length },
-      { title: 'Pending', value: jobs.filter((job) => job.status === 'pending').length },
-      { title: 'Failed', value: jobs.filter((job) => job.status === 'failed').length },
+      { title: t('jobs'), value: jobs.length },
+      { title: t('tables'), value: tables.length },
+      { title: t('pending'), value: jobs.filter((job) => job.status === 'pending').length },
+      { title: t('failed'), value: jobs.filter((job) => job.status === 'failed').length },
     ],
-    [jobs, tables]
+    [jobs, tables, t]
   );
 
   if (loading) {
@@ -233,8 +235,8 @@ export default function ImportsDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      title="Imports"
-      description="Upload data and manage import jobs"
+      title={t('imports')}
+      description={t('importsDescription')}
       icon={CloudUploadIcon}
       onClose={() => window.history.back()}
     />
@@ -244,10 +246,10 @@ export default function ImportsDetailPage() {
     <BaseDetailPage
       headerComponent={headerComponent}
       mainTabs={[
-        { label: 'Upload', component: UploadTab },
-        { label: 'History', component: HistoryTab },
+        { label: t('upload'), component: UploadTab },
+        { label: t('history'), component: HistoryTab },
       ]}
-      metricsTabs={[{ label: 'Summary', component: () => (
+      metricsTabs={[{ label: t('summary'), component: () => (
         <Box sx={{ p: 2 }}>
           {summaryCards.map((card) => (
             <Box key={card.title} sx={{ p: 2, mb: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>

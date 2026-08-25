@@ -1,6 +1,7 @@
 // src/pages/catalog/ExportsDetailPage.jsx
 // Exports: Export project CRUD with job history and download
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import SystemDialog from '../../components/SystemDialog';
@@ -45,6 +46,7 @@ const SCHEDULES = ['manual', 'daily', 'weekly', 'monthly'];
 
 export default function ExportsDetailPage() {
   useDocumentTitle("Exports");
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
 
@@ -70,13 +72,13 @@ export default function ExportsDetailPage() {
       setProjects(Array.isArray(projectsData) ? projectsData : (projectsData?.results || []));
       setJobs(Array.isArray(jobsData) ? jobsData : (jobsData?.results || []));
     } catch (err) {
-      const msg = err.message || 'Failed to load exports';
+      const msg = err.message || t('exportsLoadError');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, notify]);
+  }, [token, notify, t]);
 
   useEffect(() => {
     loadData();
@@ -101,7 +103,7 @@ export default function ExportsDetailPage() {
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      notify({ message: 'Name is required', type: 'error' });
+      notify({ message: t('nameRequired'), type: 'error' });
       return;
     }
 
@@ -110,15 +112,15 @@ export default function ExportsDetailPage() {
     try {
       if (editingProject) {
         await updateExportProject(token, editingProject.id, formData);
-        notify({ message: 'Export project updated', type: 'success' });
+        notify({ message: t('exportProjectUpdated'), type: 'success' });
       } else {
         await createExportProject(token, formData);
-        notify({ message: 'Export project created', type: 'success' });
+        notify({ message: t('exportProjectCreated'), type: 'success' });
       }
       setOpenDialog(false);
       loadData();
     } catch (err) {
-      const msg = err.message || 'Save failed';
+      const msg = err.message || t('saveFailed');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
@@ -131,11 +133,11 @@ export default function ExportsDetailPage() {
     setDeleteTarget(null);
     try {
       await deleteExportProject(token, deleteTarget.id);
-      notify({ message: 'Export project deleted', type: 'success' });
+      notify({ message: t('exportProjectDeleted'), type: 'success' });
       loadData();
     } catch (err) {
-      setError(err.message || 'Delete failed');
-      notify({ message: err.message || 'Delete failed', type: 'error' });
+      setError(err.message || t('deleteFailed'));
+      notify({ message: err.message || t('deleteFailed'), type: 'error' });
     }
   };
 
@@ -143,10 +145,10 @@ export default function ExportsDetailPage() {
     setRunningId(projectId);
     try {
       await runExportProject(token, projectId);
-      notify({ message: 'Export started', type: 'success' });
+      notify({ message: t('exportStarted'), type: 'success' });
       loadData();
     } catch (err) {
-      notify({ message: `Export failed: ${err.message}`, type: 'error' });
+      notify({ message: t('exportFailed', { message: err.message }), type: 'error' });
     } finally {
       setRunningId(null);
     }
@@ -157,9 +159,9 @@ export default function ExportsDetailPage() {
       const res = await getExportJobDownloadUrl(token, jobId);
       const url = res.download_url || `${API_ROUTES.exportJobs}${jobId}/download/`;
       window.open(url, '_blank');
-      notify({ message: 'Download started', type: 'success' });
+      notify({ message: t('downloadStarted'), type: 'success' });
     } catch (err) {
-      notify({ message: `Download failed: ${err.message}`, type: 'error' });
+      notify({ message: t('downloadFailed', { message: err.message }), type: 'error' });
     }
   };
 
@@ -167,23 +169,23 @@ export default function ExportsDetailPage() {
     <Box sx={{ p: 3 }}>
       <Box sx={{ mb: 2 }}>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          New Project
+          {t('newProject')}
         </Button>
       </Box>
       <Table>
         <TableHead>
           <TableRow sx={{ backgroundColor: 'action.hover' }}>
-            <TableCell fontWeight={600}>Name</TableCell>
-            <TableCell fontWeight={600}>Format</TableCell>
-            <TableCell fontWeight={600}>Schedule</TableCell>
-            <TableCell fontWeight={600} align="right">Actions</TableCell>
+            <TableCell fontWeight={600}>{t('name')}</TableCell>
+            <TableCell fontWeight={600}>{t('format')}</TableCell>
+            <TableCell fontWeight={600}>{t('schedule')}</TableCell>
+            <TableCell fontWeight={600} align="right">{t('actions')}</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {projects.length === 0 ? (
             <TableRow>
               <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
-                <Typography color="text.secondary">No export projects</Typography>
+                <Typography color="text.secondary">{t('noExportProjects')}</Typography>
               </TableCell>
             </TableRow>
           ) : (
@@ -200,7 +202,7 @@ export default function ExportsDetailPage() {
                     disabled={runningId === project.id}
                     sx={{ mr: 1 }}
                   >
-                    {runningId === project.id ? 'Running' : 'Run'}
+                    {runningId === project.id ? t('running') : t('run')}
                   </Button>
                   <IconButton size="small" onClick={() => openEdit(project)}>
                     <EditIcon fontSize="small" />
@@ -222,18 +224,18 @@ export default function ExportsDetailPage() {
       <Table>
         <TableHead>
           <TableRow sx={{ backgroundColor: 'action.hover' }}>
-            <TableCell fontWeight={600}>Project</TableCell>
-            <TableCell fontWeight={600}>Status</TableCell>
-            <TableCell fontWeight={600}>Rows</TableCell>
-            <TableCell fontWeight={600}>Date</TableCell>
-            <TableCell fontWeight={600} align="right">Actions</TableCell>
+            <TableCell fontWeight={600}>{t('project')}</TableCell>
+            <TableCell fontWeight={600}>{t('status')}</TableCell>
+            <TableCell fontWeight={600}>{t('rows')}</TableCell>
+            <TableCell fontWeight={600}>{t('date')}</TableCell>
+            <TableCell fontWeight={600} align="right">{t('actions')}</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {jobs.length === 0 ? (
             <TableRow>
               <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
-                <Typography color="text.secondary">No export jobs</Typography>
+                <Typography color="text.secondary">{t('noExportJobs')}</Typography>
               </TableCell>
             </TableRow>
           ) : (
@@ -257,7 +259,7 @@ export default function ExportsDetailPage() {
                 <TableCell align="right">
                   {job.status === 'ready' && (
                     <Button size="small" startIcon={<DownloadIcon />} onClick={() => handleDownload(job.id)}>
-                      Download
+                      {t('download')}
                     </Button>
                   )}
                 </TableCell>
@@ -271,12 +273,12 @@ export default function ExportsDetailPage() {
 
   const summaryCards = useMemo(
     () => [
-      { title: 'Projects', value: projects.length },
-      { title: 'Jobs', value: jobs.length },
-      { title: 'Ready', value: jobs.filter((job) => job.status === 'ready').length },
-      { title: 'Running', value: jobs.filter((job) => job.status === 'running').length },
+      { title: t('projects'), value: projects.length },
+      { title: t('jobs'), value: jobs.length },
+      { title: t('ready'), value: jobs.filter((job) => job.status === 'ready').length },
+      { title: t('running'), value: jobs.filter((job) => job.status === 'running').length },
     ],
-    [jobs, projects]
+    [jobs, projects, t]
   );
 
   if (loading) {
@@ -289,8 +291,8 @@ export default function ExportsDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      title="Exports"
-      description="Data export projects and jobs"
+      title={t('exports')}
+      description={t('exportsDescription')}
       icon={AssignmentIcon}
       onClose={() => window.history.back()}
     />
@@ -302,10 +304,10 @@ export default function ExportsDetailPage() {
       <BaseDetailPage
         headerComponent={headerComponent}
         mainTabs={[
-          { label: 'Projects', component: ProjectsTab },
-          { label: 'Jobs', component: JobsTab },
+          { label: t('projects'), component: ProjectsTab },
+          { label: t('jobs'), component: JobsTab },
         ]}
-        metricsTabs={[{ label: 'Summary', component: () => (
+        metricsTabs={[{ label: t('summary'), component: () => (
           <Box sx={{ p: 2 }}>
             {summaryCards.map((card) => (
               <Box key={card.title} sx={{ p: 2, mb: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
@@ -323,10 +325,10 @@ export default function ExportsDetailPage() {
       />
       <SystemDialog
         open={openDialog}
-        title={editingProject ? 'Edit Export Project' : 'New Export Project'}
+        title={editingProject ? t('editExportProject') : t('newExportProject')}
         onClose={() => setOpenDialog(false)}
         onCancel={() => setOpenDialog(false)}
-        cancelLabel="Cancel"
+        cancelLabel={t('common:cancel')}
         width={480}
         height={440}
         minWidth={400}
@@ -335,7 +337,7 @@ export default function ExportsDetailPage() {
         maxHeight="calc(100vh - 32px)"
         actions={
           <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('saving') : t('common:save')}
           </Button>
         }
       >
@@ -343,26 +345,26 @@ export default function ExportsDetailPage() {
           <TextField
             fullWidth
             size="small"
-            label="Name"
+            label={t('name')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             margin="normal"
           />
           <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>Format</InputLabel>
+            <InputLabel>{t('format')}</InputLabel>
             <Select
               value={formData.format}
-              label="Format"
+              label={t('format')}
               onChange={(e) => setFormData({ ...formData, format: e.target.value })}
             >
               {FORMATS.map((f) => <MenuItem key={f} value={f}>{f}</MenuItem>)}
             </Select>
           </FormControl>
           <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>Schedule</InputLabel>
+            <InputLabel>{t('schedule')}</InputLabel>
             <Select
               value={formData.schedule}
-              label="Schedule"
+              label={t('schedule')}
               onChange={(e) => setFormData({ ...formData, schedule: e.target.value })}
             >
               {SCHEDULES.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
@@ -371,7 +373,7 @@ export default function ExportsDetailPage() {
           <TextField
             fullWidth
             size="small"
-            label="Description"
+            label={t('description')}
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             margin="normal"
@@ -383,9 +385,9 @@ export default function ExportsDetailPage() {
 
       <ConfirmDialog
         open={!!deleteTarget}
-        title="Delete export project?"
-        message={`Delete export project "${deleteTarget?.name || 'this project'}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title={t('deleteExportProjectTitle')}
+        message={t('deleteExportProjectMessage', { name: deleteTarget?.name || t('thisProject') })}
+        confirmLabel={t('common:delete')}
         destructive
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}

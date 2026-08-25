@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import SystemDialog from '../../components/SystemDialog';
@@ -53,6 +54,7 @@ import {
 
 export default function MetadataManagementPage() {
   useDocumentTitle("Metadata");
+  const { t } = useTranslation('catalog');
   const location = useLocation();
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -98,11 +100,11 @@ export default function MetadataManagementPage() {
       setGlossaryTerms(Array.isArray(glossaryData) ? glossaryData : glossaryData?.results || []);
       setTags(Array.isArray(tagsData) ? tagsData : tagsData?.results || []);
     } catch (err) {
-      notify({ message: err.message || 'Failed to load metadata', type: 'error' });
+      notify({ message: err.message || t('metadataLoadError'), type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, notify]);
+  }, [token, notify, t]);
 
   useEffect(() => {
     loadData();
@@ -141,7 +143,7 @@ export default function MetadataManagementPage() {
 
   const handleSave = async () => {
     if (!formData.name?.trim()) {
-      notify({ message: 'Name is required', type: 'error' });
+      notify({ message: t('nameRequired'), type: 'error' });
       return;
     }
 
@@ -151,41 +153,40 @@ export default function MetadataManagementPage() {
         // Domains
         if (editingItem) {
           await updateDataDomain(token, editingItem.id, formData);
-          notify({ message: 'Domain updated', type: 'success' });
+          notify({ message: t('domainUpdated'), type: 'success' });
         } else {
           await createDataDomain(token, formData);
-          notify({ message: 'Domain created', type: 'success' });
+          notify({ message: t('domainCreated'), type: 'success' });
         }
       } else if (tabIndex === 1) {
         // Glossary
         if (editingItem) {
           await updateGlossaryTerm(token, editingItem.id, formData);
-          notify({ message: 'Term updated', type: 'success' });
+          notify({ message: t('termUpdated'), type: 'success' });
         } else {
           await createGlossaryTerm(token, formData);
-          notify({ message: 'Term created', type: 'success' });
+          notify({ message: t('termCreated'), type: 'success' });
         }
       } else {
         // Tags
         if (editingItem) {
           await updateTag(token, editingItem.id, formData);
-          notify({ message: 'Tag updated', type: 'success' });
+          notify({ message: t('tagUpdated'), type: 'success' });
         } else {
           await createTag(token, formData);
-          notify({ message: 'Tag created', type: 'success' });
+          notify({ message: t('tagCreated'), type: 'success' });
         }
       }
       setDialogOpen(false);
       await loadData();
     } catch (err) {
-      notify({ message: err.message || 'Save failed', type: 'error' });
+      notify({ message: err.message || t('saveFailed'), type: 'error' });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (item) => {
-    const itemType = tabIndex === 0 ? 'domain' : tabIndex === 1 ? 'term' : 'tag';
     try {
       if (tabIndex === 0) {
         await deleteDataDomain(token, item.id);
@@ -194,7 +195,8 @@ export default function MetadataManagementPage() {
       } else {
         await deleteTag(token, item.id);
       }
-      notify({ message: `${itemType.charAt(0).toUpperCase() + itemType.slice(1)} deleted`, type: 'success' });
+      const deletedMsg = tabIndex === 0 ? t('domainDeleted') : tabIndex === 1 ? t('termDeleted') : t('tagDeleted');
+      notify({ message: deletedMsg, type: 'success' });
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
@@ -203,12 +205,12 @@ export default function MetadataManagementPage() {
           message:
             err.data?.detail ||
             err.message ||
-            'This item cannot be hard-deleted and must be archived instead.',
+            t('cannotHardDelete'),
           type: 'warning',
         });
         setDeleteConfirm(null);
       } else {
-        notifyFromError(err, 'Delete failed');
+        notifyFromError(err, t('deleteFailed'));
       }
     }
   };
@@ -216,25 +218,25 @@ export default function MetadataManagementPage() {
   const renderDomainsTab = () => (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h6">Data Domains</Typography>
+        <Typography variant="h6">{t('dataDomains')}</Typography>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
-          New Domain
+          {t('newDomain')}
         </Button>
       </Box>
       <Paper variant="outlined">
         <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: 'action.hover' }}>
-              <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Description</TableCell>
-              <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('name')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('description')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }} align="right">{t('actions')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {domains.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} align="center">
-                  <Typography color="text.secondary" sx={{ py: 2 }}>No domains defined</Typography>
+                  <Typography color="text.secondary" sx={{ py: 2 }}>{t('noDomains')}</Typography>
                 </TableCell>
               </TableRow>
             ) : (
@@ -243,12 +245,12 @@ export default function MetadataManagementPage() {
                   <TableCell>{domain.name}</TableCell>
                   <TableCell>{domain.description || '—'}</TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Edit">
+                    <Tooltip title={t('common:edit')}>
                       <IconButton size="small" onClick={() => openEditDialog(domain)}>
                         <EditIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Delete">
+                    <Tooltip title={t('common:delete')}>
                       <IconButton size="small" color="error" onClick={() => setDeleteConfirm(domain)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -266,26 +268,26 @@ export default function MetadataManagementPage() {
   const renderGlossaryTab = () => (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h6">Glossary Terms</Typography>
+        <Typography variant="h6">{t('glossaryTerms')}</Typography>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
-          New Term
+          {t('newTerm')}
         </Button>
       </Box>
       <Paper variant="outlined">
         <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: 'action.hover' }}>
-              <TableCell sx={{ fontWeight: 600 }}>Term</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Definition</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Domain</TableCell>
-              <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('term')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('definition')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('domain')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }} align="right">{t('actions')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {glossaryTerms.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} align="center">
-                  <Typography color="text.secondary" sx={{ py: 2 }}>No terms defined</Typography>
+                  <Typography color="text.secondary" sx={{ py: 2 }}>{t('noTerms')}</Typography>
                 </TableCell>
               </TableRow>
             ) : (
@@ -301,12 +303,12 @@ export default function MetadataManagementPage() {
                     )}
                   </TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Edit">
+                    <Tooltip title={t('common:edit')}>
                       <IconButton size="small" onClick={() => openEditDialog(term)}>
                         <EditIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Delete">
+                    <Tooltip title={t('common:delete')}>
                       <IconButton size="small" color="error" onClick={() => setDeleteConfirm(term)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -324,25 +326,25 @@ export default function MetadataManagementPage() {
   const renderTagsTab = () => (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h6">Tags</Typography>
+        <Typography variant="h6">{t('tags')}</Typography>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
-          New Tag
+          {t('newTag')}
         </Button>
       </Box>
       <Paper variant="outlined">
         <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: 'action.hover' }}>
-              <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Preview</TableCell>
-              <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('name')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('preview')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }} align="right">{t('actions')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {tags.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} align="center">
-                  <Typography color="text.secondary" sx={{ py: 2 }}>No tags defined</Typography>
+                  <Typography color="text.secondary" sx={{ py: 2 }}>{t('noTags')}</Typography>
                 </TableCell>
               </TableRow>
             ) : (
@@ -360,12 +362,12 @@ export default function MetadataManagementPage() {
                     />
                   </TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Edit">
+                    <Tooltip title={t('common:edit')}>
                       <IconButton size="small" onClick={() => openEditDialog(tag)}>
                         <EditIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Delete">
+                    <Tooltip title={t('common:delete')}>
                       <IconButton size="small" color="error" onClick={() => setDeleteConfirm(tag)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -382,8 +384,12 @@ export default function MetadataManagementPage() {
 
   const renderDialog = () => {
     const isEdit = Boolean(editingItem);
-    const titles = ['Domain', 'Glossary Term', 'Tag'];
-    const title = `${isEdit ? 'Edit' : 'New'} ${titles[tabIndex]}`;
+    const titles = [
+      t(isEdit ? 'editDomain' : 'newDomain'),
+      t(isEdit ? 'editGlossaryTerm' : 'newGlossaryTerm'),
+      t(isEdit ? 'editTag' : 'newTag'),
+    ];
+    const title = titles[tabIndex];
 
     return (
       <SystemDialog
@@ -391,7 +397,7 @@ export default function MetadataManagementPage() {
         title={title}
         onClose={() => setDialogOpen(false)}
         onCancel={() => setDialogOpen(false)}
-        cancelLabel="Cancel"
+        cancelLabel={t('common:cancel')}
         width={480}
         height={400}
         minWidth={400}
@@ -400,7 +406,7 @@ export default function MetadataManagementPage() {
         maxHeight="calc(100vh - 32px)"
         actions={
           <Button variant="contained" size="small" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('saving') : t('common:save')}
           </Button>
         }
       >
@@ -408,7 +414,7 @@ export default function MetadataManagementPage() {
           <TextField
             fullWidth
             size="small"
-            label="Name"
+            label={t('name')}
             value={formData.name || ''}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             margin="normal"
@@ -418,7 +424,7 @@ export default function MetadataManagementPage() {
             <TextField
               fullWidth
               size="small"
-              label="Description"
+              label={t('description')}
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               margin="normal"
@@ -431,7 +437,7 @@ export default function MetadataManagementPage() {
               <TextField
                 fullWidth
                 size="small"
-                label="Definition"
+                label={t('definition')}
                 value={formData.definition || ''}
                 onChange={(e) => setFormData({ ...formData, definition: e.target.value })}
                 margin="normal"
@@ -444,7 +450,7 @@ export default function MetadataManagementPage() {
                 getOptionLabel={(d) => d.name}
                 isOptionEqualToValue={(opt, val) => opt.id === val.id}
                 onChange={(e, val) => setFormData({ ...formData, domain: val?.id || '' })}
-                renderInput={(params) => <TextField {...params} label="Domain" size="small" margin="normal" />}
+                renderInput={(params) => <TextField {...params} label={t('domain')} size="small" margin="normal" />}
               />
             </>
           )}
@@ -452,7 +458,7 @@ export default function MetadataManagementPage() {
             <TextField
               fullWidth
               size="small"
-              label="Color"
+              label={t('color')}
               type="color"
               value={formData.color || '#2563eb'}
               onChange={(e) => setFormData({ ...formData, color: e.target.value })}
@@ -476,10 +482,10 @@ export default function MetadataManagementPage() {
     <Box sx={{ p: 3 }}>
       <Box sx={{ mb: 3 }}>
         <Typography variant="h5" fontWeight={700} gutterBottom>
-          Metadata Management
+          {t('metadataManagementTitle')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Manage domains, glossary terms, and tags for organizing your data catalog
+          {t('metadataManagementSubtitle')}
         </Typography>
       </Box>
 
@@ -488,19 +494,19 @@ export default function MetadataManagementPage() {
           <Tab
             icon={<LocationOnIcon />}
             iconPosition="start"
-            label="Domains"
+            label={t('domains')}
             sx={{ textTransform: 'none', minHeight: 48 }}
           />
           <Tab
             icon={<MenuBookIcon />}
             iconPosition="start"
-            label="Glossary"
+            label={t('glossary')}
             sx={{ textTransform: 'none', minHeight: 48 }}
           />
           <Tab
             icon={<LabelIcon />}
             iconPosition="start"
-            label="Tags"
+            label={t('tags')}
             sx={{ textTransform: 'none', minHeight: 48 }}
           />
         </Tabs>
@@ -515,9 +521,9 @@ export default function MetadataManagementPage() {
       {/* Delete confirmation (ConfirmDialog — no window.confirm) */}
       <ConfirmDialog
         open={!!deleteConfirm}
-        title="Delete item?"
-        message={`Delete "${deleteConfirm?.name || deleteConfirm?.term || 'item'}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title={t('deleteItemTitle')}
+        message={t('deleteItemMessage', { name: deleteConfirm?.name || deleteConfirm?.term || t('item') })}
+        confirmLabel={t('common:delete')}
         destructive
         onConfirm={() => handleDelete(deleteConfirm)}
         onCancel={() => setDeleteConfirm(null)}

@@ -2,6 +2,7 @@
 // Catalog: Manage data sources and consuming connections (API keys for external systems)
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import SystemDialog from '../../components/SystemDialog';
@@ -71,6 +72,7 @@ function TabPanel(props) {
 
 export default function ConnectionsPage() {
   useDocumentTitle("Connections");
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const [tabValue, setTabValue] = useState(0);
   
@@ -88,19 +90,19 @@ export default function ConnectionsPage() {
   const { notify } = useNotification();
 
   const sourceTypes = [
-    { value: 'excel', label: 'Excel' },
-    { value: 'database', label: 'Database' },
-    { value: 'api', label: 'API' },
-    { value: 'iot', label: 'IoT' },
-    { value: 'mdm', label: 'MDM System' },
+    { value: 'excel', label: t('excel') },
+    { value: 'database', label: t('database') },
+    { value: 'api', label: t('api') },
+    { value: 'iot', label: t('iot') },
+    { value: 'mdm', label: t('mdmSystem') },
   ];
 
   const systemTypes = [
-    { value: 'pulse', label: 'Pulse' },
-    { value: 'powerbi', label: 'Power BI' },
-    { value: 'tableau', label: 'Tableau' },
-    { value: 'webhook', label: 'Webhook' },
-    { value: 'custom', label: 'Custom' },
+    { value: 'pulse', label: t('pulse') },
+    { value: 'powerbi', label: t('powerBi') },
+    { value: 'tableau', label: t('tableau') },
+    { value: 'webhook', label: t('webhook') },
+    { value: 'custom', label: t('custom') },
   ];
 
   const loadData = useCallback(async () => {
@@ -114,11 +116,11 @@ export default function ConnectionsPage() {
       setDataSources(Array.isArray(sources) ? sources : sources.results || []);
       setConsumingConnections(Array.isArray(connections) ? connections : connections.results || []);
     } catch (err) {
-      setError(err.message || 'Failed to load connections');
+      setError(err.message || t('connectionsLoadError'));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     loadData();
@@ -177,7 +179,7 @@ export default function ConnectionsPage() {
       await loadData();
       handleCloseDialog();
     } catch (err) {
-      setError(err.message || 'Failed to save connection');
+      setError(err.message || t('connectionSaveFailed'));
     }
   };
 
@@ -191,10 +193,10 @@ export default function ConnectionsPage() {
       } else {
         await deleteConsumingConnection(token, id);
       }
-      notify({ message: 'Deleted', type: 'success' });
+      notify({ message: t('deleted'), type: 'success' });
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to delete');
+      setError(err.message || t('deleteFailed'));
     }
   };
 
@@ -202,9 +204,9 @@ export default function ConnectionsPage() {
     try {
       await testDataSource(token, id);
       setError(null);
-      notify({ message: 'Connection test successful', type: 'success' });
+      notify({ message: t('connectionTestSuccess'), type: 'success' });
     } catch (err) {
-      setError(err.message || 'Connection test failed');
+      setError(err.message || t('connectionTestFailedShort'));
     }
   };
 
@@ -215,10 +217,10 @@ export default function ConnectionsPage() {
     try {
       const result = await rotateConsumingConnectionKey(token, id);
       setNewKey(result.api_key);
-      notify({ message: 'New API key generated', type: 'success' });
+      notify({ message: t('newApiKeyGenerated'), type: 'success' });
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to rotate key');
+      setError(err.message || t('rotateKeyFailed'));
     }
   };
 
@@ -228,13 +230,13 @@ export default function ConnectionsPage() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h5" sx={{ mb: 2 }}>Connections</Typography>
+      <Typography variant="h5" sx={{ mb: 2 }}>{t('connections')}</Typography>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)}>
-          <Tab label="Data Sources" icon={<StorageIcon />} iconPosition="start" />
-          <Tab label="Consuming Connections" icon={<VpnKeyIcon />} iconPosition="start" />
+          <Tab label={t('dataSources')} icon={<StorageIcon />} iconPosition="start" />
+          <Tab label={t('consumingConnections')} icon={<VpnKeyIcon />} iconPosition="start" />
         </Tabs>
       </Box>
 
@@ -242,17 +244,17 @@ export default function ConnectionsPage() {
       <TabPanel value={tabValue} index={0}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
           <Button startIcon={<AddIcon />} variant="contained" onClick={() => handleOpenDialog('datasource')}>
-            New Data Source
+            {t('newDataSource')}
           </Button>
         </Box>
         <TableContainer component={Paper}>
           <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: 'background.alt' }}>
-                <TableCell>Name</TableCell>
-                <TableCell>Type</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell>{t('name')}</TableCell>
+                <TableCell>{t('type')}</TableCell>
+                <TableCell>{t('status')}</TableCell>
+                <TableCell align="right">{t('actions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -263,23 +265,23 @@ export default function ConnectionsPage() {
                   <TableCell>
                     <Chip
                       icon={source.last_test_status === 'success' ? <CheckCircleIcon /> : <ErrorIcon />}
-                      label={source.last_test_status === 'success' ? 'Connected' : 'Not Tested'}
+                      label={source.last_test_status === 'success' ? t('connected') : t('notTested')}
                       color={source.last_test_status === 'success' ? 'success' : 'default'}
                       size="small"
                     />
                   </TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Test">
+                    <Tooltip title={t('test')}>
                       <Button size="small" onClick={() => handleTestDataSource(source.id)}>
-                        Test
+                        {t('test')}
                       </Button>
                     </Tooltip>
-                    <Tooltip title="Edit">
+                    <Tooltip title={t('common:edit')}>
                       <IconButton size="small" onClick={() => handleOpenDialog('datasource', source)}>
                         <EditIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Delete">
+                    <Tooltip title={t('common:delete')}>
                       <IconButton size="small" color="error" onClick={() => setDeleteTarget({ type: 'datasource', id: source.id, name: source.name })}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -296,17 +298,17 @@ export default function ConnectionsPage() {
       <TabPanel value={tabValue} index={1}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
           <Button startIcon={<AddIcon />} variant="contained" onClick={() => handleOpenDialog('consuming')}>
-            New Connection
+            {t('newConnection')}
           </Button>
         </Box>
         <TableContainer component={Paper}>
           <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: 'background.alt' }}>
-                <TableCell>Name</TableCell>
-                <TableCell>System</TableCell>
-                <TableCell>Active</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell>{t('name')}</TableCell>
+                <TableCell>{t('system')}</TableCell>
+                <TableCell>{t('active')}</TableCell>
+                <TableCell align="right">{t('actions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -316,23 +318,23 @@ export default function ConnectionsPage() {
                   <TableCell>{conn.system_type}</TableCell>
                   <TableCell>
                     <Chip
-                      label={conn.is_active ? 'Active' : 'Inactive'}
+                      label={conn.is_active ? t('active') : t('inactive')}
                       color={conn.is_active ? 'success' : 'default'}
                       size="small"
                     />
                   </TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Rotate Key">
+                    <Tooltip title={t('rotateKey')}>
                       <Button size="small" onClick={() => setRotateTarget(conn.id)}>
-                        Rotate
+                        {t('rotate')}
                       </Button>
                     </Tooltip>
-                    <Tooltip title="Edit">
+                    <Tooltip title={t('common:edit')}>
                       <IconButton size="small" onClick={() => handleOpenDialog('consuming', conn)}>
                         <EditIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Delete">
+                    <Tooltip title={t('common:delete')}>
                       <IconButton size="small" color="error" onClick={() => setDeleteTarget({ type: 'consuming', id: conn.id, name: conn.name })}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -348,10 +350,10 @@ export default function ConnectionsPage() {
       {/* Create/Edit dialog (SystemDialog — design system primitive) */}
       <SystemDialog
         open={openDialog}
-        title={editingItem ? 'Edit Connection' : 'New Connection'}
+        title={editingItem ? t('editConnection') : t('newConnection')}
         onClose={handleCloseDialog}
         onCancel={handleCloseDialog}
-        cancelLabel="Cancel"
+        cancelLabel={t('common:cancel')}
         width={480}
         height={420}
         minWidth={400}
@@ -359,12 +361,12 @@ export default function ConnectionsPage() {
         maxWidth="calc(100vw - 32px)"
         maxHeight="calc(100vh - 32px)"
         actions={
-          <Button onClick={handleSave} variant="contained" size="small">Save</Button>
+          <Button onClick={handleSave} variant="contained" size="small">{t('common:save')}</Button>
         }
       >
         <Box px={2} py={1}>
           <TextField
-            label="Name"
+            label={t('name')}
             size="small"
             fullWidth
             value={formData.name || ''}
@@ -373,7 +375,7 @@ export default function ConnectionsPage() {
             autoFocus
           />
           <TextField
-            label="Slug"
+            label={t('slug')}
             size="small"
             fullWidth
             value={formData.slug || ''}
@@ -381,7 +383,7 @@ export default function ConnectionsPage() {
             margin="normal"
           />
           <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>{dialogType === 'datasource' ? 'Source Type' : 'System Type'}</InputLabel>
+            <InputLabel>{dialogType === 'datasource' ? t('sourceType') : t('systemType')}</InputLabel>
             <Select
               size="small"
               value={dialogType === 'datasource' ? (formData.source_type || 'api') : (formData.system_type || 'custom')}
@@ -389,7 +391,7 @@ export default function ConnectionsPage() {
                 ...formData, 
                 [dialogType === 'datasource' ? 'source_type' : 'system_type']: e.target.value 
               })}
-              label={dialogType === 'datasource' ? 'Source Type' : 'System Type'}
+              label={dialogType === 'datasource' ? t('sourceType') : t('systemType')}
             >
               {(dialogType === 'datasource' ? sourceTypes : systemTypes).map((type) => (
                 <MenuItem key={type.value} value={type.value}>{type.label}</MenuItem>
@@ -397,7 +399,7 @@ export default function ConnectionsPage() {
             </Select>
           </FormControl>
           <TextField
-            label="Description"
+            label={t('description')}
             size="small"
             fullWidth
             multiline
@@ -412,9 +414,9 @@ export default function ConnectionsPage() {
       {/* Delete confirmation */}
       <ConfirmDialog
         open={!!deleteTarget}
-        title="Delete connection?"
-        message={`Delete "${deleteTarget?.name || 'this connection'}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title={t('deleteConnectionTitle')}
+        message={t('deleteConnectionMessage', { name: deleteTarget?.name || t('thisConnection') })}
+        confirmLabel={t('common:delete')}
         destructive
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
@@ -423,9 +425,9 @@ export default function ConnectionsPage() {
       {/* Rotate key confirmation */}
       <ConfirmDialog
         open={!!rotateTarget}
-        title="Generate new API key?"
-        message="The current key will be invalidated immediately. Existing integrations using it will stop working until updated."
-        confirmLabel="Rotate Key"
+        title={t('generateApiKeyTitle')}
+        message={t('generateApiKeyMessage')}
+        confirmLabel={t('rotateKeyConfirm')}
         destructive
         onConfirm={confirmRotateKey}
         onCancel={() => setRotateTarget(null)}
@@ -434,10 +436,10 @@ export default function ConnectionsPage() {
       {/* New API key (copy before closing) */}
       <SystemDialog
         open={!!newKey}
-        title="New API Key"
+        title={t('newApiKey')}
         onClose={() => setNewKey(null)}
         onCancel={() => setNewKey(null)}
-        cancelLabel="Close"
+        cancelLabel={t('common:close')}
         showCancel={false}
         width={520}
         height={220}
@@ -449,22 +451,22 @@ export default function ConnectionsPage() {
           <Button
             variant="contained"
             size="small"
-            onClick={() => { navigator.clipboard?.writeText(newKey || ''); notify({ message: 'API key copied', type: 'success' }); }}
+            onClick={() => { navigator.clipboard?.writeText(newKey || ''); notify({ message: t('apiKeyCopied'), type: 'success' }); }}
           >
-            Copy Key
+            {t('copyKey')}
           </Button>
         }
       >
         <Box px={2} py={1}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Copy this key now — it will not be shown again.
+            {t('copyKeyHint')}
           </Typography>
           <TextField
             fullWidth
             size="small"
             value={newKey || ''}
             InputProps={{ readOnly: true }}
-            inputProps={{ 'aria-label': 'New API key' }}
+            inputProps={{ 'aria-label': t('newApiKey') }}
           />
         </Box>
       </SystemDialog>

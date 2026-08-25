@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { 
@@ -52,6 +53,7 @@ import LockIcon from '@mui/icons-material/Lock';
 
 // Quality Status Badge Component
 function QualityStatusBadge({ value, score }) {
+  const { t } = useTranslation('catalog');
   const colorMap = {
     passing: '#4caf50',
     warning: '#ff9800',
@@ -66,9 +68,11 @@ function QualityStatusBadge({ value, score }) {
     unknown: '?',
   };
 
+  const statusKey = value === 'passing' ? 'passing' : value === 'warning' ? 'warning' : value === 'failing' ? 'failing' : 'unknown';
+
   return (
     <Chip
-      label={`${(value || 'unknown').charAt(0).toUpperCase() + (value || 'unknown').slice(1)} ${score ? `(${score}%)` : ''}`}
+      label={`${t(statusKey)}${score ? ` (${score}%)` : ''}`}
       size="small"
       sx={{
         backgroundColor: colorMap[value] || colorMap.unknown,
@@ -81,6 +85,7 @@ function QualityStatusBadge({ value, score }) {
 
 // Classification Badge Component
 function ClassificationBadge({ value }) {
+  const { t } = useTranslation('catalog');
   const iconMap = {
     public: '🟢',
     internal: '🟡',
@@ -90,11 +95,11 @@ function ClassificationBadge({ value }) {
   };
 
   const labelMap = {
-    public: 'Public',
-    internal: 'Internal',
-    confidential: 'Confidential',
-    pii: 'PII',
-    sensitive: 'Sensitive',
+    public: t('public'),
+    internal: t('internal'),
+    confidential: t('confidential'),
+    pii: t('pii'),
+    sensitive: t('sensitive'),
   };
 
   return (
@@ -109,6 +114,7 @@ function ClassificationBadge({ value }) {
 
 export default function AssetsPage() {
   useDocumentTitle("Assets");
+  const { t } = useTranslation('catalog');
   const navigate = useNavigate();
   const { token } = useAuth();
   const { notify } = useNotification();
@@ -162,13 +168,13 @@ export default function AssetsPage() {
       setAssets(Array.isArray(assetsData) ? assetsData : assetsData.results || []);
       setDomains(Array.isArray(domainsData) ? domainsData : domainsData.results || []);
     } catch (err) {
-      const msg = err.message || 'Failed to load assets';
+      const msg = err.message || t('failedToLoadAssets');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, notify]);
+  }, [token, notify, t]);
 
   // Load assets and domains on mount
   useEffect(() => {
@@ -219,10 +225,10 @@ export default function AssetsPage() {
     setDeleteConfirm(null);
     try {
       await deleteAssetProfile(token, id);
-      notify({ message: 'Asset deleted', type: 'success' });
+      notify({ message: t('assetDeleted'), type: 'success' });
       await loadData();
     } catch (err) {
-      const msg = err.message || 'Failed to delete asset';
+      const msg = err.message || t('failedToDeleteAsset');
       setError(msg);
       notify({ message: msg, type: 'error' });
     }
@@ -232,7 +238,7 @@ export default function AssetsPage() {
   const columns = [
     {
       field: 'title',
-      headerName: 'Asset Name',
+      headerName: t('assetName'),
       flex: 1.5,
       minWidth: 200,
       sortable: true,
@@ -250,12 +256,12 @@ export default function AssetsPage() {
     },
     {
       field: 'asset_type',
-      headerName: 'Type',
+      headerName: t('type'),
       width: 90,
       sortable: true,
       renderCell: (params) => (
         <Chip
-          label={params.value === 'table' ? '🏠 Table' : '📄 Field'}
+          label={params.value === 'table' ? `🏠 ${t('tableAsset')}` : `📄 ${t('fieldAsset')}`}
           size="small"
           variant="filled"
         />
@@ -263,7 +269,7 @@ export default function AssetsPage() {
     },
     {
       field: 'domain_name',
-      headerName: 'Domain',
+      headerName: t('domain'),
       flex: 1,
       minWidth: 120,
       sortable: true,
@@ -273,7 +279,7 @@ export default function AssetsPage() {
     },
     {
       field: 'classification',
-      headerName: 'Classification',
+      headerName: t('classification'),
       flex: 1,
       minWidth: 140,
       sortable: true,
@@ -283,7 +289,7 @@ export default function AssetsPage() {
     },
     {
       field: 'quality_status',
-      headerName: 'Quality',
+      headerName: t('quality'),
       flex: 1,
       minWidth: 140,
       sortable: true,
@@ -293,7 +299,7 @@ export default function AssetsPage() {
     },
     {
       field: 'steward_name',
-      headerName: 'Steward',
+      headerName: t('steward'),
       flex: 1,
       minWidth: 120,
       sortable: true,
@@ -303,12 +309,12 @@ export default function AssetsPage() {
     },
     {
       field: 'actions',
-      headerName: 'Actions',
+      headerName: t('actions'),
       width: 120,
       sortable: false,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="View Details">
+          <Tooltip title={t('viewDetails')}>
             <IconButton
               size="small"
               onClick={() => navigate(`/catalog/assets/${params.row.id}`)}
@@ -316,7 +322,7 @@ export default function AssetsPage() {
               <VisibilityIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Edit">
+          <Tooltip title={t('common:edit')}>
             <IconButton
               size="small"
               onClick={() => navigate(`/catalog/assets/${params.row.id}`)}
@@ -324,7 +330,7 @@ export default function AssetsPage() {
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Delete">
+          <Tooltip title={t('common:delete')}>
             <IconButton
               size="small"
               color="error"
@@ -383,7 +389,7 @@ export default function AssetsPage() {
 
   const handleCreateSave = async () => {
     if (!createForm.description.trim()) {
-      setCreateError('Description is required.');
+      setCreateError(t('descriptionRequired'));
       return;
     }
     setCreateSaving(true);
@@ -400,11 +406,11 @@ export default function AssetsPage() {
         tags: createFormTags,
       };
       await createAssetProfile(token, payload);
-      notify({ message: 'Asset profile created', type: 'success' });
+      notify({ message: t('assetProfileCreated'), type: 'success' });
       setCreateDialogOpen(false);
       await loadData();
     } catch (err) {
-      setCreateError(err.message || 'Failed to create asset profile.');
+      setCreateError(err.message || t('failedToCreateAsset'));
     } finally {
       setCreateSaving(false);
     }
@@ -418,61 +424,61 @@ export default function AssetsPage() {
       {error && <Alert severity="error" sx={{ mx: 2, mt: 2, flexShrink: 0 }}>{error}</Alert>}
 
       <FilteredDataGrid
-        title="Asset Profiles"
-        subtitle={`${filteredAssets.length} of ${assets.length} assets`}
-        description="Asset profiles define metadata for tables and fields — classification, quality scores, lineage, and ownership. Browse, create, and manage governed data assets."
+        title={t('assetProfiles')}
+        subtitle={t('assetsCount', { shown: filteredAssets.length, total: assets.length })}
+        description={t('assetsDescription')}
         actions={(
           <Button
             startIcon={<AddIcon />}
             variant="contained"
             onClick={handleOpenCreate}
           >
-            New Asset
+            {t('newAsset')}
           </Button>
         )}
         rows={filteredAssets}
         loading={loading}
         columns={columns}
-        countLabel={`${filteredAssets.length} of ${assets.length} assets`}
+        countLabel={t('assetsCount', { shown: filteredAssets.length, total: assets.length })}
         searchValue={searchText}
         onSearchChange={setSearchText}
         filterDefs={[
           {
             key: 'domain',
-            label: 'Domain',
-            emptyLabel: 'All Domains',
+            label: t('domain'),
+            emptyLabel: t('allDomains'),
             options: domains.map((d) => ({ value: d.id, label: d.name })),
           },
           {
             key: 'classification',
-            label: 'Classification',
-            emptyLabel: 'All Levels',
+            label: t('classification'),
+            emptyLabel: t('allLevels'),
             options: [
-              { value: 'public', label: 'Public' },
-              { value: 'internal', label: 'Internal' },
-              { value: 'confidential', label: 'Confidential' },
-              { value: 'pii', label: 'PII' },
-              { value: 'sensitive', label: 'Sensitive' },
+              { value: 'public', label: t('public') },
+              { value: 'internal', label: t('internal') },
+              { value: 'confidential', label: t('confidential') },
+              { value: 'pii', label: t('pii') },
+              { value: 'sensitive', label: t('sensitive') },
             ],
           },
           {
             key: 'quality',
-            label: 'Quality',
-            emptyLabel: 'All Status',
+            label: t('quality'),
+            emptyLabel: t('allStatus'),
             options: [
-              { value: 'passing', label: 'Passing' },
-              { value: 'warning', label: 'Warning' },
-              { value: 'failing', label: 'Failing' },
-              { value: 'unknown', label: 'Unknown' },
+              { value: 'passing', label: t('passing') },
+              { value: 'warning', label: t('warning') },
+              { value: 'failing', label: t('failing') },
+              { value: 'unknown', label: t('unknown') },
             ],
           },
           {
             key: 'assetType',
-            label: 'Asset Type',
-            emptyLabel: 'All Types',
+            label: t('assetType'),
+            emptyLabel: t('allTypes'),
             options: [
-              { value: 'table', label: 'Table' },
-              { value: 'field', label: 'Field' },
+              { value: 'table', label: t('table') },
+              { value: 'field', label: t('field') },
             ],
           },
         ]}
@@ -491,17 +497,17 @@ export default function AssetsPage() {
         onClearFilters={handleClearFilters}
         pageSize={25}
         rowsPerPageOptions={[25, 50, 100]}
-        emptyMessage="No assets found"
-        emptySubtext={hasActiveFilters ? 'Try adjusting your filters' : 'Assets are auto-created for all tables and fields'}
+        emptyMessage={t('noAssets')}
+        emptySubtext={hasActiveFilters ? t('tryAdjustingFilters') : t('assetsAutoCreated')}
       />
 
       {/* Create Asset Dialog (SystemDialog — design system primitive) */}
       <SystemDialog
         open={createDialogOpen}
-        title="New Asset Profile"
+        title={t('newAssetProfile')}
         onClose={handleCloseCreate}
         onCancel={handleCloseCreate}
-        cancelLabel="Cancel"
+        cancelLabel={t('common:cancel')}
         width={560}
         height={640}
         minWidth={480}
@@ -516,7 +522,7 @@ export default function AssetsPage() {
             disabled={createSaving}
             startIcon={createSaving ? <CircularProgress size={16} /> : null}
           >
-            {createSaving ? 'Creating…' : 'Create'}
+            {createSaving ? t('creating') : t('create')}
           </Button>
         }
       >
@@ -525,7 +531,7 @@ export default function AssetsPage() {
           <TextField
             fullWidth
             size="small"
-            label="Description"
+            label={t('description')}
             margin="normal"
             required
             multiline
@@ -540,22 +546,22 @@ export default function AssetsPage() {
             getOptionLabel={(d) => d.name}
             isOptionEqualToValue={(opt, val) => opt.id === val.id}
             onChange={(e, val) => setCreateForm({ ...createForm, domain: val?.id || '' })}
-            renderInput={(params) => <TextField {...params} label="Domain" margin="normal" />}
+            renderInput={(params) => <TextField {...params} label={t('domain')} margin="normal" />}
           />
           <TextField
             select
             fullWidth
-            label="Classification"
+            label={t('classification')}
             margin="normal"
             value={createForm.classification}
             onChange={(e) => setCreateForm({ ...createForm, classification: e.target.value })}
           >
-            <MenuItem value="">— None —</MenuItem>
-            <MenuItem value="public">Public</MenuItem>
-            <MenuItem value="internal">Internal</MenuItem>
-            <MenuItem value="confidential">Confidential</MenuItem>
-            <MenuItem value="pii">PII</MenuItem>
-            <MenuItem value="sensitive">Sensitive</MenuItem>
+            <MenuItem value="">{t('none')}</MenuItem>
+            <MenuItem value="public">{t('public')}</MenuItem>
+            <MenuItem value="internal">{t('internal')}</MenuItem>
+            <MenuItem value="confidential">{t('confidential')}</MenuItem>
+            <MenuItem value="pii">{t('pii')}</MenuItem>
+            <MenuItem value="sensitive">{t('sensitive')}</MenuItem>
           </TextField>
           <Autocomplete
             value={createFormUsers.find((u) => u.id === createForm.owner) || null}
@@ -563,7 +569,7 @@ export default function AssetsPage() {
             getOptionLabel={(u) => u.username || u.email || String(u.id)}
             isOptionEqualToValue={(opt, val) => opt.id === val.id}
             onChange={(e, val) => setCreateForm({ ...createForm, owner: val?.id || '' })}
-            renderInput={(params) => <TextField {...params} label="Owner" margin="normal" />}
+            renderInput={(params) => <TextField {...params} label={t('owner')} margin="normal" />}
           />
           <Autocomplete
             value={createFormUsers.find((u) => u.id === createForm.steward) || null}
@@ -571,11 +577,11 @@ export default function AssetsPage() {
             getOptionLabel={(u) => u.username || u.email || String(u.id)}
             isOptionEqualToValue={(opt, val) => opt.id === val.id}
             onChange={(e, val) => setCreateForm({ ...createForm, steward: val?.id || '' })}
-            renderInput={(params) => <TextField {...params} label="Steward" margin="normal" />}
+            renderInput={(params) => <TextField {...params} label={t('steward')} margin="normal" />}
           />
           <TextField
             fullWidth
-            label="Semantic Type"
+            label={t('semanticType')}
             margin="normal"
             value={createForm.semantic_type}
             onChange={(e) => setCreateForm({ ...createForm, semantic_type: e.target.value })}
@@ -586,7 +592,7 @@ export default function AssetsPage() {
             getOptionLabel={(g) => g.term || g.name || String(g.id)}
             isOptionEqualToValue={(opt, val) => opt.id === val.id}
             onChange={(e, val) => setCreateForm({ ...createForm, glossary_term: val?.id || '' })}
-            renderInput={(params) => <TextField {...params} label="Glossary Term" margin="normal" />}
+            renderInput={(params) => <TextField {...params} label={t('glossaryTerm')} margin="normal" />}
           />
           <Autocomplete
             multiple
@@ -595,7 +601,7 @@ export default function AssetsPage() {
             getOptionLabel={(t) => t.name}
             isOptionEqualToValue={(opt, val) => opt.id === val.id}
             onChange={(e, val) => setCreateFormTags(val.map((t) => t.id))}
-            renderInput={(params) => <TextField {...params} label="Tags" margin="normal" />}
+            renderInput={(params) => <TextField {...params} label={t('tags')} margin="normal" />}
             renderTags={(value, getTagProps) =>
               value.map((option, index) => (
                 <Chip key={option.id} label={option.name} size="small" {...getTagProps({ index })} />
@@ -607,9 +613,9 @@ export default function AssetsPage() {
 
       <ConfirmDialog
         open={deleteConfirm != null}
-        title="Delete asset?"
-        message={`Delete asset "${filteredAssets.find((a) => a.id === deleteConfirm)?.title || 'this asset'}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title={t('deleteAssetTitle')}
+        message={t('deleteAssetMessage', { name: filteredAssets.find((a) => a.id === deleteConfirm)?.title || t('thisAsset') })}
+        confirmLabel={t('common:delete')}
         destructive
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirm(null)}

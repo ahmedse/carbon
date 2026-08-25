@@ -5,6 +5,7 @@
 // CB-09 defensive arrays, theme tokens only, shared ProductForm (A7 fix).
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { can } from '../../authz';
@@ -36,6 +37,7 @@ function unwrap(data) {
 
 export default function DataProductDetailPage() {
   useDocumentTitle("Data Product Detail");
+  const { t } = useTranslation('catalog');
   const { moduleId } = useParams();
   const navigate = useNavigate();
   const { token, user, context, availablePerspectives, isGlobalAdminFlag, userCapabilities } = useAuth();
@@ -92,13 +94,13 @@ export default function DataProductDetailPage() {
       setAssets(assetMap);
       setAuditEvents(unwrap(auditData));
     } catch (err) {
-      const msg = err.message || 'Failed to load data product';
+      const msg = err.message || t('dataProductLoadError');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, moduleId, notify]);
+  }, [token, moduleId, notify, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -110,7 +112,7 @@ export default function DataProductDetailPage() {
     return (
       <Box sx={{ p: 3 }}>
         <DetailHeader
-          title="Data Product Not Found"
+          title={t('dataProductNotFound')}
           onClose={() => navigate(-1)}
         />
       </Box>
@@ -119,7 +121,7 @@ export default function DataProductDetailPage() {
 
   const headerComponent = product ? (
     <DetailHeader
-      title={product.name || 'Data Product'}
+      title={product.name || t('dataProductFallback')}
       description={product.description || product.org_unit_name || ''}
       icon={Inventory2Icon}
       onClose={() => navigate(-1)}
@@ -133,7 +135,7 @@ export default function DataProductDetailPage() {
     />
   ) : (
     <DetailHeader
-      title="Loading..."
+      title={t('loadingTitle')}
       icon={Inventory2Icon}
       onClose={() => navigate(-1)}
     />
@@ -143,16 +145,16 @@ export default function DataProductDetailPage() {
     <BaseDetailPage
       headerComponent={headerComponent}
       mainTabs={[
-        { label: 'Overview', component: DataProductOverviewTab },
-        { label: 'Tables', component: DataProductTablesTab },
-        { label: 'DQ', component: DataProductDQTab },
+        { label: t('overview'), component: DataProductOverviewTab },
+        { label: t('tables'), component: DataProductTablesTab },
+        { label: t('dq'), component: DataProductDQTab },
         ...(isAdmin
-          ? [{ label: 'Edit', component: DataProductEditTab }]
+          ? [{ label: t('common:edit'), component: DataProductEditTab }]
           : []),
-        { label: 'Audit', component: DataProductAuditTab },
+        { label: t('audit'), component: DataProductAuditTab },
       ]}
       metricsTabs={[
-        { label: 'Metrics', component: DataProductMetricsPanel },
+        { label: t('metrics'), component: DataProductMetricsPanel },
       ]}
       loading={loading}
       error={error}

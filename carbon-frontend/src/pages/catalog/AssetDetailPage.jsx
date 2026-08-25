@@ -4,6 +4,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
@@ -30,6 +31,7 @@ import AssetAuditTab from './tabs/AssetAuditTab';
 
 export default function AssetDetailPage() {
   useDocumentTitle("Asset Detail");
+  const { t } = useTranslation('catalog');
   const { assetId } = useParams();
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -76,13 +78,13 @@ export default function AssetDetailPage() {
         tags: Array.isArray(tagsData) ? tagsData : tagsData.results || [],
       });
     } catch (err) {
-      const msg = err.message || 'Failed to load asset';
+      const msg = err.message || t('assetLoadError');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, assetId, notify]);
+  }, [token, assetId, notify, t]);
 
   // Load asset, governance events, and select options on mount
   useEffect(() => {
@@ -92,14 +94,14 @@ export default function AssetDetailPage() {
   const handleAssetUpdated = async () => {
     // Refresh asset and events after update
     await loadAssetData();
-    notify({ message: 'Asset updated successfully', type: 'success' });
+    notify({ message: t('assetUpdated'), type: 'success' });
   };
 
   if (!asset && !loading && assetId !== 'new') {
     return (
       <Box sx={{ p: 3 }}>
         <DetailHeader
-          title="Asset Not Found"
+          title={t('assetNotFound')}
           onClose={() => navigate(-1)}
         />
       </Box>
@@ -112,14 +114,14 @@ export default function AssetDetailPage() {
   // Header component
   const headerComponent = asset ? (
     <DetailHeader
-      title={asset.title || 'Asset'}
+      title={asset.title || t('assetFallback')}
       description={asset.description}
       icon={iconComponent}
       onClose={() => navigate(-1)}
     />
   ) : (
     <DetailHeader
-      title="Loading..."
+      title={t('loadingTitle')}
       icon={StorageIcon}
       onClose={() => navigate(-1)}
     />
@@ -129,12 +131,12 @@ export default function AssetDetailPage() {
     <BaseDetailPage
       headerComponent={headerComponent}
       mainTabs={[
-        { label: 'Overview', component: AssetOverviewTab },
-        { label: 'Quality', component: AssetQualityTab },
-        { label: 'Edit', component: AssetEditTab },
+        { label: t('overview'), component: AssetOverviewTab },
+        { label: t('quality'), component: AssetQualityTab },
+        { label: t('common:edit'), component: AssetEditTab },
       ]}
       metricsTabs={[
-        { label: 'Audit', component: AssetAuditTab },
+        { label: t('audit'), component: AssetAuditTab },
       ]}
       loading={loading}
       error={error}

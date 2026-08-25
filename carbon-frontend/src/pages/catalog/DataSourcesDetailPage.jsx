@@ -1,6 +1,7 @@
 // src/pages/catalog/DataSourcesDetailPage.jsx
 // Data Sources: Enhanced CRUD with test functionality and status indicators
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import SystemDialog from '../../components/SystemDialog';
@@ -43,6 +44,7 @@ const SOURCE_TYPES = ['excel', 'database', 'api', 'iot', 'mdm', 'manual'];
 
 export default function DataSourcesDetailPage() {
   useDocumentTitle("Data Sources");
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
 
@@ -63,13 +65,13 @@ export default function DataSourcesDetailPage() {
       const data = await fetchDataSources(token);
       setSources(Array.isArray(data) ? data : data?.results || []);
     } catch (err) {
-      const msg = err.message || 'Failed to load data sources';
+      const msg = err.message || t('dataSourcesLoadError');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, notify]);
+  }, [token, notify, t]);
 
   useEffect(() => {
     loadSources();
@@ -93,7 +95,7 @@ export default function DataSourcesDetailPage() {
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      notify({ message: 'Name is required', type: 'error' });
+      notify({ message: t('nameRequired'), type: 'error' });
       return;
     }
 
@@ -102,15 +104,15 @@ export default function DataSourcesDetailPage() {
     try {
       if (editingSource) {
         await updateDataSource(token, editingSource.id, formData);
-        notify({ message: 'Data source updated', type: 'success' });
+        notify({ message: t('dataSourceUpdated'), type: 'success' });
       } else {
         await createDataSource(token, formData);
-        notify({ message: 'Data source created', type: 'success' });
+        notify({ message: t('dataSourceCreated'), type: 'success' });
       }
       setOpenDialog(false);
       loadSources();
     } catch (err) {
-      const msg = err.message || 'Save failed';
+      const msg = err.message || t('saveFailed');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
@@ -123,11 +125,11 @@ export default function DataSourcesDetailPage() {
     setDeleteTarget(null);
     try {
       await deleteDataSource(token, deleteTarget.id);
-      notify({ message: 'Data source deleted', type: 'success' });
+      notify({ message: t('dataSourceDeleted'), type: 'success' });
       loadSources();
     } catch (err) {
-      setError(err.message || 'Delete failed');
-      notify({ message: err.message || 'Delete failed', type: 'error' });
+      setError(err.message || t('deleteFailed'));
+      notify({ message: err.message || t('deleteFailed'), type: 'error' });
     }
   };
 
@@ -135,10 +137,10 @@ export default function DataSourcesDetailPage() {
     setTestingId(sourceId);
     try {
       await testDataSource(token, sourceId);
-      notify({ message: 'Connection test successful', type: 'success' });
+      notify({ message: t('connectionTestSuccess'), type: 'success' });
       loadSources();
     } catch (err) {
-      notify({ message: `Connection test failed: ${err.message}`, type: 'error' });
+      notify({ message: t('connectionTestFailed', { message: err.message }), type: 'error' });
     } finally {
       setTestingId(null);
     }
@@ -152,12 +154,12 @@ export default function DataSourcesDetailPage() {
 
   const summaryCards = useMemo(
     () => [
-      { title: 'Sources', value: sources.length },
-      { title: 'Active', value: sources.filter((source) => source.status === 'active').length },
-      { title: 'Error', value: sources.filter((source) => source.status === 'error').length },
-      { title: 'Pending', value: sources.filter((source) => !source.status).length },
+      { title: t('sources'), value: sources.length },
+      { title: t('active'), value: sources.filter((source) => source.status === 'active').length },
+      { title: t('errorStatus'), value: sources.filter((source) => source.status === 'error').length },
+      { title: t('pending'), value: sources.filter((source) => !source.status).length },
     ],
-    [sources]
+    [sources, t]
   );
 
   if (loading) {
@@ -171,24 +173,24 @@ export default function DataSourcesDetailPage() {
   const InventoryTab = () => (
     <Box sx={{ p: 3 }}>
       <Box sx={{ mb: 2 }}>
-        <Button variant="outlined" startIcon={<AddIcon />} onClick={openCreate}>New Source</Button>
+        <Button variant="outlined" startIcon={<AddIcon />} onClick={openCreate}>{t('newSource')}</Button>
       </Box>
       <Paper variant="outlined">
         <Table>
           <TableHead>
             <TableRow sx={{ backgroundColor: 'action.hover' }}>
-              <TableCell fontWeight={600}>Name</TableCell>
-              <TableCell fontWeight={600}>Type</TableCell>
-              <TableCell fontWeight={600}>Status</TableCell>
-              <TableCell fontWeight={600}>Last Tested</TableCell>
-              <TableCell fontWeight={600} align="right">Actions</TableCell>
+              <TableCell fontWeight={600}>{t('name')}</TableCell>
+              <TableCell fontWeight={600}>{t('type')}</TableCell>
+              <TableCell fontWeight={600}>{t('status')}</TableCell>
+              <TableCell fontWeight={600}>{t('lastTested')}</TableCell>
+              <TableCell fontWeight={600} align="right">{t('actions')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sources.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
-                  <Typography color="text.secondary">No data sources yet</Typography>
+                  <Typography color="text.secondary">{t('noDataSources')}</Typography>
                 </TableCell>
               </TableRow>
             ) : (
@@ -201,7 +203,7 @@ export default function DataSourcesDetailPage() {
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       {getStatusIcon(source.status)}
-                      <Typography variant="caption">{source.status || 'unknown'}</Typography>
+                      <Typography variant="caption">{source.status || t('unknown')}</Typography>
                     </Box>
                   </TableCell>
                   <TableCell>
@@ -211,7 +213,7 @@ export default function DataSourcesDetailPage() {
                   </TableCell>
                   <TableCell align="right">
                     <Button size="small" onClick={() => handleTest(source.id)} disabled={testingId === source.id} sx={{ mr: 1 }}>
-                      {testingId === source.id ? 'Testing...' : 'Test'}
+                      {testingId === source.id ? t('testing') : t('test')}
                     </Button>
                     <IconButton size="small" onClick={() => openEdit(source)}>
                       <EditIcon fontSize="small" />
@@ -231,8 +233,8 @@ export default function DataSourcesDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      title="Data Sources"
-      description="Source system connections"
+      title={t('dataSources')}
+      description={t('dataSourcesDescription')}
       icon={StorageIcon}
       onClose={() => window.history.back()}
     />
@@ -243,8 +245,8 @@ export default function DataSourcesDetailPage() {
       {error && <Alert severity="error" sx={{ m: 3, mb: 0 }}>{error}</Alert>}
       <BaseDetailPage
         headerComponent={headerComponent}
-        mainTabs={[{ label: 'Inventory', component: InventoryTab }]}
-        metricsTabs={[{ label: 'Summary', component: () => <Box sx={{ p: 2 }}>{summaryCards.map((card) => <Box key={card.title} sx={{ p: 2, mb: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}><Typography variant="caption" color="text.secondary">{card.title}</Typography><Typography variant="h6">{card.value}</Typography></Box>)}</Box> }]}
+        mainTabs={[{ label: t('inventory'), component: InventoryTab }]}
+        metricsTabs={[{ label: t('summary'), component: () => <Box sx={{ p: 2 }}>{summaryCards.map((card) => <Box key={card.title} sx={{ p: 2, mb: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}><Typography variant="caption" color="text.secondary">{card.title}</Typography><Typography variant="h6">{card.value}</Typography></Box>)}</Box> }]}
         loading={loading}
         error={error}
         onClose={() => window.history.back()}
@@ -254,10 +256,10 @@ export default function DataSourcesDetailPage() {
 
       <SystemDialog
         open={openDialog}
-        title={editingSource ? 'Edit Data Source' : 'New Data Source'}
+        title={editingSource ? t('editDataSource') : t('newDataSource')}
         onClose={() => setOpenDialog(false)}
         onCancel={() => setOpenDialog(false)}
-        cancelLabel="Cancel"
+        cancelLabel={t('common:cancel')}
         width={480}
         height={420}
         minWidth={400}
@@ -266,7 +268,7 @@ export default function DataSourcesDetailPage() {
         maxHeight="calc(100vh - 32px)"
         actions={
           <Button onClick={handleSave} variant="contained" size="small" disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('saving') : t('common:save')}
           </Button>
         }
       >
@@ -274,16 +276,16 @@ export default function DataSourcesDetailPage() {
           <TextField
             fullWidth
             size="small"
-            label="Name"
+            label={t('name')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             margin="normal"
           />
           <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>Source Type</InputLabel>
+            <InputLabel>{t('sourceType')}</InputLabel>
             <Select
               value={formData.source_type}
-              label="Source Type"
+              label={t('sourceType')}
               onChange={(e) => setFormData({ ...formData, source_type: e.target.value })}
             >
               {SOURCE_TYPES.map((type) => (
@@ -294,7 +296,7 @@ export default function DataSourcesDetailPage() {
           <TextField
             fullWidth
             size="small"
-            label="Description"
+            label={t('description')}
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             margin="normal"
@@ -306,9 +308,9 @@ export default function DataSourcesDetailPage() {
 
       <ConfirmDialog
         open={!!deleteTarget}
-        title="Delete data source?"
-        message={`Delete data source "${deleteTarget?.name || 'this source'}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title={t('deleteDataSourceTitle')}
+        message={t('deleteDataSourceMessage', { name: deleteTarget?.name || t('thisSource') })}
+        confirmLabel={t('common:delete')}
         destructive
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}

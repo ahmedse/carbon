@@ -5,6 +5,7 @@
 // can() manage gate (CB-13), useNotification, 4 data states, CB-09 defensive arrays.
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { can } from '../../authz';
@@ -21,7 +22,6 @@ import { fetchDataSchemaTables } from '../../api/dataschema';
 import { fetchAssetProfiles } from '../../api/catalog';
 import { createModule, updateModule, deleteModule } from '../../api/modules';
 import { fetchOrgUnits } from '../../api/orgUnits';
-import { DATA_PRODUCTS, DATA_PRODUCT } from '../../constants/terminology';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import SystemDialog from '../../components/SystemDialog';
@@ -40,6 +40,7 @@ function formatModified(value) {
 
 export default function DataProductsPage() {
   useDocumentTitle("Data Products");
+  const { t } = useTranslation('catalog');
   const navigate = useNavigate();
   const { token, user, context, selectProject, availablePerspectives, isGlobalAdminFlag, userCapabilities } = useAuth();
   const { notify, notifyFromError } = useNotification();
@@ -80,13 +81,13 @@ export default function DataProductsPage() {
       setAssets(Array.isArray(assetsData) ? assetsData : assetsData?.results || []);
       setOrgUnits(Array.isArray(orgUnitsData) ? orgUnitsData : orgUnitsData?.results || []);
     } catch (err) {
-      const msg = err.message || 'Failed to load data products';
+      const msg = err.message || t('dataProductsLoadError');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, notify]);
+  }, [token, notify, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -99,7 +100,7 @@ export default function DataProductsPage() {
   const closeDialog = () => { if (!submitting) { setDialogOpen(false); setEditing(null); } };
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) { notify({ message: 'Name is required', type: 'error' }); return; }
+    if (!form.name.trim()) { notify({ message: t('nameRequired'), type: 'error' }); return; }
     setSubmitting(true);
     try {
       const payload = {
@@ -109,16 +110,16 @@ export default function DataProductsPage() {
       };
       if (editing) {
         await updateModule(token, editing.id, payload);
-        notify({ message: 'Data product updated', type: 'success' });
+        notify({ message: t('dataProductUpdated'), type: 'success' });
       } else {
         await createModule(token, payload);
-        notify({ message: 'Data product created', type: 'success' });
+        notify({ message: t('dataProductCreated'), type: 'success' });
       }
       setDialogOpen(false);
       setEditing(null);
       await selectProject();
     } catch (err) {
-      notify({ message: err.message || 'Save failed', type: 'error' });
+      notify({ message: err.message || t('saveFailed'), type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -127,11 +128,11 @@ export default function DataProductsPage() {
   const handleDelete = async (m) => {
     try {
       await deleteModule(token, m.id);
-      notify({ message: 'Data product deleted', type: 'success' });
+      notify({ message: t('dataProductDeleted'), type: 'success' });
       setDeleteConfirm(null);
       await selectProject();
     } catch (err) {
-      notifyFromError(err, 'Delete failed');
+      notifyFromError(err, t('deleteFailed'));
     }
   };
 
@@ -177,7 +178,7 @@ export default function DataProductsPage() {
   const columns = useMemo(() => [
     {
       field: 'name',
-      headerName: 'Name',
+      headerName: t('name'),
       flex: 1,
       minWidth: 180,
       renderCell: (params) => (
@@ -192,20 +193,20 @@ export default function DataProductsPage() {
     },
     {
       field: 'org_unit_name',
-      headerName: 'Org Unit',
+      headerName: t('orgUnit'),
       width: 170,
       valueGetter: (value, row) => row.org_unit_name || '—',
     },
     {
       field: 'description',
-      headerName: 'Description',
+      headerName: t('description'),
       flex: 1.4,
       minWidth: 200,
       valueGetter: (value, row) => row.description || '—',
     },
     {
       field: 'table_count',
-      headerName: 'Tables',
+      headerName: t('tables'),
       width: 90,
       align: 'right',
       headerAlign: 'right',
@@ -213,22 +214,22 @@ export default function DataProductsPage() {
     },
     {
       field: 'quality',
-      headerName: 'Quality',
+      headerName: t('quality'),
       width: 150,
       sortable: false,
       renderCell: (params) => {
         const s = statsByModule[params.row.id] || { count: 0, failing: 0, warning: 0 };
         return (
           <Stack direction="row" spacing={0.5}>
-            {s.failing > 0 && <Chip label={`${s.failing} failing`} size="small" color="error" variant="outlined" />}
-            {s.warning > 0 && <Chip label={`${s.warning} warning`} size="small" color="warning" variant="outlined" />}
+            {s.failing > 0 && <Chip label={t('failingCount', { count: s.failing })} size="small" color="error" variant="outlined" />}
+            {s.warning > 0 && <Chip label={t('warningCount', { count: s.warning })} size="small" color="warning" variant="outlined" />}
           </Stack>
         );
       },
     },
     {
       field: 'modified',
-      headerName: 'Modified',
+      headerName: t('modified'),
       width: 170,
       valueGetter: (value, row) => statsByModule[row.id]?.updated || null,
       valueFormatter: (value) => formatModified(value),
@@ -237,22 +238,22 @@ export default function DataProductsPage() {
       ? [
           {
             field: 'actions',
-            headerName: 'Actions',
+            headerName: t('actions'),
             width: 120,
             sortable: false,
             renderCell: (params) => (
               <Box sx={{ display: 'flex', gap: 0.5 }}>
-                <Tooltip title="Open data product">
+                <Tooltip title={t('openDataProduct')}>
                   <IconButton size="small" onClick={() => navigate(`/catalog/products/${params.row.id}`)}>
                     <VisibilityIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="Edit">
+                <Tooltip title={t('common:edit')}>
                   <IconButton size="small" onClick={() => openEdit(params.row)}>
                     <EditIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="Delete">
+                <Tooltip title={t('common:delete')}>
                   <IconButton size="small" onClick={() => setDeleteConfirm(params.row)} sx={{ color: 'error.main' }}>
                     <DeleteIcon fontSize="small" />
                   </IconButton>
@@ -262,43 +263,43 @@ export default function DataProductsPage() {
           },
         ]
       : []),
-  ], [navigate, statsByModule, canManage, openEdit]);
+  ], [navigate, statsByModule, canManage, openEdit, t]);
 
   // Delete confirmation message — table-count warning when tables exist
   const deleteMessage = useMemo(() => {
     if (!deleteConfirm) return '';
     const count = statsByModule[deleteConfirm.id]?.count || 0;
     return count > 0
-      ? `"${deleteConfirm.name}" has ${count} table${count !== 1 ? 's' : ''}. Deleting it may remove associated data. This action cannot be undone.`
-      : `Delete data product "${deleteConfirm.name}"? This action cannot be undone.`;
-  }, [deleteConfirm, statsByModule]);
+      ? t('deleteDataProductWithTables', { name: deleteConfirm.name, count })
+      : t('deleteDataProductMessage', { name: deleteConfirm.name });
+  }, [deleteConfirm, statsByModule, t]);
 
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {error && <Alert severity="error" sx={{ mx: 2, mt: 2, flexShrink: 0 }}>{error}</Alert>}
 
       <FilteredDataGrid
-        title={DATA_PRODUCTS}
-        subtitle={`${filtered.length} of ${modules.length} data products`}
-        description="Data products bundle related tables under a single governance policy with version tracking, access control, and lineage metadata."
+        title={t('dataProducts')}
+        subtitle={t('dataProductsCount', { shown: filtered.length, total: modules.length })}
+        description={t('dataProductsDescription')}
         actions={
           canManage ? (
             <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={openCreate}>
-              New {DATA_PRODUCT}
+              {t('newDataProduct')}
             </Button>
           ) : null
         }
         rows={filtered}
         loading={loading}
         columns={columns}
-        countLabel={`${filtered.length} of ${modules.length} data products`}
+        countLabel={t('dataProductsCount', { shown: filtered.length, total: modules.length })}
         searchValue={searchText}
         onSearchChange={setSearchText}
         filterDefs={[
           {
             key: 'org_unit',
-            label: 'Org Unit',
-            emptyLabel: 'All Org Units',
+            label: t('orgUnit'),
+            emptyLabel: t('allOrgUnits'),
             options: orgUnits.map((ou) => ({ value: String(ou.id), label: ou.name })),
           },
         ]}
@@ -309,20 +310,20 @@ export default function DataProductsPage() {
         onClearFilters={handleClearFilters}
         pageSize={25}
         rowsPerPageOptions={[25, 50, 100]}
-        emptyMessage="No data products available"
-        emptySubtext={hasFilters ? 'Try adjusting your filters' : 'Create a data product to group related tables'}
+        emptyMessage={t('noDataProducts')}
+        emptySubtext={hasFilters ? t('tryAdjustingFilters') : t('createDataProductHint')}
       />
 
       {/* Create/Edit Dialog (modal — design system primitive) */}
       <SystemDialog
         open={dialogOpen}
-        title={editing ? `Edit ${DATA_PRODUCT}` : `New ${DATA_PRODUCT}`}
+        title={editing ? t('editDataProduct') : t('newDataProduct')}
         onClose={closeDialog}
         onCancel={closeDialog}
-        cancelLabel="Cancel"
+        cancelLabel={t('common:cancel')}
         actions={
           <Button variant="contained" size="small" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? 'Saving…' : 'Save'}
+            {submitting ? t('saving') : t('common:save')}
           </Button>
         }
         width={520}
@@ -343,9 +344,9 @@ export default function DataProductsPage() {
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         open={!!deleteConfirm}
-        title={`Delete ${DATA_PRODUCT}?`}
+        title={t('deleteDataProductTitle')}
         message={deleteMessage}
-        confirmLabel="Delete"
+        confirmLabel={t('common:delete')}
         destructive
         onConfirm={() => handleDelete(deleteConfirm)}
         onCancel={() => setDeleteConfirm(null)}

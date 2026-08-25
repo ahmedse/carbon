@@ -4,6 +4,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { 
@@ -27,6 +28,7 @@ import ReferenceSetMetricsPanel from './tabs/ReferenceSetMetricsPanel';
 
 export default function ReferenceSetDetailPage() {
   useDocumentTitle("Reference Set Detail");
+  const { t } = useTranslation('catalog');
   const { setId } = useParams();
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -68,13 +70,13 @@ export default function ReferenceSetDetailPage() {
         users: Array.isArray(usersData) ? usersData : usersData.results || [],
       });
     } catch (_err) {
-      const msg = _err.message || 'Failed to load reference set';
+      const msg = _err.message || t('referenceSetLoadError');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, setId, notify]);
+  }, [token, setId, notify, t]);
 
   useEffect(() => {
     loadReferenceSetData();
@@ -83,7 +85,7 @@ export default function ReferenceSetDetailPage() {
   const handleRefSetUpdated = async () => {
     // Refresh reference set and values after update
     await loadReferenceSetData();
-    notify({ message: 'Reference set updated successfully', type: 'success' });
+    notify({ message: t('referenceSetUpdated'), type: 'success' });
   };
 
   const handleValuesUpdated = async () => {
@@ -92,7 +94,7 @@ export default function ReferenceSetDetailPage() {
       const valuesData = await fetchReferenceValues(token, setId);
       setValues(Array.isArray(valuesData) ? valuesData : valuesData.results || []);
     } catch (_err) {
-      notify({ message: 'Failed to refresh values', type: 'error' });
+      notify({ message: t('refreshValuesError'), type: 'error' });
     }
   };
 
@@ -100,7 +102,7 @@ export default function ReferenceSetDetailPage() {
     return (
       <Box sx={{ p: 3 }}>
         <DetailHeader
-          title="Reference Set Not Found"
+          title={t('referenceSetNotFound')}
           onClose={() => navigate(-1)}
         />
       </Box>
@@ -110,14 +112,14 @@ export default function ReferenceSetDetailPage() {
   // Header component
   const headerComponent = refSet ? (
     <DetailHeader
-      title={refSet.name || 'Reference Set'}
+      title={refSet.name || t('referenceSetFallback')}
       description={refSet.description}
       icon={ListAltIcon}
       onClose={() => navigate(-1)}
     />
   ) : (
     <DetailHeader
-      title="Loading..."
+      title={t('loadingTitle')}
       icon={ListAltIcon}
       onClose={() => navigate(-1)}
     />
@@ -127,12 +129,12 @@ export default function ReferenceSetDetailPage() {
     <BaseDetailPage
       headerComponent={headerComponent}
       mainTabs={[
-        { label: 'Overview', component: ReferenceSetOverviewTab },
-        { label: 'Edit', component: ReferenceSetEditTab },
-        { label: 'Values', component: ReferenceSetValuesTab },
+        { label: t('overview'), component: ReferenceSetOverviewTab },
+        { label: t('common:edit'), component: ReferenceSetEditTab },
+        { label: t('values'), component: ReferenceSetValuesTab },
       ]}
       metricsTabs={[
-        { label: 'Metrics', component: ReferenceSetMetricsPanel },
+        { label: t('metrics'), component: ReferenceSetMetricsPanel },
       ]}
       loading={loading}
       error={error}

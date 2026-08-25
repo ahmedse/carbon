@@ -2,6 +2,7 @@
 // Catalog: Manage bulk import/export of data (jobs and reusable export projects)
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import SystemDialog from '../../components/SystemDialog';
@@ -75,6 +76,7 @@ function TabPanel(props) {
 
 export default function ImportExportPage() {
   useDocumentTitle("Import / Export");
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
   const [tabValue, setTabValue] = useState(0);
@@ -95,16 +97,16 @@ export default function ImportExportPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const formats = [
-    { value: 'csv', label: 'CSV' },
-    { value: 'excel', label: 'Excel' },
-    { value: 'json', label: 'JSON' },
+    { value: 'csv', label: t('csv') },
+    { value: 'excel', label: t('excel') },
+    { value: 'json', label: t('json') },
   ];
 
   const schedules = [
-    { value: 'manual', label: 'Manual' },
-    { value: 'daily', label: 'Daily' },
-    { value: 'weekly', label: 'Weekly' },
-    { value: 'monthly', label: 'Monthly' },
+    { value: 'manual', label: t('manual') },
+    { value: 'daily', label: t('daily') },
+    { value: 'weekly', label: t('weekly') },
+    { value: 'monthly', label: t('monthly') },
   ];
 
   const loadData = useCallback(async () => {
@@ -124,11 +126,11 @@ export default function ImportExportPage() {
       setTables(Array.isArray(tbls) ? tbls : tbls.results || []);
       setDataSources(Array.isArray(sources) ? sources : sources.results || []);
     } catch (err) {
-      setError(err.message || 'Failed to load import/export data');
+      setError(err.message || t('importExportLoadError'));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     loadData();
@@ -171,7 +173,7 @@ export default function ImportExportPage() {
       }
       handleCloseDialog();
     } catch (err) {
-      setError(err.message || 'Failed to save');
+      setError(err.message || t('saveFailed'));
     }
   };
 
@@ -180,28 +182,28 @@ export default function ImportExportPage() {
       if (type === 'export') {
         const result = await deleteExportProject(token, id);
         if (result && result.archived) {
-          notify({ message: 'Export project archived (jobs exist)', type: 'info' });
+          notify({ message: t('exportProjectArchived'), type: 'info' });
           setError(null);
         } else {
-          notify({ message: 'Export project deleted', type: 'success' });
+          notify({ message: t('exportProjectDeleted'), type: 'success' });
         }
       }
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to delete');
-      notify({ message: err.message || 'Failed to delete', type: 'error' });
+      setError(err.message || t('deleteFailed'));
+      notify({ message: err.message || t('deleteFailed'), type: 'error' });
     }
   };
 
   const handleRunExport = async (id) => {
     try {
       await runExportProject(token, id);
-      notify({ message: 'Export started — check the Export Jobs tab', type: 'success' });
+      notify({ message: t('exportStartedHint'), type: 'success' });
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to run export');
-      notify({ message: err.message || 'Failed to run export', type: 'error' });
+      setError(err.message || t('exportRunFailed'));
+      notify({ message: err.message || t('exportRunFailed'), type: 'error' });
     }
   };
 
@@ -212,13 +214,13 @@ export default function ImportExportPage() {
         window.open(result.download_url, '_blank');
       }
     } catch (err) {
-      setError(err.message || 'Failed to get download URL');
+      setError(err.message || t('downloadUrlFailed'));
     }
   };
 
   const handleUploadFile = async () => {
     if (!selectedFile || !formData.data_table) {
-      setError('Please select a file and table');
+      setError(t('selectFileAndTable'));
       return;
     }
     try {
@@ -228,12 +230,12 @@ export default function ImportExportPage() {
         file: selectedFile,
         format: formData.format || 'csv',
       });
-      notify({ message: 'Import job created — check the Import Jobs tab', type: 'success' });
+      notify({ message: t('importJobCreatedHint'), type: 'success' });
       await loadData();
       handleCloseDialog();
     } catch (err) {
-      setError(err.message || 'Failed to upload file');
-      notify({ message: err.message || 'Failed to upload file', type: 'error' });
+      setError(err.message || t('uploadFailed'));
+      notify({ message: err.message || t('uploadFailed'), type: 'error' });
     }
   };
 
@@ -244,17 +246,17 @@ export default function ImportExportPage() {
   return (
     <Box sx={{ p: 3 }}>
       <PageHeader
-        title="Import / Export"
-        subtitle="Bulk data ingestion and scheduled export jobs"
-        description="Manage reusable export projects with format, filter, and scheduling options. Import CSV/Excel data into existing tables with validation and error handling."
+        title={t('importExport')}
+        subtitle={t('importExportSubtitle')}
+        description={t('importExportDescription')}
       />
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)}>
-          <Tab label="Export Projects" />
-          <Tab label="Import Jobs" />
-          <Tab label="Export Jobs" />
+          <Tab label={t('exportProjects')} />
+          <Tab label={t('importJobs')} />
+          <Tab label={t('exportJobs')} />
         </Tabs>
       </Box>
 
@@ -262,21 +264,21 @@ export default function ImportExportPage() {
       <TabPanel value={tabValue} index={0}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
           <Button startIcon={<AddIcon />} variant="contained" onClick={() => handleOpenDialog('export')}>
-            New Project
+            {t('newProject')}
           </Button>
         </Box>
         {exportProjects.length === 0 ? (
-          <Alert>No export projects found</Alert>
+          <Alert>{t('noExportProjectsFound')}</Alert>
         ) : (
           <TableContainer component={Paper}>
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: 'background.alt' }}>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Table</TableCell>
-                  <TableCell>Format</TableCell>
-                  <TableCell>Schedule</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell>{t('name')}</TableCell>
+                  <TableCell>{t('table')}</TableCell>
+                  <TableCell>{t('format')}</TableCell>
+                  <TableCell>{t('schedule')}</TableCell>
+                  <TableCell align="right">{t('actions')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -287,17 +289,17 @@ export default function ImportExportPage() {
                     <TableCell>{project.format}</TableCell>
                     <TableCell>{project.schedule}</TableCell>
                     <TableCell align="right">
-                      <Tooltip title="Run">
+                      <Tooltip title={t('run')}>
                         <IconButton size="small" onClick={() => handleRunExport(project.id)}>
                           <PlayArrowIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Edit">
+                      <Tooltip title={t('common:edit')}>
                         <IconButton size="small" onClick={() => handleOpenDialog('export', project)}>
                           <EditIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Delete">
+                      <Tooltip title={t('common:delete')}>
                         <IconButton size="small" color="error" onClick={() => setDeleteConfirm({ type: 'export', id: project.id, name: project.name })}>
                           <DeleteIcon fontSize="small" />
                         </IconButton>
@@ -315,14 +317,14 @@ export default function ImportExportPage() {
       <TabPanel value={tabValue} index={1}>
         <Card sx={{ mb: 3 }}>
           <CardContent>
-            <Typography variant="h6" sx={{ mb: 2 }}>Upload Data File</Typography>
+            <Typography variant="h6" sx={{ mb: 2 }}>{t('uploadDataFile')}</Typography>
             <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
               <FormControl sx={{ minWidth: 200 }}>
-                <InputLabel>Target Table</InputLabel>
+                <InputLabel>{t('targetTable')}</InputLabel>
                 <Select
                   value={formData.data_table || ''}
                   onChange={(e) => setFormData({ ...formData, data_table: e.target.value })}
-                  label="Target Table"
+                  label={t('targetTable')}
                 >
                   {tables.map((tbl) => (
                     <MenuItem key={tbl.id} value={tbl.id}>{tbl.title}</MenuItem>
@@ -330,11 +332,11 @@ export default function ImportExportPage() {
                 </Select>
               </FormControl>
               <FormControl sx={{ minWidth: 150 }}>
-                <InputLabel>Format</InputLabel>
+                <InputLabel>{t('format')}</InputLabel>
                 <Select
                   value={formData.format || 'csv'}
                   onChange={(e) => setFormData({ ...formData, format: e.target.value })}
-                  label="Format"
+                  label={t('format')}
                 >
                   {formats.map((fmt) => (
                     <MenuItem key={fmt.value} value={fmt.value}>{fmt.label}</MenuItem>
@@ -342,13 +344,13 @@ export default function ImportExportPage() {
                 </Select>
               </FormControl>
               <FormControl sx={{ minWidth: 150 }}>
-                <InputLabel>Data Source</InputLabel>
+                <InputLabel>{t('dataSource')}</InputLabel>
                 <Select
                   value={formData.source || ''}
                   onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-                  label="Data Source"
+                  label={t('dataSource')}
                 >
-                  <MenuItem value="">None</MenuItem>
+                  <MenuItem value="">{t('noneShort')}</MenuItem>
                   {dataSources.map((src) => (
                     <MenuItem key={src.id} value={src.id}>{src.name}</MenuItem>
                   ))}
@@ -366,24 +368,24 @@ export default function ImportExportPage() {
                 startIcon={<CloudUploadIcon />}
                 onClick={handleUploadFile}
               >
-                Upload
+                {t('upload')}
               </Button>
             </Box>
           </CardContent>
         </Card>
 
         {importJobs.length === 0 ? (
-          <Alert>No import jobs found</Alert>
+          <Alert>{t('noImportJobsFound')}</Alert>
         ) : (
           <TableContainer component={Paper}>
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: 'background.alt' }}>
-                  <TableCell>Table</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Rows</TableCell>
-                  <TableCell>Errors</TableCell>
-                  <TableCell>Created</TableCell>
+                  <TableCell>{t('table')}</TableCell>
+                  <TableCell>{t('status')}</TableCell>
+                  <TableCell>{t('rows')}</TableCell>
+                  <TableCell>{t('errors')}</TableCell>
+                  <TableCell>{t('created')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -411,17 +413,17 @@ export default function ImportExportPage() {
       {/* Export Jobs Tab */}
       <TabPanel value={tabValue} index={2}>
         {exportJobs.length === 0 ? (
-          <Alert>No export jobs found</Alert>
+          <Alert>{t('noExportJobsFound')}</Alert>
         ) : (
           <TableContainer component={Paper}>
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: 'background.alt' }}>
-                  <TableCell>Table</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Rows</TableCell>
-                  <TableCell>Format</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell>{t('table')}</TableCell>
+                  <TableCell>{t('status')}</TableCell>
+                  <TableCell>{t('rows')}</TableCell>
+                  <TableCell>{t('format')}</TableCell>
+                  <TableCell align="right">{t('actions')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -439,7 +441,7 @@ export default function ImportExportPage() {
                     <TableCell>{job.format}</TableCell>
                     <TableCell align="right">
                       {job.status === 'ready' && (
-                        <Tooltip title="Download">
+                        <Tooltip title={t('download')}>
                           <IconButton
                             size="small"
                             onClick={() => handleDownloadExport(job.id)}
@@ -460,10 +462,10 @@ export default function ImportExportPage() {
       {/* Create/Edit export project dialog (SystemDialog — design system primitive) */}
       <SystemDialog
         open={openDialog}
-        title={editingProject ? 'Edit Export Project' : 'New Export Project'}
+        title={editingProject ? t('editExportProject') : t('newExportProject')}
         onClose={handleCloseDialog}
         onCancel={handleCloseDialog}
-        cancelLabel="Cancel"
+        cancelLabel={t('common:cancel')}
         width={480}
         height={480}
         minWidth={400}
@@ -471,12 +473,12 @@ export default function ImportExportPage() {
         maxWidth="calc(100vw - 32px)"
         maxHeight="calc(100vh - 32px)"
         actions={
-          <Button onClick={handleSave} variant="contained" size="small">Save</Button>
+          <Button onClick={handleSave} variant="contained" size="small">{t('common:save')}</Button>
         }
       >
         <Box px={2} py={1}>
           <TextField
-            label="Name"
+            label={t('name')}
             size="small"
             fullWidth
             value={formData.name || ''}
@@ -485,11 +487,11 @@ export default function ImportExportPage() {
             autoFocus
           />
           <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>Data Table</InputLabel>
+            <InputLabel>{t('dataTable')}</InputLabel>
             <Select
               value={formData.data_table || ''}
               onChange={(e) => setFormData({ ...formData, data_table: e.target.value })}
-              label="Data Table"
+              label={t('dataTable')}
             >
               {tables.map((tbl) => (
                 <MenuItem key={tbl.id} value={tbl.id}>{tbl.title}</MenuItem>
@@ -497,11 +499,11 @@ export default function ImportExportPage() {
             </Select>
           </FormControl>
           <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>Format</InputLabel>
+            <InputLabel>{t('format')}</InputLabel>
             <Select
               value={formData.format || 'csv'}
               onChange={(e) => setFormData({ ...formData, format: e.target.value })}
-              label="Format"
+              label={t('format')}
             >
               {formats.map((fmt) => (
                 <MenuItem key={fmt.value} value={fmt.value}>{fmt.label}</MenuItem>
@@ -509,11 +511,11 @@ export default function ImportExportPage() {
             </Select>
           </FormControl>
           <FormControl fullWidth margin="normal" size="small">
-            <InputLabel>Schedule</InputLabel>
+            <InputLabel>{t('schedule')}</InputLabel>
             <Select
               value={formData.schedule || 'manual'}
               onChange={(e) => setFormData({ ...formData, schedule: e.target.value })}
-              label="Schedule"
+              label={t('schedule')}
             >
               {schedules.map((sch) => (
                 <MenuItem key={sch.value} value={sch.value}>{sch.label}</MenuItem>
@@ -521,7 +523,7 @@ export default function ImportExportPage() {
             </Select>
           </FormControl>
           <TextField
-            label="Description"
+            label={t('description')}
             size="small"
             fullWidth
             multiline
@@ -536,9 +538,9 @@ export default function ImportExportPage() {
       {/* Delete confirmation (ConfirmDialog — no window.confirm) */}
       <ConfirmDialog
         open={!!deleteConfirm}
-        title="Delete export project?"
-        message={`Delete "${deleteConfirm?.name || 'this project'}"? ${deleteConfirm?.name ? 'If export jobs exist, the project will be archived instead.' : 'This action cannot be undone.'}`}
-        confirmLabel="Delete"
+        title={t('deleteExportProjectTitle')}
+        message={deleteConfirm?.name ? t('deleteProjectArchivedMessage', { name: deleteConfirm.name }) : t('deleteProjectMessage', { name: t('thisProject') })}
+        confirmLabel={t('common:delete')}
         destructive
         onConfirm={() => handleDelete(deleteConfirm?.type, deleteConfirm?.id)}
         onCancel={() => setDeleteConfirm(null)}

@@ -3,6 +3,7 @@
 // DataProductDetailPage. AI-toolkit compliant: theme tokens only, size="small",
 // no margin="normal", SystemDialog lives at the call site (CB-14).
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Stack, TextField, MenuItem, FormControlLabel, Switch, Typography } from '@mui/material';
 
 /**
@@ -23,6 +24,7 @@ export default function ProductForm({
   readOnly = false,
   showLock = false,
 }) {
+  const { t } = useTranslation('catalog');
   return (
     <Box px={2} py={1}>
       {error && (
@@ -33,7 +35,7 @@ export default function ProductForm({
       <Stack spacing={2}>
         <TextField
           fullWidth
-          label="Name"
+          label={t('name')}
           size="small"
           autoFocus={!readOnly}
           required
@@ -43,7 +45,7 @@ export default function ProductForm({
         />
         <TextField
           fullWidth
-          label="Description"
+          label={t('description')}
           size="small"
           multiline
           rows={2}
@@ -54,14 +56,14 @@ export default function ProductForm({
         <TextField
           select
           fullWidth
-          label="Org Unit"
+          label={t('orgUnit')}
           size="small"
           disabled={readOnly}
           value={form.org_unit ?? ''}
           onChange={(e) => onChange({ ...form, org_unit: e.target.value })}
-          helperText="Owning organizational unit (governs access)"
+          helperText={t('orgUnitHelper')}
         >
-          <MenuItem value="">— None —</MenuItem>
+          <MenuItem value="">{t('none')}</MenuItem>
           {orgUnits.map((ou) => (
             <MenuItem key={ou.id} value={ou.id}>{ou.name}</MenuItem>
           ))}
@@ -76,7 +78,7 @@ export default function ProductForm({
                 onChange={(e) => onChange({ ...form, is_locked: e.target.checked })}
               />
             }
-            label="Locked (prevents further edits)"
+            label={t('lockedHelp')}
           />
         )}
       </Stack>

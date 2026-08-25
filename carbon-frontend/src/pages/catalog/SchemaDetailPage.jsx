@@ -2,6 +2,7 @@
 // Schema Detail: Full view of a single table with fields, metadata, relations
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { isGlobalAdmin } from '../../authz';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
@@ -36,6 +37,7 @@ import SchemaStructureTab from './tabs/SchemaStructureTab';
 
 export default function SchemaDetailPage() {
   useDocumentTitle("Table Schema");
+  const { t } = useTranslation('catalog');
   const { tableId } = useParams();
   const { token, user, availablePerspectives, isGlobalAdminFlag } = useAuth();
   const { notify } = useNotification();
@@ -64,8 +66,8 @@ export default function SchemaDetailPage() {
       ]);
 
       if (!tableData || tableData?.detail) {
-        setError('Table not found');
-        notify({ message: 'Table not found', type: 'error' });
+        setError(t('tableNotFound'));
+        notify({ message: t('tableNotFound'), type: 'error' });
         return;
       }
 
@@ -74,13 +76,13 @@ export default function SchemaDetailPage() {
       setFields(Array.isArray(fieldsData) ? fieldsData : (fieldsData?.results || []));
       setRelations(Array.isArray(relationsData) ? relationsData : (relationsData?.results || []));
     } catch (err) {
-      const msg = err.message || 'Failed to load schema detail';
+      const msg = err.message || t('schemaLoadError');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, tableId, notify]);
+  }, [token, tableId, notify, t]);
 
   useEffect(() => {
     loadSchemaDetail();
@@ -107,9 +109,9 @@ export default function SchemaDetailPage() {
       });
       await loadSchemaDetail();
       setEditDialogOpen(false);
-      notify({ message: 'Metadata updated successfully', type: 'success' });
+      notify({ message: t('metadataUpdated'), type: 'success' });
     } catch (err) {
-      const msg = err.message || 'Failed to update metadata';
+      const msg = err.message || t('metadataUpdateError');
       notify({ message: msg, type: 'error' });
     } finally {
       setSaving(false);
@@ -121,15 +123,15 @@ export default function SchemaDetailPage() {
   const SchemaRelationsTab = ({ entityData }) => (
     <Box sx={{ p: 3 }}>
       {entityData?.relations?.length === 0 ? (
-        <Typography color="text.secondary">No relations defined</Typography>
+        <Typography color="text.secondary">{t('noRelations')}</Typography>
       ) : (
         <Paper variant="outlined">
           <Table size="small">
             <TableHead>
               <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                <TableCell fontWeight={600}>From Table</TableCell>
-                <TableCell fontWeight={600}>To Table</TableCell>
-                <TableCell fontWeight={600}>Type</TableCell>
+                <TableCell fontWeight={600}>{t('fromTable')}</TableCell>
+                <TableCell fontWeight={600}>{t('toTable')}</TableCell>
+                <TableCell fontWeight={600}>{t('type')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -151,8 +153,8 @@ export default function SchemaDetailPage() {
 
   const headerComponent = (
     <DetailHeader
-      title={table?.title || 'Table'}
-      description={table?.description || 'Table definition and relationships'}
+      title={table?.title || t('tableFallback')}
+      description={table?.description || t('tableDescription')}
       icon={StorageIcon}
       onClose={handleClose}
       actions={
@@ -176,7 +178,7 @@ export default function SchemaDetailPage() {
   if (!table) {
     return (
       <Box sx={{ p: 3 }}>
-        <Alert severity="error">{error || 'Table not found'}</Alert>
+        <Alert severity="error">{error || t('tableNotFound')}</Alert>
       </Box>
     );
   }
@@ -187,7 +189,7 @@ export default function SchemaDetailPage() {
         headerComponent={headerComponent}
         mainTabs={[
           {
-            label: 'Structure',
+            label: t('structure'),
             component: () => (
               <SchemaStructureTab
                 entityData={detailData}
@@ -200,10 +202,10 @@ export default function SchemaDetailPage() {
               />
             ),
           },
-          { label: 'Relations', component: SchemaRelationsTab },
-          { label: 'DQ Rules', component: () => <DQRulesTab tableId={tableId} fields={fields} /> },
-          { label: 'Governance', component: () => <GovernanceTab tableId={tableId} /> },
-          { label: 'Audit History', component: () => <AuditHistoryTab tableId={tableId} /> },
+          { label: t('relations'), component: SchemaRelationsTab },
+          { label: t('dqRules'), component: () => <DQRulesTab tableId={tableId} fields={fields} /> },
+          { label: t('governance'), component: () => <GovernanceTab tableId={tableId} /> },
+          { label: t('auditHistory'), component: () => <AuditHistoryTab tableId={tableId} /> },
         ]}
         loading={loading}
         error={error}
@@ -214,10 +216,10 @@ export default function SchemaDetailPage() {
 
       <SystemDialog
         open={editDialogOpen}
-        title="Edit Table Metadata"
+        title={t('editTableMetadata')}
         onClose={() => setEditDialogOpen(false)}
         onCancel={() => setEditDialogOpen(false)}
-        cancelLabel="Cancel"
+        cancelLabel={t('common:cancel')}
         width={480}
         height={360}
         minWidth={400}
@@ -226,7 +228,7 @@ export default function SchemaDetailPage() {
         maxHeight="calc(100vh - 32px)"
         actions={
           <Button onClick={handleSaveMetadata} variant="contained" size="small" disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('saving') : t('common:save')}
           </Button>
         }
       >
@@ -234,7 +236,7 @@ export default function SchemaDetailPage() {
           <TextField
             fullWidth
             size="small"
-            label="Title"
+            label={t('titleLabel')}
             value={editFormData.title}
             onChange={(event) => setEditFormData((current) => ({ ...current, title: event.target.value }))}
             margin="normal"
@@ -243,7 +245,7 @@ export default function SchemaDetailPage() {
           <TextField
             fullWidth
             size="small"
-            label="Description"
+            label={t('description')}
             value={editFormData.description}
             onChange={(event) => setEditFormData((current) => ({ ...current, description: event.target.value }))}
             margin="normal"
