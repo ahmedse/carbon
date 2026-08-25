@@ -35,6 +35,7 @@ import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
 import { formatContextLines } from '../utils/aiProvenance';
 import { isSafeInternalRoute } from '../utils/navigation';
+import { useLanguage } from '../i18n/useLanguage';
 import { resolveBackendUrl } from '../config';
 import {
   cleanPlainText,
@@ -241,6 +242,7 @@ function AIMessageBubble({
   onOpenPanel,
   onNotify,
 }) {
+  const { isRtl } = useLanguage();
   const [showActions, setShowActions] = useState(false);
   const [copied, setCopied] = useState(false);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState(null);
@@ -963,11 +965,11 @@ function AIMessageBubble({
       onMouseLeave={() => setShowActions(false)}
       onCopy={handleContainerCopy}
     >
-      {/* ⓘ provenance — floats at top-right, zero layout impact */}
+      {/* ⓘ provenance — floats at top corner, zero layout impact */}
       {!isUser && showProvenance && (
         <Tooltip title={<TooltipLines lines={provenanceLines} />} arrow>
           <InfoOutlinedIcon
-            sx={{ position: 'absolute', top: 4, right: 2, fontSize: 11, color: 'text.disabled', cursor: 'help', opacity: 0.45, '&:hover': { opacity: 1 } }}
+            sx={{ position: 'absolute', top: 4, ...(isRtl ? { left: 2 } : { right: 2 }), fontSize: 11, color: 'text.disabled', cursor: 'help', opacity: 0.45, '&:hover': { opacity: 1 } }}
             aria-label="Why this answer"
           />
         </Tooltip>

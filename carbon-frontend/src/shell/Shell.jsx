@@ -9,6 +9,7 @@ import { Allotment } from 'allotment';
 import 'allotment/dist/style.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../i18n/useLanguage';
 import { useShellState } from './useShellState';
 import { ActivityBar } from './ActivityBar';
 import { ShellSidebar } from './ShellSidebar';
@@ -58,6 +59,7 @@ function studioFromPath(pathname) {
 
 export function Shell() {
   const { t } = useTranslation('shell');
+  const { isRtl } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -195,7 +197,7 @@ export function Shell() {
             sx={{
               width: 20,
               height: '100%',
-              borderRight: 1,
+              ...(isRtl ? { borderLeft: 1 } : { borderRight: 1 }),
               borderColor: 'divider',
               cursor: 'pointer',
               bgcolor: 'background.paper',
@@ -219,15 +221,16 @@ export function Shell() {
                 opacity: 0.45,
                 color: 'text.secondary',
                 transition: 'opacity 150ms',
+                ...(isRtl && { transform: 'scaleX(-1)' }),
               }}
             />
           </Box>
         )}
 
-        {/* Left Drawer Sidebar — hidden: not rendered, peek: overlay, pinned: persistent */}
+        {/* Drawer Sidebar — hidden: not rendered, peek: overlay, pinned: persistent */}
         {sidebarMode !== 'hidden' && (
           <Drawer
-            anchor="left"
+            anchor={isRtl ? 'right' : 'left'}
             open
             onClose={dismissSidebarPeek}
             variant={sidebarMode === 'peek' ? 'temporary' : 'persistent'}
@@ -239,7 +242,7 @@ export function Shell() {
                 boxSizing: 'border-box',
                 position: 'relative',
                 height: '100%',
-                borderRight: '1px solid',
+                ...(isRtl ? { borderLeft: '1px solid' } : { borderRight: '1px solid' }),
                 borderColor: 'divider',
                 overflow: 'hidden',
                 bgcolor: 'background.paper',
@@ -277,7 +280,7 @@ export function Shell() {
                 sx={{
                   position: 'absolute',
                   top: 0,
-                  right: 0,
+                  ...(isRtl ? { left: 0 } : { right: 0 }),
                   bottom: 0,
                   width: 6,
                   cursor: 'col-resize',
@@ -295,7 +298,7 @@ export function Shell() {
                   const startWidth = drawerWidthClamped;
 
                   const onMove = (moveEvent) => {
-                    const delta = moveEvent.clientX - startX;
+                    const delta = isRtl ? (startX - moveEvent.clientX) : (moveEvent.clientX - startX);
                     setDrawerWidth(startWidth + delta);
                   };
 
@@ -321,45 +324,57 @@ export function Shell() {
         {/* Resizable Main + Copilot Panes */}
         <AITaskTransferProvider onRequestOpen={openCopilot}>
           <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
-            <Allotment
-              onChange={(sizes) => {
-                if (copilotVisible && sizes.length >= 2) {
-                  const w = sizes[sizes.length - 1];
-                  setCopilotPaneSize(w);
-                  try {
-                    localStorage.setItem('carbon-copilot-pane-size', String(w));
-                  } catch {
-                    /* ignore */
+            {copilotVisible ? (
+              <Allotment
+                onChange={(sizes) => {
+                  if (sizes.length >= 2) {
+                    const w = sizes[sizes.length - 1];
+                    setCopilotPaneSize(w);
+                    try {
+                      localStorage.setItem('carbon-copilot-pane-size', String(w));
+                    } catch {
+                      /* ignore */
+                    }
                   }
-                }
-              }}
-            >
-              {/* Main Editor Area.
-                  Never remounted: this pane keeps a stable key/identity, so
-                  toggling the copilot below only adds/removes the second pane
-                  and does NOT reset page state (e.g. active DQ Workspace tab). */}
-              <Allotment.Pane key="editor" minSize={320} preferredSize={1}>
-                <EditorArea />
-              </Allotment.Pane>
+                }}
+              >
+                {/* In RTL mode, render copilot pane first (left side), editor second (right side) */}
+                {isRtl && (
+                  <Allotment.Pane
+                    key="copilot"
+                    minSize={280}
+                    preferredSize={copilotPaneSize}
+                    maxSize={Math.floor(window.innerWidth / 2)}
+                  >
+                    <ErrorBoundary>
+                      <AIWorkspace onClose={toggleCopilot} />
+                    </ErrorBoundary>
+                  </Allotment.Pane>
+                )}
 
-              {/* Right Copilot Pane — AI Workspace.
-                  Conditionally rendered (NOT `visible`): allotment 1.20's
-                  `visible` prop throws "Index out of bounds" under React 19
-                  StrictMode. Adding/removing this pane does not remount the
-                  editor pane above. */}
-              {copilotVisible && (
-                <Allotment.Pane
-                  key="copilot"
-                  minSize={280}
-                  preferredSize={copilotPaneSize}
-                  maxSize={Math.floor(window.innerWidth / 2)}
-                >
-                  <ErrorBoundary>
-                    <AIWorkspace onClose={toggleCopilot} />
-                  </ErrorBoundary>
+                {/* Main Editor Area */}
+                <Allotment.Pane key="editor" minSize={320} preferredSize={1}>
+                  <EditorArea />
                 </Allotment.Pane>
-              )}
-            </Allotment>
+
+                {/* In LTR mode, render copilot pane second (right side) */}
+                {!isRtl && (
+                  <Allotment.Pane
+                    key="copilot"
+                    minSize={280}
+                    preferredSize={copilotPaneSize}
+                    maxSize={Math.floor(window.innerWidth / 2)}
+                  >
+                    <ErrorBoundary>
+                      <AIWorkspace onClose={toggleCopilot} />
+                    </ErrorBoundary>
+                  </Allotment.Pane>
+                )}
+              </Allotment>
+            ) : (
+              /* When copilot is closed, just render editor without Allotment wrapper */
+              <EditorArea />
+            )}
           </Box>
         </AITaskTransferProvider>
       </Box>

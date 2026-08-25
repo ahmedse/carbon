@@ -4,10 +4,12 @@
 import React from 'react';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../i18n/useLanguage';
 import { STUDIO_LABEL_KEYS } from '../i18n/shellLabels';
 
 export function ActivityBar({ studios, activeStudio, onStudioChange }) {
   const { t } = useTranslation('shell');
+  const { isRtl } = useLanguage();
 
   // Split: main studios vs bottom studios (Settings, Help)
   const mainStudios = studios.filter(s => !s.bottom);
@@ -59,7 +61,7 @@ export function ActivityBar({ studios, activeStudio, onStudioChange }) {
       sx={{
         width: 48,
         bgcolor: 'background.dark',
-        borderRight: '1px solid',
+        ...(isRtl ? { borderLeft: '1px solid' } : { borderRight: '1px solid' }),
         borderColor: 'divider',
         display: 'flex',
         flexDirection: 'column',

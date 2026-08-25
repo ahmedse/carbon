@@ -36,6 +36,7 @@ import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../i18n/useLanguage';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
 import {
@@ -74,6 +75,7 @@ const MEMORY_TAB_KEY = 'carbon-ai-memory-tab';
 
 export function AIWorkspace({ onClose }) {
   const { t } = useTranslation('ai');
+  const { isRtl } = useLanguage();
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
   const { pendingTransferId, clearPendingTransfer } = useAITaskTransfer();
@@ -504,7 +506,7 @@ export function AIWorkspace({ onClose }) {
     e.preventDefault();
     dragRef.current = { startX: e.clientX, startW: drawerWidth };
     const onMove = (ev) => {
-      const delta = dragRef.current.startX - ev.clientX;
+      const delta = isRtl ? (ev.clientX - dragRef.current.startX) : (dragRef.current.startX - ev.clientX);
       setDrawerWidth(Math.min(360, Math.max(140, dragRef.current.startW + delta)));
     };
     const onUp = () => {
@@ -513,7 +515,7 @@ export function AIWorkspace({ onClose }) {
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
-  }, [drawerWidth]);
+  }, [drawerWidth, isRtl]);
 
   // W5-A — switch the workspace-level mode. The sessions/context drawer is a
   // chat-mode surface, so it closes when entering Agent mode.
@@ -660,9 +662,9 @@ export function AIWorkspace({ onClose }) {
 
         {/* Drawer — sessions or context; pushes chat area, never overlays */}
         {(activePanel === 'sessions' || activePanel === 'context') && (
-          <Box sx={{ width: drawerWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: 1, borderColor: 'divider', overflow: 'hidden', position: 'relative' }}>
+          <Box sx={{ width: drawerWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', ...(isRtl ? { borderRight: 1 } : { borderLeft: 1 }), borderColor: 'divider', overflow: 'hidden', position: 'relative' }}>
             {/* Drag handle */}
-            <Box onMouseDown={startDrawerResize} sx={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize', zIndex: 10, '&:hover': { bgcolor: 'primary.main', opacity: 0.4 } }} />
+            <Box onMouseDown={startDrawerResize} sx={{ position: 'absolute', ...(isRtl ? { right: 0 } : { left: 0 }), top: 0, bottom: 0, width: 4, cursor: 'col-resize', zIndex: 10, '&:hover': { bgcolor: 'primary.main', opacity: 0.4 } }} />
 
             {activePanel === 'sessions' ? (
               <>
