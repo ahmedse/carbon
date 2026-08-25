@@ -4298,7 +4298,7 @@ venv`; run from `backend` with `/home/ahmed/aast/carbon/.venv/bin/python`.
 **Date:** 2026-08-24
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY
+**Status:** DONE (commit `b177d88`)
 **Kind:** Backend-only. Small.
 **Depends on:** — (schema first)
 **Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §2
@@ -4353,7 +4353,7 @@ Append to `TASK-RESULTS.md`: files changed, migration output, test output (termi
 **Date:** 2026-08-24
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY
+**Status:** DONE (commit `61248c1`)
 **Kind:** Backend-only. Large.
 **Depends on:** 25-A (models)
 **Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §1, §3.1–§3.3
@@ -4413,7 +4413,7 @@ Append to `TASK-RESULTS.md`: files changed, loop diff summary (additive-only pro
 **Date:** 2026-08-24
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY
+**Status:** DONE (commit `5d9772a`)
 **Kind:** Backend-only. Large.
 **Depends on:** 25-B
 **Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §3.4–§3.6, §4
@@ -4468,7 +4468,7 @@ Append to `TASK-RESULTS.md`: endpoints + payload shapes, test output, curl-style
 **Date:** 2026-08-24
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY
+**Status:** DONE (commit `b3528f9`)
 **Kind:** Backend-only. Small-Medium.
 **Depends on:** 25-C (report)
 **Spec:** `docs/DESIGN-FLIGHT-DIRECTOR.md` §3.6, §6
@@ -4513,7 +4513,7 @@ Append to `TASK-RESULTS.md`: matcher/dedup/playbook evidence, test output.
 **Date:** 2026-08-24
 **Worker Role:** qa-validator
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY (after 25-A..25-D all green)
+**Status:** DONE (commits `ba5acfd`, `cde0c43`)
 **Kind:** QA. Evidence-gathering.
 **Depends on:** 25-A..25-D
 **Spec:** `.ai-toolkit/shared/qa-framework.md` (4-layer) + `docs/DESIGN-FLIGHT-DIRECTOR.md` §7
@@ -4673,6 +4673,8 @@ namespace prefixes (RULE_5), `src/api/api.js` internals, backend engine files,
 
 ## I18N-1: Foundation (frontend-worker)
 
+**Status:** DONE (commit `80eb540`)
+
 Files to create:
 - `src/i18n/index.js` — i18next init: `lng` from localStorage (`carbon.lang`, default `'en'`), `fallbackLng: 'en'`, `useSuspense: false`, `interpolation.escapeValue: false`, namespaces `common`, `shell`, `auth`, `errors`; registers `en`/`ar` resources (v1 inline; JSON files in later phases).
 - `src/i18n/locales/en/common.json`, `src/i18n/locales/ar/common.json` — starter catalogs (keep keys minimal in this phase).
@@ -4694,6 +4696,8 @@ Verification gate (run all): `npm run lint` clean; `npm test` green (existing su
 
 ## I18N-2: Shell + Auth strings (frontend-worker)
 
+**Status:** DONE (commit `80eb540`)
+
 Migrate to `t()` (namespaces `shell`, `auth`, `common`): `src/shell/*` (Shell, ShellSidebar nav labels, Breadcrumbs single crumb, AI workspace chrome bars), `src/auth/*` (login/logout pages, JWT expiry copy), `src/components/HeaderEnhanced.jsx` static labels, common buttons/empty-states/status chips used platform-wide (Save/Cancel/Delete/Edit/Search/No results…), date/time labels.
 
 Rules:
@@ -4706,17 +4710,23 @@ Gate: lint + vitest + build + `verify.sh frontend`; key-parity script `node scri
 
 ## I18N-3: Core apps — catalog + mdm + dq + dataschema (frontend-worker, per-app sub-phases)
 
+**Status:** READY — remaining (pages live in `src/pages/{catalog,dq,dataschema}`, not `src/apps/*`)
+
 `src/apps/catalog/*`, `src/apps/mdm/*`, `src/apps/dq/*`, `src/apps/dataschema/*` pages, dialogs, tables, forms → `t()` with namespaces `catalog`, `mdm`, `dq`, `dataschema`. RTL-correct markup only (logical props; MUI handles most via theme). Arabic catalogs for each namespace. Charts/data tables: numerals stay Latin; tooltips localized.
 
 Gate: per-app lint + vitest + build; key-parity zero-missing; RTL manual smoke per app (no clipped text — Arabic is ~25-40% longer in some strings, allow flexible widths; no directionally-broken icons).
 
 ## I18N-4: Hosted + tools — emissions, evidence, connections, importexport (frontend-worker)
 
+**Status:** READY — remaining (evidence/import live in `src/components/{evidence,import}`)
+
 Same pattern as I18N-3 for `src/apps/emissions/*`, `src/apps/evidence/*`, `src/apps/connections/*`, `src/apps/importexport/*` (namespaces `emissions`, `evidence`, `connections`, `importexport`). Also `src/components/` shared dialogs and `src/pages/*` root pages (dashboard/health/404) → `common`/`shell`.
 
 Gate: same as I18N-3 + full-suite vitest + build + `verify.sh frontend`.
 
 ## I18N-5: AI workspace chrome + backend error-code mapping (frontend-worker + backend-worker)
+
+**Status:** DONE — backend prefs (`cdc0ceb`) + frontend error mapping + core AI chrome (`AIWorkspace`/`AIWorkspaceHeader`/`AIStatusBar`, commit `ad6d7c1`). Remaining: deep per-panel chrome (22 AI shell files + 25 admin panels).
 
 Frontend: migrate AI workspace **chrome** (tabs, panels, buttons, status labels in `src/shell/AI*.jsx` / `src/apps/ai/*` if present) to namespace `ai`. Assistant message bubbles, plan/artifact content, and rule/provenance text are CONTENT — untouched. Complete `src/i18n/errorMessages.js`: map backend `error_code`/DRF detail codes → localized strings for both languages; wire into `src/api/api.js` error normalization layer (apiFetch stays the only fetch path).
 
@@ -4725,6 +4735,8 @@ Backend (backend-worker): `accounts.User.language` field (CharField, max_length=
 Gate: frontend lint+vitest+build; backend pytest `accounts` green; end-to-end: switch language in UI → reload logged-in → server preference persists.
 
 ## I18N-6: QA / RTL audit + Arabic quality + E2E (qa-validator + master gates)
+
+**Status:** READY — remaining
 
 - RTL sweep: DataGrid (columns/density/pinning), Monaco editor (keep LTR internally), Chart.js tooltips/legends, mermaid/katex blocks, tooltips/menus/popovers, scrollbars, `dir="ltr"` on code blocks/IDs/emails.
 - Directional-icon audit: chevrons, arrows, undo/redo, sort indicators → flipped in RTL (MUI icons don't auto-flip).
