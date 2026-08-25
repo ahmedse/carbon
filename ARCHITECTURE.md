@@ -117,6 +117,35 @@ Ingest → Govern → Approve → Model Link → Serve → Feedback → Actuals 
 - **"AI engine"** = `backend/ai/engine/` — the stateless inference core
 - Never: "Pulse", "AI Heart" (retired terms)
 
+### Portability — The Intelligence Kernel
+
+The engine (`backend/ai/engine/`) is a **portable intelligence kernel**. Its
+cognition, memory, and learning layers contain zero domain-specific terms.
+To bootstrap it in a new project (Moodle, healthcare, logistics):
+
+```
+COPY   backend/ai/engine/                          # brain — zero changes needed
+WRITE  engine/instances/<project>/instance.yaml    # domain config (tools, persona, routes)
+WRITE  ai/host_executor.py                         # project-specific tool execution
+```
+
+The seam is `instances/<name>/instance.yaml`. All Carbon-specific knowledge
+(API routes, DQ schemas, navigation) lives there — never in Python.
+See **ADR-0017** for the full contract and bootstrap recipe.
+
+**Domain-agnosticism invariant:** the following directories must never contain
+the words "carbon", "DQ", "emission", "GHG", or any other domain term:
+`engine/cognition/`, `engine/memory/`, `engine/learning/`, `engine/knowledge/terminology.py`,
+`engine/skills/base.py`
+
+```bash
+# CI check:
+grep -ri "carbon\|emission\|ghg\|data.quality" \
+  backend/ai/engine/cognition/ backend/ai/engine/memory/ \
+  backend/ai/engine/learning/ --include="*.py" | grep -v "__pycache__"
+# Must return: empty
+```
+
 ### Principle
 > **Carbon is the system of intelligence. The LLM is just the voice.**
 >

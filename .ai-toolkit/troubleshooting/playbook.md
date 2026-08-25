@@ -446,3 +446,21 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Regression guard: `journey-12-task-run.spec.ts` S6.8 (w/h preserved after drag)
   and S6.12 (x/y preserved after resize).
 - First seen: 2026-08-21.
+
+### PB-41 — Pulse domain config hardcoded in Python instead of instance.yaml
+- Symptom: copying `engine/` to a new project still requires editing `engine_runtime.py` to remove Carbon-specific API routes, DQ schemas, and navigation routes.
+- Layer: backend / AI
+- Root cause: `_carbon_instance_config()` contained ~80 lines of inline Carbon domain config (routes, personas, domain topics) as a Python dict, with `load_instance_config()` only applied as an override on top — so the fallback was always Carbon-specific.
+- Fix: extracted all domain config to `engine/instances/carbon/instance.yaml`; `_carbon_instance_config()` is now a 10-line thin loader. See ADR-0017.
+- Best practice note: every domain-specific string that the intelligence kernel consumes MUST live in `instances/<name>/instance.yaml`, never in Python. The test: `grep -n 'carbon\|dq/rules\|dataschema' backend/ai/engine_runtime.py` must return only comments and string literals inside task handlers — never inside `_carbon_instance_config()`.
+- Regression guard: `pytest ai -q` (943 existing + 65 gap tests = 1,008 total). `grep` audit on `engine/cognition/`, `engine/memory/`, `engine/learning/`.
+- First seen: 2026-08-24.
+
+### PB-42 — Pulse AI empty response on unknown / ambiguous queries
+- Symptom: some chat queries return HTTP 200 with an empty assistant message body (e.g. "GHG vs GRI standards", "Water Usage or Water Quality?").
+- Layer: backend / AI
+- Root cause: `DraftWitness.draft()` returned `DraftResult(text="")` and nothing downstream intercepted it before the response was stored and returned to the client.
+- Fix: added `FallbackHandler` (GAP-1) as a post-S3 step in `TurnPipelineRunner`. Detects empty draft text; if query is ambiguous (contains "which/or/vs") returns a clarification prompt; otherwise returns a navigable "I need more context" reply. See `engine/cognition/dialogue/fallback.py`.
+- Best practice note: the intelligence layer must NEVER return an empty assistant message. Empty = silent failure = worse UX than an honest "I don't know". Every new witness or draft path must be guarded by the fallback handler.
+- Regression guard: `pytest ai/tests/test_gap1_fallback.py` (9 tests). Domain-agnostic assertions — no Carbon/DQ terms in the test file.
+- First seen: 2026-08-24.
