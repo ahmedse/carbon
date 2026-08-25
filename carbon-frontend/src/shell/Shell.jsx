@@ -8,6 +8,7 @@ import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import { Allotment } from 'allotment';
 import 'allotment/dist/style.css';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useShellState } from './useShellState';
 import { ActivityBar } from './ActivityBar';
 import { ShellSidebar } from './ShellSidebar';
@@ -56,6 +57,7 @@ function studioFromPath(pathname) {
 }
 
 export function Shell() {
+  const { t } = useTranslation('shell');
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -164,7 +166,7 @@ export function Shell() {
         overflow: 'hidden',
       }}
       role="application"
-      aria-label="Carbon Data Platform"
+      aria-label={t('ui.ariaAppLabel')}
     >
       {/* Header */}
       <HeaderEnhanced />
@@ -207,8 +209,8 @@ export function Shell() {
                 '& .expand-chevron': { opacity: 1 },
               },
             }}
-            aria-label="Show sidebar"
-            title="Show Sidebar (Ctrl+B)"
+            aria-label={t('ui.showSidebar')}
+            title={t('ui.showSidebarShortcut')}
           >
             <ChevronRightIcon
               className="expand-chevron"
@@ -259,9 +261,9 @@ export function Shell() {
                 }}
               >
                 <Typography variant="caption" sx={{ fontSize: '0.6rem', color: 'text.secondary', textTransform: 'uppercase' }}>
-                  Peek
+                  {t('ui.peek')}
                 </Typography>
-                <Tooltip title="Pin sidebar (Ctrl+Shift+B)">
+                <Tooltip title={t('ui.pinSidebarTooltip')}>
                   <IconButton size="small" onClick={pinSidebar} sx={{ p: 0.25 }}>
                     <PushPinOutlinedIcon sx={{ fontSize: 14 }} />
                   </IconButton>

@@ -1,0 +1,12 @@
+{
+  "generic": "Something went wrong. Please try again.",
+  "somethingWentWrong": "Something went wrong",
+  "sessionExpired": "Your session has expired. Please sign in again.",
+  "sessionExpiredRedirecting": "Your session has expired. Redirecting to login…",
+  "network": "Unable to reach the server. Check your connection and try again.",
+  "server": "Something went wrong on our end. Our team has been notified.",
+  "notFound": "The requested resource was not found.",
+  "permissionDenied": "You don't have permission to perform this action.",
+  "timeout": "The request timed out. Please try again.",
+  "invalidCredentials": "Invalid credentials"
+}

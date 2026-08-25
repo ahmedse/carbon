@@ -3,23 +3,27 @@ import {
   Box, Button, TextField, Typography, Alert, Paper, CircularProgress,
 } from "@mui/material";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { API_BASE_URL } from "../config";
 import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
 
 function validatePassword(password) {
+  // Returns i18n key suffixes under `reset.passwordRules.*` (translated at render).
   const errors = [];
-  if (password.length < 12) errors.push("At least 12 characters");
-  if (!/[A-Z]/.test(password)) errors.push("One uppercase letter");
-  if (!/[a-z]/.test(password)) errors.push("One lowercase letter");
-  if (!/[0-9]/.test(password)) errors.push("One number");
+  if (password.length < 12) errors.push("length");
+  if (!/[A-Z]/.test(password)) errors.push("uppercase");
+  if (!/[a-z]/.test(password)) errors.push("lowercase");
+  if (!/[0-9]/.test(password)) errors.push("number");
   if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password))
-    errors.push("One special character");
+    errors.push("special");
   return errors;
 }
 
 export default function ResetPasswordPage() {
-  useDocumentTitle("Reset Password");
+  const { t } = useTranslation('auth');
+  const { t: tShell } = useTranslation('shell');
+  useDocumentTitle(t('reset.documentTitle'));
 
   const { uidb64, token } = useParams();
   const navigate = useNavigate();
@@ -71,11 +75,11 @@ export default function ResetPasswordPage() {
     // Client-side validation
     const errs = validatePassword(password);
     if (errs.length > 0) {
-      setError("Please meet all password requirements.");
+      setError(t('reset.meetRequirements'));
       return;
     }
     if (password !== confirm) {
-      setError("Passwords do not match.");
+      setError(t('reset.passwordsDontMatch'));
       return;
     }
 
@@ -107,21 +111,19 @@ export default function ResetPasswordPage() {
         const contentType = res.headers.get("content-type") || "";
         if (contentType.includes("application/json")) {
           const data = await res.json();
-          setError(data.message || data.detail || "Failed to reset password");
+          setError(data.message || data.detail || t('reset.failedToReset'));
         } else {
           // Try to extract error from HTML (Django form errors)
           const text = await res.text();
           if (text.includes("The password reset link was invalid")) {
             setInvalidLink(true);
           } else {
-            setError(
-              "Failed to reset password. The link may have expired or already been used."
-            );
+            setError(t('reset.linkExpiredOrUsed'));
           }
         }
       }
     } catch (err) {
-      setError(err.message || "Network error. Please check your connection.");
+      setError(err.message || t('networkError'));
     } finally {
       setBusy(false);
     }
@@ -139,10 +141,10 @@ export default function ResetPasswordPage() {
         }}>
           <Box sx={{ textAlign: "center" }}>
             <Typography variant="h5" fontWeight={600} color="error" mb={2}>
-              Invalid or Expired Link
+              {t('reset.invalidLinkTitle')}
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={3}>
-              This password reset link is invalid or has expired. Please request a new one.
+              {t('reset.invalidLinkBody')}
             </Typography>
             <Button
               variant="contained"
@@ -151,11 +153,11 @@ export default function ResetPasswordPage() {
               fullWidth
               sx={{ mb: 1 }}
             >
-              Request New Link
+              {t('reset.requestNewLink')}
             </Button>
             <Typography variant="body2">
               <Link to="/login" style={{ color: "inherit" }}>
-                ← Back to Sign In
+                {t('reset.backToSignIn')}
               </Link>
             </Typography>
           </Box>
@@ -176,27 +178,27 @@ export default function ResetPasswordPage() {
         <Box sx={{ textAlign: "center", mb: 3 }}>
           <img
             src={INSTANCE_LOGO}
-            alt="Logo"
+            alt={tShell('ui.logo')}
             style={{ height: 44, marginBottom: 12, borderRadius: 6 }}
           />
           <Typography variant="h5" fontWeight={600} sx={{ color: "text.primary" }}>
-            Reset Password
+            {t('reset.title')}
           </Typography>
           <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-            Choose a strong new password for your {PLATFORM_TITLE} account
+            {t('reset.subtitle', { title: PLATFORM_TITLE })}
           </Typography>
         </Box>
 
         {success ? (
           <Box sx={{ textAlign: "center" }}>
             <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
-              Your password has been reset successfully! Redirecting to login…
+              {t('reset.success')}
             </Alert>
           </Box>
         ) : (
           <form onSubmit={handleSubmit} autoComplete="off">
             <TextField
-              label="New Password"
+              label={t('reset.newPassword')}
               type="password"
               fullWidth
               required
@@ -211,14 +213,14 @@ export default function ResetPasswordPage() {
               <Box sx={{ mt: 1 }}>
                 {passwordErrors.map((msg, i) => (
                   <Typography key={i} variant="caption" color="warning.main" display="block">
-                    • {msg}
+                    • {t(`reset.passwordRules.${msg}`)}
                   </Typography>
                 ))}
               </Box>
             )}
 
             <TextField
-              label="Confirm Password"
+              label={t('reset.confirmPassword')}
               type="password"
               fullWidth
               required
@@ -246,13 +248,13 @@ export default function ResetPasswordPage() {
               {busy ? (
                 <CircularProgress size={22} sx={{ color: "white" }} />
               ) : (
-                "Reset Password"
+                t('reset.resetButton')
               )}
             </Button>
 
             <Typography variant="body2" sx={{ textAlign: "center", mt: 2 }}>
               <Link to="/login" style={{ color: "inherit" }}>
-                ← Back to Sign In
+                {t('reset.backToSignIn')}
               </Link>
             </Typography>
           </form>

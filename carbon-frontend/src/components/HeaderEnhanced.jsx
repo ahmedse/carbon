@@ -19,11 +19,14 @@ import {
   LightMode
 } from "@mui/icons-material";
 import { useThemeMode } from "../theme/useThemeMode";
+import { useTranslation } from "react-i18next";
+import LanguageSwitcher from "./LanguageSwitcher";
 
-const PERSPECTIVE_LABELS = {
-  data_entry: 'Data Entry',
-  dashboards: 'Dashboards',
-  admin: 'Admin',
+// Perspective tab labels -> shell.nav.* keys (translated at render time).
+const PERSPECTIVE_LABEL_KEYS = {
+  data_entry: 'nav.dataEntry',
+  dashboards: 'nav.dashboards',
+  admin: 'nav.admin',
 };
 
 function MenuRow({ icon: _Icon, label, onClick, danger, disabled }) {
@@ -71,6 +74,8 @@ function RoleBadge({ role, theme }) {
 }
 
 export default function HeaderEnhanced() {
+  const { t } = useTranslation('shell');
+  const { t: tAuth } = useTranslation('auth');
   const { user, logout, availablePerspectives, currentPerspective, setPerspective } = useAuth();
   const { mode, toggle } = useThemeMode();
   const theme = useTheme();
@@ -101,7 +106,7 @@ export default function HeaderEnhanced() {
       <Toolbar sx={{ minHeight: 56, px: 2 }}>
         {/* Logo and title */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <img src={INSTANCE_LOGO} alt="Logo" style={{ height: 32, borderRadius: 6 }} />
+          <img src={INSTANCE_LOGO} alt={t('ui.logo')} style={{ height: 32, borderRadius: 6 }} />
           <Typography fontWeight={600} fontSize="1rem" color="text.primary">
             {PLATFORM_TITLE}
           </Typography>
@@ -137,7 +142,7 @@ export default function HeaderEnhanced() {
               <Tab
                 key={perspective}
                 value={perspective}
-                label={PERSPECTIVE_LABELS[perspective]}
+                label={PERSPECTIVE_LABEL_KEYS[perspective] ? t(PERSPECTIVE_LABEL_KEYS[perspective]) : perspective}
               />
             ))}
           </Tabs>
@@ -147,25 +152,27 @@ export default function HeaderEnhanced() {
 
         {/* Right side controls */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Tooltip title={mode === "light" ? "Dark mode" : "Light mode"}>
+          <Tooltip title={mode === "light" ? t('ui.darkMode') : t('ui.lightMode')}>
             <IconButton size="small" onClick={toggle} sx={{ color: "text.secondary" }}>
               {mode === "light" ? <DarkMode sx={{ fontSize: 20 }} /> : <LightMode sx={{ fontSize: 20 }} />}
             </IconButton>
           </Tooltip>
 
-          <Tooltip title="Help">
+          <Tooltip title={t('nav.help')}>
             <IconButton size="small" sx={{ color: "text.secondary" }}>
               <HelpOutline sx={{ fontSize: 20 }} />
             </IconButton>
           </Tooltip>
 
-          <Tooltip title="Notifications">
+          <Tooltip title={t('ui.notifications')}>
             <IconButton size="small" sx={{ color: "text.secondary" }}>
               <Notifications sx={{ fontSize: 20 }} />
             </IconButton>
           </Tooltip>
 
           <Divider orientation="vertical" flexItem sx={{ mx: 1, height: 24, alignSelf: "center" }} />
+
+          <LanguageSwitcher />
 
           {/* User menu trigger */}
           <Box
@@ -198,7 +205,7 @@ export default function HeaderEnhanced() {
                 {user?.username}
               </Typography>
               <Typography fontSize="0.6875rem" color="text.secondary" lineHeight={1.2}>
-                {availablePerspectives?.includes("admin") ? "Administrator" : "Operator"}
+                {availablePerspectives?.includes("admin") ? t('ui.administrator') : t('ui.operator')}
               </Typography>
             </Box>
             <KeyboardArrowDown sx={{ color: "text.disabled", fontSize: 18 }} />
@@ -263,7 +270,7 @@ export default function HeaderEnhanced() {
 
           <MenuRow
             icon={PersonIcon}
-            label="Account Settings"
+            label={t('ui.accountSettings')}
             onClick={() => {
               navigate("/settings?tab=profile");
               handleMenuClose();
@@ -271,7 +278,7 @@ export default function HeaderEnhanced() {
           />
           <MenuRow
             icon={SettingsIcon}
-            label="Preferences"
+            label={t('nav.preferences')}
             onClick={() => {
               navigate("/settings?tab=preferences");
               handleMenuClose();
@@ -279,7 +286,7 @@ export default function HeaderEnhanced() {
           />
           <MenuRow
             icon={KeyboardIcon}
-            label="Keyboard Shortcuts"
+            label={t('ui.keyboardShortcuts')}
             onClick={() => {
               navigate("/settings?tab=shortcuts");
               handleMenuClose();
@@ -290,7 +297,7 @@ export default function HeaderEnhanced() {
 
           <MenuRow
             icon={LogoutIcon}
-            label="Sign out"
+            label={tAuth('logout')}
             onClick={handleLogout}
             danger
           />

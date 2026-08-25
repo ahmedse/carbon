@@ -6,29 +6,34 @@ import React from 'react';
 import { Button, Typography, Box } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useTheme } from '@mui/material/styles';
+import { useTranslation } from 'react-i18next';
 import SystemDialog from './SystemDialog';
 
 export default function ConfirmDialog({
   open,
-  title = 'Confirm',
+  title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   destructive = false,
   onConfirm,
   onCancel,
   ...props
 }) {
+  const { t } = useTranslation('common');
   const theme = useTheme();
+  const resolvedTitle = title ?? t('confirm');
+  const resolvedConfirmLabel = confirmLabel ?? t('confirm');
+  const resolvedCancelLabel = cancelLabel ?? t('cancel');
 
   return (
     <SystemDialog
       open={open}
-      title={title}
+      title={resolvedTitle}
       onClose={onCancel}
       onCancel={onCancel}
       showCancel={false}
-      cancelLabel={cancelLabel}
+      cancelLabel={resolvedCancelLabel}
       width={440}
       height={260}
       minWidth={380}
@@ -37,7 +42,7 @@ export default function ConfirmDialog({
       actions={
         <>
           <Button onClick={onCancel} color='inherit'>
-            {cancelLabel}
+            {resolvedCancelLabel}
           </Button>
           <Button
             variant='contained'
@@ -45,7 +50,7 @@ export default function ConfirmDialog({
             onClick={onConfirm}
             autoFocus
           >
-            {confirmLabel}
+            {resolvedConfirmLabel}
           </Button>
         </>
       }

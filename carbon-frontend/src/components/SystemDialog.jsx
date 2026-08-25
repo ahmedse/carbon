@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Dialog, DialogTitle, DialogContent, DialogActions, Paper, IconButton, Button } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import { useTranslation } from 'react-i18next';
 
 const MIN_WIDTH = 420;
 const MIN_HEIGHT = 320;
@@ -29,6 +30,7 @@ export default function SystemDialog({
   fullWidth = false,
   ...props
 }) {
+  const { t } = useTranslation('common');
   const [size, setSize] = useState({ width, height });
   const [position, setPosition] = useState({ top: 80, left: 0 });
   const [dragging, setDragging] = useState(false);
@@ -166,7 +168,7 @@ export default function SystemDialog({
             {title}
           </Box>
         </Box>
-        <IconButton size='small' onClick={handleCancel} aria-label='Close dialog'>
+        <IconButton size='small' onClick={handleCancel} aria-label={t('closeDialog')}>
           <CloseIcon fontSize='small' />
         </IconButton>
       </DialogTitle>

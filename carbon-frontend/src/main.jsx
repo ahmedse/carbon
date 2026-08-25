@@ -6,8 +6,13 @@ import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
 import "@fontsource/inter/800.css";
+import "@fontsource/cairo/400.css";
+import "@fontsource/cairo/500.css";
+import "@fontsource/cairo/600.css";
+import "@fontsource/cairo/700.css";
 import { ThemeModeProvider } from "./theme/ThemeContext";
 import ThemedApp from "./theme/ThemedApp";
+import "./i18n";
 
 console.debug("main.jsx: Rendering root app...");
 createRoot(document.getElementById("root")).render(

@@ -4,7 +4,9 @@
 import React from 'react';
 import { Box, Breadcrumbs as MuiBreadcrumbs, Typography, Link } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
+import { shellLabel } from '../i18n/shellLabels';
 import HomeIcon from '@mui/icons-material/Home';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -536,6 +538,7 @@ function resolveCrumbLabel(crumb, modules, tablesByModule) {
 }
 
 export function Breadcrumbs() {
+  const { t } = useTranslation('shell');
   const location = useLocation();
   const navigate = useNavigate();
   const { context, tablesByModule } = useAuth();
@@ -543,7 +546,7 @@ export function Breadcrumbs() {
 
   const breadcrumbs = buildBreadcrumbs(location.pathname).map((crumb) => ({
     ...crumb,
-    label: resolveCrumbLabel(crumb, modules, tablesByModule),
+    label: shellLabel(t, resolveCrumbLabel(crumb, modules, tablesByModule)),
   }));
 
   if (breadcrumbs.length <= 1) {
@@ -554,7 +557,7 @@ export function Breadcrumbs() {
   return (
     <Box
       component="nav"
-      aria-label="Breadcrumb navigation"
+      aria-label={t('ui.breadcrumbNavigation')}
       sx={{
         height: 30,
         display: 'flex',
@@ -567,7 +570,7 @@ export function Breadcrumbs() {
     >
       <MuiBreadcrumbs
         separator={<ChevronRightIcon sx={{ fontSize: 11, color: 'text.disabled' }} />}
-        aria-label="breadcrumb"
+        aria-label={t('ui.breadcrumb')}
         sx={{ fontSize: '0.65rem' }}
       >
         {breadcrumbs.map((crumb, index) => {
@@ -607,7 +610,7 @@ export function Breadcrumbs() {
               key={crumb.path}
               component="button"
               onClick={() => navigate(crumb.path)}
-              aria-label={`Navigate to ${crumb.label}`}
+              aria-label={t('ui.navigateTo', { label: crumb.label })}
               sx={{
                 display: 'flex',
                 alignItems: 'center',

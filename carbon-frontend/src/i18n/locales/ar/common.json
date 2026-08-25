@@ -1,0 +1,21 @@
+{
+  "appName": "Carbon",
+  "save": "حفظ",
+  "cancel": "إلغاء",
+  "delete": "حذف",
+  "edit": "تعديل",
+  "search": "بحث",
+  "loading": "جارٍ التحميل…",
+  "noResults": "لا توجد نتائج",
+  "language": "اللغة",
+  "confirm": "تأكيد",
+  "close": "إغلاق",
+  "back": "رجوع",
+  "next": "التالي",
+  "retry": "إعادة المحاولة",
+  "gotIt": "حسنًا",
+  "why": "لماذا",
+  "whatYouCanDo": "ما يمكنك فعله",
+  "notice": "تنبيه",
+  "closeDialog": "إغلاق مربع الحوار"
+}

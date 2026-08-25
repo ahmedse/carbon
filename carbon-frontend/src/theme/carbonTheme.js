@@ -84,17 +84,26 @@ const darkColors = {
 };
 
 // Create Theme Function
-const createCarbonTheme = (mode = 'light') => {
+const createCarbonTheme = (mode = 'light', direction = 'ltr') => {
   const colors = mode === 'light' ? lightColors : darkColors;
+  const isRtl = direction === 'rtl';
+
+  // RTL (Arabic): Cairo leads the font stack with a taller line height for
+  // Arabic glyphs; LTR keeps the existing Inter stack untouched.
+  const fontFamily = isRtl
+    ? '"Cairo", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    : '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  const bodyLineHeight = isRtl ? 1.6 : 1.35;
 
   return createTheme({
+    direction,
     palette: {
       mode,
       ...colors,
     },
 
     typography: {
-      fontFamily: '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontFamily,
       fontSize: 10,
       htmlFontSize: 14,
       h1: {
@@ -144,12 +153,12 @@ const createCarbonTheme = (mode = 'light') => {
       },
       body1: {
         fontSize: '0.75rem',
-        lineHeight: 1.35,
+        lineHeight: bodyLineHeight,
         color: colors.text.primary,
       },
       body2: {
         fontSize: '0.6875rem',
-        lineHeight: 1.35,
+        lineHeight: bodyLineHeight,
         color: colors.text.secondary,
       },
       button: {
@@ -211,7 +220,7 @@ const createCarbonTheme = (mode = 'light') => {
           },
           body: {
             fontSize: 11,
-            lineHeight: 1.4,
+            lineHeight: isRtl ? 1.6 : 1.4,
             letterSpacing: '-0.008em',
             WebkitFontSmoothing: 'antialiased',
             MozOsxFontSmoothing: 'grayscale',

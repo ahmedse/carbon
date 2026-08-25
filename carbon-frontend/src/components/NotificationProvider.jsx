@@ -16,6 +16,7 @@
 // TO DO next.
 
 import React, { createContext, useContext, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Snackbar,
   Alert,
@@ -55,6 +56,8 @@ function getMeta(severity) {
 }
 
 export function NotificationProvider({ children }) {
+  const { t } = useTranslation('common');
+  const { t: tErrors } = useTranslation('errors');
   const [notification, setNotification] = useState(null);
   const [feedback, setFeedbackState] = useState(null);
 
@@ -71,24 +74,24 @@ export function NotificationProvider({ children }) {
     if (!fb) return;
     setFeedbackState({
       severity: fb.severity || "error",
-      title: fb.title || "Notice",
+      title: fb.title || t('notice'),
       detail: fb.detail || "",
       reasons: Array.isArray(fb.reasons) ? fb.reasons : [],
       remediation: Array.isArray(fb.remediation) ? fb.remediation : [],
       context: fb.context || {},
       key: Date.now(),
     });
-  }, []);
+  }, [t]);
 
   // Smart router: choose dialog vs toast based on structured content.
   const notifyFromError = useCallback(
-    (error, fallbackMessage = "Something went wrong") => {
+    (error, fallbackMessage = tErrors('somethingWentWrong')) => {
       // If the error was normalized by errorNormalizer, check for auth type
       const normalized = error?.normalized;
       if (normalized?.type === "auth" && normalized?.status === 401) {
         // Session expired — trigger re-login instead of a toast
         setNotification({
-          message: "Your session has expired. Redirecting to login…",
+          message: tErrors('sessionExpiredRedirecting'),
           type: "warning",
           duration: 2500,
           key: Date.now(),
@@ -115,7 +118,7 @@ export function NotificationProvider({ children }) {
       const type = fb?.severity || "error";
       setNotification({ message, type, duration: 5000, key: Date.now() });
     },
-    [showFeedback]
+    [showFeedback, tErrors]
   );
 
   const handleCloseSnackbar = (_, reason) => {
@@ -147,7 +150,7 @@ export function NotificationProvider({ children }) {
             sx={{ width: "100%" }}
             action={
               <IconButton
-                aria-label="close"
+                aria-label={t('close')}
                 color="inherit"
                 size="small"
                 onClick={handleCloseSnackbar}
@@ -209,7 +212,7 @@ export function NotificationProvider({ children }) {
                     color="text.secondary"
                     fontWeight={700}
                   >
-                    Why
+                    {t('why')}
                   </Typography>
                   <List dense disablePadding>
                     {feedback.reasons.map((reason, i) => (
@@ -235,7 +238,7 @@ export function NotificationProvider({ children }) {
                     color="text.secondary"
                     fontWeight={700}
                   >
-                    What you can do
+                    {t('whatYouCanDo')}
                   </Typography>
                   <List dense disablePadding>
                     {feedback.remediation.map((step, i) => (
@@ -253,7 +256,7 @@ export function NotificationProvider({ children }) {
 
             <DialogActions>
               <Button onClick={handleCloseFeedback} variant="contained">
-                Got it
+                {t('gotIt')}
               </Button>
             </DialogActions>
           </>

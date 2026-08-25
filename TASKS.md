@@ -4643,3 +4643,106 @@ Confirm your role and begin. Model: DeepSeek V4-Flash.
 RULE_23: outcome copy only. lint + vitest + build must all pass.
 ```
 
+---
+
+# Phase Set I18N — Dual-Language UI: English (default) + Arabic RTL
+
+**Authoritative context — read FIRST, before any worker prompt:**
+- `.ai-toolkit/decisions/0018-i18n-dual-language.md` (locked decisions: i18next, semantic namespaced keys, Latin digits, no flags, AI replies NOT translated, en default)
+- `.ai-toolkit/shared/compact-ui.md` (shell/theme conventions)
+- RULE_23: every translated string must still describe OUTCOMES, never internals. A translation that exposes engine internals is a RULE_23 violation.
+
+**Scope boundary (user-confirmed):** i18n = UI chrome + static platform copy ONLY.
+AI/Pulse assistant replies and user-generated content stay in the language the user
+writes (assistant mirrors the request language). Do NOT translate content strings.
+
+**Non-negotiables (from ADR-0018):**
+1. Switcher is text-based: "English" / "العربية" (+ translate icon). NO flags, NO country icons.
+2. Default language is `en`. Persistence = localStorage + server-side user profile. NEVER navigator-language auto-detect.
+3. Data numerals in Arabic stay Latin digits (`ar-EG-u-nu-latn`). Never Eastern Arabic numerals in tables/metrics.
+4. Keys are semantic + namespaced (`shell.sidebar.catalog`), never English-as-key.
+5. Backend errors → frontend error-code mapping. No backend gettext overhaul.
+6. `useSuspense: false` + `ready` flag. `fallbackLng: 'en'`.
+7. `src/api/api.js` apiFetch must remain the only fetch path (RULE_10).
+
+**DO-NOT-TOUCH list (all I18N phases):** `vite.config.js` base, `App.jsx` route
+namespace prefixes (RULE_5), `src/api/api.js` internals, backend engine files,
+`src/theme/carbonTheme.js` palette tokens (extend, don't restyle).
+
+---
+
+## I18N-1: Foundation (frontend-worker)
+
+Files to create:
+- `src/i18n/index.js` — i18next init: `lng` from localStorage (`carbon.lang`, default `'en'`), `fallbackLng: 'en'`, `useSuspense: false`, `interpolation.escapeValue: false`, namespaces `common`, `shell`, `auth`, `errors`; registers `en`/`ar` resources (v1 inline; JSON files in later phases).
+- `src/i18n/locales/en/common.json`, `src/i18n/locales/ar/common.json` — starter catalogs (keep keys minimal in this phase).
+- `src/i18n/LanguageProvider.jsx` — React context: `{ lang, isRtl, setLanguage, ready }`. `setLanguage` writes localStorage, `i18n.changeLanguage`, sets `document.documentElement.dir` (`rtl`/`ltr`) and `lang`, flips theme direction + Emotion cache. On mount, fetch server preference via apiFetch and reconcile (server wins on login; localStorage wins pre-login).
+- `src/i18n/useLanguage.js` — hook re-export.
+- `src/i18n/RtlProvider.jsx` — dual Emotion caches (`createCache({key:'muil'})` / `createCache({key:'muirtl', stylisPlugins:[rtlPlugin]})`), swaps `CacheProvider` on `isRtl`.
+- `src/components/LanguageSwitcher.jsx` — text-only menu (Menu of `MenuItem`s: "English", "العربية"), `LanguageIcon` from MUI icons, placed in `HeaderEnhanced` near the avatar (top-right). NO flags. Accessible labels.
+- `src/__mocks__/react-i18next.js` — vitest mock (`useTranslation: () => ({ t: (k) => k, i18n: {...} })`).
+
+Files to modify (extend, never restyle):
+- `package.json` — add deps: `i18next`, `react-i18next`, `stylis-plugin-rtl`, `@fontsource/cairo`.
+- `src/theme/carbonTheme.js` — `createCarbonTheme(mode, direction='ltr')` accepts direction; sets `direction` and swaps `fontFamily` to Cairo (Arabic) when `direction==='rtl'`; Arabic `lineHeight` bump.
+- `src/theme/getTheme.js` — pass direction through.
+- `src/theme/ThemedApp.jsx` — wrap: `LanguageProvider` (outer) → `RtlProvider` → `ThemeProvider` (direction-aware) → existing providers. Preserve `NotificationProvider`/`AuthProvider` order.
+- `src/components/HeaderEnhanced.jsx` — mount `<LanguageSwitcher />` (top-right, before avatar menu).
+- `src/main.jsx` — import `src/i18n/index.js` + Cairo font css (wght 400/500/600/700) before root render.
+
+Verification gate (run all): `npm run lint` clean; `npm test` green (existing suite must not regress — default `en` renders identical strings); `npm run build` passes; `./.ai-toolkit/scripts/verify.sh frontend` passes. Manual: switcher toggles en↔العربية, `<html>` flips `dir`/`lang`, layout mirrors, no layout breakage in sidebar.
+
+## I18N-2: Shell + Auth strings (frontend-worker)
+
+Migrate to `t()` (namespaces `shell`, `auth`, `common`): `src/shell/*` (Shell, ShellSidebar nav labels, Breadcrumbs single crumb, AI workspace chrome bars), `src/auth/*` (login/logout pages, JWT expiry copy), `src/components/HeaderEnhanced.jsx` static labels, common buttons/empty-states/status chips used platform-wide (Save/Cancel/Delete/Edit/Search/No results…), date/time labels.
+
+Rules:
+- Keys under `shell.*`, `auth.*`, `common.*`; full-sentence keys; `<Trans>` for any sentence embedding JSX.
+- Add Arabic catalogs: `src/i18n/locales/{ar,en}/shell.json`, `auth.json` (+ register in `index.js`).
+- Any string containing an API error message goes through the error-code mapping (see I18N-5; stub `src/i18n/errorMessages.js` with a small starter map in this phase, code-prefixed).
+- DO NOT touch AI workspace content bubbles, rule descriptions, or assistant copy (content scope).
+
+Gate: lint + vitest + build + `verify.sh frontend`; key-parity script `node scripts/check-i18n-keys.js` (compares en/ar key sets; add this script in this phase) → zero missing keys.
+
+## I18N-3: Core apps — catalog + mdm + dq + dataschema (frontend-worker, per-app sub-phases)
+
+`src/apps/catalog/*`, `src/apps/mdm/*`, `src/apps/dq/*`, `src/apps/dataschema/*` pages, dialogs, tables, forms → `t()` with namespaces `catalog`, `mdm`, `dq`, `dataschema`. RTL-correct markup only (logical props; MUI handles most via theme). Arabic catalogs for each namespace. Charts/data tables: numerals stay Latin; tooltips localized.
+
+Gate: per-app lint + vitest + build; key-parity zero-missing; RTL manual smoke per app (no clipped text — Arabic is ~25-40% longer in some strings, allow flexible widths; no directionally-broken icons).
+
+## I18N-4: Hosted + tools — emissions, evidence, connections, importexport (frontend-worker)
+
+Same pattern as I18N-3 for `src/apps/emissions/*`, `src/apps/evidence/*`, `src/apps/connections/*`, `src/apps/importexport/*` (namespaces `emissions`, `evidence`, `connections`, `importexport`). Also `src/components/` shared dialogs and `src/pages/*` root pages (dashboard/health/404) → `common`/`shell`.
+
+Gate: same as I18N-3 + full-suite vitest + build + `verify.sh frontend`.
+
+## I18N-5: AI workspace chrome + backend error-code mapping (frontend-worker + backend-worker)
+
+Frontend: migrate AI workspace **chrome** (tabs, panels, buttons, status labels in `src/shell/AI*.jsx` / `src/apps/ai/*` if present) to namespace `ai`. Assistant message bubbles, plan/artifact content, and rule/provenance text are CONTENT — untouched. Complete `src/i18n/errorMessages.js`: map backend `error_code`/DRF detail codes → localized strings for both languages; wire into `src/api/api.js` error normalization layer (apiFetch stays the only fetch path).
+
+Backend (backend-worker): `accounts.User.language` field (CharField, max_length=10, default `'en'`, choices `en`/`ar`), migration, `GET/PATCH /carbon-api/accounts/me/preferences/` (read/write `language`), surface `language` in `me/context/`. Tests: serializer round-trip, auth required, invalid value 400. Run: pytest for `accounts/` + `manage.py check` + `makemigrations --check --dry-run`.
+
+Gate: frontend lint+vitest+build; backend pytest `accounts` green; end-to-end: switch language in UI → reload logged-in → server preference persists.
+
+## I18N-6: QA / RTL audit + Arabic quality + E2E (qa-validator + master gates)
+
+- RTL sweep: DataGrid (columns/density/pinning), Monaco editor (keep LTR internally), Chart.js tooltips/legends, mermaid/katex blocks, tooltips/menus/popovers, scrollbars, `dir="ltr"` on code blocks/IDs/emails.
+- Directional-icon audit: chevrons, arrows, undo/redo, sort indicators → flipped in RTL (MUI icons don't auto-flip).
+- Numerals audit: all tables/metrics show Latin digits in Arabic mode (`ar-EG-u-nu-latn`).
+- Arabic translation quality pass: native-fluent review of `ar/*.json`; gendered "you" forms neutralized; word-order/plural correctness (6 CLDR forms); dates Gregorian with Arabic month names via dayjs `ar`.
+- Key parity gate: `node scripts/check-i18n-keys.js` → zero missing; `fallbackLng` never silently serving en keys in ar.
+- E2E (Playwright): full key journeys in EN and AR (login → dashboard → one app workflow → language switch mid-session → persistence across reload → logout/login).
+- Deliverable: `TASK-RESULTS-17-I18N-DUAL-LANG.md` with evidence (gates, key parity, E2E runs, RTL audit checklist).
+- Update `.ai-toolkit/roles/frontend-worker.md` (or add a shared rule): every new user-facing string must use `t()` + both locale catalogs.
+
+Gate: ALL green — lint, vitest, build, verify.sh frontend, pytest smoke, E2E both languages, key parity.
+
+## I18N dispatch order
+1. I18N-1 (foundation) — frontend-worker
+2. I18N-2 (shell+auth) — frontend-worker
+3. I18N-3 (core apps) — frontend-worker (per-app)
+4. I18N-4 (hosted+tools) — frontend-worker
+5. I18N-5 (ai chrome + backend prefs) — frontend-worker + backend-worker (parallel-safe: separate repos of files)
+6. I18N-6 (QA/audit/E2E) — qa-validator
+Each phase requires the previous gate green before dispatch. Master Architect runs all terminal gates.
+

@@ -11,6 +11,13 @@ export default [
       globals: globals.node,
     },
   },
+  // Node scripts (e.g. scripts/check-i18n-keys.js)
+  {
+    files: ['scripts/**/*.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
   // Test files: vitest globals (describe/it/expect/vi/beforeAll/afterAll/beforeEach/afterEach)
   {
     files: ['src/__tests__/**/*.{js,jsx}', 'src/**/*.test.{js,jsx}'],

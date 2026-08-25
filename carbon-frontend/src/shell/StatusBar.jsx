@@ -6,6 +6,7 @@ import { Box, Typography, IconButton, Tooltip, Link, Badge } from '@mui/material
 import { useLocation } from 'react-router-dom';
 import ViewSidebarIcon from '@mui/icons-material/ViewSidebar';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import { listWorkspaceSuggestions } from '../api/aiWorkspace';
 import { PLATFORM_TITLE } from '../config/branding';
@@ -18,6 +19,7 @@ export function StatusBar({
 }) {
   const location = useLocation();
   const { context, token } = useAuth();
+  const { t } = useTranslation('shell');
   const [systemStatus, setSystemStatus] = useState('ready');
   const [suggestionCount, setSuggestionCount] = useState(0);
 
@@ -55,9 +57,9 @@ export function StatusBar({
   const statusColor = systemStatus === 'error' ? '#f87171' :
                       systemStatus === 'processing' ? '#fbbf24' :
                       'rgba(255,255,255,0.7)';
-  const statusLabel = systemStatus === 'error' ? 'Error' :
-                      systemStatus === 'processing' ? 'Processing' :
-                      'Ready';
+  const statusLabel = systemStatus === 'error' ? t('ui.error') :
+                      systemStatus === 'processing' ? t('ui.processing') :
+                      t('ui.ready');
 
   // Extract module/table context from URL
   const contextInfo = useMemo(() => {
@@ -69,7 +71,7 @@ export function StatusBar({
       const moduleId = moduleMatch[1];
       const module = context?.modules?.find(m => String(m.id) === moduleId);
       if (module) {
-        return `Data Product: ${module.name}`;
+        return t('ui.dataProductLabel', { name: module.name });
       }
     }
 
@@ -91,7 +93,7 @@ export function StatusBar({
     }
 
     return null;
-  }, [location.pathname, context]);
+  }, [location.pathname, context, t]);
 
   return (
     <Box
@@ -172,7 +174,7 @@ export function StatusBar({
             '&:hover': { color: '#fff', textDecoration: 'underline' }
           }}
         >
-          Privacy
+          {t('ui.privacy')}
         </Link>
         <Link
           href="/help"
@@ -183,7 +185,7 @@ export function StatusBar({
             '&:hover': { color: '#fff', textDecoration: 'underline' }
           }}
         >
-          Terms
+          {t('ui.terms')}
         </Link>
         <Link
           href="/feedback"
@@ -194,7 +196,7 @@ export function StatusBar({
             '&:hover': { color: '#fff', textDecoration: 'underline' }
           }}
         >
-          Support
+          {t('ui.support')}
         </Link>
       </Box>
 
@@ -202,11 +204,11 @@ export function StatusBar({
 
       {/* Toggle buttons */}
       <Box sx={{ display: 'flex', gap: 0.25 }}>
-        <Tooltip title={sidebarMode === 'pinned' ? 'Hide Sidebar (Ctrl+B)' : sidebarMode === 'peek' ? 'Pin Sidebar (Ctrl+Shift+B)' : 'Show Sidebar (Ctrl+B)'} placement="top">
+        <Tooltip title={sidebarMode === 'pinned' ? t('ui.hideSidebarShortcut') : sidebarMode === 'peek' ? t('ui.pinSidebar') : t('ui.showSidebarShortcut')} placement="top">
           <IconButton
             size="small"
             onClick={onToggleSidebar}
-            aria-label={sidebarMode === 'pinned' ? 'Hide Sidebar' : 'Show Sidebar'}
+            aria-label={sidebarMode === 'pinned' ? t('ui.hideSidebar') : t('ui.showSidebar')}
             aria-pressed={sidebarMode !== 'hidden'}
             sx={{
               p: 0.25,
@@ -228,7 +230,7 @@ export function StatusBar({
           </IconButton>
         </Tooltip>
 
-        <Tooltip title={`${copilotVisible ? 'Hide' : 'Show'} Pulse (Ctrl+\\)`} placement="top">
+        <Tooltip title={copilotVisible ? t('ui.hidePulseShortcut') : t('ui.showPulseShortcut')} placement="top">
           <Badge
             badgeContent={copilotVisible ? 0 : suggestionCount}
             color="error"
@@ -239,7 +241,7 @@ export function StatusBar({
             <IconButton
               size="small"
               onClick={onToggleCopilot}
-              aria-label={`${copilotVisible ? 'Hide' : 'Show'} Pulse`}
+              aria-label={copilotVisible ? t('ui.hidePulse') : t('ui.showPulse')}
               aria-pressed={copilotVisible}
               sx={{
                 p: 0.25,

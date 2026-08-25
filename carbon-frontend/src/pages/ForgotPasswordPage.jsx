@@ -3,12 +3,15 @@ import {
   Box, Button, TextField, Typography, Alert, Paper, CircularProgress,
 } from "@mui/material";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { API_BASE_URL } from "../config";
 import { INSTANCE_LOGO } from "../config/branding";
 
 export default function ForgotPasswordPage() {
-  useDocumentTitle("Forgot Password");
+  const { t } = useTranslation('auth');
+  const { t: tShell } = useTranslation('shell');
+  useDocumentTitle(t('forgot.documentTitle'));
 
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
@@ -41,13 +44,13 @@ export default function ForgotPasswordPage() {
         const contentType = res.headers.get("content-type") || "";
         if (contentType.includes("application/json")) {
           const data = await res.json();
-          setError(data.message || data.detail || "Failed to send reset email");
+          setError(data.message || data.detail || t('forgot.failedToSend'));
         } else {
-          setError("Failed to send reset email. Please try again.");
+          setError(t('forgot.failedToSendRetry'));
         }
       }
     } catch (err) {
-      setError(err.message || "Network error. Please check your connection.");
+      setError(err.message || t('networkError'));
     } finally {
       setBusy(false);
     }
@@ -72,33 +75,32 @@ export default function ForgotPasswordPage() {
         <Box sx={{ textAlign: "center", mb: 3 }}>
           <img
             src={INSTANCE_LOGO}
-            alt="Logo"
+            alt={tShell('ui.logo')}
             style={{ height: 44, marginBottom: 12, borderRadius: 6 }}
           />
           <Typography variant="h5" fontWeight={600} sx={{ color: "text.primary" }}>
-            Forgot Password
+            {t('forgot.title')}
           </Typography>
           <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-            Enter your email to receive a reset link
+            {t('forgot.subtitle')}
           </Typography>
         </Box>
 
         {success ? (
           <Box sx={{ textAlign: "center" }}>
             <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
-              If an account exists with that email, you'll receive a password reset
-              link shortly. Please check your inbox and spam folder.
+              {t('forgot.success')}
             </Alert>
             <Typography variant="body2" sx={{ mt: 2 }}>
               <Link to="/login" style={{ color: "inherit" }}>
-                ← Back to Sign In
+                {t('forgot.backToSignIn')}
               </Link>
             </Typography>
           </Box>
         ) : (
           <form onSubmit={handleSubmit} autoComplete="on">
             <TextField
-              label="Email Address"
+              label={t('forgot.email')}
               type="email"
               fullWidth
               required
@@ -127,13 +129,13 @@ export default function ForgotPasswordPage() {
               {busy ? (
                 <CircularProgress size={22} sx={{ color: "white" }} />
               ) : (
-                "Send Reset Link"
+                t('forgot.sendResetLink')
               )}
             </Button>
 
             <Typography variant="body2" sx={{ textAlign: "center", mt: 2 }}>
               <Link to="/login" style={{ color: "inherit" }}>
-                ← Back to Sign In
+                {t('forgot.backToSignIn')}
               </Link>
             </Typography>
           </form>

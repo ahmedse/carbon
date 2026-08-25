@@ -56,6 +56,8 @@ import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
 import { can } from '../authz';
 import { MENU_ITEM_CAPABILITIES } from '../capabilities';
+import { useTranslation } from 'react-i18next';
+import { shellLabel, STUDIO_TITLE_KEYS } from '../i18n/shellLabels';
 
 // UI-driven icon mapping for Carbon sidebar items
 // This allows icons to be chosen at runtime without hardcoding
@@ -273,6 +275,7 @@ function filterItemsByCapability(items, user, authCtx) {
 }
 
 export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
+  const { t } = useTranslation('shell');
   const { currentPerspective: _currentPerspective, availablePerspectives, isGlobalAdminFlag, userCapabilities, context, user } = useAuth();
   const location = useLocation();
 
@@ -286,7 +289,8 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
 
   // Filter items based on capability-based access (CBAC)
   let items = getSidebarItems(activeStudio);
-  const title = getStudioTitle(activeStudio);
+  const titleKey = STUDIO_TITLE_KEYS[activeStudio];
+  const title = titleKey ? t(titleKey) : getStudioTitle(activeStudio);
 
   // If in admin studios, gate with can() — only platform admins see them
   if ((activeStudio === 'admin' || activeStudio === 'ai-admin') && !can(user, 'access_route', '/admin/users', authCtx)) {
@@ -396,11 +400,11 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
         >
           {title}
         </Typography>
-        <Tooltip title="Collapse sidebar (Ctrl+B)" placement="bottom">
+        <Tooltip title={t('ui.collapseSidebarShortcut')} placement="bottom">
           <IconButton
             size="small"
             onClick={onCollapse}
-            aria-label="Collapse sidebar"
+            aria-label={t('ui.collapseSidebar')}
             sx={{
               p: 0.25,
               opacity: 0.4,
@@ -425,7 +429,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
         {items.length === 0 ? (
           <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-              No items available
+              {t('ui.noItemsAvailable')}
             </Typography>
           </Box>
         ) : (
@@ -462,7 +466,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                       display: 'block',
                     }}
                   >
-                    {item.label}
+                    {shellLabel(t, item.label)}
                   </Typography>
                 );
                 lastWasGroup = true;
@@ -508,7 +512,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                       },
                     }),
                   }}
-                  title={item.label}
+                  title={shellLabel(t, item.label)}
                 >
                   <Icon sx={{ fontSize: 14, flexShrink: 0, opacity: isActive ? 1 : 0.6 }} />
                   <Typography
@@ -519,7 +523,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
                       lineHeight: 1,
                     }}
                   >
-                    {item.label}
+                    {shellLabel(t, item.label)}
                   </Typography>
                 </Box>
               );

@@ -83,6 +83,27 @@ function normalizeMetadata(message) {
   return message.metadata || message.metadata_json || {};
 }
 
+// Derive a pending action's true ``kind`` when the ``kind`` tag is missing
+// (legacy persisted messages predate the tag). Mirrors the backend
+// ``_classify_pending`` so a memory proposal is NEVER rendered as an empty
+// "DQ rule" card — anti-fabrication on the render side too.
+function derivePendingKind(pending) {
+  if (pending?.kind) return pending.kind;
+  const tool = String(pending?.tool || '').toLowerCase();
+  const operation = String(pending?.operation || '').toLowerCase();
+  const method = String(pending?.method || '').toUpperCase();
+  if (method === 'MEMORY' || operation === 'learn' || operation === 'forget' ||
+      tool === 'learn_fact' || tool === 'forget_fact') {
+    return 'memory';
+  }
+  const proposedRule = pending?.proposed_rule;
+  if (proposedRule && typeof proposedRule === 'object' && (proposedRule.name || '').trim()) {
+    return 'dq_rule';
+  }
+  if (method || pending?.endpoint) return 'host';
+  return 'dq_rule';
+}
+
 function toGridRows(rows) {
   return (rows || []).map((r, idx) => ({ id: r.id ?? idx, ...r }));
 }
@@ -741,8 +762,15 @@ function AIMessageBubble({
       {pendingActions.map((pending) => {
         const executionId = pending.execution_id;
         if (!executionId) return null;
+        // Derive the true kind (memory / dq_rule / host) — legacy messages
+        // without the ``kind`` tag are re-classified from tool/operation so a
+        // memory proposal never renders as an empty "DQ rule" card.
+        const kind = derivePendingKind(pending);
+        const isMemory = kind === 'memory';
         const proposed = pending.proposed_rule || {};
-        const proposedName = proposed.name || pending.confirmation_message || 'this proposal';
+        const proposedName = isMemory
+          ? pending.confirmation_message || 'this memory'
+          : proposed.name || pending.confirmation_message || 'this proposal';
         const detailsOpen = detailsOpenId === executionId;
         const validation = pending.validation;
         const validationLabel =
@@ -757,6 +785,18 @@ function AIMessageBubble({
             : validation?.passed === false
               ? 'error'
               : 'default';
+        const confirmLabel = isMemory
+          ? (pending.operation === 'forget' ? 'Confirm & forget' : 'Confirm & remember')
+          : kind === 'host'
+            ? 'Confirm & run'
+            : 'Confirm & create';
+        // Screen-reader wording ("and") differs from the visible "&" for
+        // clarity; existing tests match the accessible name.
+        const confirmAriaLabel = isMemory
+          ? (pending.operation === 'forget' ? 'Confirm and forget' : 'Confirm and remember')
+          : kind === 'host'
+            ? 'Confirm and run'
+            : 'Confirm and create';
         return (
           <Paper key={executionId} variant="outlined" sx={{ p: 1.25 }}>
             <Stack spacing={1}>
@@ -769,20 +809,22 @@ function AIMessageBubble({
                       variant="outlined"
                       disabled={!onConfirmExecution}
                       onClick={() => onConfirmExecution?.(executionId, pending)}
-                      aria-label={`Confirm and create ${proposedName}`}
+                      aria-label={`${confirmAriaLabel} ${proposedName}`}
                     >
-                      Confirm &amp; create
+                      {confirmLabel}
                     </Button>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      startIcon={<EditIcon sx={{ fontSize: 16 }} />}
-                      disabled={!onConfirmExecution}
-                      onClick={() => openEditAction(pending)}
-                      aria-label={`Edit and confirm ${proposedName}`}
-                    >
-                      Edit &amp; confirm
-                    </Button>
+                    {!isMemory && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<EditIcon sx={{ fontSize: 16 }} />}
+                        disabled={!onConfirmExecution}
+                        onClick={() => openEditAction(pending)}
+                        aria-label={`Edit and confirm ${proposedName}`}
+                      >
+                        Edit &amp; confirm
+                      </Button>
+                    )}
                     <Button
                       size="small"
                       color="error"
@@ -815,22 +857,35 @@ function AIMessageBubble({
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                     {pending.confirmation_message || `Create DQ rule "${proposedName}"?`}
                   </Typography>
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    color={validationColor}
-                    label={validationLabel}
-                    sx={{ alignSelf: 'flex-start' }}
-                  />
-                  {validation?.passed === false && Array.isArray(validation.errors) && (
-                    <Typography variant="caption" color="error">
-                      {validation.errors.join(' · ')}
-                    </Typography>
-                  )}
-                  {jsonBlock('Proposed rule (definition JSON)', JSON.stringify(proposed, null, 2))}
-                  {jsonBlock(
-                    'Body that will be POSTed',
-                    JSON.stringify(pending.proposed_body || {}, null, 2),
+                  {isMemory ? (
+                    <>
+                      {jsonBlock('Fact', pending.fact || pending.confirmation_message || '')}
+                      {pending.category ? (
+                        <Typography variant="caption" color="text.secondary">
+                          Category: {pending.category}
+                        </Typography>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        color={validationColor}
+                        label={validationLabel}
+                        sx={{ alignSelf: 'flex-start' }}
+                      />
+                      {validation?.passed === false && Array.isArray(validation.errors) && (
+                        <Typography variant="caption" color="error">
+                          {validation.errors.join(' · ')}
+                        </Typography>
+                      )}
+                      {kind !== 'host' && jsonBlock('Proposed rule (definition JSON)', JSON.stringify(proposed, null, 2))}
+                      {jsonBlock(
+                        'Body that will be POSTed',
+                        JSON.stringify(pending.proposed_body || pending.body || {}, null, 2),
+                      )}
+                    </>
                   )}
                 </Stack>
               )}

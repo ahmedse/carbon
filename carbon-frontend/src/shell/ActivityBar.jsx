@@ -3,8 +3,12 @@
 
 import React from 'react';
 import { Box, IconButton, Tooltip } from '@mui/material';
+import { useTranslation } from 'react-i18next';
+import { STUDIO_LABEL_KEYS } from '../i18n/shellLabels';
 
 export function ActivityBar({ studios, activeStudio, onStudioChange }) {
+  const { t } = useTranslation('shell');
+
   // Split: main studios vs bottom studios (Settings, Help)
   const mainStudios = studios.filter(s => !s.bottom);
   const bottomStudios = studios.filter(s => s.bottom);
@@ -12,13 +16,16 @@ export function ActivityBar({ studios, activeStudio, onStudioChange }) {
   const renderStudioButton = (studio) => {
     const Icon = studio.icon;
     const isActive = activeStudio === studio.id;
+    const label = STUDIO_LABEL_KEYS[studio.id]
+      ? t(STUDIO_LABEL_KEYS[studio.id])
+      : studio.label;
 
     return (
-      <Tooltip title={studio.label} placement="right" key={studio.id}>
+      <Tooltip title={label} placement="right" key={studio.id}>
         <IconButton
           size="small"
           onClick={() => onStudioChange(studio.id)}
-          aria-label={studio.label}
+          aria-label={label}
           aria-current={isActive ? 'page' : undefined}
           sx={{
             width: 40,
@@ -48,7 +55,7 @@ export function ActivityBar({ studios, activeStudio, onStudioChange }) {
   return (
     <Box
       component="nav"
-      aria-label="Studio navigation"
+      aria-label={t('ui.studioNavigation')}
       sx={{
         width: 48,
         bgcolor: 'background.dark',

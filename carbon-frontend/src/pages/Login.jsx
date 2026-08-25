@@ -5,12 +5,15 @@ import {
 } from "@mui/material";
 import { Navigate, useNavigate, Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
 
 
 export default function Login() {
-  useDocumentTitle("Sign In");
+  const { t } = useTranslation('auth');
+  const { t: tShell } = useTranslation('shell');
+  useDocumentTitle(t('login.documentTitle'));
   const {
     user, projects, context, loading, login, selectProject,
   } = useAuth();
@@ -35,7 +38,7 @@ export default function Login() {
       <Box sx={{ maxWidth: 400, mx: "auto", mt: 10 }}>
         <Paper sx={{ p: 4, borderRadius: 4 }}>
           <Typography variant="h6" align="center" mb={2}>
-            Select a Project
+            {t('login.selectProject')}
           </Typography>
           <Select
             value={projectSelection}
@@ -44,7 +47,7 @@ export default function Login() {
             displayEmpty
             sx={{ mb: 2 }}
           >
-            <MenuItem value="" disabled>Select Project</MenuItem>
+            <MenuItem value="" disabled>{t('login.selectProjectPlaceholder')}</MenuItem>
             {projects.map(p => (
               <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
             ))}
@@ -58,11 +61,11 @@ export default function Login() {
                 await selectProject(projectSelection);
                 navigate("/dashboard", { replace: true });
               } catch (err) {
-                setError(err.message || "Failed to select project");
+                setError(err.message || t('login.failedToSelectProject'));
               }
             }}
           >
-            Continue
+            {t('login.continue')}
           </Button>
         </Paper>
       </Box>
@@ -82,7 +85,11 @@ export default function Login() {
       }
       // Otherwise, show project selection UI (handled by component render above)
     } catch (err) {
-      setError(err.message || "Login failed");
+      setError(
+        err.message === 'Invalid credentials'
+          ? t('login.invalidCredentials')
+          : (err.message || t('login.loginFailed'))
+      );
     } finally {
       setBusy(false);
     }
@@ -105,22 +112,22 @@ export default function Login() {
         boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
       }}>
         <Box sx={{ textAlign: "center", mb: 3 }}>
-          <img src={INSTANCE_LOGO} alt="Logo" style={{ height: 44, marginBottom: 12, borderRadius: 6 }} />
+          <img src={INSTANCE_LOGO} alt={tShell('ui.logo')} style={{ height: 44, marginBottom: 12, borderRadius: 6 }} />
           <Typography variant="h5" fontWeight={600} sx={{ color: "text.primary" }}>
-            Welcome back
+            {t('login.welcome')}
           </Typography>
           <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-            Sign in to {PLATFORM_TITLE}
+            {t('login.subtitle', { title: PLATFORM_TITLE })}
           </Typography>
         </Box>
         {sessionExpired && (
           <Alert severity="warning" sx={{ mb: 2 }}>
-            Your session has expired. Please sign in again.
+            {t('login.sessionExpired')}
           </Alert>
         )}
         <form onSubmit={handleSubmit} autoComplete="on">
           <TextField
-            label="Username"
+            label={t('login.username')}
             fullWidth
             required
             margin="normal"
@@ -131,7 +138,7 @@ export default function Login() {
             autoComplete="username"
           />
           <TextField
-            label="Password"
+            label={t('login.password')}
             fullWidth
             required
             margin="normal"
@@ -144,7 +151,7 @@ export default function Login() {
           {error && <Alert severity="error" sx={{ mt: 2, borderRadius: 2 }}>{error}</Alert>}
           <Typography variant="body2" sx={{ textAlign: 'right', mt: 0.5 }}>
             <Link to="/forgot-password" color="primary" style={{ textDecoration: 'none' }}>
-              Forgot Password?
+              {t('login.forgotPassword')}
             </Link>
           </Typography>
           <Button
@@ -155,7 +162,7 @@ export default function Login() {
             sx={{ mt: 3, py: 1.25, fontWeight: 600 }}
             disabled={busy || loading}
           >
-            {busy || loading ? <CircularProgress size={22} sx={{ color: "white" }} /> : "Sign in"}
+            {busy || loading ? <CircularProgress size={22} sx={{ color: "white" }} /> : t('login.submit')}
           </Button>
         </form>
       </Paper>

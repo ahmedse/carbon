@@ -1,0 +1,21 @@
+{
+  "appName": "Carbon",
+  "save": "Save",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "edit": "Edit",
+  "search": "Search",
+  "loading": "Loading…",
+  "noResults": "No results found",
+  "language": "Language",
+  "confirm": "Confirm",
+  "close": "Close",
+  "back": "Back",
+  "next": "Next",
+  "retry": "Retry",
+  "gotIt": "Got it",
+  "why": "Why",
+  "whatYouCanDo": "What you can do",
+  "notice": "Notice",
+  "closeDialog": "Close dialog"
+}

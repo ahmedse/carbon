@@ -119,6 +119,71 @@ describe('AIMessageBubble AI-driven actions', () => {
     expect(screen.getByRole('button', { name: /Decline/i })).toBeInTheDocument();
   });
 
+  it('renders a memory proposal as Confirm & remember (not a DQ-rule card)', () => {
+    const message = {
+      ...assistantMessage,
+      metadata: {
+        pending_actions: [
+          {
+            kind: 'memory',
+            execution_id: 'exec-mem',
+            tool: 'learn_fact',
+            operation: 'learn',
+            fact: 'Ahmed is from Egypt, Alexandria',
+            category: 'observation',
+            confirmation_message: 'Remember this observation: Ahmed is from Egypt, Alexandria',
+          },
+        ],
+      },
+    };
+    renderBubble(message, {
+      onConfirmExecution: vi.fn(),
+      onDeclineExecution: vi.fn(),
+      executeMode: true,
+    });
+    expect(screen.getByRole('button', { name: /Confirm and remember/i })).toBeInTheDocument();
+    // No Edit & confirm for a memory write (not a JSON-editable rule body).
+    expect(screen.queryByRole('button', { name: /Edit and confirm/i })).not.toBeInTheDocument();
+
+    // Details show the fact, not a fabricated empty rule JSON.
+    fireEvent.click(screen.getByRole('button', { name: /Show details/i }));
+    expect(screen.getByText('Fact')).toBeInTheDocument();
+    expect(screen.queryByText('Proposed rule (definition JSON)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Body that will be POSTed')).not.toBeInTheDocument();
+  });
+
+  it('derives a legacy memory proposal (no kind tag) from tool/operation', () => {
+    // Legacy persisted messages predate the ``kind`` tag — they carry
+    // tool/operation but no kind. The card must still render as a memory
+    // write, never as an empty DQ-rule card.
+    const message = {
+      ...assistantMessage,
+      metadata: {
+        pending_actions: [
+          {
+            execution_id: 'exec-legacy-mem',
+            tool: 'learn_fact',
+            operation: 'learn',
+            fact: 'Ahmed is from Egypt, Alexandria',
+            category: 'observation',
+            confirmation_message: 'Remember this observation: Ahmed is from Egypt, Alexandria',
+          },
+        ],
+      },
+    };
+    renderBubble(message, {
+      onConfirmExecution: vi.fn(),
+      onDeclineExecution: vi.fn(),
+      executeMode: true,
+    });
+    expect(screen.getByRole('button', { name: /Confirm and remember/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Edit and confirm/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Show details/i }));
+    expect(screen.getByText('Fact')).toBeInTheDocument();
+    expect(screen.queryByText('Proposed rule (definition JSON)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Body that will be POSTed')).not.toBeInTheDocument();
+  });
+
   it('calls onConfirmExecution with the execution id', () => {
     const onConfirmExecution = vi.fn();
     const message = {
