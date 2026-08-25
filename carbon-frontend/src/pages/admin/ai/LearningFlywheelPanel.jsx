@@ -116,21 +116,21 @@ export default function LearningFlywheelPanel() {
 
   const factColumns = useMemo(
     () => [
-      { field: 'category', headerName: 'Category', width: 140, valueFormatter: ({ value }) => value ?? '—' },
+      { field: 'category', headerName: 'Category', width: 140, valueFormatter: (params) => params?.value ?? '—' },
       { field: 'content', headerName: 'Fact', minWidth: 320, flex: 1 },
-      { field: 'confidence', headerName: 'Confidence', width: 120, valueFormatter: ({ value }) => formatInt(value) },
-      { field: 'created_at', headerName: 'Created', width: 200, valueFormatter: ({ value }) => formatDate(value) },
+      { field: 'confidence', headerName: 'Confidence', width: 120, valueFormatter: (params) => formatInt(params?.value) },
+      { field: 'created_at', headerName: 'Created', width: 200, valueFormatter: (params) => formatDate(params?.value) },
     ],
     []
   );
 
   const feedbackColumns = useMemo(
     () => [
-      { field: 'signal_type', headerName: 'Signal', width: 150, valueFormatter: ({ value }) => value ?? '—' },
-      { field: 'message_id', headerName: 'Message', width: 220, valueFormatter: ({ value }) => value ?? '—' },
-      { field: 'user_comment', headerName: 'Comment', minWidth: 240, flex: 1, valueFormatter: ({ value }) => value || '—' },
-      { field: 'quality_score', headerName: 'Quality', width: 110, valueFormatter: ({ value }) => formatInt(value) },
-      { field: 'created_at', headerName: 'Created', width: 200, valueFormatter: ({ value }) => formatDate(value) },
+      { field: 'signal_type', headerName: 'Signal', width: 150, valueFormatter: (params) => params?.value ?? '—' },
+      { field: 'message_id', headerName: 'Message', width: 220, valueFormatter: (params) => params?.value ?? '—' },
+      { field: 'user_comment', headerName: 'Comment', minWidth: 240, flex: 1, valueFormatter: (params) => params?.value || '—' },
+      { field: 'quality_score', headerName: 'Quality', width: 110, valueFormatter: (params) => formatInt(params?.value) },
+      { field: 'created_at', headerName: 'Created', width: 200, valueFormatter: (params) => formatDate(params?.value) },
     ],
     []
   );

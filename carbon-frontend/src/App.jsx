@@ -81,6 +81,7 @@ const AuditLogPage = React.lazy(() => import("./pages/admin/AuditLogPage"));
 const LogViewerPage = React.lazy(() => import("./pages/admin/LogViewerPage"));
 const PlatformConfigPage = React.lazy(() => import("./pages/admin/PlatformConfigPage"));
 const PulseOverviewPage = React.lazy(() => import("./pages/admin/ai/PulseOverviewPage"));
+const AIExpertisePanel = React.lazy(() => import("./pages/admin/ai/AIExpertisePanel"));
 const AIWorkspacePage = React.lazy(() => import("./pages/admin/ai/AIWorkspacePage"));
 const AIConversationsPage = React.lazy(() => import("./pages/admin/ai/AIConversationsPage"));
 const KnowledgeBasePanel = React.lazy(() => import("./pages/admin/ai/KnowledgeBasePanel"));
@@ -347,6 +348,7 @@ export default function App() {
                 <Route path="/admin/logs" element={<AdminRoute><LogViewerPage /></AdminRoute>} />
                 <Route path="/admin/config" element={<AdminRoute><PlatformConfigPage /></AdminRoute>} />
                 <Route path="/admin/ai" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PulseOverviewPage /></AdminRoute>} />
+                <Route path="/admin/ai/expertise" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AIExpertisePanel /></AdminRoute>} />
                 <Route path="/admin/ai/workspace" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AIWorkspacePage /></AdminRoute>} />
                 <Route path="/admin/ai/conversations" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AIConversationsPage /></AdminRoute>} />
                 <Route path="/admin/ai/knowledge" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><KnowledgeBasePanel /></AdminRoute>} />

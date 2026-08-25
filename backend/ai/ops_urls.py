@@ -5,6 +5,7 @@ from django.urls import path
 from ai.activation_api import PulseSettingsView, PulseUsageView
 from ai.graph_api import GraphDataView
 from ai.learning_api import LearningRunView, LearningStatusView
+from ai.maturity_api import AIMaturityView
 from ai.observability_api import (
     OutputQualityTrendView,
     PulseArchetypesView,
@@ -46,6 +47,7 @@ urlpatterns = [
     path("archetypes/", PulseArchetypesView.as_view(), name="ai-pulse-archetypes"),
     path("quality-trend/", OutputQualityTrendView.as_view(), name="ai-pulse-quality-trend"),
     path("rollups/", RunRollupView.as_view(), name="ai-pulse-rollups"),
+    path("maturity/", AIMaturityView.as_view(), name="ai-pulse-maturity"),
     path("graph/", GraphDataView.as_view(), name="ai-pulse-graph"),
     path("usage/", PulseUsageView.as_view(), name="ai-pulse-usage"),
     path("settings/", PulseSettingsView.as_view(), name="ai-pulse-settings"),
