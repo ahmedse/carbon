@@ -1,6 +1,7 @@
 // src/pages/catalog/GovernancePage.jsx
 // Governance: Read-only audit log of governance events
 import React, { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
@@ -15,6 +16,7 @@ import { fetchGovernanceEvents } from '../../api/catalog';
 
 export default function GovernancePage() {
   useDocumentTitle("Governance");
+  const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
 
@@ -28,15 +30,15 @@ export default function GovernancePage() {
     try {
       const data = await fetchGovernanceEvents(token);
       setEvents(Array.isArray(data) ? data : data?.results || []);
-      notify({ message: 'Events loaded', type: 'success' });
+      notify({ message: t('eventsLoaded'), type: 'success' });
     } catch (err) {
-      const msg = err.message || 'Failed to load governance events';
+      const msg = err.message || t('governanceLoadError');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, notify]);
+  }, [token, notify, t]);
 
   useEffect(() => {
     loadEvents();
@@ -56,12 +58,12 @@ export default function GovernancePage() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <AssignmentIcon sx={{ fontSize: '2rem', color: 'primary.main' }} />
           <Box>
-            <Typography variant="h5" fontWeight={700}>Governance Log</Typography>
-            <Typography variant="body2" color="text.secondary">Audit trail of governance events</Typography>
+            <Typography variant="h5" fontWeight={700}>{t('governanceLog')}</Typography>
+            <Typography variant="body2" color="text.secondary">{t('governanceSubtitle')}</Typography>
           </Box>
         </Box>
         <Button variant="outlined" startIcon={<RefreshIcon />} onClick={loadEvents}>
-          Refresh
+          {t('refresh')}
         </Button>
       </Box>
 
@@ -71,25 +73,25 @@ export default function GovernancePage() {
         <Table>
           <TableHead>
             <TableRow sx={{ backgroundColor: 'action.hover' }}>
-              <TableCell fontWeight={600}>Event Type</TableCell>
-              <TableCell fontWeight={600}>Asset</TableCell>
-              <TableCell fontWeight={600}>Details</TableCell>
-              <TableCell fontWeight={600}>Date</TableCell>
+              <TableCell fontWeight={600}>{t('eventType')}</TableCell>
+              <TableCell fontWeight={600}>{t('asset')}</TableCell>
+              <TableCell fontWeight={600}>{t('details')}</TableCell>
+              <TableCell fontWeight={600}>{t('date')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {events.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
-                  <Typography color="text.secondary">No governance events</Typography>
+                  <Typography color="text.secondary">{t('noGovernanceEvents')}</Typography>
                 </TableCell>
               </TableRow>
             ) : (
               events.map(event => {
                 const eventType = event.action || event.entity_type || '—';
                 const assetName = event.asset 
-                  ? `Asset #${event.asset}` 
-                  : `${event.entity_type || 'Entity'} #${event.entity_id || '?'}`;
+                  ? t('assetNumber', { id: event.asset }) 
+                  : t('entityNumber', { entity: event.entity_type || t('entity'), id: event.entity_id || '?' });
                 const details = event.before || event.after
                   ? `${JSON.stringify(event.before || {})} → ${JSON.stringify(event.after || {})}`.substring(0, 80)
                   : '—';

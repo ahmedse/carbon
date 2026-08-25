@@ -2,6 +2,7 @@
 // Catalog Studio Home: Dashboard overview of data governance
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import {
@@ -20,6 +21,7 @@ import { fetchDataSchemaTables } from '../../api/dataschema';
 
 export default function CatalogHome() {
   useDocumentTitle("Catalog Studio");
+  const { t } = useTranslation('catalog');
   const navigate = useNavigate();
   const { token } = useAuth();
   const { notify } = useNotification();
@@ -54,13 +56,13 @@ export default function CatalogHome() {
         qualityScore,
       });
     } catch (err) {
-      const msg = err.message || 'Failed to load catalog dashboard';
+      const msg = err.message || t('loadError');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [token, notify]);
+  }, [token, notify, t]);
 
   useEffect(() => {
     loadDashboardData();
@@ -81,9 +83,9 @@ export default function CatalogHome() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
           <LibraryBooksIcon sx={{ fontSize: '2.5rem', color: 'primary.main' }} />
           <Box>
-            <Typography variant="h4" fontWeight={700}>Catalog Studio</Typography>
+            <Typography variant="h4" fontWeight={700}>{t('title')}</Typography>
             <Typography variant="body2" color="text.secondary">
-              Centralized data-product catalog with governance and lineage
+              {t('subtitle')}
             </Typography>
           </Box>
         </Box>
@@ -98,14 +100,14 @@ export default function CatalogHome() {
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ height: '100%' }}>
             <CardHeader
-              title="Data Domains"
+              title={t('dataDomains')}
               titleTypographyProps={{ variant: 'subtitle2', fontWeight: 600 }}
               sx={{ pb: 1 }}
             />
             <CardContent sx={{ pt: 0 }}>
               <Typography variant="h3" fontWeight={700}>{stats.totalDomains}</Typography>
               <Typography variant="caption" color="text.secondary">
-                Business data domains
+                {t('dataDomainsHint')}
               </Typography>
             </CardContent>
           </Card>
@@ -115,14 +117,14 @@ export default function CatalogHome() {
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ height: '100%' }}>
             <CardHeader
-              title="Tables"
+              title={t('tables')}
               titleTypographyProps={{ variant: 'subtitle2', fontWeight: 600 }}
               sx={{ pb: 1 }}
             />
             <CardContent sx={{ pt: 0 }}>
               <Typography variant="h3" fontWeight={700}>{stats.totalTables}</Typography>
               <Typography variant="caption" color="text.secondary">
-                Registered data tables
+                {t('tablesHint')}
               </Typography>
             </CardContent>
           </Card>
@@ -132,14 +134,14 @@ export default function CatalogHome() {
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ height: '100%' }}>
             <CardHeader
-              title="Metadata Coverage"
+              title={t('metadataCoverage')}
               titleTypographyProps={{ variant: 'subtitle2', fontWeight: 600 }}
               sx={{ pb: 1 }}
             />
             <CardContent sx={{ pt: 0 }}>
               <Typography variant="h3" fontWeight={700}>{stats.tablesWithMetadata}</Typography>
               <Typography variant="caption" color="text.secondary">
-                Tables with documentation
+                {t('metadataCoverageHint')}
               </Typography>
             </CardContent>
           </Card>
@@ -149,7 +151,7 @@ export default function CatalogHome() {
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ height: '100%' }}>
             <CardHeader
-              title="Quality Index"
+              title={t('qualityIndex')}
               titleTypographyProps={{ variant: 'subtitle2', fontWeight: 600 }}
               sx={{ pb: 1 }}
             />
@@ -162,20 +164,20 @@ export default function CatalogHome() {
       </Grid>
 
       {/* Quick Access Cards */}
-      <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>Quick Access</Typography>
+      <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>{t('quickAccess')}</Typography>
       <Grid container spacing={2} sx={{ mb: 4 }}>
         <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <StorageIcon sx={{ color: 'primary.main' }} />
-              <Typography variant="subtitle1" fontWeight={600}>Data Products</Typography>
+              <Typography variant="subtitle1" fontWeight={600}>{t('dataProducts')}</Typography>
             </Box>
             <Typography variant="body2" color="text.secondary">
-              Browse data products and the tables they contain, with quality and governance
+              {t('dataProductsHint')}
             </Typography>
             <Box>
               <Button variant="outlined" size="small" onClick={() => navigate('/catalog/products')}>
-                Open Data Products
+                {t('openDataProducts')}
               </Button>
             </Box>
           </Paper>
@@ -185,14 +187,14 @@ export default function CatalogHome() {
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <CheckCircleIcon sx={{ color: 'success.main' }} />
-              <Typography variant="subtitle1" fontWeight={600}>Governance Audit</Typography>
+              <Typography variant="subtitle1" fontWeight={600}>{t('governanceAudit')}</Typography>
             </Box>
             <Typography variant="body2" color="text.secondary">
-              Review governance events and asset ownership across the catalog
+              {t('governanceAuditHint')}
             </Typography>
             <Box>
               <Button variant="outlined" size="small" onClick={() => navigate('/catalog/governance')}>
-                Open Governance Audit
+                {t('openGovernanceAudit')}
               </Button>
             </Box>
           </Paper>
@@ -200,7 +202,7 @@ export default function CatalogHome() {
       </Grid>
 
       {/* Governance & Metadata */}
-      <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>Governance & Metadata</Typography>
+      <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>{t('governanceAndMetadata')}</Typography>
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Button
@@ -209,7 +211,7 @@ export default function CatalogHome() {
             onClick={() => navigate('/catalog/metadata#domains')}
             sx={{ py: 1.5 }}
           >
-            Domains
+            {t('domains')}
           </Button>
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -219,7 +221,7 @@ export default function CatalogHome() {
             onClick={() => navigate('/catalog/metadata#glossary')}
             sx={{ py: 1.5 }}
           >
-            Glossary
+            {t('glossary')}
           </Button>
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -229,7 +231,7 @@ export default function CatalogHome() {
             onClick={() => navigate('/catalog/metadata#tags')}
             sx={{ py: 1.5 }}
           >
-            Tags
+            {t('tags')}
           </Button>
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -239,7 +241,7 @@ export default function CatalogHome() {
             onClick={() => navigate('/catalog/mdm')}
             sx={{ py: 1.5 }}
           >
-            Master Data
+            {t('masterData')}
           </Button>
         </Grid>
       </Grid>

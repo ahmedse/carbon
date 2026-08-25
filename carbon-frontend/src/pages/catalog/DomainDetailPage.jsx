@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { Box } from '@mui/material';
@@ -20,6 +21,7 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 export default function DomainDetailPage() {
   useDocumentTitle("Domain Detail");
+  const { t } = useTranslation('catalog');
   const { domainId } = useParams();
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -32,7 +34,7 @@ export default function DomainDetailPage() {
   useEffect(() => {
     const fetchDomain = async () => {
       if (!domainId || !token) {
-        setError('Missing required parameters');
+        setError(t('missingParams'));
         setLoading(false);
         return;
       }
@@ -42,7 +44,7 @@ export default function DomainDetailPage() {
         const data = await apiFetch(`catalog/domains/${domainId}/`, { method: 'GET', token }); // fetch domain
         setDomain(data);
       } catch (err) {
-        const message = err.message || 'Failed to load domain';
+        const message = err.message || t('domainLoadError');
         setError(message);
         notify({ message, type: 'error' });
       } finally {
@@ -51,11 +53,11 @@ export default function DomainDetailPage() {
     };
 
     fetchDomain();
-  }, [domainId, token, notify]);
+  }, [domainId, token, notify, t]);
 
   const headerComponent = (
     <DetailHeader
-      title={domain?.name || 'Domain'}
+      title={domain?.name || t('domainFallback')}
       description={domain?.description}
       icon={CategoryIcon}
       onClose={() => navigate(-1)}
@@ -66,11 +68,11 @@ export default function DomainDetailPage() {
     <BaseDetailPage
       headerComponent={headerComponent}
       mainTabs={[
-        { label: 'Overview', component: DomainOverviewTab },
-        { label: 'Edit', component: DomainEditTab },
+        { label: t('overview'), component: DomainOverviewTab },
+        { label: t('common:edit'), component: DomainEditTab },
       ]}
       metricsTabs={[
-        { label: 'Summary', component: DomainSummaryMetrics },
+        { label: t('summary'), component: DomainSummaryMetrics },
       ]}
       loading={loading}
       error={error}

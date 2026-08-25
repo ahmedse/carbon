@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { Box } from '@mui/material';
@@ -18,6 +19,7 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 export default function TagDetailPage() {
   useDocumentTitle("Tag Detail");
+  const { t } = useTranslation('catalog');
   const { tagId } = useParams();
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -30,7 +32,7 @@ export default function TagDetailPage() {
   useEffect(() => {
     const fetchTag = async () => {
       if (!tagId || !token) {
-        setError('Missing required parameters');
+        setError(t('missingParams'));
         setLoading(false);
         return;
       }
@@ -40,7 +42,7 @@ export default function TagDetailPage() {
         const data = await apiFetch(`catalog/tags/${tagId}/`, { method: 'GET', token }); // fetch tag
         setTag(data);
       } catch (err) {
-        const message = err.message || 'Failed to load tag';
+        const message = err.message || t('tagLoadError');
         setError(message);
         notify({ message, type: 'error' });
       } finally {
@@ -49,11 +51,11 @@ export default function TagDetailPage() {
     };
 
     fetchTag();
-  }, [tagId, token, notify]);
+  }, [tagId, token, notify, t]);
 
   const headerComponent = (
     <DetailHeader
-      title={tag?.name || 'Tag'}
+      title={tag?.name || t('tagFallback')}
       description={tag?.description}
       icon={LocalOfferIcon}
       onClose={() => navigate(-1)}
@@ -64,11 +66,11 @@ export default function TagDetailPage() {
     <BaseDetailPage
       headerComponent={headerComponent}
       mainTabs={[
-        { label: 'Overview', component: TagOverviewTab },
-        { label: 'Edit', component: TagEditTab },
+        { label: t('overview'), component: TagOverviewTab },
+        { label: t('common:edit'), component: TagEditTab },
       ]}
       metricsTabs={[
-        { label: 'Summary', component: TagSummaryMetrics },
+        { label: t('summary'), component: TagSummaryMetrics },
       ]}
       loading={loading}
       error={error}
