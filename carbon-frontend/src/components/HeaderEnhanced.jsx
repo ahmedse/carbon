@@ -2,7 +2,7 @@
 // Enhanced header with user menu (based on Gigacast pattern)
 
 import React, { useState } from "react";
-import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Tooltip, Box, Avatar, Divider, Popover, Tabs, Tab, useTheme } from "@mui/material";
+import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Tooltip, Box, Avatar, Divider, Popover, Tabs, Tab, useTheme, Badge } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
@@ -21,6 +21,8 @@ import {
 import { useThemeMode } from "../theme/useThemeMode";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./LanguageSwitcher";
+import { useNotifications } from "../hooks/useNotifications";
+import { NotificationCenter } from "./notifications/NotificationCenter";
 
 // Perspective tab labels -> shell.nav.* keys (translated at render time).
 const PERSPECTIVE_LABEL_KEYS = {
@@ -77,10 +79,12 @@ export default function HeaderEnhanced() {
   const { t } = useTranslation('shell');
   const { t: tAuth } = useTranslation('auth');
   const { user, logout, availablePerspectives, currentPerspective, setPerspective } = useAuth();
+  const { unreadCount } = useNotifications();
   const { mode, toggle } = useThemeMode();
   const theme = useTheme();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
+  const [notifAnchor, setNotifAnchor] = useState(null);
 
   const initials = user?.username?.slice(0, 2).toUpperCase() || "U";
   const primaryRole = user?.roles?.[0]?.role;
@@ -165,8 +169,15 @@ export default function HeaderEnhanced() {
           </Tooltip>
 
           <Tooltip title={t('ui.notifications')}>
-            <IconButton size="small" sx={{ color: "text.secondary" }}>
-              <Notifications sx={{ fontSize: 20 }} />
+            <IconButton
+              size="small"
+              aria-label={t('ui.notifications')}
+              sx={{ color: "text.secondary" }}
+              onClick={(e) => setNotifAnchor(e.currentTarget)}
+            >
+              <Badge badgeContent={unreadCount} color="error" max={99} showZero={false}>
+                <Notifications sx={{ fontSize: 20 }} />
+              </Badge>
             </IconButton>
           </Tooltip>
 
@@ -302,6 +313,7 @@ export default function HeaderEnhanced() {
             danger
           />
         </Popover>
+        <NotificationCenter anchorEl={notifAnchor} onClose={() => setNotifAnchor(null)} />
       </Toolbar>
     </AppBar>
   );
