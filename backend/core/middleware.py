@@ -108,3 +108,85 @@ class RequestLoggingMiddleware(MiddlewareMixin):
         if x_forwarded_for:
             return x_forwarded_for.split(',')[0]
         return request.META.get('REMOTE_ADDR')
+
+
+# ── Audit Middleware ──────────────────────────────────────────────────────────
+
+class AuditMiddleware(MiddlewareMixin):
+    """Audit all mutating requests (POST/PUT/PATCH/DELETE) regardless of status code.
+    
+    Records who made what request, when, and with what result. Skipped during pytest
+    to avoid inflating N+1 query-count assertions and during test runs.
+    """
+
+    def process_request(self, request):
+        """Record the start time of the request."""
+        request._audit_start = time.time()
+        return None
+
+    def process_response(self, request, response):
+        """Log the mutating request to RequestAuditLog if enabled."""
+        # Skip non-mutating requests
+        if request.method not in {'POST', 'PUT', 'PATCH', 'DELETE'}:
+            return response
+
+        # Skip health/static/admin/metrics paths
+        if self._should_skip_path(request.path):
+            return response
+
+        # Skip if audit is disabled (e.g. during pytest)
+        from django.conf import settings
+        if not getattr(settings, 'CORE_REQUEST_AUDIT_ENABLED', True):
+            return response
+
+        # Compute metrics
+        duration_ms = int(round((time.time() - getattr(request, '_audit_start', time.time())) * 1000))
+        correlation_id = getattr(request, 'correlation_id', '') or ''
+        status_code = response.status_code
+
+        # Get user
+        user = None
+        if hasattr(request, 'user') and request.user is not None and request.user.is_authenticated:
+            user = request.user
+
+        # Get IP
+        ip_address = self.get_client_ip(request)
+
+        # Get query string
+        query_string = request.META.get('QUERY_STRING', '')[:500]
+
+        # Write audit log
+        try:
+            from core.models import RequestAuditLog
+            RequestAuditLog.objects.create(
+                user=user,
+                ip_address=ip_address,
+                method=request.method,
+                path=request.path,
+                query_string=query_string,
+                status_code=status_code,
+                duration_ms=duration_ms,
+                correlation_id=correlation_id,
+            )
+        except Exception:
+            # Never let audit failure break the response
+            pass
+
+        return response
+
+    def _should_skip_path(self, path):
+        """Check if path should be skipped from audit."""
+        skip_prefixes = ['/health/', '/static/', '/mediafiles/', '/admin/']
+        for prefix in skip_prefixes:
+            if path.startswith(prefix):
+                return True
+        if '/metrics' in path:
+            return True
+        return False
+
+    def get_client_ip(self, request):
+        """Extract client IP from request, checking X-Forwarded-For first."""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR', '127.0.0.1')

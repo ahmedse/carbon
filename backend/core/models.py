@@ -1,5 +1,6 @@
 # File: core/models.py
 from django.db import models
+from django.conf import settings
 
 
 class Module(models.Model):
@@ -125,3 +126,32 @@ class RequestLog(models.Model):
 
     def __str__(self):
         return f"{self.timestamp:%Y-%m-%d %H:%M:%S} [{self.level}] {self.method} {self.path} → {self.status_code}"
+
+
+# ── Request Audit Log (Mutating Requests Only) ─────────────────────────────────
+
+class RequestAuditLog(models.Model):
+    """Audit log for all mutating requests (POST/PUT/PATCH/DELETE).
+    
+    Records who accessed what endpoint, when, and with what result.
+    Skipped during pytest to avoid inflating N+1 query-count assertions.
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, db_index=True)
+    ip_address = models.GenericIPAddressField()
+    method = models.CharField(max_length=10)
+    path = models.CharField(max_length=500, db_index=True)
+    query_string = models.CharField(max_length=500, blank=True)
+    status_code = models.PositiveSmallIntegerField(null=True)
+    duration_ms = models.PositiveIntegerField(null=True)
+    correlation_id = models.CharField(max_length=36, blank=True, db_index=True)
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['user', 'timestamp']),
+            models.Index(fields=['path', 'timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.timestamp:%Y-%m-%d %H:%M:%S} {self.method} {self.path} ({self.user}) → {self.status_code}"

@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 # (silk) can be excluded from the test request pipeline.
 RUNNING_TESTS = bool("pytest" in sys.modules or "test" in sys.argv)
 
+# Enable audit logging for mutating requests (disabled during pytest to avoid N+1 assertions)
+CORE_REQUEST_AUDIT_ENABLED = not RUNNING_TESTS
+
 # Suppress ONNX Runtime GPU warnings (harmless - we don't need GPU)
 warnings.filterwarnings('ignore', category=UserWarning, module='onnxruntime')
 os.environ['ORT_LOGGING_LEVEL'] = '3'  # Error level only
@@ -182,6 +185,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'core.middleware.RequestLoggingMiddleware',
+    'core.middleware.AuditMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
