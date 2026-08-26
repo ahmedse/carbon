@@ -4824,7 +4824,7 @@ Workflow/approval engine (P1) | Retention policies/right-to-erasure (P1) | Gloss
 ## EPH-0 — AI Expertise Dashboard: Close In-Flight Work
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Claude Haiku 3.5
 **Status:** READY — backend tests needed; frontend + url routing already wired
 **Kind:** Backend tests only. Small.
 
@@ -4874,7 +4874,7 @@ Commit all 7 files: `feat(ai): AI Expertise & Maturity Dashboard (EPH-0)`
 ## EPH-1A — Request Audit Middleware + Structured JSON Logging
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Claude Haiku 3.5
 **Status:** PLANNED
 **Kind:** Backend. Medium.
 **Closes:** P0-5 (API request audit), P0-6 (data access logging), P1-10 (structured logging)
@@ -4960,7 +4960,7 @@ Apply JSON formatter + correlation filter to all non-debug handlers.
 ## EPH-1B — Notification Center (In-App Bell + Panel)
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Raptor
 **Status:** PLANNED
 **Kind:** Frontend only. Medium.
 **Closes:** P0-8 (unified notification system — backend exists since Phase 1.6)
@@ -5026,7 +5026,7 @@ npm run build
 ## EPH-2A — Lineage Graph Model + Impact Analysis API
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Sonnet
+**Recommended Model:** Claude Haiku 3.5
 **Status:** PLANNED
 **Kind:** Backend. Medium-Large.
 **Closes:** P0-3 (lineage graph model), P0-4 (impact analysis)
@@ -5107,7 +5107,7 @@ GET  /carbon-api/catalog/tables/{id}/impact/  — BFS downstream ?depth=5 (max 1
 ## EPH-2B — PostgreSQL Full-Text Catalog Search
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Claude Haiku 3.5
 **Status:** PLANNED
 **Kind:** Backend. Medium.
 **Closes:** P0-7 (full-text search — PG FTS, zero new infra)
@@ -5170,7 +5170,7 @@ GET /carbon-api/catalog/search/?q=text&types=table,field,domain,glossary&page=1
 ## EPH-2C — Lineage Graph Visualization (Frontend)
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Raptor
 **Status:** PLANNED
 **Kind:** Frontend. Medium.
 **Depends on:** EPH-2A done (API live).
@@ -5217,7 +5217,7 @@ npm run build
 ## EPH-2D — Catalog Search UI
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Raptor
 **Status:** PLANNED
 **Kind:** Frontend. Medium.
 **Depends on:** EPH-2B done (API live). Parallel with EPH-2C.
@@ -5259,7 +5259,7 @@ npm run build
 ## EPH-3A — DQ Profiling Service + Scorecard API
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Sonnet
+**Recommended Model:** Claude Haiku 3.5
 **Status:** PLANNED
 **Kind:** Backend. Medium-Large.
 **Closes:** P1-1 (automated profiling — models exist, service doesn't), P1-2 (DQ scorecard API)
@@ -5333,7 +5333,7 @@ GET  /carbon-api/dq/tables/{id}/scorecard/    — quality scorecard
 ## EPH-3B — Freshness Monitoring + Staleness Alerts
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Claude Haiku 3.5
 **Status:** PLANNED
 **Kind:** Backend. Medium.
 **Closes:** P1-3 (freshness monitoring — alerting plumbing already exists via `notify_event`)
@@ -5402,7 +5402,7 @@ DEL  /carbon-api/catalog/tables/{id}/freshness/   — remove policy
 ## EPH-3C — DQ Profile + Scorecard + Freshness UI
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Raptor
 **Status:** PLANNED
 **Kind:** Frontend. Medium.
 **Depends on:** EPH-3A + EPH-3B both done.
@@ -5449,7 +5449,7 @@ npm run build
 ## EPH-4A — Column-Level RBAC (FieldAccessPolicy)
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Sonnet
+**Recommended Model:** Claude Haiku 3.5
 **Status:** PLANNED
 **Kind:** Backend. Large.
 **Closes:** P0-1 (column-level access control)
@@ -5523,7 +5523,7 @@ class FieldAccessPolicy(models.Model):
 ## EPH-4B — Data Masking Engine
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Claude Haiku 3.5
 **Status:** PLANNED
 **Kind:** Backend. Medium.
 **Closes:** P0-2 (data masking)
@@ -5588,7 +5588,7 @@ masking_strategy = models.CharField(max_length=20, choices=MASKING_STRATEGY_CHOI
 ## EPH-4C — Field Visibility + Masking UI
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Raptor
 **Status:** PLANNED
 **Kind:** Frontend. Medium.
 **Depends on:** EPH-4A + EPH-4B done.
@@ -5635,7 +5635,7 @@ npm run build
 ## EPH-5A — Structured Error Codes + API Version Header
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Claude Haiku 3.5
 **Status:** PLANNED
 **Kind:** Backend. Small-Medium.
 **Closes:** P1-9 (structured error codes), P1-7 (API versioning)
@@ -5708,7 +5708,7 @@ class CarbonAPIError(Exception):
 ## EPH-5B — Rate Limiting + OpenAPI Spec
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Claude Haiku 3.5
 **Status:** PLANNED
 **Kind:** Backend. Medium.
 **Closes:** P1-8 (rate limiting), P1 OpenAPI
@@ -5750,7 +5750,7 @@ DRF throttle classes backed by existing Redis `CACHES['default']`. Apply `AIRate
 ## EPH-6A — Structured JSON Logging + OpenTelemetry + Prometheus
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Sonnet
+**Recommended Model:** Claude Haiku 3.5
 **Status:** PLANNED
 **Kind:** Backend. Medium-Large.
 **Closes:** P1-10 (structured logging), P1-11 (OpenTelemetry/Prometheus)
@@ -5806,7 +5806,7 @@ ai_conversations_active = Gauge('carbon_ai_conversations_active', 'Active AI con
 ## EPH-6B — Grafana Dashboards + Prometheus Scrape Config
 **Date:** 2026-08-26
 **Worker Role:** devops-worker
-**Recommended Model:** DeepSeek V4-Flash
+**Recommended Model:** Claude Haiku 3.5
 **Status:** PLANNED
 **Kind:** DevOps. Small.
 **Depends on:** EPH-6A done (Prometheus metrics endpoint live).
