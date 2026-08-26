@@ -9,6 +9,7 @@ from .views import (
     FreshnessCheckViewSet, SchemaSnapshotViewSet, SchemaChangeViewSet,
     RuleTagViewSet, RuleFieldAssignmentViewSet,
     DQSuggestionViewSet, DQAnomalyViewSet,
+    TableProfileView, RunProfileView, TableScorecardView,
 )
 from .config_views import DQProfileConfigView
 
@@ -37,5 +38,9 @@ urlpatterns = [
     path('run-validation/', RunDQValidationView.as_view(), name='dq-run-validation'),
     path('gate/check/', GateCheckView.as_view(), name='dq-gate-check'),
     path('suggest/', DQSuggestView.as_view(), name='dq-suggest'),
+    # EPH-3A — table-scoped profile + scorecard
+    path('tables/<int:table_id>/profile/', TableProfileView.as_view(), name='dq-table-profile'),
+    path('tables/<int:table_id>/profile/run/', RunProfileView.as_view(), name='dq-table-profile-run'),
+    path('tables/<int:table_id>/scorecard/', TableScorecardView.as_view(), name='dq-table-scorecard'),
 ]
 urlpatterns += router.urls

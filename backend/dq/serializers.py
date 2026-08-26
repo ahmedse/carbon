@@ -69,6 +69,21 @@ class FieldProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'profiled_at']
 
 
+class TableProfileDetailSerializer(serializers.Serializer):
+    """Profile endpoint payload — latest TableProfile + its FieldProfiles."""
+    profile = TableProfileSerializer()
+    fields = FieldProfileSerializer(many=True)
+
+
+class ScorecardSerializer(serializers.Serializer):
+    """Quality scorecard payload (computed by scorecard_service)."""
+    quality_score = serializers.FloatField()
+    dimensions = serializers.DictField()
+    total_rules = serializers.IntegerField()
+    last_run_at = serializers.CharField(allow_null=True, allow_blank=True)
+    profile_summary = serializers.DictField()
+
+
 class RuleTagSerializer(serializers.ModelSerializer):
     """Simple serializer for rule categorization tags."""
     class Meta:

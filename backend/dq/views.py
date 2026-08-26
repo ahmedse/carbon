@@ -23,6 +23,7 @@ from .serializers import (
     FreshnessCheckSerializer, SchemaSnapshotSerializer, SchemaChangeSerializer,
     RuleTagSerializer, RuleFieldAssignmentSerializer, DQJobSerializer,
     DQSuggestionSerializer, DQAnomalySerializer,
+    TableProfileDetailSerializer, ScorecardSerializer,
 )
 from accounts.permissions import ReadAnyWriteAdmin, AdminOrSuperuserOnly
 from accounts.rbac_utils import get_allowed_org_unit_ids, user_has_global_role, get_allowed_module_ids
@@ -787,6 +788,127 @@ class BulkProfileView(APIView):
             except PermissionDenied:
                 pass  # silently skip inaccessible tables for non-staff
         return Response(bulk_profile(accessible_ids, user=user))
+
+
+# ---------------------------------------------------------------------------
+# EPH-3A — Table-scoped profile + scorecard endpoints
+# ---------------------------------------------------------------------------
+
+class TableProfileView(APIView):
+    """GET /dq/tables/{id}/profile/ — latest TableProfile + FieldProfiles."""
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
+
+    @swagger_auto_schema(
+        operation_description='Return the latest table profile and its per-field profiles.',
+        responses={200: 'TableProfile + FieldProfiles', 404: 'Table or profile not found'},
+    )
+    def get(self, request, table_id=None):
+        try:
+            table = DataTable.objects.get(id=table_id)
+        except DataTable.DoesNotExist:
+            return Response(
+                {'error': f'Table {table_id} not found'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        _check_table_access(request.user, table)
+
+        profile = TableProfile.objects.filter(data_table=table).order_by('-profiled_at').first()
+        if profile is None:
+            return Response(
+                {'detail': 'No profile yet for this table.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        field_profiles = (
+            FieldProfile.objects.filter(data_field__data_table=table)
+            .select_related('data_field')
+            .order_by('data_field__order', 'data_field__id')
+        )
+        serializer = TableProfileDetailSerializer({
+            'profile': profile,
+            'fields': field_profiles,
+        })
+        return Response(serializer.data)
+
+
+class RunProfileView(APIView):
+    """POST /dq/tables/{id}/profile/run/ — trigger async profiling (202 + task_id)."""
+    permission_classes = [IsAuthenticated, AdminOrSuperuserOnly]
+    required_capability = 'dq:manage_rules'
+
+    @swagger_auto_schema(
+        operation_description='Trigger profiling for a table (async). Returns 202 + task_id.',
+        responses={202: 'Accepted (task_id)', 404: 'Table not found'},
+    )
+    def post(self, request, table_id=None):
+        try:
+            table = DataTable.objects.get(id=table_id)
+        except DataTable.DoesNotExist:
+            return Response(
+                {'error': f'Table {table_id} not found'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        _check_table_access(request.user, table)
+
+        from .jobs import create_job
+        from .tasks import profile_table_task
+
+        # Give the run a followable lifecycle + a stable id via a DQJob.
+        job = create_job('profile', table=table, user=request.user)
+
+        # Dispatch async (Celery when configured); otherwise run inline.
+        # Deterministic jobs run inline as a platform hard rule.
+        if hasattr(profile_table_task, 'delay'):
+            async_result = profile_table_task.delay(table.id)
+            task_id = str(async_result.id)
+        else:
+            try:
+                summary = profile_table_task(table.id)
+                job.status = 'done'
+                job.progress = 100
+                job.result = summary
+                job.save(update_fields=['status', 'progress', 'result', 'updated_at'])
+            except Exception as exc:
+                job.status = 'failed'
+                job.error = str(exc)[:2000]
+                job.save(update_fields=['status', 'error', 'updated_at'])
+            task_id = str(job.id)
+
+        return Response(
+            {
+                'task_id': task_id,
+                'job_id': job.id,
+                'status': 'accepted',
+                'table_id': table.id,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class TableScorecardView(APIView):
+    """GET /dq/tables/{id}/scorecard/ — quality scorecard."""
+    permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
+    required_write_capability = 'dq:view'
+
+    @swagger_auto_schema(
+        operation_description='Return the quality scorecard for a table.',
+        responses={200: 'Scorecard', 404: 'Table not found'},
+    )
+    def get(self, request, table_id=None):
+        try:
+            table = DataTable.objects.get(id=table_id)
+        except DataTable.DoesNotExist:
+            return Response(
+                {'error': f'Table {table_id} not found'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        _check_table_access(request.user, table)
+
+        from .scorecard_service import compute_scorecard
+
+        scorecard = compute_scorecard(table.id)
+        return Response(ScorecardSerializer(scorecard).data)
 
 
 class DQRunView(APIView):
