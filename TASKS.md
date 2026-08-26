@@ -4874,8 +4874,8 @@ Commit all 7 files: `feat(ai): AI Expertise & Maturity Dashboard (EPH-0)`
 ## EPH-1A — Request Audit Middleware + Structured JSON Logging
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Claude Haiku 3.5
-**Status:** PLANNED
+**Recommended Model:** Claude Haiku 4.5
+**Status:** DONE — commit `29f891f` (15/15 tests, migration `core.0015` applied)
 **Kind:** Backend. Medium.
 **Closes:** P0-5 (API request audit), P0-6 (data access logging), P1-10 (structured logging)
 **Depends on:** EPH-0 done.
@@ -4960,8 +4960,8 @@ Apply JSON formatter + correlation filter to all non-debug handlers.
 ## EPH-1B — Notification Center (In-App Bell + Panel)
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
-**Recommended Model:** Raptor
-**Status:** PLANNED
+**Recommended Model:** Raptor mini
+**Status:** DONE — commit `5f0709d` (6/6 tests, build clean)
 **Kind:** Frontend only. Medium.
 **Closes:** P0-8 (unified notification system — backend exists since Phase 1.6)
 **Depends on:** EPH-0 done (can run in parallel with EPH-1A — different files).
