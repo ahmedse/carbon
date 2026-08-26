@@ -5170,8 +5170,8 @@ GET /carbon-api/catalog/search/?q=text&types=table,field,domain,glossary&page=1
 ## EPH-2C — Lineage Graph Visualization (Frontend)
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
-**Recommended Model:** Raptor
-**Status:** PLANNED
+**Recommended Model:** Raptor mini
+**Status:** DONE
 **Kind:** Frontend. Medium.
 **Depends on:** EPH-2A done (API live).
 
@@ -5217,8 +5217,8 @@ npm run build
 ## EPH-2D — Catalog Search UI
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
-**Recommended Model:** Raptor
-**Status:** PLANNED
+**Recommended Model:** Raptor mini
+**Status:** DONE
 **Kind:** Frontend. Medium.
 **Depends on:** EPH-2B done (API live). Parallel with EPH-2C.
 
