@@ -4,6 +4,8 @@ Virtual schema management for multi-tenant, modular, RBAC-controlled data tables
 import re
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.contrib.postgres.search import SearchVectorField
+from django.contrib.postgres.indexes import GinIndex
 from core.models import Module
 
 User = get_user_model()
@@ -32,6 +34,7 @@ class DataTable(models.Model):
         default=False,
         help_text="When locked, prevents accidental deletion or modification (admin override available)"
     )
+    search_vector = SearchVectorField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_data_tables')
     updated_at = models.DateTimeField(auto_now=True)
@@ -47,6 +50,9 @@ class DataTable(models.Model):
 
     class Meta:
         unique_together = ("module", "name")
+        indexes = [
+            GinIndex(fields=['search_vector'], name='datatable_search_vector_idx'),
+        ]
 
 class DataField(models.Model):
     FIELD_TYPES = [

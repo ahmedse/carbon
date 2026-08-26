@@ -7,6 +7,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.contrib.postgres.search import SearchVectorField
+from django.contrib.postgres.indexes import GinIndex
 
 from connections.models import DataSource
 from core.models import Module
@@ -31,6 +33,7 @@ class DataDomain(models.Model):
     name = models.CharField(max_length=120, unique=True)
     slug = models.SlugField(max_length=140, unique=True, blank=True)
     description = models.TextField(blank=True)
+    search_vector = SearchVectorField(null=True)
     parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='children')
     owner = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='owned_domains')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -38,6 +41,11 @@ class DataDomain(models.Model):
 
     def __str__(self):
         return self.name
+
+    class Meta:
+        indexes = [
+            GinIndex(fields=['search_vector'], name='datadomain_search_vector_idx'),
+        ]
 
 
 class GlossaryTerm(models.Model):

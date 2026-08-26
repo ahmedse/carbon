@@ -341,28 +341,6 @@ class GovernancePolicyViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
 
-class CatalogSearchView(APIView):
-    permission_classes = [ReadAnyWriteAdmin]
-    required_write_capability = 'catalog:view'
-
-    def get(self, request):
-        ensure_asset_profiles()
-        q = (request.query_params.get('q') or '').strip()
-        assets, terms = [], []
-        if q:
-            asset_qs = AssetProfile.objects.filter(
-                Q(description__icontains=q) |
-                Q(data_table__title__icontains=q) | Q(data_table__name__icontains=q) |
-                Q(data_field__label__icontains=q) | Q(data_field__name__icontains=q)
-            ).distinct()[:50]
-            assets = AssetProfileSerializer(asset_qs, many=True).data
-            term_qs = GlossaryTerm.objects.filter(
-                Q(term__icontains=q) | Q(definition__icontains=q)
-            )[:50]
-            terms = GlossaryTermSerializer(term_qs, many=True).data
-        return Response({'query': q, 'assets': assets, 'glossary': terms})
-
-
 class LineageEdgeViewSet(viewsets.ModelViewSet):
     """
     CRUD operations on lineage edges.

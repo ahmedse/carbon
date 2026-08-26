@@ -3,9 +3,10 @@ from django.urls import path
 from .views import (
     DataDomainViewSet, GlossaryTermViewSet, TagViewSet,
     AssetProfileViewSet, GovernanceEventViewSet, GovernanceComplianceView,
-    GovernancePolicyViewSet, CatalogSearchView, LineageEdgeViewSet,
+    GovernancePolicyViewSet, LineageEdgeViewSet,
     TableLineageView, TableImpactView,
 )
+from .search_views import CatalogSearchView
 from .dataset_views import (
     ApproveVersionView, ContractViolationsView, ContractView, DatasetViewSet,
     IngestERPView, IngestUploadView, RejectVersionView, VersionDetailView,
