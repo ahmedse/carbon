@@ -4825,7 +4825,7 @@ Workflow/approval engine (P1) | Retention policies/right-to-erasure (P1) | Gloss
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
 **Recommended Model:** Claude Haiku 3.5
-**Status:** READY — backend tests needed; frontend + url routing already wired
+**Status:** DONE (11 tests, commit e34e6d0)
 **Kind:** Backend tests only. Small.
 
 ### Context
