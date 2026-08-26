@@ -33,6 +33,7 @@ import DetailHeader from '../../components/detail/DetailHeader';
 import DQRulesTab from './tabs/DQRulesTab';
 import GovernanceTab from './tabs/GovernanceTab';
 import AuditHistoryTab from './tabs/AuditHistoryTab';
+import LineageTab from './tabs/LineageTab';
 import SchemaStructureTab from './tabs/SchemaStructureTab';
 
 export default function SchemaDetailPage() {
@@ -203,6 +204,7 @@ export default function SchemaDetailPage() {
             ),
           },
           { label: t('relations'), component: SchemaRelationsTab },
+          { label: t('lineage'), component: () => <LineageTab tableId={tableId} isAdmin={isAdmin} /> },
           { label: t('dqRules'), component: () => <DQRulesTab tableId={tableId} fields={fields} /> },
           { label: t('governance'), component: () => <GovernanceTab tableId={tableId} /> },
           { label: t('auditHistory'), component: () => <AuditHistoryTab tableId={tableId} /> },

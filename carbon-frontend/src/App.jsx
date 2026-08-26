@@ -52,6 +52,7 @@ const CatalogHome = React.lazy(() => import("./pages/catalog/CatalogHome"));
 const SchemaDetailPage = React.lazy(() => import("./pages/catalog/SchemaDetailPage"));
 const DataProductsPage = React.lazy(() => import("./pages/catalog/DataProductsPage"));
 const DataProductDetailPage = React.lazy(() => import("./pages/catalog/DataProductDetailPage"));
+const SearchPage = React.lazy(() => import("./pages/catalog/SearchPage"));
 const DomainDetailPage = React.lazy(() => import("./pages/catalog/DomainDetailPage"));
 const TagDetailPage = React.lazy(() => import("./pages/catalog/TagDetailPage"));
 const AssetDetailPage = React.lazy(() => import("./pages/catalog/AssetDetailPage"));
@@ -393,6 +394,7 @@ export default function App() {
                       <GovernancePolicyPage />
                     </AdminRoute>
                   } />
+                  <Route path="/catalog/search" element={<SearchPage />} />
                   <Route path="/catalog/tables/:tableId" element={<SchemaDetailPage />} />
                   {/* Legacy redirects */}
                   <Route path="/catalog/schemas" element={<Navigate to="/catalog/products" replace />} />

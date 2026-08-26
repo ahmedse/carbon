@@ -37,15 +37,27 @@ i18n.init({
   initImmediate: false,
 });
 
+// Cache `t` per namespace so `useTranslation` returns a STABLE function
+// reference across renders. Real react-i18next memoizes `t`; without this, any
+// `useCallback`/`useEffect` that lists `t` in its deps re-fires on every render,
+// causing infinite re-render loops in tests.
+const tCache = new Map();
+
 export const useTranslation = (ns) => {
   const namespaces = Array.isArray(ns) ? ns : ns ? [ns] : ['common'];
-  return {
-    t: (key, options) => {
+  const cacheKey = namespaces.join('|');
+  let t = tCache.get(cacheKey);
+  if (!t) {
+    t = (key, options) => {
       if (typeof key !== 'string') return i18n.t(key, options);
       // Colon-prefixed keys (e.g. 'shell:nav.home') already carry a namespace.
       if (key.includes(':')) return i18n.t(key, options);
       return i18n.t(key, { ...options, ns: namespaces });
-    },
+    };
+    tCache.set(cacheKey, t);
+  }
+  return {
+    t,
     i18n,
     ready: true,
   };

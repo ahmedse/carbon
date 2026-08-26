@@ -53,6 +53,7 @@ import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import SchemaIcon from '@mui/icons-material/Schema';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import SearchIcon from '@mui/icons-material/Search';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
 import { can } from '../authz';
@@ -106,6 +107,7 @@ function getSidebarItems(studioId) {
     case 'catalog':
       return [
         { label: 'Catalog Home', path: '/catalog', icon: DashboardIcon },
+        { label: 'Search', path: '/catalog/search', icon: SearchIcon },
         { type: 'divider' },
         { type: 'group', label: 'Data Products' },
         { label: 'Data Products', path: '/catalog/products', icon: TableChartIcon },
