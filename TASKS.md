@@ -4758,3 +4758,1137 @@ Gate: ALL green — lint, vitest, build, verify.sh frontend, pytest smoke, E2E b
 6. I18N-6 (QA/audit/E2E) — qa-validator
 Each phase requires the previous gate green before dispatch. Master Architect runs all terminal gates.
 
+
+---
+
+# ENTERPRISE PLATFORM HARDENING TRACK (EPH)
+
+**Audit reference:** `docs/AUDIT-DATA-TRUST-PLATFORM-ENTERPRISE.md` — 47 gaps across 25 categories (6/10 overall).
+**Goal:** Close all 8 P0 blockers. Address 8 of 12 P1 gaps. 18 phases across 6 sprints.
+**Audit date:** 2026-08-26.
+
+## Pre-Dispatch Reality Check (audit corrections vs. actual codebase)
+
+| Audit Claim | Actual State | Implication |
+|-------------|--------------|-------------|
+| "No Notification model, no in-app center" | `UserAlert` + `NotificationChannel` + `NotificationRule` + `notify_event()` fully implemented in `accounts/models.py` (Phase 1.6). API in `notification_views.py`. | EPH-1B is **frontend only** (no backend work). |
+| "DQ Profiling — no TableProfile model" | `TableProfile` + `FieldProfile` exist in `dq/models.py` with null_counts, distinct_counts, min/max/mean, completeness_pct. | EPH-3A = scheduling service + scorecard, NOT model creation. |
+| "No freshness monitoring" | `NotificationRule.EventType.FRESHNESS_VIOLATION` defined; `notify_event('freshness_violation', ...)` callable. | EPH-3B = add `DataTable.last_data_updated_at` signal + `FreshnessPolicy` model + task. Alerting plumbing done. |
+
+## Locked Architectural Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Search: PostgreSQL FTS (`SearchVector`/`SearchQuery`/GIN index) | Zero new infra. Good to 50K assets. Migrate to Meilisearch later if needed. |
+| Lineage: manual registration first | No SQL parser (P2). `LineageEdge` table + API + graph UI only. |
+| Masking: serializer-based redaction | PII fields masked in API response per user capabilities. Dynamic consent gate is P2. |
+| Column RBAC: capability-based `FieldAccessPolicy` | Extends existing `ScopedRole` + capabilities pattern. No ABAC engine (P2). |
+| Rate limiting: Redis counter via DRF throttle | Redis already present. No new broker. |
+| Versioning: `API-Version: 1` response header | No URL churn. `/v2/` reserved for breaking changes. |
+| Profiling: Celery periodic task | Celery + Redis in stack. Profile via existing `DataRow` queryset. |
+| Notifications: extend `accounts/` app | `UserAlert` is canonical. No new app. |
+
+## P0 Closure Map
+
+| P0 Gap | Phase | Notes |
+|--------|-------|-------|
+| API request audit middleware | EPH-1A | New `RequestAuditLog` + `AuditMiddleware` |
+| Data access logging | EPH-1A | Same middleware, structured JSON logging |
+| Unified notification system | EPH-1B (frontend only) | Backend exists since Phase 1.6 |
+| Lineage graph model | EPH-2A | New `LineageEdge` table + API |
+| Impact analysis | EPH-2A | BFS downstream query |
+| Full-text search | EPH-2B + EPH-2D | PG FTS + search UI |
+| Column-level access control | EPH-4A + EPH-4C | `FieldAccessPolicy` + serializer filtering |
+| Data masking engine | EPH-4B | `DataField.masking_strategy` + `MaskingService` |
+
+## P1 Partial Closure Map
+
+| P1 Gap | Phase |
+|--------|-------|
+| Automated DQ profiling engine | EPH-3A |
+| DQ scorecard API | EPH-3A |
+| Freshness monitoring + alerts | EPH-3B |
+| Structured error codes | EPH-5A |
+| API versioning header | EPH-5A |
+| Platform-wide rate limiting | EPH-5B |
+| OpenAPI spec publication | EPH-5B |
+| Structured JSON logging + correlation IDs | EPH-6A |
+| OpenTelemetry + Prometheus | EPH-6A |
+
+## Deferred (P2/P3 — dispatch after EPH-6 complete)
+
+Workflow/approval engine (P1) | Retention policies/right-to-erasure (P1) | Glossary hierarchy (P2) | MDM hierarchical values (P2) | Webhook infrastructure (P2) | Column-level lineage (P2, after EPH-2A) | ABAC engine (P2, after EPH-4A) | Slack/Teams integration (P2) | Schema templates (P2) | Storybook (P2) | Async import/export (P2) | LDAP/AD sync (P2) | DQ incident management (P2) | Access review workflows (P2) | GraphQL (P3) | Event sourcing/CQRS (P3) | Federated learning (P3) | Synthetic data (P3).
+
+---
+
+## EPH-0 — AI Expertise Dashboard: Close In-Flight Work
+**Date:** 2026-08-26
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY — backend tests needed; frontend + url routing already wired
+**Kind:** Backend tests only. Small.
+
+### Context
+Four files exist uncommitted and ready:
+- `backend/ai/maturity_api.py` (232 lines) — `AIMaturityView` at `GET ai/pulse/maturity/`
+- `backend/ai/ops_urls.py` — adds `maturity/` route (already wired via `config/urls.py`)
+- `carbon-frontend/src/pages/admin/ai/AIExpertisePanel.jsx` (416 lines, 0 lint errors)
+- `carbon-frontend/src/App.jsx` + `src/shell/ShellSidebar.jsx` — route + nav link wired
+- `carbon-frontend/src/pages/admin/ai/LearningFlywheelPanel.jsx` — minor update
+
+### Files to Read First
+- `backend/ai/maturity_api.py` (read fully — understand response structure before writing tests)
+- `backend/ai/ops_urls.py` (confirm route name `ai-pulse-maturity`)
+- `backend/ai/tests/test_observability_api.py` (test fixture pattern to replicate)
+
+### Files to Change
+- `backend/ai/tests/test_maturity_api.py` (NEW)
+
+### Implementation
+Write `test_maturity_api.py` covering:
+1. `GET /carbon-api/ai/pulse/maturity/` returns 200 for admin user
+2. Returns expected top-level keys (inspect `AIMaturityView.get()` return dict)
+3. Returns 401 for unauthenticated
+4. Returns 403 for regular (non-admin) user
+5. Response is CBAC-scoped (query is filtered by `scope_ai_queryset` or equivalent)
+
+No new migration needed.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_maturity_api.py -v --maxfail=5
+# >=4 tests pass
+
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint      # 0 new errors
+npm run build     # clean
+```
+
+### Output
+Commit all 7 files: `feat(ai): AI Expertise & Maturity Dashboard (EPH-0)`
+
+---
+
+## EPH-1A — Request Audit Middleware + Structured JSON Logging
+**Date:** 2026-08-26
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Backend. Medium.
+**Closes:** P0-5 (API request audit), P0-6 (data access logging), P1-10 (structured logging)
+**Depends on:** EPH-0 done.
+
+### Files to Read First
+- `backend/config/settings.py` — `MIDDLEWARE` list, current `LOGGING` config
+- `backend/core/models.py` — understand what lives in `core/` (add model here or new file)
+- `backend/accounts/models.py` — ScopedRole pattern for IP/org extraction reference
+- `backend/requirements.txt` — confirm `python-json-logger` not already present
+
+### Files to Change
+- `backend/core/middleware.py` (NEW or EXTEND) — `AuditMiddleware` + `CorrelationIdMiddleware`
+- `backend/core/models.py` or `backend/core/audit_models.py` — `RequestAuditLog` model
+- `backend/core/migrations/` — migration for `RequestAuditLog`
+- `backend/core/log_filters.py` (NEW) — `CorrelationIdFilter` injects correlation_id into log records
+- `backend/config/settings.py` — wire middleware, update LOGGING to JSON formatter
+- `backend/requirements.txt` — add `python-json-logger>=2.0.7`
+- `backend/core/tests/test_audit_middleware.py` (NEW)
+
+### Implementation
+
+**`RequestAuditLog` model:**
+```python
+class RequestAuditLog(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, db_index=True)
+    ip_address = models.GenericIPAddressField()
+    method = models.CharField(max_length=10)
+    path = models.CharField(max_length=500, db_index=True)
+    query_string = models.CharField(max_length=500, blank=True)
+    status_code = models.PositiveSmallIntegerField(null=True)
+    duration_ms = models.PositiveIntegerField(null=True)
+    correlation_id = models.CharField(max_length=36, blank=True, db_index=True)
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [models.Index(fields=['user', 'timestamp']), models.Index(fields=['path', 'timestamp'])]
+```
+
+**`AuditMiddleware`** — logs POST/PUT/PATCH/DELETE only:
+- Skip paths: `/health/`, `/carbon-api/schema/`, `/static/`, `/mediafiles/`
+- Extract real IP: `X-Forwarded-For` first entry (stripped)
+- Write `RequestAuditLog` inside `try/except` — NEVER let audit failure break the request
+- Read `correlation_id` from `request.correlation_id` (set by `CorrelationIdMiddleware` which runs first)
+
+**`CorrelationIdMiddleware`** — runs before `AuditMiddleware`:
+- Read `HTTP_X_REQUEST_ID` from headers or generate `uuid4()`
+- Attach to `request.correlation_id` + `response['X-Request-ID']`
+- Store in thread-local for log filter injection
+
+**JSON logging** in `settings.LOGGING`:
+```python
+'formatters': {
+    'json': {
+        '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+        'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
+    },
+},
+'filters': {'correlation_id': {'()': 'core.log_filters.CorrelationIdFilter'}},
+```
+Apply JSON formatter + correlation filter to all non-debug handlers.
+
+### Tests (`test_audit_middleware.py`)
+- POST creates `RequestAuditLog` with correct method/path/status_code
+- GET does NOT create `RequestAuditLog`
+- `/health/` endpoint is skipped
+- Unauthenticated request logs `user=None`
+- IP extracted correctly from `X-Forwarded-For`
+- `X-Request-ID` present in response headers
+- Middleware exception does NOT propagate (fail-silent guard)
+
+### Verification Gate
+```bash
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest core/tests/test_audit_middleware.py -v
+# >=7 tests pass
+```
+
+---
+
+## EPH-1B — Notification Center (In-App Bell + Panel)
+**Date:** 2026-08-26
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Frontend only. Medium.
+**Closes:** P0-8 (unified notification system — backend exists since Phase 1.6)
+**Depends on:** EPH-0 done (can run in parallel with EPH-1A — different files).
+
+### Backend API (already exists — DO NOT TOUCH)
+- `GET /carbon-api/accounts/notifications/` — paginated `UserAlert` list (newest first)
+- `PATCH /carbon-api/accounts/notifications/{id}/mark-read/`
+- `POST /carbon-api/accounts/notifications/mark-all-read/`
+- `GET /carbon-api/accounts/notifications/unread-count/` — `{count: N}`
+
+### Files to Read First
+- `backend/accounts/notification_views.py` — exact endpoint URLs + response shape
+- `carbon-frontend/src/components/HeaderEnhanced.jsx` — bell icon location
+- `carbon-frontend/src/api/api.js` — `apiFetch` pattern
+- `.ai-toolkit/shared/compact-ui.md` — RULE_8 (theme tokens), RULE_16 (layout)
+
+### Files to Change
+- `carbon-frontend/src/api/notifications.js` (NEW) — `getNotifications(token,page)`, `getUnreadCount(token)`, `markRead(token,id)`, `markAllRead(token)`
+- `carbon-frontend/src/hooks/useNotifications.js` (NEW) — polls unread-count every 30s, returns `{alerts, unreadCount, loading, markRead, markAllRead, refresh}`
+- `carbon-frontend/src/components/notifications/NotificationCenter.jsx` (NEW) — Popover anchored to bell
+- `carbon-frontend/src/components/HeaderEnhanced.jsx` (MODIFY) — wire bell to `NotificationCenter`, add `Badge badgeContent={unreadCount}`
+- `carbon-frontend/src/__tests__/NotificationCenter.test.jsx` (NEW)
+
+### Implementation
+
+**`NotificationCenter.jsx`** — MUI `Popover` (not `Modal`), 380px wide, max 480px tall:
+- Header: "Notifications" + "Mark all read" `Button` (disabled when count=0)
+- List: each row has level icon (Info/Warning/Error/Success with MUI severity colors) + title (bold) + body (2-line truncated) + relative time + optional link chip
+- Clicking row: markRead optimistically + navigate to `alert.link` if set
+- Category chips: `Chip size="small" variant="outlined"` per `UserAlert.Category`
+- "Load more" button at bottom for pagination
+- Empty state: "No notifications" centered with `text.secondary`
+- RULE_8: theme tokens only — `warning.main`, `error.main`, `success.main`, `text.secondary`
+
+**`useNotifications`** hook:
+- On mount: fetch page 1 + unread count
+- `setInterval(30000)` polling for unread count (clear on unmount)
+- `markRead(id)`: optimistic `is_read=true` + PATCH
+- `markAllRead()`: optimistic clear all + POST
+
+### Tests
+- Renders badge with correct unread count
+- Renders empty state when no notifications
+- Renders notification rows with correct level colors
+- Click notification: `markRead` called + navigation to link
+- "Mark all read" triggers bulk action
+- Loading skeleton during fetch
+
+### DO NOT TOUCH
+- `backend/accounts/notification_views.py`, `backend/accounts/models.py`
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/NotificationCenter.test.jsx
+npm run build
+```
+
+---
+
+## EPH-2A — Lineage Graph Model + Impact Analysis API
+**Date:** 2026-08-26
+**Worker Role:** backend-worker
+**Recommended Model:** Sonnet
+**Status:** PLANNED
+**Kind:** Backend. Medium-Large.
+**Closes:** P0-3 (lineage graph model), P0-4 (impact analysis)
+**Depends on:** EPH-1A done.
+
+### Files to Read First
+- `backend/catalog/models.py` — existing models; `lineage = JSONField` stub at ~line 305 (this is on `DatasetVersion`, not a graph — we ADD `LineageEdge` as a separate model)
+- `backend/dataschema/models.py` — `DataTable`, `DataField` (FKs for LineageEdge)
+- `backend/catalog/views.py` — existing viewset/RBAC patterns
+- `backend/catalog/urls.py` — URL registration
+- `.ai-toolkit/shared/api-contract.md` — REST conventions
+
+### Files to Change
+- `backend/catalog/models.py` — add `LineageEdge` model
+- `backend/catalog/serializers.py` — `LineageEdgeSerializer`
+- `backend/catalog/views.py` — `LineageEdgeViewSet`, `TableLineageView`, `TableImpactView`
+- `backend/catalog/urls.py` — new route registrations
+- `backend/catalog/services.py` — `get_lineage(table_id, direction, depth)`, `get_impact(table_id, depth=5)`
+- `backend/catalog/migrations/` — migration
+- `backend/catalog/tests/test_lineage.py` (NEW)
+
+### Model
+
+```python
+class LineageEdge(models.Model):
+    class EdgeType(models.TextChoices):
+        TRANSFORM = 'transform', 'Transform'
+        COPY = 'copy', 'Copy'
+        AGGREGATE = 'aggregate', 'Aggregate'
+        DEPENDENCY = 'dependency', 'Dependency'
+
+    source_table = models.ForeignKey('dataschema.DataTable', on_delete=models.CASCADE, related_name='lineage_outgoing')
+    target_table = models.ForeignKey('dataschema.DataTable', on_delete=models.CASCADE, related_name='lineage_incoming')
+    # Column lineage (P2 — optional fields now)
+    source_field = models.ForeignKey('dataschema.DataField', null=True, blank=True, on_delete=models.SET_NULL, related_name='lineage_outgoing')
+    target_field = models.ForeignKey('dataschema.DataField', null=True, blank=True, on_delete=models.SET_NULL, related_name='lineage_incoming')
+    edge_type = models.CharField(max_length=20, choices=EdgeType.choices, default=EdgeType.DEPENDENCY)
+    transform_description = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('source_table', 'target_table', 'edge_type')]
+        indexes = [models.Index(fields=['source_table']), models.Index(fields=['target_table'])]
+```
+
+### API Endpoints
+```
+GET  /carbon-api/catalog/lineage/             — list all edges (paginated; filter ?source=id&target=id)
+POST /carbon-api/catalog/lineage/             — register edge (RequireWriteAdmin)
+DEL  /carbon-api/catalog/lineage/{id}/        — remove edge (RequireWriteAdmin)
+GET  /carbon-api/catalog/tables/{id}/lineage/ — upstream+downstream ?direction=upstream|downstream|both
+GET  /carbon-api/catalog/tables/{id}/impact/  — BFS downstream ?depth=5 (max 10)
+```
+
+**`get_impact(table_id, depth=5)`** — BFS over `lineage_outgoing`. Cycle-guard: track visited set. Returns `{levels: [{depth:1, tables:[{id,name,module_name,edge_type}]},...], total_affected: N}`.
+
+### Tests (`test_lineage.py`)
+- Create edge: stored correctly, `unique_together` enforced
+- `GET tables/{id}/lineage/?direction=upstream` returns only incoming
+- `GET tables/{id}/lineage/?direction=downstream` returns only outgoing
+- `GET tables/{id}/impact/` BFS: A→B→C returns 2 levels, total_affected=2
+- Cycle guard: A→B→A does not loop
+- 401 for unauthenticated; 403 for non-admin POST
+- Cascade: deleting DataTable deletes its LineageEdges
+
+### Verification Gate
+```bash
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest catalog/tests/test_lineage.py -v
+# >=8 tests pass
+```
+
+---
+
+## EPH-2B — PostgreSQL Full-Text Catalog Search
+**Date:** 2026-08-26
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Backend. Medium.
+**Closes:** P0-7 (full-text search — PG FTS, zero new infra)
+**Depends on:** EPH-2A done.
+
+### Files to Read First
+- `backend/catalog/models.py` — `DataDomain`, `GlossaryTerm`, `AssetProfile`
+- `backend/dataschema/models.py` — `DataTable`, `DataField`
+- `backend/catalog/views.py` — existing filter/search patterns
+- `backend/catalog/urls.py`
+
+### Files to Change
+- `backend/catalog/models.py` — add `search_vector = SearchVectorField(null=True)` to `DataTable` + `DataDomain`
+- `backend/catalog/migrations/` — migration with GIN index
+- `backend/catalog/search_views.py` (NEW) — `CatalogSearchView`
+- `backend/catalog/search_index.py` (NEW) — `post_save` signal handlers to update `search_vector`
+- `backend/catalog/urls.py` — `path('search/', CatalogSearchView.as_view(), name='catalog-search')`
+- `backend/catalog/tests/test_search.py` (NEW)
+
+### Implementation
+
+**SearchVectorField migration** for `DataTable` and `DataDomain` (weight A=name, B=description):
+```python
+from django.contrib.postgres.search import SearchVectorField
+from django.contrib.postgres.indexes import GinIndex
+# Add field + GinIndex in migration
+```
+
+**Signal handler** updates `search_vector` on `post_save` for `DataTable` and `DataDomain` using `SearchVector('name', weight='A') + SearchVector('description', weight='B')`.
+
+**`CatalogSearchView`**:
+```
+GET /carbon-api/catalog/search/?q=text&types=table,field,domain,glossary&page=1
+```
+- `table` + `domain`: use `SearchQuery` against `search_vector` (PostgreSQL ranked)
+- `field` + `glossary`: use `Q(name__icontains=q) | Q(description__icontains=q)` (simpler, no GIN needed)
+- Apply existing RBAC org-unit scoping
+- Returns: `{query, total, results: [{type, id, name, description, url_hint}]}` (page size 20)
+- Reject `?q=` shorter than 2 chars with 400
+
+### Tests (`test_search.py`)
+- Name match returns table (weight A)
+- Description match returns table (weight B)
+- `?types=domain` returns only domains
+- Mixed type search returns interleaved results
+- Empty `?q=` returns 400
+- RBAC: org-scoped tables only visible to authorized user
+
+### Verification Gate
+```bash
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest catalog/tests/test_search.py -v
+# >=6 tests pass
+```
+
+---
+
+## EPH-2C — Lineage Graph Visualization (Frontend)
+**Date:** 2026-08-26
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Frontend. Medium.
+**Depends on:** EPH-2A done (API live).
+
+### Files to Read First
+- `carbon-frontend/src/components/graph/EnterpriseGraph.jsx` — REUSE this for rendering
+- `carbon-frontend/src/pages/catalog/SchemaDetailPage.jsx` — add tab here (between Relations and Governance)
+- `carbon-frontend/src/api/aiWorkspace.js` — apiFetch pattern
+- EPH-2A API response shape: `GET tables/{id}/lineage/` + `GET tables/{id}/impact/`
+
+### Files to Change
+- `carbon-frontend/src/api/lineage.js` (NEW) — `getTableLineage(tableId,direction)`, `getTableImpact(tableId)`, `createLineageEdge(data)`, `deleteLineageEdge(id)`
+- `carbon-frontend/src/pages/catalog/tabs/LineageTab.jsx` (NEW)
+- `carbon-frontend/src/pages/catalog/SchemaDetailPage.jsx` (MODIFY) — add "Lineage" tab
+- `carbon-frontend/src/__tests__/LineageTab.test.jsx` (NEW)
+
+### Implementation
+
+**`LineageTab.jsx`**:
+- Toggle `ToggleButtonGroup`: "Graph" / "Impact" (default Graph)
+- **Graph view**: `<EnterpriseGraph nodes={tableNodes} edges={lineageEdges} />` — upstream nodes one color, current table highlighted, downstream another
+- **Impact view**: structured list of impact levels — each level = indented group with `Chip` count badge
+- Direction filter: `ButtonGroup` upstream / both / downstream
+- Empty state: "No lineage registered. Click Add Edge to connect tables."
+- "Add Edge" button (admin only): `SystemDialog` with source/target autocomplete + edge type + description
+
+### Tests
+- Renders graph view by default
+- Toggle switches to impact view
+- Empty state renders correctly
+- Graph shows upstream + downstream nodes
+- Impact view shows correct level structure
+- "Add Edge" dialog opens for admin
+
+### Verification Gate
+```bash
+npm run lint
+npx vitest run src/__tests__/LineageTab.test.jsx
+npm run build
+```
+
+---
+
+## EPH-2D — Catalog Search UI
+**Date:** 2026-08-26
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Frontend. Medium.
+**Depends on:** EPH-2B done (API live). Parallel with EPH-2C.
+
+### Files to Read First
+- `carbon-frontend/src/shell/ShellSidebar.jsx` — where to add search shortcut
+- `carbon-frontend/src/App.jsx` — add `/catalog/search` route
+- Backend response shape: `{query, total, results: [{type, id, name, description, url_hint}]}`
+
+### Files to Change
+- `carbon-frontend/src/api/catalogSearch.js` (NEW) — `searchCatalog(token, q, types, page)`
+- `carbon-frontend/src/pages/catalog/SearchPage.jsx` (NEW)
+- `carbon-frontend/src/App.jsx` (MODIFY) — add `Route path="/catalog/search"`
+- `carbon-frontend/src/shell/ShellSidebar.jsx` (MODIFY) — add search shortcut at top of catalog sidebar
+- `carbon-frontend/src/__tests__/SearchPage.test.jsx` (NEW)
+
+### Implementation
+- `SearchPage.jsx` at `/catalog/search`: debounced `TextField` + type filter chips (All/Tables/Fields/Domains/Glossary) + results list (type icon chip + name + 2-line description + detail link) + "N results for '...'" + loading skeleton + empty state
+- URL params sync (`?q=...&types=...`) for back/forward navigation
+- Sidebar: search icon button at top of Catalog sidebar; `onClick` navigate to `/catalog/search`
+
+### Tests
+- Renders search input + type chips
+- Debounced fetch called on input change
+- Results render with type chips + links
+- Type filter toggles update results
+- Empty state shown when no results
+- URL params sync
+
+### Verification Gate
+```bash
+npm run lint
+npx vitest run src/__tests__/SearchPage.test.jsx
+npm run build
+```
+
+---
+
+## EPH-3A — DQ Profiling Service + Scorecard API
+**Date:** 2026-08-26
+**Worker Role:** backend-worker
+**Recommended Model:** Sonnet
+**Status:** PLANNED
+**Kind:** Backend. Medium-Large.
+**Closes:** P1-1 (automated profiling — models exist, service doesn't), P1-2 (DQ scorecard API)
+**Depends on:** EPH-2B done.
+
+### Files to Read First
+- `backend/dq/models.py` — `TableProfile` + `FieldProfile` (ALREADY EXIST — read fully before writing any code)
+- `backend/dq/services.py` — existing run/job patterns
+- `backend/dataschema/models.py` — `DataTable`, `DataField`, `DataRow`
+- `backend/dq/jobs.py` — Celery/task pattern to replicate
+
+### Files to Change
+- `backend/dq/profiling_service.py` (NEW) — `profile_table(table_id)` — populates existing `TableProfile`/`FieldProfile`
+- `backend/dq/tasks.py` (NEW or EXTEND) — `profile_table_task` Celery task
+- `backend/dq/scorecard_service.py` (NEW) — `compute_scorecard(table_id)` aggregates `DQResult` by DAMA dimension
+- `backend/dq/views.py` (EXTEND) — `TableProfileView`, `RunProfileView`, `TableScorecardView`
+- `backend/dq/serializers.py` (EXTEND) — profile + scorecard serializers
+- `backend/dq/urls.py` (EXTEND) — new routes
+- `backend/dq/tests/test_profiling.py` (NEW)
+
+### Implementation
+
+**`profile_table(table_id)`** — populates existing models:
+1. Load `DataRow` queryset for table (limit 10_000 rows)
+2. For each `DataField`: compute null_count, distinct_count, min/max (all types), mean (numeric only), top 10 values by frequency
+3. Create or update `TableProfile` + one `FieldProfile` per field (use `update_or_create` on `data_field`)
+4. These models ALREADY exist — do NOT recreate them, populate them
+
+**`compute_scorecard(table_id)`** — returns:
+```python
+{
+    "quality_score": 0.0..1.0,         # weighted average of dimension scores
+    "dimensions": {                     # per DAMA dimension
+        "completeness": {"passed": N, "failed": M, "score": 0.0..1.0},
+        ...                             # validity, accuracy, uniqueness, consistency, timeliness
+    },
+    "total_rules": N,
+    "last_run_at": timestamp,
+    "profile_summary": {"row_count": N, "completeness_pct": P, "profiled_at": ts}
+}
+```
+Pull from `DQResult.objects.filter(rule__table_assignments__data_table=table)`.
+
+**API Endpoints**:
+```
+GET  /carbon-api/dq/tables/{id}/profile/      — latest TableProfile + FieldProfiles
+POST /carbon-api/dq/tables/{id}/profile/run/  — trigger async profiling (202 + {task_id})
+GET  /carbon-api/dq/tables/{id}/scorecard/    — quality scorecard
+```
+
+### Tests (`test_profiling.py`)
+- `profile_table()` creates `TableProfile` with correct `row_count`
+- `profile_table()` creates `FieldProfile` with correct `null_count`
+- `profile_table()` computes correct `distinct_count` for string field
+- `profile_table()` computes correct `min`/`max`/`mean` for numeric field
+- `compute_scorecard()` returns correct dimension breakdown from `DQResult` fixtures
+- `compute_scorecard()` handles table with no DQ results (returns zeros)
+- `GET tables/{id}/profile/` returns 404 when no profile yet
+- `POST tables/{id}/profile/run/` returns 202
+
+### Verification Gate
+```bash
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest dq/tests/test_profiling.py -v
+# >=8 tests pass
+```
+
+---
+
+## EPH-3B — Freshness Monitoring + Staleness Alerts
+**Date:** 2026-08-26
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Backend. Medium.
+**Closes:** P1-3 (freshness monitoring — alerting plumbing already exists via `notify_event`)
+**Depends on:** EPH-3A done.
+
+### Files to Read First
+- `backend/dataschema/models.py` — `DataTable`, `DataRow` (add `last_data_updated_at` to DataTable)
+- `backend/accounts/models.py` — `notify_event()` (line ~540), `NotificationRule.EventType.FRESHNESS_VIOLATION` (already defined!)
+- `backend/catalog/models.py` — no freshness policy yet; add `FreshnessPolicy` here
+- `backend/dq/jobs.py` — periodic task pattern to replicate
+
+### Files to Change
+- `backend/dataschema/models.py` — add `last_data_updated_at = models.DateTimeField(null=True, blank=True)` to `DataTable`
+- `backend/dataschema/migrations/` — migration
+- `backend/dataschema/signals.py` (NEW or EXTEND) — `post_save` on `DataRow` updates `DataTable.last_data_updated_at`
+- `backend/catalog/models.py` — add `FreshnessPolicy` model
+- `backend/catalog/migrations/` — migration
+- `backend/catalog/freshness_service.py` (NEW) — `check_freshness()` service
+- `backend/catalog/tasks.py` (NEW or EXTEND) — `check_freshness_task` periodic Celery task
+- `backend/catalog/views.py` (EXTEND) — `FreshnessPolicyView` CRUD
+- `backend/catalog/tests/test_freshness.py` (NEW)
+
+### Models
+
+```python
+class FreshnessPolicy(models.Model):
+    table = models.OneToOneField('dataschema.DataTable', on_delete=models.CASCADE, related_name='freshness_policy')
+    max_age_hours = models.PositiveIntegerField(default=24)
+    alert_level = models.CharField(max_length=10, default='warning',
+        choices=[('info','Info'),('warning','Warning'),('error','Error')])
+    enabled = models.BooleanField(default=True)
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    last_alerted_at = models.DateTimeField(null=True, blank=True)
+```
+
+**`check_freshness()`** service — iterate `FreshnessPolicy.objects.filter(enabled=True)`:
+1. Compute `age_hours` from `table.last_data_updated_at or table.created_at`
+2. If `age_hours > max_age_hours` AND rate-limit (no alert in last 6h): call `notify_event('freshness_violation', ...)` + update `last_alerted_at`
+3. Always update `last_checked_at`
+
+**API**:
+```
+GET  /carbon-api/catalog/tables/{id}/freshness/   — get FreshnessPolicy + last_data_updated_at
+POST /carbon-api/catalog/tables/{id}/freshness/   — create/update policy
+DEL  /carbon-api/catalog/tables/{id}/freshness/   — remove policy
+```
+
+### Tests (`test_freshness.py`)
+- `DataRow` save updates `DataTable.last_data_updated_at`
+- `check_freshness()` creates UserAlert when data is stale
+- `check_freshness()` does NOT alert when data is fresh
+- Rate-limit: second alert within 6h is skipped
+- `GET tables/{id}/freshness/` returns 404 when no policy
+
+### Verification Gate
+```bash
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest catalog/tests/test_freshness.py -v
+# >=5 tests pass
+```
+
+---
+
+## EPH-3C — DQ Profile + Scorecard + Freshness UI
+**Date:** 2026-08-26
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Frontend. Medium.
+**Depends on:** EPH-3A + EPH-3B both done.
+
+### Files to Read First
+- `carbon-frontend/src/pages/catalog/SchemaDetailPage.jsx` — tab structure
+- `carbon-frontend/src/pages/catalog/tabs/DQRulesTab.jsx` — sister component patterns
+- `carbon-frontend/src/pages/catalog/tabs/SchemaQualityMetrics.jsx` — existing quality surface
+- API shapes from EPH-3A (profile: field stats) + EPH-3B (freshness: last_data_updated_at)
+
+### Files to Change
+- `carbon-frontend/src/api/profiling.js` (NEW) — `getTableProfile`, `runTableProfile`, `getTableScorecard`, `getTableFreshness`, `saveFreshnessPolicy`
+- `carbon-frontend/src/pages/catalog/tabs/TableProfileTab.jsx` (NEW)
+- `carbon-frontend/src/pages/catalog/tabs/DQScorecardTab.jsx` (NEW)
+- `carbon-frontend/src/pages/catalog/SchemaDetailPage.jsx` (MODIFY) — add "Profile" + "Scorecard" tabs
+- `carbon-frontend/src/__tests__/TableProfileTab.test.jsx` (NEW)
+- `carbon-frontend/src/__tests__/DQScorecardTab.test.jsx` (NEW)
+
+### Implementation
+
+**`TableProfileTab.jsx`**:
+- "Profiled N minutes ago" header + "Run Profile" button (POST `/profile/run/`, show "Profiling..." chip, poll until done)
+- `DataGrid` columns: Field Name / Type / Null% / Cardinality / Min / Max / Mean / Top Values (popover on hover showing `top_values` list)
+- No-profile state: info alert "No profile yet — click Run Profile"
+
+**`DQScorecardTab.jsx`**:
+- Overall quality score: large `CircularProgress` with numeric score in center (0-100%)
+- Per-dimension `LinearProgress` bars: Completeness / Validity / Accuracy / Uniqueness / Consistency / Timeliness
+- Each bar: name + "N passed / M failed" + score%
+- Empty state if no DQ rules assigned
+
+**Freshness indicator** — add to `SchemaQualityMetrics.jsx` (or detail page header):
+- Fresh (green chip, "<2h ago") / Stale (orange chip, "26h ago") based on `last_data_updated_at`
+
+### Verification Gate
+```bash
+npm run lint
+npx vitest run src/__tests__/TableProfileTab.test.jsx src/__tests__/DQScorecardTab.test.jsx
+npm run build
+```
+
+---
+
+## EPH-4A — Column-Level RBAC (FieldAccessPolicy)
+**Date:** 2026-08-26
+**Worker Role:** backend-worker
+**Recommended Model:** Sonnet
+**Status:** PLANNED
+**Kind:** Backend. Large.
+**Closes:** P0-1 (column-level access control)
+**Depends on:** EPH-3C done.
+
+### Files to Read First
+- `backend/dataschema/models.py` — `DataField` (FK target for policy)
+- `backend/accounts/models.py` — `ScopedRole`, `get_user_capabilities()` pattern
+- `backend/accounts/permissions.py` or `capabilities.py` — existing capability constants
+- `backend/dataschema/serializers.py` — `DataFieldSerializer` (extend `to_representation`)
+- `.ai-toolkit/shared/cbac.md` — capability-based access control conventions
+
+### Files to Change
+- `backend/dataschema/models.py` — add `FieldAccessPolicy` model
+- `backend/dataschema/migrations/` — migration
+- `backend/accounts/capabilities.py` or equivalent — add `catalog:view_pii` capability constant
+- `backend/dataschema/serializers.py` — extend `DataFieldSerializer.to_representation()` to apply policies
+- `backend/dataschema/views.py` — ensure `request` in serializer context
+- `backend/dataschema/policy_views.py` (NEW) — admin CRUD for `FieldAccessPolicy`
+- `backend/dataschema/urls.py` (EXTEND) — field policy admin routes
+- `backend/dataschema/tests/test_field_access_policy.py` (NEW)
+
+### Model
+
+```python
+class FieldAccessPolicy(models.Model):
+    class Action(models.TextChoices):
+        DENY = 'deny', 'Deny (hide field entirely)'
+        MASK = 'mask', 'Mask (redact value, show field name)'
+
+    field = models.ForeignKey(DataField, on_delete=models.CASCADE, related_name='access_policies')
+    required_capability = models.CharField(max_length=100,
+        help_text='Users WITHOUT this cap are denied/masked. E.g. catalog:view_pii')
+    action = models.CharField(max_length=10, choices=Action.choices, default=Action.DENY)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('field', 'required_capability')]
+```
+
+**Serializer filtering** in `DataFieldSerializer.to_representation()`:
+- Get `user_caps = get_user_capabilities(request.user)`
+- For each `FieldAccessPolicy` on the field:
+  - If `required_capability not in user_caps` AND `action == 'deny'`: return `{id, name, access_denied: True}` (minimal safe response)
+  - If `required_capability not in user_caps` AND `action == 'mask'`: return full data with `is_masked: True`
+- Superuser bypasses all policies
+
+**New capability**: add `catalog:view_pii` to capability constants. Assign to Data Owner + HR groups by default (document this in output — DO NOT silently change group permissions without a management command).
+
+### Tests (`test_field_access_policy.py`)
+- User WITH `catalog:view_pii` sees full field data
+- User WITHOUT `catalog:view_pii` gets `{id, name, access_denied: True}` when action=deny
+- User WITHOUT gets `is_masked: True` when action=mask
+- Superuser always sees full field (bypass)
+- Create policy: 403 for non-admin, 201 for admin
+- Delete policy: 403 for non-admin
+- Cascade: delete DataField deletes its policies
+
+### Verification Gate
+```bash
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest dataschema/tests/test_field_access_policy.py -v
+# >=7 tests pass
+```
+
+---
+
+## EPH-4B — Data Masking Engine
+**Date:** 2026-08-26
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Backend. Medium.
+**Closes:** P0-2 (data masking)
+**Depends on:** EPH-4A done (`FieldAccessPolicy` + `catalog:view_pii` established).
+
+### Files to Read First
+- `backend/dataschema/models.py` — `DataField` (add `masking_strategy`), `DataRow` (where masking is applied)
+- `backend/dataschema/serializers.py` — `DataRowSerializer` (extend to mask field values)
+- `backend/catalog/models.py` — `AssetProfile.classification == 'pii'` (auto-masking trigger)
+
+### Files to Change
+- `backend/dataschema/models.py` — add `masking_strategy` CharField to `DataField`
+- `backend/dataschema/migrations/` — migration
+- `backend/dataschema/masking.py` (NEW) — `MaskingService.mask_value(value, strategy)`
+- `backend/dataschema/serializers.py` — extend `DataRowSerializer` to apply masking
+- `backend/dataschema/tests/test_masking.py` (NEW)
+
+### Implementation
+
+**`DataField.masking_strategy`**:
+```python
+MASKING_STRATEGY_CHOICES = [
+    ('none', 'None'), ('redact', '[REDACTED]'),
+    ('hash', 'Hash (SHA-256 12-char)'), ('truncate', 'Truncate (3 chars + ***)'),
+    ('null', 'Null (empty)'),
+]
+masking_strategy = models.CharField(max_length=20, choices=MASKING_STRATEGY_CHOICES, default='none')
+```
+
+**`MaskingService.mask_value(value, strategy)`**:
+- `redact` → `'[REDACTED]'`
+- `hash` → `'h:' + sha256(str(value))[:12]`
+- `truncate` → `str(value)[:3] + '***'` (or `'***'` if len < 3)
+- `null` → `None`
+- `none` / unknown → `'[REDACTED]'` (fail-safe default)
+
+**`DataRowSerializer`** masking — for each field value in a row:
+- Check: field has `FieldAccessPolicy(action='mask')` for current user (EPH-4A handles this)
+- OR: field's `AssetProfile.classification == 'pii'` AND `masking_strategy != 'none'` AND user lacks `catalog:view_pii`
+- Apply `MaskingService.mask_value(raw_value, field.masking_strategy)` if either condition holds
+
+### Tests (`test_masking.py`)
+- `mask_value('John Smith', 'redact')` → `'[REDACTED]'`
+- `mask_value('John Smith', 'truncate')` → `'Joh***'`
+- `mask_value('abc', 'hash')` → 14-char `'h:...'` string
+- `mask_value('x', 'null')` → `None`
+- DataRow API: PII field masked for non-PII user
+- DataRow API: PII field NOT masked for user with `catalog:view_pii`
+- `masking_strategy='none'` — no masking even when classification=pii
+
+### Verification Gate
+```bash
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest dataschema/tests/test_masking.py -v
+# >=7 tests pass
+```
+
+---
+
+## EPH-4C — Field Visibility + Masking UI
+**Date:** 2026-08-26
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Frontend. Medium.
+**Depends on:** EPH-4A + EPH-4B done.
+
+### Files to Read First
+- `carbon-frontend/src/pages/catalog/tabs/SchemaStructureTab.jsx` — field rows to annotate
+- EPH-4A response shape: `DataField` may have `access_denied: true` or `is_masked: true`
+- EPH-4B response shape: `DataRow` field values may be `'[REDACTED]'` or `null`
+
+### Files to Change
+- `carbon-frontend/src/pages/catalog/tabs/SchemaStructureTab.jsx` (MODIFY) — lock icon for `access_denied`, mask icon for `is_masked`
+- `carbon-frontend/src/api/fieldPolicies.js` (NEW) — `getFieldPolicies(fieldId)`, `createFieldPolicy(data)`, `deleteFieldPolicy(id)`, `updateFieldMaskingStrategy(fieldId, strategy)`
+- `carbon-frontend/src/pages/admin/catalog/FieldPoliciesPanel.jsx` (NEW) — admin panel at `/admin/catalog/field-policies`
+- `carbon-frontend/src/__tests__/SchemaStructureTab.access.test.jsx` (NEW)
+
+### Implementation
+
+**`SchemaStructureTab.jsx`** field row changes:
+- `field.access_denied === true` → render `LockIcon` (gray) + "(Access Restricted)" text, mute all other cells
+- `field.is_masked === true` → render `VisibilityOffIcon` (orange) + "Masked" `Chip size="small"`, tooltip: "Values masked per data policy"
+- Admin view: show `masking_strategy` select inline per field (updates via PATCH)
+
+**`FieldPoliciesPanel.jsx`** (admin at `/admin/catalog/field-policies`):
+- Table: Field Name / Required Capability / Action / Created By / Actions
+- Add form: field search (autocomplete against `/dataschema/fields/`) + capability input + action select
+- Masking strategy per field: `None / [REDACTED] / Hash / Truncate / Null` (select updates `masking_strategy`)
+
+### Tests
+- Renders `LockIcon` for `access_denied` field
+- Renders `VisibilityOffIcon` + Masked chip for `is_masked` field
+- Normal field renders without access icons
+- Admin sees FieldPoliciesPanel add form
+- Non-admin does not see admin panel
+
+### Verification Gate
+```bash
+npm run lint
+npx vitest run src/__tests__/SchemaStructureTab.access.test.jsx
+npm run build
+```
+
+---
+
+## EPH-5A — Structured Error Codes + API Version Header
+**Date:** 2026-08-26
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Backend. Small-Medium.
+**Closes:** P1-9 (structured error codes), P1-7 (API versioning)
+**Depends on:** EPH-4B done.
+
+### Files to Read First
+- `backend/core/feedback.py` — existing exception classes (extend, not replace)
+- `backend/config/settings.py` — `REST_FRAMEWORK` exception handler setting
+- Existing error format in `backend/accounts/views.py` (check current 404/403 shape)
+
+### Files to Change
+- `backend/core/error_codes.py` (NEW) — error code taxonomy + `CarbonAPIError` base exception
+- `backend/core/exception_handler.py` (NEW) — custom DRF exception handler
+- `backend/core/middleware.py` (EXTEND) — `ApiVersionMiddleware` adds `API-Version: 1` header
+- `backend/config/settings.py` (MODIFY) — wire `EXCEPTION_HANDLER` + `ApiVersionMiddleware`
+- `backend/core/tests/test_error_codes.py` (NEW)
+
+### Implementation
+
+**`core/error_codes.py`** — minimal taxonomy to start (extend later):
+```python
+ERROR_CODES = {
+    'ERR_AUTH_001': 'Authentication required',
+    'ERR_AUTH_002': 'Token expired',
+    'ERR_AUTH_003': 'Insufficient permissions',
+    'ERR_CAT_001': 'Table not found',
+    'ERR_CAT_002': 'Field not found',
+    'ERR_CAT_003': 'Schema is locked',
+    'ERR_DQ_001': 'DQ rule not found',
+    'ERR_DQ_002': 'Rule execution failed',
+    'ERR_DQ_003': 'Rule already assigned',
+    'ERR_MDM_001': 'Reference set not found',
+    'ERR_MDM_002': 'Invalid lifecycle transition',
+    'ERR_SCH_001': 'DataTable not found',
+    'ERR_VAL_001': 'Required field missing',
+    'ERR_VAL_002': 'Invalid value',
+    'ERR_VAL_003': 'Duplicate entry',
+    'ERR_AI_001': 'AI service unavailable',
+    'ERR_AI_002': 'Rate limit exceeded',
+}
+
+class CarbonAPIError(Exception):
+    def __init__(self, error_code, detail=None, status_code=400):
+        self.error_code = error_code
+        self.detail = detail or ERROR_CODES.get(error_code, 'Error')
+        self.status_code = status_code
+        super().__init__(self.detail)
+```
+
+**Custom DRF exception handler** — wraps default handler, adds `error_code` + `error_message` to response body. Infers code from exception type (404→ERR_CAT_001 context-free, but better than nothing).
+
+**`ApiVersionMiddleware`** — adds `API-Version: 1` to every response (2 lines).
+
+### Tests
+- `CarbonAPIError('ERR_AUTH_003').detail` == 'Insufficient permissions'
+- 404 response body contains `error_code` key
+- 403 response body contains `error_code` key
+- All responses have `API-Version: 1` header
+- `CarbonAPIError` with unknown code gets default 'Error' message
+
+### Verification Gate
+```bash
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest core/tests/test_error_codes.py -v
+# >=5 tests pass; manual curl confirms API-Version header + error_code in 404
+```
+
+---
+
+## EPH-5B — Rate Limiting + OpenAPI Spec
+**Date:** 2026-08-26
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Backend. Medium.
+**Closes:** P1-8 (rate limiting), P1 OpenAPI
+**Depends on:** EPH-5A done.
+
+### Files to Read First
+- `backend/config/settings.py` — existing `REST_FRAMEWORK` throttle config (check if any)
+- `backend/requirements.txt` — confirm `drf-spectacular` not present
+- `backend/config/urls.py` — where to add schema endpoints
+
+### Files to Change
+- `backend/requirements.txt` — add `drf-spectacular>=0.27`
+- `backend/config/settings.py` — add throttle classes + `SPECTACULAR_SETTINGS` + `drf_spectacular` to `INSTALLED_APPS`
+- `backend/config/urls.py` — add `/carbon-api/schema/`, `/carbon-api/schema/swagger-ui/`, `/carbon-api/schema/redoc/`
+- `backend/core/throttling.py` (NEW) — `UserRateThrottle` (1000/min), `AnonRateThrottle` (60/min), `AIRateThrottle` (60/min), `HeavyRateThrottle` (10/min)
+- `backend/core/tests/test_throttle.py` (NEW)
+
+### Implementation
+
+DRF throttle classes backed by existing Redis `CACHES['default']`. Apply `AIRateThrottle` to AI views via `@throttle_classes` decorator (do NOT override existing `RateLimiter` in AI — add as complement at view layer).
+
+`drf-spectacular` with `SPECTACULAR_SETTINGS = {TITLE: 'Carbon Data Trust Platform API', VERSION: '1.0.0'}`. Schema endpoint gated by `AdminOrSuperuserOnly`.
+
+### Tests
+- `POST` to any endpoint after `1/minute` override → 429 with correct `Retry-After` header
+- Anonymous throttle triggers at lower rate
+- `GET /carbon-api/schema/` → 200, valid YAML content-type
+
+### Verification Gate
+```bash
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest core/tests/test_throttle.py -v
+# >=3 tests pass
+# Manual: curl /carbon-api/schema/ → YAML; curl /carbon-api/schema/swagger-ui/ → HTML
+```
+
+---
+
+## EPH-6A — Structured JSON Logging + OpenTelemetry + Prometheus
+**Date:** 2026-08-26
+**Worker Role:** backend-worker
+**Recommended Model:** Sonnet
+**Status:** PLANNED
+**Kind:** Backend. Medium-Large.
+**Closes:** P1-10 (structured logging), P1-11 (OpenTelemetry/Prometheus)
+**Depends on:** EPH-5B done.
+
+### Files to Read First
+- `backend/config/settings.py` — current `LOGGING` config
+- `backend/healthy/views.py` — existing `/health/metrics/` (extend, not replace)
+- `backend/requirements.txt` — check existing observability deps
+
+### Files to Change
+- `backend/requirements.txt` — add `python-json-logger>=2.0.7`, `django-prometheus`, `opentelemetry-sdk`, `opentelemetry-instrumentation-django`
+- `backend/config/settings.py` — update `LOGGING` JSON formatter + `django_prometheus` in `INSTALLED_APPS` + `MIDDLEWARE`
+- `backend/healthy/views.py` (EXTEND) — `GET /health/prometheus/` returns `generate_latest()`
+- `backend/core/telemetry.py` (NEW) — `Counter`, `Histogram`, `Gauge` metric definitions
+- `backend/core/log_filters.py` (NEW) — `CorrelationIdFilter` for thread-local injection
+- `backend/config/urls.py` (EXTEND) — add Prometheus metrics endpoint
+- `backend/core/tests/test_metrics.py` (NEW)
+
+### Implementation
+
+**Prometheus metrics** (`core/telemetry.py`):
+```python
+from prometheus_client import Counter, Histogram, Gauge
+api_requests_total = Counter('carbon_api_requests_total', 'Total API requests', ['method', 'status', 'app'])
+api_duration_seconds = Histogram('carbon_api_duration_seconds', 'API duration', ['app'])
+dq_runs_total = Counter('carbon_dq_runs_total', 'DQ rule executions', ['status'])
+ai_conversations_active = Gauge('carbon_ai_conversations_active', 'Active AI conversations')
+```
+
+**`GET /health/prometheus/`** — expose `generate_latest()` on a path NOT subject to `SECURE_SSL_REDIRECT` (add to `SECURE_REDIRECT_EXEMPT` or use `http_method_not_allowed` guard — see CB-09 in team memory).
+
+**OpenTelemetry** — `opentelemetry-instrumentation-django` auto-instruments Django. Export via `OTEL_EXPORTER_OTLP_ENDPOINT` env var (default empty = disabled).
+
+**JSON logging** — update `LOGGING` `formatters.json` using `pythonjsonlogger.jsonlogger.JsonFormatter`. Add `CorrelationIdFilter` to all handlers (injects `correlation_id` from thread-local set by `CorrelationIdMiddleware` in EPH-1A).
+
+### Tests (`test_metrics.py`)
+- `GET /health/prometheus/` returns 200 with `text/plain` content-type
+- Response body contains `carbon_api_requests_total` metric name
+- JSON log entry is valid JSON with `levelname`, `name`, `message`
+- Correlation ID appears in log when `X-Request-ID` header is sent
+
+### Verification Gate
+```bash
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest core/tests/test_metrics.py -v
+# >=4 tests pass
+# Manual: curl http://127.0.0.1:8009/health/prometheus/ → Prometheus text format (no HTTPS redirect)
+```
+
+---
+
+## EPH-6B — Grafana Dashboards + Prometheus Scrape Config
+**Date:** 2026-08-26
+**Worker Role:** devops-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** DevOps. Small.
+**Depends on:** EPH-6A done (Prometheus metrics endpoint live).
+
+### Files to Read First
+- `deploy/carbon/` — existing deployment config
+- `docs/DEPLOYMENT_PLAN_AASTMT_CARBON.md` — VPS setup + existing Grafana/Prometheus
+
+### Files to Change
+- `deploy/carbon/grafana/dashboards/carbon-api.json` (NEW) — API dashboard
+- `deploy/carbon/grafana/dashboards/carbon-dq.json` (NEW) — DQ dashboard
+- Existing `prometheus.yml` on VPS — add Carbon scrape target
+
+### Implementation
+
+**Prometheus scrape** (add to VPS `prometheus.yml` — HTTP NOT HTTPS to avoid CB-09 SSL redirect bug):
+```yaml
+- job_name: 'carbon-backend'
+  static_configs:
+    - targets: ['127.0.0.1:8009']
+  metrics_path: '/health/prometheus/'
+  scheme: 'http'
+```
+
+**Carbon API Grafana dashboard** (JSON panels):
+- API request rate by app (5m rate of `carbon_api_requests_total`)
+- P50/P95/P99 latency (`carbon_api_duration_seconds`)
+- Error rate (4xx + 5xx)
+- Active AI conversations (`carbon_ai_conversations_active`)
+- Alert rule: error_rate > 5% for 5min
+
+**Carbon DQ dashboard**:
+- DQ runs/day (`carbon_dq_runs_total`)
+- Pass/fail/skip ratio (stacked bar)
+- Freshness violations over time
+- Tables with quality_score < 0.7 (from scorecard API — Grafana JSON panel with query)
+
+### Verification Gate
+```bash
+# On VPS:
+curl -s http://127.0.0.1:8009/health/prometheus/ | head -5   # Prometheus text format
+# In Grafana: import JSON dashboards — all panels load without errors
+```
+
+---
+
+## EPH Dispatch Order & Parallelism
+
+```
+IMMEDIATE:
+  EPH-0   — backend-worker     (AI Expertise Panel tests + commit)
+
+SPRINT 1 (parallel):
+  EPH-1A  — backend-worker     (Audit Middleware + JSON Logging)
+  EPH-1B  — frontend-worker    (Notification Center) — parallel with EPH-1A, different files
+
+SPRINT 2 (parallel):
+  EPH-2A  — backend-worker     (Lineage Graph + Impact API)
+  EPH-2B  — backend-worker     (Full-Text Search) — PARALLEL with EPH-2A (different models)
+  EPH-2C  — frontend-worker    — after EPH-2A done
+  EPH-2D  — frontend-worker    — after EPH-2B done; parallel with EPH-2C
+
+SPRINT 3 (parallel):
+  EPH-3A  — backend-worker     (DQ Profiling Service + Scorecard)
+  EPH-3B  — backend-worker     (Freshness Monitoring) — PARALLEL with EPH-3A (different files)
+  EPH-3C  — frontend-worker    — after EPH-3A + EPH-3B done
+
+SPRINT 4 (sequential — each depends on previous):
+  EPH-4A  — backend-worker     (Column-Level RBAC)
+  EPH-4B  — backend-worker     — after EPH-4A
+  EPH-4C  — frontend-worker    — after EPH-4A + EPH-4B
+
+SPRINT 5 (sequential):
+  EPH-5A  — backend-worker     (Error Codes + API Version)
+  EPH-5B  — backend-worker     — after EPH-5A (OpenAPI + Rate Limiting)
+
+SPRINT 6:
+  EPH-6A  — backend-worker     (OTel + Prometheus + JSON Logging full wiring)
+  EPH-6B  — devops-worker      — after EPH-6A (Grafana dashboards)
+```
+
+**I18N-4 can run in parallel with any EPH sprint** — frontend-only, touches different files.
+
+**Master Architect runs all terminal verification gates before marking any phase DONE.**
+All P0 blockers closed at end of Sprint 4. All target P1 gaps closed at end of Sprint 6.
