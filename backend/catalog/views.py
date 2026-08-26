@@ -16,10 +16,10 @@ from accounts.models import ScopedRole
 from core.feedback import AppFeedback
 from .audit_utils import emit_governance_event
 from .filters import GovernanceEventFilter
-from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy
+from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy, LineageEdge
 from .serializers import (
     DataDomainSerializer, GlossaryTermSerializer, TagSerializer,
-    AssetProfileSerializer, GovernanceEventSerializer, GovernancePolicySerializer,
+    AssetProfileSerializer, GovernanceEventSerializer, GovernancePolicySerializer, LineageEdgeSerializer,
 )
 from .services import ensure_asset_profiles
 
@@ -361,3 +361,84 @@ class CatalogSearchView(APIView):
             )[:50]
             terms = GlossaryTermSerializer(term_qs, many=True).data
         return Response({'query': q, 'assets': assets, 'glossary': terms})
+
+
+class LineageEdgeViewSet(viewsets.ModelViewSet):
+    """
+    CRUD operations on lineage edges.
+    - GET /lineage/ — list all edges (paginated; filter by source/target)
+    - POST /lineage/ — create edge (admin only)
+    - DELETE /lineage/{id}/ — delete edge (admin only)
+    """
+    queryset = LineageEdge.objects.all().select_related(
+        'source_table__module', 'target_table__module',
+        'source_field', 'target_field', 'created_by'
+    )
+    serializer_class = LineageEdgeSerializer
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'catalog:manage_metadata'
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        source_id = self.request.query_params.get('source')
+        target_id = self.request.query_params.get('target')
+        if source_id:
+            qs = qs.filter(source_table_id=source_id)
+        if target_id:
+            qs = qs.filter(target_table_id=target_id)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user if self.request.user.is_authenticated else None)
+
+
+class TableLineageView(APIView):
+    """
+    GET /tables/{table_id}/lineage/?direction=upstream|downstream|both
+    Returns upstream and/or downstream lineage edges for a given table.
+    """
+    permission_classes = [ReadAnyWriteAdmin]
+
+    def get(self, request, table_id):
+        from .services import get_lineage
+        direction = request.query_params.get('direction', 'both')
+        if direction not in ('upstream', 'downstream', 'both'):
+            return Response(
+                {'error': 'direction must be one of: upstream, downstream, both'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        result = get_lineage(table_id, direction=direction)
+        
+        # Serialize edges
+        data = {}
+        if 'upstream' in result:
+            data['upstream'] = LineageEdgeSerializer(result['upstream'], many=True).data
+        if 'downstream' in result:
+            data['downstream'] = LineageEdgeSerializer(result['downstream'], many=True).data
+        
+        return Response(data)
+
+
+class TableImpactView(APIView):
+    """
+    GET /tables/{table_id}/impact/?depth=5
+    Returns BFS impact analysis: which tables are affected by changes to this table.
+    """
+    permission_classes = [ReadAnyWriteAdmin]
+
+    def get(self, request, table_id):
+        from .services import get_impact
+        depth = request.query_params.get('depth', 5)
+        try:
+            depth = int(depth)
+        except ValueError:
+            return Response(
+                {'error': 'depth must be an integer'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        depth = max(1, min(depth, 10))  # cap at 10
+        
+        result = get_impact(table_id, depth=depth)
+        return Response(result)

@@ -3,7 +3,8 @@ from django.urls import path
 from .views import (
     DataDomainViewSet, GlossaryTermViewSet, TagViewSet,
     AssetProfileViewSet, GovernanceEventViewSet, GovernanceComplianceView,
-    GovernancePolicyViewSet, CatalogSearchView,
+    GovernancePolicyViewSet, CatalogSearchView, LineageEdgeViewSet,
+    TableLineageView, TableImpactView,
 )
 from .dataset_views import (
     ApproveVersionView, ContractViolationsView, ContractView, DatasetViewSet,
@@ -20,12 +21,15 @@ router.register(r'assets', AssetProfileViewSet, basename='assetprofile')
 router.register(r'governance-events', GovernanceEventViewSet, basename='governanceevent')
 router.register(r'governance-policies', GovernancePolicyViewSet, basename='governancepolicy')
 router.register(r'datasets', DatasetViewSet, basename='dataset')
+router.register(r'lineage', LineageEdgeViewSet, basename='lineageedge')
 
 urlpatterns = [
     path('search/', CatalogSearchView.as_view(), name='catalog-search'),
     path('governance/compliance/', GovernanceComplianceView.as_view(), name='governance-compliance'),
-    # Nested dataset version routes — declared before router.urls so the uuid
-    # converters never collide with the router's catch-all detail regex.
+    # Table lineage and impact routes — declared before router.urls
+    path('tables/<int:table_id>/lineage/', TableLineageView.as_view(), name='table-lineage'),
+    path('tables/<int:table_id>/impact/', TableImpactView.as_view(), name='table-impact'),
+    # Nested dataset version routes
     path('datasets/<uuid:dataset_id>/versions/',
          VersionListCreateView.as_view(), name='dataset-versions'),
     path('datasets/<uuid:dataset_id>/versions/<uuid:version_id>/',

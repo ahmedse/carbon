@@ -2,6 +2,7 @@
 # domain-agnostic. MUST NOT import from emissions.
 import uuid
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
@@ -449,3 +450,72 @@ class DatasetAccessPolicy(models.Model):
     def __str__(self):
         subject = self.user or self.group
         return f"Access policy for {self.dataset} → {subject}"
+
+
+class LineageEdge(models.Model):
+    """Data lineage graph: directed edge from source_table to target_table.
+    
+    Models table-level and (optionally) column-level data lineage.
+    Supports multiple edge types (transform, copy, aggregate, dependency).
+    """
+    class EdgeType(models.TextChoices):
+        TRANSFORM = 'transform', 'Transform'
+        COPY = 'copy', 'Copy'
+        AGGREGATE = 'aggregate', 'Aggregate'
+        DEPENDENCY = 'dependency', 'Dependency'
+
+    source_table = models.ForeignKey(
+        'dataschema.DataTable',
+        on_delete=models.CASCADE,
+        related_name='lineage_outgoing',
+        help_text='Source table in the lineage relationship'
+    )
+    target_table = models.ForeignKey(
+        'dataschema.DataTable',
+        on_delete=models.CASCADE,
+        related_name='lineage_incoming',
+        help_text='Target (destination) table in the lineage relationship'
+    )
+    # Column lineage (optional — P2 feature)
+    source_field = models.ForeignKey(
+        'dataschema.DataField',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='lineage_outgoing',
+        help_text='Optional: specific source column'
+    )
+    target_field = models.ForeignKey(
+        'dataschema.DataField',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='lineage_incoming',
+        help_text='Optional: specific target column'
+    )
+    edge_type = models.CharField(
+        max_length=20,
+        choices=EdgeType.choices,
+        default=EdgeType.DEPENDENCY
+    )
+    transform_description = models.TextField(
+        blank=True,
+        help_text='Human-readable description of the transformation (e.g., "SUM(amount) grouped by date")'
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('source_table', 'target_table', 'edge_type')]
+        indexes = [
+            models.Index(fields=['source_table']),
+            models.Index(fields=['target_table']),
+        ]
+
+    def __str__(self):
+        return f"{self.source_table} --[{self.edge_type}]--> {self.target_table}"

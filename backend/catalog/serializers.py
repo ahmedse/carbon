@@ -1,6 +1,6 @@
 # catalog/serializers.py
 from rest_framework import serializers
-from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy
+from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy, LineageEdge
 
 
 class DataDomainSerializer(serializers.ModelSerializer):
@@ -70,3 +70,21 @@ class GovernancePolicySerializer(serializers.ModelSerializer):
             'config', 'created_at', 'updated_at', 'updated_by', 'updated_by_username'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'updated_by', 'updated_by_username']
+
+
+class LineageEdgeSerializer(serializers.ModelSerializer):
+    source_table_name = serializers.CharField(source='source_table.title', read_only=True)
+    target_table_name = serializers.CharField(source='target_table.title', read_only=True)
+    source_field_name = serializers.CharField(source='source_field.label', read_only=True, allow_null=True)
+    target_field_name = serializers.CharField(source='target_field.label', read_only=True, allow_null=True)
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+
+    class Meta:
+        model = LineageEdge
+        fields = [
+            'id', 'source_table', 'target_table', 'source_field', 'target_field',
+            'source_table_name', 'target_table_name', 'source_field_name', 'target_field_name',
+            'edge_type', 'transform_description', 'created_by', 'created_by_username', 'created_at'
+        ]
+        read_only_fields = ['id', 'source_table_name', 'target_table_name', 'source_field_name', 
+                            'target_field_name', 'created_by', 'created_by_username', 'created_at']
