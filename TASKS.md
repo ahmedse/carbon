@@ -5259,8 +5259,8 @@ npm run build
 ## EPH-3A — DQ Profiling Service + Scorecard API
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Claude Haiku 3.5
-**Status:** PLANNED
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE
 **Kind:** Backend. Medium-Large.
 **Closes:** P1-1 (automated profiling — models exist, service doesn't), P1-2 (DQ scorecard API)
 **Depends on:** EPH-2B done.
@@ -5333,8 +5333,8 @@ GET  /carbon-api/dq/tables/{id}/scorecard/    — quality scorecard
 ## EPH-3B — Freshness Monitoring + Staleness Alerts
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Claude Haiku 3.5
-**Status:** PLANNED
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE
 **Kind:** Backend. Medium.
 **Closes:** P1-3 (freshness monitoring — alerting plumbing already exists via `notify_event`)
 **Depends on:** EPH-3A done.
@@ -5402,7 +5402,7 @@ DEL  /carbon-api/catalog/tables/{id}/freshness/   — remove policy
 ## EPH-3C — DQ Profile + Scorecard + Freshness UI
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
-**Recommended Model:** Raptor
+**Recommended Model:** DeepSeek V4-Flash
 **Status:** PLANNED
 **Kind:** Frontend. Medium.
 **Depends on:** EPH-3A + EPH-3B both done.
