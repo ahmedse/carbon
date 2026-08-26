@@ -5450,7 +5450,7 @@ npm run build
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE
 **Kind:** Backend. Large.
 **Closes:** P0-1 (column-level access control)
 **Depends on:** EPH-3C done.
@@ -5518,12 +5518,24 @@ class FieldAccessPolicy(models.Model):
 # >=7 tests pass
 ```
 
+### Result (2026-08-26) — DONE
+- `FieldAccessPolicy` model + migration `dataschema.0011_fieldaccesspolicy` added.
+- New capability `catalog:view_pii` registered; granted to `dataowners_group` ONLY.
+  NOT implied by `catalog:view` (sensitive, distinct). There is no "HR" group in
+  this codebase — a future HR/other group must be granted via admin/management
+  command, not by silently editing `GROUP_CAPABILITIES`.
+- `DataFieldSerializer.to_representation()` applies deny/mask with request-context
+  guard and superuser bypass via `has_capability` (handles `"*"` wildcard).
+- Admin CRUD `GET/POST /dataschema/fields/{id}/policies/` + `DELETE .../{pk}/`,
+  gated by `AdminOrSuperuserOnly` + `dataschema:manage`.
+- 9 tests pass; full dataschema+accounts suite 422 passed; check/migrations clean.
+
 ---
 
 ## EPH-4B — Data Masking Engine
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Claude Haiku 3.5
+**Recommended Model:** DeepSeek V4-Flash
 **Status:** PLANNED
 **Kind:** Backend. Medium.
 **Closes:** P0-2 (data masking)
