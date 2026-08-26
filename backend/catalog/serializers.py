@@ -1,6 +1,6 @@
 # catalog/serializers.py
 from rest_framework import serializers
-from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy, LineageEdge
+from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy, LineageEdge, FreshnessPolicy
 
 
 class DataDomainSerializer(serializers.ModelSerializer):
@@ -88,3 +88,20 @@ class LineageEdgeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'source_table_name', 'target_table_name', 'source_field_name', 
                             'target_field_name', 'created_by', 'created_by_username', 'created_at']
+
+
+class FreshnessPolicySerializer(serializers.ModelSerializer):
+    table_title = serializers.CharField(source='table.title', read_only=True)
+    last_data_updated_at = serializers.DateTimeField(
+        source='table.last_data_updated_at', read_only=True, allow_null=True)
+
+    class Meta:
+        model = FreshnessPolicy
+        fields = [
+            'id', 'table', 'table_title', 'max_age_hours', 'alert_level',
+            'enabled', 'last_checked_at', 'last_alerted_at', 'last_data_updated_at',
+        ]
+        read_only_fields = [
+            'id', 'table', 'table_title', 'last_checked_at', 'last_alerted_at',
+            'last_data_updated_at',
+        ]

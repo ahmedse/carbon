@@ -10,16 +10,19 @@ from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.shortcuts import get_object_or_404
 
 from accounts.permissions import ReadAnyWriteAdmin
 from accounts.models import ScopedRole
 from core.feedback import AppFeedback
 from .audit_utils import emit_governance_event
 from .filters import GovernanceEventFilter
-from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy, LineageEdge
+from dataschema.models import DataTable
+from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy, LineageEdge, FreshnessPolicy
 from .serializers import (
     DataDomainSerializer, GlossaryTermSerializer, TagSerializer,
     AssetProfileSerializer, GovernanceEventSerializer, GovernancePolicySerializer, LineageEdgeSerializer,
+    FreshnessPolicySerializer,
 )
 from .services import ensure_asset_profiles
 
@@ -420,3 +423,37 @@ class TableImpactView(APIView):
         
         result = get_impact(table_id, depth=depth)
         return Response(result)
+
+
+class FreshnessPolicyView(APIView):
+    """
+    GET/POST/DELETE /catalog/tables/{table_id}/freshness/
+
+    Manage the FreshnessPolicy for a single DataTable. GET returns the policy
+    plus the table's ``last_data_updated_at``; 404 when no policy exists.
+    """
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'catalog:manage_policies'
+
+    def get(self, request, table_id):
+        table = get_object_or_404(DataTable, pk=table_id)
+        policy = get_object_or_404(FreshnessPolicy, table=table)
+        return Response(FreshnessPolicySerializer(policy).data)
+
+    def post(self, request, table_id):
+        table = get_object_or_404(DataTable, pk=table_id)
+        existing = FreshnessPolicy.objects.filter(table=table).first()
+        serializer = FreshnessPolicySerializer(
+            existing, data=request.data, partial=existing is not None)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(table=table)
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED if existing is None else status.HTTP_200_OK,
+        )
+
+    def delete(self, request, table_id):
+        table = get_object_or_404(DataTable, pk=table_id)
+        policy = get_object_or_404(FreshnessPolicy, table=table)
+        policy.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

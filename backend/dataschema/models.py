@@ -39,6 +39,9 @@ class DataTable(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_data_tables')
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_data_tables')
+    # Timestamp of the last row-level write (ingest/CRUD) into this table,
+    # maintained by dataschema.signals; consumed by the freshness monitor.
+    last_data_updated_at = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         # Standardize the table name

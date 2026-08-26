@@ -4,7 +4,7 @@ from .views import (
     DataDomainViewSet, GlossaryTermViewSet, TagViewSet,
     AssetProfileViewSet, GovernanceEventViewSet, GovernanceComplianceView,
     GovernancePolicyViewSet, LineageEdgeViewSet,
-    TableLineageView, TableImpactView,
+    TableLineageView, TableImpactView, FreshnessPolicyView,
 )
 from .search_views import CatalogSearchView
 from .dataset_views import (
@@ -30,6 +30,7 @@ urlpatterns = [
     # Table lineage and impact routes — declared before router.urls
     path('tables/<int:table_id>/lineage/', TableLineageView.as_view(), name='table-lineage'),
     path('tables/<int:table_id>/impact/', TableImpactView.as_view(), name='table-impact'),
+    path('tables/<int:table_id>/freshness/', FreshnessPolicyView.as_view(), name='table-freshness'),
     # Nested dataset version routes
     path('datasets/<uuid:dataset_id>/versions/',
          VersionListCreateView.as_view(), name='dataset-versions'),

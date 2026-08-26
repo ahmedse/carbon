@@ -527,3 +527,26 @@ class LineageEdge(models.Model):
 
     def __str__(self):
         return f"{self.source_table} --[{self.edge_type}]--> {self.target_table}"
+
+
+class FreshnessPolicy(models.Model):
+    """Per-table freshness SLA monitored by ``catalog.freshness_service``.
+
+    A OneToOne policy per DataTable defines the maximum acceptable age of the
+    table's data (computed from ``DataTable.last_data_updated_at``, falling
+    back to ``created_at``). When stale and outside the alert rate-limit, the
+    service raises a ``freshness_violation`` notification via
+    ``accounts.notify_event``.
+    """
+    table = models.OneToOneField(
+        DataTable, on_delete=models.CASCADE, related_name='freshness_policy')
+    max_age_hours = models.PositiveIntegerField(default=24)
+    alert_level = models.CharField(
+        max_length=10, default='warning',
+        choices=[('info', 'Info'), ('warning', 'Warning'), ('error', 'Error')])
+    enabled = models.BooleanField(default=True)
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    last_alerted_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"FreshnessPolicy({self.table.title} <= {self.max_age_hours}h)"
