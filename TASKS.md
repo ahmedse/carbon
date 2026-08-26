@@ -5536,10 +5536,16 @@ class FieldAccessPolicy(models.Model):
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE ✅
 **Kind:** Backend. Medium.
 **Closes:** P0-2 (data masking)
 **Depends on:** EPH-4A done (`FieldAccessPolicy` + `catalog:view_pii` established).
+
+> **Result (commit `039489d`):** `DataField.masking_strategy` added; `MaskingService.mask_value()`
+> implemented; `DataRowSerializer.to_representation()` masks PII-classified and
+> `FieldAccessPolicy(mask)` fields when caller lacks `catalog:view_pii`; `DataRowViewSet`
+> prefetches fields/access-policies/catalog-profile. 8 tests pass; 552 across
+> dataschema/accounts/catalog pass. Fix: DataRow detail tests require `?data_table=` query param.
 
 ### Files to Read First
 - `backend/dataschema/models.py` — `DataField` (add `masking_strategy`), `DataRow` (where masking is applied)
@@ -5600,7 +5606,7 @@ masking_strategy = models.CharField(max_length=20, choices=MASKING_STRATEGY_CHOI
 ## EPH-4C — Field Visibility + Masking UI
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
-**Recommended Model:** Raptor
+**Recommended Model:** DeepSeek V4-Flash
 **Status:** PLANNED
 **Kind:** Frontend. Medium.
 **Depends on:** EPH-4A + EPH-4B done.
