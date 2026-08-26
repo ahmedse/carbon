@@ -35,6 +35,9 @@ import GovernanceTab from './tabs/GovernanceTab';
 import AuditHistoryTab from './tabs/AuditHistoryTab';
 import LineageTab from './tabs/LineageTab';
 import SchemaStructureTab from './tabs/SchemaStructureTab';
+import TableProfileTab from './tabs/TableProfileTab';
+import DQScorecardTab from './tabs/DQScorecardTab';
+import FreshnessChip from './tabs/FreshnessChip';
 
 export default function SchemaDetailPage() {
   useDocumentTitle("Table Schema");
@@ -159,11 +162,14 @@ export default function SchemaDetailPage() {
       icon={StorageIcon}
       onClose={handleClose}
       actions={
-        <AIDomainEntryPoints
-          entityType="table"
-          entityId={table?.id ?? tableId}
-          entity={table}
-        />
+        <>
+          <FreshnessChip tableId={table?.id ?? tableId} />
+          <AIDomainEntryPoints
+            entityType="table"
+            entityId={table?.id ?? tableId}
+            entity={table}
+          />
+        </>
       }
     />
   );
@@ -206,6 +212,8 @@ export default function SchemaDetailPage() {
           { label: t('relations'), component: SchemaRelationsTab },
           { label: t('lineage'), component: () => <LineageTab tableId={tableId} isAdmin={isAdmin} /> },
           { label: t('dqRules'), component: () => <DQRulesTab tableId={tableId} fields={fields} /> },
+          { label: t('profile'), component: () => <TableProfileTab tableId={tableId} isAdmin={isAdmin} /> },
+          { label: t('scorecard'), component: () => <DQScorecardTab tableId={tableId} /> },
           { label: t('governance'), component: () => <GovernanceTab tableId={tableId} /> },
           { label: t('auditHistory'), component: () => <AuditHistoryTab tableId={tableId} /> },
         ]}
