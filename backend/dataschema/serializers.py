@@ -1,12 +1,13 @@
 from rest_framework import serializers
 from .models import DataTable, DataField, DataRow, SchemaChangeLog, TableRelation
+from .masking import MaskingService
 
 class DataFieldSerializer(serializers.ModelSerializer):
     class Meta:
         model = DataField
         fields = [
             'id', 'data_table', 'name', 'label', 'type', 'order',
-            'description', 'required', 'options', 'validation',
+            'description', 'required', 'options', 'validation', 'masking_strategy',
             'is_active', 'is_archived', 'version',
             'reference_table',
             'created_at', 'created_by', 'updated_at', 'updated_by'
@@ -74,6 +75,50 @@ class DataTableSerializer(serializers.ModelSerializer):
 
 class DataRowSerializer(serializers.ModelSerializer):
     dq_flags = serializers.JSONField(read_only=True)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        user = getattr(request, 'user', None) if request is not None else None
+        if user is None or not getattr(user, 'is_authenticated', False):
+            return data
+
+        from accounts.capabilities import has_capability
+        user_has_pii = has_capability(user, 'catalog:view_pii')
+
+        fields = list(instance.data_table.fields.all())
+        field_by_name = {f.name: f for f in fields}
+
+        values = dict(data.get('values') or {})
+        if isinstance(values, dict):
+            for field_name, raw in list(values.items()):
+                field = field_by_name.get(field_name)
+                if field is None:
+                    continue
+                should_mask = self._should_mask_field(field, user_has_pii)
+                if should_mask:
+                    values[field_name] = MaskingService.mask_value(raw, field.masking_strategy)
+            data['values'] = values
+        return data
+
+    def _should_mask_field(self, field, user_has_pii):
+        """True if the field value must be masked for the current user."""
+        from accounts.capabilities import has_capability
+        user = self.context['request'].user
+        # Case A: explicit FieldAccessPolicy(action='mask') whose required cap the user lacks
+        for policy in field.access_policies.all():
+            if policy.action == 'mask' and not has_capability(user, policy.required_capability):
+                return True
+        # Case B: PII-classified field with a masking strategy set, user lacks view_pii
+        profile = field.catalog_profile.first()
+        if (
+            field.masking_strategy != 'none'
+            and profile is not None
+            and profile.classification == 'pii'
+            and not user_has_pii
+        ):
+            return True
+        return False
 
     def validate_values(self, values):
         if not isinstance(values, dict):

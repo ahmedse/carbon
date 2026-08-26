@@ -349,7 +349,17 @@ class DataRowViewSet(ScopedViewSet):
         module_id = self.request.query_params.get("module_id")
         data_table_id = self.request.query_params.get("data_table")
 
-        qs = DataRow.objects.filter(is_archived=False)
+        qs = (
+            DataRow.objects
+            .select_related('data_table')
+            .prefetch_related(
+                Prefetch(
+                    'data_table__fields',
+                    queryset=DataField.objects.prefetch_related('access_policies', 'catalog_profile'),
+                )
+            )
+            .filter(is_archived=False)
+        )
         visible = get_visible_module_ids(user)
         if visible is not None:
             qs = qs.filter(data_table__module_id__in=visible)

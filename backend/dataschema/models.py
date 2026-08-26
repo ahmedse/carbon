@@ -57,6 +57,14 @@ class DataTable(models.Model):
             GinIndex(fields=['search_vector'], name='datatable_search_vector_idx'),
         ]
 
+MASKING_STRATEGY_CHOICES = [
+    ('none', 'None'),
+    ('redact', '[REDACTED]'),
+    ('hash', 'Hash (SHA-256 12-char)'),
+    ('truncate', 'Truncate (3 chars + ***)'),
+    ('null', 'Null (empty)'),
+]
+
 class DataField(models.Model):
     FIELD_TYPES = [
         ('string', 'String'),
@@ -79,6 +87,9 @@ class DataField(models.Model):
     required = models.BooleanField(default=False)
     options = models.JSONField(blank=True, null=True)
     validation = models.JSONField(blank=True, null=True)
+    masking_strategy = models.CharField(
+        max_length=20, choices=MASKING_STRATEGY_CHOICES, default='none'
+    )
     is_active = models.BooleanField(default=True)
     is_archived = models.BooleanField(default=False)
     version = models.PositiveIntegerField(default=1)
