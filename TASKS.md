@@ -5026,8 +5026,8 @@ npm run build
 ## EPH-2A — Lineage Graph Model + Impact Analysis API
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Claude Haiku 3.5
-**Status:** PLANNED
+**Recommended Model:** Claude Haiku 4.5
+**Status:** DONE — commit `2688de3` (16/16 tests, migration `catalog.0008` applied)
 **Kind:** Backend. Medium-Large.
 **Closes:** P0-3 (lineage graph model), P0-4 (impact analysis)
 **Depends on:** EPH-1A done.
@@ -5107,8 +5107,8 @@ GET  /carbon-api/catalog/tables/{id}/impact/  — BFS downstream ?depth=5 (max 1
 ## EPH-2B — PostgreSQL Full-Text Catalog Search
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Claude Haiku 3.5
-**Status:** PLANNED
+**Recommended Model:** Claude Haiku 4.5
+**Status:** DONE — commit `90b6e2e` (20/20 tests, migrations `catalog.0009` + `dataschema.0009` applied)
 **Kind:** Backend. Medium.
 **Closes:** P0-7 (full-text search — PG FTS, zero new infra)
 **Depends on:** EPH-2A done.
