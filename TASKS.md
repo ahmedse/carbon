@@ -5403,7 +5403,7 @@ DEL  /carbon-api/catalog/tables/{id}/freshness/   — remove policy
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE
 **Kind:** Frontend. Medium.
 **Depends on:** EPH-3A + EPH-3B both done.
 
@@ -5449,7 +5449,7 @@ npm run build
 ## EPH-4A — Column-Level RBAC (FieldAccessPolicy)
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Claude Haiku 3.5
+**Recommended Model:** DeepSeek V4-Flash
 **Status:** PLANNED
 **Kind:** Backend. Large.
 **Closes:** P0-1 (column-level access control)
