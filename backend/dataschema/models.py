@@ -102,6 +102,39 @@ class DataField(models.Model):
     def __str__(self):
         return f"{self.label} ({self.type}) in {self.data_table.title}"
 
+class FieldAccessPolicy(models.Model):
+    """Column-level access control: gate a DataField behind a capability.
+
+    Users who lack `required_capability` are either denied the field entirely
+    (Action.DENY) or shown the field with a masking flag (Action.MASK).
+    Superusers and global admins (via the capability wildcard) are never gated.
+    """
+    class Action(models.TextChoices):
+        DENY = 'deny', 'Deny (hide field entirely)'
+        MASK = 'mask', 'Mask (redact value, show field name)'
+
+    field = models.ForeignKey(
+        DataField, on_delete=models.CASCADE, related_name='access_policies'
+    )
+    required_capability = models.CharField(
+        max_length=100,
+        help_text="Users WITHOUT this capability are denied/masked. E.g. catalog:view_pii",
+    )
+    action = models.CharField(
+        max_length=10, choices=Action.choices, default=Action.DENY
+    )
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_field_access_policies',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.action} on {self.field.name} unless {self.required_capability}"
+
+    class Meta:
+        unique_together = [('field', 'required_capability')]
+
 class DataRow(models.Model):
     data_table = models.ForeignKey(DataTable, on_delete=models.CASCADE, related_name='rows')
     values = models.JSONField()

@@ -9,6 +9,7 @@ from .views import (
     SchemaChangeLogViewSet,
     TableRelationViewSet,
 )
+from .policy_views import FieldAccessPolicyView, FieldAccessPolicyDetailView
 
 router = DefaultRouter()
 router.register(r'tables', DataTableViewSet, basename='dataschema-table')
@@ -18,5 +19,7 @@ router.register(r'schema-logs', SchemaChangeLogViewSet, basename='dataschema-sch
 router.register(r'relations', TableRelationViewSet, basename='dataschema-relation')
 
 urlpatterns = [
+    path('fields/<int:field_id>/policies/', FieldAccessPolicyView.as_view(), name='field-policies'),
+    path('fields/<int:field_id>/policies/<int:pk>/', FieldAccessPolicyDetailView.as_view(), name='field-policy-detail'),
     path('', include(router.urls)),
 ]

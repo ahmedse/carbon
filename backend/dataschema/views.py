@@ -14,6 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.http import HttpResponse
+from django.db.models import Prefetch
 from .models import DataTable, DataField, DataRow, SchemaChangeLog, TableRelation
 from .serializers import (
     DataTableSerializer, DataTableDetailSerializer,
@@ -92,7 +93,8 @@ class DataTableViewSet(ScopedViewSet):
         qs = DataTable.objects.select_related(
             'module'
         ).prefetch_related(
-            'fields', 'rows'
+            Prefetch('fields', queryset=DataField.objects.prefetch_related('access_policies')),
+            'rows'
         ).filter(is_archived=False)
         visible = get_visible_module_ids(user)
         if visible is not None:
@@ -201,7 +203,7 @@ class DataFieldViewSet(ScopedViewSet):
 
     def get_queryset(self):
         module = getattr(self, 'module', None)
-        qs = DataField.objects.all()
+        qs = DataField.objects.prefetch_related('access_policies')
         if module:
             qs = qs.filter(data_table__module=module, is_archived=False)
         else:

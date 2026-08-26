@@ -299,6 +299,15 @@ CATALOG_VIEW_GOVERNANCE = Capability(
     category="reporting",
 )
 
+CATALOG_VIEW_PII = Capability(
+    key="catalog:view_pii",
+    domain="catalog",
+    action="view_pii",
+    label="View PII Data",
+    description="View personally-identifiable fields masked/denied to other roles",
+    category="data",
+)
+
 # ── DQ domain capabilities ─────────────────────────────────────────
 
 DQ_VIEW = Capability(
@@ -575,6 +584,7 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     CATALOG_MANAGE_METADATA.key: CATALOG_MANAGE_METADATA,
     CATALOG_MANAGE_POLICIES.key: CATALOG_MANAGE_POLICIES,
     CATALOG_VIEW_GOVERNANCE.key: CATALOG_VIEW_GOVERNANCE,
+    CATALOG_VIEW_PII.key: CATALOG_VIEW_PII,
     # DQ
     DQ_VIEW.key: DQ_VIEW,
     DQ_MANAGE_RULES.key: DQ_MANAGE_RULES,
@@ -771,6 +781,8 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         TURNKEY_VIEW.key,
         APPREGISTRY_VIEW.key,
         HEALTHY_VIEW.key,
+        # PII field visibility (EPH-4A)
+        CATALOG_VIEW_PII.key,
     },
 
     # ── Analysts (cross-org read + reporting) ──

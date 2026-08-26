@@ -15,6 +15,22 @@ class DataFieldSerializer(serializers.ModelSerializer):
             'id', 'created_at', 'created_by', 'updated_at', 'updated_by', 'version'
         ]
 
+    def to_representation(self, instance):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None) if request is not None else None
+        if user is not None and getattr(user, 'is_authenticated', False):
+            from accounts.capabilities import has_capability
+            # access_policies is prefetched in views; .all() also works for N+1-safe-enough
+            for policy in instance.access_policies.all():
+                if not has_capability(user, policy.required_capability):
+                    if policy.action == 'deny':
+                        return {'id': instance.id, 'name': instance.name, 'access_denied': True}
+                    else:  # mask
+                        data = super().to_representation(instance)
+                        data['is_masked'] = True
+                        return data
+        return super().to_representation(instance)
+
     def validate(self, data):
         data_table = data.get('data_table') or (self.instance.data_table if self.instance else None)
         name = data.get('name') or (self.instance.name if self.instance else None)
