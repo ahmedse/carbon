@@ -174,4 +174,7 @@ logs/
 # Indexing output
 indexed_src/
 backend/.env.carbon
+
+# Windows Mark-of-the-Web (downloaded-file) artifacts
+*Zone.Identifier
 ~
