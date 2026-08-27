@@ -5730,44 +5730,164 @@ class CarbonAPIError(Exception):
 
 ---
 
-## EPH-5B — Rate Limiting + OpenAPI Spec
+## EPH-5B — Rate Limiting
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE ✅
 **Kind:** Backend. Medium.
-**Closes:** P1-8 (rate limiting), P1 OpenAPI
+**Closes:** P1-8 (rate limiting)
 **Depends on:** EPH-5A done.
 
+> **RESULT (2026-08-27):** Delivered + verified. `core/throttling.py` (4 scoped classes:
+> `UserMinuteRateThrottle` 1000/min, `AnonMinuteRateThrottle` 60/min, `AIRateThrottle` 60/min,
+> `HeavyRateThrottle` 10/min) added to `DEFAULT_THROTTLE_CLASSES`/`DEFAULT_THROTTLE_RATES`;
+> `AIRateThrottle` on `WorkspaceConversationViewSet`, `HeavyRateThrottle` on
+> `ExportProjectViewSet` + `ImportJobViewSet`. 5/5 throttle tests; regression
+> core/catalog/accounts/mdm/importexport = 622 passed + 11 subtests. Live: 62 anon POSTs →
+> 60× 401 then 429,429; 429 body = structured envelope with `Retry-After` + `error_code:
+> ERR_AI_002`. One test-side fix by master: DRF's `SimpleRateThrottle.THROTTLE_RATES` is a
+> class-attribute import-time snapshot, so `override_settings` cannot change effective rates —
+> tests use `mock.patch.object`. Commit `(see git log)`. OpenAPI half → EPH-5C.
+
+> ⚠️ **SCOPE NOTE (master-architect 2026-08-27):** Original spec combined rate limiting + OpenAPI.
+> The OpenAPI half was SPLIT OUT to EPH-5C because the platform ALREADY ships drf-yasg
+> (dev-gated swagger UI at `/carbon-api/swagger/`, ~85 `@swagger_auto_schema` decorator sites,
+> `mdm/tests/test_swagger_docs.py`) and ADR 0003 (Proposed) plans the drf-spectacular migration
+> as its own effort. This phase delivers rate limiting ONLY.
+
 ### Files to Read First
-- `backend/config/settings.py` — existing `REST_FRAMEWORK` throttle config (check if any)
-- `backend/requirements.txt` — confirm `drf-spectacular` not present
-- `backend/config/urls.py` — where to add schema endpoints
+- `backend/config/settings.py` — existing `REST_FRAMEWORK` throttle config (ALREADY has `DEFAULT_THROTTLE_CLASSES` = AnonRateThrottle + UserRateThrottle, `DEFAULT_THROTTLE_RATES` = anon 100/hour + user 1000/hour + login scope) — extend, do not replace
+- `backend/accounts/views.py` line ~105 — `LoginRateThrottle(ScopedRateThrottle)` pattern (the house style for throttle classes)
+- `backend/ai/workspace_api.py` — `WorkspaceConversationViewSet` (line ~58) — AI throttle target
+- `backend/importexport/views.py` — `ExportProjectViewSet` (line ~19), `ImportJobViewSet` (line ~68) — heavy throttle targets
 
 ### Files to Change
-- `backend/requirements.txt` — add `drf-spectacular>=0.27`
-- `backend/config/settings.py` — add throttle classes + `SPECTACULAR_SETTINGS` + `drf_spectacular` to `INSTALLED_APPS`
-- `backend/config/urls.py` — add `/carbon-api/schema/`, `/carbon-api/schema/swagger-ui/`, `/carbon-api/schema/redoc/`
-- `backend/core/throttling.py` (NEW) — `UserRateThrottle` (1000/min), `AnonRateThrottle` (60/min), `AIRateThrottle` (60/min), `HeavyRateThrottle` (10/min)
+- `backend/core/throttling.py` (NEW) — 4 custom throttle classes
+- `backend/config/settings.py` (MODIFY) — add rates to `DEFAULT_THROTTLE_RATES` + add per-minute classes to `DEFAULT_THROTTLE_CLASSES`
+- `backend/ai/workspace_api.py` (MODIFY) — apply `AIRateThrottle` to `WorkspaceConversationViewSet`
+- `backend/importexport/views.py` (MODIFY) — apply `HeavyRateThrottle` to `ExportProjectViewSet` + `ImportJobViewSet`
 - `backend/core/tests/test_throttle.py` (NEW)
 
 ### Implementation
 
-DRF throttle classes backed by existing Redis `CACHES['default']`. Apply `AIRateThrottle` to AI views via `@throttle_classes` decorator (do NOT override existing `RateLimiter` in AI — add as complement at view layer).
+**`core/throttling.py`** — follow the `LoginRateThrottle(ScopedRateThrottle)` house pattern
+(scoped classes; rates live in `DEFAULT_THROTTLE_RATES`, never hardcoded in the class):
+```python
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
-`drf-spectacular` with `SPECTACULAR_SETTINGS = {TITLE: 'Carbon Data Trust Platform API', VERSION: '1.0.0'}`. Schema endpoint gated by `AdminOrSuperuserOnly`.
+class UserMinuteRateThrottle(UserRateThrottle):
+    """Per-user per-minute cap (complement to the hourly cap)."""
+    scope = 'user_minute'
+
+class AnonMinuteRateThrottle(AnonRateThrottle):
+    """Per-IP per-minute cap for anonymous traffic."""
+    scope = 'anon_minute'
+
+class AIRateThrottle(UserRateThrottle):
+    """Per-user cap on AI generation endpoints (complement to the in-app RateLimiter)."""
+    scope = 'ai'
+
+class HeavyRateThrottle(UserRateThrottle):
+    """Per-user cap on heavy export/import endpoints."""
+    scope = 'heavy'
+```
+
+**`settings.py`** — in `REST_FRAMEWORK`:
+- `DEFAULT_THROTTLE_CLASSES`: append `'core.throttling.UserMinuteRateThrottle', 'core.throttling.AnonMinuteRateThrottle'`
+  (keep the existing anon/user hourly classes — both apply, stricter wins)
+- `DEFAULT_THROTTLE_RATES`: add `'user_minute': '1000/min'`, `'anon_minute': '60/min'`, `'ai': '60/min'`, `'heavy': '10/min'`
+
+**AI views** — on `WorkspaceConversationViewSet` in `ai/workspace_api.py` add
+`throttle_classes = [AIRateThrottle]` (class attribute, DRF house style — NOT the decorator).
+Do NOT touch the existing in-app `RateLimiter`; this is a view-layer complement.
+
+**Import/export views** — on `ExportProjectViewSet` and `ImportJobViewSet` in
+`backend/importexport/views.py` add `throttle_classes = [HeavyRateThrottle]`.
+
+**Tests (`core/tests/test_throttle.py`)** — clear `django.core.cache.cache` in `setUp` (throttle
+buckets live in cache; LocMemCache persists per process). Use `override_settings` with a
+rebuilt `REST_FRAMEWORK` dict when overriding rates:
+```python
+from django.test import override_settings
+from django.conf import settings
+
+def _rates(**overrides):
+    rf = {**settings.REST_FRAMEWORK}
+    rf['DEFAULT_THROTTLE_RATES'] = {**rf['DEFAULT_THROTTLE_RATES'], **overrides}
+    return {'REST_FRAMEWORK': rf}
+```
+- `test_user_throttle_429_with_retry_after`: `@override_settings(**_rates(user_minute='1/minute'))`,
+  authenticated user (fixtures `create_user` + `get_token_for_user` from conftest) hits a GET
+  endpoint twice → 2nd response 429, `Retry-After` header present
+- `test_anon_throttle_lower_rate`: `@override_settings(**_rates(anon_minute='1/minute'))`,
+  anonymous client hits an anon-accessible DRF endpoint (use `POST /carbon-api/token/` with
+  bad creds — it's `ThrottledTokenObtainPairView`, anonymous-accessible) twice → 2nd 429
+- `test_ai_throttle_applied`: assert `WorkspaceConversationViewSet.throttle_classes == [AIRateThrottle]`
+  (import both) — proves wiring without network calls
+- `test_heavy_throttle_applied`: assert `ImportJobViewSet.throttle_classes == [HeavyRateThrottle]`
+- `test_default_rates_present`: assert `'user_minute'`/`'anon_minute'`/`'ai'`/`'heavy'` in
+  `settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']`
+
+### Do NOT touch
+- `backend/requirements.txt` (no new deps in this phase — drf-spectacular is EPH-5C)
+- `backend/config/urls.py` (no schema endpoints here — EPH-5C)
+- The existing `RateLimiter` inside `backend/ai/` (in-app guard stays untouched)
+- Any frontend files, any migrations
 
 ### Tests
-- `POST` to any endpoint after `1/minute` override → 429 with correct `Retry-After` header
+- 429 with `Retry-After` after 1/minute override
 - Anonymous throttle triggers at lower rate
-- `GET /carbon-api/schema/` → 200, valid YAML content-type
+- AI + Heavy throttle wiring assertions
+- Default rates present in settings
 
 ### Verification Gate
 ```bash
 /home/ahmed/aast/carbon/.venv/bin/python manage.py check
-/home/ahmed/aast/carbon/.venv/bin/python -m pytest core/tests/test_throttle.py -v
-# >=3 tests pass
-# Manual: curl /carbon-api/schema/ → YAML; curl /carbon-api/schema/swagger-ui/ → HTML
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run   # No changes detected
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest core/tests/test_throttle.py -v --create-db   # >=5 pass
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest core/ catalog/ accounts/ -q --create-db   # regression, no throttle flakiness
+```
+
+---
+
+## EPH-5C — OpenAPI Spec (drf-yasg → drf-spectacular migration, ADR 0003)
+**Date:** 2026-08-27
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Kind:** Backend. Medium-Large.
+**Closes:** P1 OpenAPI (prod-accessible, versioned API docs)
+**Depends on:** EPH-5B done.
+
+> Executes the migration ADR 0003 (Proposed) proposes: replace unmaintained drf-yasg with
+> drf-spectacular. `drf-yasg` is currently in `INSTALLED_APPS`, dev-gated swagger UI at
+> `/carbon-api/swagger/` (config/urls.py ~line 95-128), ~85 `@swagger_auto_schema` decorator
+> sites across `accounts/views.py`, `catalog/views.py`, `catalog/dataset_views.py`, `dq/views.py`,
+> `emissions/views.py`, `mdm/views.py`, and `mdm/tests/test_swagger_docs.py` asserts schema content.
+
+### Implementation (ADR 0003 steps)
+1. `requirements.txt` — remove `drf-yasg`, add `drf-spectacular>=0.27`
+2. `config/settings.py` — `INSTALLED_APPS`: replace `'drf_yasg'` → `'drf_spectacular'`; add
+   `SPECTACULAR_SETTINGS = {'TITLE': 'Carbon Data Trust Platform API', 'VERSION': '1.0.0'}`;
+   remove `SWAGGER_USE_COMPAT_RENDERERS` (and any `SWAGGER_SETTINGS`)
+3. `config/urls.py` — replace the `IS_DEVELOPMENT` get_schema_view block with
+   `SpectacularAPIView` at `/carbon-api/schema/`, `SpectacularSwaggerView` at
+   `/carbon-api/schema/swagger-ui/`, `SpectacularRedocView` at `/carbon-api/schema/redoc/` —
+   gated `AdminOrSuperuserOnly` (from `accounts.permissions`), available in all envs
+4. Replace every `@swagger_auto_schema(...)` with the drf-spectacular equivalent
+   (`@extend_schema(...)`); `manual_parameters` → `parameters`, `request_body` → `request`,
+   `responses` keep `{status: serializer}` shape; keep `swagger_fake_view` guards (they are
+   harmless; spectacular sets `swagger_fake_view` the same way)
+5. Rewrite `mdm/tests/test_swagger_docs.py` to hit `/carbon-api/schema/?format=json` with an
+   admin user and assert endpoint coverage
+
+### Verification Gate
+```bash
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest mdm/tests/test_swagger_docs.py -v --create-db
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest core/ catalog/ accounts/ mdm/ dq/ -q --create-db  # full regression
+# Manual (backend running): curl -u admin http://localhost:8009/carbon-api/schema/?format=json → valid OpenAPI
 ```
 
 ---
@@ -5905,8 +6025,9 @@ SPRINT 4 (sequential — each depends on previous):
   EPH-4C  — frontend-worker    — after EPH-4A + EPH-4B
 
 SPRINT 5 (sequential):
-  EPH-5A  — backend-worker     (Error Codes + API Version)
-  EPH-5B  — backend-worker     — after EPH-5A (OpenAPI + Rate Limiting)
+  EPH-5A  — backend-worker     (Error Codes + API Version)   ✅ DONE (5e2335d + 1d34da5)
+  EPH-5B  — backend-worker     — after EPH-5A (Rate Limiting) — scoped to rate limiting ONLY (OpenAPI split to 5C)
+  EPH-5C  — backend-worker     — after EPH-5B (OpenAPI: drf-spectacular migration, ADR 0003)
 
 SPRINT 6:
   EPH-6A  — backend-worker     (OTel + Prometheus + JSON Logging full wiring)
