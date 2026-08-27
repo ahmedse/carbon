@@ -1,0 +1,36 @@
+# Prometheus scrape config — Carbon Data Trust Platform (EPH-6B)
+#
+# COPY the `carbon-backend` job below into the VPS Prometheus
+# /etc/prometheus/prometheus.yml (or wherever prometheus.yml lives) and
+# `sudo systemctl reload prometheus`.
+#
+# IMPORTANT (CB-09): the scheme MUST be http and the metrics_path MUST be
+# /carbon-api/health/prometheus/ — the Django backend runs with
+# SECURE_SSL_REDIRECT=True in production, but SECURE_REDIRECT_EXEMPT exempts
+# the /health/(metrics|prometheus)/ routes so scrapers can poll over plain
+# HTTP on the loopback. Never switch to https (Prometheus does not follow
+# 301 redirects and will time out on HTTPS-on-HTTP-port).
+#
+# PORT NOTE: production backend binds 127.0.0.1:8006 (host → container :8000).
+# The local dev backend uses 127.0.0.1:8009. Use the correct target for the
+# environment you are scraping.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ── Carbon Data Trust Platform backend (EPH-6A/6B) ─────────────────────
+  - job_name: 'carbon-backend'
+    static_configs:
+      # Production: 127.0.0.1:8006  |  Dev: 127.0.0.1:8009
+      - targets: ['127.0.0.1:8006']
+    metrics_path: '/carbon-api/health/prometheus/'
+    scheme: 'http'
+    # Optional labels for multi-instance setups:
+    #   - labels: { env: 'prod', instance: 'carbon-prod' }
