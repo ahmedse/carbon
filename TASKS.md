@@ -5653,7 +5653,7 @@ npm run build
 ## EPH-5A — Structured Error Codes + API Version Header
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Claude Haiku 3.5
+**Recommended Model:** DeepSeek V4-Flash
 **Status:** PLANNED
 **Kind:** Backend. Small-Medium.
 **Closes:** P1-9 (structured error codes), P1-7 (API versioning)
@@ -5726,7 +5726,7 @@ class CarbonAPIError(Exception):
 ## EPH-5B — Rate Limiting + OpenAPI Spec
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Claude Haiku 3.5
+**Recommended Model:** DeepSeek V4-Flash
 **Status:** PLANNED
 **Kind:** Backend. Medium.
 **Closes:** P1-8 (rate limiting), P1 OpenAPI
@@ -5768,7 +5768,7 @@ DRF throttle classes backed by existing Redis `CACHES['default']`. Apply `AIRate
 ## EPH-6A — Structured JSON Logging + OpenTelemetry + Prometheus
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
-**Recommended Model:** Claude Haiku 3.5
+**Recommended Model:** DeepSeek V4-Flash
 **Status:** PLANNED
 **Kind:** Backend. Medium-Large.
 **Closes:** P1-10 (structured logging), P1-11 (OpenTelemetry/Prometheus)
@@ -5824,7 +5824,7 @@ ai_conversations_active = Gauge('carbon_ai_conversations_active', 'Active AI con
 ## EPH-6B — Grafana Dashboards + Prometheus Scrape Config
 **Date:** 2026-08-26
 **Worker Role:** devops-worker
-**Recommended Model:** Claude Haiku 3.5
+**Recommended Model:** DeepSeek V4-Flash
 **Status:** PLANNED
 **Kind:** DevOps. Small.
 **Depends on:** EPH-6A done (Prometheus metrics endpoint live).
