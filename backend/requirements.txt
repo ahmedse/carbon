@@ -6,7 +6,7 @@ django-filter==25.1                   # Filtering utilities
 django-debug-toolbar==5.2.0           # Development debugging
 django-silk==5.3.2                    # Development request profiling (P12)
 djangorestframework-simplejwt==5.5.0  # JWT Authentication
-drf-spectacular==0.30.0                 # OpenAPI schema generation (ADR 0003)
+drf-spectacular==0.30.0              # OpenAPI schema generation (ADR 0003)
 
 # ASGI/WSGI Server
 gunicorn==26.0.0                      # WSGI HTTP server
