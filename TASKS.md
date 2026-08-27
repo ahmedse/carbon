@@ -5654,10 +5654,17 @@ npm run build
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE ✅
 **Kind:** Backend. Small-Medium.
 **Closes:** P1-9 (structured error codes), P1-7 (API versioning)
 **Depends on:** EPH-4B done.
+
+> **Result (commit `5e2335d`):** `core/error_codes.py` taxonomy (17 codes) + `CarbonAPIError`;
+> `core/exception_handler.py` wraps the existing `catalog.data_trust_exception_handler`
+> (single source of truth preserved — no competing handler) and adds `error_code` to every
+> error envelope; `ApiVersionMiddleware` adds `API-Version: 1`. 5 tests pass; 532 across
+> core/catalog/accounts pass; live curl confirms header + `ERR_AUTH_001` on 401. Note:
+> `core/feedback.unified_exception_handler` is dead code — NOT wired.
 
 ### Files to Read First
 - `backend/core/feedback.py` — existing exception classes (extend, not replace)
