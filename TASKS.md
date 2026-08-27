@@ -5952,7 +5952,7 @@ ai_conversations_active = Gauge('carbon_ai_conversations_active', 'Active AI con
 **Date:** 2026-08-26
 **Worker Role:** devops-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE ✅ (2026-08-27, commit `37f3977`)
 **Kind:** DevOps. Small.
 **Depends on:** EPH-6A done (Prometheus metrics endpoint live).
 
@@ -6031,7 +6031,7 @@ SPRINT 5 (sequential):
 
 SPRINT 6:
   EPH-6A  — backend-worker     ✅ (OTel + Prometheus + JSON Logging full wiring)
-  EPH-6B  — devops-worker      — after EPH-6A (Grafana dashboards)
+  EPH-6B  — devops-worker      ✅ (Grafana dashboards + scrape config)
 ```
 
 **I18N-4 can run in parallel with any EPH sprint** — frontend-only, touches different files.
