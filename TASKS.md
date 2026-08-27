@@ -5855,7 +5855,7 @@ def _rates(**overrides):
 **Date:** 2026-08-27
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE ✅ (`537c2c5`, 2026-08-27 — verified by master-architect)
 **Kind:** Backend. Medium-Large.
 **Closes:** P1 OpenAPI (prod-accessible, versioned API docs)
 **Depends on:** EPH-5B done.
@@ -6027,7 +6027,7 @@ SPRINT 4 (sequential — each depends on previous):
 SPRINT 5 (sequential):
   EPH-5A  — backend-worker     (Error Codes + API Version)   ✅ DONE (5e2335d + 1d34da5)
   EPH-5B  — backend-worker     — after EPH-5A (Rate Limiting) — scoped to rate limiting ONLY (OpenAPI split to 5C)
-  EPH-5C  — backend-worker     — after EPH-5B (OpenAPI: drf-spectacular migration, ADR 0003)
+  EPH-5C  — backend-worker     — after EPH-5B (OpenAPI: drf-spectacular migration, ADR 0003) ✅ DONE (537c2c5)
 
 SPRINT 6:
   EPH-6A  — backend-worker     (OTel + Prometheus + JSON Logging full wiring)
