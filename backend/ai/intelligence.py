@@ -25,8 +25,8 @@ from django.db import models
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
-from backend.ai.engine_runtime import dispatch_task, get_task
-from backend.ai.protocol import (
+from ai.engine_runtime import dispatch_task, get_task
+from ai.protocol import (
     AIProvider,
     AnomalyDetectRequest,
     ChatRequest,
@@ -42,7 +42,7 @@ from backend.ai.protocol import (
     TableProfile,
     WorkspaceContext,
 )
-from backend.ai.providers.pulse import PulseProvider
+from ai.providers.pulse import PulseProvider
 from ai.domain_protocol import DomainContext, get_domain, has_domain
 from ai.domain import emissions  # noqa: F401  (registers the emissions domain)
 from ai.domain import water  # noqa: F401  (registers the water domain)
@@ -4099,7 +4099,7 @@ def _domain_context_prompt_prefix(ctx: DomainContext) -> str:
 
 def _format_dq_results(response) -> str:
     """Format DQ validate results as a human-readable summary."""
-    from backend.ai.protocol import DqValidateResponse
+    from ai.protocol import DqValidateResponse
     if not response.results:
         return "No DQ rules were evaluated."
 

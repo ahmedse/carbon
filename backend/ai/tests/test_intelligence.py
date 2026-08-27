@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.ai.protocol import (
+from ai.protocol import (
     AIProvider,
     DqValidateRequest,
     DqValidateResponse,
@@ -17,7 +17,7 @@ from backend.ai.protocol import (
     ProviderStatus,
     Scope,
 )
-from backend.ai.intelligence import (
+from ai.intelligence import (
     CarbonIntelligence,
     build_scope,
 )
@@ -185,7 +185,7 @@ class TestCarbonIntelligence:
 
 class TestSubmitDqValidate:
     def test_sends_correct_envelope(self):
-        with patch("backend.ai.intelligence.dispatch_task") as mock_dispatch:
+        with patch("ai.intelligence.dispatch_task") as mock_dispatch:
             mock_dispatch.return_value = {
                 "status": "completed",
                 "task_id": "t-1",
@@ -207,7 +207,7 @@ class TestSubmitDqValidate:
             assert payload["context"]["table_name"] == "tbl"
 
     def test_returns_pulse_unavailable_on_error(self):
-        with patch("backend.ai.intelligence.dispatch_task") as mock_dispatch:
+        with patch("ai.intelligence.dispatch_task") as mock_dispatch:
             mock_dispatch.return_value = {"status": "pulse_unavailable", "error": {"code": "not_wired"}}
             ci = CarbonIntelligence()
             response = ci.submit_dq_validate(
@@ -219,7 +219,7 @@ class TestSubmitDqValidate:
 
 class TestSubmitDqSuggest:
     def test_sends_correct_task_type(self):
-        with patch("backend.ai.intelligence.dispatch_task") as mock_dispatch:
+        with patch("ai.intelligence.dispatch_task") as mock_dispatch:
             mock_dispatch.return_value = {"status": "completed"}
             ci = CarbonIntelligence()
             response = ci.submit_dq_suggest({"name": "t", "fields": []})
@@ -231,7 +231,7 @@ class TestSubmitDqSuggest:
 
 class TestSubmitAnomalyDetect:
     def test_sends_correct_task_type(self):
-        with patch("backend.ai.intelligence.dispatch_task") as mock_dispatch:
+        with patch("ai.intelligence.dispatch_task") as mock_dispatch:
             mock_dispatch.return_value = {"status": "completed"}
             ci = CarbonIntelligence()
             response = ci.submit_anomaly_detect({"history": []})
@@ -243,7 +243,7 @@ class TestSubmitAnomalyDetect:
 
 class TestGetTaskStatus:
     def test_polls_correct_task(self):
-        with patch("backend.ai.intelligence.get_task") as mock_get_task:
+        with patch("ai.intelligence.get_task") as mock_get_task:
             mock_get_task.return_value = {"status": "completed", "result": {}}
 
             ci = CarbonIntelligence()
@@ -252,7 +252,7 @@ class TestGetTaskStatus:
             mock_get_task.assert_called_once_with("t-42", timeout=10)
 
     def test_handles_unavailable(self):
-        with patch("backend.ai.intelligence.get_task") as mock_get_task:
+        with patch("ai.intelligence.get_task") as mock_get_task:
             mock_get_task.return_value = {"status": "pulse_unavailable", "error": {"code": "not_found"}}
 
             ci = CarbonIntelligence()

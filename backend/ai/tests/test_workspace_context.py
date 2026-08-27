@@ -21,7 +21,7 @@ import pytest
 from accounts.models import User
 from ai.intelligence import CarbonIntelligence
 from ai.models import AIConversation, AIMessage
-from backend.ai.protocol import (
+from ai.protocol import (
     ChatResponse,
     ConversationContext,
     Scope,

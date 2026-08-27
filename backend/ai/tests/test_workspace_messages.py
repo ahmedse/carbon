@@ -7,7 +7,7 @@ import pytest
 from accounts.models import User
 from ai.intelligence import CarbonIntelligence
 from ai.models import AIConversation, KnowledgeEdge, KnowledgeNode
-from backend.ai.protocol import (
+from ai.protocol import (
     AnomalyDetectResponse,
     ChatResponse,
     DetectedAnomaly,

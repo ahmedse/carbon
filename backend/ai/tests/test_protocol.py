@@ -8,7 +8,7 @@ no Django, no HTTP, no database.
 import dataclasses
 import typing
 
-from backend.ai.protocol import (
+from ai.protocol import (
     ConversationContext,
     Scope, ProviderStatus,
     DqRuleInput, DqRuleResult, DqValidateRequest, DqValidateResponse,

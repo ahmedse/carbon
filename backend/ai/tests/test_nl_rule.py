@@ -31,7 +31,7 @@ from ai.engine.core.config import get_settings
 from ai.intelligence import CarbonIntelligence
 from ai.models import AIConversation
 from ai.store import reset_store
-from backend.ai.protocol import Scope
+from ai.protocol import Scope
 from core.models import Module
 from dataschema.models import DataField, DataRow, DataTable
 from mdm.models import OrgUnit

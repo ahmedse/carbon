@@ -6,7 +6,7 @@ fake data. These tests prove that CarbonIntelligence (Wave C) can swap
 providers (Pulse, Azure, Claude, local LLM) with zero code changes.
 """
 
-from backend.ai.protocol import (
+from ai.protocol import (
     AIProvider, Scope, ProviderStatus,
     ChatResponse,
     DqRuleInput, DqValidateRequest, DqValidateResponse, DqRuleResult,

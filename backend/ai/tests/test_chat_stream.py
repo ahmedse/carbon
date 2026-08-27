@@ -23,7 +23,7 @@ import pytest
 from accounts.models import User
 from ai.intelligence import CarbonIntelligence
 from ai.models import AIConversation, AIMessage
-from backend.ai.protocol import ChatRequest, ConversationContext, Scope
+from ai.protocol import ChatRequest, ConversationContext, Scope
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
@@ -123,7 +123,7 @@ def test_dispatch_task_stream_passes_async_callback(monkeypatch):
 
 
 def test_chat_stream_builds_payload_and_delegates():
-    from backend.ai.providers.pulse import PulseProvider
+    from ai.providers.pulse import PulseProvider
 
     provider = PulseProvider()
     request = ChatRequest(
@@ -137,7 +137,7 @@ def test_chat_stream_builds_payload_and_delegates():
         scope=Scope(),
     )
 
-    with patch("backend.ai.providers.pulse.dispatch_task_stream") as ds:
+    with patch("ai.providers.pulse.dispatch_task_stream") as ds:
         ds.return_value = iter([("chunk", "He"), ("done", {"status": "completed"})])
         frames = list(provider.chat_stream(request))
 

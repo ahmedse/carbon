@@ -16,7 +16,7 @@ from django.contrib.auth.models import Group
 from accounts.models import ScopedRole, User
 from ai.context_assembler import _user_profile_message, assemble_context
 from ai.models import AIConversation
-from backend.ai.protocol import Scope
+from ai.protocol import Scope
 from core.models import Module
 from mdm.models import OrgUnit
 

@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.ai.protocol import (
+from ai.protocol import (
     AIProvider,
     AnomalyDetectRequest,
     AnomalyExplainRequest,
@@ -34,7 +34,7 @@ from backend.ai.protocol import (
     SchemaChange,
     TableProfile,
 )
-from backend.ai.providers.pulse import PulseProvider
+from ai.providers.pulse import PulseProvider
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
@@ -55,13 +55,13 @@ def mock_dispatch():
         with mock as dispatch:
             ...
     """
-    return patch("backend.ai.providers.pulse.dispatch_task")
+    return patch("ai.providers.pulse.dispatch_task")
 
 
 @pytest.fixture
 def mock_list_modules():
     """Patch the in-process module listing for health_check tests."""
-    return patch("backend.ai.providers.pulse.list_modules")
+    return patch("ai.providers.pulse.list_modules")
 
 
 def _task_type(dispatch) -> str:
@@ -489,7 +489,7 @@ def test_all_nine_task_types(method_name, request_obj, expected_task_type):
     """Parametric test: every ABC method dispatches the correct task type."""
     provider = PulseProvider()
 
-    with patch("backend.ai.providers.pulse.dispatch_task") as dispatch:
+    with patch("ai.providers.pulse.dispatch_task") as dispatch:
         dispatch.return_value = {"status": "completed", "result": {}}
         method = getattr(provider, method_name)
         method(request_obj)

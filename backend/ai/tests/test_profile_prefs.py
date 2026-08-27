@@ -36,7 +36,7 @@ from ai.models import (
     ModelCatalog,
 )
 from ai.usage_service import AIUsage
-from backend.ai.protocol import ChatResponse, Scope
+from ai.protocol import ChatResponse, Scope
 
 
 @pytest.fixture

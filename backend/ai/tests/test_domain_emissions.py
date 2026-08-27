@@ -28,7 +28,7 @@ from ai.domain_protocol import (
 )
 from ai.intelligence import CarbonIntelligence
 from accounts.models import User
-from backend.ai.protocol import ChatResponse, ConversationContext, Scope
+from ai.protocol import ChatResponse, ConversationContext, Scope
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────

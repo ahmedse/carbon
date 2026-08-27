@@ -21,7 +21,7 @@ from ai.domain_protocol import (
     register_domain,
 )
 from ai.intelligence import CarbonIntelligence
-from backend.ai.protocol import ChatResponse, Scope
+from ai.protocol import ChatResponse, Scope
 
 
 # ── Registration & lookup ─────────────────────────────────────────────────

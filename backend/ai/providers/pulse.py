@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from backend.ai.protocol import (
+from ai.protocol import (
     AIProvider,
     AnomalyDetectRequest,
     AnomalyDetectResponse,
@@ -45,7 +45,7 @@ from backend.ai.protocol import (
     Scope,
     TableProfile,
 )
-from backend.ai.engine_runtime import (
+from ai.engine_runtime import (
     dispatch_action_stream,
     dispatch_task,
     dispatch_task_stream,

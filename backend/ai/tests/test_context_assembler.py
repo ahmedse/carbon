@@ -30,7 +30,7 @@ from ai.models import (
 )
 from dq.models import DQRule
 from mdm.models import OrgUnit
-from backend.ai.protocol import ChatResponse, Scope
+from ai.protocol import ChatResponse, Scope
 
 
 @pytest.fixture

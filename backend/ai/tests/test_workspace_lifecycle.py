@@ -22,7 +22,7 @@ from rest_framework.test import APIClient
 from accounts.models import User
 from ai.intelligence import CarbonIntelligence
 from ai.models import AIConversation, AIMessage
-from backend.ai.protocol import ChatResponse, Scope
+from ai.protocol import ChatResponse, Scope
 
 
 @pytest.fixture
