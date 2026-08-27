@@ -1,8 +1,7 @@
 # dq/views.py
 import logging
 import time
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers, viewsets, status, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -257,8 +256,8 @@ class DQRuleViewSet(viewsets.ModelViewSet):
             )
         return super().destroy(request, *args, **kwargs)
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Create and run a DQ job for this rule. '
             'rule_run for deterministic rules, nl_check for NL rules (job-only).'
         ),
@@ -300,8 +299,8 @@ class DQRuleViewSet(viewsets.ModelViewSet):
         execute(job)
         return Response(DQJobSerializer(job).data, status=status.HTTP_201_CREATED)
 
-    @swagger_auto_schema(
-        operation_description='Return the recent execution history for a data quality rule.',
+    @extend_schema(
+        description='Return the recent execution history for a data quality rule.',
         responses={200: 'Recent execution history', 404: 'Rule not found'},
     )
     @action(detail=True, methods=['get'])
@@ -335,15 +334,15 @@ class DQRuleViewSet(viewsets.ModelViewSet):
             'trend': trend,
         })
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Detect contradictions/redundancies among active rules on a field or table. '
             'Provide data_field (int) or data_table (int) as a query param. '
             'Returns findings with kind = conflict|redundant|undecidable.'
         ),
-        manual_parameters=[
-            openapi.Parameter('data_field', openapi.IN_QUERY, type=openapi.TYPE_INTEGER),
-            openapi.Parameter('data_table', openapi.IN_QUERY, type=openapi.TYPE_INTEGER),
+        parameters=[
+            OpenApiParameter('data_field', type=int),
+            OpenApiParameter('data_table', type=int),
         ],
         responses={200: 'Contradiction findings', 400: 'Missing/invalid field or table'},
     )
@@ -393,27 +392,29 @@ class DQRuleViewSet(viewsets.ModelViewSet):
         )
         return Response({'count': len(findings), 'findings': findings})
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Bulk-execute multiple DQ rules or all rules for a table. '
             'Provide either rule_ids (array) or data_table_id (int).'
         ),
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'rule_ids': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Schema(type=openapi.TYPE_INTEGER),
-                    description='List of DQRule IDs to execute',
-                ),
-                'data_table_id': openapi.Schema(
-                    type=openapi.TYPE_INTEGER,
-                    description='Run all active rules for this DataTable',
-                ),
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'rule_ids': {
+                        'type': 'array',
+                        'items': {'type': 'integer'},
+                        'description': 'List of DQRule IDs to execute',
+                    },
+                    'data_table_id': {
+                        'type': 'integer',
+                        'description': 'Run all active rules for this DataTable',
+                    },
+                },
             },
-        ),
+        },
         responses={
-            200: openapi.Response(description='Bulk execution summary with total/passed/failed/results'),
+            200: 'Bulk execution summary with total/passed/failed/results',
             400: 'Neither rule_ids nor data_table_id provided',
         },
     )
@@ -540,8 +541,8 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(passed=False)
         return qs.order_by('-run_at').distinct()
 
-    @swagger_auto_schema(
-        operation_description='Return a paged list of DQ execution results for the current scope.',
+    @extend_schema(
+        description='Return a paged list of DQ execution results for the current scope.',
         responses={200: 'List of DQ results'},
     )
     def list(self, request, *args, **kwargs):
@@ -551,8 +552,8 @@ class DQResultViewSet(viewsets.ReadOnlyModelViewSet):
             return self.get_paginated_response(self.get_serializer(page, many=True).data)
         return Response(self.get_serializer(qs, many=True).data)
 
-    @swagger_auto_schema(
-        operation_description='Return a sample of failed rows and reasons for a DQ execution result.',
+    @extend_schema(
+        description='Return a sample of failed rows and reasons for a DQ execution result.',
         responses={200: 'Sample failures', 404: 'Result not found'},
     )
     @action(detail=True, methods=['get'])
@@ -594,20 +595,22 @@ class ProfileTriggerView(APIView):
     permission_classes = [AdminOrSuperuserOnly]
     required_capability = 'dq:manage_rules'
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Profile a single data table, computing row count, completeness, null counts, '
             'and uniqueness for each field. Results are persisted as TableProfile / FieldProfile records.'
         ),
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'data_table_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the DataTable to profile'),
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'data_table_id': {'type': 'integer', 'description': 'ID of the DataTable to profile'},
+                },
+                'required': ['data_table_id'],
             },
-            required=['data_table_id'],
-        ),
+        },
         responses={
-            200: openapi.Response(description='Profile result with row count and per-field stats'),
+            200: 'Profile result with row count and per-field stats',
             400: 'data_table_id is required',
             403: 'Not authorized for this table',
             404: 'Table not found',
@@ -749,25 +752,27 @@ class BulkProfileView(APIView):
     permission_classes = [AdminOrSuperuserOnly]
     required_capability = 'dq:manage_rules'
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Profile multiple data tables in a single request. '
             'Non-admin users have inaccessible tables silently skipped. '
             'Returns total/success/failed counts plus per-table results.'
         ),
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'data_table_ids': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Schema(type=openapi.TYPE_INTEGER),
-                    description='List of DataTable IDs to profile',
-                ),
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'data_table_ids': {
+                        'type': 'array',
+                        'items': {'type': 'integer'},
+                        'description': 'List of DataTable IDs to profile',
+                    },
+                },
+                'required': ['data_table_ids'],
             },
-            required=['data_table_ids'],
-        ),
+        },
         responses={
-            200: openapi.Response(description='Bulk profile result with total/success/failed counts and per-table results'),
+            200: 'Bulk profile result with total/success/failed counts and per-table results',
             400: 'data_table_ids must be a non-empty list',
         },
     )
@@ -799,8 +804,8 @@ class TableProfileView(APIView):
     permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
     required_write_capability = 'dq:view'
 
-    @swagger_auto_schema(
-        operation_description='Return the latest table profile and its per-field profiles.',
+    @extend_schema(
+        description='Return the latest table profile and its per-field profiles.',
         responses={200: 'TableProfile + FieldProfiles', 404: 'Table or profile not found'},
     )
     def get(self, request, table_id=None):
@@ -837,8 +842,8 @@ class RunProfileView(APIView):
     permission_classes = [IsAuthenticated, AdminOrSuperuserOnly]
     required_capability = 'dq:manage_rules'
 
-    @swagger_auto_schema(
-        operation_description='Trigger profiling for a table (async). Returns 202 + task_id.',
+    @extend_schema(
+        description='Trigger profiling for a table (async). Returns 202 + task_id.',
         responses={202: 'Accepted (task_id)', 404: 'Table not found'},
     )
     def post(self, request, table_id=None):
@@ -891,8 +896,8 @@ class TableScorecardView(APIView):
     permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
     required_write_capability = 'dq:view'
 
-    @swagger_auto_schema(
-        operation_description='Return the quality scorecard for a table.',
+    @extend_schema(
+        description='Return the quality scorecard for a table.',
         responses={200: 'Scorecard', 404: 'Table not found'},
     )
     def get(self, request, table_id=None):
@@ -916,22 +921,24 @@ class DQRunView(APIView):
     permission_classes = [AdminOrSuperuserOnly]
     required_capability = 'dq:manage_rules'
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Run DQ rules and record results. Provide either:\n'
             '- `rule_id` to execute a single rule\n'
             '- `data_table_id` to run all active rules scoped to that table\n\n'
             'Results are persisted as DQResult records and written back to AssetProfile quality_status/quality_score.'
         ),
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'rule_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of a specific DQRule to execute'),
-                'data_table_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='Run all active rules for this DataTable'),
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'rule_id': {'type': 'integer', 'description': 'ID of a specific DQRule to execute'},
+                    'data_table_id': {'type': 'integer', 'description': 'Run all active rules for this DataTable'},
+                },
             },
-        ),
+        },
         responses={
-            200: openapi.Response(description='DQ run result with passed/score/rules_run counts'),
+            200: 'DQ run result with passed/score/rules_run counts',
             400: 'Neither rule_id nor data_table_id provided',
             403: 'Not authorized for this rule or table',
             404: 'Rule or table not found',
@@ -979,12 +986,12 @@ class DQMetricsView(APIView):
     permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
     required_write_capability = 'dq:view'
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Return aggregated DQ metrics for the authenticated user\'s org scope: '
             'total tables profiled, total rows, and weighted completeness percentage.'
         ),
-        responses={200: openapi.Response(description='DQ metrics summary (table_count, total_rows, completeness_pct)')},
+        responses={200: 'DQ metrics summary (table_count, total_rows, completeness_pct)'},
     )
     def get(self, request):
         user = request.user
@@ -1069,13 +1076,13 @@ class TableDQMetricsView(APIView):
     permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
     required_write_capability = 'dq:view'
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Return DQ metrics for a specific table: row count, completeness percentage, '
             'per-field profiles, and all active DQ rules scoped to this table.'
         ),
         responses={
-            200: openapi.Response(description='Table-level DQ metrics with field profiles and active rules'),
+            200: 'Table-level DQ metrics with field profiles and active rules',
             403: 'Not authorized for this table',
             404: 'Table not found',
         },
@@ -1135,13 +1142,13 @@ class FieldDQMetricsView(APIView):
     permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
     required_write_capability = 'dq:view'
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Return DQ metrics for a specific field: null count, completeness percentage, '
             'uniqueness percentage, and all active DQ rules targeting this field.'
         ),
         responses={
-            200: openapi.Response(description='Field-level DQ metrics with active rules'),
+            200: 'Field-level DQ metrics with active rules',
             403: 'Not authorized for this field',
             404: 'Field not found',
         },
@@ -1173,21 +1180,23 @@ class RunDQValidationView(APIView):
     permission_classes = [AdminOrSuperuserOnly]
     required_capability = 'dq:manage_rules'
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Legacy alias for POST /dq/run/ with data_table. '
             'Run all active DQ rules against a table and return a summary. '
             'Prefer POST /dq/run/ for new integrations.'
         ),
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'data_table': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID of the DataTable to validate'),
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'data_table': {'type': 'integer', 'description': 'ID of the DataTable to validate'},
+                },
+                'required': ['data_table'],
             },
-            required=['data_table'],
-        ),
+        },
         responses={
-            200: openapi.Response(description='Validation complete with status and result summary'),
+            200: 'Validation complete with status and result summary',
             400: 'data_table is required',
             404: 'Table not found',
         },
@@ -1225,25 +1234,27 @@ class DQSuggestView(APIView):
     permission_classes = [AdminOrSuperuserOnly]
     required_capability = 'dq:manage_rules'
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'DEPRECATED thin alias for creating a suggest DQJob. '
             'Creates and submits a `suggest` job to Pulse; suggestions are '
             'persisted as DQSuggestion rows when the job completes. '
             'Prefer POST /dq/jobs/ {job_type: "suggest", data_table_id}.'
         ),
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'data_table_id': openapi.Schema(
-                    type=openapi.TYPE_INTEGER,
-                    description='ID of the DataTable to suggest rules for',
-                ),
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'data_table_id': {
+                        'type': 'integer',
+                        'description': 'ID of the DataTable to suggest rules for',
+                    },
+                },
+                'required': ['data_table_id'],
             },
-            required=['data_table_id'],
-        ),
+        },
         responses={
-            201: openapi.Response(description='Suggest DQJob created (thin alias)'),
+            201: 'Suggest DQJob created (thin alias)',
             400: 'data_table_id is required',
             404: 'Table not found',
         },
@@ -1413,31 +1424,33 @@ class GateCheckView(APIView):
     permission_classes = [IsAuthenticated, ReadAnyWriteAdmin]
     required_write_capability = 'dq:manage_rules'
 
-    @swagger_auto_schema(
-        operation_description='Evaluate DQ gate rules against raw row data.',
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=['data_table', 'rows'],
-            properties={
-                'data_table': openapi.Schema(
-                    type=openapi.TYPE_INTEGER,
-                    description='DataTable ID to load gate rules for',
-                ),
-                'rows': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Schema(type=openapi.TYPE_OBJECT),
-                    description='List of raw row value dicts to evaluate',
-                ),
-                'mode': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    enum=['write', 'import'],
-                    default='write',
-                    description='Gate mode: "write" or "import"',
-                ),
+    @extend_schema(
+        description='Evaluate DQ gate rules against raw row data.',
+        request={
+            'application/json': {
+                'type': 'object',
+                'required': ['data_table', 'rows'],
+                'properties': {
+                    'data_table': {
+                        'type': 'integer',
+                        'description': 'DataTable ID to load gate rules for',
+                    },
+                    'rows': {
+                        'type': 'array',
+                        'items': {'type': 'object'},
+                        'description': 'List of raw row value dicts to evaluate',
+                    },
+                    'mode': {
+                        'type': 'string',
+                        'enum': ['write', 'import'],
+                        'default': 'write',
+                        'description': 'Gate mode: "write" or "import"',
+                    },
+                },
             },
-        ),
+        },
         responses={
-            200: openapi.Response(description='Gate verdicts with summary and per-row details'),
+            200: 'Gate verdicts with summary and per-row details',
             400: 'Invalid request (missing data_table, invalid rows, etc.)',
             404: 'DataTable not found',
         },
@@ -1578,8 +1591,8 @@ class DQJobViewSet(viewsets.ModelViewSet):
         refresh(job)
         return Response(DQJobSerializer(job).data)
 
-    @swagger_auto_schema(
-        operation_description='Cancel a queued/running job (best-effort; Pulse is not notified).',
+    @extend_schema(
+        description='Cancel a queued/running job (best-effort; Pulse is not notified).',
         responses={200: 'Job canceled', 400: 'Job not cancelable'},
     )
     @action(detail=True, methods=['post'])
@@ -1635,8 +1648,8 @@ class DQSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(data_table_id=p['data_table'])
         return qs.distinct()
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Accept a suggestion: validate its payload definition with '
             'rule_schema, create the DQRule + field assignments, mark accepted. '
             'Returns the created rule.'
@@ -1729,14 +1742,16 @@ class DQSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
         from .serializers import DQRuleSerializer
         return Response(DQRuleSerializer(rule).data, status=status.HTTP_201_CREATED)
 
-    @swagger_auto_schema(
-        operation_description='Reject a suggestion, optionally with a reason.',
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'reason': openapi.Schema(type=openapi.TYPE_STRING, description='Why it was rejected'),
+    @extend_schema(
+        description='Reject a suggestion, optionally with a reason.',
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'reason': {'type': 'string', 'description': 'Why it was rejected'},
+                },
             },
-        ),
+        },
         responses={200: 'Suggestion rejected', 400: 'Not pending', 404: 'Not found'},
     )
     @action(detail=True, methods=['post'])

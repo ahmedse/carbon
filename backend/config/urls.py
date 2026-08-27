@@ -10,13 +10,16 @@ from accounts.views import ThrottledTokenObtainPairView
 from accounts.password_reset_signals import NotifyingPasswordResetView
 from .health_views import health_check, metrics_view
 from ai import workspace_api as ai_workspace_views
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from accounts.permissions import AdminOrSuperuserOnly
 
 # API prefix, e.g. '/api/v1/' or '/carbon/api/'
 api_prefix = getattr(settings, "API_PREFIX", "/api/v1/").strip("/")
 
-# Single predicate for the dev-only URL surface (swagger UI). Production
-# never imports drf_yasg, so the API-docs dependency can be dropped from
-# prod images entirely.
+# Single predicate for the dev-only URL surface (debug toolbar, silk).
+# drf-spectacular is import-safe in ALL environments (ADR 0003), so the
+# OpenAPI schema/docs endpoints below are NOT dev-gated — they run in
+# production too, protected by AdminOrSuperuserOnly.
 IS_DEVELOPMENT = getattr(settings, "IS_DEVELOPMENT", False)
 
 
@@ -91,41 +94,14 @@ urlpatterns = [
     path(f'{api_prefix}/', include('evidence.urls')),
 ]
 
-# ── Development-only surface ─────────────────────────────────────────────
-# Swagger UI is dev tooling: gate it on the same predicate as the debug
-# toolbars (settings.IS_DEVELOPMENT), not DEBUG — so DEBUG=True in a
-# production env cannot accidentally publish API docs.
-if IS_DEVELOPMENT:
-    from drf_yasg.views import get_schema_view
-    from drf_yasg import openapi
-    from rest_framework.permissions import AllowAny
-
-    schema_view = get_schema_view(
-        openapi.Info(
-            title=f"{getattr(settings, 'PLATFORM_TITLE', 'Data Trust Platform')} Core API",
-            default_version='v1',
-            description=(
-                "**Data Trust Core Platform APIs**\n\n"
-                "Provides catalog, master data management (MDM), and data quality (DQ) services.\n\n"
-                "### Key Modules\n"
-                "- **Catalog** (`/catalog/`): Asset profiling, governance events, glossary terms, data domains\n"
-                "- **MDM** (`/mdm/`): Reference sets (temporal + lifecycle), org-unit hierarchy, field binding\n"
-                "- **DQ** (`/dq/`): Data profiling, rule execution, quality metrics, execution history\n\n"
-                "### Authentication\n"
-                "All endpoints require JWT. Obtain a token via `POST /carbon-api/token/`.\n\n"
-                "### Soft-Delete Policy\n"
-                "Hard DELETE is rejected with HTTP 405 on catalog and DQ resources. "
-                "Use `PATCH {\"is_active\": false}` or the dedicated `archive-bulk` actions instead."
-            ),
-            contact=openapi.Contact(email="carbon@aast.edu"),
-            license=openapi.License(name="Proprietary"),
-        ),
-        public=True,
-        permission_classes=(AllowAny,),
-    )
-    urlpatterns += [
-        path(f'{api_prefix}/swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
-    ]
+# ── OpenAPI schema + docs (ADR 0003 — drf-spectacular) ──────────────────
+# NOT dev-gated: drf-spectacular is import-safe in every environment, so the
+# schema endpoints run in production too — protected by AdminOrSuperuserOnly.
+urlpatterns += [
+    path(f'{api_prefix}/schema/', SpectacularAPIView.as_view(permission_classes=[AdminOrSuperuserOnly]), name='schema'),
+    path(f'{api_prefix}/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='schema-swagger-ui'),
+    path(f'{api_prefix}/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='schema-redoc'),
+]
 
 # Debug tooling URLs (dev only). Gated on the same IS_DEVELOPMENT predicate
 # as their INSTALLED_APPS/MIDDLEWARE entries so the two cannot diverge.

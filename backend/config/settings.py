@@ -169,7 +169,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
-    'drf_yasg',
+    'drf_spectacular',
 ]
 
 # Phase 1.1 — Dynamic email config from DB (defaults to console)
@@ -298,6 +298,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    # EPH-5C (ADR 0003): drf-spectacular schema generator (was drf-yasg).
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     # EPH-5A: structured handler wraps catalog's data_trust_exception_handler
     # and adds a taxonomy error_code — see core/exception_handler.py.
     'EXCEPTION_HANDLER': 'core.exception_handler.structured_exception_handler',
@@ -371,8 +373,29 @@ STATIC_ROOT = get_env("DJANGO_STATIC_ROOT", BASE_DIR / 'staticfiles')
 MEDIA_URL = '/media/'
 MEDIA_ROOT = get_env("DJANGO_MEDIA_ROOT", BASE_DIR / 'mediafiles')
 
-# drf-yasg compat (ADR 0003: migrate to drf-spectacular)
-SWAGGER_USE_COMPAT_RENDERERS = False
+# drf-spectacular OpenAPI config (ADR 0003 — migrated from drf-yasg)
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Carbon Data Trust Platform API',
+    'DESCRIPTION': (
+        "**Data Trust Core Platform APIs**\n\n"
+        "Provides catalog, master data management (MDM), and data quality (DQ) services.\n\n"
+        "### Key Modules\n"
+        "- **Catalog** (`/catalog/`): Asset profiling, governance events, glossary terms, data domains\n"
+        "- **MDM** (`/mdm/`): Reference sets (temporal + lifecycle), org-unit hierarchy, field binding\n"
+        "- **DQ** (`/dq/`): Data profiling, rule execution, quality metrics, execution history\n\n"
+        "### Authentication\n"
+        "All endpoints require JWT. Obtain a token via `POST /carbon-api/token/`.\n\n"
+        "### Soft-Delete Policy\n"
+        "Hard DELETE is rejected with HTTP 405 on catalog and DQ resources. "
+        "Use `PATCH {\"is_active\": false}` or the dedicated `archive-bulk` actions instead."
+    ),
+    'VERSION': '1.0.0',
+    # Strip the API mount prefix from generated paths so operation paths read
+    # like `/mdm/reference-sets/{id}/values/` (matching the pre-EPH-5C docs).
+    'SCHEMA_PATH_PREFIX': f'/{API_PREFIX.strip("/")}',
+    'SCHEMA_PATH_PREFIX_TRIM': True,
+    'SERVE_INCLUDE_SCHEMA': False,
+}
 
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB

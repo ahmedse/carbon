@@ -1,8 +1,8 @@
 # mdm/views.py
+from datetime import date
 from django.db import models
 from django.utils.text import slugify
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import viewsets, status, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -161,11 +161,11 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
             user=self.request.user,
         )
 
-    @swagger_auto_schema(
-        operation_description='Return reference values valid on a given date, optionally filtered to active values only.',
-        manual_parameters=[
-            openapi.Parameter('date', openapi.IN_QUERY, description='ISO date to query historical values', type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE, required=False),
-            openapi.Parameter('active', openapi.IN_QUERY, description='Filter to active values only', type=openapi.TYPE_BOOLEAN, required=False),
+    @extend_schema(
+        description='Return reference values valid on a given date, optionally filtered to active values only.',
+        parameters=[
+            OpenApiParameter('date', type=date, description='ISO date to query historical values', required=False),
+            OpenApiParameter('active', type=bool, description='Filter to active values only', required=False),
         ],
         responses={200: 'List of reference values', 400: 'Invalid date format', 404: 'Reference set not found'},
     )
@@ -195,13 +195,15 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
 
         return Response(ReferenceValueSerializer(qs, many=True).data)
 
-    @swagger_auto_schema(
-        operation_description='Advance a reference set through its lifecycle states.',
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={'state': openapi.Schema(type=openapi.TYPE_STRING, description='Target lifecycle state')},
-            required=['state'],
-        ),
+    @extend_schema(
+        description='Advance a reference set through its lifecycle states.',
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {'state': {'type': 'string', 'description': 'Target lifecycle state'}},
+                'required': ['state'],
+            },
+        },
         responses={200: 'Transition accepted', 400: 'Invalid lifecycle transition', 404: 'Reference set not found'},
     )
     @action(detail=True, methods=['post'])
@@ -218,9 +220,9 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
             raise DRFValidationError(exc.args[0] if exc.args else {'state': ['Invalid transition.']})
         return Response(result)
 
-    @swagger_auto_schema(
-        operation_description='Add a new reference value to this reference set.',
-        request_body=openapi.Schema(type=openapi.TYPE_OBJECT),
+    @extend_schema(
+        description='Add a new reference value to this reference set.',
+        request={'application/json': {'type': 'object'}},
         responses={201: 'Value created', 400: 'Validation error'},
     )
     @action(detail=True, methods=['post'])
@@ -237,28 +239,27 @@ class ReferenceSetViewSet(viewsets.ModelViewSet):
             return Response(data, status=status.HTTP_201_CREATED)
         return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Archive multiple reference sets in one request. '
             'Sets is_active=False and lifecycle_state=archived for each ID. '
             'Returns per-item success/failure so partial failures do not abort the batch.'
         ),
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'ids': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Schema(type=openapi.TYPE_INTEGER),
-                    description='List of ReferenceSet IDs to archive',
-                ),
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'ids': {
+                        'type': 'array',
+                        'items': {'type': 'integer'},
+                        'description': 'List of ReferenceSet IDs to archive',
+                    },
+                },
+                'required': ['ids'],
             },
-            required=['ids'],
-        ),
+        },
         responses={
-            200: openapi.Response(
-                description='Per-item success/failure summary',
-                examples={'application/json': {'success': [1, 2], 'failed': [{'id': 99, 'error': 'ReferenceSet not found'}]}},
-            ),
+            200: 'Per-item success/failure summary',
             400: 'ids must be a non-empty list',
         },
     )
@@ -280,9 +281,9 @@ class ReferenceValueViewSet(viewsets.ModelViewSet):
     permission_classes = [CanManageReferenceValues]
     required_write_capability = 'mdm:manage'
 
-    @swagger_auto_schema(
-        operation_description='Create multiple reference values atomically for bulk import workflows.',
-        request_body=openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
+    @extend_schema(
+        description='Create multiple reference values atomically for bulk import workflows.',
+        request={'application/json': {'type': 'array', 'items': {'type': 'object'}}},
         responses={201: 'Bulk-create succeeded', 400: 'One or more values failed validation'},
     )
     @action(detail=False, methods=['post'], url_path='bulk-create')
@@ -392,17 +393,19 @@ class BindFieldView(APIView):
     permission_classes = [ReadAnyWriteAdmin]
     required_write_capability = 'mdm:manage'
 
-    @swagger_auto_schema(
-        operation_description='Bind or unbind one or many data fields to a reference set.',
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'data_field': openapi.Schema(type=openapi.TYPE_INTEGER),
-                'data_fields': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_INTEGER)),
-                'reference_set': openapi.Schema(type=openapi.TYPE_INTEGER),
-                'force': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+    @extend_schema(
+        description='Bind or unbind one or many data fields to a reference set.',
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'data_field': {'type': 'integer'},
+                    'data_fields': {'type': 'array', 'items': {'type': 'integer'}},
+                    'reference_set': {'type': 'integer'},
+                    'force': {'type': 'boolean'},
+                },
             },
-        ),
+        },
         responses={200: 'Binding updated', 400: 'Invalid request', 404: 'Field or reference set not found'},
     )
     def post(self, request):
@@ -604,13 +607,13 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
             user=self.request.user,
         )
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Return the full subtree of org units rooted at this unit, '
             'including self and all active descendants (breadth-first order).'
         ),
         responses={
-            200: openapi.Response(description='Flat list of OrgUnit objects in the subtree'),
+            200: 'Flat list of OrgUnit objects in the subtree',
             404: 'Org unit not found',
         },
     )
@@ -622,8 +625,8 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Return the full visible org-unit hierarchy as a nested tree. '
             'Only org units visible to the current user (RBAC-scoped subtree) '
             'are included; roots are the visible units with no visible parent. '
@@ -631,7 +634,7 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
             'empty).'
         ),
         responses={
-            200: openapi.Response(description='Nested list of visible OrgUnit objects with children'),
+            200: 'Nested list of visible OrgUnit objects with children',
         },
     )
     @action(detail=False, methods=['get'], url_path='tree')
@@ -664,13 +667,13 @@ class OrgUnitViewSet(viewsets.ModelViewSet):
 
         return Response([build(r) for r in roots])
 
-    @swagger_auto_schema(
-        operation_description=(
+    @extend_schema(
+        description=(
             'Return the ancestor chain from the root org unit down to this unit\'s parent '
             '(ordered root-first). Self is not included.'
         ),
         responses={
-            200: openapi.Response(description='Ordered list of ancestor OrgUnit objects from root to parent'),
+            200: 'Ordered list of ancestor OrgUnit objects from root to parent',
             404: 'Org unit not found',
         },
     )

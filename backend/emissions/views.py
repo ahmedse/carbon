@@ -12,8 +12,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Sum, Count, Q, Max
 from django.utils import timezone
 from decimal import Decimal
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger
 from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units, user_is_global_admin
@@ -162,9 +161,9 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
         return Response(ReportingPeriodSerializer(period).data)
 
-    @swagger_auto_schema(
-        method='get',
-        operation_description='Generate a GHG Protocol Inventory Report PDF for this reporting period.',
+    @extend_schema(
+        methods=['GET'],
+        description='Generate a GHG Protocol Inventory Report PDF for this reporting period.',
         responses={200: 'PDF file', 404: 'Period not found'},
     )
     @action(detail=True, methods=['get'])
@@ -608,12 +607,12 @@ class CalculationSummaryAPIView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(
-        operation_description='Return aggregated calculation summary for a reporting period.',
-        manual_parameters=[
-            openapi.Parameter('reporting_period_id', openapi.IN_QUERY, description='Filter by reporting period', type=openapi.TYPE_INTEGER),
+    @extend_schema(
+        description='Return aggregated calculation summary for a reporting period.',
+        parameters=[
+            OpenApiParameter('reporting_period_id', type=int, description='Filter by reporting period'),
         ],
-        responses={200: openapi.Response('OK')}
+        responses={200: 'OK'}
     )
     def get(self, request):
         period_id = request.query_params.get('reporting_period_id')
@@ -1042,23 +1041,25 @@ class BatchCalculateAPIView(APIView):
     permission_classes = [AdminOrSuperuserOnly]
     required_capability = 'carbon:trigger_calculations'
 
-    @swagger_auto_schema(
-        operation_description="Batch calculate emissions for multiple tables",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=['table_ids', 'period_id'],
-            properties={
-                'table_ids': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Schema(type=openapi.TYPE_INTEGER),
-                    description="DataTable IDs to calculate",
-                ),
-                'period_id': openapi.Schema(
-                    type=openapi.TYPE_INTEGER,
-                    description="ReportingPeriod ID",
-                ),
+    @extend_schema(
+        description="Batch calculate emissions for multiple tables",
+        request={
+            'application/json': {
+                'type': 'object',
+                'required': ['table_ids', 'period_id'],
+                'properties': {
+                    'table_ids': {
+                        'type': 'array',
+                        'items': {'type': 'integer'},
+                        'description': "DataTable IDs to calculate",
+                    },
+                    'period_id': {
+                        'type': 'integer',
+                        'description': "ReportingPeriod ID",
+                    },
+                },
             },
-        ),
+        },
     )
     def post(self, request):
         table_ids = request.data.get('table_ids')
@@ -1156,9 +1157,9 @@ class OwnerSummaryAPIView(APIView):
     """Get high-level summary data for the data owner landing page."""
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(
-        operation_description='Return a summary of emission modules and data quality for the current org unit.',
-        responses={200: openapi.Response('OK', schema=openapi.Schema(type=openapi.TYPE_OBJECT))}
+    @extend_schema(
+        description='Return a summary of emission modules and data quality for the current org unit.',
+        responses={200: {'type': 'object'}}
     )
     def get(self, request):
         data = OwnerService.get_owner_summary(request.user)
@@ -1171,13 +1172,13 @@ class OwnerAssetsAPIView(APIView):
     """Return emission-generating assets scoped to the current owner org unit."""
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(
-        operation_description='List emission source modules for the current org unit.',
-        manual_parameters=[
-            openapi.Parameter('search', openapi.IN_QUERY, description='Filter by module name', type=openapi.TYPE_STRING),
-            openapi.Parameter('scope', openapi.IN_QUERY, description='Filter by emission scope', type=openapi.TYPE_INTEGER),
+    @extend_schema(
+        description='List emission source modules for the current org unit.',
+        parameters=[
+            OpenApiParameter('search', type=str, description='Filter by module name'),
+            OpenApiParameter('scope', type=int, description='Filter by emission scope'),
         ],
-        responses={200: openapi.Response('OK', schema=openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)))}
+        responses={200: {'type': 'array', 'items': {'type': 'object'}}}
     )
     def get(self, request):
         search = request.query_params.get('search')
@@ -1192,9 +1193,9 @@ class OwnerActivityAPIView(APIView):
     """Return recent emission submission activity for the current owner org unit."""
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(
-        operation_description='Return recent emission activity for the current org unit.',
-        responses={200: openapi.Response('OK', schema=openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)))}
+    @extend_schema(
+        description='Return recent emission activity for the current org unit.',
+        responses={200: {'type': 'array', 'items': {'type': 'object'}}}
     )
     def get(self, request):
         data = OwnerService.get_owner_activity(request.user)

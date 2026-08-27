@@ -3,8 +3,7 @@ from django.db.models import Count, Q
 from django.utils.text import slugify
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -154,19 +153,22 @@ class AssetProfileViewSet(viewsets.ModelViewSet):
     required_write_capability = 'catalog:manage_products'
     http_method_names = ['get', 'post', 'patch', 'put', 'head', 'options']  # profiles are auto-managed; no create/delete
 
-    @swagger_auto_schema(
-        operation_description='Archive multiple asset profiles in one request.',
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'ids': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_INTEGER)),
+    @extend_schema(
+        description='Archive multiple asset profiles in one request.',
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'ids': {'type': 'array', 'items': {'type': 'integer'}},
+                },
+                'required': ['ids'],
             },
-            required=['ids'],
-        ),
+        },
         responses={200: 'Per-item success/failure summary', 400: 'Invalid request'},
     )
     @action(detail=False, methods=['post'], url_path='archive-bulk')
     def archive_bulk(self, request):
+        """POST /catalog/assets/archive-bulk/ — archive multiple asset profiles at once."""
         ids = request.data.get('ids', [])
         if not isinstance(ids, list) or not ids:
             return Response({'error': 'ids must be a non-empty list'}, status=status.HTTP_400_BAD_REQUEST)
@@ -283,10 +285,10 @@ class GovernanceComplianceView(APIView):
     permission_classes = [ReadAnyWriteAdmin]
     required_write_capability = 'catalog:view_governance'
 
-    @swagger_auto_schema(
-        operation_description='Summarize governance events for a recent time window.',
-        manual_parameters=[
-            openapi.Parameter('days', openapi.IN_QUERY, description='Number of days to include', type=openapi.TYPE_INTEGER, required=False),
+    @extend_schema(
+        description='Summarize governance events for a recent time window.',
+        parameters=[
+            OpenApiParameter('days', type=int, description='Number of days to include', required=False),
         ],
         responses={200: 'Compliance summary of recent governance activity'},
     )

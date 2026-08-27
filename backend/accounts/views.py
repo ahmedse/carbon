@@ -6,8 +6,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated, IsAdminU
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from django.contrib.auth.models import Group
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import extend_schema
 from .models import User, ScopedRole, RoleAssignmentAuditLog, PlatformAppConfig
 from .serializers import (
     UserSerializer, GroupSerializer,
@@ -405,10 +404,10 @@ class ScopedRoleViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-@swagger_auto_schema(
-    method='get',
-    operation_description='Return app role definitions from the platform manifest registry.',
-    responses={200: openapi.Response('OK', schema=openapi.Schema(type=openapi.TYPE_OBJECT))},
+@extend_schema(
+    methods=['GET'],
+    description='Return app role definitions from the platform manifest registry.',
+    responses={200: {'type': 'object'}},
 )
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
