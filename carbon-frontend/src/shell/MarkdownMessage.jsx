@@ -102,7 +102,7 @@ function MermaidBlock({ code }) {
           label="Diagram could not be rendered"
           sx={{ m: 0.75 }}
         />
-        <Box component="pre" sx={{ m: 0, p: 1.5, bgcolor: '#282c34', overflowX: 'auto', fontSize: '0.8125rem', color: '#abb2bf' }}>
+        <Box component="pre" dir="ltr" sx={{ m: 0, p: 1.5, bgcolor: '#282c34', overflowX: 'auto', fontSize: '0.8125rem', color: '#abb2bf' }}>
           <code>{code}</code>
         </Box>
       </Box>
@@ -149,10 +149,11 @@ function CodeBlock({ children, className }) {
   }, [code]);
 
   if (!match) {
-    // inline code
+    // inline code — always LTR so identifiers/emails never get mirrored
     return (
       <Typography
         component="code"
+        dir="ltr"
         sx={{
           fontFamily: 'monospace',
           fontSize: '0.85em',
@@ -198,6 +199,7 @@ function CodeBlock({ children, className }) {
       {/* code body — children preserve rehype-highlight spans (syntax colors) */}
       <Box
         component="pre"
+        dir="ltr"
         sx={{
           m: 0,
           p: 1.5,

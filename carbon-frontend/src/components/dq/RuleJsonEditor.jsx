@@ -215,7 +215,8 @@ export default function RuleJsonEditor({
         )}
       </Stack>
 
-      <Box sx={{ position: 'relative', border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+      {/* dir="ltr" keeps Monaco's internal layout LTR even when the app is in RTL (Arabic) */}
+      <Box dir="ltr" sx={{ position: 'relative', border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
         <Chip
           label="Schema v1"
           size="small"

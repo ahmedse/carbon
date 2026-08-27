@@ -4736,7 +4736,12 @@ Gate: frontend lint+vitest+build; backend pytest `accounts` green; end-to-end: s
 
 ## I18N-6: QA / RTL audit + Arabic quality + E2E (qa-validator + master gates)
 
-**Status:** READY — remaining
+**Status:** DONE ✅ (2026-08-27) — see `TASK-RESULTS-17-I18N-DUAL-LANG.md`. All
+gates green: key parity 1036 (en===ar), E2E journey-13 6/6 (EN+AR incl. mid-
+session switch, reload persistence, logout/login), RTL fixes in
+`MarkdownMessage.jsx` + `RuleJsonEditor.jsx`, Arabic quality pass clean.
+Deferred to W7-B: directional-icon flip (~92 matches/40 files, 90% W7-B dirty)
++ Arabic plural keys. EPH-4C / I18N-3/4 remain HELD until W7-B commits.
 
 - RTL sweep: DataGrid (columns/density/pinning), Monaco editor (keep LTR internally), Chart.js tooltips/legends, mermaid/katex blocks, tooltips/menus/popovers, scrollbars, `dir="ltr"` on code blocks/IDs/emails.
 - Directional-icon audit: chevrons, arrows, undo/redo, sort indicators → flipped in RTL (MUI icons don't auto-flip).
