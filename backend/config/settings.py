@@ -431,6 +431,13 @@ if SECURE_SSL_REDIRECT:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
+# CB-09: a Prometheus scraper does not follow 301 redirects, so the metrics
+# endpoints must stay reachable over plain HTTP on the loopback — exempt them
+# from the HTTPS redirect.
+SECURE_REDIRECT_EXEMPT = [
+    rf'^/{API_PREFIX.strip("/")}/health/(metrics/|prometheus/)',
+]
+
 # Trust the X-Forwarded-Proto header from nginx (SSL terminated at reverse proxy)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
@@ -464,10 +471,15 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "correlation_id": {
+            "()": "core.log_filters.CorrelationIdFilter",
+        },
+    },
     "formatters": {
         "json": {
             "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
-            "format": "%(asctime)s %(levelname)s %(name)s %(message)s %(pathname)s %(lineno)d",
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s %(pathname)s %(lineno)d %(correlation_id)s",
         },
         "verbose": {
             "format": "{levelname} {asctime} {module} {message}",
@@ -478,6 +490,7 @@ LOGGING = {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "json" if os.getenv("LOG_FORMAT", "json") == "json" else "verbose",
+            "filters": ["correlation_id"],
         },
         "file": {
             "class": "logging.handlers.RotatingFileHandler",
@@ -485,6 +498,7 @@ LOGGING = {
             "maxBytes": 10 * 1024 * 1024,  # 10MB
             "backupCount": 5,
             "formatter": "json",
+            "filters": ["correlation_id"],
         },
     },
     "root": {
@@ -540,3 +554,24 @@ AI_DEFAULT_MONTHLY_TOKEN_LIMIT = int(
 AI_QUOTA_SOFT_WARNING_PCT = int(
     os.environ.get("AI_QUOTA_SOFT_WARNING_PCT", 80)
 )
+
+# ── OpenTelemetry (EPH-6A / P1-11) ────────────────────────────────────────
+# Auto-instruments Django only when an OTLP collector endpoint is configured.
+# Default: disabled — no span pipeline is started, zero overhead.
+OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
+
+if OTEL_EXPORTER_OTLP_ENDPOINT:
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.instrumentation.django import DjangoInstrumentor
+    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    _otel_resource = Resource.create({SERVICE_NAME: "carbon-backend"})
+    _otel_provider = TracerProvider(resource=_otel_resource)
+    _otel_provider.add_span_processor(
+        BatchSpanProcessor(OTLPSpanExporter(endpoint=OTEL_EXPORTER_OTLP_ENDPOINT))
+    )
+    trace.set_tracer_provider(_otel_provider)
+    DjangoInstrumentor().instrument()

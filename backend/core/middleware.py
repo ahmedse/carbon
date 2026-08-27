@@ -8,6 +8,9 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
+from core.log_filters import clear_correlation_id, set_correlation_id
+from core.telemetry import api_duration_seconds, api_requests_total, app_label_from_path
+
 # Phase 1.3: Level ordering for DB log threshold
 LEVEL_RANK = {'DEBUG': 10, 'INFO': 20, 'WARNING': 30, 'ERROR': 40}
 
@@ -23,6 +26,7 @@ class RequestLoggingMiddleware(MiddlewareMixin):
         correlation_id = request.headers.get('X-Correlation-ID', str(uuid.uuid4()))
         request.correlation_id = correlation_id
         request.start_time = time.time()
+        set_correlation_id(correlation_id)  # EPH-6A: thread-local for log filter
 
         logger.info(
             "Request started",
@@ -39,6 +43,7 @@ class RequestLoggingMiddleware(MiddlewareMixin):
 
     def process_response(self, request, response):
         if not hasattr(request, 'start_time'):
+            clear_correlation_id()
             return response
 
         duration = time.time() - request.start_time
@@ -60,6 +65,19 @@ class RequestLoggingMiddleware(MiddlewareMixin):
             }
         )
         response['X-Correlation-ID'] = correlation_id
+
+        # EPH-6A: record request metrics (skip the metrics endpoints themselves)
+        try:
+            if not (request.path.endswith('/health/metrics/')
+                    or request.path.endswith('/health/prometheus/')):
+                app = app_label_from_path(request.path)
+                api_requests_total.labels(
+                    method=request.method, status=str(status_code), app=app,
+                ).inc()
+                api_duration_seconds.labels(app=app).observe(duration)
+        except Exception:
+            pass  # Never let metrics break the response
+        clear_correlation_id()
 
         # Phase 1.3: Persist ERROR+ requests to DB for admin log viewer
         self._persist_if_needed(request, response, correlation_id, duration_ms, is_slow, level, status_code)

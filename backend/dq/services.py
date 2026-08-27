@@ -691,6 +691,12 @@ def run_dq(table_id, user=None):
                     passed=passed, checked_count=checked,
                     failed_count=failed, sample_failures=sample, score=score,
                 ))
+                # EPH-6A: count DQ runs for Prometheus telemetry.
+                try:
+                    from core.telemetry import dq_runs_total
+                    dq_runs_total.labels(status=status).inc()
+                except Exception:
+                    pass  # Never let telemetry break DQ execution
                 rule_duration_ms = (time.time() - rule_start) * 1000
 
                 if rule_duration_ms > 2000:

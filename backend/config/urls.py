@@ -8,7 +8,7 @@ from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 from accounts.views import ThrottledTokenObtainPairView
 from accounts.password_reset_signals import NotifyingPasswordResetView
-from .health_views import health_check, metrics_view
+from .health_views import health_check, metrics_view, prometheus_metrics_view
 from ai import workspace_api as ai_workspace_views
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from accounts.permissions import AdminOrSuperuserOnly
@@ -27,6 +27,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path(f'{api_prefix}/health/', health_check),
     path(f'{api_prefix}/health/metrics/', metrics_view),
+    # EPH-6A: full Prometheus registry export (generate_latest)
+    path(f'{api_prefix}/health/prometheus/', prometheus_metrics_view),
 
     # JWT Auth endpoints under API prefix
     path(f'{api_prefix}/token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),

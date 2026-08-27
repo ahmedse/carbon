@@ -110,3 +110,17 @@ def metrics_view(request):
 
     lines.append('# EOF')
     return HttpResponse('\n'.join(lines) + '\n', content_type='text/plain; version=0.0.4')
+
+
+def prometheus_metrics_view(request):
+    """EPH-6A / P1-11: full Prometheus registry export.
+
+    Serves every registered collector (``carbon_api_requests_total``,
+    ``carbon_api_duration_seconds``, ``carbon_dq_runs_total``,
+    ``carbon_ai_conversations_active``, plus ``process_*`` runtime metrics)
+    via ``prometheus_client.generate_latest()``. Exempt from
+    ``SECURE_SSL_REDIRECT`` through ``SECURE_REDIRECT_EXEMPT`` so scrapers can
+    poll over plain HTTP on the loopback (CB-09).
+    """
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+    return HttpResponse(generate_latest(), content_type=CONTENT_TYPE_LATEST)

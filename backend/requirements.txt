@@ -24,6 +24,13 @@ python-dotenv==1.1.0                  # Env variable management
 # Logging
 python-json-logger==2.0.7             # JSON structured logging
 
+# Observability (EPH-6A / P1-11)
+prometheus-client==0.21.1             # Prometheus metrics export
+opentelemetry-api==1.44.0             # OpenTelemetry API
+opentelemetry-sdk==1.44.0             # OpenTelemetry SDK (traces)
+opentelemetry-instrumentation-django==0.65b0  # Django auto-instrumentation
+opentelemetry-exporter-otlp==1.44.0   # OTLP trace exporter (HTTP/gRPC)
+
 # Testing
 pytest==9.1.1
 pytest-django==4.12.0
