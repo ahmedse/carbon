@@ -5896,7 +5896,7 @@ def _rates(**overrides):
 **Date:** 2026-08-26
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE ✅ (2026-08-27, commit `8e2e480`)
 **Kind:** Backend. Medium-Large.
 **Closes:** P1-10 (structured logging), P1-11 (OpenTelemetry/Prometheus)
 **Depends on:** EPH-5B done.
@@ -6030,7 +6030,7 @@ SPRINT 5 (sequential):
   EPH-5C  — backend-worker     — after EPH-5B (OpenAPI: drf-spectacular migration, ADR 0003) ✅ DONE (537c2c5)
 
 SPRINT 6:
-  EPH-6A  — backend-worker     (OTel + Prometheus + JSON Logging full wiring)
+  EPH-6A  — backend-worker     ✅ (OTel + Prometheus + JSON Logging full wiring)
   EPH-6B  — devops-worker      — after EPH-6A (Grafana dashboards)
 ```
 
