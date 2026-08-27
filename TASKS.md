@@ -6008,7 +6008,7 @@ curl -s http://127.0.0.1:8009/health/prometheus/ | head -5   # Prometheus text f
 **Date:** 2026-08-27
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** DONE ✅ (2026-08-27, commit `TBD`)
+**Status:** DONE ✅ (2026-08-27, commit `3a29eb3`)
 **Kind:** Backend + DevOps. Small.
 **Closes:** P1-3 follow-up flagged in `TASK-RESULTS-EPH-6B.md` (freshness
 observability gap — no Prometheus gauge for staleness).
