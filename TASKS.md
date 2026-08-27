@@ -740,10 +740,10 @@ npm run build              # clean
 
 ## Phase 14 — QA Re-validation: Journey-11 after defect fixes (F1 / A1 / B5)
 
-**Date:** 2026-08-18
+**Date:** 2026-08-18 (re-validated 2026-08-27)
 **Worker Role:** qa-validator
 **Recommended Model:** DeepSeek-V3
-**Status:** READY (handoff)
+**Status:** DONE — 2026-08-27 (commit `9d7c0a3`). **Verdict: FAILED** — B5 chain broken by two confirmed runtime defects: R14-5 ("Test live" sends empty NL) + R14-14 ("Save Rule" 400 `params.max must be numeric`). F1/A1 remain validated; `dq_suggest` + NL-rule-test engine healthy. Full evidence in `TASK-RESULTS-14.md` appended re-validation section.
 **Kind:** Pure validation. NO code changes. Evidence only. If a test still fails, record it (severity + repro + suggested owner) and STOP — do NOT fix (RULE_11 → Debugger/Fixer applies fixes).
 
 ### Context (already done — trust, do NOT redo)
