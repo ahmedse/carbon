@@ -19,6 +19,10 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# EPH-6C: alert rules (freshness + API error rate) — see carbon-alerts.yml
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
 scrape_configs:
   # Prometheus self-monitoring
   - job_name: 'prometheus'

@@ -8,6 +8,12 @@ when the data is stale — subject to a 6-hour per-policy alert rate-limit.
 from django.utils import timezone
 
 from accounts.models import notify_event
+from core.telemetry import (
+    freshness_alerts_total,
+    freshness_stale_tables,
+    freshness_table_age_hours,
+    freshness_tables_total,
+)
 from .models import FreshnessPolicy
 
 # Minimum interval (hours) between consecutive alerts for the same policy.
@@ -22,6 +28,7 @@ def check_freshness():
     now = timezone.now()
     limit_delta = timezone.timedelta(hours=ALERT_RATE_LIMIT_HOURS)
     summary = {"checked": 0, "alerted": 0, "skipped": 0}
+    stale_count = 0
 
     policies = FreshnessPolicy.objects.filter(enabled=True).select_related('table')
     for policy in policies:
@@ -30,6 +37,13 @@ def check_freshness():
         age_hours = 0.0 if reference is None else (now - reference).total_seconds() / 3600.0
 
         is_stale = age_hours > policy.max_age_hours
+        if is_stale:
+            stale_count += 1
+
+        # EPH-6C: export the per-policy age (one series per enabled policy).
+        freshness_table_age_hours.labels(
+            table_id=table.id, table=table.name,
+        ).set(age_hours)
         should_alert = is_stale
 
         # Rate-limit: skip the alert if one was raised within the last 6 hours.
@@ -51,9 +65,15 @@ def check_freshness():
             )
             policy.last_alerted_at = now
             summary['alerted'] += 1
+            # EPH-6C: count alerts per severity for Prometheus.
+            freshness_alerts_total.labels(severity=policy.alert_level).inc()
 
         policy.last_checked_at = now
         policy.save(update_fields=['last_checked_at', 'last_alerted_at'])
         summary['checked'] += 1
+
+    # EPH-6C: publish pass-level gauges (set, not inc — snapshot per pass).
+    freshness_tables_total.set(summary['checked'])
+    freshness_stale_tables.set(stale_count)
 
     return summary

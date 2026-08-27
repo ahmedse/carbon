@@ -1,0 +1,41 @@
+# Prometheus alert rules — Carbon Data Trust Platform (EPH-6C)
+# ------------------------------------------------------------------
+# Install:  copy to /etc/prometheus/rules/carbon-alerts.yml
+# Wire up:  add `rule_files: ['/etc/prometheus/rules/*.yml']` to
+#           prometheus.yml (see prometheus.yml.example), then
+#           `sudo systemctl reload prometheus`.
+#
+# Alertmanager receivers are out of scope for the platform itself; point
+# them at your notification channel (email/webhook/slack) via the
+# Prometheus server's alertmanager config on the VPS.
+# ------------------------------------------------------------------
+groups:
+  - name: carbon-freshness
+    rules:
+      - alert: CarbonStaleDataTable
+        expr: carbon_freshness_stale_tables > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Carbon — stale data tables detected'
+          description: >-
+            {{ $value }} table(s) exceed their FreshnessPolicy max_age_hours.
+            Inspect freshness policies and data ingest
+            (GET /carbon-api/catalog/tables/{id}/freshness/).
+
+  - name: carbon-api
+    rules:
+      - alert: CarbonAPIErrorRateHigh
+        expr: |
+          sum(rate(carbon_api_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(carbon_api_requests_total[5m])), 1)
+          * 100 > 5
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Carbon — API 5xx rate above 5%'
+          description: >-
+            5xx responses are {{ $value }}% of the API traffic over the
+            last 10 minutes. Check backend logs: ./manage.sh logs backend

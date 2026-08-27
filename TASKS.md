@@ -5967,12 +5967,18 @@ ai_conversations_active = Gauge('carbon_ai_conversations_active', 'Active AI con
 
 ### Implementation
 
+> ⚠️ **Shipped reality (2026-08-27) supersedes the draft below** — see
+> `TASK-RESULTS-EPH-6B.md`. Key corrections: prod target is `127.0.0.1:8006`
+> (dev `8009`), `metrics_path` must be `/carbon-api/health/prometheus/`
+> (full `API_PREFIX`), and the metrics view lives in `config/health_views.py`
+> (`prometheus_metrics_view`), not `backend/healthy/views.py`.
+
 **Prometheus scrape** (add to VPS `prometheus.yml` — HTTP NOT HTTPS to avoid CB-09 SSL redirect bug):
 ```yaml
 - job_name: 'carbon-backend'
   static_configs:
-    - targets: ['127.0.0.1:8009']
-  metrics_path: '/health/prometheus/'
+    - targets: ['127.0.0.1:8006']   # prod; dev = 127.0.0.1:8009
+  metrics_path: '/carbon-api/health/prometheus/'
   scheme: 'http'
 ```
 
@@ -5994,6 +6000,70 @@ ai_conversations_active = Gauge('carbon_ai_conversations_active', 'Active AI con
 # On VPS:
 curl -s http://127.0.0.1:8009/health/prometheus/ | head -5   # Prometheus text format
 # In Grafana: import JSON dashboards — all panels load without errors
+```
+
+---
+
+## EPH-6C — Freshness Violations Gauge + Prometheus Alert Rules
+**Date:** 2026-08-27
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE ✅ (2026-08-27, commit `TBD`)
+**Kind:** Backend + DevOps. Small.
+**Closes:** P1-3 follow-up flagged in `TASK-RESULTS-EPH-6B.md` (freshness
+observability gap — no Prometheus gauge for staleness).
+**Depends on:** EPH-3B (freshness service) + EPH-6A/6B (Prometheus stack).
+
+### Files to Read First
+- `backend/catalog/freshness_service.py` — `check_freshness()` (EPH-3B)
+- `backend/catalog/tasks.py` — `check_freshness_task` (invoked by the cognition
+  supervisor loop every `COGNITION_FRESHNESS_INTERVAL` = 21600s / 6h)
+- `backend/core/telemetry.py` — existing Prometheus collectors (EPH-6A)
+- `deploy/carbon/prometheus/prometheus.yml.example` — scrape config (EPH-6B)
+
+### Files to Change
+- `backend/core/telemetry.py` (EXTEND) — freshness collectors
+- `backend/catalog/freshness_service.py` (EXTEND) — record metrics in `check_freshness()`
+- `backend/catalog/tests/test_freshness_metrics.py` (NEW) — metric tests
+- `deploy/carbon/prometheus/carbon-alerts.yml` (NEW) — Prometheus alert rules
+- `deploy/carbon/prometheus/prometheus.yml.example` (EXTEND) — `rule_files`
+
+### New Metrics (in `core/telemetry.py`)
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `carbon_freshness_stale_tables` | Gauge | — | Tables with an enabled policy over `max_age_hours` (last pass snapshot) |
+| `carbon_freshness_tables_total` | Gauge | — | Enabled policies checked in the last pass |
+| `carbon_freshness_alerts_total` | Counter | `severity` | Freshness violation alerts raised |
+| `carbon_freshness_table_age_hours` | Gauge | `table_id`, `table` | Hours since last data update, per enabled policy (bounded cardinality = #enabled policies) |
+
+### Wiring
+
+`check_freshness()` (already returns `{checked, alerted, skipped}`):
+- Per policy: `freshness_table_age_hours.labels(table_id, table).set(age_hours)`;
+  track `stale_count` for `is_stale` (regardless of alert rate-limit).
+- On alert: `freshness_alerts_total.labels(severity=policy.alert_level).inc()`.
+- End of pass: `freshness_tables_total.set(checked)` +
+  `freshness_stale_tables.set(stale_count)` (set = snapshot per pass).
+
+**Alert rules** (`deploy/carbon/prometheus/carbon-alerts.yml`):
+- `CarbonStaleDataTable` — `carbon_freshness_stale_tables > 0` for 15m, severity warning.
+- `CarbonAPIErrorRateHigh` — 5xx share > 5% for 10m, severity critical
+  (`sum(rate(...{status=~"5.."}[5m])) / clamp_min(sum(rate(...)), 1) * 100 > 5`).
+
+### Tests (`test_freshness_metrics.py`)
+- Stale gauge counts stale policy tables; fresh tables → `0.0`
+- Alert counter increments per severity (relative to registry baseline — the
+  `prometheus_client` default registry is shared across tests)
+- Rate-limited alert is NOT re-counted (counter delta 0) while stale gauge stays 1
+- Per-table age gauge carries `table_id` + `table` labels
+
+### Verification Gate
+```bash
+cd backend && ../.venv/bin/python -m pytest catalog/tests/test_freshness_metrics.py -q
+../.venv/bin/python manage.py check
+curl -s http://localhost:8009/carbon-api/health/prometheus/ | grep carbon_freshness
+# All 4 metric families present; non-zero values after an in-process freshness pass
 ```
 
 ---
@@ -6032,9 +6102,11 @@ SPRINT 5 (sequential):
 SPRINT 6:
   EPH-6A  — backend-worker     ✅ (OTel + Prometheus + JSON Logging full wiring)
   EPH-6B  — devops-worker      ✅ (Grafana dashboards + scrape config)
+  EPH-6C  — backend-worker     ✅ (Freshness gauges + Prometheus alert rules)
 ```
 
 **I18N-4 can run in parallel with any EPH sprint** — frontend-only, touches different files.
 
 **Master Architect runs all terminal verification gates before marking any phase DONE.**
-All P0 blockers closed at end of Sprint 4. All target P1 gaps closed at end of Sprint 6.
+All P0 blockers closed at end of Sprint 4. All target P1 gaps closed at end of Sprint 6
+(freshness observability gap closed by EPH-6C).
