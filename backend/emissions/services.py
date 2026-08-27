@@ -1712,3 +1712,83 @@ class PeriodLockService:
             is_active=True,
         ).values_list('data_table_id', flat=True).distinct()
         DataTable.objects.filter(id__in=table_ids).update(is_locked=locked)
+
+
+class InventoryCoverageService:
+    """Computes declared-universe coverage for a reporting period (ADR-0020).
+
+    Returns FIVE outputs: total, covered, gaps, pct, avg_quality_tier,
+    material_exclusions, completeness_definition.
+    """
+
+    @staticmethod
+    def compute_coverage(reporting_period_id, org_unit_id=None):
+        from .models import InventorySource, InventorySourceStatus, CoverageGoal
+
+        sources = InventorySource.objects.filter(is_active=True).select_related('org_unit')
+        if org_unit_id:
+            sources = sources.filter(org_unit_id=org_unit_id)
+
+        total = sources.count()
+        statuses = {
+            s.source_id: s
+            for s in InventorySourceStatus.objects.filter(
+                reporting_period_id=reporting_period_id, source__in=sources
+            ).select_related('source')
+        }
+
+        covered = 0
+        tier_sum = 0
+        tier_count = 0
+        gaps = []
+        exclusions = []
+
+        for source in sources:
+            st = statuses.get(source.id)
+            if st is None:
+                gaps.append({
+                    'source_id': source.id, 'source_name': source.source_name,
+                    'scope': source.scope, 'scope3_category': source.scope3_category,
+                    'reason': 'not_assessed',
+                })
+            elif st.status == 'covered':
+                covered += 1
+                if st.data_quality_tier:
+                    tier_sum += st.data_quality_tier
+                    tier_count += 1
+            elif st.status == 'excluded':
+                exclusions.append({
+                    'source_id': source.id, 'source_name': source.source_name,
+                    'scope': source.scope, 'scope3_category': source.scope3_category,
+                    'reason': st.get_exclusion_reason_display() if st.exclusion_reason else None,
+                })
+            else:  # declared
+                gaps.append({
+                    'source_id': source.id, 'source_name': source.source_name,
+                    'scope': source.scope, 'scope3_category': source.scope3_category,
+                    'reason': 'declared',
+                })
+
+        goal = CoverageGoal.objects.filter(status='active')
+        if org_unit_id:
+            goal = goal.filter(org_unit_id=org_unit_id)
+        goal = goal.first()
+        completeness_definition = goal.completeness_definition if goal else 'absolute'
+
+        denominator = (total - len(exclusions)) if completeness_definition == 'materiality_bounded' else total
+        pct = round((covered / denominator) * 100, 2) if denominator else 0.0
+        avg_quality_tier = round(tier_sum / tier_count, 2) if tier_count else None
+
+        return {
+            'total': total,
+            'covered': covered,
+            'gaps': gaps,
+            'gaps_count': len(gaps),
+            'pct': pct,
+            'avg_quality_tier': avg_quality_tier,
+            'material_exclusions': exclusions,
+            'material_exclusions_count': len(exclusions),
+            'completeness_definition': completeness_definition,
+            'min_quality_tier': goal.min_quality_tier if goal else None,
+            'target_coverage_pct': float(goal.target_coverage_pct) if goal else None,
+        }

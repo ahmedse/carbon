@@ -27,6 +27,7 @@ import {
 } from '@mui/material';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
@@ -34,6 +35,7 @@ import { PLAN_STATUS, STEP_STATUS, agentRoleLabel, toolLabel } from './aiTaskSta
 import PlanDagGraph from '../components/graph/PlanDagGraph';
 import PlanMermaidPreview from '../components/graph/PlanMermaidPreview';
 import { buildPlanPhases } from '../utils/planGraph';
+import StepOutputRenderer from '../components/ai/StepOutputRenderer';
 
 // W3-G — human-readable key→value input rows (not raw JSON). Flattens a
 // top-level object into labelled rows so `{ dataset: 'emissions' }` reads as
@@ -113,6 +115,7 @@ function AITaskPlanCard({
   onRun,
   onPause,
   onFork,
+  onSwitchToChat,
   onEditPlan,
   onEditStep,
   onConfirmStep,
@@ -122,6 +125,10 @@ function AITaskPlanCard({
   const [editBriefOpen, setEditBriefOpen] = useState(false);
   const [editBriefValue, setEditBriefValue] = useState('');
   const [previewMode, setPreviewMode] = useState('graph');
+  // The plan DAG is heavy — collapse it by default in the review view so the
+  // step list is the first thing a user reads. It stays expanded only while a
+  // run is live (progress-at-a-glance, W5-E).
+  const [showGraph, setShowGraph] = useState(false);
 
   if (!plan) return null;
 
@@ -379,11 +386,21 @@ function AITaskPlanCard({
                           <KeyValuePreview title="Input" value={step.tool_args} />
                         </Box>
                       )}
+                      {step.status === 'completed' && step.tool_output && (
+                        <Box sx={{ px: 1.25, pb: 0.75 }}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                            Output
+                          </Typography>
+                          <StepOutputRenderer outputType={step.output_type} value={step.tool_output} />
+                        </Box>
+                      )}
                       {step.status === 'awaiting_approval' && (
                         <Box sx={{ px: 1.25, pb: 0.75 }}>
                           <Box sx={{ p: 1, borderRadius: 1, bgcolor: 'warning.soft' }}>
                             <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6875rem', mb: 0.5 }}>
-                              This step writes to Carbon — approve it to run, or decline to skip it.
+                              {step.tool_name
+                                ? 'This step writes to Carbon — approve it to run, or decline to skip it.'
+                                : 'Approve to continue, or decline to skip this step.'}
                             </Typography>
                             <Stack direction="row" spacing={1}>
                               <Button
@@ -432,8 +449,22 @@ function AITaskPlanCard({
           </Typography>
         )}
 
-        {/* Plan preview — below the step list for non-live review. */}
-        {!live && renderPlanPreview()}
+        {/* Plan preview — collapsed by default below the step list for non-live
+            review; the user expands it on demand so the step list stays primary. */}
+        {!live && steps.length > 0 && (
+          <Box>
+            <Button
+              size="small"
+              variant="text"
+              onClick={() => setShowGraph((v) => !v)}
+              aria-expanded={showGraph}
+              sx={{ fontSize: '0.6875rem', textTransform: 'none', px: 0.5, color: 'text.secondary' }}
+            >
+              {showGraph ? 'Hide plan graph' : 'Show plan graph'}
+            </Button>
+            {showGraph && renderPlanPreview()}
+          </Box>
+        )}
 
         {/* Plan-level consent gate (RULE_21) — nothing executes before approve */}
         {reviewable && (
@@ -529,6 +560,17 @@ function AITaskPlanCard({
                 Fork
               </Button>
             )}
+            {onSwitchToChat && (
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 12 }} />}
+                onClick={onSwitchToChat}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+              >
+                Discuss in Chat
+              </Button>
+            )}
           </Stack>
         )}
 
@@ -559,6 +601,7 @@ AITaskPlanCard.propTypes = {
   onRun: PropTypes.func,
   onPause: PropTypes.func,
   onFork: PropTypes.func,
+  onSwitchToChat: PropTypes.func,
   onEditPlan: PropTypes.func,
   onEditStep: PropTypes.func,
   onConfirmStep: PropTypes.func,

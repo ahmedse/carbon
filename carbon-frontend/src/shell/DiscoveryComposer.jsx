@@ -136,26 +136,22 @@ function DiscoveryComposer({ conversationId, onPlanReady }) {
     );
   }
 
-  // Opening greeting — makes the composer read as a conversation from the
-  // first paint, before any turns exist (W5-B chat-until-plan).
   const messages = turnsToMessages(turns);
+
+  // When no conversation has started yet, show a compact input-only state.
+  // The greeting expands inline once the user starts the dialogue.
   if (messages.length === 0) {
-    messages.push({
-      id: 'greeting',
-      role: 'assistant',
-      content:
-        "Hi — I'm Pulse. Describe the outcome you want, and I'll ask you a few focused questions before drafting a plan. Nothing runs until you approve it.",
-      created_at: new Date().toISOString(),
-    });
+    return (
+      <AIInputBar
+        onSend={handleSubmit}
+        working={busy}
+      />
+    );
   }
 
   return (
     <Paper variant="outlined" sx={{ p: 1.25, bgcolor: 'background.paper' }}>
-      <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.75rem', mb: 0.5 }}>
-        Plan a task
-      </Typography>
-
-      {/* Same rich bubbles as the main chat (markdown, actions, provenance). */}
+      {/* Conversation bubbles appear only after the first reply. */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mb: 1 }}>
         {messages.map((msg) => (
           <AIMessageBubble key={msg.id} message={msg} />
@@ -163,7 +159,6 @@ function DiscoveryComposer({ conversationId, onPlanReady }) {
         {busy && <AIWorkingIndicator conversationType="chat" />}
       </Box>
 
-      {/* Same rich composer as the main chat (mentions, working state, stop). */}
       <AIInputBar
         onSend={handleSubmit}
         working={busy}

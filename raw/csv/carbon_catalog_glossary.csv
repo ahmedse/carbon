@@ -1,0 +1,11 @@
+term,slug,definition,domain
+Carbon Footprint,carbon-footprint,Total greenhouse gas emissions caused directly and indirectly by an organization expressed as CO2 equivalent,Emissions & Sustainability
+Emission Factor,emission-factor,A coefficient that converts activity data into greenhouse gas emissions,Emissions & Sustainability
+Global Warming Potential,gwp,A measure of how much heat a greenhouse gas traps relative to CO2 over a given time horizon,Emissions & Sustainability
+Scope 1,scope-1,Direct GHG emissions from sources owned or controlled by the organization,Emissions & Sustainability
+Scope 2,scope-2,Indirect GHG emissions from the generation of purchased electricity steam heating or cooling,Emissions & Sustainability
+Scope 3,scope-3,All other indirect emissions that occur in the value chain of the reporting organization,Emissions & Sustainability
+GHG Inventory,ghg-inventory,An accounting of greenhouse gas emissions by source across all scopes,Emissions & Sustainability
+Base Year,base-year,A historical reference year against which emission reductions are measured,Emissions & Sustainability
+Reporting Period,reporting-period,The time frame for which emissions are reported,Emissions & Sustainability
+Organizational Boundary,organizational-boundary,The boundary that determines which operations are included in the inventory,Emissions & Sustainability

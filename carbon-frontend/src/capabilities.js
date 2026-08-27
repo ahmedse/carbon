@@ -28,6 +28,7 @@ export const CARBON_MANAGE_CALCULATION_RULES = 'carbon:manage_calculation_rules'
 export const CARBON_MANAGE_GWP              = 'carbon:manage_gwp';
 export const CARBON_MANAGE_SBTI_TARGETS     = 'carbon:manage_sbti_targets';
 export const CARBON_MANAGE_REPORTING_PERIODS = 'carbon:manage_reporting_periods';
+export const CARBON_MANAGE_INVENTORY_COVERAGE = 'carbon:manage_inventory_coverage';
 export const CARBON_TRIGGER_CALCULATIONS    = 'carbon:trigger_calculations';
 export const CARBON_VERIFY_DATA             = 'carbon:verify_data';
 export const CARBON_GENERATE_REPORTS        = 'carbon:generate_reports';
@@ -76,7 +77,7 @@ export const AI_MANAGE_CONSOLE = 'ai:manage_console';
 export const MANIFEST_ROLE_TO_CAPABILITY = {
   'carbon:data_owner': [CARBON_VIEW_CONSOLE, CARBON_VIEW_DASHBOARD, CARBON_VIEW_MY_DATA, CARBON_ENTER_DATA, CARBON_VIEW_CALCULATIONS, CARBON_VIEW_VERIFICATION],
   'carbon:analyst':    [CARBON_VIEW_CONSOLE, CARBON_VIEW_DASHBOARD, CARBON_VIEW_ANALYTICS, CARBON_VIEW_MY_DATA, CARBON_VIEW_CALCULATIONS, CARBON_VIEW_VERIFICATION, CARBON_VIEW_REPORTING_PERIODS, CARBON_GENERATE_REPORTS],
-  'carbon:admin':      [CARBON_MANAGE_EMISSION_FACTORS, CARBON_MANAGE_CALCULATION_RULES, CARBON_MANAGE_GWP, CARBON_MANAGE_SBTI_TARGETS, CARBON_MANAGE_REPORTING_PERIODS, CARBON_TRIGGER_CALCULATIONS, CARBON_VERIFY_DATA],
+  'carbon:admin':      [CARBON_MANAGE_EMISSION_FACTORS, CARBON_MANAGE_CALCULATION_RULES, CARBON_MANAGE_GWP, CARBON_MANAGE_SBTI_TARGETS, CARBON_MANAGE_REPORTING_PERIODS, CARBON_MANAGE_INVENTORY_COVERAGE, CARBON_TRIGGER_CALCULATIONS, CARBON_VERIFY_DATA],
 };
 
 // ── Route → required capability mapping ────────────────────────────
@@ -97,8 +98,10 @@ export const ROUTE_CAPABILITIES = {
   '/carbon/admin/targets':    CARBON_MANAGE_SBTI_TARGETS,
   '/carbon/admin/boundaries': CARBON_MANAGE_REPORTING_PERIODS,
   '/carbon/admin/base-years': CARBON_MANAGE_REPORTING_PERIODS,
+  '/carbon/admin/inventory-coverage': CARBON_MANAGE_INVENTORY_COVERAGE,
 
   // Carbon — reporting
+  '/carbon/reporting':          CARBON_GENERATE_REPORTS,
   '/carbon/reporting/generate': CARBON_GENERATE_REPORTS,
   '/carbon/reporting/saved':    CARBON_GENERATE_REPORTS,
   '/carbon/reporting/periods':  CARBON_MANAGE_REPORTING_PERIODS,
@@ -132,9 +135,10 @@ export const MENU_ITEM_CAPABILITIES = {
   'Verification':         CARBON_VIEW_VERIFICATION,
 
   // Carbon — reporting
+  'Reports':              CARBON_GENERATE_REPORTS,
   'Generate Report':      CARBON_GENERATE_REPORTS,
   'Saved Reports':        CARBON_GENERATE_REPORTS,
-  'Reporting Periods':    CARBON_VIEW_REPORTING_PERIODS,
+  'Reporting Periods':    CARBON_MANAGE_REPORTING_PERIODS,
 
   // Carbon — configuration
   'Emission Factors':     CARBON_MANAGE_EMISSION_FACTORS,
@@ -143,6 +147,7 @@ export const MENU_ITEM_CAPABILITIES = {
   'SBTi Targets':         CARBON_MANAGE_SBTI_TARGETS,
   'Organizational Boundaries': CARBON_MANAGE_REPORTING_PERIODS,
   'Base Years':               CARBON_MANAGE_REPORTING_PERIODS,
+  'Inventory Coverage':       CARBON_MANAGE_INVENTORY_COVERAGE,
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -162,6 +167,7 @@ export const CAPABILITY_INHERITANCE = {
   [CARBON_MANAGE_CALCULATION_RULES]: [CARBON_VIEW_CONSOLE],
   [CARBON_MANAGE_GWP]: [CARBON_VIEW_CONSOLE],
   [CARBON_MANAGE_SBTI_TARGETS]: [CARBON_VIEW_CONSOLE],
+  [CARBON_MANAGE_INVENTORY_COVERAGE]: [CARBON_VIEW_CONSOLE],
   [CARBON_MANAGE_REPORTING_PERIODS]: [CARBON_VIEW_REPORTING_PERIODS, CARBON_VIEW_CONSOLE],
   [CARBON_TRIGGER_CALCULATIONS]: [CARBON_VIEW_CALCULATIONS, CARBON_VIEW_CONSOLE],
   [CARBON_VERIFY_DATA]: [CARBON_VIEW_VERIFICATION, CARBON_VIEW_CONSOLE],

@@ -54,7 +54,6 @@ export default {
       // ── Overview (all roles) ──
       { label: 'Overview',             path: '/carbon/console',            role: '*' },
       { label: 'Emissions Dashboard',  path: '/carbon/dashboard',          role: '*' },
-      { label: 'Analytics & Trends',   path: '/carbon/analytics',          role: 'carbon:analyst' },
       { type: 'divider' },
 
       // ── My Data (data owners: enter & review their org-unit data) ──
@@ -64,21 +63,20 @@ export default {
       { label: 'Verification',         path: '/carbon/verification',         role: 'carbon:data_owner' },
       { type: 'divider' },
 
-      // ── Reporting (analyst + admin) ──
+      // ── Reporting (analyst) ──
       { type: 'group', label: 'Reporting' },
-      { label: 'Generate Report',      path: '/carbon/reporting/generate', role: 'carbon:analyst' },
-      { label: 'Saved Reports',        path: '/carbon/reporting/saved',    role: 'carbon:analyst' },
-      { label: 'Reporting Periods',    path: '/carbon/reporting/periods',  role: 'carbon:analyst' },
+      { label: 'Reports',              path: '/carbon/reporting',          role: 'carbon:analyst' },
       { type: 'divider' },
 
       // ── Configuration (admin only) ──
       { type: 'group', label: 'Configuration' },
       { label: 'Emission Factors',     path: '/carbon/admin/factors',      role: 'carbon:admin' },
       { label: 'Calculation Rules',    path: '/carbon/admin/rules',        role: 'carbon:admin' },
-      { label: 'GWP Reference',        path: '/carbon/admin/gwp',          role: 'carbon:admin' },
       { label: 'SBTi Targets',         path: '/carbon/admin/targets',      role: 'carbon:admin' },
       { label: 'Organizational Boundaries', path: '/carbon/admin/boundaries', role: 'carbon:admin' },
       { label: 'Base Years',               path: '/carbon/admin/base-years',  role: 'carbon:admin' },
+      { label: 'Inventory Coverage',       path: '/carbon/admin/inventory-coverage', role: 'carbon:admin' },
+      { label: 'Reporting Periods',        path: '/carbon/reporting/periods',  role: 'carbon:admin' },
     ],
   },
 

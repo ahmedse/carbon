@@ -34,7 +34,7 @@ import {
 const QUICK_ACTIONS = [
   { title: 'Dashboard', description: 'Organization-wide emissions, trends, and scope analysis', icon: <DashboardIcon />, path: '/carbon/dashboard', category: 'primary' },
   { title: 'My Data', description: 'Enter and manage activity data for emission sources', icon: <DataIcon />, path: '/carbon/my-data', category: 'primary' },
-  { title: 'Reports', description: 'Generate compliance reports and export data', icon: <ReportIcon />, path: '/carbon/reporting/generate', category: 'primary' },
+  { title: 'Reports', description: 'Generate compliance reports and export data', icon: <ReportIcon />, path: '/carbon/reporting', category: 'primary' },
 ];
 
 const ADMIN_TOOLS = [

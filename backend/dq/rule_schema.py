@@ -154,6 +154,13 @@ def _validate_params(rule_type: str, params: Any) -> List[Dict[str, str]]:
         if not has_min and not has_max:
             errors.append({'field': 'params', 'code': 'required',
                             'message': 'range requires at least one of min or max'})
+        # range is an inclusive [min, max] bound with no comparison operator.
+        # A stray ``operator`` key (a common LLM mistake for "positive number")
+        # is rejected here rather than silently ignored — comparisons belong to
+        # the ``threshold`` type.
+        if 'operator' in params:
+            errors.append({'field': 'params.operator', 'code': 'invalid_value',
+                            'message': "range does not support operator; use type 'threshold' with operator gt/gte/lt/lte for inequality comparisons"})
         for key in ('min', 'max'):
             if key in params:
                 try:

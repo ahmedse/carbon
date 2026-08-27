@@ -351,6 +351,27 @@ async def _execute_single_tool(
             except Exception as exc:
                 logger.exception("After-hook pipeline error for tool=%s: %s", tool_name, exc)
 
+        # ── Null-output guard (mutation/confirmation tools) ──────────────
+        # A confirmation-gated tool (create_dq_rule, learn_fact, …) that
+        # returns None or an empty payload produced NO proposal and NO
+        # execution. Serializing that to "null" and carrying on used to mark
+        # the step "completed" — a phantom success (2026-08-27: the planner
+        # hallucinated create_dq_rule args, the tool returned nothing, yet
+        # critic/step/run all read "completed"). Fail honestly instead.
+        if _is_null_tool_output(result) and _tool_requires_confirmation(tool_name):
+            _msg = (
+                f"{tool_name} returned no output "
+                f"(expected a confirmation response)"
+            )
+            logger.warning("Tool %s returned null output; failing honestly", tool_name)
+            return {
+                "tool_name": tool_name,
+                "result": None,
+                "error": _msg,
+                "latency_ms": elapsed,
+                "guardrail_flags": guardrail_flags,
+            }
+
         # ── Nested tool-error promotion ───────────────────────────────────
         # Heterogeneous executors may return {"error": ...} as their RESULT
         # (e.g. invoke_skill's "No skill named X found — try draft_skill
@@ -408,6 +429,31 @@ async def _execute_single_tool(
             "error": str(e),
             "latency_ms": elapsed,
         }
+
+
+def _is_null_tool_output(value) -> bool:
+    """True when a tool result carries no usable payload (null / empty / blank)."""
+    if value is None:
+        return True
+    if isinstance(value, dict) and not value:
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    return False
+
+
+def _tool_requires_confirmation(tool_name: str) -> bool:
+    """True when a registered plugin tool gates its write behind confirmation.
+
+    Lazy import avoids a circular dependency; a lookup failure is treated as
+    read-only (fail-open for the guard — a read-only tool returning null is
+    still handled by the nested-error promotion and loop.py).
+    """
+    try:
+        from ai.engine.agent.plugins import is_confirmation_tool
+        return is_confirmation_tool(tool_name)
+    except Exception:  # noqa: BLE001 - guard must never raise into the turn
+        return False
 
 
 def _safe_serialize(value) -> str:

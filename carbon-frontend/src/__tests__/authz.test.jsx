@@ -536,10 +536,10 @@ describe('can() — view_menu (sidebar capability-gating)', () => {
     })).toBe(true);
   });
 
-  it('Reporting Periods with carbon:view_reporting_periods → true', () => {
+  it('Reporting Periods with only carbon:view_reporting_periods → false (admin-only)', () => {
     expect(can(mockUser, 'view_menu', 'Reporting Periods', {
       capabilities: ['carbon:view_reporting_periods'],
-    })).toBe(true);
+    })).toBe(false);
   });
 
   it('Reporting Periods via manage inheritance → true', () => {

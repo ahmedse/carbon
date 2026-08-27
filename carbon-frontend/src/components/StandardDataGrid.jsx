@@ -1,8 +1,8 @@
 // src/components/StandardDataGrid.jsx
 // Shared MUI DataGrid wrapper for consistent table layout and styling.
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Box, Paper } from '@mui/material';
+import React, { useState } from 'react';
+import { Paper } from '@mui/material';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 
 export default function StandardDataGrid({
@@ -21,33 +21,17 @@ export default function StandardDataGrid({
   ...props
 }) {
   const [paginationModel, setPaginationModel] = useState({ pageSize, page: 0 });
-  const paperRef = useRef(null);
-  const [gridHeight, setGridHeight] = useState(400);
-
-  useEffect(() => {
-    const el = paperRef.current;
-    if (!el) return;
-
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const h = entry.contentRect.height;
-        if (h > 0) setGridHeight(h);
-      }
-    });
-
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   return (
     <Paper
-      ref={paperRef}
       variant="outlined"
       sx={{
         flex: 1,
         minHeight: 0,
         borderRadius: 2,
         overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
         ...sx,
       }}
     >
@@ -63,7 +47,7 @@ export default function StandardDataGrid({
         hideFooterSelectedRowCount={hideFooterSelectedRowCount}
         slots={toolbar ? { toolbar: GridToolbar } : undefined}
         slotProps={toolbar ? { toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 250 } } } : undefined}
-        sx={{ border: 'none', height: gridHeight, '& .MuiDataGrid-cell': { outline: 'none' } }}
+        sx={{ border: 'none', flex: 1, '& .MuiDataGrid-cell': { outline: 'none' } }}
         {...props}
       />
     </Paper>

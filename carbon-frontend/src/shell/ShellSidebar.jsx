@@ -68,7 +68,7 @@ const CARBON_ITEM_ICONS = {
   'Emissions Dashboard':  BarChartIcon,
   'Analytics & Trends':   BarChartIcon,
   'Data Entry':           AddCircleOutlineIcon,
-  'Emission Sources':     StorageIcon,
+  'Reports':              AssessmentIcon,
   'Generate Report':      AssessmentIcon,
   'Saved Reports':        FolderIcon,
   'Reporting Periods':    AssignmentIcon,
@@ -80,7 +80,7 @@ const CARBON_ITEM_ICONS = {
   'SBTi Targets':         TrackChangesIcon,
   'Organizational Boundaries': AccountTreeIcon,
   'Base Years':               HistoryIcon,
-  'Dashboard':            DashboardIcon,
+  'Inventory Coverage':       TrackChangesIcon,
 };
 
 // Define sidebar content per studio

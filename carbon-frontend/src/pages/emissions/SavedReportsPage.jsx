@@ -210,7 +210,7 @@ export default function SavedReportsPage() {
             <Typography variant="body2" sx={{ color: 'text.disabled', mb: 3 }}>
               Generate your first report to save and reuse configurations.
             </Typography>
-            <Button variant="contained" href="/carbon/reporting/generate">
+            <Button variant="contained" href="/carbon/reporting">
               Generate Report
             </Button>
           </CardContent>

@@ -5,6 +5,7 @@ from django.contrib import admin
 from .models import (
     EmissionFactor, GWP, Calculation, ReportingPeriod, CalculationRule,
     OrganizationalBoundary, BaseYear, RecalculationTrigger,
+    InventorySource, InventorySourceStatus, CoverageGoal, CoverageAction,
 )
 
 
@@ -239,3 +240,46 @@ class RecalculationTriggerAdmin(admin.ModelAdmin):
     search_fields = ['description', 'resolution_notes']
     ordering = ['-triggered_at']
     readonly_fields = ['triggered_at', 'resolved_at']
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Inventory Coverage Admin Registrations (ADR-0020)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@admin.register(InventorySource)
+class InventorySourceAdmin(admin.ModelAdmin):
+    list_display = ['source_name', 'org_unit', 'scope', 'scope3_category', 'is_active', 'created_at']
+    list_filter = ['scope', 'scope3_category', 'is_active']
+    search_fields = ['source_name', 'description', 'org_unit__name']
+    ordering = ['scope', 'scope3_category', 'source_name']
+    readonly_fields = ['created_at', 'updated_at', 'created_by']
+
+
+@admin.register(InventorySourceStatus)
+class InventorySourceStatusAdmin(admin.ModelAdmin):
+    list_display = ['source', 'reporting_period', 'status', 'data_quality_tier',
+                   'exclusion_reason', 'updated_at']
+    list_filter = ['status', 'data_quality_tier', 'exclusion_reason']
+    search_fields = ['source__source_name', 'notes']
+    ordering = ['reporting_period', 'source__scope']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(CoverageGoal)
+class CoverageGoalAdmin(admin.ModelAdmin):
+    list_display = ['name', 'org_unit', 'scope', 'target_coverage_pct',
+                   'min_quality_tier', 'target_year', 'status']
+    list_filter = ['scope', 'status', 'min_quality_tier']
+    search_fields = ['name', 'org_unit__name']
+    ordering = ['-target_year', 'scope']
+    readonly_fields = ['created_at', 'updated_at', 'created_by']
+
+
+@admin.register(CoverageAction)
+class CoverageActionAdmin(admin.ModelAdmin):
+    list_display = ['source', 'action_type', 'status', 'due_date', 'owner', 'created_at']
+    list_filter = ['action_type', 'status']
+    search_fields = ['source__source_name', 'notes']
+    ordering = ['due_date', '-created_at']
+    readonly_fields = ['created_at', 'updated_at', 'created_by']

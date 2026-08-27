@@ -160,6 +160,13 @@ Rules:
   internet/knowledge research, "domain_specialist" for deep domain
   expertise, "orchestrator" for everything else (the main agent).
 - Set is_mutation: true only for steps that modify host state.
+- create_dq_rule needs a REAL target: deterministic rule types (not_null,
+  unique, allowed_values, range, regex) REQUIRE data_table AND data_field ids.
+  If the field/table is unknown, first call get_entity_details (or another
+  lookup tool) to resolve it, OR emit a reasoning step whose instructions ask
+  the user for the specific field/table before any create_dq_rule step.
+  NEVER emit a create_dq_rule step for a deterministic rule without its
+  data_table and data_field.
 
 User task: {task}
 """
@@ -237,6 +244,119 @@ def _looks_agent_multi_step(utterance: str) -> bool:
         return True
     # Two or more distinct action verbs ⇒ a multi-action job, not a bare query.
     return sum(1 for v in _ACTION_VERBS if v in lower) >= 2
+
+
+# ── Tool-args schema validation (Fix 2 — phantom-success guard) ────────────────
+# The LLM decompose step routinely hallucinates tool arguments (2026-08-27:
+# create_dq_rule with rule_type="general", a value outside the plugin's enum).
+# Tool NAMES are validated elsewhere; the args were not — so a poisoned step
+# reached the executor, the tool errored/nulled, and the step was still marked
+# "completed". Validate ``tool_args`` against the plugin ``input_schema`` and
+# drop the tool call when the args are structurally invalid (the step degrades
+# to reasoning rather than emitting a broken tool call).
+
+
+def _plugin_input_schemas() -> dict[str, dict]:
+    """Map registered plugin tool name → its ``input_schema`` (JSON Schema)."""
+    try:
+        from ai.engine.agent.plugins import registered_plugins
+        return {p.name: (p.input_schema or {}) for p in registered_plugins()}
+    except Exception:  # noqa: BLE001 - validation is best-effort, never fatal
+        return {}
+
+
+def _schema_field_violations(prop: dict, value, path: str) -> list[str]:
+    """Validate one value against a JSON-Schema property (subset: type + enum)."""
+    violations: list[str] = []
+
+    enum = prop.get("enum")
+    if enum is not None and value not in enum:
+        allowed = ", ".join(repr(e) for e in enum)
+        violations.append(f"{path}: invalid value {value!r} (allowed: {allowed})")
+
+    ptype = prop.get("type")
+    if ptype is None:
+        return violations
+
+    types = ptype if isinstance(ptype, list) else [ptype]
+    ok = False
+    for t in types:
+        if t == "null" and value is None:
+            ok = True
+        elif t == "string" and isinstance(value, str):
+            ok = True
+        elif t == "integer" and isinstance(value, int) and not isinstance(value, bool):
+            ok = True
+        elif t == "number" and isinstance(value, (int, float)) and not isinstance(value, bool):
+            ok = True
+        elif t == "boolean" and isinstance(value, bool):
+            ok = True
+        elif t == "array" and isinstance(value, list):
+            ok = True
+        elif t == "object" and isinstance(value, dict):
+            ok = True
+    if not ok:
+        violations.append(
+            f"{path}: expected {'/'.join(types)}, got {type(value).__name__}"
+        )
+    return violations
+
+
+def _schema_violations(schema: dict, args: dict) -> list[str]:
+    """Validate ``args`` against a plugin ``input_schema`` (JSON-Schema subset).
+
+    Handles ``type``, ``required`` and ``enum`` — the constructs the plugin
+    schemas actually use. Kept deliberately small: it exists to catch planner
+    hallucinations, not to replace the plugin's own deeper validation.
+    Returns human-readable violation strings (empty = valid).
+    """
+    if not isinstance(args, dict):
+        return ["tool_args must be a JSON object"]
+
+    violations: list[str] = []
+    for field in (schema.get("required") or []):
+        if field not in args:
+            violations.append(f"missing required field {field!r}")
+
+    props = schema.get("properties") or {}
+    for field, value in args.items():
+        prop = props.get(field)
+        if prop is None:
+            if schema.get("additionalProperties") is False:
+                violations.append(f"unknown field {field!r}")
+            continue
+        violations.extend(_schema_field_violations(prop, value, field))
+
+    return violations
+
+
+def _strip_invalid_tool_args(steps: list[PlanStep]) -> None:
+    """Drop the tool on any step whose args violate that tool's input_schema.
+
+    Mutates ``steps`` in place. A step whose args are structurally invalid
+    (missing required field, out-of-enum value, wrong type) degrades to a pure
+    reasoning step (``tool_name=None``) instead of emitting a poisoned tool
+    call — mirroring the existing "unknown tool name" strip.
+    """
+    schemas = _plugin_input_schemas()
+    if not schemas:
+        return
+    for step in steps:
+        if not step.tool_name:
+            continue
+        schema = schemas.get(step.tool_name)
+        if schema is None:
+            continue
+        violations = _schema_violations(schema, step.tool_args or {})
+        if violations:
+            logger.warning(
+                "Step %d tool=%r has invalid args (%s) — dropping the tool "
+                "call so the step degrades to reasoning",
+                step.step_id, step.tool_name, "; ".join(violations),
+            )
+            step.tool_name = None
+            step.tool_args = {}
+            step.is_mutation = False  # a reasoning step cannot write anything
 
 
 # ── Planner ────────────────────────────────────────────────────────────────────
@@ -491,6 +611,12 @@ class SkillAwarePlanner:
                     )
                     step.tool_name = None
                     step.agent_role = step.agent_role or "domain_specialist"
+
+        # Fix 2: validate tool_args against the tool's input_schema. A
+        # hallucinated arg (rule_type="general") is caught BEFORE the step is
+        # emitted — otherwise the tool errors/nulls at execution and the step
+        # is still marked "completed" (phantom success).
+        _strip_invalid_tool_args(steps)
 
         # Deterministic mutation classification — a capability fact of the
         # tool, NOT the LLM's judgment. The LLM routinely under-marks mutation

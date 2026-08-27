@@ -311,6 +311,16 @@ class PlanViewSet(viewsets.GenericViewSet):
                 {"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST
             )
 
+    def destroy(self, request, pk=None):
+        """DELETE /plans/{id}/ — hard-delete a cancelled/failed/completed plan."""
+        try:
+            result = self.service.delete_plan(request.user, pk)
+        except PlanNotAccessibleError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        except PlanNotRunnableError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_200_OK)
+
     # ── W3-C: pause / resume / fork ───────────────────────────────────────
 
     @action(detail=True, methods=["post"], url_path="pause", url_name="pause-plan")

@@ -595,6 +595,7 @@ export function AIWorkspace({ onClose }) {
               focusPlanId={tasksFocusPlanId}
               onFocusPlanConsumed={() => setTasksFocusPlanId(null)}
               onLifecycleStateChange={handleLifecycleStateChange}
+              onSwitchToChat={() => setMode('chat')}
               externalTab={agentView}
             />
           ) : (

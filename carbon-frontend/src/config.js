@@ -156,6 +156,11 @@ export const API_ROUTES = {
   emissionsReportConfigs: "carbon/report-configs/",
   emissionsBoundaries: "carbon/boundaries/",
   emissionsBaseYears: "carbon/base-years/",
+  emissionsInventorySources: "carbon/inventory-sources/",
+  emissionsInventorySourceStatuses: "carbon/inventory-source-statuses/",
+  emissionsCoverageGoals: "carbon/coverage-goals/",
+  emissionsCoverageActions: "carbon/coverage-actions/",
+  emissionsCoverage: "carbon/coverage/",
 };
 
 // Pulse AI Configuration

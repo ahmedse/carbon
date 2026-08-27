@@ -570,3 +570,178 @@ export async function deleteGWPValue(gwpId, token) {
     token,
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 28-B — Inventory Coverage (ADR-0020) API
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Fetch inventory sources (declared-universe bindings)
+ */
+export async function fetchInventorySources(token) {
+  return apiFetch(API_ROUTES.emissionsInventorySources, { token });
+}
+
+/**
+ * Create a new inventory source (admin only)
+ */
+export async function createInventorySource(data, token) {
+  return apiFetch(API_ROUTES.emissionsInventorySources, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Update an existing inventory source (admin only)
+ */
+export async function updateInventorySource(sourceId, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsInventorySources}${sourceId}/`, {
+    method: "PATCH",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Delete an inventory source (admin only)
+ */
+export async function deleteInventorySource(sourceId, token) {
+  return apiFetch(`${API_ROUTES.emissionsInventorySources}${sourceId}/`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+/**
+ * Fetch inventory source statuses (optionally filtered by reporting period)
+ */
+export async function fetchInventorySourceStatuses({ reporting_period } = {}, token) {
+  const params = new URLSearchParams();
+  if (reporting_period) params.append("reporting_period", reporting_period);
+  const qs = params.toString();
+  return apiFetch(`${API_ROUTES.emissionsInventorySourceStatuses}${qs ? `?${qs}` : ""}`, { token });
+}
+
+/**
+ * Create a new inventory source status (admin only)
+ */
+export async function createInventorySourceStatus(data, token) {
+  return apiFetch(API_ROUTES.emissionsInventorySourceStatuses, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Update an existing inventory source status (admin only)
+ */
+export async function updateInventorySourceStatus(statusId, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsInventorySourceStatuses}${statusId}/`, {
+    method: "PATCH",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Delete an inventory source status (admin only)
+ */
+export async function deleteInventorySourceStatus(statusId, token) {
+  return apiFetch(`${API_ROUTES.emissionsInventorySourceStatuses}${statusId}/`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+/**
+ * Fetch coverage goals
+ */
+export async function fetchCoverageGoals(token) {
+  return apiFetch(API_ROUTES.emissionsCoverageGoals, { token });
+}
+
+/**
+ * Create a new coverage goal (admin only)
+ */
+export async function createCoverageGoal(data, token) {
+  return apiFetch(API_ROUTES.emissionsCoverageGoals, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Update an existing coverage goal (admin only)
+ */
+export async function updateCoverageGoal(goalId, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsCoverageGoals}${goalId}/`, {
+    method: "PATCH",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Delete a coverage goal (admin only)
+ */
+export async function deleteCoverageGoal(goalId, token) {
+  return apiFetch(`${API_ROUTES.emissionsCoverageGoals}${goalId}/`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+/**
+ * Fetch coverage actions
+ */
+export async function fetchCoverageActions(token) {
+  return apiFetch(API_ROUTES.emissionsCoverageActions, { token });
+}
+
+/**
+ * Create a new coverage action (admin only)
+ */
+export async function createCoverageAction(data, token) {
+  return apiFetch(API_ROUTES.emissionsCoverageActions, {
+    method: "POST",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Update an existing coverage action (admin only)
+ */
+export async function updateCoverageAction(actionId, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsCoverageActions}${actionId}/`, {
+    method: "PATCH",
+    body: data,
+    token,
+  });
+}
+
+/**
+ * Delete a coverage action (admin only)
+ */
+export async function deleteCoverageAction(actionId, token) {
+  return apiFetch(`${API_ROUTES.emissionsCoverageActions}${actionId}/`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+/**
+ * Compute declared-universe coverage for a reporting period (read-only).
+ * GET /carbon/coverage/?reporting_period=<id>&org_unit=<id>
+ */
+export async function fetchCoverage({ reporting_period, org_unit } = {}, token) {
+  const params = new URLSearchParams();
+  if (reporting_period) params.append("reporting_period", reporting_period);
+  if (org_unit) params.append("org_unit", org_unit);
+  const qs = params.toString();
+  return apiFetch(`${API_ROUTES.emissionsCoverage}${qs ? `?${qs}` : ""}`, { token });
+}

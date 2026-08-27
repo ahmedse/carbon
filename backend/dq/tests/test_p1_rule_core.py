@@ -152,6 +152,40 @@ class RuleSchemaValidationTests(TestCase):
         errors = validate_definition(d)
         self.assertTrue(any('min' in str(e).lower() or 'max' in str(e).lower() for e in errors))
 
+    def test_invalid_range_with_operator(self):
+        """range has no comparison operator — a stray 'operator' (e.g. a LLM
+        expressing 'positive number' as range+min+operator) must be rejected,
+        not silently ignored. Comparisons belong to the threshold type."""
+        from dq.rule_schema import validate_definition
+        d = {
+            'schema_version': 1,
+            'name': 'validate positive number',
+            'level': 'field',
+            'dimension': 'validity',
+            'type': 'range',
+            'severity': 'error',
+            'active': True,
+            'params': {'min': 0, 'operator': '>'},
+        }
+        errors = validate_definition(d)
+        self.assertTrue(any('operator' in str(e.get('field', '')).lower() for e in errors))
+
+    def test_valid_threshold_positive_number(self):
+        """The correct way to express 'strictly positive' is threshold+gt+0."""
+        from dq.rule_schema import validate_definition
+        d = {
+            'schema_version': 1,
+            'name': 'validate positive number',
+            'level': 'field',
+            'dimension': 'reasonability',
+            'type': 'threshold',
+            'severity': 'error',
+            'active': True,
+            'params': {'operator': 'gt', 'value': 0},
+        }
+        errors = validate_definition(d)
+        self.assertEqual(errors, [])
+
     def test_invalid_threshold_bad_operator(self):
         from dq.rule_schema import validate_definition
         d = {

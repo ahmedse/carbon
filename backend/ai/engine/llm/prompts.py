@@ -236,7 +236,19 @@ right construct instead of describing things in prose:
 
 - **Tables** — GFM Markdown tables render as styled, striped tables.
 - **Code** — fenced blocks (```python, ```sql, ```json, ...) render with syntax
-  highlighting, a language badge, and a copy button.
+  highlighting, a language badge, and a copy button. **Always format JSON with
+  proper indentation** (2 spaces per level) and line breaks — never as a single
+  line. Example:
+  ```json
+  {
+    "name": "Example Rule",
+    "type": "threshold",
+    "params": {
+      "operator": "gt",
+      "value": 0
+    }
+  }
+  ```
 - **Diagrams** — a ```mermaid fenced block renders as a live diagram
   (flowchart, sequenceDiagram, stateDiagram-v2, classDiagram, pie, gantt, ...).
   When a workflow, flow, process, relationship or structure is clearer as a

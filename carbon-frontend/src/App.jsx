@@ -19,6 +19,7 @@ import {
   CARBON_MANAGE_EMISSION_FACTORS, CARBON_MANAGE_CALCULATION_RULES,
   CARBON_MANAGE_GWP, CARBON_MANAGE_SBTI_TARGETS,
   CARBON_GENERATE_REPORTS, CARBON_MANAGE_REPORTING_PERIODS,
+  CARBON_MANAGE_INVENTORY_COVERAGE,
   AI_VIEW_CONSOLE,
 } from "./capabilities";
 // ── Lazy-loaded page imports ──────────────────────────────────────────
@@ -63,16 +64,16 @@ const DataSourcesDetailPage = React.lazy(() => import("./pages/catalog/DataSourc
 const ExportsDetailPage = React.lazy(() => import("./pages/catalog/ExportsDetailPage"));
 const ImportsDetailPage = React.lazy(() => import("./pages/catalog/ImportsDetailPage"));
 const DataOwnerAssetsPage = React.lazy(() => import("./pages/data-owner/DataOwnerAssetsPage"));
-const EmissionFactorsPage = React.lazy(() => import("./pages/emissions/EmissionFactorsPage"));
+const FactorsHubPage = React.lazy(() => import("./pages/emissions/FactorsHubPage"));
 const CalculationRulesPage = React.lazy(() => import("./pages/emissions/CalculationRulesPage"));
-const GWPReferencePage = React.lazy(() => import("./pages/emissions/GWPReferencePage"));
 const SBTiTargetsPage = React.lazy(() => import("./pages/carbon/SBTiTargetsPage"));
 const OrganizationalBoundariesPage = React.lazy(() => import("./pages/carbon/OrganizationalBoundariesPage"));
 const BaseYearsPage = React.lazy(() => import("./pages/carbon/BaseYearsPage"));
-const ReportGeneratorPage = React.lazy(() => import("./pages/emissions/ReportGeneratorPage"));
-const SavedReportsPage = React.lazy(() => import("./pages/emissions/SavedReportsPage"));
+const InventoryCoveragePage = React.lazy(() => import("./pages/carbon/InventoryCoveragePage"));
 const ReportingPeriodsPage = React.lazy(() => import("./pages/emissions/ReportingPeriodsPage"));
 const CarbonConsolePage = React.lazy(() => import("./pages/carbon/CarbonConsolePage"));
+const CarbonDashboardPage = React.lazy(() => import("./pages/carbon/CarbonDashboardPage"));
+const ReportsPage = React.lazy(() => import("./pages/carbon/ReportsPage"));
 const MyDataPage = React.lazy(() => import("./pages/carbon/MyDataPage"));
 const ModuleWorkspacePage = React.lazy(() => import("./pages/carbon/ModuleWorkspacePage"));
 const CalculationsPage = React.lazy(() => import("./pages/carbon/CalculationsPage"));
@@ -104,7 +105,6 @@ const AuditPanel = React.lazy(() => import("./pages/admin/ai/AuditPanel"));
 const AILogsPanel = React.lazy(() => import("./pages/admin/ai/AILogsPanel"));
 const AgentTopologyPanel = React.lazy(() => import("./pages/admin/ai/AgentTopologyPanel"));
 const RunTimelinePanel = React.lazy(() => import("./pages/admin/ai/RunTimelinePanel"));
-const AnalyticsDashboard = React.lazy(() => import("./pages/dashboards/AnalyticsDashboard"));
 const HealthyDashboard = React.lazy(() => import("./apps/healthy/HealthyDashboard"));
 const LoadoutSheetPage = React.lazy(() => import("./apps/healthy/LoadoutSheetPage"));
 const RepHealthPage = React.lazy(() => import("./apps/healthy/RepHealthPage"));
@@ -228,23 +228,25 @@ export default function App() {
                     /carbon/ deployment mount path) must never 404. RULE_22. */}
                 <Route path="/carbon" element={<Navigate to="/carbon/console" replace />} />
                 <Route path="/carbon/console" element={<CarbonConsolePage />} />
-                <Route path="/carbon/dashboard" element={<EmissionsDashboard />} />
+                <Route path="/carbon/dashboard" element={<CarbonDashboardPage />} />
+                <Route path="/carbon/analytics" element={<Navigate to="/carbon/dashboard" replace />} />
                 {/* Carbon-domain admin routes — accessible by global admins OR carbon_lead Domain Leads */}
-                <Route path="/carbon/analytics" element={<AdminRoute appId="carbon" requiredCapability={CARBON_VIEW_ANALYTICS}><AnalyticsDashboard /></AdminRoute>} />
                 <Route path="/carbon/my-data" element={<MyDataPage />} />
                 <Route path="/carbon/my-data/:moduleId" element={<ModuleWorkspacePage />} />
                 <Route path="/carbon/my-data/:moduleId/:tableId" element={<DataEntryPage />} />
                 <Route path="/carbon/my-data/row/:tableId/:rowId" element={<RowDetailPage />} />
                 <Route path="/carbon/calculations" element={<AdminRoute appId="carbon" requiredCapability={CARBON_VIEW_CALCULATIONS}><CalculationsPage /></AdminRoute>} />
                 <Route path="/carbon/verification" element={<AdminRoute appId="carbon" requiredCapability={CARBON_VIEW_VERIFICATION}><VerificationPage /></AdminRoute>} />
-                <Route path="/carbon/admin/factors" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_EMISSION_FACTORS}><EmissionFactorsPage /></AdminRoute>} />
+                <Route path="/carbon/admin/factors" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_EMISSION_FACTORS}><FactorsHubPage /></AdminRoute>} />
                 <Route path="/carbon/admin/rules" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_CALCULATION_RULES}><CalculationRulesPage /></AdminRoute>} />
-                <Route path="/carbon/admin/gwp" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_GWP}><GWPReferencePage /></AdminRoute>} />
+                <Route path="/carbon/admin/gwp" element={<Navigate to="/carbon/admin/factors" replace />} />
                 <Route path="/carbon/admin/targets" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_SBTI_TARGETS}><SBTiTargetsPage /></AdminRoute>} />
                 <Route path="/carbon/admin/boundaries" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_REPORTING_PERIODS}><OrganizationalBoundariesPage /></AdminRoute>} />
                 <Route path="/carbon/admin/base-years" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_REPORTING_PERIODS}><BaseYearsPage /></AdminRoute>} />
-                <Route path="/carbon/reporting/generate" element={<AdminRoute appId="carbon" requiredCapability={CARBON_GENERATE_REPORTS}><ReportGeneratorPage /></AdminRoute>} />
-                <Route path="/carbon/reporting/saved" element={<AdminRoute appId="carbon" requiredCapability={CARBON_GENERATE_REPORTS}><SavedReportsPage /></AdminRoute>} />
+                <Route path="/carbon/admin/inventory-coverage" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_INVENTORY_COVERAGE}><InventoryCoveragePage /></AdminRoute>} />
+                <Route path="/carbon/reporting" element={<AdminRoute appId="carbon" requiredCapability={CARBON_GENERATE_REPORTS}><ReportsPage /></AdminRoute>} />
+                <Route path="/carbon/reporting/generate" element={<Navigate to="/carbon/reporting" replace />} />
+                <Route path="/carbon/reporting/saved" element={<Navigate to="/carbon/reporting" replace />} />
                 <Route path="/carbon/reporting/periods" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_REPORTING_PERIODS}><ReportingPeriodsPage /></AdminRoute>} />
                 
                 {/* Carbon App — Data Owner Routes (namespace: /carbon/owner/*) */}

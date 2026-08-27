@@ -928,6 +928,13 @@ export function declinePlan(token, planId) {
 }
 
 /**
+ * Delete a terminal-state plan (cancelled / failed / completed only).
+ */
+export function deletePlan(token, planId) {
+  return apiFetch(`${PLANS_BASE}${planId}/`, { token, method: 'DELETE' });
+}
+
+/**
  * Stream a plan run over SSE (POST .../plans/{id}/run/). Reuses the shared
  * streamJsonPost auth + SSE reader; plan frames are dispatched through
  * ``onFrame`` (plan_start / step_start / step_confirm / step_result /

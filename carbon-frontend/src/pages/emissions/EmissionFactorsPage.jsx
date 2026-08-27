@@ -240,7 +240,7 @@ export default function EmissionFactorsPage() {
   ];
 
   return (
-    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <>
       <FilteredDataGrid
         title="Emission Factors"
         subtitle={`${filteredFactors.length} of ${factors.length} factors`}
@@ -305,7 +305,7 @@ export default function EmissionFactorsPage() {
         onConfirm={() => handleDelete(deleteConfirm)}
         onCancel={() => setDeleteConfirm(null)}
       />
-    </Box>
+    </>
   );
 }
 

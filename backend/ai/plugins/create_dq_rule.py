@@ -117,6 +117,11 @@ def _validate_definition(d: dict) -> list[dict]:
         if "min" not in params and "max" not in params:
             errors.append({"field": "params", "code": "required",
                            "message": "range requires at least one of min or max"})
+        # range is an inclusive [min, max] bound with no comparison operator;
+        # comparisons (e.g. "greater than 0") belong to ``threshold``.
+        if "operator" in params:
+            errors.append({"field": "params.operator", "code": "invalid_value",
+                           "message": "range does not support operator; use type 'threshold' with operator gt/gte/lt/lte for inequality comparisons"})
         for key in ("min", "max"):
             if key in params:
                 try:
@@ -274,6 +279,44 @@ def build_definition(args: dict) -> tuple[dict, list[dict]]:
     return definition, _validate_definition(definition)
 
 
+def _binding_errors(rule_type: str, args: dict) -> list[dict]:
+    """Return binding-target errors for deterministic rules.
+
+    Deterministic rules (``not_null``, ``unique``, ``allowed_values``,
+    ``range``, ``regex``) evaluate a specific column, so they must bind to a
+    real field — ``data_table`` + ``data_field`` ids. The host POST maps
+    exactly those two to a ``RuleFieldAssignment``; without them the rule is
+    created bound to nothing (a phantom rule). Fail-visible with a targeted
+    clarifying question instead of staging an unusable rule silently.
+
+    Business/``nl_check``/``reference_integrity``/``threshold`` rules skip
+    this check — they either don't need a field or resolve it elsewhere.
+    """
+    if rule_type not in _DETERMINISTIC_TYPES:
+        return []
+
+    errors: list[dict] = []
+    if not args.get("data_table"):
+        errors.append({
+            "field": "data_table",
+            "code": "missing_binding",
+            "message": (
+                "Which table should this rule apply to? Provide data_table "
+                "(the DataTable id)."
+            ),
+        })
+    if not args.get("data_field"):
+        errors.append({
+            "field": "data_field",
+            "code": "missing_binding",
+            "message": (
+                "Which field/column should this rule check? Provide data_field "
+                "(the DataField id)."
+            ),
+        })
+    return errors
+
+
 # ── Plugin ────────────────────────────────────────────────────────────────
 
 
@@ -295,7 +338,11 @@ class CreateDQRule(ToolPlugin):
             "rule_type": {
                 "type": "string",
                 "enum": sorted(_RULE_TYPES),
-                "description": "DQ rule type.",
+                "description": (
+                    "DQ rule type. Use 'range' only for an inclusive [min, max] "
+                    "bound. For comparisons like 'greater than 0' or 'less than X', "
+                    "use 'threshold' with operator (gt|gte|lt|lte|eq|neq) + value."
+                ),
             },
             "level": {
                 "type": "string",
@@ -316,10 +363,28 @@ class CreateDQRule(ToolPlugin):
             "column": {"type": "string", "description": "Target column for deterministic rules."},
             "params": {
                 "type": "object",
-                "description": "Type-specific params (values, min/max, pattern, operator, value, prompt).",
+                "description": (
+                    "Type-specific params. range: min and/or max (inclusive). "
+                    "threshold: operator (gt|gte|lt|lte|eq|neq) + value. "
+                    "allowed_values: values (list) or reference_set (int). "
+                    "regex: pattern (string). reference_integrity: reference_set_id (int). "
+                    "nl_check: prompt (string)."
+                ),
             },
-            "data_table": {"type": "integer", "description": "DataTable id to bind the rule to."},
-            "data_field": {"type": ["integer", "null"], "description": "Optional DataField id."},
+            "data_table": {
+                "type": "integer",
+                "description": (
+                    "DataTable id to bind the rule to. REQUIRED for deterministic "
+                    "rule types (not_null, unique, allowed_values, range, regex)."
+                ),
+            },
+            "data_field": {
+                "type": ["integer", "null"],
+                "description": (
+                    "DataField id the rule checks. REQUIRED for deterministic "
+                    "rule types (not_null, unique, allowed_values, range, regex)."
+                ),
+            },
             "sample_rows": {
                 "type": "array",
                 "items": {"type": "object"},
@@ -347,11 +412,25 @@ class CreateDQRule(ToolPlugin):
             }
 
         definition, errors = build_definition(args)
+        # Intelligence gate (2026-08-27): a deterministic rule evaluates a
+        # specific column, so it MUST bind to a real field (data_table +
+        # data_field). Without them the host POST creates a rule bound to
+        # nothing — a phantom rule. Fail-visible with a targeted
+        # clarifying question instead of silently staging an unusable rule.
+        errors.extend(_binding_errors(definition.get("type"), args))
         if errors:
+            messages = "; ".join(e.get("message", "") for e in errors if e.get("message"))
             return {
                 "requires_confirmation": False,
-                "error": "Proposed DQ rule is invalid — nothing was written.",
+                "error": (
+                    f"Proposed DQ rule is incomplete — nothing was written. "
+                    + (messages or "the rule definition is invalid.")
+                ),
                 "validation": {"passed": False, "errors": errors},
+                "clarification": {
+                    "needed": True,
+                    "missing": [e.get("field") for e in errors if e.get("field")],
+                },
             }
 
         preview = self._preview(definition, args)

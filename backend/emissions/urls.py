@@ -30,6 +30,11 @@ from .views import (
     OrganizationalBoundaryViewSet,
     BaseYearViewSet,
     RecalculationTriggerViewSet,
+    InventorySourceViewSet,
+    InventorySourceStatusViewSet,
+    CoverageGoalViewSet,
+    CoverageActionViewSet,
+    InventoryCoverageAPIView,
 )
 
 app_name = 'emissions'
@@ -65,6 +70,21 @@ base_year_router.register(r'base-years', BaseYearViewSet, basename='base-year')
 recalc_router = DefaultRouter()
 recalc_router.register(r'recalculation-triggers', RecalculationTriggerViewSet, basename='recalculation-trigger')
 
+# Inventory Coverage routers (ADR-0020)
+inventory_source_router = DefaultRouter()
+inventory_source_router.register(r'inventory-sources', InventorySourceViewSet, basename='inventory-source')
+
+inventory_source_status_router = DefaultRouter()
+inventory_source_status_router.register(
+    r'inventory-source-statuses', InventorySourceStatusViewSet, basename='inventory-source-status'
+)
+
+coverage_goal_router = DefaultRouter()
+coverage_goal_router.register(r'coverage-goals', CoverageGoalViewSet, basename='coverage-goal')
+
+coverage_action_router = DefaultRouter()
+coverage_action_router.register(r'coverage-actions', CoverageActionViewSet, basename='coverage-action')
+
 urlpatterns = [
     # Calculation summary — MUST come before router include to avoid path collision
     path('calculations/summary/', CalculationSummaryAPIView.as_view(), name='calculation-summary'),
@@ -88,6 +108,13 @@ urlpatterns = [
     path('', include(boundary_router.urls)),
     path('', include(base_year_router.urls)),
     path('', include(recalc_router.urls)),
+
+    # Inventory Coverage routes (ADR-0020)
+    path('', include(inventory_source_router.urls)),
+    path('', include(inventory_source_status_router.urls)),
+    path('', include(coverage_goal_router.urls)),
+    path('', include(coverage_action_router.urls)),
+    path('coverage/', InventoryCoverageAPIView.as_view(), name='inventory-coverage'),
     
     # Dashboard API
     path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),

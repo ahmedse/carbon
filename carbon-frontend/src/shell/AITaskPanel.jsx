@@ -39,6 +39,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
+import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import StopIcon from '@mui/icons-material/Stop';
 import dayjs from 'dayjs';
@@ -52,6 +53,7 @@ import {
   createSchedule,
   declinePlan,
   declinePlanStep,
+  deletePlan,
   deleteSchedule,
   downloadArtifact,
   editPlan,
@@ -506,7 +508,7 @@ ResultArtifactCard.propTypes = {
  *   (tasks|monitor|results) that drives this panel's internal tab, so the
  *   Monitor and Results activity icons open the right internal view.
  */
-function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, onLifecycleStateChange, externalTab = 'tasks' }) {
+function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, onLifecycleStateChange, onSwitchToChat, externalTab = 'tasks' }) {
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
   const notifyRef = useRef(notify);
@@ -560,6 +562,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   const [scheduleDialog, setScheduleDialog] = useState(null);
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingPlanId, setDeletingPlanId] = useState(null); // plan pending inline delete confirm
 
   const runPhaseRef = useRef(phase);
   runPhaseRef.current = phase;
@@ -870,8 +873,15 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
     if (!selectedPlan) return;
     setConfirmingId(stepId);
     try {
-      await confirmPlanStep(token, selectedPlan.id, stepId);
-      upsertStep({ step_id: stepId, status: 'completed' });
+      const result = await confirmPlanStep(token, selectedPlan.id, stepId);
+      if (result?.unstaged) {
+        // Pre-execution consent: the step hasn't run yet; token is now set.
+        // Auto-resume so the user only needs one click instead of Approve → Resume.
+        await handleRun();
+      } else {
+        // Post-execution confirmation: the staged host mutation ran; step done.
+        upsertStep({ step_id: stepId, status: 'completed' });
+      }
     } catch (err) {
       notifyFromErrorRef.current(err, 'Could not approve the step');
     } finally {
@@ -889,6 +899,21 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
       notifyFromErrorRef.current(err, 'Could not decline the step');
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  const handleDeletePlan = async (planId) => {
+    try {
+      await deletePlan(token, planId);
+      setPlans((prev) => prev.filter((p) => p.id !== planId));
+      if (selectedPlan?.id === planId) {
+        setSelectedPlan(null);
+        setTab('tasks');
+      }
+      setDeletingPlanId(null);
+    } catch (err) {
+      notifyFromErrorRef.current(err, 'Could not delete the task');
+      setDeletingPlanId(null);
     }
   };
 
@@ -1130,12 +1155,14 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         <Stack spacing={0.75}>
           {plans.map((plan) => {
             const meta = { pending_approval: { label: 'Needs review', color: 'warning' }, approved: { label: 'Approved', color: 'primary' }, running: { label: 'Running…', color: 'primary' }, paused: { label: 'Needs approval', color: 'warning' }, completed: { label: 'Completed', color: 'success' }, failed: { label: 'Failed', color: 'error' }, cancelled: { label: 'Cancelled', color: 'default' } }[plan.status] || { label: plan.status, color: 'default' };
+            const deletable = ['cancelled', 'failed', 'completed'].includes(plan.status);
+            const confirming = deletingPlanId === plan.id;
             return (
               <Paper
                 key={plan.id}
                 variant="outlined"
                 sx={{ p: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-                onClick={() => openPlan(plan.id)}
+                onClick={() => { if (!confirming) openPlan(plan.id); }}
               >
                 <Stack direction="row" alignItems="center" spacing={0.75}>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -1147,6 +1174,23 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
                     </Typography>
                   </Box>
                   <Chip size="small" variant="outlined" label={meta.label} color={meta.color} sx={{ height: 16, fontSize: '0.5625rem' }} />
+                  {deletable && !confirming && (
+                    <Tooltip title="Delete task">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => { e.stopPropagation(); setDeletingPlanId(plan.id); }}
+                        sx={{ p: 0.375 }}
+                      >
+                        <DeleteOutlinedIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  {confirming && (
+                    <Stack direction="row" spacing={0.5} onClick={(e) => e.stopPropagation()}>
+                      <Button size="small" color="error" variant="contained" onClick={() => handleDeletePlan(plan.id)} sx={{ fontSize: '0.5625rem', textTransform: 'none', minWidth: 0, px: 0.75, height: 20 }}>Delete</Button>
+                      <Button size="small" onClick={() => setDeletingPlanId(null)} sx={{ fontSize: '0.5625rem', textTransform: 'none', minWidth: 0, px: 0.75, height: 20 }}>Cancel</Button>
+                    </Stack>
+                  )}
                 </Stack>
               </Paper>
             );
@@ -1199,6 +1243,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           onEditStep={(step) => setEditStepTarget({ step })}
           onConfirmStep={handleConfirmStep}
           onDeclineStep={handleDeclineStep}
+          onSwitchToChat={onSwitchToChat}
           confirmingId={confirmingId}
         />
 

@@ -905,7 +905,9 @@ describe('filterMenuItems', () => {
     expect(labels).toContain('Emissions Dashboard');
     expect(labels).toContain('Calculations');
     expect(labels).toContain('Verification');
-    expect(labels).toContain('Reporting Periods');
+
+    // Reporting Periods is admin-only (CARBON_MANAGE_REPORTING_PERIODS)
+    expect(labels).not.toContain('Reporting Periods');
 
     // These require manage/admin caps
     expect(labels).not.toContain('Emission Factors');

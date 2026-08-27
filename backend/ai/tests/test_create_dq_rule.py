@@ -110,6 +110,29 @@ def test_validate_definition_requires_nl_prompt():
     assert any(e["field"] == "params.prompt" for e in errors)
 
 
+def test_validate_definition_rejects_operator_on_range():
+    # range has no comparison operator; "positive number" must use threshold.
+    _, errors = build_definition({
+        "name": "validate positive number",
+        "rule_type": "range",
+        "level": "field",
+        "params": {"min": 0, "operator": ">"},
+    })
+    assert any(e["field"] == "params.operator" for e in errors)
+
+
+def test_build_definition_threshold_positive_number_is_valid():
+    definition, errors = build_definition({
+        "name": "validate positive number",
+        "rule_type": "threshold",
+        "level": "field",
+        "params": {"operator": "gt", "value": 0},
+    })
+    assert errors == []
+    assert definition["type"] == "threshold"
+    assert definition["params"] == {"operator": "gt", "value": 0}
+
+
 # ── Deterministic dry-run preview ────────────────────────────────────────
 
 
@@ -161,6 +184,62 @@ def test_execute_invalid_rule_stops_before_write():
     assert "error" in result
     assert result["validation"]["passed"] is False
     assert host_api.staged == []  # nothing staged
+
+
+def test_create_dq_rule_with_invalid_rule_type_returns_error():
+    """Regression (2026-08-27 phantom success): a hallucinated ``rule_type``
+    (e.g. "general") must produce a non-null error/validation result — never a
+    silent null that the runner marks "completed"."""
+    host_api = FakeHostAPI()
+    # Reproduce the exact hallucinated args from the phantom-success run.
+    result = _run({
+        "rule_type": "general",
+        "validation_logic": "field is a number and positive",
+    }, host_api=host_api)
+
+    assert result is not None
+    assert "error" in result or "validation" in result
+    # The invalid rule_type (→ definition["type"]) must fail validation.
+    assert result["validation"]["passed"] is False
+    fields = {e["field"] for e in result["validation"]["errors"]}
+    assert "type" in fields  # rule_type is mapped to definition.type
+    # Nothing was staged — the phantom write must never happen.
+    assert host_api.staged == []
+    assert result["requires_confirmation"] is False
+
+
+def test_execute_deterministic_rule_requires_field_binding():
+    """Intelligence gate (2026-08-27): a deterministic rule (not_null/unique/
+    allowed_values/range/regex) must bind to a real data_table + data_field.
+    Without them the host would create a rule bound to nothing — fail-visible
+    with a targeted clarifying question, never a silent staged write."""
+    host_api = FakeHostAPI()
+    result = _run({
+        "name": "mobile number valid",
+        "rule_type": "regex",
+        "level": "field",
+        "params": {"pattern": r"^01[0-9]{9}$"},
+    }, host_api=host_api)
+
+    assert result is not None
+    assert result["requires_confirmation"] is False
+    assert "error" in result
+    assert result["clarification"]["needed"] is True
+    missing = set(result["clarification"]["missing"])
+    assert {"data_table", "data_field"} <= missing
+    assert host_api.staged == []  # nothing staged — phantom write impossible
+
+
+def test_binding_errors_skipped_for_non_deterministic_rules():
+    """Business/nl_check/threshold/reference_integrity rules don't need a field
+    binding, so the intelligence gate must not block them."""
+    from ai.plugins.create_dq_rule import _binding_errors
+
+    assert _binding_errors("nl_check", {}) == []
+    assert _binding_errors("threshold", {}) == []
+    assert _binding_errors("reference_integrity", {}) == []
+    assert _binding_errors("not_null", {})  # deterministic → errors present
+    assert _binding_errors("not_null", {"data_table": 5, "data_field": 7}) == []
 
 
 def test_execute_dry_run_stages_confirmation_not_write():

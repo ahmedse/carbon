@@ -626,26 +626,26 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
                 if operation == "forget":
                     lines.append(
                         f"✅ Proposed to forget: {fact} — nothing was archived "
-                        "yet. Confirm below to archive it."
+                        "yet. Confirm below to archive it (Agent mode required)."
                     )
                 else:
                     lines.append(
                         f"✅ Proposed to remember: {fact} — nothing was stored "
-                        "yet. Confirm below to save it."
+                        "yet. Confirm below to save it (Agent mode required)."
                     )
             elif kind == "dq_rule":
                 proposed = data.get("proposed_rule") or {}
                 name = str(proposed.get("name") or "").strip() or "rule"
                 lines.append(
                     f"✅ Proposed DQ rule '{name}' validated and staged — nothing "
-                    "was created yet. Confirm with the button below to create it."
+                    "was created yet. Confirm & create below (Agent mode required)."
                 )
             elif kind == "host":
                 method = str(data.get("method") or "").strip() or "action"
                 endpoint = str(data.get("endpoint") or "").strip()
                 lines.append(
                     f"✅ Proposed {method} {endpoint} — staged, nothing executed "
-                    "yet. Confirm below to proceed."
+                    "yet. Confirm below to proceed (Agent mode required)."
                 )
             # kind is None → unrecognized staged result; emit nothing rather
             # than fabricate a DQ-rule note (anti-fabrication).
@@ -768,6 +768,21 @@ _MEMORY_DENIAL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# LLM provider refusal/error messages that contradict a successful or staged
+# tool execution. When tools executed successfully or were staged for
+# confirmation, generic error messages like "I wasn't able to generate a
+# response" are false — the tool DID work and produced a valid result.
+_LLM_REFUSAL_RE = re.compile(
+    r"\bI\s+(?:was\s+not|wasn'?t)\s+able\s+to\s+(?:generate|provide|create|complete)\s+(?:a\s+)?(?:response|reply|answer)\b[^.!?\n]*[.!?]?"
+    r"|\bI\s+(?:could\s+not|couldn'?t|can'?t|cannot)\s+(?:generate|provide|create|complete|process)\s+(?:a\s+)?(?:response|reply|answer|that)\b[^.!?\n]*[.!?]?"
+    r"|\bThis\s+(?:may|might)\s+be\s+a\s+temporary\s+issue\b[^.!?\n]*[.!?]?"
+    r"|\bPlease\s+try\s+again\s+(?:in\s+a\s+moment|later|or\s+rephrase)\b[^.!?\n]*[.!?]?"
+    r"|\bI\s+(?:don'?t|do\s+not)\s+have\s+(?:the\s+)?(?:ability|capability|permission)\s+to\b[^.!?\n]*[.!?]?"
+    r"|\bI\s+(?:encountered|experienced)\s+(?:an\s+)?(?:error|issue|problem)\b[^.!?\n]*[.!?]?"
+    r"|\bSomething\s+went\s+wrong\b[^.!?\n]*[.!?]?",
+    re.IGNORECASE,
+)
+
 
 def _classify_tool_outcomes(completed_tools: list[dict]) -> dict[str, str]:
     """Map tool_name → staged/failed/succeeded from executed tool results.
@@ -856,6 +871,16 @@ def apply_anti_hallucination_gate(
         corrected, removed = _MEMORY_DENIAL_RE.subn("", corrected)
         if removed:
             flags.append("false_memory_denial_corrected")
+
+    # Gate 4 — anti-refusal: any tool succeeded or was staged, yet the prose
+    # contains a generic LLM error/refusal message ("I wasn't able to generate
+    # a response", "This may be a temporary issue"). These contradict the
+    # successful tool execution and are stripped so the grounded note stands alone.
+    any_tool_worked = any(outcome in (_STAGED, _SUCCEEDED) for outcome in outcomes.values())
+    if corrected and any_tool_worked:
+        corrected, removed = _LLM_REFUSAL_RE.subn("", corrected)
+        if removed:
+            flags.append("false_llm_refusal_corrected")
 
     # Normalize whitespace left behind by removed sentences.
     corrected = re.sub(r"\s{2,}", " ", corrected).strip()

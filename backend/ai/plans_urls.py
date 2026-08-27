@@ -68,7 +68,7 @@ urlpatterns = [
     ),
     path(
         "<str:pk>/",
-        PlanViewSet.as_view({"get": "retrieve", "patch": "partial_update"}),
+        PlanViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
         name="ai-plan-detail",
     ),
     path(

@@ -4798,6 +4798,435 @@ Deferred to W7-B: directional-icon flip (~92 matches/40 files, 90% W7-B dirty)
 - Key parity gate: `node scripts/check-i18n-keys.js` → zero missing; `fallbackLng` never silently serving en keys in ar.
 - E2E (Playwright): full key journeys in EN and AR (login → dashboard → one app workflow → language switch mid-session → persistence across reload → logout/login).
 - Deliverable: `TASK-RESULTS-17-I18N-DUAL-LANG.md` with evidence (gates, key parity, E2E runs, RTL audit checklist).
+
+# ─────────────────────────────────────────────────────────────────────
+# Phase 28 — Inventory Coverage (GHG declared-universe completeness)
+# Spec: ADR-0020 (.ai-toolkit/decisions/0020-inventory-coverage.md)
+# ─────────────────────────────────────────────────────────────────────
+
+## Phase 28-A — Inventory Coverage backend (backend-worker)
+
+**Date:** 2026-08-27
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Depends on:** nothing (greenfield — grep confirms no InventorySource/CoverageGoal exists yet)
+
+**Files to Read First:**
+- `.ai-toolkit/decisions/0020-inventory-coverage.md` (authoritative design)
+- `backend/emissions/models.py` (end of file — GHG Phase 2 model patterns)
+- `backend/emissions/services.py` (TargetService at ~1398 — static-method service precedent)
+- `backend/emissions/serializers.py` (SBTiTargetSerializer ~340 — read-only display field pattern)
+- `backend/emissions/views.py` (OrganizationalBoundaryViewSet ~1369 — ReadAnyWriteAdmin + required_write_capability pattern)
+- `backend/emissions/urls.py` (router registration pattern)
+- `backend/accounts/capabilities.py` (Capability dataclass, ALL_CAPABILITIES ~555, IMPLIES ~640, GROUP_CAPABILITIES ~721)
+- `backend/emissions/admin.py` (GHG Phase 2 admin registrations at end)
+- `backend/emissions/tests/test_targets.py` (test patterns)
+
+**Files to Change:**
+1. `backend/emissions/models.py` — append 4 models
+2. `backend/emissions/services.py` — append `InventoryCoverageService`
+3. `backend/emissions/serializers.py` — append 4 serializers
+4. `backend/emissions/views.py` — append 4 viewsets + 1 coverage APIView
+5. `backend/emissions/urls.py` — register 4 routers + coverage path
+6. `backend/accounts/capabilities.py` — add `CARBON_MANAGE_INVENTORY_COVERAGE`
+7. `backend/emissions/admin.py` — register 4 models
+8. `backend/emissions/tests/test_inventory_coverage.py` — NEW tests
+
+**Context:** The platform measures emissions but never records *what it is accountable for measuring* vs *what it measured*. This adds the GHG Protocol "declared universe" layer: `InventorySource` (period-invariant binding keyed by org_unit×scope×scope3_category×source_name), `InventorySourceStatus` (per-period through-model carrying status declared/covered/excluded + PCAF data_quality_tier 1–5 + period-scoped M2M `linked_tables`), `CoverageGoal` (target % + min_quality_tier + completeness_definition absolute|materiality_bounded), `CoverageAction` (remediation work items), and `InventoryCoverageService.compute_coverage()` returning 5 outputs.
+
+**Implementation:**
+
+### 1. Models — append to `backend/emissions/models.py`
+
+```python
+# ── Inventory Coverage (ADR-0020) ───────────────────────────────────
+
+class InventorySource(models.Model):
+    """Declared-universe binding: an emission source the org is accountable for measuring.
+
+    Period-invariant fact keyed by (org_unit, scope, scope3_category, source_name).
+    NOT a DataTable extension — one physical table can be both scope 1 and scope 3
+    cat 3, so scope semantics live here, not on the table.
+    """
+    SCOPE_CHOICES = [(1, 'Scope 1'), (2, 'Scope 2'), (3, 'Scope 3')]
+
+    org_unit = models.ForeignKey(
+        'mdm.OrgUnit', on_delete=models.CASCADE, related_name='inventory_sources'
+    )
+    scope = models.PositiveSmallIntegerField(choices=SCOPE_CHOICES)
+    scope3_category = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="Scope 3 category 1-15; null for scope 1/2"
+    )
+    source_name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='')
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='inventory_sources_created'
+    )
+
+    class Meta:
+        ordering = ['scope', 'scope3_category', 'source_name']
+        verbose_name = "Inventory Source"
+        verbose_name_plural = "Inventory Sources"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['org_unit', 'scope', 'scope3_category', 'source_name'],
+                name='uniq_inventory_source_binding',
+            ),
+        ]
+        indexes = [models.Index(fields=['org_unit', 'scope', 'is_active'])]
+
+    def __str__(self):
+        label = f"Scope {self.scope}"
+        if self.scope == 3 and self.scope3_category:
+            label += f" — Cat {self.scope3_category}"
+        return f"{self.source_name} ({label})"
+
+
+class InventorySourceStatus(models.Model):
+    """Per-period status of a source — slowly-changing dimension (ADR-0020).
+
+    Carries PCAF data quality tier + exclusion reason + period-scoped linked_tables.
+    The M2M lives HERE (not on InventorySource) so a table linked in 2024 no longer
+    reads as 'covered' in 2026.
+    """
+    STATUS_CHOICES = [
+        ('declared', 'Declared'),
+        ('covered', 'Covered'),
+        ('excluded', 'Excluded'),
+    ]
+    TIER_CHOICES = [
+        (1, 'Tier 1 — Audited'),
+        (2, 'Tier 2 — Verified'),
+        (3, 'Tier 3 — Calculated'),
+        (4, 'Tier 4 — Estimated'),
+        (5, 'Tier 5 — Proxy'),
+    ]
+    EXCLUSION_REASON_CHOICES = [
+        ('not_material', 'Not Material'),
+        ('insufficient_data', 'Insufficient Data'),
+        ('out_of_boundary', 'Outside Operational Boundary'),
+        ('other', 'Other'),
+    ]
+
+    source = models.ForeignKey(
+        InventorySource, on_delete=models.CASCADE, related_name='statuses'
+    )
+    reporting_period = models.ForeignKey(
+        ReportingPeriod, on_delete=models.CASCADE, related_name='inventory_source_statuses'
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='declared')
+    data_quality_tier = models.PositiveSmallIntegerField(
+        choices=TIER_CHOICES, null=True, blank=True,
+        help_text="PCAF data quality score 1-5 (1=best)"
+    )
+    exclusion_reason = models.CharField(
+        max_length=30, choices=EXCLUSION_REASON_CHOICES, null=True, blank=True
+    )
+    linked_tables = models.ManyToManyField(
+        'dataschema.DataTable', blank=True, related_name='inventory_source_statuses'
+    )
+    notes = models.TextField(blank=True, default='')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['reporting_period', 'source__scope', 'source__scope3_category']
+        verbose_name = "Inventory Source Status"
+        verbose_name_plural = "Inventory Source Statuses"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['source', 'reporting_period'],
+                name='uniq_source_period_status',
+            ),
+        ]
+        indexes = [models.Index(fields=['reporting_period', 'status'])]
+
+    def __str__(self):
+        return f"{self.source} — {self.get_status_display()} ({self.reporting_period})"
+
+
+class CoverageGoal(models.Model):
+    """Coverage target: org_unit × scope × target % × quality tier × completeness def."""
+    SCOPE_CHOICES = [
+        ('1', 'Scope 1'), ('2', 'Scope 2'), ('3', 'Scope 3'),
+        ('1+2', 'Scope 1+2'), ('1+2+3', 'Scope 1+2+3'),
+    ]
+    COMPLETENESS_CHOICES = [
+        ('absolute', 'Absolute'),
+        ('materiality_bounded', 'Materiality-Bounded'),
+    ]
+    STATUS_CHOICES = [('draft', 'Draft'), ('active', 'Active'), ('archived', 'Archived')]
+
+    org_unit = models.ForeignKey(
+        'mdm.OrgUnit', on_delete=models.CASCADE, related_name='coverage_goals'
+    )
+    name = models.CharField(max_length=200)
+    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES)
+    target_coverage_pct = models.DecimalField(max_digits=5, decimal_places=2)
+    min_quality_tier = models.PositiveSmallIntegerField(
+        choices=InventorySourceStatus.TIER_CHOICES, null=True, blank=True,
+        help_text="Minimum PCAF tier for a source to count as 'covered'"
+    )
+    completeness_definition = models.CharField(
+        max_length=30, choices=COMPLETENESS_CHOICES, default='materiality_bounded'
+    )
+    target_year = models.PositiveIntegerField()
+    sbti_target = models.ForeignKey(
+        SBTiTarget, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_goals'
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_goals_created'
+    )
+
+    class Meta:
+        ordering = ['-target_year', 'scope']
+        verbose_name = "Coverage Goal"
+        verbose_name_plural = "Coverage Goals"
+        indexes = [models.Index(fields=['org_unit', 'scope', 'status'])]
+
+    def __str__(self):
+        return f"{self.name} — {self.scope} @ {self.target_coverage_pct}%"
+
+
+class CoverageAction(models.Model):
+    """Remediation work item for closing a coverage gap or improving quality."""
+    ACTION_TYPE_CHOICES = [
+        ('collect_data', 'Collect Data'),
+        ('improve_quality', 'Improve Data Quality'),
+        ('obtain_verification', 'Obtain Verification'),
+        ('formalize_exclusion', 'Formalize Exclusion'),
+    ]
+    STATUS_CHOICES = [('open', 'Open'), ('in_progress', 'In Progress'), ('done', 'Done'), ('blocked', 'Blocked')]
+
+    source = models.ForeignKey(
+        InventorySource, on_delete=models.CASCADE, related_name='actions'
+    )
+    action_type = models.CharField(max_length=30, choices=ACTION_TYPE_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
+    due_date = models.DateField(null=True, blank=True)
+    owner = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_actions'
+    )
+    notes = models.TextField(blank=True, default='')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_actions_created'
+    )
+
+    class Meta:
+        ordering = ['due_date', '-created_at']
+        verbose_name = "Coverage Action"
+        verbose_name_plural = "Coverage Actions"
+        indexes = [models.Index(fields=['source', 'status'])]
+
+    def __str__(self):
+        return f"{self.get_action_type_display()} — {self.source}"
+```
+
+### 2. Service — append `InventoryCoverageService` to `backend/emissions/services.py`
+
+```python
+class InventoryCoverageService:
+    """Computes declared-universe coverage for a reporting period (ADR-0020).
+
+    Returns FIVE outputs: total, covered, gaps, pct, avg_quality_tier,
+    material_exclusions, completeness_definition.
+    """
+
+    @staticmethod
+    def compute_coverage(reporting_period_id, org_unit_id=None):
+        from .models import InventorySource, InventorySourceStatus, CoverageGoal
+
+        sources = InventorySource.objects.filter(is_active=True).select_related('org_unit')
+        if org_unit_id:
+            sources = sources.filter(org_unit_id=org_unit_id)
+
+        total = sources.count()
+        statuses = {
+            s.source_id: s
+            for s in InventorySourceStatus.objects.filter(
+                reporting_period_id=reporting_period_id, source__in=sources
+            ).select_related('source')
+        }
+
+        covered = 0
+        tier_sum = 0
+        tier_count = 0
+        gaps = []
+        exclusions = []
+
+        for source in sources:
+            st = statuses.get(source.id)
+            if st is None:
+                gaps.append({
+                    'source_id': source.id, 'source_name': source.source_name,
+                    'scope': source.scope, 'scope3_category': source.scope3_category,
+                    'reason': 'not_assessed',
+                })
+            elif st.status == 'covered':
+                covered += 1
+                if st.data_quality_tier:
+                    tier_sum += st.data_quality_tier
+                    tier_count += 1
+            elif st.status == 'excluded':
+                exclusions.append({
+                    'source_id': source.id, 'source_name': source.source_name,
+                    'scope': source.scope, 'scope3_category': source.scope3_category,
+                    'reason': st.get_exclusion_reason_display() if st.exclusion_reason else None,
+                })
+            else:  # declared
+                gaps.append({
+                    'source_id': source.id, 'source_name': source.source_name,
+                    'scope': source.scope, 'scope3_category': source.scope3_category,
+                    'reason': 'declared',
+                })
+
+        goal = CoverageGoal.objects.filter(status='active')
+        if org_unit_id:
+            goal = goal.filter(org_unit_id=org_unit_id)
+        goal = goal.first()
+        completeness_definition = goal.completeness_definition if goal else 'absolute'
+
+        denominator = (total - len(exclusions)) if completeness_definition == 'materiality_bounded' else total
+        pct = round((covered / denominator) * 100, 2) if denominator else 0.0
+        avg_quality_tier = round(tier_sum / tier_count, 2) if tier_count else None
+
+        return {
+            'total': total,
+            'covered': covered,
+            'gaps': gaps,
+            'gaps_count': len(gaps),
+            'pct': pct,
+            'avg_quality_tier': avg_quality_tier,
+            'material_exclusions': exclusions,
+            'material_exclusions_count': len(exclusions),
+            'completeness_definition': completeness_definition,
+            'min_quality_tier': goal.min_quality_tier if goal else None,
+            'target_coverage_pct': float(goal.target_coverage_pct) if goal else None,
+        }
+```
+
+### 3. Serializers — append to `backend/emissions/serializers.py`
+
+Four ModelSerializers mirroring the existing pattern (read-only `*_name`/`*_label` display fields + `read_only_fields` for created_at/updated_at/created_by):
+
+- `InventorySourceSerializer` — add `org_unit_name = CharField(source='org_unit.name', read_only=True)`, `scope_display`, `scope3_category`.
+- `InventorySourceStatusSerializer` — add `source_name`, `reporting_period_name = CharField(source='reporting_period.name', read_only=True)`, `status_display`, `data_quality_tier_display`, `exclusion_reason_display`.
+- `CoverageGoalSerializer` — add `org_unit_name`, `scope_display`, `completeness_definition_display`, `status_display`.
+- `CoverageActionSerializer` — add `source_name`, `action_type_display`, `status_display`, `owner_username = CharField(source='owner.username', read_only=True)`.
+
+### 4. Views — append to `backend/emissions/views.py`
+
+- Import the 4 models + 4 serializers + `InventoryCoverageService`.
+- 4 ModelViewSets using **`ReadAnyWriteAdmin` + `required_write_capability = 'carbon:manage_inventory_coverage'`** (mirror OrganizationalBoundaryViewSet exactly). `get_queryset` scoped via `get_visible_org_units(user)` for the org-scoped ones (InventorySource, CoverageGoal). All 4: `http_method_names` default; add `@extend_schema(tags=['emissions'])` if present elsewhere.
+- `InventoryCoverageAPIView(APIView)` — `permission_classes = [IsAuthenticated]`, GET only. Accepts `reporting_period` (required int) + `org_unit` (optional int) query params, calls `InventoryCoverageService.compute_coverage()`, returns Response. 400 if `reporting_period` missing.
+
+### 5. URLs — `backend/emissions/urls.py`
+
+- Import the 4 viewsets + `InventoryCoverageAPIView`.
+- 4 new `DefaultRouter()` instances: `inventory-sources`, `inventory-source-statuses`, `coverage-goals`, `coverage-actions` (basenames `inventory-source`, `inventory-source-status`, `coverage-goal`, `coverage-action`).
+- `path('', include(...))` for each + `path('coverage/', InventoryCoverageAPIView.as_view(), name='inventory-coverage')`.
+
+### 6. Capability — `backend/accounts/capabilities.py`
+
+Add after `CARBON_MANAGE_REPORTING_PERIODS`:
+
+```python
+CARBON_MANAGE_INVENTORY_COVERAGE = Capability(
+    key="carbon:manage_inventory_coverage",
+    domain="carbon",
+    action="manage_inventory_coverage",
+    label="Manage Inventory Coverage",
+    description="Declare emission sources, track coverage, set coverage goals",
+    category="admin",
+)
+```
+
+Then:
+- `ALL_CAPABILITIES`: add `CARBON_MANAGE_INVENTORY_COVERAGE.key: CARBON_MANAGE_INVENTORY_COVERAGE,`
+- `IMPLIES`: add `CARBON_MANAGE_INVENTORY_COVERAGE.key: {CARBON_VIEW_CONSOLE.key},`
+- `GROUP_CAPABILITIES["carbon_lead"]`: add `CARBON_MANAGE_INVENTORY_COVERAGE.key,`
+
+### 7. Admin — `backend/emissions/admin.py`
+
+Register all 4 with `list_display`/`list_filter`/`search_fields`/`ordering` matching the GHG Phase 2 style.
+
+### 8. Migration + tests
+
+- Run `makemigrations emissions` (create migration), do NOT run migrate in dev (document as `./manage.sh migrate` step).
+- `backend/emissions/tests/test_inventory_coverage.py`: test model creation + unique constraint, `compute_coverage` for all status branches (not_assessed/covered/excluded/declared), materiality-bounded denominator, API GET `coverage/` 200 + 400 on missing period, viewset write-permission (non-admin 403 on POST).
+
+**DO NOT TOUCH:** `backend/core/*`, `backend/catalog/*`, `backend/mdm/*`, `backend/dataschema/*`, `backend/accounts/permissions.py`, `backend/accounts/rbac_utils.py` (import only), frontend files, `config/urls.py`, any existing model/serializer/view (append only).
+
+**Verification Gate (backend-worker MUST run):**
+1. `.ai-toolkit/scripts/verify.sh` (full backend pass)
+2. `pytest backend/emissions/tests/test_inventory_coverage.py -v` (one app at a time — DO NOT run full suite)
+3. `python backend/manage.py makemigrations --check --dry-run` (no missing migrations)
+4. `python backend/manage.py check`
+5. Report: files changed, migration name, test pass count, any gaps.
+
+---
+
+## Phase 28-B — Inventory Coverage frontend (frontend-worker)
+
+**Date:** 2026-08-27
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY (after 28-A backend green)
+**Depends on:** Phase 28-A (API contract above)
+
+**Files to Read First:**
+- `.ai-toolkit/decisions/0020-inventory-coverage.md`
+- `carbon-frontend/src/pages/carbon/SBTiTargetsPage.jsx` (full CRUD reference pattern — Table + Drawer + Dialog + Snackbar + chips, FONT theme token, PageContainer + PageHeader + useDocumentTitle + useAuth)
+- `carbon-frontend/src/capabilities.js` (add capability + ROUTE_CAPABILITIES + MANIFEST_ROLE_TO_CAPABILITY + MENU_ITEM_CAPABILITIES + CAPABILITY_INHERITANCE)
+- `carbon-frontend/src/config.js` (API_ROUTES)
+- `carbon-frontend/src/api/emissions-extended.js` (CRUD fn pattern)
+- `carbon-frontend/src/apps/carbon/manifest.js` (nav items under Configuration)
+- `carbon-frontend/src/App.jsx` (lazy import + route)
+- `carbon-frontend/src/shell/Shell.jsx` (`studioFromPath` — RULE_15)
+
+**Files to Change:**
+1. `carbon-frontend/src/capabilities.js`
+2. `carbon-frontend/src/config.js`
+3. `carbon-frontend/src/api/emissions-extended.js`
+4. `carbon-frontend/src/pages/carbon/InventoryCoveragePage.jsx` — NEW
+5. `carbon-frontend/src/apps/carbon/manifest.js`
+6. `carbon-frontend/src/App.jsx`
+
+**Context:** Backend now exposes `carbon/inventory-sources/`, `carbon/inventory-source-statuses/`, `carbon/coverage-goals/`, `carbon/coverage-actions/`, and read-only `carbon/coverage/?reporting_period=<id>&org_unit=<id>`. Frontend adds an admin "Inventory Coverage" page (SBTiTargetsPage pattern) with a coverage summary header (pct / covered / gaps / avg_quality_tier / completeness_definition / material_exclusions) + tabs or sections for Sources, Statuses, Goals, Actions.
+
+**Implementation:**
+1. `capabilities.js`: add `export const CARBON_MANAGE_INVENTORY_COVERAGE = 'carbon:manage_inventory_coverage';` + wire into `MANIFEST_ROLE_TO_CAPABILITY['carbon:admin']`, `ROUTE_CAPABILITIES['/carbon/admin/inventory-coverage']`, `MENU_ITEM_CAPABILITIES['Inventory Coverage']`, `CAPABILITY_INHERITANCE` (→ CARBON_VIEW_CONSOLE).
+2. `config.js` API_ROUTES: `emissionsInventorySources: "carbon/inventory-sources/"`, `emissionsInventorySourceStatuses: "carbon/inventory-source-statuses/"`, `emissionsCoverageGoals: "carbon/coverage-goals/"`, `emissionsCoverageActions: "carbon/coverage-actions/"`, `emissionsCoverage: "carbon/coverage/"`.
+3. `emissions-extended.js`: CRUD fns — `fetchInventorySources/createInventorySource/updateInventorySource/deleteInventorySource`, same for Statuses/Goals/Actions, + `fetchCoverage({ reporting_period, org_unit }, token)` (apiFetch only — RULE_10).
+4. `InventoryCoveragePage.jsx` (NEW): SBTiTargetsPage structure. Header cards for coverage summary; a reporting-period selector (from `fetchReportingPeriods`); sections for Sources (table + drawer CRUD), Goals (table + drawer CRUD), Actions (table + drawer CRUD), Statuses (table). ScopeChip/TierChip/StatusChip helpers via theme tokens. All colors via theme.palette (zero hardcoded hex), `FONT` token for typography, `PageContainer`/`PageHeader`/`useDocumentTitle`/`useAuth`.
+5. `manifest.js`: add `{ label: 'Inventory Coverage', path: '/carbon/admin/inventory-coverage', role: 'carbon:admin' }` under the Configuration group (after Base Years).
+6. `App.jsx`: lazy import `InventoryCoveragePage` + `<Route path="/carbon/admin/inventory-coverage" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_INVENTORY_COVERAGE}><InventoryCoveragePage /></AdminRoute>} />` (import the new capability from capabilities.js).
+
+**DO NOT TOUCH:** `src/api/api.js`, `src/auth/*`, `src/theme/*` (use tokens only), other pages, backend files.
+
+**Verification Gate (frontend-worker MUST run):**
+1. `npm run lint` (eslint clean)
+2. `npx vitest run` (existing tests green)
+3. `npm run build` (no errors)
+4. Report: files changed, route registered, capability wired, any i18n/lint gaps.
 - Update `.ai-toolkit/roles/frontend-worker.md` (or add a shared rule): every new user-facing string must use `t()` + both locale catalogs.
 
 Gate: ALL green — lint, vitest, build, verify.sh frontend, pytest smoke, E2E both languages, key parity.

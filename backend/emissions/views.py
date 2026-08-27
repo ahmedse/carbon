@@ -14,7 +14,7 @@ from django.utils import timezone
 from decimal import Decimal
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger, InventorySource, InventorySourceStatus, CoverageGoal, CoverageAction
 from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units, user_is_global_admin
 from accounts.constants import ADMINS_GROUP
 from core.feedback import AppFeedback
@@ -37,6 +37,10 @@ from .serializers import (
     OrganizationalBoundarySerializer,
     BaseYearSerializer,
     RecalculationTriggerSerializer,
+    InventorySourceSerializer,
+    InventorySourceStatusSerializer,
+    CoverageGoalSerializer,
+    CoverageActionSerializer,
 )
 from .services import (
     scope_calculations,
@@ -51,6 +55,7 @@ from .services import (
     ReportConfigService,
     VerificationService,
     PeriodLockService,
+    InventoryCoverageService,
 )
 from core.services import NotificationService
 
@@ -1488,3 +1493,121 @@ class RecalculationTriggerViewSet(viewsets.ModelViewSet):
             trigger.resolved_at = timezone.now()
         trigger.save()
         return Response(RecalculationTriggerSerializer(trigger).data)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Inventory Coverage Views (ADR-0020)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class InventorySourceViewSet(viewsets.ModelViewSet):
+    """ViewSet for declared-universe emission sources — org-scoped visibility."""
+    serializer_class = InventorySourceSerializer
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'carbon:manage_inventory_coverage'
+
+    def get_queryset(self):
+        visible_ids = {ou.id for ou in get_visible_org_units(self.request.user)}
+        if not visible_ids:
+            return InventorySource.objects.none()
+        return InventorySource.objects.filter(
+            org_unit_id__in=visible_ids
+        ).select_related('org_unit', 'created_by')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class InventorySourceStatusViewSet(viewsets.ModelViewSet):
+    """ViewSet for per-period source statuses (slowly-changing dimension)."""
+    serializer_class = InventorySourceStatusSerializer
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'carbon:manage_inventory_coverage'
+
+    def get_queryset(self):
+        qs = InventorySourceStatus.objects.select_related(
+            'source', 'reporting_period'
+        )
+        period_id = self.request.query_params.get('reporting_period')
+        if period_id:
+            qs = qs.filter(reporting_period_id=period_id)
+        source_id = self.request.query_params.get('source')
+        if source_id:
+            qs = qs.filter(source_id=source_id)
+        return qs
+
+
+class CoverageGoalViewSet(viewsets.ModelViewSet):
+    """ViewSet for coverage goals — org-scoped visibility."""
+    serializer_class = CoverageGoalSerializer
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'carbon:manage_inventory_coverage'
+
+    def get_queryset(self):
+        visible_ids = {ou.id for ou in get_visible_org_units(self.request.user)}
+        if not visible_ids:
+            return CoverageGoal.objects.none()
+        return CoverageGoal.objects.filter(
+            org_unit_id__in=visible_ids
+        ).select_related('org_unit', 'sbti_target', 'created_by')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class CoverageActionViewSet(viewsets.ModelViewSet):
+    """ViewSet for coverage remediation work items."""
+    serializer_class = CoverageActionSerializer
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'carbon:manage_inventory_coverage'
+
+    def get_queryset(self):
+        qs = CoverageAction.objects.select_related('source', 'owner', 'created_by')
+        source_id = self.request.query_params.get('source')
+        if source_id:
+            qs = qs.filter(source_id=source_id)
+        action_status = self.request.query_params.get('status')
+        if action_status:
+            qs = qs.filter(status=action_status)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class InventoryCoverageAPIView(APIView):
+    """Read-only coverage computation for a reporting period (ADR-0020).
+
+    GET /coverage/?reporting_period=<id>&org_unit=<id>
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        period_id = request.query_params.get('reporting_period')
+        if not period_id:
+            return Response(
+                {'detail': 'reporting_period query parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            period_id = int(period_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'reporting_period must be an integer'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        org_unit_id = request.query_params.get('org_unit')
+        if org_unit_id:
+            try:
+                org_unit_id = int(org_unit_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {'detail': 'org_unit must be an integer'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        data = InventoryCoverageService.compute_coverage(
+            period_id, org_unit_id=org_unit_id
+        )
+        return Response(data)

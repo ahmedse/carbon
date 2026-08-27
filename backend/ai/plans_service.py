@@ -827,6 +827,13 @@ class PlansService:
         "Platform. Before proposing a plan, you clarify the user's outcome "
         "with a short series of focused questions. Ask ONE concise question "
         "at a time. When you have enough information, respond with complete."
+        "\n\n"
+        "If the user wants a data-quality rule (validate/check/flag a field, "
+        "not-null, unique, allowed values, range, regex, format like an email "
+        "or phone number), you MUST find out exactly WHICH field and table the "
+        "rule applies to before completing — ask for the specific field/column "
+        "name (or DataField id) and table. Never complete discovery for a DQ "
+        "rule while the target field is still unknown."
     )
 
     def _discovery_prompt(self, brief: str, turns: list) -> list:
@@ -1126,6 +1133,17 @@ class PlansService:
             status=STEP_SKIPPED
         )
         return self.get_plan(user, plan_id)
+
+    def delete_plan(self, user, plan_id: str) -> dict:
+        """Delete a terminal-state plan (cancelled / failed / completed only)."""
+        run = self._get_owned_run(user, plan_id)
+        if run.status not in (STATUS_CANCELLED, STATUS_FAILED, STATUS_COMPLETED):
+            raise PlanNotRunnableError(
+                f"Only cancelled, failed, or completed plans can be deleted "
+                f"(status: {run.status})."
+            )
+        run.delete()
+        return {"deleted": True, "plan_id": plan_id}
 
     # ── W3-C: edit / pause / resume / fork ────────────────────────────────
 

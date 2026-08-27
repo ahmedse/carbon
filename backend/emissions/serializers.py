@@ -4,7 +4,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from django.db.models import Sum
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, VerificationRecord, SBTiTarget, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, VerificationRecord, SBTiTarget, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger, InventorySource, InventorySourceStatus, CoverageGoal, CoverageAction
 
 
 class ReportingPeriodSerializer(serializers.ModelSerializer):
@@ -468,3 +468,68 @@ class RecalculationTriggerSerializer(serializers.ModelSerializer):
             'resolved_at',
         ]
         read_only_fields = ['id', 'triggered_at', 'triggered_by_name', 'base_year_label']
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Inventory Coverage Serializers (ADR-0020)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class InventorySourceSerializer(serializers.ModelSerializer):
+    org_unit_name = serializers.CharField(source='org_unit.name', read_only=True)
+    scope_display = serializers.CharField(source='get_scope_display', read_only=True)
+
+    class Meta:
+        model = InventorySource
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'created_by',
+                            'org_unit_name', 'scope_display']
+
+
+class InventorySourceStatusSerializer(serializers.ModelSerializer):
+    source_name = serializers.CharField(source='source.source_name', read_only=True)
+    reporting_period_name = serializers.CharField(source='reporting_period.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    data_quality_tier_display = serializers.CharField(
+        source='get_data_quality_tier_display', read_only=True
+    )
+    exclusion_reason_display = serializers.CharField(
+        source='get_exclusion_reason_display', read_only=True
+    )
+
+    class Meta:
+        model = InventorySourceStatus
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'source_name',
+                            'reporting_period_name', 'status_display',
+                            'data_quality_tier_display', 'exclusion_reason_display']
+
+
+class CoverageGoalSerializer(serializers.ModelSerializer):
+    org_unit_name = serializers.CharField(source='org_unit.name', read_only=True)
+    scope_display = serializers.CharField(source='get_scope_display', read_only=True)
+    completeness_definition_display = serializers.CharField(
+        source='get_completeness_definition_display', read_only=True
+    )
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = CoverageGoal
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'created_by',
+                            'org_unit_name', 'scope_display',
+                            'completeness_definition_display', 'status_display']
+
+
+class CoverageActionSerializer(serializers.ModelSerializer):
+    source_name = serializers.CharField(source='source.source_name', read_only=True)
+    action_type_display = serializers.CharField(source='get_action_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    owner_username = serializers.CharField(source='owner.username', read_only=True)
+
+    class Meta:
+        model = CoverageAction
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'created_by',
+                            'source_name', 'action_type_display', 'status_display',
+                            'owner_username']

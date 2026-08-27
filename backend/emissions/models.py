@@ -1408,3 +1408,203 @@ class RecalculationTrigger(models.Model):
 
     def __str__(self):
         return f"Trigger #{self.id}: {self.get_trigger_type_display()} — {self.get_resolution_status_display()}"
+
+
+# ── Inventory Coverage (ADR-0020) ───────────────────────────────────
+
+class InventorySource(models.Model):
+    """Declared-universe binding: an emission source the org is accountable for measuring.
+
+    Period-invariant fact keyed by (org_unit, scope, scope3_category, source_name).
+    NOT a DataTable extension — one physical table can be both scope 1 and scope 3
+    cat 3, so scope semantics live here, not on the table.
+    """
+    SCOPE_CHOICES = [(1, 'Scope 1'), (2, 'Scope 2'), (3, 'Scope 3')]
+
+    org_unit = models.ForeignKey(
+        'mdm.OrgUnit', on_delete=models.CASCADE, related_name='inventory_sources'
+    )
+    scope = models.PositiveSmallIntegerField(choices=SCOPE_CHOICES)
+    scope3_category = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="Scope 3 category 1-15; null for scope 1/2"
+    )
+    source_name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='')
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='inventory_sources_created'
+    )
+
+    class Meta:
+        ordering = ['scope', 'scope3_category', 'source_name']
+        verbose_name = "Inventory Source"
+        verbose_name_plural = "Inventory Sources"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['org_unit', 'scope', 'scope3_category', 'source_name'],
+                name='uniq_inventory_source_binding',
+            ),
+        ]
+        indexes = [models.Index(fields=['org_unit', 'scope', 'is_active'])]
+
+    def __str__(self):
+        label = f"Scope {self.scope}"
+        if self.scope == 3 and self.scope3_category:
+            label += f" — Cat {self.scope3_category}"
+        return f"{self.source_name} ({label})"
+
+
+class InventorySourceStatus(models.Model):
+    """Per-period status of a source — slowly-changing dimension (ADR-0020).
+
+    Carries PCAF data quality tier + exclusion reason + period-scoped linked_tables.
+    The M2M lives HERE (not on InventorySource) so a table linked in 2024 no longer
+    reads as 'covered' in 2026.
+    """
+    STATUS_CHOICES = [
+        ('declared', 'Declared'),
+        ('covered', 'Covered'),
+        ('excluded', 'Excluded'),
+    ]
+    TIER_CHOICES = [
+        (1, 'Tier 1 — Audited'),
+        (2, 'Tier 2 — Verified'),
+        (3, 'Tier 3 — Calculated'),
+        (4, 'Tier 4 — Estimated'),
+        (5, 'Tier 5 — Proxy'),
+    ]
+    EXCLUSION_REASON_CHOICES = [
+        ('not_material', 'Not Material'),
+        ('insufficient_data', 'Insufficient Data'),
+        ('out_of_boundary', 'Outside Operational Boundary'),
+        ('other', 'Other'),
+    ]
+
+    source = models.ForeignKey(
+        InventorySource, on_delete=models.CASCADE, related_name='statuses'
+    )
+    reporting_period = models.ForeignKey(
+        ReportingPeriod, on_delete=models.CASCADE, related_name='inventory_source_statuses'
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='declared')
+    data_quality_tier = models.PositiveSmallIntegerField(
+        choices=TIER_CHOICES, null=True, blank=True,
+        help_text="PCAF data quality score 1-5 (1=best)"
+    )
+    exclusion_reason = models.CharField(
+        max_length=30, choices=EXCLUSION_REASON_CHOICES, null=True, blank=True
+    )
+    linked_tables = models.ManyToManyField(
+        'dataschema.DataTable', blank=True, related_name='inventory_source_statuses'
+    )
+    notes = models.TextField(blank=True, default='')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['reporting_period', 'source__scope', 'source__scope3_category']
+        verbose_name = "Inventory Source Status"
+        verbose_name_plural = "Inventory Source Statuses"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['source', 'reporting_period'],
+                name='uniq_source_period_status',
+            ),
+        ]
+        indexes = [models.Index(fields=['reporting_period', 'status'])]
+
+    def __str__(self):
+        return f"{self.source} — {self.get_status_display()} ({self.reporting_period})"
+
+
+class CoverageGoal(models.Model):
+    """Coverage target: org_unit × scope × target % × quality tier × completeness def."""
+    SCOPE_CHOICES = [
+        ('1', 'Scope 1'), ('2', 'Scope 2'), ('3', 'Scope 3'),
+        ('1+2', 'Scope 1+2'), ('1+2+3', 'Scope 1+2+3'),
+    ]
+    COMPLETENESS_CHOICES = [
+        ('absolute', 'Absolute'),
+        ('materiality_bounded', 'Materiality-Bounded'),
+    ]
+    STATUS_CHOICES = [('draft', 'Draft'), ('active', 'Active'), ('archived', 'Archived')]
+
+    org_unit = models.ForeignKey(
+        'mdm.OrgUnit', on_delete=models.CASCADE, related_name='coverage_goals'
+    )
+    name = models.CharField(max_length=200)
+    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES)
+    target_coverage_pct = models.DecimalField(max_digits=5, decimal_places=2)
+    min_quality_tier = models.PositiveSmallIntegerField(
+        choices=InventorySourceStatus.TIER_CHOICES, null=True, blank=True,
+        help_text="Minimum PCAF tier for a source to count as 'covered'"
+    )
+    completeness_definition = models.CharField(
+        max_length=30, choices=COMPLETENESS_CHOICES, default='materiality_bounded'
+    )
+    target_year = models.PositiveIntegerField()
+    sbti_target = models.ForeignKey(
+        SBTiTarget, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_goals'
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_goals_created'
+    )
+
+    class Meta:
+        ordering = ['-target_year', 'scope']
+        verbose_name = "Coverage Goal"
+        verbose_name_plural = "Coverage Goals"
+        indexes = [models.Index(fields=['org_unit', 'scope', 'status'])]
+
+    def __str__(self):
+        return f"{self.name} — {self.scope} @ {self.target_coverage_pct}%"
+
+
+class CoverageAction(models.Model):
+    """Remediation work item for closing a coverage gap or improving quality."""
+    ACTION_TYPE_CHOICES = [
+        ('collect_data', 'Collect Data'),
+        ('improve_quality', 'Improve Data Quality'),
+        ('obtain_verification', 'Obtain Verification'),
+        ('formalize_exclusion', 'Formalize Exclusion'),
+    ]
+    STATUS_CHOICES = [('open', 'Open'), ('in_progress', 'In Progress'), ('done', 'Done'), ('blocked', 'Blocked')]
+
+    source = models.ForeignKey(
+        InventorySource, on_delete=models.CASCADE, related_name='actions'
+    )
+    action_type = models.CharField(max_length=30, choices=ACTION_TYPE_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
+    due_date = models.DateField(null=True, blank=True)
+    owner = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_actions'
+    )
+    notes = models.TextField(blank=True, default='')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_actions_created'
+    )
+
+    class Meta:
+        ordering = ['due_date', '-created_at']
+        verbose_name = "Coverage Action"
+        verbose_name_plural = "Coverage Actions"
+        indexes = [models.Index(fields=['source', 'status'])]
+
+    def __str__(self):
+        return f"{self.get_action_type_display()} — {self.source}"

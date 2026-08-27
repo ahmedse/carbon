@@ -198,8 +198,6 @@
   "devBanner": {
     "label": "Early preview",
     "message": "Data Trust Platform, Pulse AI, and Carbon Footprint are under active development. Share feedback to help shape what we build next.",
-    "cta": "Share feedback",
-    "dismiss": "Dismiss",
-    "ariaLive": "Platform development notice"
+    "cta": "Share feedback"
   }
 }

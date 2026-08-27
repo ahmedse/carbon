@@ -226,6 +226,21 @@ def registered_plugins() -> list[ToolPlugin]:
     return list(_PLUGINS)
 
 
+def is_confirmation_tool(tool_name: str) -> bool:
+    """True when a registered plugin gates its write behind user confirmation
+    (``requires_confirmation=True`` — RULE_21).
+
+    The execute/loop layers use this capability fact to distinguish a
+    genuinely-staged mutation (which MUST return ``requires_confirmation`` or
+    ``error``) from a read-only tool. A confirmation tool that returns
+    ``null``/empty output is a phantom success and must fail honestly.
+    """
+    for p in _PLUGINS:
+        if p.name == tool_name:
+            return bool(p.requires_confirmation)
+    return False
+
+
 def chat_tool_names() -> frozenset[str]:
     """Names of registered plugins exposed to the chat planner (``chat_visible``).
 

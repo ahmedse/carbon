@@ -94,13 +94,8 @@ const ROUTE_CONFIG = {
     icon: StorageIcon,
     parent: '/carbon/owner/portal',
   },
-  '/carbon/reporting/generate': {
-    label: 'Generate Report',
-    icon: AssessmentIcon,
-    parent: '/carbon/console',
-  },
-  '/carbon/reporting/saved': {
-    label: 'Saved Reports',
+  '/carbon/reporting': {
+    label: 'Reports',
     icon: AssessmentIcon,
     parent: '/carbon/console',
   },

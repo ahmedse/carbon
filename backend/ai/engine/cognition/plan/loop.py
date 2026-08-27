@@ -29,6 +29,19 @@ def _get_broadcast():
     return _broadcast_run
 
 
+def _tool_requires_confirmation(tool_name: str) -> bool:
+    """True when a registered plugin gates its write behind confirmation.
+
+    Lazy import avoids a circular dependency; a lookup failure is treated as
+    read-only (fail-open for the guard).
+    """
+    try:
+        from ai.engine.agent.plugins import is_confirmation_tool
+        return is_confirmation_tool(tool_name)
+    except Exception:  # noqa: BLE001 - guard must never raise into the run
+        return False
+
+
 # ── Dataclasses ────────────────────────────────────────────────────────────────
 
 def _phase_name(plan, phase_id: int) -> str:
@@ -773,6 +786,49 @@ class ReActLoop:
                 _tool_err = result.tool_output.get("error")
                 if _tool_err:
                     result.error = str(_tool_err)
+
+            # ── Fix 3: mutation-tool output validation ─────────────────────
+            # A confirmation-gated tool (create_dq_rule, learn_fact, …) MUST
+            # return either a ``requires_confirmation`` proposal or an
+            # ``error``. A null/empty/malformed output is a silent failure —
+            # mark the step failed instead of "completed" (phantom-success
+            # guard). Without this, a hallucinated create_dq_rule that staged
+            # nothing was persisted "completed" and the run read "completed".
+            if not result.error and not result.paused:
+                _mto = result.tool_output or {}
+                _mto_name = _mto.get("tool_name", "")
+                if _tool_requires_confirmation(_mto_name):
+                    _mraw = _mto.get("result", "")
+                    try:
+                        _mparsed = (
+                            json.loads(_mraw) if isinstance(_mraw, str) else _mraw
+                        )
+                    except (json.JSONDecodeError, TypeError):
+                        _mparsed = None
+                    _is_null = _mparsed is None or (
+                        isinstance(_mparsed, dict) and not _mparsed
+                    )
+                    _missing_keys = (
+                        isinstance(_mparsed, dict)
+                        and "requires_confirmation" not in _mparsed
+                        and "error" not in _mparsed
+                    )
+                    if _is_null:
+                        result.error = (
+                            f"{_mto_name} returned no output "
+                            f"(expected a confirmation response)"
+                        )
+                        result.critic_verdict = "veto"
+                        if "null_output" not in result.critic_flags:
+                            result.critic_flags.append("null_output")
+                    elif _missing_keys:
+                        result.error = (
+                            f"{_mto_name} returned neither a confirmation nor "
+                            f"an error — nothing was staged"
+                        )
+                        result.critic_verdict = "veto"
+                        if "missing_confirmation_response" not in result.critic_flags:
+                            result.critic_flags.append("missing_confirmation_response")
 
             # ── P1.3: Consent gate — pause if tool requires confirmation ──
             if result.tool_output:
