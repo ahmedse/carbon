@@ -190,3 +190,17 @@ class AuditMiddleware(MiddlewareMixin):
         if x_forwarded_for:
             return x_forwarded_for.split(',')[0].strip()
         return request.META.get('REMOTE_ADDR', '127.0.0.1')
+
+
+# ── API Versioning (EPH-5A / P1-7) ────────────────────────────────────────
+
+class ApiVersionMiddleware(MiddlewareMixin):
+    """Tag every response with the current API version header.
+
+    Clients can inspect ``API-Version`` to adapt to breaking changes without
+    parsing the URL or the response body.
+    """
+
+    def process_response(self, request, response):
+        response['API-Version'] = '1'
+        return response

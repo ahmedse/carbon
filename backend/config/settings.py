@@ -186,6 +186,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'core.middleware.RequestLoggingMiddleware',
     'core.middleware.AuditMiddleware',
+    'core.middleware.ApiVersionMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -297,8 +298,9 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    # 'EXCEPTION_HANDLER': 'catalog.exceptions.data_trust_exception_handler',  # Temporarily disabled to see full errors
-    'EXCEPTION_HANDLER': 'catalog.exceptions.data_trust_exception_handler',
+    # EPH-5A: structured handler wraps catalog's data_trust_exception_handler
+    # and adds a taxonomy error_code — see core/exception_handler.py.
+    'EXCEPTION_HANDLER': 'core.exception_handler.structured_exception_handler',
     'DEFAULT_THROTTLE_CLASSES': (
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
