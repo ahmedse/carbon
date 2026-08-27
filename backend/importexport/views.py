@@ -13,6 +13,7 @@ from .serializers import ExportProjectSerializer, ImportJobSerializer, ExportJob
 from .services import ImportService, ExportService
 from accounts.permissions import ReadAnyWriteAdmin, AdminOrSuperuserOnly
 from core.feedback import AppFeedback
+from core.throttling import HeavyRateThrottle
 from catalog.audit_utils import emit_governance_event
 
 
@@ -26,6 +27,7 @@ class ExportProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ExportProjectSerializer
     permission_classes = [AdminOrSuperuserOnly]
     required_capability = 'importexport:manage'
+    throttle_classes = [HeavyRateThrottle]
 
     @action(detail=True, methods=['post'])
     def run(self, request, pk=None):
@@ -75,6 +77,7 @@ class ImportJobViewSet(viewsets.ModelViewSet):
     serializer_class = ImportJobSerializer
     permission_classes = [AdminOrSuperuserOnly]
     required_capability = 'importexport:manage'
+    throttle_classes = [HeavyRateThrottle]
     parser_classes = (MultiPartParser, FormParser)
 
     def get_permissions(self):

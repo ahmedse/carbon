@@ -301,13 +301,20 @@ REST_FRAMEWORK = {
     # EPH-5A: structured handler wraps catalog's data_trust_exception_handler
     # and adds a taxonomy error_code — see core/exception_handler.py.
     'EXCEPTION_HANDLER': 'core.exception_handler.structured_exception_handler',
+    # EPH-5B: per-minute complements + per-endpoint scoped throttles (core/throttling.py)
     'DEFAULT_THROTTLE_CLASSES': (
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
+        'core.throttling.UserMinuteRateThrottle',
+        'core.throttling.AnonMinuteRateThrottle',
     ),
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',
         'user': '1000/hour',
+        'user_minute': '1000/min',
+        'anon_minute': '60/min',
+        'ai': '60/min',
+        'heavy': '10/min',
         # Development: allow rapid logins for E2E testing
         'login': '1000/minute' if IS_DEVELOPMENT else '5/minute',
     },

@@ -49,6 +49,7 @@ from ai.serializers import (
     UserProfileSerializer,
 )
 from accounts.capabilities import has_capability
+from core.throttling import AIRateThrottle
 
 import logging
 
@@ -63,6 +64,7 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AIRateThrottle]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
