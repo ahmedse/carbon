@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
-  Box, Button, TextField, Typography, Alert, Paper, CircularProgress,
+  Box, Button, TextField, Typography, Alert, Paper, CircularProgress, useTheme,
 } from "@mui/material";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -24,6 +24,7 @@ export default function ResetPasswordPage() {
   const { t } = useTranslation('auth');
   const { t: tShell } = useTranslation('shell');
   useDocumentTitle(t('reset.documentTitle'));
+  const theme = useTheme();
 
   const { uidb64, token } = useParams();
   const navigate = useNavigate();
@@ -133,7 +134,7 @@ export default function ResetPasswordPage() {
     return (
       <Box sx={{
         minHeight: "100vh", display: "flex", alignItems: "center",
-        justifyContent: "center", bgcolor: "#f8fafc", p: 2,
+        justifyContent: "center", bgcolor: theme.palette.grey[50], p: 2,
       }}>
         <Paper sx={{
           p: 4, borderRadius: 3, maxWidth: 380, width: "100%",
@@ -169,7 +170,7 @@ export default function ResetPasswordPage() {
   return (
     <Box sx={{
       minHeight: "100vh", display: "flex", alignItems: "center",
-      justifyContent: "center", bgcolor: "#f8fafc", p: 2,
+      justifyContent: "center", bgcolor: theme.palette.grey[50], p: 2,
     }}>
       <Paper sx={{
         p: 4, borderRadius: 3, maxWidth: 380, width: "100%",

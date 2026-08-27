@@ -14,6 +14,7 @@ import {
   Grid,
   Avatar,
   Chip,
+  useTheme,
 } from '@mui/material';
 import Co2Icon from '@mui/icons-material/Co2';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -23,6 +24,8 @@ import { useAuth } from '../auth/AuthContext';
 import { hasAppAccess } from '../authz';
 import { useEnabledApps } from '../hooks/useEnabledApps';
 import useDocumentTitle from '../hooks/useDocumentTitle';
+import PageContainer from '../components/layout/PageContainer';
+import { FONT } from '../theme/themeTokens';
 import { PLATFORM_TITLE, PLATFORM_TAGLINE } from '../config/branding';
 
 // Icon lookup — maps manifest icon names to MUI icon components.
@@ -35,6 +38,7 @@ const APP_ICONS = {
 
 function AppCard({ app }) {
   const navigate = useNavigate();
+  const theme = useTheme();
   const Icon = APP_ICONS[app.icon] || DashboardIcon;
 
   const handleClick = () => {
@@ -47,7 +51,7 @@ function AppCard({ app }) {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        borderTop: `4px solid ${app.color || '#2563eb'}`,
+        borderTop: `4px solid ${app.color || theme.palette.primary.main}`,
         transition: 'box-shadow 0.2s, transform 0.15s',
         '&:hover': {
           boxShadow: 6,
@@ -85,7 +89,7 @@ function AppCard({ app }) {
                 label={role.label}
                 size="small"
                 variant="outlined"
-                sx={{ fontSize: '0.6875rem', height: 20 }}
+                sx={{ ...FONT.bodySmall, height: 2.5 }}
               />
             ))}
             {(app.roles || []).length > 3 && (
@@ -93,7 +97,7 @@ function AppCard({ app }) {
                 label={`+${app.roles.length - 3}`}
                 size="small"
                 variant="outlined"
-                sx={{ fontSize: '0.6875rem', height: 20 }}
+                sx={{ ...FONT.bodySmall, height: 2.5 }}
               />
             )}
           </Box>
@@ -130,12 +134,10 @@ export default function PlatformHome() {
   });
 
   return (
-    <Box
+    <PageContainer
       sx={{
-        p: { xs: 2, sm: 3, md: 4 },
         maxWidth: 1100,
         mx: 'auto',
-        width: '100%',
       }}
     >
       {/* Platform header */}
@@ -163,6 +165,6 @@ export default function PlatformHome() {
       ) : (
         <NoAppsPlaceholder />
       )}
-    </Box>
+    </PageContainer>
   );
 }

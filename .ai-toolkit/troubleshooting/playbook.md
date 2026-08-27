@@ -464,3 +464,30 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: the intelligence layer must NEVER return an empty assistant message. Empty = silent failure = worse UX than an honest "I don't know". Every new witness or draft path must be guarded by the fallback handler.
 - Regression guard: `pytest ai/tests/test_gap1_fallback.py` (9 tests). Domain-agnostic assertions — no Carbon/DQ terms in the test file.
 - First seen: 2026-08-24.
+
+### PB-43 — DRF 400 "This field may not be null": frontend `|| null` vs model `blank=True` (not `null=True`)
+- Symptom: MDM org-unit edit (or any ModelSerializer PUT/PATCH) returns `400 {"code":["This field may not be null."]}` when the user clears an optional field. Reproduced on the MDM page changing an org unit's parent with empty Code/Description.
+- Layer: backend (contract) + frontend (payload)
+- Root cause: the frontend serializes empty optional fields as `null` (`value.trim() || null`), but the model field is `blank=True` **without** `null=True` — Django/DRF accepts `""` but rejects JSON `null`. Also `org_type` with `null` hits the same wall.
+- Fix: `OrgUnitSerializer.to_internal_value()` normalizes `None` → `''` for `code`/`description` and `None`/`''` → `'other'` for `org_type`, guarded by `isinstance(data, dict)` (multipart `QueryDict` must NOT be run through `dict()` — values become lists).
+- Best practice note: pick ONE contract. Either (a) make model fields `null=True, blank=True` and let DRF store NULL, or (b) standardize the frontend to send `''` for empty optionals. Normalizing in the serializer is a shim that hides the contract drift; fix at the source when touching these models.
+- Regression guard: `pytest mdm/tests/test_org_units.py::test_update_org_unit_null_optional_fields_ok` + `::test_update_org_unit_null_org_type_uses_default`.
+- First seen: 2026-08-27.
+
+### PB-44 — Backend won't start: `OpenApiParameter.__init__() got multiple values for argument 'type'` (drf_yasg→drf-spectacular migration)
+- Symptom: `./manage.sh start` fails; `logs/backend.log` shows `TypeError: OpenApiParameter.__init__() got multiple values for argument 'type'` at a `@extend_schema(parameters=[OpenApiParameter(...)])` site.
+- Layer: backend
+- Root cause: old drf_yasg-style call `OpenApiParameter('x', OpenApiParameter.QUERY, description=..., type=int)` passes `OpenApiParameter.QUERY` as the **second positional arg**, which drf-spectacular's signature `(name, type, location=QUERY, ...)` binds to `type`; then `type=int` keyword collides. (drf_yasg's old signature was `(name, in_, description, type, ...)`.)
+- Fix: drop the stray positional — `OpenApiParameter('x', type=int, description=...)`. `QUERY` is already the default location. Fixed 5 occurrences in `emissions/views.py`, `catalog/views.py`, `dq/views.py`, `mdm/views.py`.
+- Best practice note: when migrating decorators to drf-spectacular, convert ALL `OpenApiParameter` calls in the same pass; a half-migrated file also crashes with `NameError: swagger_auto_schema is not defined`. The safe sweep: `grep -rn "swagger_auto_schema" backend/ --include=*.py` must return nothing, and every `OpenApiParameter(` call must match the new signature.
+- Regression guard: `python manage.py check` + backend start + `curl /carbon-api/health/` → 200. (Schema tests still hitting `/swagger/` are a separate migration artifact — see `test_swagger_docs.py`.)
+- First seen: 2026-08-27.
+
+### PB-45 — Django auto-reload kills the backend silently on a broken file (mid-edit state)
+- Symptom: backend dies with no visible error; `./manage.sh status` shows it stopped; `carbon.log` ends abruptly after "Watching for file changes with StatReloader" (or the last entries precede the crash by minutes). The actual traceback is in `logs/backend.log` (the manage.sh nohup target), not `backend/logs/carbon.log` (the app logger).
+- Layer: infra / dev-env
+- Root cause: `runserver`'s StatReloader restarts the process when ANY `.py` file changes. A file saved mid-refactor (e.g. imports updated but 6 decorators not yet converted) raises `NameError` at import time; the reloading child dies immediately and the parent exits — no app-level log line because the app never finished booting.
+- Fix: read `logs/backend.log` (nohup stdout/stderr) for the import traceback, fix the file, `./manage.sh start`.
+- Best practice note: never trust `carbon.log` alone for startup failures — always check the manage.sh-redirected `logs/backend.log` too. For large migrations, keep the file importable at every save (imports + usages change atomically) or use `python -m py_compile` before saving.
+- Regression guard: `./manage.sh start` → `curl http://127.0.0.1:8009/carbon-api/health/` → 200.
+- First seen: 2026-08-27.

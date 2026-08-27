@@ -17,6 +17,7 @@ import {
   Tooltip,
   Divider,
   Avatar,
+  useTheme,
 } from '@mui/material';
 import AutoGraphIcon from '@mui/icons-material/AutoGraph';
 import EmojiObjectsIcon from '@mui/icons-material/EmojiObjects';
@@ -31,9 +32,11 @@ import { useAuth } from '../../../auth/AuthContext';
 import { apiFetch } from '../../../api/api';
 import PageContainer from '../../../components/layout/PageContainer';
 import useDocumentTitle from '../../../hooks/useDocumentTitle';
+import { FONT } from '../../../theme/themeTokens';
 
 // Maturity score gauge visualization with enhanced visuals
 function MaturityGauge({ score, level, description }) {
+  const theme = useTheme();
   const getColor = () => {
     if (score < 20) return 'error';
     if (score < 40) return 'warning';
@@ -43,11 +46,11 @@ function MaturityGauge({ score, level, description }) {
   };
 
   const getIcon = () => {
-    if (score < 20) return <SchoolIcon sx={{ fontSize: 56 }} />;
-    if (score < 40) return <AutoGraphIcon sx={{ fontSize: 56 }} />;
-    if (score < 60) return <PsychologyIcon sx={{ fontSize: 56 }} />;
-    if (score < 80) return <EmojiObjectsIcon sx={{ fontSize: 56 }} />;
-    return <VerifiedIcon sx={{ fontSize: 56 }} />;
+    if (score < 20) return <SchoolIcon sx={{ fontSize: '3.5rem' }} />;
+    if (score < 40) return <AutoGraphIcon sx={{ fontSize: '3.5rem' }} />;
+    if (score < 60) return <PsychologyIcon sx={{ fontSize: '3.5rem' }} />;
+    if (score < 80) return <EmojiObjectsIcon sx={{ fontSize: '3.5rem' }} />;
+    return <VerifiedIcon sx={{ fontSize: '3.5rem' }} />;
   };
 
   const getBadgeText = () => {
@@ -65,11 +68,11 @@ function MaturityGauge({ score, level, description }) {
         p: 4, 
         textAlign: 'center',
         background: `linear-gradient(135deg, ${
-          score < 20 ? '#fff5f5 0%, #ffffff 100%' :
-          score < 40 ? '#fff9e6 0%, #ffffff 100%' :
-          score < 60 ? '#e3f2fd 0%, #ffffff 100%' :
-          score < 80 ? '#e8eaf6 0%, #ffffff 100%' :
-          '#e8f5e9 0%, #ffffff 100%'
+          score < 20 ? `${theme.palette.error.light} 0%, ${theme.palette.background.paper} 100%` :
+          score < 40 ? `${theme.palette.warning.light} 0%, ${theme.palette.background.paper} 100%` :
+          score < 60 ? `${theme.palette.info.light} 0%, ${theme.palette.background.paper} 100%` :
+          score < 80 ? `${theme.palette.primary.light} 0%, ${theme.palette.background.paper} 100%` :
+          `${theme.palette.success.light} 0%, ${theme.palette.background.paper} 100%`
         })`,
         borderRadius: 2,
       }}
@@ -109,7 +112,7 @@ function MaturityGauge({ score, level, description }) {
       <Chip 
         label={getBadgeText()} 
         color={getColor()} 
-        sx={{ mb: 1.5, fontWeight: 700, fontSize: '0.875rem' }}
+        sx={{ mb: 1.5, ...FONT.body, fontWeight: 700 }}
       />
       <Typography variant="h5" fontWeight={700} sx={{ mb: 0.5 }}>
         {level}
@@ -204,8 +207,8 @@ function MetricCard({ title, value, subtitle, icon, color = 'primary.main', tren
               label={trend}
               size="small"
               color="success"
-              icon={<TrendingUpIcon sx={{ fontSize: 14 }} />}
-              sx={{ alignSelf: 'flex-start', fontSize: '0.75rem' }}
+              icon={<TrendingUpIcon sx={{ fontSize: '0.875rem' }} />}
+              sx={{ alignSelf: 'flex-start', ...FONT.body }}
             />
           )}
         </Stack>
@@ -216,6 +219,7 @@ function MetricCard({ title, value, subtitle, icon, color = 'primary.main', tren
 
 // Learning velocity trend with enhanced visuals
 function VelocityIndicator({ velocity }) {
+  const theme = useTheme();
   const total = velocity.skills_acquired + velocity.entities_added + velocity.nodes_added;
   
   return (
@@ -223,7 +227,7 @@ function VelocityIndicator({ velocity }) {
       elevation={2}
       sx={{ 
         p: 3,
-        background: 'linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%)',
+        background: `linear-gradient(135deg, ${theme.palette.grey[50]} 0%, ${theme.palette.background.paper} 100%)`,
       }}
     >
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2.5 }}>
@@ -241,7 +245,7 @@ function VelocityIndicator({ velocity }) {
       </Stack>
       
       <Grid container spacing={3}>
-        <Grid item xs={12} sm={3}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Box sx={{ 
             textAlign: 'center', 
             p: 2, 
@@ -258,7 +262,7 @@ function VelocityIndicator({ velocity }) {
             </Typography>
           </Box>
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Box sx={{ 
             textAlign: 'center', 
             p: 2, 
@@ -275,7 +279,7 @@ function VelocityIndicator({ velocity }) {
             </Typography>
           </Box>
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Box sx={{ 
             textAlign: 'center', 
             p: 2, 
@@ -292,7 +296,7 @@ function VelocityIndicator({ velocity }) {
             </Typography>
           </Box>
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Box sx={{ 
             textAlign: 'center', 
             p: 2, 
@@ -479,7 +483,7 @@ export default function AIExpertisePanel() {
             Key Performance Indicators
           </Typography>
           <Grid container spacing={2.5}>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
                 title="Skills"
                 value={data.skills.total}
@@ -489,7 +493,7 @@ export default function AIExpertisePanel() {
                 trend={data.skills.total > 10 ? '+15% this month' : null}
               />
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
                 title="Knowledge Entities"
                 value={data.knowledge.entities}
@@ -498,7 +502,7 @@ export default function AIExpertisePanel() {
                 color="info.main"
               />
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
                 title="Success Rate"
                 value={`${data.performance.success_rate}%`}
@@ -508,7 +512,7 @@ export default function AIExpertisePanel() {
                 trend={data.performance.success_rate >= 80 ? 'Excellent' : null}
               />
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
                 title="Conversations"
                 value={data.complexity.total_conversations || data.complexity.total_plans}

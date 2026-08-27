@@ -2,7 +2,7 @@
 // Enhanced header with user menu (based on Gigacast pattern)
 
 import React, { useState } from "react";
-import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Tooltip, Box, Avatar, Divider, Popover, Tabs, Tab, useTheme, Badge } from "@mui/material";
+import { AppBar, Toolbar, Typography, IconButton, Menu, MenuItem, Tooltip, Box, Avatar, Divider, Popover, Tabs, Tab, useTheme, Badge, Chip } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
@@ -53,7 +53,7 @@ function MenuRow({ icon: _Icon, label, onClick, danger, disabled }) {
         transition: "background 120ms",
       }}
     >
-      <_Icon sx={{ fontSize: 13, flexShrink: 0 }} />
+      <_Icon sx={{ fontSize: '0.8125rem', flexShrink: 0 }} />
       <Typography sx={{ fontSize: "0.75rem" }}>{label}</Typography>
     </Box>
   );
@@ -108,12 +108,47 @@ export default function HeaderEnhanced() {
       }}
     >
       <Toolbar sx={{ minHeight: 56, px: 2 }}>
-        {/* Logo and title */}
+        {/* Logo and title — clickable, navigates home */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <img src={INSTANCE_LOGO} alt={t('ui.logo')} style={{ height: 32, borderRadius: 6 }} />
-          <Typography fontWeight={600} fontSize="1rem" color="text.primary">
-            {PLATFORM_TITLE}
-          </Typography>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => navigate('/')}
+            title={t('ui.goHome')}
+            aria-label={t('ui.goHome')}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1.5,
+              p: 0,
+              m: 0,
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              borderRadius: 1,
+              '&:hover': { opacity: 0.8 },
+              '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 2 },
+            }}
+          >
+            <img src={INSTANCE_LOGO} alt={t('ui.logo')} style={{ height: 32, borderRadius: 6 }} />
+            <Typography fontWeight={600} fontSize="1rem" color="text.primary">
+              {PLATFORM_TITLE}
+            </Typography>
+          </Box>
+          <Chip
+            label={t('devBanner.label')}
+            size="small"
+            variant="outlined"
+            color="info"
+            sx={{
+              height: 18,
+              fontSize: '0.5625rem',
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              '& .MuiChip-label': { px: 0.75 },
+            }}
+          />
         </Box>
 
         <Box sx={{ flexGrow: 1 }} />
@@ -158,13 +193,13 @@ export default function HeaderEnhanced() {
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
           <Tooltip title={mode === "light" ? t('ui.darkMode') : t('ui.lightMode')}>
             <IconButton size="small" onClick={toggle} sx={{ color: "text.secondary" }}>
-              {mode === "light" ? <DarkMode sx={{ fontSize: 20 }} /> : <LightMode sx={{ fontSize: 20 }} />}
+              {mode === "light" ? <DarkMode sx={{ fontSize: '1.25rem' }} /> : <LightMode sx={{ fontSize: '1.25rem' }} />}
             </IconButton>
           </Tooltip>
 
           <Tooltip title={t('nav.help')}>
             <IconButton size="small" sx={{ color: "text.secondary" }}>
-              <HelpOutline sx={{ fontSize: 20 }} />
+              <HelpOutline sx={{ fontSize: '1.25rem' }} />
             </IconButton>
           </Tooltip>
 
@@ -176,7 +211,7 @@ export default function HeaderEnhanced() {
               onClick={(e) => setNotifAnchor(e.currentTarget)}
             >
               <Badge badgeContent={unreadCount} color="error" max={99} showZero={false}>
-                <Notifications sx={{ fontSize: 20 }} />
+                <Notifications sx={{ fontSize: '1.25rem' }} />
               </Badge>
             </IconButton>
           </Tooltip>
@@ -219,7 +254,7 @@ export default function HeaderEnhanced() {
                 {availablePerspectives?.includes("admin") ? t('ui.administrator') : t('ui.operator')}
               </Typography>
             </Box>
-            <KeyboardArrowDown sx={{ color: "text.disabled", fontSize: 18 }} />
+            <KeyboardArrowDown sx={{ color: "text.disabled", fontSize: '1.125rem' }} />
           </Box>
         </Box>
 

@@ -153,7 +153,7 @@ export default function SkillsPanel() {
           </Typography>
           <Button
             size="small"
-            startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
+            startIcon={<RefreshIcon sx={{ fontSize: '0.9375rem' }} />}
             onClick={load}
             disabled={loading}
             sx={{ fontSize: '0.75rem' }}
@@ -177,7 +177,7 @@ export default function SkillsPanel() {
           <Paper variant="outlined" sx={{ p: 3 }}>
             <Stack spacing={1} alignItems="flex-start">
               <Stack direction="row" spacing={1} alignItems="center">
-                <CloudOffIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                <CloudOffIcon sx={{ fontSize: '1.125rem', color: 'text.secondary' }} />
                 <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8125rem' }}>
                   Skill catalog unavailable
                 </Typography>
@@ -185,7 +185,7 @@ export default function SkillsPanel() {
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
                 Could not reach the catalog service. Check the API and try again.
               </Typography>
-              <Button size="small" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />} onClick={load}>
+              <Button size="small" startIcon={<RefreshIcon sx={{ fontSize: '0.9375rem' }} />} onClick={load}>
                 Retry
               </Button>
             </Stack>
@@ -226,8 +226,8 @@ export default function SkillsPanel() {
                 </IconButton>
               </Stack>
               <Stack direction="row" spacing={1} alignItems="center">
-                <Chip size="small" label={selected.kind} sx={{ fontSize: '0.625rem', height: 18 }} />
-                <Chip size="small" label={selected.status} sx={{ fontSize: '0.625rem', height: 18 }} />
+                <Chip size="small" label={selected.kind} sx={{ fontSize: '0.625rem', height: 2.25 }} />
+                <Chip size="small" label={selected.status} sx={{ fontSize: '0.625rem', height: 2.25 }} />
                 {admission && (
                   <Chip
                     size="small"

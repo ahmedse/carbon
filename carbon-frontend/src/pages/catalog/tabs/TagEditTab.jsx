@@ -1,7 +1,7 @@
 // src/pages/catalog/tabs/TagEditTab.jsx
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, TextField, Button, CircularProgress, Alert } from '@mui/material';
+import { Box, TextField, Button, CircularProgress, Alert, useTheme } from '@mui/material';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
@@ -9,12 +9,13 @@ import { apiFetch } from '../../../api/api';
 
 export default function TagEditTab({ entityData }) {
   const { t } = useTranslation('catalog');
+  const theme = useTheme();
   const { token } = useAuth();
   const { notify } = useNotification();
   const [formData, setFormData] = useState({
     name: entityData?.name || '',
     description: entityData?.description || '',
-    color: entityData?.color || '#000000',
+    color: entityData?.color || theme.palette.primary.main,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);

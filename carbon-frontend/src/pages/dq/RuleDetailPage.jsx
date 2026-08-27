@@ -1,8 +1,8 @@
 // carbon-frontend/src/pages/dq/RuleDetailPage.jsx
 // Rule detail — Overview | Definition | Test | Lifecycle | Usage & Data Products | Stats | Execution Log
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Alert, Box, Chip, CircularProgress, Paper, Typography } from '@mui/material';
+import { Alert, Box, CircularProgress } from '@mui/material';
 import RuleIcon from '@mui/icons-material/Rule';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
@@ -11,7 +11,8 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
 import { getDQRule } from '../../api/dq';
-import { RULE_TYPE_LABELS, RULE_LEVEL_LABELS, DIMENSION_LABELS, SEVERITY_LABELS, SEVERITY_COLORS } from './constants';
+import { useNotes } from '../../notes/NotesContext';
+import { registerRuleInspectorTabs } from '../../inspector/tabs/ruleTabs';
 import OverviewTab from './tabs/OverviewTab';
 import DefinitionTab from './tabs/DefinitionTab';
 import TestTab from './tabs/TestTab';
@@ -51,6 +52,25 @@ export default function RuleDetailPage() {
     loadRule();
   }, [loadRule]);
 
+  // ── Contextual Inspector (global drawer) ────────────────────────────
+  const { setContexts } = useNotes();
+
+  useEffect(() => registerRuleInspectorTabs(), []);
+
+  const inspectorContext = useMemo(
+    () => [{
+      entityType: 'rule',
+      entityId: id,
+      label: rule?.name,
+      payload: { entityData: { rule } },
+    }],
+    [id, rule],
+  );
+  useEffect(() => {
+    setContexts(inspectorContext);
+    return () => setContexts(null);
+  }, [inspectorContext, setContexts]);
+
   const handleClose = () => navigate(-1);
 
   if (loading) {
@@ -68,56 +88,6 @@ export default function RuleDetailPage() {
       </Box>
     );
   }
-
-  const RuleSummaryMetrics = () => (
-    <Box sx={{ p: 2 }}>
-      <Box sx={{ display: 'grid', gap: 1.5 }}>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Version</Typography>
-          <Typography variant="h6">{rule.version ?? 1}</Typography>
-        </Paper>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Results</Typography>
-          <Typography variant="h6">{rule.results_count ?? 0}</Typography>
-        </Paper>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Dimension</Typography>
-          <Typography variant="body2" sx={{ mt: 0.5 }}>
-            {DIMENSION_LABELS[rule.dimension] || rule.dimension || '—'}
-          </Typography>
-        </Paper>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Severity</Typography>
-          <Box sx={{ mt: 0.5 }}>
-            <Chip
-              size="small"
-              color={SEVERITY_COLORS[rule.severity] || 'default'}
-              label={SEVERITY_LABELS[rule.severity] || rule.severity}
-            />
-          </Box>
-        </Paper>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Type</Typography>
-          <Typography variant="body2" sx={{ mt: 0.5 }}>
-            {RULE_TYPE_LABELS[rule.rule_type] || rule.rule_type}
-          </Typography>
-        </Paper>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Level</Typography>
-          <Typography variant="body2" sx={{ mt: 0.5 }}>
-            {RULE_LEVEL_LABELS[rule.rule_level] || rule.rule_level}
-          </Typography>
-        </Paper>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Created</Typography>
-          <Typography variant="body2" sx={{ mt: 0.5 }}>
-            {rule.created_at ? new Date(rule.created_at).toLocaleDateString() : '—'}
-            {rule.created_by_name ? ` by ${rule.created_by_name}` : ''}
-          </Typography>
-        </Paper>
-      </Box>
-    </Box>
-  );
 
   const headerComponent = (
     <DetailHeader
@@ -183,12 +153,10 @@ export default function RuleDetailPage() {
         { label: 'Stats', component: () => <StatsTab rule={rule} onAnalyzeAI={handleAnalyzeTrendWithAI} /> },
         { label: 'Execution Log', component: () => <ResultsTab rule={rule} onExplainAI={handleExplainFailuresWithAI} /> },
       ]}
-      metricsTabs={[{ label: 'Summary', component: RuleSummaryMetrics }]}
       loading={false}
       error={null}
       onClose={handleClose}
       storageKey="carbonRuleDetail"
-      entityData={{ rule }}
     />
   );
 }

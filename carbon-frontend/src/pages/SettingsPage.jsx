@@ -22,6 +22,9 @@ import KeyboardOutlinedIcon from "@mui/icons-material/KeyboardOutlined";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../api/api";
 import useDocumentTitle from "../hooks/useDocumentTitle";
+import PageContainer from "../components/layout/PageContainer";
+import { FONT } from "../theme/themeTokens";
+import { useTheme } from "@mui/material/styles";
 
 const SECTION_SX = {
   bgcolor: "background.paper",
@@ -47,8 +50,8 @@ function SectionHead({ icon, label }) {
   const IconComponent = icon;
   return (
     <Box sx={SECTION_HEAD_SX}>
-      <IconComponent sx={{ fontSize: 13, color: "text.disabled" }} />
-      <Typography sx={{ fontSize: "0.6875rem", fontWeight: 700, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+      <IconComponent sx={{ fontSize: '0.8125rem', color: "text.disabled" }} />
+      <Typography sx={{ ...FONT.sectionTitle, fontWeight: 700, letterSpacing: "0.07em" }}>
         {label}
       </Typography>
     </Box>
@@ -58,24 +61,27 @@ function SectionHead({ icon, label }) {
 function InfoRow({ label, value }) {
   return (
     <Box sx={{ display: "flex", gap: 2, py: 0.75, borderBottom: "1px solid", borderColor: "divider", "&:last-child": { borderBottom: "none" }, px: 2 }}>
-      <Typography sx={{ fontSize: "0.625rem", color: "text.disabled", fontWeight: 600, width: 120, flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.05em", pt: 0.125 }}>
+      <Typography sx={{ ...FONT.bodySmall, color: "text.disabled", fontWeight: 600, width: 120, flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.05em", pt: 0.125 }}>
         {label}
       </Typography>
-      <Typography sx={{ fontSize: "0.75rem", color: "text.primary" }}>{value || "—"}</Typography>
+      <Typography sx={{ ...FONT.body, color: "text.primary" }}>{value || "—"}</Typography>
     </Box>
   );
 }
 
 function RoleBadge({ role }) {
+  const theme = useTheme();
   // Handle both string and object formats
   const roleStr = typeof role === "string" ? role : role?.role || String(role);
   
-  const colors = {
-    admins_group: { bg: "rgba(220,38,38,0.1)", text: "#dc2626" },
-    dataowners_group: { bg: "rgba(37,99,235,0.1)", text: "#2563eb" },
-    auditors_group: { bg: "rgba(245,158,11,0.1)", text: "#d97706" },
+  const palette = {
+    admins_group: theme.palette.error,
+    dataowners_group: theme.palette.primary,
+    auditors_group: theme.palette.warning,
   };
-  const s = colors[roleStr] || { bg: "rgba(113,113,122,0.1)", text: "#71717a" };
+  const p = palette[roleStr];
+  const bg = p ? `${p.main}1A` : 'action.hover';
+  const text = p ? p.main : 'text.secondary';
   const label = String(roleStr).replace("_group", "").replace(/_/g, " ");
   
   return (
@@ -83,9 +89,9 @@ function RoleBadge({ role }) {
       label={label}
       size="small"
       sx={{
-        bgcolor: s.bg,
-        color: s.text,
-        fontSize: "0.5625rem",
+        bgcolor: bg,
+        color: text,
+        ...FONT.caption,
         fontWeight: 700,
         textTransform: "uppercase",
         letterSpacing: "0.05em",
@@ -139,7 +145,7 @@ function KbdKey({ k }) {
         border: "1px solid",
         borderColor: "divider",
         bgcolor: "background.default",
-        fontSize: "0.625rem",
+        ...FONT.bodySmall,
         fontWeight: 600,
         color: "text.secondary",
         fontFamily: "monospace",
@@ -282,13 +288,13 @@ export default function SettingsPage() {
   ];
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+    <PageContainer sx={{ height: '100%', overflow: 'hidden' }}>
       {/* Page header */}
       <Box sx={{ px: 2.5, pt: 1.75, pb: 1.5, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
-        <Typography sx={{ fontSize: "0.9375rem", fontWeight: 700, color: "text.primary" }}>
+        <Typography variant="h4">
           Account Settings
         </Typography>
-        <Typography sx={{ fontSize: "0.6875rem", color: "text.disabled", mt: 0.25 }}>
+        <Typography sx={{ ...FONT.body, color: "text.disabled", mt: 0.25 }}>
           {profile.username && `Signed in as ${profile.username}`}
         </Typography>
       </Box>
@@ -308,7 +314,7 @@ export default function SettingsPage() {
                 px: 2,
                 py: 1.125,
                 cursor: "pointer",
-                fontSize: "0.75rem",
+                ...FONT.body,
                 fontWeight: tab === id ? 600 : 400,
                 color: tab === id ? "primary.main" : "text.secondary",
                 borderBottom: tab === id ? "2px solid" : "2px solid transparent",
@@ -317,7 +323,7 @@ export default function SettingsPage() {
                 whiteSpace: "nowrap",
               }}
             >
-              <IconComponent sx={{ fontSize: 13 }} />
+              <IconComponent sx={{ fontSize: '0.8125rem' }} />
               {label}
             </Box>
           );
@@ -359,7 +365,7 @@ export default function SettingsPage() {
               <SectionHead icon={LockOutlinedIcon} label="Change Password" />
               <Box sx={{ px: 2, py: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
                 {pwError && (
-                  <Alert severity="error" sx={{ fontSize: "0.75rem", py: 0.25 }}>
+                  <Alert severity="error" sx={{ ...FONT.body, py: 0.25 }}>
                     {pwError}
                   </Alert>
                 )}
@@ -370,7 +376,7 @@ export default function SettingsPage() {
                   value={currentPw}
                   onChange={(e) => setCurrentPw(e.target.value)}
                   autoComplete="current-password"
-                  sx={{ "& .MuiInputBase-input": { fontSize: "0.8125rem" } }}
+                  sx={{ "& .MuiInputBase-input": { ...FONT.body } }}
                 />
                 <TextField
                   size="small"
@@ -380,7 +386,7 @@ export default function SettingsPage() {
                   onChange={(e) => setNewPw(e.target.value)}
                   autoComplete="new-password"
                   helperText="Minimum 8 characters"
-                  sx={{ "& .MuiInputBase-input": { fontSize: "0.8125rem" } }}
+                  sx={{ "& .MuiInputBase-input": { ...FONT.body } }}
                 />
                 <TextField
                   size="small"
@@ -395,7 +401,7 @@ export default function SettingsPage() {
                       ? "Passwords do not match"
                       : ""
                   }
-                  sx={{ "& .MuiInputBase-input": { fontSize: "0.8125rem" } }}
+                  sx={{ "& .MuiInputBase-input": { ...FONT.body } }}
                 />
                 {pwLoading && <LinearProgress />}
                 <Button
@@ -406,7 +412,7 @@ export default function SettingsPage() {
                   sx={{
                     alignSelf: "flex-start",
                     textTransform: "none",
-                    fontSize: "0.75rem",
+                    ...FONT.body,
                     py: 0.625,
                     px: 2,
                   }}
@@ -422,7 +428,7 @@ export default function SettingsPage() {
             <Box sx={SECTION_SX}>
               <SectionHead icon={SettingsOutlinedIcon} label="Preferences" />
               <Box sx={{ px: 2, py: 2 }}>
-                <Typography sx={{ fontSize: "0.8125rem", color: "text.secondary", mb: 1 }}>
+                <Typography sx={{ ...FONT.body, color: "text.secondary", mb: 1 }}>
                   Preference settings coming soon. Customize your dashboard and notification settings here.
                 </Typography>
               </Box>
@@ -436,7 +442,7 @@ export default function SettingsPage() {
                 <SectionHead icon={AutoAwesomeOutlinedIcon} label="AI Copilot Connection" />
                 <Box sx={{ px: 2, py: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
                   {pulseError && (
-                    <Alert severity="error" sx={{ fontSize: "0.75rem", py: 0.25 }}>
+                    <Alert severity="error" sx={{ ...FONT.body, py: 0.25 }}>
                       {pulseError}
                     </Alert>
                   )}
@@ -444,7 +450,7 @@ export default function SettingsPage() {
                   {pulseKeyInfo && pulseKeyInfo.connected ? (
                     <>
                       <Box>
-                        <Typography sx={{ fontSize: "0.6875rem", color: "text.disabled", fontWeight: 600, mb: 0.5, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        <Typography sx={{ ...FONT.sectionTitle, color: "text.disabled", mb: 0.5 }}>
                           Status
                         </Typography>
                         <Chip
@@ -452,15 +458,15 @@ export default function SettingsPage() {
                           color="success"
                           variant="outlined"
                           size="small"
-                          sx={{ fontSize: "0.75rem" }}
+                          sx={{ ...FONT.body }}
                         />
                       </Box>
 
                       <Box>
-                        <Typography sx={{ fontSize: "0.6875rem", color: "text.disabled", fontWeight: 600, mb: 0.5, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        <Typography sx={{ ...FONT.sectionTitle, color: "text.disabled", mb: 0.5 }}>
                           Key
                         </Typography>
-                        <Typography sx={{ fontSize: "0.75rem", fontFamily: "monospace", color: "text.primary", wordBreak: "break-all" }}>
+                        <Typography sx={{ ...FONT.body, fontFamily: "monospace", color: "text.primary", wordBreak: "break-all" }}>
                           {pulseKeyInfo.key_prefix}
                         </Typography>
                       </Box>
@@ -473,7 +479,7 @@ export default function SettingsPage() {
                         sx={{
                           alignSelf: "flex-start",
                           textTransform: "none",
-                          fontSize: "0.75rem",
+                          ...FONT.body,
                         }}
                       >
                         Disconnect
@@ -481,7 +487,7 @@ export default function SettingsPage() {
                     </>
                   ) : (
                     <>
-                      <Alert severity="info" sx={{ fontSize: "0.75rem", py: 0.5 }}>
+                      <Alert severity="info" sx={{ ...FONT.body, py: 0.5 }}>
                         Generate a Pulse AI key to enable AI-powered features in your Carbon workflows.
                       </Alert>
                       {pulseLoading && <LinearProgress />}
@@ -493,7 +499,7 @@ export default function SettingsPage() {
                         sx={{
                           alignSelf: "flex-start",
                           textTransform: "none",
-                          fontSize: "0.75rem",
+                          ...FONT.body,
                         }}
                       >
                         Generate Pulse Key
@@ -502,16 +508,16 @@ export default function SettingsPage() {
                   )}
 
                   {pulseNewKey && (
-                    <Alert severity="warning" sx={{ fontSize: "0.75rem", py: 0.5 }}>
-                      <Typography sx={{ fontSize: "0.6875rem", fontWeight: 600, mb: 0.5 }}>
+                    <Alert severity="warning" sx={{ ...FONT.body, py: 0.5 }}>
+                      <Typography sx={{ ...FONT.bodySmall, fontWeight: 600, mb: 0.5 }}>
                         Your Pulse AI Key (save this securely):
                       </Typography>
                       <Typography
                         sx={{
-                          fontSize: "0.7rem",
+                          ...FONT.bodySmall,
                           fontFamily: "monospace",
                           wordBreak: "break-all",
-                          bgcolor: "rgba(0,0,0,0.05)",
+                          bgcolor: "action.hover",
                           p: 1,
                           borderRadius: 0.5,
                         }}
@@ -532,7 +538,7 @@ export default function SettingsPage() {
               <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.25 }}>
                 {SHORTCUTS.map((shortcut, idx) => (
                   <Box key={idx} sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+                    <Typography sx={{ ...FONT.body, color: "text.secondary" }}>
                       {shortcut.desc}
                     </Typography>
                     <Box sx={{ display: "flex", gap: 0.375 }}>
@@ -556,6 +562,6 @@ export default function SettingsPage() {
         message={toast}
         anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
       />
-    </Box>
+    </PageContainer>
   );
 }

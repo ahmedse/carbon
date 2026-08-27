@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  Box, Button, TextField, Typography, Alert, Paper, CircularProgress,
+  Box, Button, TextField, Typography, Alert, Paper, CircularProgress, useTheme,
 } from "@mui/material";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -12,6 +12,7 @@ export default function ForgotPasswordPage() {
   const { t } = useTranslation('auth');
   const { t: tShell } = useTranslation('shell');
   useDocumentTitle(t('forgot.documentTitle'));
+  const theme = useTheme();
 
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
@@ -62,7 +63,7 @@ export default function ForgotPasswordPage() {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      bgcolor: "#f8fafc",
+      bgcolor: theme.palette.grey[50],
       p: 2,
     }}>
       <Paper sx={{

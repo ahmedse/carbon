@@ -48,6 +48,6 @@ describe('namespace-root index redirects (RULE_22)', () => {
     expect(redirects.get('/modules')).toBe('/carbon/my-data');
     expect(redirects.get('/scopes')).toBe('/carbon/console');
     expect(redirects.get('/dashboards')).toBe('/carbon/dashboard');
-    expect(redirects.get('/schema-admin')).toBe('/schema-admin/table-manager');
+    expect(redirects.get('/schema-admin')).toBe('/catalog/products');
   });
 });

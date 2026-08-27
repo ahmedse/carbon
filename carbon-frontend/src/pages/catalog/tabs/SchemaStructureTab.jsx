@@ -56,6 +56,9 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
         (user?.roles || []).some((role) => role?.active !== false && (role.role === 'admins_group' || role.role === 'admin'))
   );
 
+  // Parity with legacy Schema Manager: block schema edits once a table has data
+  const hasData = Number(table?.row_count ?? 0) > 0;
+
   const visibleFields = useMemo(() => sortFields(fields), [fields]);
 
   const handleOpenCreate = () => {
@@ -154,9 +157,13 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
                 <Button variant="outlined" onClick={onEditMetadata} disabled={working}>
                   {t('editMetadata')}
                 </Button>
-                <Button variant="contained" color="error" onClick={handleDeleteTable} disabled={working}>
-                  {t('deleteTable')}
-                </Button>
+                <Tooltip title={hasData ? t('tableHasData') : ''}>
+                  <span>
+                    <Button variant="contained" color="error" onClick={handleDeleteTable} disabled={working || hasData}>
+                      {t('deleteTable')}
+                    </Button>
+                  </span>
+                </Tooltip>
               </Stack>
             )}
           </Box>
@@ -165,9 +172,13 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="subtitle1" fontWeight={600}>{t('fields')}</Typography>
           {effectiveIsAdmin && (
-            <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate} disabled={working}>
-              {t('addField')}
-            </Button>
+            <Tooltip title={hasData ? t('tableHasData') : ''}>
+              <span>
+                <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate} disabled={working || hasData}>
+                  {t('addField')}
+                </Button>
+              </span>
+            </Tooltip>
           )}
         </Box>
 
@@ -203,29 +214,33 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
                     {effectiveIsAdmin && (
                       <TableCell>
                         <Stack direction="row" spacing={0.5}>
-                          <Tooltip title={t('moveUp')}>
+                          <Tooltip title={hasData ? t('tableHasData') : t('moveUp')}>
                             <span>
-                              <IconButton size="small" onClick={() => handleReorder(field, 'up')} disabled={working}>
+                              <IconButton size="small" onClick={() => handleReorder(field, 'up')} disabled={working || hasData}>
                                 <ArrowUpwardIcon fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
-                          <Tooltip title={t('moveDown')}>
+                          <Tooltip title={hasData ? t('tableHasData') : t('moveDown')}>
                             <span>
-                              <IconButton size="small" onClick={() => handleReorder(field, 'down')} disabled={working}>
+                              <IconButton size="small" onClick={() => handleReorder(field, 'down')} disabled={working || hasData}>
                                 <ArrowDownwardIcon fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
-                          <Tooltip title={t('edit')}>
-                            <IconButton size="small" onClick={() => handleOpenEdit(field)} disabled={working}>
-                              <EditIcon fontSize="small" />
-                            </IconButton>
+                          <Tooltip title={hasData ? t('tableHasData') : t('edit')}>
+                            <span>
+                              <IconButton size="small" onClick={() => handleOpenEdit(field)} disabled={working || hasData}>
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </span>
                           </Tooltip>
-                          <Tooltip title={t('delete')}>
-                            <IconButton size="small" color="error" onClick={() => handleDeleteField(field)} disabled={working}>
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
+                          <Tooltip title={hasData ? t('tableHasData') : t('delete')}>
+                            <span>
+                              <IconButton size="small" color="error" onClick={() => handleDeleteField(field)} disabled={working || hasData}>
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                         </Stack>
                       </TableCell>

@@ -126,10 +126,12 @@ export default function DataProductTablesTab({ entityData, additionalProps = {} 
                   <EditIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-              <Tooltip title={t('common:delete')}>
-                <IconButton size="small" onClick={() => setDeleteTarget(params.row)} sx={{ color: 'error.main' }}>
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
+              <Tooltip title={Number(params.row.row_count) > 0 ? t('tableHasData') : t('common:delete')}>
+                <span>
+                  <IconButton size="small" disabled={Number(params.row.row_count) > 0} onClick={() => setDeleteTarget(params.row)} sx={{ color: 'error.main' }}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </span>
               </Tooltip>
             </Box>
           ),

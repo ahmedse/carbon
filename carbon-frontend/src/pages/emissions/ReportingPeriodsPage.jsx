@@ -33,6 +33,7 @@ import {
   Typography,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import PageContainer from '../../components/layout/PageContainer';
 
 import {
   Add as AddIcon,
@@ -269,7 +270,7 @@ export default function ReportingPeriodsPage() {
   // ── Render ────────────────────────────────────────────────────────────
 
   return (
-    <Box sx={{ p: 3 }}>
+    <PageContainer>
       {error && (
         <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
           {error}
@@ -515,6 +516,6 @@ export default function ReportingPeriodsPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </PageContainer>
   );
 }

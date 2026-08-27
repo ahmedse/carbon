@@ -16,6 +16,8 @@ import enAi from './locales/en/ai.json';
 import arAi from './locales/ar/ai.json';
 import enCatalog from './locales/en/catalog.json';
 import arCatalog from './locales/ar/catalog.json';
+import enNotes from './locales/en/notes.json';
+import arNotes from './locales/ar/notes.json';
 
 const STORAGE_KEY = 'carbon.lang';
 const SUPPORTED_LANGS = ['en', 'ar'];
@@ -32,13 +34,13 @@ function getInitialLanguage() {
 
 i18n.use(initReactI18next).init({
   resources: {
-    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog },
-    ar: { common: arCommon, shell: arShell, auth: arAuth, errors: arErrors, ai: arAi, catalog: arCatalog },
+    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog, notes: enNotes },
+    ar: { common: arCommon, shell: arShell, auth: arAuth, errors: arErrors, ai: arAi, catalog: arCatalog, notes: arNotes },
   },
   lng: getInitialLanguage(),
   fallbackLng: 'en',
   supportedLngs: SUPPORTED_LANGS,
-  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog'],
+  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog', 'notes'],
   defaultNS: 'common',
   interpolation: {
     // React already escapes — no double escaping.

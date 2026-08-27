@@ -1,7 +1,7 @@
 // src/pages/admin/OrgUnitDetailPage.jsx
 // OrgUnit Detail: Full view of an organizational unit with hierarchy
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
@@ -13,8 +13,9 @@ import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
 import OrgUnitOverviewTab from './tabs/OrgUnitOverviewTab';
 import OrgUnitEditTab from './tabs/OrgUnitEditTab';
-import OrgUnitSummaryMetrics from './tabs/OrgUnitSummaryMetrics';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useNotes } from '../../notes/NotesContext';
+import { registerOrgUnitInspectorTabs } from '../../inspector/tabs/orgUnitTabs';
 
 export default function OrgUnitDetailPage() {
   useDocumentTitle("Org Unit Detail");
@@ -58,6 +59,25 @@ export default function OrgUnitDetailPage() {
     fetchData();
   }, [orgUnitId, user?.token, notify]);
 
+  // ── Contextual Inspector (global drawer) ────────────────────────────
+  const { setContexts } = useNotes();
+
+  useEffect(() => registerOrgUnitInspectorTabs(), []);
+
+  const inspectorContext = useMemo(
+    () => [{
+      entityType: 'org-unit',
+      entityId: orgUnitId,
+      label: orgUnit?.name,
+      payload: { entityData: { ...orgUnit, allOrgUnits } },
+    }],
+    [orgUnitId, orgUnit, allOrgUnits],
+  );
+  useEffect(() => {
+    setContexts(inspectorContext);
+    return () => setContexts(null);
+  }, [inspectorContext, setContexts]);
+
   const headerComponent = (
     <DetailHeader
       title={orgUnit?.name || 'Organization Unit'}
@@ -73,9 +93,6 @@ export default function OrgUnitDetailPage() {
       mainTabs={[
         { label: 'Overview', component: OrgUnitOverviewTab },
         { label: 'Edit', component: OrgUnitEditTab },
-      ]}
-      metricsTabs={[
-        { label: 'Summary', component: OrgUnitSummaryMetrics },
       ]}
       loading={loading}
       error={error}

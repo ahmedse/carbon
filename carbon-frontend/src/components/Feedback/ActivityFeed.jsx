@@ -78,7 +78,7 @@ function ActivityFeed({ items, maxItems, emptyMessage, loading }) {
                   justifyContent: 'center',
                   flexShrink: 0
                 }}>
-                  <ActionIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                  <ActionIcon sx={{ fontSize: '1rem', color: 'primary.main' }} />
                 </Box>
                 <Box sx={{ minWidth: 0, flex: 1 }}>
                   <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.primary', lineHeight: 1.4 }}>

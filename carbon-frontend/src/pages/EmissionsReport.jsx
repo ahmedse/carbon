@@ -274,7 +274,7 @@ export default function EmissionsReport({ projectId }) {
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-              <Nature sx={{ fontSize: 40 }} />
+              <Nature sx={{ fontSize: '2.5rem' }} />
               <Typography variant="h4" sx={{ fontWeight: 800 }}>
                 Carbon Emissions Report
               </Typography>
@@ -341,7 +341,7 @@ export default function EmissionsReport({ projectId }) {
       </Paper>
 
       {/* Executive Summary */}
-      <ReportSection title="Executive Summary" icon={<Description sx={{ color: "success.main", fontSize: 28 }} />}>
+      <ReportSection title="Executive Summary" icon={<Description sx={{ color: "success.main", fontSize: '1.75rem' }} />}>
         <Grid container spacing={4}>
           <Grid size={{ xs: 12, md: 6 }}>
             <Box sx={{ mb: 3 }}>
@@ -389,7 +389,7 @@ export default function EmissionsReport({ projectId }) {
       </ReportSection>
 
       {/* Scope Breakdown */}
-      <ReportSection title="Emissions by Scope" icon={<Factory sx={{ color: "primary.light", fontSize: 28 }} />}>
+      <ReportSection title="Emissions by Scope" icon={<Factory sx={{ color: "primary.light", fontSize: '1.75rem' }} />}>
         <Grid container spacing={3}>
           {report.scope_details?.map((scope) => (
             <Grid size={{ xs: 12, md: 4 }} key={scope.scope}>
@@ -546,7 +546,7 @@ export default function EmissionsReport({ projectId }) {
       </Accordion>
 
       {/* Methodology Note */}
-      <ReportSection title="Methodology" icon={<Description sx={{ color: "secondary.main", fontSize: 28 }} />}>
+      <ReportSection title="Methodology" icon={<Description sx={{ color: "secondary.main", fontSize: '1.75rem' }} />}>
         <Typography variant="body1" sx={{ color: "text.secondary", lineHeight: 1.8, mb: 2 }}>
           This emissions inventory was prepared in accordance with the Greenhouse Gas Protocol Corporate
           Standard developed by the World Resources Institute (WRI) and the World Business Council for

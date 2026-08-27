@@ -80,17 +80,17 @@ export default function DataLineageTab({ rowId: _rowId }) {
       {/* Summary */}
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <Paper sx={{ p: 2, flex: 1, minWidth: 180, textAlign: 'center' }}>
-          <AccountTreeIcon sx={{ color: 'primary.main', fontSize: 28, mb: 0.5 }} />
+          <AccountTreeIcon sx={{ color: 'primary.main', fontSize: '1.75rem', mb: 0.5 }} />
           <Typography variant="h6" fontWeight={700}>{totalRelations}</Typography>
           <Typography variant="caption" color="text.secondary">Lineage Relations</Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1, minWidth: 180, textAlign: 'center' }}>
-          <HistoryIcon sx={{ color: 'warning.main', fontSize: 28, mb: 0.5 }} />
+          <HistoryIcon sx={{ color: 'warning.main', fontSize: '1.75rem', mb: 0.5 }} />
           <Typography variant="h6" fontWeight={700}>{totalChanges}</Typography>
           <Typography variant="caption" color="text.secondary">Schema Changes</Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1, minWidth: 180, textAlign: 'center' }}>
-          <SwapHorizIcon sx={{ color: 'success.main', fontSize: 28, mb: 0.5 }} />
+          <SwapHorizIcon sx={{ color: 'success.main', fontSize: '1.75rem', mb: 0.5 }} />
           <Typography variant="h6" fontWeight={700}>{Object.keys(tableMap).length}</Typography>
           <Typography variant="caption" color="text.secondary">Tracked Tables</Typography>
         </Paper>

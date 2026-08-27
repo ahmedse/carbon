@@ -251,7 +251,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
           }}
         >
           <AccordionSummary
-            expandIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />}
+            expandIcon={<ExpandMoreIcon sx={{ fontSize: '1rem' }} />}
             sx={{ minHeight: 36, '& .MuiAccordionSummary-content': { my: 0.5 }, px: 2 }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>

@@ -22,7 +22,14 @@ import {
   LinearProgress,
   Button,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -53,6 +60,11 @@ import {
 } from "@mui/icons-material";
 import { fetchEmissionsDashboard, triggerCalculations } from "../api/emissions";
 import useDocumentTitle from "../hooks/useDocumentTitle";
+import { useEnabledApps } from "../hooks/useEnabledApps";
+import { useNotes } from "../notes/NotesContext";
+import PageContainer from "../components/layout/PageContainer";
+import { FONT, SPACING } from "../theme/themeTokens";
+import { chartPalette } from "../theme/carbonTheme";
 
 // Register Chart.js components
 ChartJS.register(
@@ -70,23 +82,13 @@ ChartJS.register(
 
 // ============ Styled Components ============
 
-// ── Compact Design System (aligned with carbonDesign.js) ────────────────────
-const SPACING = { sm: 1.5, md: 2, lg: 3 };
-const FONT = {
-  statValue: { fontSize: '1.5rem', fontWeight: 700, lineHeight: 1.2 },
-  statLabel: { fontSize: '0.6875rem', fontWeight: 500, letterSpacing: '0.02em', textTransform: 'uppercase' },
-  cardTitle: { fontSize: '0.875rem', fontWeight: 600 },
-  bodySmall: { fontSize: '0.75rem', lineHeight: 1.5 },
-  chip: { fontSize: '0.6875rem', fontWeight: 500 },
-};
-
 const GlassCard = ({ children, sx = {}, ...props }) => (
   <Card
     variant="outlined"
     sx={{
       borderRadius: 1.5,
       transition: "box-shadow 0.15s ease",
-      "&:hover": { boxShadow: "0 2px 12px rgba(0, 0, 0, 0.06)" },
+      "&:hover": { boxShadow: 2 },
       ...sx,
     }}
     {...props}
@@ -111,9 +113,9 @@ const StatCard = ({ title, value, unit, subtitle, icon, color, trend, trendValue
         {trend && (
           <Chip
             size="small"
-            icon={trend === "up" ? <TrendingUp sx={{ fontSize: 12 }} /> : <TrendingDown sx={{ fontSize: 12 }} />}
+            icon={trend === "up" ? <TrendingUp sx={{ fontSize: '0.75rem' }} /> : <TrendingDown sx={{ fontSize: '0.75rem' }} />}
             label={trendValue}
-            sx={{ ...FONT.chip, height: 20, bgcolor: trend === "up" ? "error.light" : "success.light", color: trend === "up" ? "error.dark" : "success.dark" }}
+            sx={{ ...FONT.chip, bgcolor: trend === "up" ? "error.light" : "success.light", color: trend === "up" ? "error.dark" : "success.dark" }}
           />
         )}
       </Box>
@@ -138,7 +140,7 @@ const StatCard = ({ title, value, unit, subtitle, icon, color, trend, trendValue
 const ScopeCard = ({ name, value, percentage, color }) => (
   <Box sx={{ flex: 1, minWidth: 180 }}>
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
-      <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color }} />
+      <Box sx={{ width: 1.25, height: 1.25, borderRadius: "50%", bgcolor: color }} />
       <Typography sx={{ ...FONT.cardTitle, color: "text.primary" }}>
         {name}
       </Typography>
@@ -170,6 +172,7 @@ const ScopeCard = ({ name, value, percentage, color }) => (
 
 export default function EmissionsDashboard({ projectId }) {
   useDocumentTitle("Emissions");
+  const theme = useTheme();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
@@ -177,6 +180,49 @@ export default function EmissionsDashboard({ projectId }) {
   const [recalculating, setRecalculating] = useState(false);
   
   const token = localStorage.getItem("access");
+
+  // ── Notes entity context ──────────────────────────────────────────────────
+  // Notes are entity-anchored: the Notes drawer only shows the composer when a
+  // page registers one or more entities via setContexts. This dashboard anchors
+  // notes to the reporting period it displays when one is present, else to the
+  // selected reporting year (the API returns reporting_period only when called
+  // with reporting_period_id; this page queries by year, so the period is usually
+  // null → fall back to "Year N", which matches the header the user sees).
+  // The Carbon Footprint domain app is attached as a SECOND anchor, so notes
+  // about the whole app surface here too — while each app's thread stays
+  // isolated (Option B: NoteAnchor, one note, many contexts).
+  const { setContexts } = useNotes();
+  const { apps: enabledApps } = useEnabledApps();
+  const carbonApp = useMemo(
+    () => enabledApps?.find((a) => a.app_id === "carbon") || null,
+    [enabledApps]
+  );
+  const notesEntity = useMemo(() => {
+    if (!data) return null;
+    const rp = data.reporting_period;
+    const primary = rp?.id
+      ? {
+          entityType: "reporting_period",
+          entityId: rp.id,
+          label: rp.name || `Year ${selectedYear}`,
+        }
+      : {
+          entityType: "reporting_year",
+          entityId: selectedYear,
+          label: `Year ${selectedYear}`,
+        };
+    const appAnchor = {
+      entityType: "app",
+      entityId: carbonApp?.id ?? 1,
+      label: carbonApp?.name || "Carbon Footprint",
+    };
+    return [primary, appAnchor];
+  }, [data, selectedYear, carbonApp]);
+
+  useEffect(() => {
+    setContexts(notesEntity);
+  }, [notesEntity, setContexts]);
+  useEffect(() => () => setContexts(null), [setContexts]);
 
   // Fetch dashboard data
   useEffect(() => {
@@ -218,12 +264,12 @@ export default function EmissionsDashboard({ projectId }) {
     }
   };
 
-  // Scope colors
+  // Scope colors — theme palette (same model as EmissionsReport)
   const scopeColors = useMemo(() => ({
-    1: "#10b981", // Green - Scope 1
-    2: "#3b82f6", // Blue - Scope 2
-    3: "#f59e0b", // Orange - Scope 3
-  }), []);
+    1: theme.palette.success.main,   // Green - Scope 1
+    2: theme.palette.primary.light,  // Blue - Scope 2
+    3: theme.palette.warning.main,   // Orange - Scope 3
+  }), [theme]);
 
   // Chart configurations
   const monthlyTrendChart = useMemo(() => {
@@ -275,13 +321,13 @@ export default function EmissionsDashboard({ projectId }) {
         {
           data: data.scope_breakdown.map((s) => s.co2e_tonnes),
           backgroundColor: data.scope_breakdown.map((s) => scopeColors[s.scope]),
-          borderColor: "#fff",
+          borderColor: theme.palette.background.paper,
           borderWidth: 3,
           hoverOffset: 8,
         },
       ],
     };
-  }, [data, scopeColors]);
+  }, [data, scopeColors, theme]);
 
   const categoryBarChart = useMemo(() => {
     if (!data?.category_breakdown) return null;
@@ -306,21 +352,21 @@ export default function EmissionsDashboard({ projectId }) {
           label: "Emissions (t CO₂e)",
           data: sortedCategories.map(([, value]) => value),
           backgroundColor: [
-            "#10b981",
-            "#3b82f6",
-            "#f59e0b",
-            "#8b5cf6",
-            "#ef4444",
-            "#06b6d4",
-            "#ec4899",
-            "#84cc16",
+            theme.palette.success.main,
+            theme.palette.primary.light,
+            theme.palette.warning.main,
+            theme.palette.secondary.light,
+            theme.palette.error.main,
+            theme.palette.info.main,
+            theme.palette.warning.light,
+            theme.palette.success.light,
           ],
           borderRadius: 8,
           maxBarThickness: 50,
         },
       ],
     };
-  }, [data]);
+  }, [data, theme]);
 
   const lineChartOptions = {
     responsive: true,
@@ -339,7 +385,7 @@ export default function EmissionsDashboard({ projectId }) {
         },
       },
       tooltip: {
-        backgroundColor: "#1f2937",
+        backgroundColor: theme.palette.grey[900],
         titleFont: { size: 13, weight: 600 },
         bodyFont: { size: 12 },
         padding: 12,
@@ -352,7 +398,7 @@ export default function EmissionsDashboard({ projectId }) {
     scales: {
       y: {
         beginAtZero: true,
-        grid: { color: "#f3f4f6" },
+        grid: { color: theme.palette.divider },
         ticks: {
           font: { size: 11 },
           callback: (value) => `${value} t`,
@@ -372,7 +418,7 @@ export default function EmissionsDashboard({ projectId }) {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: "#1f2937",
+        backgroundColor: theme.palette.grey[900],
         titleFont: { size: 13, weight: 600 },
         bodyFont: { size: 12 },
         padding: 12,
@@ -385,7 +431,7 @@ export default function EmissionsDashboard({ projectId }) {
     scales: {
       x: {
         beginAtZero: true,
-        grid: { color: "#f3f4f6" },
+        grid: { color: theme.palette.divider },
         ticks: {
           font: { size: 11 },
           callback: (value) => `${value} t`,
@@ -411,7 +457,7 @@ export default function EmissionsDashboard({ projectId }) {
         },
       },
       tooltip: {
-        backgroundColor: "#1f2937",
+        backgroundColor: theme.palette.grey[900],
         titleFont: { size: 13, weight: 600 },
         bodyFont: { size: 12 },
         padding: 12,
@@ -430,27 +476,31 @@ export default function EmissionsDashboard({ projectId }) {
   // Loading state
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 400 }}>
-        <CircularProgress size={48} sx={{ color: "success.main" }} />
-      </Box>
+      <PageContainer sx={{ alignItems: "center", justifyContent: "center" }}>
+        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 400 }}>
+          <CircularProgress size={48} sx={{ color: "success.main" }} />
+        </Box>
+      </PageContainer>
     );
   }
 
   // Error state
   if (error) {
     return (
-      <Alert severity="error" sx={{ m: 2 }}>
-        {error}
-      </Alert>
+      <PageContainer>
+        <Alert severity="error" sx={{ m: 2 }}>
+          {error}
+        </Alert>
+      </PageContainer>
     );
   }
 
   // No data state
   if (!data || data.calculation_count === 0) {
     return (
-      <Box sx={{ px: SPACING.lg, py: SPACING.md, height: '100%', overflow: 'auto' }}>
-        <Paper variant="outlined" sx={{ p: SPACING.lg * 2, textAlign: "center", borderRadius: 1.5 }}>
-          <CloudQueue sx={{ fontSize: 48, color: "text.disabled", mb: SPACING.md }} />
+      <PageContainer>
+        <Paper variant="outlined" sx={{ p: 2.5, textAlign: "center", borderRadius: 1.5 }}>
+          <CloudQueue sx={{ fontSize: '3rem', color: "text.disabled", mb: SPACING.md }} />
           <Typography sx={{ ...FONT.cardTitle, color: "text.secondary", mb: 0.5 }}>
             No Emissions Data Yet
           </Typography>
@@ -466,23 +516,16 @@ export default function EmissionsDashboard({ projectId }) {
             Calculate Emissions
           </Button>
         </Paper>
-      </Box>
+      </PageContainer>
     );
   }
 
   return (
-    <Box
-      sx={{
-        px: SPACING.lg,
-        py: SPACING.md,
-        height: '100%',
-        overflow: 'auto',
-      }}
-    >
+    <PageContainer sx={{ height: '100%', overflow: 'auto' }}>
       {/* Header */}
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: SPACING.lg }}>
         <Box>
-          <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: 'text.primary', mb: 0.25 }}>
+          <Typography variant="h2" sx={{ mb: 0.25 }}>
             Emissions Dashboard
           </Typography>
           <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>
@@ -544,8 +587,8 @@ export default function EmissionsDashboard({ projectId }) {
             value={data.total_co2e_tonnes}
             unit="t CO₂e"
             subtitle={`${data.calculation_count.toLocaleString()} data points`}
-            icon={<Nature sx={{ fontSize: 28 }} />}
-            color="#10b981"
+            icon={<Nature sx={{ fontSize: '1.75rem' }} />}
+            color={scopeColors[1]}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -554,8 +597,8 @@ export default function EmissionsDashboard({ projectId }) {
             value={data.data_quality_score}
             unit="%"
             subtitle="Based on completeness"
-            icon={<Speed sx={{ fontSize: 28 }} />}
-            color="#3b82f6"
+            icon={<Speed sx={{ fontSize: '1.75rem' }} />}
+            color={scopeColors[2]}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -568,15 +611,15 @@ export default function EmissionsDashboard({ projectId }) {
                 ? `${data.reporting_period.start_date} to ${data.reporting_period.end_date}`
                 : "Calendar Year"
             }
-            icon={<CalendarMonth sx={{ fontSize: 28 }} />}
-            color="#8b5cf6"
+            icon={<CalendarMonth sx={{ fontSize: '1.75rem' }} />}
+            color={chartPalette.purple}
           />
         </Grid>
       </Grid>
 
       {/* Scope Breakdown */}
       <GlassCard sx={{ mb: 4, p: 3 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700, color: "text.primary", mb: 3 }}>
+        <Typography variant="h6" sx={{ mb: 3 }}>
           GHG Protocol Scope Breakdown
         </Typography>
         <Box sx={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -599,7 +642,7 @@ export default function EmissionsDashboard({ projectId }) {
         <Grid size={{ xs: 12, lg: 8 }}>
           <GlassCard sx={{ height: "100%" }}>
             <CardContent sx={{ height: "100%", p: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700, color: "text.primary", mb: 3 }}>
+              <Typography variant="h6" sx={{ mb: 3 }}>
                 Monthly Emissions Trend
               </Typography>
               <Box sx={{ height: 350 }}>
@@ -615,7 +658,7 @@ export default function EmissionsDashboard({ projectId }) {
         <Grid size={{ xs: 12, lg: 4 }}>
           <GlassCard sx={{ height: "100%" }}>
             <CardContent sx={{ height: "100%", p: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700, color: "text.primary", mb: 3 }}>
+              <Typography variant="h6" sx={{ mb: 3 }}>
                 Scope Distribution
               </Typography>
               <Box sx={{ height: 350, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -629,7 +672,7 @@ export default function EmissionsDashboard({ projectId }) {
       {/* Category Breakdown */}
       <GlassCard sx={{ mb: 4 }}>
         <CardContent sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: "text.primary", mb: 3 }}>
+          <Typography variant="h6" sx={{ mb: 3 }}>
             Emissions by Category
           </Typography>
           <Box sx={{ height: 400 }}>
@@ -641,52 +684,54 @@ export default function EmissionsDashboard({ projectId }) {
       {/* Category Details Table */}
       <GlassCard>
         <CardContent sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: "text.primary", mb: 3 }}>
+          <Typography variant="h6" sx={{ mb: 3 }}>
             Detailed Category Breakdown
           </Typography>
           <Box sx={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ backgroundColor: "#f9fafb" }}>
-                  <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#374151", borderBottom: "2px solid #e5e7eb" }}>
-                    Category
-                  </th>
-                  <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 600, color: "#374151", borderBottom: "2px solid #e5e7eb" }}>
-                    Scope
-                  </th>
-                  <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#374151", borderBottom: "2px solid #e5e7eb" }}>
-                    Emissions (t CO₂e)
-                  </th>
-                  <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#374151", borderBottom: "2px solid #e5e7eb" }}>
-                    Data Points
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.category_breakdown?.map((cat, idx) => (
-                  <tr key={idx} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                    <td style={{ padding: "12px 16px", color: "#111827" }}>{cat.category_name}</td>
-                    <td style={{ padding: "12px 16px", textAlign: "center" }}>
-                      <Chip
-                        label={`Scope ${cat.scope}`}
-                        size="small"
-                        sx={{
-                          bgcolor: `${scopeColors[cat.scope]}20`,
-                          color: scopeColors[cat.scope],
-                          fontWeight: 600,
-                        }}
-                      />
-                    </td>
-                    <td style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#111827" }}>
-                      {cat.co2e_tonnes.toLocaleString()}
-                    </td>
-                    <td style={{ padding: "12px 16px", textAlign: "right", color: "#6b7280" }}>
-                      {cat.count.toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1.5 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: "background.default" }}>
+                    <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600, color: "text.secondary" }}>
+                      Category
+                    </TableCell>
+                    <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600, color: "text.secondary" }}>
+                      Scope
+                    </TableCell>
+                    <TableCell align="right" sx={{ ...FONT.bodySmall, fontWeight: 600, color: "text.secondary" }}>
+                      Emissions (t CO₂e)
+                    </TableCell>
+                    <TableCell align="right" sx={{ ...FONT.bodySmall, fontWeight: 600, color: "text.secondary" }}>
+                      Data Points
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {data.category_breakdown?.map((cat, idx) => (
+                    <TableRow key={idx} sx={{ "&:last-child th, &:last-child td": { border: 0 } }}>
+                      <TableCell sx={{ ...FONT.body }}>{cat.category_name}</TableCell>
+                      <TableCell align="center">
+                        <Chip
+                          label={`Scope ${cat.scope}`}
+                          size="small"
+                          sx={{
+                            bgcolor: `${scopeColors[cat.scope]}20`,
+                            color: scopeColors[cat.scope],
+                            fontWeight: 600,
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                        {cat.co2e_tonnes.toLocaleString()}
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...FONT.body, color: "text.secondary" }}>
+                        {cat.count.toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </Box>
         </CardContent>
       </GlassCard>
@@ -700,6 +745,6 @@ export default function EmissionsDashboard({ projectId }) {
           }
         `}
       </style>
-    </Box>
+    </PageContainer>
   );
 }

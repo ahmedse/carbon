@@ -2,7 +2,7 @@
 // Asset Detail: Full view of a data asset with governance metadata and audit history
 // Phase 2: Detail page using BaseDetailPage pattern with tabs
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
@@ -27,7 +27,8 @@ import ViewWeekIcon from '@mui/icons-material/ViewWeek';
 import AssetOverviewTab from './tabs/AssetOverviewTab';
 import AssetEditTab from './tabs/AssetEditTab';
 import AssetQualityTab from './tabs/AssetQualityTab';
-import AssetAuditTab from './tabs/AssetAuditTab';
+import { useNotes } from '../../notes/NotesContext';
+import { registerAssetInspectorTabs } from '../../inspector/tabs/catalogTabs';
 
 export default function AssetDetailPage() {
   useDocumentTitle("Asset Detail");
@@ -91,6 +92,25 @@ export default function AssetDetailPage() {
     loadAssetData();
   }, [loadAssetData]);
 
+  // ── Contextual Inspector (global drawer) ────────────────────────────
+  const { setContexts } = useNotes();
+
+  useEffect(() => registerAssetInspectorTabs(), []);
+
+  const inspectorContext = useMemo(
+    () => [{
+      entityType: 'asset',
+      entityId: assetId,
+      label: asset?.title,
+      payload: { entityData: asset, events },
+    }],
+    [assetId, asset, events],
+  );
+  useEffect(() => {
+    setContexts(inspectorContext);
+    return () => setContexts(null);
+  }, [inspectorContext, setContexts]);
+
   const handleAssetUpdated = async () => {
     // Refresh asset and events after update
     await loadAssetData();
@@ -134,9 +154,6 @@ export default function AssetDetailPage() {
         { label: t('overview'), component: AssetOverviewTab },
         { label: t('quality'), component: AssetQualityTab },
         { label: t('common:edit'), component: AssetEditTab },
-      ]}
-      metricsTabs={[
-        { label: t('audit'), component: AssetAuditTab },
       ]}
       loading={loading}
       error={error}

@@ -106,21 +106,21 @@ export default function ScheduleList({ schedules, loading, error, onEdit, onPaus
                 <Tooltip title="Edit">
                   <span>
                     <IconButton size="small" onClick={() => onEdit?.(s)} aria-label={`Edit ${s.name}`}>
-                      <EditOutlinedIcon sx={{ fontSize: 16 }} />
+                      <EditOutlinedIcon sx={{ fontSize: '1rem' }} />
                     </IconButton>
                   </span>
                 </Tooltip>
                 <Tooltip title={s.enabled ? 'Pause' : 'Resume'}>
                   <span>
                     <IconButton size="small" onClick={() => onPause?.(s)} aria-label={s.enabled ? `Pause ${s.name}` : `Resume ${s.name}`}>
-                      {s.enabled ? <PauseIcon sx={{ fontSize: 16 }} /> : <PlayArrowIcon sx={{ fontSize: 16 }} />}
+                      {s.enabled ? <PauseIcon sx={{ fontSize: '1rem' }} /> : <PlayArrowIcon sx={{ fontSize: '1rem' }} />}
                     </IconButton>
                   </span>
                 </Tooltip>
                 <Tooltip title="Delete">
                   <span>
                     <IconButton size="small" onClick={() => onDelete?.(s)} aria-label={`Delete ${s.name}`}>
-                      <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                      <DeleteOutlineIcon sx={{ fontSize: '1rem' }} />
                     </IconButton>
                   </span>
                 </Tooltip>

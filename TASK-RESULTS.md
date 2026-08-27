@@ -1,3 +1,137 @@
+## [2026-08-27] Master Architect — Notes round 2: no rail badge, composer disabled on global view + toolkit compliance audit
+
+**Role:** master-architect · **Model:** DeepSeek V4-Flash · **Kind:** UX fix + audit
+
+### Summary
+1. **Rail badge removed** — user mandate: no note-count on the arrow. `NotesRail` is now a pure toggle (arrow + tooltip), `badgeCount` prop and `Badge` wrapper deleted from rail + drawer call site.
+2. **"No entity context for note" fixed** — the throw surfaced as a raw composer error on pages without an entity context (e.g. MDM list page). Notes are entity-anchored by design (backend `entity_type`/`entity_id` non-null), so the global "All notes" view now **disables the composer** and shows a muted hint `tab.noContext` ("Open a record to attach a note" / "افتح سجلاً لإرفاق ملاحظة") instead of letting the user hit a cryptic error. `addNote` keeps its defensive guard.
+3. **Toolkit compliance audit** — see below.
+
+### Toolkit / enterprise compliance audit (`.ai-toolkit/`)
+**PASS:**
+- **Patterns (design-patterns.md, 14/23 GoF):** Observer (`NotesContext`), Mediator (provider mediates lists/comments/UI state — no prop drilling), Facade (`notesApi` single module hides HTTP), Composite (components compose MUI primitives, never fork), Flyweight (theme tokens only — no raw hex), Singleton (single provider).
+- **Compact UI (compact-ui.md):** body 0.68rem ≈ body2 0.6875rem ✓; chips height 18px ✓; theme tokens for all colors/spacing ✓; dense spacing ✓.
+- **Base rules:** no `print`, no hardcoded secrets, localStorage access wrapped in try/catch ✓; entity-anchored data model (no global orphan notes) ✓.
+- **A11y/enterprise:** aria-labels on rail/separator/reactions ✓, `role=navigation`/`complementary` ✓, focus-visible outline ✓, abort controllers on fetches ✓, optimistic reactions with server reconcile ✓, i18n en/ar ✓, RTL mirror ✓, immutable state updates ✓.
+
+**FLAGGED as debt (best-practice notes, not blocking):**
+- Tab bar density (24px / 0.6rem) is below the constitution's `MuiTab minHeight 36 / 0.8125rem` — kept because the drawer is a utility panel (not main navigation) and the user explicitly mandated "tiny/compact" density. Revisit if a full-width nav tab bar is ever added.
+- Inline `sx` font sizes (0.52–0.7rem) instead of theme typography tokens — matches existing codebase convention; a theme-level `notes` typography scale would centralize them (future refactor).
+- Chip font 0.58rem vs constitution 0.65rem — negligible, kept for compaction mandate.
+
+### Verification
+- Frontend: 886/886 (79 files); drawer tests 10/10; lint clean on changed files.
+- Live browser (MDM): rail 32px with **no badge** ✓; panel shows "Open a record to attach a note" with no textbox/Add-note button ✓ (global view); context chip "All notes" ✓.
+
+## [2026-08-27] Master Architect — Notes UX round: implicit visibility, resize direction, rail redesign, compaction
+
+**Role:** master-architect · **Model:** DeepSeek V4-Flash · **Kind:** UX/backend polish
+
+### Summary
+Four user-driven refinements to the Notes drawer, all code-complete, unit-tested, and live browser-verified on MDM (`localhost:5179/catalog/mdm`):
+
+1. **Visibility is implicit (backend)** — server derives `visibility` from author scope (admin → `internal`, everyone else → `public`); client can never set/patch it. `NoteCreateSerializer.read_only_fields = ['visibility']`. 22/22 notes tests green (incl. `test_visibility_is_implicit`, `test_internal_visible_to_author_and_admin`); full catalog suite 144 passed.
+2. **Resize direction fixed** — direct manipulation, edge follows cursor: `delta = isRtl ? (e.clientX - startX) : (startX - e.clientX)`. LTR: drag LEFT → drawer wider (content smaller); drag RIGHT → narrower. Live-verified: drag L 60px → +59px; drag R 40px → −40px. Handle = `role=separator` "Resize notes panel", width 4, content-side.
+3. **Rail redesign** — single arrow button (ChevronLeft/ChevronRight by RTL) + tooltip "Notes" + count badge, matching the left-menu standard (no more icon+label pill). `NotesRail.jsx` props `{onOpen, badgeCount}`; `role="navigation"` aria-label "Notes drawer". Live-verified: 32px rail, arrow btn 21×21, svg 15px, tooltip on hover, badge "3", click opens panel.
+4. **Compaction** — NoteCard/ReactionBar/CommentThread/NotesTab/NotesPanel tightened: avatars 16×16 (7.68px), body 0.68rem, reactions 13px tall/0.6rem, tab bar 24px/0.6rem, card p 0.5, time 0.52rem. Live-verified via getComputedStyle.
+
+### Fixes
+- **DRF APIClient is stateful** — `auth_client`/`admin_client` fixtures shared one `api_client` instance; admin credentials overwrote normal-user creds → "normal user" posted as admin. Fixed: each fixture builds its own `APIClient()` + Bearer creds.
+
+### Verification
+- Backend: 144/144 catalog tests. Frontend: 885/885 (78 files). Lint: 0 errors (3 pre-existing warnings in NotesContext.jsx). Live browser: rail redesign + tooltip + badge + open + compact metrics + resize direction all confirmed via Playwright `getComputedStyle`/`getBoundingClientRect`.
+
+## [2026-08-27] Master Architect — Centralized Notes + 1-level Comments (backend + drawer UI)
+
+**Role:** master-architect · **Model:** DeepSeek V4-Flash · **Kind:** feature
+
+### Summary
+Implemented the approved unified Notes system (Phases 1–2): **backend** `Note` / `NoteComment` / `NoteReaction` models + REST API (lazy list, comments_count, reactions, soft delete, visibility public/internal, RBAC, Governance audit events) and **frontend** centralized right-edge multi-tab drawer in the master layout (Shell.jsx) — collapsed 36px rail by default, resizable (280px–50% viewport), pin/collapse, fixed first "Notes" tab, newest-first list with "Show N older" accordion, small 👍❓⭐ reactions on notes + comments, lazy per-thread comment loading. Bilingual en/ar.
+
+### Backend (Phase 1 — green)
+- `catalog/models.py` — `Note` (entity_type/entity_id indexed, author, visibility, is_active, `-created_at` + composite index), `NoteComment` (flat, **no parent** → 1-level), `NoteReaction` (note XOR comment unique per user). Migration 0011.
+- `catalog/views.py` — `NoteViewSet` + nested `NoteCommentViewSet` (lazy comments, reactions actions, soft delete, `_visible_notes` scoping admin/all/author-internal); create overrides return rich serializers.
+- Audit backbone: `emit_governance_event('note'|'note_comment', create|update|delete)` — verified live.
+- `catalog/tests/test_notes.py` — 22 tests; full catalog suite 144 passed.
+
+### Frontend (Phase 2 — green)
+- New `src/notes/`: `notesApi.js`, `notesUtils.js`, `NotesContext.jsx` (lists+comments caches, optimistic reactions, localStorage `carbon-notes-*`), `NotesRail.jsx`, `NotesPanel.jsx`, `NotesTab.jsx`, `NoteCard.jsx`, `CommentThread.jsx`, `NoteComposer.jsx`, `ReactionBar.jsx`, `NotesDrawer.jsx` (resize handle, RTL-mirrored).
+- Shell.jsx: `NotesProvider` wraps content; `Ctrl+Shift+N` toggles; drawer renders as flex sibling (right edge LTR / left edge RTL).
+- i18n `notes` namespace registered in `src/i18n/index.js` **and** `src/__mocks__/react-i18next.js`.
+- Tests: `src/__tests__/notes.drawer.test.jsx` — 9 tests (rail/collapse/persist, pin auto-collapse vs pinned-stays, lazy comments, optimistic reaction reconcile, width clamp). **Full suite 78 files / 885 tests passed; lint clean.**
+
+### E2E verified (live browser + API)
+Rail badge count → expand panel → context chip "All notes" → composer (visibility Public/Internal) → newest-first list → reactions → comments counts → "Show 2 older notes" accordion → resize separator. Lazy thread loaded with delete control. API: create note 201 → comment 201 → like toggle 200 `{like:1, my_reaction:'like'}` → governance events (note=4, note_comment=1) → soft delete 204.
+
+### Notes / Defects found & fixed during bring-up
+- `NotesContext` LS map was missing the `pin` key → pin wrote to key `"undefined"` and never persisted; fixed with `pin: 'carbon-notes-pin'`.
+- Shell.jsx edit initially dropped the outer `return (<Box` → esbuild syntax error; restored.
+- NoteCard comment toggle had no accessible name → added `aria-label`.
+
+### Remaining (Phase 3)
+Wire `setContext({entityType, entityId, label})` + unmount cleanup into: `MDMPage` (org_unit), `SchemaDetailPage` (table), `DataProductDetailPage` (module), `RuleDetailPage` (dq_rule), `UsersPage` (user), `ReportingPeriodsPage` (period). All other pages stay on the global "All notes" view.
+
+## [2026-08-27] Debugger/Fixer — MDM org-unit parent change 400 + unblock backend (in-flight drf-spectacular migration bugs)
+
+**Role:** debugger-fixer · **Model:** DeepSeek V4-Flash · **Kind:** bugfix
+
+### Summary
+Fixed "can't change the parent of an org unit" — `PUT /carbon-api/mdm/org-units/{id}/` returned **400 "This field may not be null"** from the MDM page. Root cause: the frontend sends `null` for empty optional fields (`code`, `description`, `org_type` via the `|| null` idiom) while `OrgUnit` model fields are `blank=True` but **not** `null=True` → DRF rejects. Fix is a `to_internal_value` normalization in `OrgUnitSerializer` (null→`''` / default `org_type`). Verified live: HTTP 200, regression tests red→green, full browser E2E (save → success toast, no 400). Also unblocked backend startup by fixing the in-flight drf_yasg→drf-spectacular migration errors (`OpenApiParameter` positional collision) in `emissions`, `catalog`, `dq`, `mdm` views.
+
+### Root Cause
+- **MDM 400** — `carbon-frontend/src/pages/catalog/MDMPage.jsx` `handleSaveOrgUnit` sends `code: form.code.trim() || null, description: ... || null, org_type: ... || null`. `OrgUnit.code/description` are `blank=True` (empty string OK) but **not** `null=True` → DRF ModelSerializer `validate_<field>` fails with `This field may not be null.` (400). Same for `org_type` when `null` is sent.
+- **Backend crash** — backend died on auto-reload (08:51) because `emissions/views.py` was mid-refactor to drf-spectacular: `from drf_spectacular.utils import ...` but 6 `@swagger_auto_schema(` decorators remained → `NameError`. After those were converted, startup hit `TypeError: OpenApiParameter.__init__() got multiple values for argument 'type'` in 4 files: the old drf_yasg-style call `OpenApiParameter('x', OpenApiParameter.QUERY, ..., type=int)` passes `QUERY` as the **second positional** which drf-spectacular binds to `type`, then `type=int` keyword collides.
+
+### Regression Test
+- `backend/mdm/tests/test_org_units.py`:
+  - `test_update_org_unit_null_optional_fields_ok` — PUT with `code=None, description=None, parent=..., org_type='other'` → expects 200, `code==''`, `description==''`.
+  - `test_update_org_unit_null_org_type_uses_default` — `org_type=None` → 200, `org_type=='other'`.
+  - Both **red before fix** (400), **green after** (payloads must use a valid `org_type` choice, e.g. `'other'`/`'college'` — `'company'` is not a valid choice).
+
+### Fix Applied
+- `backend/mdm/serializers.py` — added `to_internal_value` override to `OrgUnitSerializer`:
+  ```python
+  def to_internal_value(self, data):
+      if isinstance(data, dict):                      # QueryDict guard — multipart
+          data = {k: v for k, v in data.items()}
+          for field in ('code', 'description'):
+              if field in data and data[field] is None:
+                  data[field] = ''
+          if 'org_type' in data and data['org_type'] in (None, ''):
+              data['org_type'] = 'other'
+      return super().to_internal_value(data)
+  ```
+  CRITICAL: the `isinstance(data, dict)` guard is mandatory — multipart form data arrives as `QueryDict`, and `dict(QueryDict)` wraps values in lists (would break 2 pre-existing multipart tests with "Not a valid string" / invalid choice).
+- `backend/emissions/views.py`, `backend/catalog/views.py`, `backend/dq/views.py`, `backend/mdm/views.py` — removed the stray positional `OpenApiParameter.QUERY` (it is the **default** location in drf-spectacular; `QUERY` as 2nd positional binds to `type`). e.g. `OpenApiParameter('days', OpenApiParameter.QUERY, ..., type=int)` → `OpenApiParameter('days', type=int, ...)`. Fixed 5 occurrences across 4 files.
+
+### Before/After Evidence
+Before (live API):
+```
+PUT /carbon-api/mdm/org-units/3/ {"code":null,"org_type":"college","parent":2,"description":null}
+→ HTTP 400 {"code":["This field may not be null."],"description":["This field may not be null."]}
+```
+After (live API):
+```
+PUT ... same payload → HTTP 200
+{"id":3, "code":"", "description":"", "parent":2, "full_path":"AAST / فرع العلمين — Alamein Campus / كلية الطب — College of Medicine"}
+```
+Browser E2E (localhost:5179/catalog/mdm → Org Units tab → Edit كلية الطب → set Parent=AAST, empty code/description → Save Changes):
+- Before: `ERR_CONNECTION_REFUSED` (backend had crashed) / 400 before that.
+- After: dialog closes, toast **"Org unit updated"**, grid row shows new parent; unit 3 restored to parent فرع العلمين (id=2) afterwards.
+
+Tests:
+```
+$ cd backend && .venv/bin/python -m pytest mdm/tests/ -q
+51 passed, 2 failed in 17.70s
+```
+The 2 failures are **pre-existing** (user's in-flight ADR-0003 migration): `test_swagger_docs.py` still hits `/swagger/?format=openapi` while `urls.py` now only serves `/schema/` (drf-spectacular). Unrelated to this fix — tests need updating as part of the migration.
+
+### Follow-up Needed
+- Update `backend/mdm/tests/test_swagger_docs.py` to hit `/{api_prefix}/schema/?format=openapi` (or drop) as part of completing ADR-0003 drf-spectacular migration.
+- Frontend `MDMPage.jsx` `|| null` idiom is now safely handled server-side; no frontend change required (but see playbook PB-43 for the long-term contract).
+
+---
+
 ## [2026-08-22] Backend Worker — P1C "Dataset into Catalog": datahub app fully removed, catalog.0007 self-contained + Ask-AI button/entity-scoped resume fix
 
 ### Summary

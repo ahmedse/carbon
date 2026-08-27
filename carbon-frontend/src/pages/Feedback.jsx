@@ -57,7 +57,7 @@ export default function Feedback() {
     return (
       <Box maxWidth={500} mx="auto" mt={7}>
         <Paper elevation={3} sx={{ p: 4, borderRadius: 3, textAlign: "center" }}>
-          <FeedbackIcon color="success" sx={{ fontSize: 48, mb: 2 }} />
+          <FeedbackIcon color="success" sx={{ fontSize: '3rem', mb: 2 }} />
           <Typography variant="h5" fontWeight={700} mb={2}>
             Thank you for your feedback!
           </Typography>
@@ -73,7 +73,7 @@ export default function Feedback() {
     <Box maxWidth={500} mx="auto" mt={7}>
       <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
         <Box display="flex" alignItems="center" mb={3}>
-          <FeedbackIcon color="primary" sx={{ fontSize: 40, mr: 2 }} />
+          <FeedbackIcon color="primary" sx={{ fontSize: '2.5rem', mr: 2 }} />
           <Typography variant="h4" fontWeight={700}>
             Feedback
           </Typography>
@@ -127,7 +127,7 @@ export default function Feedback() {
             variant="contained"
             fullWidth
             disabled={busy}
-            sx={{ mt: 2, fontWeight: 700, fontSize: 16 }}
+            sx={{ mt: 2, fontWeight: 700, fontSize: '1rem' }}
             size="large"
           >
             {busy ? <CircularProgress size={24} /> : "Send Feedback"}

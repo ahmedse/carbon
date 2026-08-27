@@ -4,7 +4,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
-  Container,
   Paper,
   Table,
   TableBody,
@@ -32,6 +31,9 @@ import {
   Divider,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useTheme } from '@mui/material/styles';
+import PageContainer from '../../components/layout/PageContainer';
+import { FONT } from '../../theme/themeTokens';
 
 import {
   Refresh as RefreshIcon,
@@ -47,16 +49,20 @@ import { useAuth } from '../../auth/AuthContext';
 import { apiFetch } from '../../api/api';
 import { API_ROUTES } from '../../config';
 
-const ACTION_COLOR = {
-  CREATE: '#10b981',
-  UPDATE: '#3b82f6',
-  DELETE: '#ef4444',
-  READ: '#6b7280',
-  LOGIN: '#8b5cf6',
-  LOGOUT: '#9ca3af',
-  EXPORT: '#f59e0b',
-  IMPORT: '#06b6d4',
+// Action → theme palette token (resolved via useTheme at render time)
+const ACTION_TOKEN = {
+  CREATE: 'success.main',
+  UPDATE: 'primary.light',
+  DELETE: 'error.main',
+  READ: 'text.secondary',
+  LOGIN: 'secondary.light',
+  LOGOUT: 'text.disabled',
+  EXPORT: 'warning.main',
+  IMPORT: 'info.main',
 };
+
+const resolveToken = (theme, token) =>
+  token.split('.').reduce((acc, key) => acc?.[key], theme.palette) || theme.palette.text.primary;
 
 const ACTION_LABEL = {
   CREATE: 'Create',
@@ -70,7 +76,8 @@ const ACTION_LABEL = {
 };
 
 function ActionChip({ action }) {
-  const color = ACTION_COLOR[action] || '#71717a';
+  const theme = useTheme();
+  const color = resolveToken(theme, ACTION_TOKEN[action] || 'text.primary');
   const label = ACTION_LABEL[action] || action;
   return (
     <Chip
@@ -78,7 +85,7 @@ function ActionChip({ action }) {
       size="small"
       sx={{
         backgroundColor: `${color}20`,
-        color: color,
+        color,
         fontWeight: 600,
         fontSize: '0.75rem',
       }}
@@ -164,7 +171,7 @@ function AuditDetailDialog({ open, onClose, audit }) {
                 Changes
               </Typography>
               <Paper sx={{ p: 1.5, bgcolor: 'background.default' }}>
-                <Typography component="pre" variant="caption" sx={{ fontSize: '0.65rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                <Typography component="pre" variant="caption" sx={{ ...FONT.bodySmall, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                   {JSON.stringify(audit.changes, null, 2)}
                 </Typography>
               </Paper>
@@ -178,6 +185,7 @@ function AuditDetailDialog({ open, onClose, audit }) {
 
 export default function AuditLogPage() {
   useDocumentTitle("Audit Log");
+  const theme = useTheme();
   const { user: _user } = useAuth();
   const [audits, setAudits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -253,10 +261,10 @@ export default function AuditLogPage() {
   }, [audits]);
 
   return (
-    <Container maxWidth="lg" sx={{ py: 3 }}>
+    <PageContainer sx={{ maxWidth: 'lg' }}>
       {/* Header */}
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+        <Typography variant="h2" sx={{ mb: 1 }}>
           Audit Log
         </Typography>
         <Typography variant="body1" color="text.secondary">
@@ -285,7 +293,7 @@ export default function AuditLogPage() {
                 <Typography color="text.secondary" variant="caption" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>
                   {ACTION_LABEL[action] || action}
                 </Typography>
-                <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, color: ACTION_COLOR[action] }}>
+                <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, color: resolveToken(theme, ACTION_TOKEN[action] || 'text.primary') }}>
                   {count}
                 </Typography>
               </CardContent>
@@ -391,32 +399,32 @@ export default function AuditLogPage() {
           <Table>
             <TableHead sx={{ bgcolor: 'action.hover' }}>
               <TableRow>
-                <TableCell sx={{ fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase' }}>ID</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase' }}>User</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase' }}>Action</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase' }}>Entity</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase' }}>Timestamp</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase' }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase' }}>Details</TableCell>
+                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600, textTransform: 'uppercase' }}>ID</TableCell>
+                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600, textTransform: 'uppercase' }}>User</TableCell>
+                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600, textTransform: 'uppercase' }}>Action</TableCell>
+                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600, textTransform: 'uppercase' }}>Entity</TableCell>
+                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600, textTransform: 'uppercase' }}>Timestamp</TableCell>
+                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600, textTransform: 'uppercase' }}>Status</TableCell>
+                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600, textTransform: 'uppercase' }}>Details</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {audits.map((audit) => (
                 <TableRow key={audit.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                  <TableCell sx={{ fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                  <TableCell sx={{ ...FONT.bodySmall, fontFamily: 'monospace' }}>
                     {String(audit.id).slice(0, 8)}
                   </TableCell>
-                  <TableCell sx={{ fontSize: '0.8rem' }}>
+                  <TableCell sx={{ ...FONT.body }}>
                     {audit.user || '(System)'}
                   </TableCell>
                   <TableCell>
                     <ActionChip action={audit.action} />
                   </TableCell>
-                  <TableCell sx={{ fontSize: '0.8rem' }}>
+                  <TableCell sx={{ ...FONT.body }}>
                     {audit.entity_type}
                     {audit.entity_id && ` #${audit.entity_id}`}
                   </TableCell>
-                  <TableCell sx={{ fontSize: '0.75rem' }}>
+                  <TableCell sx={{ ...FONT.bodySmall }}>
                     {new Date(audit.timestamp).toLocaleString()}
                   </TableCell>
                   <TableCell>
@@ -449,6 +457,6 @@ export default function AuditLogPage() {
 
       {/* Detail Dialog */}
       <AuditDetailDialog open={detailOpen} onClose={() => setDetailOpen(false)} audit={selectedAudit} />
-    </Container>
+    </PageContainer>
   );
 }

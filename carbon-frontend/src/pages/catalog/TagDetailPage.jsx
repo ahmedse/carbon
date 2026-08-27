@@ -1,7 +1,7 @@
 // src/pages/catalog/TagDetailPage.jsx
 // Tag Detail: Full view of a tag with usage info
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
@@ -14,8 +14,9 @@ import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
 import TagOverviewTab from './tabs/TagOverviewTab';
 import TagEditTab from './tabs/TagEditTab';
-import TagSummaryMetrics from './tabs/TagSummaryMetrics';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useNotes } from '../../notes/NotesContext';
+import { registerTagInspectorTabs } from '../../inspector/tabs/catalogTabs';
 
 export default function TagDetailPage() {
   useDocumentTitle("Tag Detail");
@@ -53,6 +54,20 @@ export default function TagDetailPage() {
     fetchTag();
   }, [tagId, token, notify, t]);
 
+  // ── Contextual Inspector (global drawer) ────────────────────────────
+  const { setContexts } = useNotes();
+
+  useEffect(() => registerTagInspectorTabs(), []);
+
+  const inspectorContext = useMemo(
+    () => [{ entityType: 'tag', entityId: tagId, label: tag?.name, payload: { entityData: tag } }],
+    [tagId, tag],
+  );
+  useEffect(() => {
+    setContexts(inspectorContext);
+    return () => setContexts(null);
+  }, [inspectorContext, setContexts]);
+
   const headerComponent = (
     <DetailHeader
       title={tag?.name || t('tagFallback')}
@@ -68,9 +83,6 @@ export default function TagDetailPage() {
       mainTabs={[
         { label: t('overview'), component: TagOverviewTab },
         { label: t('common:edit'), component: TagEditTab },
-      ]}
-      metricsTabs={[
-        { label: t('summary'), component: TagSummaryMetrics },
       ]}
       loading={loading}
       error={error}

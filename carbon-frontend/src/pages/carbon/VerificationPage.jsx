@@ -43,6 +43,8 @@ import {
   VerifiedUser as ApprovedIcon,
 } from '@mui/icons-material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import PageContainer from '../../components/layout/PageContainer';
+import { FONT } from '../../theme/themeTokens';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchVerificationRecords,
@@ -57,8 +59,8 @@ import EmptyState from '../../components/Page/EmptyState';
 // ── Tab config ──────────────────────────────────────────────────────────
 
 const VERIFICATION_TABS = [
-  { label: 'Pending Review', key: 'pending',  icon: <ReviewIcon sx={{ fontSize: 18 }} />, status: 'pending' },
-  { label: 'Verified',       key: 'verified', icon: <ApprovedIcon sx={{ fontSize: 18 }} />, status: 'verified' },
+  { label: 'Pending Review', key: 'pending',  icon: <ReviewIcon sx={{ fontSize: '1.125rem' }} />, status: 'pending' },
+  { label: 'Verified',       key: 'verified', icon: <ApprovedIcon sx={{ fontSize: '1.125rem' }} />, status: 'verified' },
   { label: 'All Periods',    key: 'all',      icon: null,                                   status: null },
 ];
 
@@ -102,8 +104,8 @@ function ScopeBadge({ value }) {
       label={cfg.label}
       size="small"
       sx={{
-        height: 20,
-        fontSize: '0.68rem',
+        height: 2.5,
+        ...FONT.body,
         fontWeight: 700,
         bgcolor: p?.[50] || (p?.light + '30'),
         color: p?.dark || p?.main,
@@ -119,12 +121,12 @@ function StatusChip({ status }) {
   const Icon = cfg.Icon;
   return (
     <Chip
-      icon={<Icon sx={{ fontSize: '13px !important' }} />}
+      icon={<Icon sx={{ fontSize: '0.8125rem !important' }} />}
       label={cfg.label}
       size="small"
       color={cfg.palette}
       variant="outlined"
-      sx={{ height: 20, fontSize: '0.68rem', '& .MuiChip-label': { px: 0.5 }, '& .MuiChip-icon': { ml: '4px' } }}
+      sx={{ height: 2.5, ...FONT.body, '& .MuiChip-label': { px: 0.5 }, '& .MuiChip-icon': { ml: 0.5 } }}
     />
   );
 }
@@ -157,7 +159,7 @@ function RejectDialog({ open, record, onClose, onConfirm, loading }) {
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Reject Period</DialogTitle>
       <DialogContent>
-        <Typography sx={{ fontSize: '0.85rem', mb: 2 }}>
+        <Typography sx={{ ...FONT.body, mb: 2 }}>
           Reject verification for <strong>{record?.period_label || record?.period_name || record?.id}</strong>?
         </Typography>
         <TextField
@@ -169,7 +171,7 @@ function RejectDialog({ open, record, onClose, onConfirm, loading }) {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Provide a reason for rejection…"
-          sx={{ '& .MuiInputBase-root': { fontSize: '0.82rem' } }}
+          sx={{ '& .MuiInputBase-root': { ...FONT.body } }}
         />
       </DialogContent>
       <DialogActions>
@@ -195,9 +197,9 @@ function ApproveDialog({ open, record, onClose, onConfirm, loading }) {
     <Dialog open={open} onClose={onClose} maxWidth="xs">
       <DialogTitle>Confirm Approval</DialogTitle>
       <DialogContent>
-        <Typography sx={{ fontSize: '0.85rem' }}>
+        <Typography sx={{ ...FONT.body }}>
           Approve verification for <strong>{record?.period_label || record?.period_name || record?.id}</strong>?
-          <Box component="span" sx={{ display: 'block', mt: 1, fontSize: '0.78rem', color: 'text.secondary' }}>
+          <Box component="span" sx={{ display: 'block', mt: 1, ...FONT.bodySmall, color: 'text.secondary' }}>
             This confirms the calculation data is accurate and complete.
           </Box>
         </Typography>
@@ -308,7 +310,7 @@ export default function VerificationPage() {
         flex: 1.5,
         minWidth: 220,
         renderCell: (params) => (
-          <Typography sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
+          <Typography sx={{ ...FONT.body, fontWeight: 500 }}>
             {params.value || params.row.period_name || '—'}
           </Typography>
         ),
@@ -319,7 +321,7 @@ export default function VerificationPage() {
         width: 120,
         renderCell: (params) => {
           const cfg = PERIOD_STATUS_CFG[params.value] || PERIOD_STATUS_CFG.draft;
-          return <Chip label={cfg.label} size="small" color={cfg.color} variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />;
+          return <Chip label={cfg.label} size="small" color={cfg.color} variant="outlined" sx={{ height: 2.5, ...FONT.body }} />;
         },
       },
       {
@@ -338,7 +340,7 @@ export default function VerificationPage() {
         renderCell: (params) => {
           const summary = params.value;
           if (!summary || typeof summary !== 'object' || Object.keys(summary).length === 0) {
-            return <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>—</Typography>;
+            return <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>—</Typography>;
           }
           return (
             <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
@@ -348,8 +350,8 @@ export default function VerificationPage() {
                   label={`S${scope}: ${fmtNum(tonnes)}`}
                   size="small"
                   sx={{
-                    height: 20,
-                    fontSize: '0.65rem',
+                    height: 2.5,
+                    ...FONT.bodySmall,
                     fontWeight: 600,
                     bgcolor: 'action.hover',
                   }}
@@ -370,7 +372,7 @@ export default function VerificationPage() {
         headerName: 'Verifier',
         width: 130,
         renderCell: (params) => (
-          <Typography sx={{ fontSize: '0.78rem' }}>{params.value || '—'}</Typography>
+          <Typography sx={{ ...FONT.body }}>{params.value || '—'}</Typography>
         ),
       },
       {
@@ -399,7 +401,7 @@ export default function VerificationPage() {
         flex: 1,
         minWidth: 120,
         renderCell: (params) => (
-          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontStyle: 'italic' }}>
+          <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary', fontStyle: 'italic' }}>
             {params.value || '—'}
           </Typography>
         ),
@@ -424,7 +426,7 @@ export default function VerificationPage() {
                   setApproveDialog({ open: true, record: params.row });
                 }}
               >
-                <ApproveIcon sx={{ fontSize: 18 }} />
+                <ApproveIcon sx={{ fontSize: '1.125rem' }} />
               </IconButton>
             </Tooltip>
             <Tooltip title="Reject">
@@ -436,7 +438,7 @@ export default function VerificationPage() {
                   setRejectDialog({ open: true, record: params.row });
                 }}
               >
-                <RejectIcon sx={{ fontSize: 18 }} />
+                <RejectIcon sx={{ fontSize: '1.125rem' }} />
               </IconButton>
             </Tooltip>
           </Stack>
@@ -450,7 +452,7 @@ export default function VerificationPage() {
   // ── Render ────────────────────────────────────────────────────────────
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <PageContainer sx={{ height: '100%', overflow: 'hidden' }}>
       {/* Header */}
       <Box sx={{ px: 2.5, pt: 2, pb: 0 }}>
         <PageHeader
@@ -489,8 +491,8 @@ export default function VerificationPage() {
           value={activeTab}
           onChange={(_, v) => setActiveTab(v)}
           sx={{
-            minHeight: 40,
-            '& .MuiTab-root': { minHeight: 40, fontSize: '0.78rem', textTransform: 'none', px: 2 },
+            minHeight: 5,
+            '& .MuiTab-root': { minHeight: 5, ...FONT.body, textTransform: 'none', px: 2 },
           }}
         >
           {VERIFICATION_TABS.map((tab) => (
@@ -574,6 +576,6 @@ export default function VerificationPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </PageContainer>
   );
 }

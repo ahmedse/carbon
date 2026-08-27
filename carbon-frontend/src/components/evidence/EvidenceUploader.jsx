@@ -84,7 +84,7 @@ export default function EvidenceUploader({ dataRowId, onUploadComplete }) {
         }}
       >
         <input {...getInputProps()} disabled={uploading && results.length === 0} />
-        <UploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+        <UploadIcon sx={{ fontSize: '3rem', color: 'primary.main', mb: 2 }} />
         <Typography variant="h6" gutterBottom>
           {isDragActive ? 'Drop files here' : 'Drag & drop evidence files'}
         </Typography>

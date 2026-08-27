@@ -2,12 +2,13 @@
 // Resizable divider between main content and metrics panel
 
 import React, { useState, useRef, useCallback } from 'react';
-import { Box } from '@mui/material';
+import { Box, useTheme } from '@mui/material';
 
 const MIN_WIDTH = 250;
 const MAX_WIDTH_PERCENT = 0.5;
 
 export default function ResizableDivider({ onResize }) {
+  const theme = useTheme();
   const [isDragging, setIsDragging] = useState(false);
   const dividerRef = useRef(null);
 
@@ -55,11 +56,11 @@ export default function ResizableDivider({ onResize }) {
       onMouseDown={handleMouseDown}
       sx={{
         width: '4px',
-        bgcolor: '#e0e0e0',
+        bgcolor: theme.palette.action.hover,
         cursor: 'col-resize',
         transition: isDragging ? 'none' : 'background-color 0.2s',
         '&:hover': {
-          bgcolor: '#1976d2',
+          bgcolor: theme.palette.primary.main,
         },
       }}
     />

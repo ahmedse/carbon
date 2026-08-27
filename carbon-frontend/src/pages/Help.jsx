@@ -100,7 +100,7 @@ export default function Help() {
       <Paper elevation={4} sx={{ p: { xs: 2, sm: 4 }, borderRadius: 4, position: "relative", overflow: "hidden" }}>
         {/* Title & Intro */}
         <Box display="flex" alignItems="center" mb={2}>
-          <HelpOutlineIcon color="primary" sx={{ fontSize: 48, mr: 2 }} />
+          <HelpOutlineIcon color="primary" sx={{ fontSize: '3rem', mr: 2 }} />
           <Typography variant="h3" fontWeight={800} color="primary.dark" letterSpacing={-1}>
             Welcome to the Carbon Data Platform
           </Typography>
@@ -213,7 +213,7 @@ export default function Help() {
         {/* Contact & Feedback */}
         <Divider sx={{ my: 3 }} />
         <Box display="flex" alignItems="center" gap={2} mb={2}>
-          <ContactSupportIcon color="info" sx={{ fontSize: 32 }} />
+          <ContactSupportIcon color="info" sx={{ fontSize: '2rem' }} />
           <Typography variant="h6" fontWeight={700}>
             Need help or want to suggest an improvement?
           </Typography>

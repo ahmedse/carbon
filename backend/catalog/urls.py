@@ -3,7 +3,7 @@ from django.urls import path
 from .views import (
     DataDomainViewSet, GlossaryTermViewSet, TagViewSet,
     AssetProfileViewSet, GovernanceEventViewSet, GovernanceComplianceView,
-    GovernancePolicyViewSet, LineageEdgeViewSet,
+    GovernancePolicyViewSet, LineageEdgeViewSet, NoteViewSet, NoteCommentViewSet,
     TableLineageView, TableImpactView, FreshnessPolicyView,
 )
 from .search_views import CatalogSearchView
@@ -23,6 +23,8 @@ router.register(r'governance-events', GovernanceEventViewSet, basename='governan
 router.register(r'governance-policies', GovernancePolicyViewSet, basename='governancepolicy')
 router.register(r'datasets', DatasetViewSet, basename='dataset')
 router.register(r'lineage', LineageEdgeViewSet, basename='lineageedge')
+router.register(r'notes', NoteViewSet, basename='note')
+router.register(r'notes/(?P<note_id>[^/.]+)/comments', NoteCommentViewSet, basename='notecomment')
 
 urlpatterns = [
     path('search/', CatalogSearchView.as_view(), name='catalog-search'),

@@ -1,0 +1,52 @@
+{
+  "rail": {
+    "label": "Notes drawer"
+  },
+  "tabs": {
+    "notes": "Notes"
+  },
+  "panel": {
+    "label": "Notes panel",
+    "title": "Annotations",
+    "pin": "Pin open",
+    "unpin": "Unpin (collapse on entity change)",
+    "collapse": "Collapse"
+  },
+  "tab": {
+    "contextLabel": "Context",
+    "global": "All notes",
+    "noContext": "Open a record to attach a note",
+    "empty": "No notes yet. Add the first one above.",
+    "older": "Show {{count}} older notes",
+    "older_one": "Show {{count}} older note",
+    "loadMore": "Load more"
+  },
+  "composer": {
+    "placeholder": "Write a note…",
+    "submit": "Add note",
+    "save": "Save",
+    "cancel": "Cancel",
+    "error": "Could not save. Please try again."
+  },
+  "card": {
+    "internal": "internal",
+    "actions": "Note actions",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this note?",
+    "comments": "Comments"
+  },
+  "comments": {
+    "addPlaceholder": "Add a comment…",
+    "add": "Comment",
+    "empty": "No comments yet.",
+    "delete": "Delete comment",
+    "deleteConfirm": "Delete this comment?",
+    "removed": "deleted"
+  },
+  "reactions": {
+    "like": "Like",
+    "question": "Question",
+    "star": "Important"
+  }
+}

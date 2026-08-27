@@ -1,12 +1,15 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Box, Paper, Typography, Chip, Button } from '@mui/material';
+import { Box, Paper, Typography, Chip, Button, useTheme } from '@mui/material';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 
 function PeriodBanner({ name, startDate, endDate, status, daysRemaining, onAction }) {
-  const statusBg = status === 'open' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : // gradient
-                   status === 'closing' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : // gradient
-                   'linear-gradient(135deg, #64748b 0%, #475569 100%)'; // gradient
+  const theme = useTheme();
+  const statusBg = status === 'open'
+    ? `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`
+    : status === 'closing'
+      ? `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%)`
+      : `linear-gradient(135deg, ${theme.palette.grey[600]} 0%, ${theme.palette.grey[700]} 100%)`;
 
   return (
     <Paper 
@@ -36,7 +39,7 @@ function PeriodBanner({ name, startDate, endDate, status, daysRemaining, onActio
           justifyContent: 'center',
           backdropFilter: 'blur(10px)'
         }}>
-          <CalendarMonthIcon sx={{ fontSize: 16, color: 'common.white' }} />
+          <CalendarMonthIcon sx={{ fontSize: '1rem', color: 'common.white' }} />
         </Box>
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'common.white' }}>{name}</Typography>

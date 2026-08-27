@@ -98,7 +98,7 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
           )}
         </Box>
         <Button
-          startIcon={running ? <CircularProgress size={14} /> : <RefreshIcon sx={{ fontSize: 16 }} />}
+          startIcon={running ? <CircularProgress size={14} /> : <RefreshIcon sx={{ fontSize: '1rem' }} />}
           onClick={handleRerun}
           disabled={running}
           size="small"

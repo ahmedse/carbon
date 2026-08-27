@@ -91,7 +91,7 @@ export function NotificationCenter({ anchorEl, onClose }) {
                   mb: 1,
                 }}
               >
-                <Icon sx={{ color: config.color, fontSize: 20, mt: '2px' }} />
+                <Icon sx={{ color: config.color, fontSize: '1.25rem', mt: '2px' }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
                     <Typography fontSize="0.8125rem" fontWeight={600} color="text.primary" noWrap>

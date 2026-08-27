@@ -23,7 +23,14 @@ import {
   Divider,
   IconButton,
   Tooltip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
@@ -56,6 +63,8 @@ import {
 } from "chart.js";
 import { fetchEmissionsDashboard } from "../../api/emissions";
 import { useAuth } from "../../auth/AuthContext";
+import PageContainer from "../../components/layout/PageContainer";
+import { FONT } from "../../theme/themeTokens";
 
 Chart.register(
   ArcElement,
@@ -75,14 +84,12 @@ const GlassCard = ({ children, sx = {}, ...props }) => (
   <Card
     elevation={0}
     sx={{
-      background: "rgba(255, 255, 255, 0.98)",
-      backdropFilter: "blur(10px)",
-      border: "1px solid rgba(0, 0, 0, 0.06)",
-      borderRadius: 3,
-      transition: "all 0.3s ease",
-      "&:hover": {
-        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.06)",
-      },
+      bgcolor: "background.paper",
+      border: "1px solid",
+      borderColor: "divider",
+      borderRadius: 1.5,
+      transition: "box-shadow 0.15s ease",
+      "&:hover": { boxShadow: 2 },
       ...sx,
     }}
     {...props}
@@ -99,12 +106,6 @@ const QUICK_SELECT_OPTIONS = [
   { label: "Custom Range", value: "custom" },
 ];
 
-const SCOPE_COLORS = {
-  scope1: { main: "#10b981", light: "#d1fae5", label: "Scope 1 (Direct)" },
-  scope2: { main: "#3b82f6", light: "#dbeafe", label: "Scope 2 (Energy)" },
-  scope3: { main: "#f59e0b", light: "#fef3c7", label: "Scope 3 (Value Chain)" },
-};
-
 // ============ Date Range Picker Component ============
 
 const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, quickSelect, onQuickSelectChange }) => (
@@ -112,9 +113,10 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
     elevation={0}
     sx={{
       p: 2,
-      borderRadius: 2,
-      bgcolor: "#f9fafb",
-      border: "1px solid #e5e7eb",
+      borderRadius: 1.5,
+      bgcolor: "background.dark",
+      border: "1px solid",
+      borderColor: "divider",
       display: "flex",
       alignItems: "center",
       gap: 2,
@@ -147,16 +149,16 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
         value={startDate}
         onChange={onStartChange}
         slotProps={{
-          textField: { size: "small", sx: { width: 160, bgcolor: "#fff" } },
+          textField: { size: "small", sx: { width: 160, bgcolor: "background.default" } },
         }}
       />
-      <Typography color="#6b7280">to</Typography>
+      <Typography color="text.secondary">to</Typography>
       <DatePicker
         label="End Date"
         value={endDate}
         onChange={onEndChange}
         slotProps={{
-          textField: { size: "small", sx: { width: 160, bgcolor: "#fff" } },
+          textField: { size: "small", sx: { width: 160, bgcolor: "background.default" } },
         }}
       />
     </LocalizationProvider>
@@ -169,9 +171,9 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
         size="small"
         startIcon={<Compare />}
         sx={{
-          borderColor: "#e5e7eb",
-          color: "#374151",
-          "&:hover": { bgcolor: "#f3f4f6", borderColor: "#d1d5db" },
+          borderColor: "divider",
+          color: "text.primary",
+          "&:hover": { bgcolor: "action.hover", borderColor: "divider" },
         }}
       >
         Compare
@@ -188,7 +190,9 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
 
 // ============ Metric Cards ============
 
-const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, color = "#3b82f6" }) => {
+const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, color = null }) => {
+  const theme = useTheme();
+  const accent = color || theme.palette.primary.light;
   const isPositive = change < 0; // For emissions, reduction is positive
   
   return (
@@ -197,25 +201,25 @@ const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, colo
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
           <Box
             sx={{
-              width: 40,
-              height: 40,
-              borderRadius: 2,
-              bgcolor: `${color}15`,
+              width: 5,
+              height: 5,
+              borderRadius: 1,
+              bgcolor: `${accent}15`,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <_Icon sx={{ color, fontSize: 22 }} />
+            <_Icon sx={{ color: accent, fontSize: '1.375rem' }} />
           </Box>
-          <Typography variant="subtitle2" color="#6b7280" fontWeight={500}>
+          <Typography variant="subtitle2" color="text.secondary" fontWeight={500}>
             {title}
           </Typography>
         </Box>
         
-        <Typography variant="h4" fontWeight={700} color="#111827" sx={{ mb: 1 }}>
+        <Typography variant="h4" sx={{ mb: 1 }}>
           {value.toLocaleString()}
-          <Typography component="span" variant="body2" color="#6b7280" sx={{ ml: 1 }}>
+          <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
             {unit}
           </Typography>
         </Typography>
@@ -226,8 +230,8 @@ const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, colo
             icon={isPositive ? <TrendingDown fontSize="small" /> : <TrendingUp fontSize="small" />}
             label={`${isPositive ? "" : "+"}${change.toFixed(1)}% ${changeLabel || "vs last period"}`}
             sx={{
-              bgcolor: isPositive ? "#d1fae5" : "#fee2e2",
-              color: isPositive ? "#059669" : "#dc2626",
+              bgcolor: isPositive ? "success.light" : "error.light",
+              color: isPositive ? "success.dark" : "error.dark",
               fontWeight: 600,
               "& .MuiChip-icon": { color: "inherit" },
             }}
@@ -241,6 +245,12 @@ const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, colo
 // ============ Chart Components ============
 
 const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) => {
+  const theme = useTheme();
+  const scopeColors = {
+    1: theme.palette.success.main,
+    2: theme.palette.primary.light,
+    3: theme.palette.warning.main,
+  };
   // Use real monthly data from API
   const months = monthlyTrend?.map(m => m.month_name) || ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const monthlyTotals = monthlyTrend?.map(m => m.total) || [];
@@ -251,18 +261,18 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
       {
         label: "Total Emissions (tonnes)",
         data: monthlyTotals,
-        borderColor: "#3b82f6",
-        backgroundColor: "rgba(59, 130, 246, 0.1)",
+        borderColor: theme.palette.primary.light,
+        backgroundColor: `${theme.palette.primary.light}1A`,
         fill: true,
         tension: 0.4,
         pointRadius: 4,
-        pointBackgroundColor: "#3b82f6",
+        pointBackgroundColor: theme.palette.primary.light,
       },
       // Scope breakdown lines
       {
         label: "Scope 1",
         data: monthlyTrend?.map(m => m.scope1) || [],
-        borderColor: "#10b981",
+        borderColor: scopeColors[1],
         backgroundColor: "transparent",
         tension: 0.4,
         pointRadius: 2,
@@ -271,7 +281,7 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
       {
         label: "Scope 2",
         data: monthlyTrend?.map(m => m.scope2) || [],
-        borderColor: "#3b82f6",
+        borderColor: scopeColors[2],
         backgroundColor: "transparent",
         tension: 0.4,
         pointRadius: 2,
@@ -281,7 +291,7 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
       {
         label: "Scope 3",
         data: monthlyTrend?.map(m => m.scope3) || [],
-        borderColor: "#f59e0b",
+        borderColor: scopeColors[3],
         backgroundColor: "transparent",
         tension: 0.4,
         pointRadius: 2,
@@ -311,7 +321,7 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
     scales: {
       y: {
         beginAtZero: true,
-        grid: { color: "#f3f4f6" },
+        grid: { color: theme.palette.divider },
         ticks: { callback: (v) => v.toLocaleString() },
       },
       x: {
@@ -328,7 +338,7 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
   return (
     <GlassCard sx={{ height: "100%" }}>
       <CardContent sx={{ p: 3 }}>
-        <Typography variant="subtitle1" fontWeight={600} color="#111827" sx={{ mb: 2 }}>
+        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
           Monthly Emissions Trend
         </Typography>
         <Box sx={{ height: 300 }}>
@@ -340,14 +350,20 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
 };
 
 const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
+  const theme = useTheme();
   const total = scope1 + scope2 + scope3;
+  const scopeColors = {
+    scope1: { main: theme.palette.success.main, label: "Scope 1 (Direct)" },
+    scope2: { main: theme.palette.primary.light, label: "Scope 2 (Energy)" },
+    scope3: { main: theme.palette.warning.main, label: "Scope 3 (Value Chain)" },
+  };
   
   const data = {
     labels: ["Scope 1", "Scope 2", "Scope 3"],
     datasets: [{
       data: [scope1, scope2, scope3],
-      backgroundColor: [SCOPE_COLORS.scope1.main, SCOPE_COLORS.scope2.main, SCOPE_COLORS.scope3.main],
-      borderColor: "#fff",
+      backgroundColor: [scopeColors.scope1.main, scopeColors.scope2.main, scopeColors.scope3.main],
+      borderColor: theme.palette.background.paper,
       borderWidth: 3,
     }],
   };
@@ -369,7 +385,7 @@ const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
   return (
     <GlassCard sx={{ height: "100%" }}>
       <CardContent sx={{ p: 3 }}>
-        <Typography variant="subtitle1" fontWeight={600} color="#111827" sx={{ mb: 2 }}>
+        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
           Scope Distribution
         </Typography>
         
@@ -381,23 +397,23 @@ const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
           </Grid>
           <Grid size={7}>
             <Stack spacing={2} sx={{ height: "100%", justifyContent: "center" }}>
-              {Object.entries(SCOPE_COLORS).map(([key, config]) => {
+              {Object.entries(scopeColors).map(([key, config]) => {
                 const value = key === "scope1" ? scope1 : key === "scope2" ? scope2 : scope3;
                 const pct = ((value / total) * 100).toFixed(1);
                 return (
                   <Box key={key}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: config.main }} />
-                        <Typography variant="body2" fontWeight={500} color="#374151">
+                        <Box sx={{ width: 1.5, height: 1.5, borderRadius: "50%", bgcolor: config.main }} />
+                        <Typography variant="body2" fontWeight={500} color="text.primary">
                           {config.label}
                         </Typography>
                       </Box>
-                      <Typography variant="body2" fontWeight={600} color="#111827">
+                      <Typography variant="body2" fontWeight={600} color="text.primary">
                         {pct}%
                       </Typography>
                     </Box>
-                    <Typography variant="caption" color="#6b7280">
+                    <Typography variant="caption" color="text.secondary">
                       {value.toLocaleString()} t CO₂e
                     </Typography>
                   </Box>
@@ -412,19 +428,20 @@ const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
 };
 
 const CategoryBreakdownChart = ({ categories }) => {
+  const theme = useTheme();
   const data = {
     labels: categories.map((c) => c.name),
     datasets: [{
       label: "Emissions",
       data: categories.map((c) => c.value),
       backgroundColor: [
-        "#3b82f6",
-        "#10b981",
-        "#f59e0b",
-        "#ef4444",
-        "#8b5cf6",
-        "#06b6d4",
-        "#ec4899",
+        theme.palette.primary.light,
+        theme.palette.success.main,
+        theme.palette.warning.main,
+        theme.palette.error.main,
+        theme.palette.secondary.light,
+        theme.palette.info.main,
+        theme.palette.secondary.main,
       ],
       borderRadius: 6,
       barThickness: 24,
@@ -446,7 +463,7 @@ const CategoryBreakdownChart = ({ categories }) => {
     scales: {
       x: {
         beginAtZero: true,
-        grid: { color: "#f3f4f6" },
+        grid: { color: theme.palette.divider },
         ticks: { callback: (v) => v.toLocaleString() },
       },
       y: {
@@ -458,7 +475,7 @@ const CategoryBreakdownChart = ({ categories }) => {
   return (
     <GlassCard sx={{ height: "100%" }}>
       <CardContent sx={{ p: 3 }}>
-        <Typography variant="subtitle1" fontWeight={600} color="#111827" sx={{ mb: 2 }}>
+        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
           Emissions by Category
         </Typography>
         <Box sx={{ height: 280 }}>
@@ -469,97 +486,79 @@ const CategoryBreakdownChart = ({ categories }) => {
   );
 };
 
-const DetailedTable = ({ data }) => (
-  <GlassCard>
-    <CardContent sx={{ p: 3 }}>
-      <Typography variant="subtitle1" fontWeight={600} color="#111827" sx={{ mb: 2 }}>
-        Detailed Breakdown
-      </Typography>
-      <Paper
-        elevation={0}
-        sx={{
-          border: "1px solid #e5e7eb",
-          borderRadius: 2,
-          overflow: "hidden",
-        }}
-      >
-        <Box
-          component="table"
-          sx={{
-            width: "100%",
-            borderCollapse: "collapse",
-            "& th, & td": {
-              p: 1.5,
-              textAlign: "left",
-              borderBottom: "1px solid #e5e7eb",
-            },
-            "& th": {
-              bgcolor: "#f9fafb",
-              fontWeight: 600,
-              color: "#374151",
-              fontSize: 13,
-            },
-            "& td": {
-              color: "#111827",
-              fontSize: 14,
-            },
-            "& tr:last-child td": {
-              borderBottom: "none",
-            },
-          }}
+const DetailedTable = ({ data }) => {
+  const theme = useTheme();
+  const scopeChipColors = {
+    1: { bg: theme.palette.success.light, fg: theme.palette.success.dark },
+    2: { bg: theme.palette.primary.light, fg: theme.palette.primary.dark },
+    3: { bg: theme.palette.warning.light, fg: theme.palette.warning.dark },
+  };
+  return (
+    <GlassCard>
+      <CardContent sx={{ p: 3 }}>
+        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
+          Detailed Breakdown
+        </Typography>
+        <TableContainer
+          component={Paper}
+          elevation={0}
+          sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}
         >
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>Scope</th>
-              <th>Emissions (t CO₂e)</th>
-              <th>% of Total</th>
-              <th>vs Last Period</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((row, idx) => (
-              <tr key={idx}>
-                <td>{row.category}</td>
-                <td>
-                  <Chip
-                    size="small"
-                    label={`Scope ${row.scope}`}
-                    sx={{
-                      bgcolor: row.scope === 1 ? "#d1fae5" : row.scope === 2 ? "#dbeafe" : "#fef3c7",
-                      color: row.scope === 1 ? "#059669" : row.scope === 2 ? "#2563eb" : "#d97706",
-                      fontWeight: 600,
-                    }}
-                  />
-                </td>
-                <td>{row.value.toLocaleString()}</td>
-                <td>{row.percentage}%</td>
-                <td>
-                  <Chip
-                    size="small"
-                    icon={row.change < 0 ? <TrendingDown fontSize="small" /> : <TrendingUp fontSize="small" />}
-                    label={`${row.change < 0 ? "" : "+"}${row.change}%`}
-                    sx={{
-                      bgcolor: row.change < 0 ? "#d1fae5" : "#fee2e2",
-                      color: row.change < 0 ? "#059669" : "#dc2626",
-                      fontWeight: 600,
-                      "& .MuiChip-icon": { color: "inherit" },
-                    }}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </Box>
-      </Paper>
-    </CardContent>
-  </GlassCard>
-);
+          <Table size="small" sx={{ "& th, & td": { textAlign: "left" } }}>
+            <TableHead>
+              <TableRow sx={{ bgcolor: "background.dark" }}>
+                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>Category</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>Scope</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>Emissions (t CO₂e)</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>% of Total</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>vs Last Period</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {data.map((row, idx) => (
+                <TableRow key={idx} sx={{ "&:last-child td": { borderBottom: "none" } }}>
+                  <TableCell>{row.category}</TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      label={`Scope ${row.scope}`}
+                      sx={{
+                        bgcolor: scopeChipColors[row.scope]?.bg || theme.palette.secondary.light,
+                        color: scopeChipColors[row.scope]?.fg || theme.palette.secondary.main,
+                        fontWeight: 600,
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell>{row.value.toLocaleString()}</TableCell>
+                  <TableCell>{row.percentage}%</TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      icon={row.change < 0 ? <TrendingDown fontSize="small" /> : <TrendingUp fontSize="small" />}
+                      label={`${row.change < 0 ? "" : "+"}${row.change}%`}
+                      sx={{
+                        bgcolor: row.change < 0 ? "success.light" : "error.light",
+                        color: row.change < 0 ? "success.dark" : "error.dark",
+                        fontWeight: 600,
+                        "& .MuiChip-icon": { color: "inherit" },
+                      }}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </CardContent>
+    </GlassCard>
+  );
+};
 
 // ============ Main Component ============
 
 export default function AnalyticsDashboard() {
   useDocumentTitle("Analytics & Trends");
+  const theme = useTheme();
   const { user, context } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -619,25 +618,25 @@ export default function AnalyticsDashboard() {
 
   if (loading) {
     return (
-      <Box sx={{ p: 4 }}>
-        <Skeleton variant="rectangular" height={60} sx={{ borderRadius: 2, mb: 3 }} />
-        <Skeleton variant="rectangular" height={60} sx={{ borderRadius: 2, mb: 3 }} />
+      <PageContainer>
+        <Skeleton variant="rectangular" height={60} sx={{ borderRadius: 1.5, mb: 3 }} />
+        <Skeleton variant="rectangular" height={60} sx={{ borderRadius: 1.5, mb: 3 }} />
         <Grid container spacing={3}>
           {[1, 2, 3, 4].map((i) => (
             <Grid size={{ xs: 12, md: 6, lg: 3 }} key={i}>
-              <Skeleton variant="rectangular" height={160} sx={{ borderRadius: 3 }} />
+              <Skeleton variant="rectangular" height={160} sx={{ borderRadius: 1.5 }} />
             </Grid>
           ))}
         </Grid>
-      </Box>
+      </PageContainer>
     );
   }
 
   if (error) {
     return (
-      <Box sx={{ p: 4 }}>
+      <PageContainer>
         <Alert severity="error">Failed to load analytics data: {error}</Alert>
-      </Box>
+      </PageContainer>
     );
   }
 
@@ -676,13 +675,13 @@ export default function AnalyticsDashboard() {
   });
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 3 } }}>
+    <PageContainer sx={{ maxWidth: 1400, mx: "auto", overflow: "auto" }}>
       {/* Header */}
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" fontWeight={700} color="#111827" gutterBottom>
+        <Typography variant="h4" gutterBottom>
           Analytics
         </Typography>
-        <Typography variant="body2" color="#6b7280">
+        <Typography variant="body2" color="text.secondary">
           Deep dive into your emissions data with full date range analysis
         </Typography>
       </Box>
@@ -729,7 +728,7 @@ export default function AnalyticsDashboard() {
             value={emissions.total}
             unit="t CO₂e"
             icon={TrendingDown}
-            color="#16a34a"
+            color={theme.palette.success.main}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
@@ -738,7 +737,7 @@ export default function AnalyticsDashboard() {
             value={emissions.scope1}
             unit="t CO₂e"
             icon={ShowChart}
-            color="#10b981"
+            color={theme.palette.success.main}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
@@ -747,7 +746,7 @@ export default function AnalyticsDashboard() {
             value={emissions.scope2}
             unit="t CO₂e"
             icon={ShowChart}
-            color="#3b82f6"
+            color={theme.palette.primary.light}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
@@ -756,7 +755,7 @@ export default function AnalyticsDashboard() {
             value={emissions.scope3}
             unit="t CO₂e"
             icon={ShowChart}
-            color="#f59e0b"
+            color={theme.palette.warning.main}
           />
         </Grid>
       </Grid>
@@ -789,13 +788,13 @@ export default function AnalyticsDashboard() {
 
       {/* Footer */}
       <Box sx={{ mt: 4, pt: 3, borderTop: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="body2" color="#9ca3af" textAlign="center">
+        <Typography variant="body2" color="text.disabled" textAlign="center">
           Data refreshed: {dayjs().format("MMM D, YYYY h:mm A")} • 
           <Button size="small" startIcon={<Refresh fontSize="small" />} sx={{ ml: 1 }}>
             Refresh
           </Button>
         </Typography>
       </Box>
-    </Box>
+    </PageContainer>
   );
 }

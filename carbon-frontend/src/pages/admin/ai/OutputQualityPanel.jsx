@@ -13,6 +13,7 @@ import {
   Paper,
   Stack,
   Typography,
+  useTheme,
 } from '@mui/material';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
@@ -57,6 +58,7 @@ function formatCount(value) {
 
 export default function OutputQualityPanel() {
   useDocumentTitle('Output Quality');
+  const theme = useTheme();
   const { token } = useAuth();
 
   const [data, setData] = useState(null);
@@ -95,8 +97,8 @@ export default function OutputQualityPanel() {
         {
           label: 'Quality score',
           data: days.map((d) => d.avg),
-          borderColor: '#2e7d32',
-          backgroundColor: 'rgba(46, 125, 50, 0.15)',
+          borderColor: theme.palette.success.main,
+          backgroundColor: `${theme.palette.success.main}26`,
           fill: true,
           tension: 0.25,
           pointRadius: 3,
@@ -231,7 +233,7 @@ export default function OutputQualityPanel() {
                 <Stack spacing={1} sx={{ mt: 1 }}>
                   {(data?.drift ?? []).map((d) => (
                     <Stack key={d.date} direction="row" spacing={1} alignItems="center">
-                      <TrendingDownIcon sx={{ fontSize: 18, color: 'warning.main' }} />
+                      <TrendingDownIcon sx={{ fontSize: '1.125rem', color: 'warning.main' }} />
                       <Typography variant="body2" sx={{ fontSize: '0.8125rem' }}>
                         <strong>{d.date}</strong> — dropped {formatAvg(Math.abs(d.delta))} to{' '}
                         {formatAvg(d.avg)}

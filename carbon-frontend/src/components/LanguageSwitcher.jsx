@@ -40,7 +40,7 @@ export default function LanguageSwitcher() {
           onClick={handleOpen}
           sx={{ color: 'text.secondary' }}
         >
-          <LanguageIcon sx={{ fontSize: 20 }} />
+          <LanguageIcon sx={{ fontSize: '1.25rem' }} />
         </IconButton>
       </Tooltip>
       <Menu

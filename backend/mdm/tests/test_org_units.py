@@ -93,6 +93,54 @@ class OrgUnitCRUDTestCase(TestCase):
         org.refresh_from_db()
         self.assertFalse(org.is_active)
 
+    def test_update_org_unit_null_optional_fields_ok(self):
+        """Regression: PUT with null optional strings (code/description) must NOT 400.
+
+        The MDM edit dialog sends `null` for empty code/description fields
+        (frontend `|| null` idiom), e.g. when an admin changes only the parent.
+        The OrgUnit model contract is blank=True (empty string), so the
+        serializer must normalize null -> '' instead of rejecting it.
+        """
+        self.client.force_authenticate(self.admin_user)
+        payload = {
+            'name': 'Company',
+            'code': None,
+            'org_type': 'other',
+            'parent': None,
+            'description': None,
+            'is_active': True,
+        }
+        response = self.client.put(
+            f'/carbon-api/mdm/org-units/{self.org_root.id}/', payload, format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.org_root.refresh_from_db()
+        self.assertEqual(self.org_root.code, '')
+        self.assertEqual(self.org_root.description, '')
+
+    def test_update_org_unit_null_org_type_uses_default(self):
+        """Regression: org_type null/'' (UI 'None' option) must NOT 400.
+
+        The MDM dialog offers a 'None' type choice which serializes as
+        null/''; the model default is 'other', so the serializer maps the
+        empty selection to the documented default instead of rejecting it.
+        """
+        self.client.force_authenticate(self.admin_user)
+        payload = {
+            'name': 'Company',
+            'code': 'CO',
+            'org_type': None,
+            'parent': None,
+            'description': 'x',
+            'is_active': True,
+        }
+        response = self.client.put(
+            f'/carbon-api/mdm/org-units/{self.org_root.id}/', payload, format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.org_root.refresh_from_db()
+        self.assertEqual(self.org_root.org_type, 'other')
+
 
 class OrgUnitHierarchyTestCase(TestCase):
     """Test hierarchy and tree operations."""

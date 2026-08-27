@@ -257,7 +257,7 @@ export default function RowEditTab({
           sx={{
             display: 'block',
             mt: 2,
-            color: '#4caf50',
+            color: 'success.main',
             fontWeight: 500,
           }}
         >

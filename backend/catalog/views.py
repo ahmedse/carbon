@@ -4,7 +4,7 @@ from django.utils.text import slugify
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
@@ -13,15 +13,20 @@ from django.shortcuts import get_object_or_404
 
 from accounts.permissions import ReadAnyWriteAdmin
 from accounts.models import ScopedRole
+from accounts.rbac_utils import user_has_global_role, ADMIN_ROLES
 from core.feedback import AppFeedback
 from .audit_utils import emit_governance_event
 from .filters import GovernanceEventFilter
 from dataschema.models import DataTable
-from .models import DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy, LineageEdge, FreshnessPolicy
+from .models import (
+    DataDomain, GlossaryTerm, Tag, AssetProfile, GovernanceEvent, GovernancePolicy,
+    LineageEdge, FreshnessPolicy, Note, NoteComment, NoteReaction,
+)
 from .serializers import (
     DataDomainSerializer, GlossaryTermSerializer, TagSerializer,
     AssetProfileSerializer, GovernanceEventSerializer, GovernancePolicySerializer, LineageEdgeSerializer,
-    FreshnessPolicySerializer,
+    FreshnessPolicySerializer, NoteListSerializer, NoteCreateSerializer,
+    NoteCommentSerializer, NoteCommentCreateSerializer, NoteReactionToggleSerializer,
 )
 from .services import ensure_asset_profiles
 
@@ -459,3 +464,260 @@ class FreshnessPolicyView(APIView):
         policy = get_object_or_404(FreshnessPolicy, table=table)
         policy.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Notes / Comments / Reactions (centralized annotation layer) ────────────
+# Permission model (Jira/Collibra pattern):
+#   • Any authenticated user: read (public + their own internal), create notes/comments,
+#     toggle reactions on anything they can see.
+#   • Author or global admin: edit / soft-delete notes and comments.
+#   • Internal visibility: author + admins only.
+
+class NotesPermission(permissions.BasePermission):
+    """Authenticated read & create; edit/delete author-or-admin (object-level)."""
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        # Reactions target any visible note/comment — not author-scoped.
+        if getattr(view, 'action', None) in ('reactions',):
+            return True
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        user = request.user
+        if user.is_superuser:
+            return True
+        if getattr(obj, 'author_id', None) and obj.author_id == user.id:
+            return True
+        return user_has_global_role(user, ADMIN_ROLES)
+
+
+class NotesPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+def _visible_notes(user):
+    """Active public notes + internal notes authored by user (or all for admins)."""
+    if user.is_superuser or user_has_global_role(user, ADMIN_ROLES):
+        return Note.objects.filter(is_active=True)
+    return Note.objects.filter(
+        Q(visibility='public') | Q(author=user), is_active=True
+    )
+
+
+class NoteViewSet(viewsets.ModelViewSet):
+    """Polymorphic notes on any entity. Lazy contract: list has counts, no comment bodies."""
+    permission_classes = [NotesPermission]
+    pagination_class = NotesPagination
+    http_method_names = ['get', 'post', 'patch', 'delete']
+
+    def get_queryset(self):
+        qs = _visible_notes(self.request.user)
+        qs = qs.annotate(
+            comments_count=Count('comments', filter=Q(comments__is_active=True))
+        ).order_by('-created_at', '-id')
+        # Multi-anchor filter: ?anchor=et:ei&anchor=et:ei  → notes under ANY.
+        anchors = self.request.query_params.getlist('anchor')
+        if anchors:
+            q = Q()
+            for raw in anchors:
+                try:
+                    et, ei = raw.split(':', 1)
+                    ei = int(ei)
+                except (ValueError, TypeError):
+                    continue
+                q |= Q(entity_type=et, entity_id=ei) | Q(anchors__entity_type=et, anchors__entity_id=ei)
+            if q:
+                return qs.filter(q).distinct()
+            return qs
+        entity_type = self.request.query_params.get('entity_type')
+        entity_id = self.request.query_params.get('entity_id')
+        if entity_type and entity_id is not None:
+            # Pair filter — must match BOTH, against primary OR any anchor.
+            try:
+                ei = int(entity_id)
+            except (TypeError, ValueError):
+                return qs.none()
+            return qs.filter(
+                Q(entity_type=entity_type, entity_id=ei)
+                | Q(anchors__entity_type=entity_type, anchors__entity_id=ei)
+            ).distinct()
+        if entity_type:
+            # Entity-type-only filter (no id): primary OR any anchor.
+            return qs.filter(
+                Q(entity_type=entity_type) | Q(anchors__entity_type=entity_type)
+            ).distinct()
+        if entity_id is not None:
+            try:
+                ei = int(entity_id)
+            except (TypeError, ValueError):
+                return qs.none()
+            return qs.filter(
+                Q(entity_id=ei) | Q(anchors__entity_id=ei)
+            ).distinct()
+        return qs
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return NoteCreateSerializer
+        return NoteListSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Create then respond with the full list payload (author, counts…)."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        instance = Note.objects.annotate(
+            comments_count=Count('comments', filter=Q(comments__is_active=True))
+        ).get(pk=serializer.instance.pk)
+        out = NoteListSerializer(instance, context=self.get_serializer_context()).data
+        headers = self.get_success_headers(out)
+        return Response(out, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        # Visibility is IMPLICIT from the author's scope: admins → internal,
+        # everyone else → public. Client-supplied visibility is ignored.
+        is_admin = self.request.user.is_superuser or user_has_global_role(self.request.user, ADMIN_ROLES)
+        note = serializer.save(
+            author=self.request.user,
+            visibility='internal' if is_admin else 'public',
+        )
+        anchors = [{'entity_type': note.entity_type, 'entity_id': note.entity_id}]
+        anchors += list(note.anchors.values('entity_type', 'entity_id'))
+        emit_governance_event(
+            entity_type='note', entity_id=note.id, action='create',
+            before={},
+            after={'body': note.body, 'visibility': note.visibility, 'anchors': anchors},
+            user=self.request.user,
+        )
+
+    def perform_update(self, serializer):
+        old = self.get_object()
+        before = {'body': old.body, 'visibility': old.visibility}
+        # Entity identity is immutable — never changeable via PATCH.
+        serializer.validated_data.pop('entity_type', None)
+        serializer.validated_data.pop('entity_id', None)
+        note = serializer.save()
+        after = {'body': note.body, 'visibility': note.visibility}
+        changed = {k: after[k] for k in before if before.get(k) != after.get(k)}
+        if changed:
+            emit_governance_event(
+                entity_type='note', entity_id=note.id, action='update',
+                before={k: before[k] for k in changed}, after=changed,
+                user=self.request.user,
+            )
+
+    def destroy(self, request, *args, **kwargs):
+        note = self.get_object()
+        before = {'body': note.body, 'visibility': note.visibility,
+                  'entity_type': note.entity_type, 'entity_id': note.entity_id}
+        note.is_active = False
+        note.save(update_fields=['is_active'])
+        emit_governance_event(
+            entity_type='note', entity_id=note.id, action='delete',
+            before=before, after={'deleted': True}, user=request.user,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'], url_path='reactions')
+    def reactions(self, request, pk=None):
+        note = self.get_object()
+        serializer = NoteReactionToggleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reaction = serializer.validated_data['reaction']
+        existing = NoteReaction.objects.filter(
+            user=request.user, note=note, reaction=reaction).first()
+        if existing:
+            existing.delete()
+        else:
+            NoteReaction.objects.create(user=request.user, note=note, reaction=reaction)
+        return Response(_reaction_payload(note, request.user))
+
+
+class NoteCommentViewSet(viewsets.ModelViewSet):
+    """1-level comments on a note — lazy endpoint per note id."""
+    permission_classes = [NotesPermission]
+    pagination_class = NotesPagination
+    http_method_names = ['get', 'post', 'patch', 'delete']
+
+    def get_queryset(self):
+        note = get_object_or_404(_visible_notes(self.request.user), pk=self.kwargs['note_id'])
+        return note.comments.all()
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return NoteCommentCreateSerializer
+        return NoteCommentSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Create then respond with the full comment payload (author, counts…)."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        comment = NoteComment.objects.get(pk=serializer.instance.pk)
+        out = NoteCommentSerializer(comment, context=self.get_serializer_context()).data
+        headers = self.get_success_headers(out)
+        return Response(out, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        note = get_object_or_404(_visible_notes(self.request.user), pk=self.kwargs['note_id'])
+        comment = serializer.save(note=note, author=self.request.user)
+        emit_governance_event(
+            entity_type='note_comment', entity_id=comment.id, action='create',
+            before={}, after={'body': comment.body, 'note': note.id},
+            user=self.request.user,
+        )
+
+    def perform_update(self, serializer):
+        old = self.get_object()
+        before = {'body': old.body}
+        comment = serializer.save()
+        after = {'body': comment.body}
+        changed = {k: after[k] for k in before if before.get(k) != after.get(k)}
+        if changed:
+            emit_governance_event(
+                entity_type='note_comment', entity_id=comment.id, action='update',
+                before={k: before[k] for k in changed}, after=changed,
+                user=self.request.user,
+            )
+
+    def destroy(self, request, *args, **kwargs):
+        comment = self.get_object()
+        before = {'body': comment.body, 'note': comment.note_id}
+        comment.is_active = False
+        comment.save(update_fields=['is_active'])
+        emit_governance_event(
+            entity_type='note_comment', entity_id=comment.id, action='delete',
+            before=before, after={'deleted': True}, user=request.user,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'], url_path='reactions')
+    def reactions(self, request, note_id=None, pk=None):
+        comment = self.get_object()
+        serializer = NoteReactionToggleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reaction = serializer.validated_data['reaction']
+        existing = NoteReaction.objects.filter(
+            user=request.user, comment=comment, reaction=reaction).first()
+        if existing:
+            existing.delete()
+        else:
+            NoteReaction.objects.create(user=request.user, comment=comment, reaction=reaction)
+        return Response(_reaction_payload(comment, request.user))
+
+
+def _reaction_payload(obj, user):
+    """Reaction toggle response — counts + the caller's current reaction."""
+    counts = {
+        choice: obj.reactions.filter(reaction=choice).count()
+        for choice, _ in NoteReaction.REACTIONS
+    }
+    my_reaction = None
+    if user and user.is_authenticated:
+        first = obj.reactions.filter(user=user).first()
+        my_reaction = first.reaction if first else None
+    return {'reaction_counts': counts, 'my_reaction': my_reaction}

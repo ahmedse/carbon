@@ -51,7 +51,6 @@
     "dataEntry": "إدخال البيانات",
     "rowDetail": "تفاصيل الصف",
     "activityDataEntry": "إدخال بيانات النشاط",
-    "tableManager": "مدير الجداول",
     "dataProduct": "منتج البيانات",
     "scopeDetail": "تفاصيل النطاق",
     "admin": "الإدارة",
@@ -166,6 +165,7 @@
     "administrator": "مدير",
     "operator": "مشغّل",
     "logo": "الشعار",
+    "goHome": "الانتقال إلى الصفحة الرئيسية",
     "showSidebar": "إظهار الشريط الجانبي",
     "showSidebarShortcut": "إظهار الشريط الجانبي (Ctrl+B)",
     "hideSidebar": "إخفاء الشريط الجانبي",
@@ -194,5 +194,12 @@
     "ariaAppLabel": "منصة بيانات الكربون",
     "studioNavigation": "التنقل بين الأستوديوهات",
     "version": "v1.0"
+  },
+  "devBanner": {
+    "label": "عرض مبكر",
+    "message": "Data Trust Platform وPulse AI والبصمة الكربونية قيد التطوير النشط. شارك ملاحظاتك للمساهمة في تشكيل ما نبنيه بعد ذلك.",
+    "cta": "شارك ملاحظاتك",
+    "dismiss": "تجاهل",
+    "ariaLive": "إشعار تطوير المنصة"
   }
 }

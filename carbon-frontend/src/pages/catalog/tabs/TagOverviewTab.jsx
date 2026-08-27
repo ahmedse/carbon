@@ -18,7 +18,7 @@ export default function TagOverviewTab({ entityData }) {
     { label: t('id'), value: entityData.id },
     { label: t('name'), value: entityData.name },
     { label: t('description'), value: entityData.description || '—' },
-    { label: t('color'), value: entityData.color || '#000000' },
+    { label: t('color'), value: entityData.color || '—' },
     { label: t('createdAt'), value: entityData.created_at ? new Date(entityData.created_at).toLocaleDateString() : '—' },
   ];
 

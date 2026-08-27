@@ -59,7 +59,7 @@ function StatCard({ title, value, unit, icon, color, sparkline, trend, trendLabe
             justifyContent: 'center',
             transition: 'all 0.25s ease'
           }}>
-            {React.cloneElement(icon, { sx: { fontSize: 14, color: paletteColor } })}
+            {React.cloneElement(icon, { sx: { fontSize: '0.875rem', color: paletteColor } })}
           </Box>
         )}
         <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>

@@ -143,7 +143,7 @@ export default function OrgUnitsPage() {
                 <TableCell><Chip size="small" label={u.org_type} /></TableCell>
                 <TableCell>{u.parent ? (nameById[u.parent] || u.parent) : "—"}</TableCell>
                 <TableCell>{u.code || "—"}</TableCell>
-                <TableCell style={{ color: "#6b7280", fontSize: 12 }}>{u.full_path || u.name}</TableCell>
+                <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>{u.full_path || u.name}</TableCell>
                 <TableCell align="right">
                   <IconButton size="small" onClick={() => navigate(`/admin/org-units/${u.id}`)} color="primary"><VisibilityRounded fontSize="small" /></IconButton>
                   <IconButton size="small" onClick={() => openEdit(u)}><EditRounded fontSize="small" /></IconButton>

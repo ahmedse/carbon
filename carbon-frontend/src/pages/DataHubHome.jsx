@@ -1,26 +1,28 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { Box, Typography, Card, CardContent, Grid, Button, Chip, Tabs, Tab } from "@mui/material";
+import { Box, Typography, Card, CardContent, Grid, Button, Chip, Tabs, Tab, useTheme } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import StorageIcon from '@mui/icons-material/Storage';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import { NatureRounded, BoltRounded, LocalShippingRounded } from "@mui/icons-material";
 import useDocumentTitle from '../hooks/useDocumentTitle';
-
-const SCOPE_COLORS = {
-  1: { bg: '#e8f5e9', color: '#2e7d32', label: 'Scope 1' },
-  2: { bg: '#e3f2fd', color: '#1565c0', label: 'Scope 2' },
-  3: { bg: '#fff3e0', color: '#e65100', label: 'Scope 3' },
-};
-
-const SCOPE_ICONS = {
-  1: <NatureRounded sx={{ fontSize: 16, color: 'success.dark' }} />,
-  2: <BoltRounded sx={{ fontSize: 16, color: 'primary.dark' }} />,
-  3: <LocalShippingRounded sx={{ fontSize: 16, color: 'warning.dark' }} />,
-};
+import PageContainer from '../components/layout/PageContainer';
+import { FONT } from '../theme/themeTokens';
 
 export default function DataHubHome() {
   useDocumentTitle("Data Hub");
+  const theme = useTheme();
+  const SCOPE_COLORS = {
+    1: { bg: `${theme.palette.success.main}1A`, color: theme.palette.success.main, label: 'Scope 1' },
+    2: { bg: `${theme.palette.primary.main}1A`, color: theme.palette.primary.main, label: 'Scope 2' },
+    3: { bg: `${theme.palette.warning.main}1A`, color: theme.palette.warning.main, label: 'Scope 3' },
+  };
+
+  const SCOPE_ICONS = {
+    1: <NatureRounded sx={{ fontSize: '1rem', color: 'success.dark' }} />,
+    2: <BoltRounded sx={{ fontSize: '1rem', color: 'primary.dark' }} />,
+    3: <LocalShippingRounded sx={{ fontSize: '1rem', color: 'warning.dark' }} />,
+  };
   const navigate = useNavigate();
   const { context, availablePerspectives, tablesByModule } = useAuth();
   const modules = useMemo(() => context?.modules || [], [context?.modules]);
@@ -52,14 +54,14 @@ export default function DataHubHome() {
 
   if (modules.length === 1 && !isAdmin) {
     return (
-      <Box p={3} textAlign="center">
+      <PageContainer sx={{ alignItems: 'center', justifyContent: 'center' }}>
         <Typography variant="h5">Loading your module...</Typography>
-      </Box>
+      </PageContainer>
     );
   }
 
   return (
-    <Box p={3}>
+    <PageContainer>
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={2}>
         <Box>
           <Typography variant="h4" gutterBottom>
@@ -74,16 +76,16 @@ export default function DataHubHome() {
           <Button
             variant="contained"
             startIcon={<AdminPanelSettingsIcon />}
-            onClick={() => navigate('/schema-admin/table-manager')}
+            onClick={() => navigate('/catalog/products')}
           >
-            Manage All Tables
+            Manage Data Products
           </Button>
         )}
       </Box>
 
       {modules.length === 0 ? (
         <Box textAlign="center" py={8}>
-          <StorageIcon sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
+          <StorageIcon sx={{ fontSize: '5rem', color: 'text.disabled', mb: 2 }} />
           <Typography variant="h6" color="text.secondary">
             No Data Modules Assigned
           </Typography>
@@ -99,13 +101,12 @@ export default function DataHubHome() {
               value={scopeFilter}
               onChange={(_, val) => setScopeFilter(val)}
               sx={{
-                minHeight: 40,
+                minHeight: 5,
                 '& .MuiTab-root': {
-                  minHeight: 40,
+                  minHeight: 5,
                   py: 0.75,
-                  textTransform: 'none',
+                  ...FONT.body,
                   fontWeight: 500,
-                  fontSize: '0.8125rem',
                 },
               }}
             >
@@ -190,6 +191,7 @@ export default function DataHubHome() {
                             sx={{
                               bgcolor: scopeStyle.bg,
                               color: scopeStyle.color,
+                              ...FONT.body,
                               fontWeight: 600,
                             }}
                           />
@@ -207,6 +209,6 @@ export default function DataHubHome() {
           )}
         </>
       )}
-    </Box>
+    </PageContainer>
   );
 }

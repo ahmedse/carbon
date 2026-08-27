@@ -136,8 +136,12 @@ export function fetchDataRows(token, tableId, filters = {}, project_id, module_i
   });
 
   const endpoint = `${API_ROUTES.rows}?${params.toString()}`;
-  return apiFetch(endpoint, { token, project_id, module_id })
-    .then(data => (Array.isArray(data) ? data : []));
+  return apiFetch(endpoint, { token, project_id, module_id }).then((data) => {
+    // Backend list views are paginated by default (CarbonPageNumberPagination):
+    // { count, page_size, page, total_pages, next, previous, results: [...] }.
+    if (data && Array.isArray(data.results)) return data.results;
+    return Array.isArray(data) ? data : [];
+  });
 }
 
 /**

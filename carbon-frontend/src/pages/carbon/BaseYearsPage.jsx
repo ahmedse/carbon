@@ -31,6 +31,8 @@ import {
   FormControlLabel,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import PageContainer from '../../components/layout/PageContainer';
+import { FONT } from '../../theme/themeTokens';
 
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -64,7 +66,7 @@ function PolicyChip({ value }) {
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
       variant="outlined"
-      sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }}
+      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -76,7 +78,7 @@ function ActiveChip({ value }) {
       size="small"
       color={value ? 'success' : 'default'}
       variant="filled"
-      sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }}
+      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -125,7 +127,7 @@ function BaseYearDrawer({ open, baseYear, periods, onSave, onClose }) {
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box sx={{ width: 440, p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 3, fontSize: '1rem', fontWeight: 600 }}>
+        <Typography variant="h5" sx={{ mb: 3 }}>
           {baseYear ? 'Edit Base Year' : 'New Base Year'}
         </Typography>
         <Stack spacing={2}>
@@ -388,14 +390,14 @@ export default function BaseYearsPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+      <PageContainer sx={{ alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress />
-      </Box>
+      </PageContainer>
     );
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <PageContainer>
       <PageHeader
         title="Base Years"
         description="GHG Protocol base years with recalculation policy. A base year is the benchmark against which future emission reductions are measured."
@@ -419,15 +421,15 @@ export default function BaseYearsPage() {
         <Table>
           <TableHead sx={{ bgcolor: 'action.hover' }}>
             <TableRow>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>ID</TableCell>
-              <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Year</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Reporting Period</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Recalculation Policy</TableCell>
-              <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Threshold</TableCell>
-              <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Open Triggers</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Status</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Created</TableCell>
-              {isAdmin && <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Actions</TableCell>}
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>ID</TableCell>
+              <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Year</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Reporting Period</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Recalculation Policy</TableCell>
+              <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Threshold</TableCell>
+              <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Open Triggers</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Status</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Created</TableCell>
+              {isAdmin && <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Actions</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -440,14 +442,14 @@ export default function BaseYearsPage() {
             ) : (
               baseYears.map((by) => (
                 <TableRow key={by.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                  <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{by.id}</TableCell>
-                  <TableCell align="center" sx={{ fontSize: '0.82rem', fontWeight: 500 }}>{by.year}</TableCell>
-                  <TableCell sx={{ fontSize: '0.78rem' }}>{by.reporting_period_name || by.reporting_period || '—'}</TableCell>
+                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{by.id}</TableCell>
+                  <TableCell align="center" sx={{ ...FONT.body, fontWeight: 500 }}>{by.year}</TableCell>
+                  <TableCell sx={{ ...FONT.body }}>{by.reporting_period_name || by.reporting_period || '—'}</TableCell>
                   <TableCell><PolicyChip value={by.recalculation_policy} /></TableCell>
-                  <TableCell align="center" sx={{ fontSize: '0.78rem' }}>{by.significance_threshold_pct ?? '—'}%</TableCell>
-                  <TableCell align="center" sx={{ fontSize: '0.78rem' }}>{by.open_triggers_count ?? 0}</TableCell>
+                  <TableCell align="center" sx={{ ...FONT.body }}>{by.significance_threshold_pct ?? '—'}%</TableCell>
+                  <TableCell align="center" sx={{ ...FONT.body }}>{by.open_triggers_count ?? 0}</TableCell>
                   <TableCell><ActiveChip value={by.is_active} /></TableCell>
-                  <TableCell sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>{fmtDate(by.created_at)}</TableCell>
+                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{fmtDate(by.created_at)}</TableCell>
                   {isAdmin && (
                     <TableCell align="center">
                       <IconButton size="small" onClick={() => handleEdit(by)} title="Edit">
@@ -490,7 +492,7 @@ export default function BaseYearsPage() {
       <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
         <DialogTitle>Delete Base Year?</DialogTitle>
         <DialogContent>
-          <Typography sx={{ fontSize: '0.85rem' }}>This action cannot be undone.</Typography>
+          <Typography sx={{ ...FONT.body }}>This action cannot be undone.</Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
@@ -510,6 +512,6 @@ export default function BaseYearsPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </PageContainer>
   );
 }

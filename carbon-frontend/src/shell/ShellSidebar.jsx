@@ -80,7 +80,6 @@ const CARBON_ITEM_ICONS = {
   'SBTi Targets':         TrackChangesIcon,
   'Organizational Boundaries': AccountTreeIcon,
   'Base Years':               HistoryIcon,
-  'Table Manager':        TableChartIcon,
   'Dashboard':            DashboardIcon,
 };
 
@@ -127,9 +126,6 @@ function getSidebarItems(studioId) {
         { label: 'Data Sources', path: '/catalog/sources', icon: StorageIcon },
         { label: 'Exports', path: '/catalog/exports', icon: DownloadIcon },
         { label: 'Imports', path: '/catalog/imports', icon: UploadIcon },
-        { type: 'divider' },
-        { type: 'group', label: 'Schema Tools' },
-        { label: 'Table Manager', path: '/schema-admin/table-manager', icon: TableChartIcon },
       ];
     
     case 'admin':

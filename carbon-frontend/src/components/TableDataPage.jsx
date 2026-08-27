@@ -117,14 +117,15 @@ export default function TableDataPage({
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      fetchDataSchemaTables(token, project_id, module_id).then((tables) =>
-        (tables || []).find((t) => String(t.id) === String(tableId))
-      ),
+      fetchDataSchemaTables(token, project_id, module_id).then((tables) => {
+        const list = Array.isArray(tables) ? tables : tables?.results || [];
+        return list.find((t) => String(t.id) === String(tableId));
+      }),
       fetchDataSchemaFields(token, tableId, project_id, module_id),
     ])
       .then(([table, fields]) => {
         setTable(table);
-        setFields(fields || []);
+        setFields(Array.isArray(fields) ? fields : fields?.results || []);
         setLoading(false);
       })
       .catch((err) => {

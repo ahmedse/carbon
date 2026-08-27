@@ -12,6 +12,8 @@ import {
   ExpandLess as CollapseIcon,
 } from "@mui/icons-material";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
+import PageContainer from "../../components/layout/PageContainer";
+import { useTheme } from "@mui/material/styles";
 import { apiFetch } from "../../api/api";
 
 const LEVEL_COLORS = {
@@ -26,6 +28,7 @@ const LEVELS = ["", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"];
 
 export default function LogViewerPage() {
   useDocumentTitle("System Logs");
+  const theme = useTheme();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -117,7 +120,7 @@ export default function LogViewerPage() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <PageContainer>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Typography variant="h5" fontWeight={600}>
           System Logs
@@ -333,8 +336,8 @@ export default function LogViewerPage() {
                             <Typography variant="caption" color="text.secondary">Raw JSON</Typography>
                             <pre style={{
                               fontSize: "0.7rem", fontFamily: "monospace",
-                              background: "#fff", padding: 8, borderRadius: 4,
-                              border: "1px solid #e2e8f0", overflow: "auto", maxHeight: 200,
+                              background: theme.palette.background.paper, padding: 8, borderRadius: 4,
+                              border: `1px solid ${theme.palette.divider}`, overflow: "auto", maxHeight: 200,
                             }}>
                               {JSON.stringify(entry, null, 2)}
                             </pre>
@@ -363,6 +366,6 @@ export default function LogViewerPage() {
           />
         </Box>
       )}
-    </Box>
+    </PageContainer>
   );
 }

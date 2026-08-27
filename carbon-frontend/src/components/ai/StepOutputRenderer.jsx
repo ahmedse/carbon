@@ -310,7 +310,7 @@ export function ArtifactCard({ value }) {
       spacing={1}
       sx={{ mt: 0.5, p: 0.75, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
     >
-      <DescriptionIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
+      <DescriptionIcon sx={{ fontSize: '1.125rem', color: 'text.secondary', flexShrink: 0 }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {name}
@@ -327,7 +327,7 @@ export function ArtifactCard({ value }) {
           variant="outlined"
           disabled={downloading}
           onClick={handleDownload}
-          startIcon={<DownloadIcon sx={{ fontSize: 14 }} />}
+          startIcon={<DownloadIcon sx={{ fontSize: '0.875rem' }} />}
           sx={{ fontSize: '0.625rem', textTransform: 'none', flexShrink: 0 }}
         >
           {downloading ? 'Downloading…' : 'Download'}

@@ -16,9 +16,12 @@ import { ShellSidebar } from './ShellSidebar';
 import { EditorArea } from './EditorArea';
 import { StatusBar } from './StatusBar';
 import HeaderEnhanced from '../components/HeaderEnhanced';
+import DevelopmentBanner from './DevelopmentBanner';
 import ErrorBoundary from './ErrorBoundary';
 import { AIWorkspace } from './AIWorkspace';
 import { AITaskTransferProvider } from './AITaskTransferContext';
+import { NotesProvider, useNotes } from '../notes/NotesContext';
+import { NotesDrawer } from '../notes/NotesDrawer';
 import { LoadingSpinner, DialogLoadingSkeleton } from './LoadingFallback';
 
 // Lazy load heavy components for code splitting
@@ -39,7 +42,7 @@ const STUDIO_PATHS = {
 // Infer active studio from current URL
 function studioFromPath(pathname) {
   if (pathname.startsWith('/carbon')) return 'carbon';  // app studio — checked first
-  if (pathname.startsWith('/emissions') || pathname.startsWith('/dataschema') || pathname.startsWith('/schema-admin')) return 'carbon';
+  if (pathname.startsWith('/emissions') || pathname.startsWith('/dataschema')) return 'carbon';
   if (pathname.startsWith('/catalog')) return 'catalog';
   // DQ Workspace lives under Catalog Studio in the sidebar (Governance section)
   if (pathname.startsWith('/dq')) return 'catalog';
@@ -158,6 +161,52 @@ export function Shell() {
     if (path) navigate(path);
   };
 
+// Notes drawer shortcut bridge (provider is mounted inside the content area)
+function NotesShortcutBridge() {
+  const { toggleOpen } = useNotes();
+  return (
+    <NotesShortcutHandler toggleOpen={toggleOpen} />
+  );
+}
+
+function NotesShortcutHandler({ toggleOpen }) {
+  const toggleRef = React.useRef(toggleOpen);
+  toggleRef.current = toggleOpen;
+
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
+        e.preventDefault();
+        toggleRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  return null;
+}
+
+  // Content pane = EditorArea + docked side panes.
+  // Notes drawer today; future panes (e.g. governance info tabs) can be appended
+  // to DOCKED_PANES in order — each pane renders as a fixed-width, flexShrink:0
+  // column (see NotesDrawer) and the editor absorbs the remaining width.
+  // NOTE: the wrapper MUST fill the available width (flex: 1 + width: '100%').
+  // When Pulse is closed this Box is a direct flex child of the content row and
+  // without flex:1 it collapses to its content width (~344px), breaking the layout.
+  const DOCKED_PANES = [
+    <NotesDrawer key="notes" />,
+    // Future panes — e.g. <GovernanceInfoDrawer key="governance" />, <DataQualityTabs key="dq" />
+  ];
+  const renderContentPane = () => (
+    <Box sx={{ display: 'flex', height: '100%', minWidth: 0, flex: 1, width: '100%' }}>
+      <Box sx={{ flex: 1, minWidth: 0, height: '100%' }}>
+        <EditorArea />
+      </Box>
+      {DOCKED_PANES}
+    </Box>
+  );
+
   return (
     <Box
       sx={{
@@ -172,6 +221,9 @@ export function Shell() {
     >
       {/* Header */}
       <HeaderEnhanced />
+
+      {/* Early-access notice — dismissible, appears once; see DevelopmentBanner */}
+      <DevelopmentBanner />
 
       {/* Main Content Area */}
       <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -322,61 +374,64 @@ export function Shell() {
         )}
 
         {/* Resizable Main + Copilot Panes */}
-        <AITaskTransferProvider onRequestOpen={openCopilot}>
-          <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
-            {copilotVisible ? (
-              <Allotment
-                onChange={(sizes) => {
-                  if (sizes.length >= 2) {
-                    const w = sizes[sizes.length - 1];
-                    setCopilotPaneSize(w);
-                    try {
-                      localStorage.setItem('carbon-copilot-pane-size', String(w));
-                    } catch {
-                      /* ignore */
+        <NotesProvider>
+          <NotesShortcutBridge />
+          <AITaskTransferProvider onRequestOpen={openCopilot}>
+            <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
+              {copilotVisible ? (
+                <Allotment
+                  onChange={(sizes) => {
+                    if (sizes.length >= 2) {
+                      const w = sizes[sizes.length - 1];
+                      setCopilotPaneSize(w);
+                      try {
+                        localStorage.setItem('carbon-copilot-pane-size', String(w));
+                      } catch {
+                        /* ignore */
+                      }
                     }
-                  }
-                }}
-              >
-                {/* In RTL mode, render copilot pane first (left side), editor second (right side) */}
-                {isRtl && (
-                  <Allotment.Pane
-                    key="copilot"
-                    minSize={280}
-                    preferredSize={copilotPaneSize}
-                    maxSize={Math.floor(window.innerWidth / 2)}
-                  >
-                    <ErrorBoundary>
-                      <AIWorkspace onClose={toggleCopilot} />
-                    </ErrorBoundary>
-                  </Allotment.Pane>
-                )}
+                  }}
+                >
+                  {/* In RTL mode, render copilot pane first (left side), editor second (right side) */}
+                  {isRtl && (
+                    <Allotment.Pane
+                      key="copilot"
+                      minSize={280}
+                      preferredSize={copilotPaneSize}
+                      maxSize={Math.floor(window.innerWidth / 2)}
+                    >
+                      <ErrorBoundary>
+                        <AIWorkspace onClose={toggleCopilot} />
+                      </ErrorBoundary>
+                    </Allotment.Pane>
+                  )}
 
-                {/* Main Editor Area */}
-                <Allotment.Pane key="editor" minSize={320} preferredSize={1}>
-                  <EditorArea />
-                </Allotment.Pane>
-
-                {/* In LTR mode, render copilot pane second (right side) */}
-                {!isRtl && (
-                  <Allotment.Pane
-                    key="copilot"
-                    minSize={280}
-                    preferredSize={copilotPaneSize}
-                    maxSize={Math.floor(window.innerWidth / 2)}
-                  >
-                    <ErrorBoundary>
-                      <AIWorkspace onClose={toggleCopilot} />
-                    </ErrorBoundary>
+                  {/* Main Editor Area — content + notes drawer docked at its right edge */}
+                  <Allotment.Pane key="editor" minSize={320} preferredSize={1}>
+                    {renderContentPane()}
                   </Allotment.Pane>
-                )}
-              </Allotment>
-            ) : (
-              /* When copilot is closed, just render editor without Allotment wrapper */
-              <EditorArea />
-            )}
-          </Box>
-        </AITaskTransferProvider>
+
+                  {/* In LTR mode, render copilot pane second (right side) */}
+                  {!isRtl && (
+                    <Allotment.Pane
+                      key="copilot"
+                      minSize={280}
+                      preferredSize={copilotPaneSize}
+                      maxSize={Math.floor(window.innerWidth / 2)}
+                    >
+                      <ErrorBoundary>
+                        <AIWorkspace onClose={toggleCopilot} />
+                      </ErrorBoundary>
+                    </Allotment.Pane>
+                  )}
+                </Allotment>
+              ) : (
+                /* When copilot is closed, just render editor without Allotment wrapper */
+                renderContentPane()
+              )}
+            </Box>
+          </AITaskTransferProvider>
+        </NotesProvider>
       </Box>
 
       {/* Status Bar with integrated Footer */}

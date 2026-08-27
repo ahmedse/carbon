@@ -1,7 +1,7 @@
 // src/pages/catalog/tabs/AssetSummaryMetrics.jsx
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, LinearProgress, Typography } from '@mui/material';
+import { Box, LinearProgress, Typography, useTheme } from '@mui/material';
 import DetailMetricsPanel, {
   MetricCard,
   MetricsGrid,
@@ -12,6 +12,7 @@ import UpdateIcon from '@mui/icons-material/Update';
 
 export default function AssetSummaryMetrics({ entityData }) {
   const { t } = useTranslation('catalog');
+  const theme = useTheme();
   if (!entityData) return null;
 
   const createdDate = entityData.created_at 
@@ -22,13 +23,13 @@ export default function AssetSummaryMetrics({ entityData }) {
     : '—';
 
   const getQualityColorBackground = (status) => {
-    const colors = { 
-      passing: '#c8e6c9', 
-      warning: '#fff9c4', 
-      failing: '#ffcdd2', 
-      unknown: '#f5f5f5' 
+    const colors = {
+      passing: `${theme.palette.success.main}26`,
+      warning: `${theme.palette.warning.main}26`,
+      failing: `${theme.palette.error.main}26`,
+      unknown: theme.palette.action.hover,
     };
-    return colors[status] || '#f5f5f5';
+    return colors[status] || theme.palette.action.hover;
   };
 
   const qualityScore = entityData.quality_score || 0;
@@ -63,11 +64,11 @@ export default function AssetSummaryMetrics({ entityData }) {
                 variant="determinate" 
                 value={qualityScore}
                 sx={{
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: '#e0e0e0',
+                  height: 1,
+                  borderRadius: 1,
+                  backgroundColor: theme.palette.action.hover,
                   '& .MuiLinearProgress-bar': {
-                    backgroundColor: qualityScore >= 80 ? '#4caf50' : qualityScore >= 60 ? '#ff9800' : '#f44336',
+                    backgroundColor: qualityScore >= 80 ? theme.palette.success.main : qualityScore >= 60 ? theme.palette.warning.main : theme.palette.error.main,
                   },
                 }}
               />
@@ -82,7 +83,7 @@ export default function AssetSummaryMetrics({ entityData }) {
               p: 1.5, 
               borderRadius: 1, 
               bgcolor: getQualityColorBackground(entityData.quality_status),
-              border: '1px solid #e0e0e0',
+              border: `1px solid ${theme.palette.divider}`,
               textAlign: 'center',
             }}
           >

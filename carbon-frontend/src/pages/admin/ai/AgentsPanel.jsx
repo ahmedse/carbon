@@ -268,12 +268,12 @@ export default function AgentsPanel() {
                 <Stack direction="row" spacing={0.5}>
                   <Tooltip title="Edit agent">
                     <IconButton size="small" aria-label={`Edit ${row.name}`} onClick={() => openEdit(row)}>
-                      <EditOutlinedIcon sx={{ fontSize: 15 }} />
+                      <EditOutlinedIcon sx={{ fontSize: '0.9375rem' }} />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Remove agent">
                     <IconButton size="small" aria-label={`Remove ${row.name}`} onClick={() => openDelete(row)}>
-                      <DeleteOutlineIcon sx={{ fontSize: 15 }} />
+                      <DeleteOutlineIcon sx={{ fontSize: '0.9375rem' }} />
                     </IconButton>
                   </Tooltip>
                 </Stack>
@@ -309,7 +309,7 @@ export default function AgentsPanel() {
             <Button
               size="small"
               variant="contained"
-              startIcon={<AddIcon sx={{ fontSize: 15 }} />}
+              startIcon={<AddIcon sx={{ fontSize: '0.9375rem' }} />}
               onClick={openCreate}
               sx={{ fontSize: '0.75rem' }}
             >
@@ -318,7 +318,7 @@ export default function AgentsPanel() {
           )}
           <Button
             size="small"
-            startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
+            startIcon={<RefreshIcon sx={{ fontSize: '0.9375rem' }} />}
             onClick={load}
             disabled={loading}
             sx={{ fontSize: '0.75rem' }}
@@ -327,11 +327,11 @@ export default function AgentsPanel() {
           </Button>
           <ToggleButtonGroup size="small" exclusive value={view} onChange={toggleView} aria-label="Agents view">
             <ToggleButton value="table" sx={{ fontSize: '0.6875rem', px: 1 }}>
-              <TableRowsOutlinedIcon sx={{ fontSize: 15, mr: 0.5 }} />
+              <TableRowsOutlinedIcon sx={{ fontSize: '0.9375rem', mr: 0.5 }} />
               Table
             </ToggleButton>
             <ToggleButton value="topology" sx={{ fontSize: '0.6875rem', px: 1 }}>
-              <SchemaOutlinedIcon sx={{ fontSize: 15, mr: 0.5 }} />
+              <SchemaOutlinedIcon sx={{ fontSize: '0.9375rem', mr: 0.5 }} />
               Topology
             </ToggleButton>
           </ToggleButtonGroup>
@@ -352,7 +352,7 @@ export default function AgentsPanel() {
           <Paper variant="outlined" sx={{ p: 3 }}>
             <Stack spacing={1} alignItems="flex-start">
               <Stack direction="row" spacing={1} alignItems="center">
-                <CloudOffIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                <CloudOffIcon sx={{ fontSize: '1.125rem', color: 'text.secondary' }} />
                 <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8125rem' }}>
                   Catalog unavailable
                 </Typography>
@@ -360,7 +360,7 @@ export default function AgentsPanel() {
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
                 Could not reach the agent catalog. Check the API and try again.
               </Typography>
-              <Button size="small" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />} onClick={load}>
+              <Button size="small" startIcon={<RefreshIcon sx={{ fontSize: '0.9375rem' }} />} onClick={load}>
                 Retry
               </Button>
             </Stack>
@@ -461,7 +461,7 @@ export default function AgentsPanel() {
               {toolSet.length ? (
                 <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
                   {toolSet.map((t) => (
-                    <Chip key={t} size="small" label={t} sx={{ fontSize: '0.625rem', height: 18 }} />
+                    <Chip key={t} size="small" label={t} sx={{ fontSize: '0.625rem', height: 2.25 }} />
                   ))}
                 </Stack>
               ) : (
@@ -517,7 +517,7 @@ export default function AgentsPanel() {
                       key={s.id ?? s.name}
                       size="small"
                       label={s.name}
-                      sx={{ fontSize: '0.625rem', height: 18 }}
+                      sx={{ fontSize: '0.625rem', height: 2.25 }}
                     />
                   ))}
                 </Stack>

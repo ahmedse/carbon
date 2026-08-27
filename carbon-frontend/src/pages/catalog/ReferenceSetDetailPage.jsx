@@ -2,7 +2,7 @@
 // Reference Set Detail: Full view with governance metadata and values management
 // Phase 2: Detail page using BaseDetailPage pattern with tabs
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
@@ -24,7 +24,8 @@ import ListAltIcon from '@mui/icons-material/ListAlt';
 import ReferenceSetOverviewTab from './tabs/ReferenceSetOverviewTab';
 import ReferenceSetEditTab from './tabs/ReferenceSetEditTab';
 import ReferenceSetValuesTab from './tabs/ReferenceSetValuesTab';
-import ReferenceSetMetricsPanel from './tabs/ReferenceSetMetricsPanel';
+import { useNotes } from '../../notes/NotesContext';
+import { registerReferenceSetInspectorTabs } from '../../inspector/tabs/catalogTabs';
 
 export default function ReferenceSetDetailPage() {
   useDocumentTitle("Reference Set Detail");
@@ -82,6 +83,25 @@ export default function ReferenceSetDetailPage() {
     loadReferenceSetData();
   }, [loadReferenceSetData]);
 
+  // ── Contextual Inspector (global drawer) ────────────────────────────
+  const { setContexts } = useNotes();
+
+  useEffect(() => registerReferenceSetInspectorTabs(), []);
+
+  const inspectorContext = useMemo(
+    () => [{
+      entityType: 'reference-set',
+      entityId: setId,
+      label: refSet?.name,
+      payload: { entityData: refSet, values },
+    }],
+    [setId, refSet, values],
+  );
+  useEffect(() => {
+    setContexts(inspectorContext);
+    return () => setContexts(null);
+  }, [inspectorContext, setContexts]);
+
   const handleRefSetUpdated = async () => {
     // Refresh reference set and values after update
     await loadReferenceSetData();
@@ -132,9 +152,6 @@ export default function ReferenceSetDetailPage() {
         { label: t('overview'), component: ReferenceSetOverviewTab },
         { label: t('common:edit'), component: ReferenceSetEditTab },
         { label: t('values'), component: ReferenceSetValuesTab },
-      ]}
-      metricsTabs={[
-        { label: t('metrics'), component: ReferenceSetMetricsPanel },
       ]}
       loading={loading}
       error={error}

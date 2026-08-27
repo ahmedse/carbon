@@ -26,7 +26,7 @@ import { useAuth } from "../auth/AuthContext";
 const SCOPE_DETAILS = {
   1: {
     label: "Scope 1: Direct Emissions",
-    icon: <Scope1Icon sx={{ fontSize: 40, color: "success.main", verticalAlign: "middle" }} />,
+    icon: <Scope1Icon sx={{ fontSize: '2.5rem', color: "success.main", verticalAlign: "middle" }} />,
     description: "Direct greenhouse gas (GHG) emissions from sources owned or controlled by your organization, such as company vehicles, on-site fuel combustion, or manufacturing activities.",
     examples: [
       "Company-owned vehicles",
@@ -36,7 +36,7 @@ const SCOPE_DETAILS = {
   },
   2: {
     label: "Scope 2: Indirect Energy Emissions",
-    icon: <Scope2Icon sx={{ fontSize: 40, color: "primary.main", verticalAlign: "middle" }} />,
+    icon: <Scope2Icon sx={{ fontSize: '2.5rem', color: "primary.main", verticalAlign: "middle" }} />,
     description: "Indirect GHG emissions from the generation of purchased electricity, steam, heating, and cooling consumed by your organization.",
     examples: [
       "Purchased electricity for offices and factories",
@@ -45,7 +45,7 @@ const SCOPE_DETAILS = {
   },
   3: {
     label: "Scope 3: Value Chain Emissions",
-    icon: <Scope3Icon sx={{ fontSize: 40, color: "warning.main", verticalAlign: "middle" }} />,
+    icon: <Scope3Icon sx={{ fontSize: '2.5rem', color: "warning.main", verticalAlign: "middle" }} />,
     description: "Other indirect GHG emissions that occur in the value chain of your organization, both upstream and downstream (including suppliers and product use by customers).",
     examples: [
       "Business travel and employee commuting",

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import {
-  Box, Button, TextField, Typography, Alert, Paper, CircularProgress, MenuItem, Select,
+  Box, Button, TextField, Typography, Alert, Paper, CircularProgress, MenuItem, Select, useTheme,
 } from "@mui/material";
 import { Navigate, useNavigate, Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
@@ -14,6 +14,7 @@ export default function Login() {
   const { t } = useTranslation('auth');
   const { t: tShell } = useTranslation('shell');
   useDocumentTitle(t('login.documentTitle'));
+  const theme = useTheme();
   const {
     user, projects, context, loading, login, selectProject,
   } = useAuth();
@@ -101,7 +102,7 @@ export default function Login() {
       display: "flex", 
       alignItems: "center", 
       justifyContent: "center",
-      bgcolor: "#f8fafc",
+      bgcolor: theme.palette.grey[50],
       p: 2
     }}>
       <Paper sx={{ 

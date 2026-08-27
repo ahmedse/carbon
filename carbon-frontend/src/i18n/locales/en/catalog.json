@@ -540,6 +540,7 @@
   "addField": "Add Field",
   "noFieldsYet": "No fields yet — add the first field.",
   "noFieldsDefined": "No fields defined.",
+  "tableHasData": "Table already contains data — schema edits are disabled.",
   "moveUp": "Move up",
   "moveDown": "Move down",
   "deleteFieldTitle": "Delete field?",

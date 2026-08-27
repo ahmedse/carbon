@@ -1,9 +1,9 @@
 // src/pages/carbon/MyDataPage.jsx
 // My Data – Level 1 data owner workspace.
-// Pattern: EntityDetailShell (main grid + resizable right panel)
 //   – Grid: FilteredDataGrid-style with search, scope + status filters
-//   – Row click: highlights row, populates right panel (tabs: Trust, Impact, Activity)
-//   – Row actions: View (→ module workspace), Edit, Delete
+//   – Row click: highlights row, sets the contextual inspector context
+//     (global drawer tabs: Trust / Impact / Activity — see inspector/tabs/myDataTabs.jsx)
+//   – Row actions: View (→ module workspace)
 //   – All colours via theme.palette, zero hardcoded hex
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -12,54 +12,36 @@ import {
   Alert,
   Box,
   Chip,
-  CircularProgress,
-  Divider,
   FormControl,
   IconButton,
   InputAdornment,
   InputLabel,
-  LinearProgress,
-  List,
-  ListItemButton,
-  ListItemText,
   MenuItem,
   Select,
   Snackbar,
   Stack,
-  Tab,
-  Tabs,
   TextField,
   Tooltip,
   Typography,
-  useTheme,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
-import AssessmentIcon from '@mui/icons-material/Assessment';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded';
-import MemoryIcon from '@mui/icons-material/Memory';
 import NatureRoundedIcon from '@mui/icons-material/NatureRounded';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
-import ShieldIcon from '@mui/icons-material/Shield';
-import TimelineIcon from '@mui/icons-material/Timeline';
-import TrackChangesIcon from '@mui/icons-material/TrackChanges';
-import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchMyData, fetchOwnerActivity } from '../../api/emissions';
-import { fetchSBTiTargets } from '../../api/emissions-extended';
-import { fetchAssetProfiles, fetchGovernanceEvents } from '../../api/catalog';
-import { getOrgDQMetrics } from '../../api/dq';
-import EntityDetailShell from '../../components/entity/EntityDetailShell';
-import useDetailPanel from '../../components/entity/useDetailPanel';
-import { EmptyState, ErrorAlert, LoadingSkeleton, PageHeader, StatCard } from '../../components';
-import { PanelGauge, PanelMetricRow } from '../../components/panel';
+import { FONT } from '../../theme/themeTokens';
+import { EmptyState, ErrorAlert, LoadingSkeleton, PageHeader } from '../../components';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useNotes } from '../../notes/NotesContext';
+import { registerMyDataSourceInspectorTabs } from '../../inspector/tabs/myDataTabs';
 
 // ── Scope config uses MUI palette colour names ─────────────────────────────
 
@@ -92,20 +74,14 @@ function fmtDate(v) {
 // ── Reusable chip helpers ──────────────────────────────────────────────────
 
 function ScopeChip({ value }) {
-  const theme = useTheme();
   const cfg = SCOPE_CFG[value] || SCOPE_CFG[1];
-  const p = theme.palette[cfg.palette];
   return (
     <Chip
       label={cfg.label}
       size="small"
+      color={cfg.palette}
       sx={{
-        height: 20,
-        fontSize: '0.68rem',
         fontWeight: 700,
-        bgcolor: p?.['50'] || p?.light + '30',
-        color: p?.dark || p?.main,
-        border: 'none',
         '& .MuiChip-label': { px: 1 },
       }}
     />
@@ -118,275 +94,13 @@ function StatusChip({ row }) {
   const Icon = cfg.Icon;
   return (
     <Chip
-      icon={<Icon sx={{ fontSize: '13px !important' }} />}
+      icon={<Icon sx={{ fontSize: '0.8125rem' }} />}
       label={cfg.label}
       size="small"
       color={cfg.palette || 'default'}
       variant="outlined"
-      sx={{ height: 20, fontSize: '0.68rem', '& .MuiChip-label': { px: 0.5 }, '& .MuiChip-icon': { ml: '4px' } }}
+      sx={{ '& .MuiChip-label': { px: 0.5 }, '& .MuiChip-icon': { ml: 0.5 } }}
     />
-  );
-}
-
-// ── Right panel: Trust tab ────────────────────────────────────────────────
-
-function TrustTab({ mod, _theme, token }) {
-  const [dqMetrics, setDqMetrics] = useState(null);
-  const [assetProfile, setAssetProfile] = useState(null);
-
-  useEffect(() => {
-    if (!mod?.id || !token) return;
-    getOrgDQMetrics(token)
-      .then(setDqMetrics)
-      .catch(() => setDqMetrics(null));
-    fetchAssetProfiles(token)
-      .then((profiles) => {
-        const match = (profiles || []).find(
-          (p) => p.id === mod.id || p.source_id === mod.id || p.name === mod.name
-        );
-        setAssetProfile(match || null);
-      })
-      .catch(() => setAssetProfile(null));
-  }, [mod?.id, mod?.name, token]);
-
-  if (!mod) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography variant="body2" color="text.secondary">
-          Select a source to see trust metrics.
-        </Typography>
-      </Box>
-    );
-  }
-
-  const dqScore = mod.quality_score ?? 0;
-  const failingRules = dqMetrics?.failing_rules ?? (mod.quality_score != null && mod.quality_score < 60 ? '—' : 0);
-  const isLocked = assetProfile?.governance?.locked ?? false;
-  const lastVerified = assetProfile?.governance?.last_verified ?? null;
-  const evidenceCount = assetProfile?.evidence_count ?? 0;
-
-  return (
-    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="body2" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.68rem' }}>
-        Trust
-      </Typography>
-
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <PanelGauge score={dqScore} size={72} label="DQ Score" />
-      </Box>
-
-      <Divider />
-
-      <Box>
-        <PanelMetricRow label="Failing rules" value={`${failingRules}`} divider />
-        <PanelMetricRow label="Locked" value={isLocked ? 'Yes' : 'No'} divider />
-        <PanelMetricRow label="Last verified" value={fmtDate(lastVerified)} divider />
-        <PanelMetricRow label="Evidence" value={`${evidenceCount} docs`} divider />
-      </Box>
-    </Box>
-  );
-}
-
-function ImpactTab({ mod, theme, token }) {
-  const [sbtiTargets, setSbtiTargets] = useState([]);
-
-  useEffect(() => {
-    if (!mod?.id || !token) return;
-    fetchSBTiTargets(token)
-      .then((targets) => setSbtiTargets(Array.isArray(targets) ? targets : []))
-      .catch(() => setSbtiTargets([]));
-  }, [mod?.id, token]);
-
-  if (!mod) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography variant="body2" color="text.secondary">
-          Select a source to see downstream impact.
-        </Typography>
-      </Box>
-    );
-  }
-
-  const sbtiCount = sbtiTargets.filter(
-    (t) =>
-      t.org_unit_id === mod.id ||
-      t.source_id === mod.id ||
-      (t.org_unit_name && t.org_unit_name === mod.name)
-  ).length;
-  const rowCount = mod.row_count ?? 0;
-
-  return (
-    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="body2" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.68rem' }}>
-        Impact
-      </Typography>
-
-      {/* Dependency chain — kept visual */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 0.5,
-          py: 1.5,
-          flexWrap: 'wrap',
-        }}
-      >
-        {[
-          { label: 'Source', icon: <MemoryIcon sx={{ fontSize: 14 }} /> },
-          { label: 'Tables', icon: null },
-          { label: 'Calc', icon: <AssessmentIcon sx={{ fontSize: 14 }} /> },
-          { label: 'Reports', icon: null },
-        ].map((step, idx, arr) => (
-          <React.Fragment key={step.label}>
-            <Chip
-              icon={step.icon}
-              label={step.label}
-              size="small"
-              variant="outlined"
-              sx={{ height: 24, fontSize: '0.68rem', fontWeight: 600, borderColor: theme.palette.divider }}
-            />
-            {idx < arr.length - 1 && (
-              <Typography sx={{ color: 'text.disabled', fontSize: '0.75rem', mx: -0.25 }}>→</Typography>
-            )}
-          </React.Fragment>
-        ))}
-      </Box>
-
-      <Divider />
-
-      <Box>
-        <PanelMetricRow label="SBTi targets" value={`${sbtiCount} reference${sbtiCount !== 1 ? 's' : ''} this org unit`} divider />
-        <PanelMetricRow label="Calculations" value={`${rowCount} records linked`} divider />
-        <PanelMetricRow label="Data consumers" value={(
-          <Chip label="Carbon app" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }} />
-        )} divider />
-      </Box>
-    </Box>
-  );
-}
-
-const ACTIVITY_KINDS = {
-  data_change: { label: 'Data change', color: 'info', Icon: MemoryIcon },
-  dq_run: { label: 'DQ run', color: 'success', Icon: AssessmentIcon },
-  governance: { label: 'Governance', color: 'secondary', Icon: ShieldIcon },
-  calculation: { label: 'Calculation', color: 'warning', Icon: AssessmentIcon },
-};
-
-function fmtActivityText(item) {
-  if (item.detail || item.message) return item.detail || item.message;
-  const type = item.activity_type || '';
-  const name = item.module_name || '';
-  const tonnes = item.co2e_tonnes != null ? `${Number(item.co2e_tonnes).toFixed(1)} tCO₂e` : '';
-  const parts = [name, tonnes].filter(Boolean);
-  return parts.length ? `${type}${parts.length ? ' · ' : ''}${parts.join(' · ')}` : (type || 'Updated');
-}
-
-function detectActivityKind(item) {
-  const detail = (item.detail || item.message || item.event || item.activity_type || '').toLowerCase();
-  if (detail.includes('governance') || detail.includes('lock') || detail.includes('policy') || detail.includes('approve')) return 'governance';
-  if (detail.includes('dq') || detail.includes('quality') || detail.includes('check') || detail.includes('rule')) return 'dq_run';
-  if (detail.includes('calc') || detail.includes('compute') || detail.includes('emission') || detail.includes('target')) return 'calculation';
-  return 'data_change';
-}
-
-function ActivityTab({ activity, theme, token }) {
-  const [filter, setFilter] = useState('all');
-  const [govEvents, setGovEvents] = useState([]);
-
-  useEffect(() => {
-    if (!token) return;
-    fetchGovernanceEvents(token, { limit: 20 })
-      .then((events) => setGovEvents(Array.isArray(events) ? events : []))
-      .catch(() => setGovEvents([]));
-  }, [token]);
-
-  const merged = useMemo(() => {
-    const govMapped = govEvents.map((e) => ({
-      id: e.id,
-      detail: e.description || e.event || e.action || 'Governance event',
-      timestamp: e.timestamp || e.created_at,
-      kind: 'governance',
-    }));
-    const actMapped = (activity || []).map((a) => ({
-      ...a,
-      kind: detectActivityKind(a),
-    }));
-    const combined = [...actMapped, ...govMapped];
-    combined.sort((a, b) => new Date(b.reported_at || b.timestamp || b.created_at || 0) - new Date(a.reported_at || a.timestamp || a.created_at || 0));
-    return combined;
-  }, [activity, govEvents]);
-
-  const filtered = useMemo(() => {
-    if (filter === 'all') return merged;
-    return merged.filter((item) => item.kind === filter);
-  }, [merged, filter]);
-
-  const filterOptions = [
-    { value: 'all', label: 'All' },
-    { value: 'data_change', label: 'Data', color: 'info' },
-    { value: 'dq_run', label: 'DQ', color: 'success' },
-    { value: 'governance', label: 'Gov', color: 'secondary' },
-    { value: 'calculation', label: 'Calc', color: 'warning' },
-  ];
-
-  return (
-    <Box sx={{ p: 1.5 }}>
-      {/* Filter row */}
-      <Stack direction="row" spacing={0.5} sx={{ mb: 1.5, flexWrap: 'wrap', gap: 0.5 }}>
-        {filterOptions.map((opt) => {
-          const isActive = filter === opt.value;
-          return (
-            <Chip
-              key={opt.value}
-              label={opt.label}
-              size="small"
-              variant={isActive ? 'filled' : 'outlined'}
-              color={isActive ? (opt.color || 'primary') : 'default'}
-              onClick={() => setFilter(opt.value)}
-              sx={{
-                height: 22,
-                fontSize: '0.65rem',
-                fontWeight: isActive ? 700 : 500,
-                cursor: 'pointer',
-                '&:hover': { bgcolor: isActive ? undefined : theme.palette.action.hover },
-              }}
-            />
-          );
-        })}
-      </Stack>
-
-      {filtered.length === 0 ? (
-        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>No recent activity.</Typography>
-      ) : (
-        <Stack divider={<Divider flexItem />} spacing={0}>
-          {filtered.map((item, i) => {
-            const cfg = ACTIVITY_KINDS[item.kind] || ACTIVITY_KINDS.data_change;
-            const Icon = cfg.Icon;
-            return (
-              <Box key={item.id ?? i} sx={{ py: 1, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                <Icon
-                  sx={{
-                    fontSize: 14,
-                    mt: '2px',
-                    color: `${cfg.color}.main`,
-                    flexShrink: 0,
-                  }}
-                />
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontSize: '0.75rem', lineHeight: 1.35 }}>
-                    {fmtActivityText(item)}
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled', mt: 0.25 }}>
-                    {fmtDate(item.reported_at || item.timestamp || item.created_at)}
-                  </Typography>
-                </Box>
-              </Box>
-            );
-          })}
-        </Stack>
-      )}
-    </Box>
   );
 }
 
@@ -395,7 +109,6 @@ function ActivityTab({ activity, theme, token }) {
 export default function MyDataPage() {
   useDocumentTitle("My Data");
   const navigate = useNavigate();
-  const theme = useTheme();
   const { token } = useAuth();
 
   const [loading, setLoading]       = useState(true);
@@ -451,7 +164,7 @@ export default function MyDataPage() {
       width: 105,
       renderHeader: () => (
         <Tooltip title="GHG Protocol scope classification. Scope 1 = direct emissions from owned sources. Scope 2 = purchased electricity. Scope 3 = value chain (supply chain, travel, etc.)." arrow>
-          <Typography component="span" sx={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.04em' }}>
+          <Typography component="span" sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}>
             Scope
           </Typography>
         </Tooltip>
@@ -464,7 +177,7 @@ export default function MyDataPage() {
       flex: 2,
       minWidth: 180,
       renderCell: ({ value }) => (
-        <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{value}</Typography>
+        <Typography sx={{ ...FONT.body, fontWeight: 600 }}>{value}</Typography>
       ),
     },
     {
@@ -472,14 +185,14 @@ export default function MyDataPage() {
       headerName: 'Tables',
       width: 75,
       type: 'number',
-      renderCell: ({ value }) => <Typography sx={{ fontSize: '0.8125rem' }}>{value ?? 0}</Typography>,
+      renderCell: ({ value }) => <Typography sx={FONT.body}>{value ?? 0}</Typography>,
     },
     {
       field: 'row_count',
       headerName: 'Rows',
       width: 75,
       type: 'number',
-      renderCell: ({ value }) => <Typography sx={{ fontSize: '0.8125rem' }}>{value ?? 0}</Typography>,
+      renderCell: ({ value }) => <Typography sx={FONT.body}>{value ?? 0}</Typography>,
     },
     {
       field: 'status',
@@ -497,7 +210,7 @@ export default function MyDataPage() {
       width: 68,
       renderHeader: () => (
         <Tooltip title="Data Quality score (%) — computed from completeness, freshness, accuracy, and consistency checks. ≥80% passing, 60–79% warning, <60% failing." arrow>
-          <Typography component="span" sx={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.04em' }}>
+          <Typography component="span" sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}>
             DQ%
           </Typography>
         </Tooltip>
@@ -505,7 +218,7 @@ export default function MyDataPage() {
       renderCell: ({ value }) => (
         <Typography
           sx={{
-            fontSize: '0.8125rem',
+            ...FONT.body,
             fontWeight: 600,
             color: value == null
               ? 'text.disabled'
@@ -521,7 +234,7 @@ export default function MyDataPage() {
       headerName: 'Last Entry',
       width: 110,
       renderCell: ({ value }) => (
-        <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>{fmtDate(value)}</Typography>
+        <Typography sx={{ ...FONT.body, color: 'text.secondary' }}>{fmtDate(value)}</Typography>
       ),
     },
     {
@@ -534,7 +247,7 @@ export default function MyDataPage() {
         <Stack direction="row" spacing={0.25} onClick={(e) => e.stopPropagation()}>
           <Tooltip title="Open workspace">
             <IconButton size="small" onClick={() => navigate(`/carbon/my-data/${row.id}`)}>
-              <VisibilityIcon sx={{ fontSize: 15 }} />
+              <VisibilityIcon sx={{ fontSize: '0.9375rem' }} />
             </IconButton>
           </Tooltip>
         </Stack>
@@ -542,15 +255,22 @@ export default function MyDataPage() {
     },
   ], [navigate]);
 
-  const { metricsPanel, metricsTabs, activeMetricsTab, onMetricsTabChange, resetTab, toggleConfigPopup, saveConfig, panelConfigOpen, panelConfig } = useDetailPanel({
-    tabs: [
-      { label: 'Trust',    description: 'Data quality score, verification status, and evidence completeness', render: () => <TrustTab mod={selected} theme={theme} token={token} /> },
-      { label: 'Impact',   description: 'Environmental impact metrics, SBTi alignment, and data consumers', render: () => <ImpactTab mod={selected} theme={theme} token={token} /> },
-      { label: 'Activity', description: 'Recent changes, calculations, and governance events', render: () => <ActivityTab activity={activity} theme={theme} token={token} /> },
-    ],
-    storageKey: 'myData:panelTab',
-    configurable: true,
-  });
+  // ── Contextual Inspector (global drawer) ────────────────────────────────
+  const { setContexts } = useNotes();
+
+  // Register the My-Data source tabs once; unregister on unmount.
+  useEffect(() => registerMyDataSourceInspectorTabs(), []);
+
+  // Expose the selected source as the active inspector context with a payload
+  // fast-path ({ mod, activity }) so the registered tabs render without refetch.
+  const inspectorContext = useMemo(
+    () => [{ entityType: 'myDataSource', entityId: selected?.id ?? null, label: selected?.name, payload: { mod: selected, activity } }],
+    [selected, activity],
+  );
+  useEffect(() => {
+    setContexts(inspectorContext);
+    return () => setContexts(null);
+  }, [inspectorContext, setContexts]);
 
   // ── Loading / error states ─────────────────────────────────────────────
   if (loading) return (
@@ -593,14 +313,11 @@ export default function MyDataPage() {
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon sx={{ fontSize: 15, color: 'text.disabled' }} />
+                <SearchIcon sx={{ fontSize: '0.9375rem', color: 'text.disabled' }} />
               </InputAdornment>
             ),
           }}
-          sx={{
-            flex: 1,
-            '& .MuiInputBase-input': { fontSize: '0.8125rem', py: '6px' },
-          }}
+          sx={{ flex: 1 }}
         />
 
         <FormControl size="small" sx={{ minWidth: 100 }}>
@@ -609,8 +326,7 @@ export default function MyDataPage() {
               <Typography component="span" sx={{ fontSize: 'inherit' }}>Scope</Typography>
             </Tooltip>
           </InputLabel>
-          <Select value={scopeFilter} label="Scope" onChange={(e) => setScopeFilter(e.target.value)}
-            sx={{ fontSize: '0.8125rem' }}>
+          <Select value={scopeFilter} label="Scope" onChange={(e) => setScopeFilter(e.target.value)}>
             <MenuItem value="all">All scopes</MenuItem>
             <MenuItem value="1">Scope 1</MenuItem>
             <MenuItem value="2">Scope 2</MenuItem>
@@ -624,8 +340,7 @@ export default function MyDataPage() {
               <Typography component="span" sx={{ fontSize: 'inherit' }}>Status</Typography>
             </Tooltip>
           </InputLabel>
-          <Select value={statusFilter} label="Status" onChange={(e) => setStatusFilter(e.target.value)}
-            sx={{ fontSize: '0.8125rem' }}>
+          <Select value={statusFilter} label="Status" onChange={(e) => setStatusFilter(e.target.value)}>
             <MenuItem value="all">All</MenuItem>
             <MenuItem value="passing">Passing</MenuItem>
             <MenuItem value="warning">Warning</MenuItem>
@@ -636,7 +351,7 @@ export default function MyDataPage() {
 
         <Tooltip title="Refresh">
           <IconButton size="small" onClick={load}>
-            <RefreshIcon sx={{ fontSize: 16 }} />
+            <RefreshIcon sx={{ fontSize: '1rem' }} />
           </IconButton>
         </Tooltip>
 
@@ -661,39 +376,15 @@ export default function MyDataPage() {
             onRowSelectionModelChange={(model) => {
               const ids = Array.from(model.ids || []);
               setSelectedId(ids[0] ?? null);
-              resetTab();
             }}
             onRowClick={(params) => {
               setSelectedId(params.id);
-              resetTab();
             }}
             pageSizeOptions={[25, 50, 100]}
             initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
             sx={{
-              border: 'none',
-              fontSize: '0.8125rem',
-              '& .MuiDataGrid-columnHeaders': {
-                bgcolor: 'grey.50',
-                borderBottom: 1,
-                borderColor: 'divider',
-                '& .MuiDataGrid-columnHeaderTitle': {
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  color: 'text.secondary',
-                  letterSpacing: '0.04em',
-                },
-              },
-              '& .MuiDataGrid-row': {
-                cursor: 'pointer',
-                '&:hover': { bgcolor: 'action.hover' },
-                '&.Mui-selected': {
-                  bgcolor: `${theme.palette.primary.main}14`,
-                  '&:hover': { bgcolor: `${theme.palette.primary.main}1e` },
-                },
-              },
+              '& .MuiDataGrid-row': { cursor: 'pointer' },
               '& .MuiDataGrid-cell': {
-                borderBottom: `1px solid ${theme.palette.divider}`,
                 '&:focus, &:focus-within': { outline: 'none' },
               },
               '& .MuiDataGrid-footerContainer': {
@@ -710,27 +401,18 @@ export default function MyDataPage() {
 
   return (
     <>
-      <EntityDetailShell
-        header={
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.default' }}>
+        <Box sx={{ bgcolor: 'white', px: 2, pt: 1.5, pb: 0 }}>
           <PageHeader
             title="My Data"
             subtitle={orgUnit?.name || ''}
             description="Your data owner workspace. Select a source to inspect row counts, data quality scores, and activity. Open the workspace to edit tables row by row."
           />
-        }
-        mainContent={mainContent}
-        metricsPanel={metricsPanel}
-        metricsTabs={metricsTabs}
-        activeMetricsTab={activeMetricsTab}
-        onMetricsTabChange={onMetricsTabChange}
-        panelWidthKey="myData:panelWidth"
-        panelConfigurable
-        panelConfig={panelConfig}
-        panelConfigOpen={panelConfigOpen}
-        toggleConfigPopup={toggleConfigPopup}
-        saveConfig={saveConfig}
-        allPanelTabs={['Trust', 'Impact', 'Activity'].map((l) => ({ label: l }))}
-      />
+        </Box>
+        <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'white', borderTop: 1, borderColor: 'divider' }}>
+          {mainContent}
+        </Box>
+      </Box>
 
       <Snackbar open={Boolean(snackbar)} autoHideDuration={4000} onClose={() => setSnackbar(null)}>
         <Alert severity={snackbar?.severity || 'info'} onClose={() => setSnackbar(null)}>

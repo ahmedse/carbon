@@ -162,7 +162,7 @@ export default function RunTimelinePanel() {
             {timeline && !loading && (
               <Button
                 size="small"
-                startIcon={<PlayArrowOutlinedIcon sx={{ fontSize: 15 }} />}
+                startIcon={<PlayArrowOutlinedIcon sx={{ fontSize: '0.9375rem' }} />}
                 disabled={acting}
                 onClick={() => setConfirmAction('resume')}
                 sx={{ fontSize: '0.75rem' }}
@@ -173,7 +173,7 @@ export default function RunTimelinePanel() {
             {timeline && !loading && (
               <Button
                 size="small"
-                startIcon={<ReplayOutlinedIcon sx={{ fontSize: 15 }} />}
+                startIcon={<ReplayOutlinedIcon sx={{ fontSize: '0.9375rem' }} />}
                 disabled={acting}
                 onClick={() => setConfirmAction('replay')}
                 sx={{ fontSize: '0.75rem' }}
@@ -208,7 +208,7 @@ export default function RunTimelinePanel() {
             />
             <Button
               size="small"
-              startIcon={<CompareArrowsIcon sx={{ fontSize: 15 }} />}
+              startIcon={<CompareArrowsIcon sx={{ fontSize: '0.9375rem' }} />}
               onClick={onCompare}
               disabled={compareLoading || !runId.trim() || !runBId.trim()}
               sx={{ fontSize: '0.75rem' }}
@@ -228,7 +228,7 @@ export default function RunTimelinePanel() {
           <Paper variant="outlined" sx={{ p: 3 }}>
             <Stack spacing={1} alignItems="flex-start">
               <Stack direction="row" spacing={1} alignItems="center">
-                <CloudOffIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                <CloudOffIcon sx={{ fontSize: '1.125rem', color: 'text.secondary' }} />
                 <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8125rem' }}>
                   Timeline unavailable
                 </Typography>
@@ -262,7 +262,7 @@ export default function RunTimelinePanel() {
           <Paper variant="outlined" sx={{ p: 3 }}>
             <Stack spacing={1} alignItems="flex-start">
               <Stack direction="row" spacing={1} alignItems="center">
-                <CloudOffIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                <CloudOffIcon sx={{ fontSize: '1.125rem', color: 'text.secondary' }} />
                 <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8125rem' }}>
                   Comparison unavailable
                 </Typography>
@@ -319,7 +319,7 @@ export default function RunTimelinePanel() {
                           </Alert>
                         ) : (
                           <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
-                            {d.a_status} <CompareArrowsIcon sx={{ fontSize: 12, verticalAlign: 'middle' }} /> {d.b_status}
+                            {d.a_status} <CompareArrowsIcon sx={{ fontSize: '0.75rem', verticalAlign: 'middle' }} /> {d.b_status}
                           </Typography>
                         )}
                       </Stack>

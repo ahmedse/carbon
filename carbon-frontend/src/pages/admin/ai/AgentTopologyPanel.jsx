@@ -60,7 +60,7 @@ export default function AgentTopologyPanel() {
           )}
           <Button
             size="small"
-            startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
+            startIcon={<RefreshIcon sx={{ fontSize: '0.9375rem' }} />}
             onClick={load}
             disabled={loading}
             sx={{ fontSize: '0.75rem' }}
@@ -84,7 +84,7 @@ export default function AgentTopologyPanel() {
           <Paper variant="outlined" sx={{ p: 3 }}>
             <Stack spacing={1} alignItems="flex-start">
               <Stack direction="row" spacing={1} alignItems="center">
-                <CloudOffIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                <CloudOffIcon sx={{ fontSize: '1.125rem', color: 'text.secondary' }} />
                 <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8125rem' }}>
                   Topology unavailable
                 </Typography>
@@ -92,7 +92,7 @@ export default function AgentTopologyPanel() {
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
                 Could not reach the catalog service. Check the API and try again.
               </Typography>
-              <Button size="small" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />} onClick={load}>
+              <Button size="small" startIcon={<RefreshIcon sx={{ fontSize: '0.9375rem' }} />} onClick={load}>
                 Retry
               </Button>
             </Stack>

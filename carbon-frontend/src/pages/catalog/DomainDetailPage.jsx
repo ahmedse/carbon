@@ -1,7 +1,7 @@
 // src/pages/catalog/DomainDetailPage.jsx
 // Domain Detail: Full view of a data domain with governance info
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
@@ -16,8 +16,9 @@ import DetailHeader from '../../components/detail/DetailHeader';
 // Tab components
 import DomainOverviewTab from './tabs/DomainOverviewTab';
 import DomainEditTab from './tabs/DomainEditTab';
-import DomainSummaryMetrics from './tabs/DomainSummaryMetrics';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { useNotes } from '../../notes/NotesContext';
+import { registerDomainInspectorTabs } from '../../inspector/tabs/catalogTabs';
 
 export default function DomainDetailPage() {
   useDocumentTitle("Domain Detail");
@@ -55,6 +56,20 @@ export default function DomainDetailPage() {
     fetchDomain();
   }, [domainId, token, notify, t]);
 
+  // ── Contextual Inspector (global drawer) ────────────────────────────
+  const { setContexts } = useNotes();
+
+  useEffect(() => registerDomainInspectorTabs(), []);
+
+  const inspectorContext = useMemo(
+    () => [{ entityType: 'domain', entityId: domainId, label: domain?.name, payload: { entityData: domain } }],
+    [domainId, domain],
+  );
+  useEffect(() => {
+    setContexts(inspectorContext);
+    return () => setContexts(null);
+  }, [inspectorContext, setContexts]);
+
   const headerComponent = (
     <DetailHeader
       title={domain?.name || t('domainFallback')}
@@ -70,9 +85,6 @@ export default function DomainDetailPage() {
       mainTabs={[
         { label: t('overview'), component: DomainOverviewTab },
         { label: t('common:edit'), component: DomainEditTab },
-      ]}
-      metricsTabs={[
-        { label: t('summary'), component: DomainSummaryMetrics },
       ]}
       loading={loading}
       error={error}

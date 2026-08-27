@@ -1,7 +1,7 @@
 // src/pages/catalog/tabs/TagSummaryMetrics.jsx
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, useTheme } from '@mui/material';
 import DetailMetricsPanel, {
   MetricCard,
   MetricsGrid,
@@ -12,6 +12,7 @@ import ColorLensIcon from '@mui/icons-material/ColorLens';
 
 export default function TagSummaryMetrics({ entityData }) {
   const { t } = useTranslation('catalog');
+  const theme = useTheme();
   if (!entityData) return null;
 
   const createdDate = entityData.created_at 
@@ -41,11 +42,11 @@ export default function TagSummaryMetrics({ entityData }) {
         <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box
             sx={{
-              width: 48,
-              height: 48,
+              width: 6,
+              height: 6,
               borderRadius: 1,
-              bgcolor: entityData.color || '#000000',
-              border: '2px solid #e0e0e0',
+              bgcolor: entityData.color || theme.palette.primary.main,
+              border: `2px solid ${theme.palette.divider}`,
             }}
           />
           <Box>

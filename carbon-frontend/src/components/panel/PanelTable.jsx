@@ -178,14 +178,14 @@ export default function PanelTable({
               disabled={pagination.page <= 1}
               onClick={() => pagination.onChange(pagination.page - 1)}
             >
-              <ChevronLeftIcon sx={{ fontSize: 18 }} />
+              <ChevronLeftIcon sx={{ fontSize: '1.125rem' }} />
             </IconButton>
             <IconButton
               size="small"
               disabled={pagination.page * pagination.pageSize >= pagination.total}
               onClick={() => pagination.onChange(pagination.page + 1)}
             >
-              <ChevronRightIcon sx={{ fontSize: 18 }} />
+              <ChevronRightIcon sx={{ fontSize: '1.125rem' }} />
             </IconButton>
           </Box>
         </Box>

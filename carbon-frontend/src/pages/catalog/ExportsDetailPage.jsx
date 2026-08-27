@@ -39,6 +39,8 @@ import { fetchExportProjects, createExportProject, updateExportProject, deleteEx
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
 import HomeIcon from '@mui/icons-material/Home';
+import { useNotes } from '../../notes/NotesContext';
+import { registerExportInspectorTabs } from '../../inspector/tabs/collectionTabs';
 
 const EMPTY_FORM = { name: '', format: 'excel', schedule: 'manual', description: '' };
 const FORMATS = ['csv', 'excel', 'json'];
@@ -49,6 +51,7 @@ export default function ExportsDetailPage() {
   const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
+  const { setContexts } = useNotes();
 
   const [projects, setProjects] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -281,6 +284,20 @@ export default function ExportsDetailPage() {
     [jobs, projects, t]
   );
 
+  // ── Contextual Inspector (global drawer) ────────────────────────────
+  // Collection pages have no single entity; anchor to a stable sentinel id (0)
+  // so the summary tab renders and notes stay scoped to this collection.
+  useEffect(() => registerExportInspectorTabs(), []);
+
+  const inspectorContext = useMemo(
+    () => [{ entityType: 'export', entityId: 0, label: t('exports'), payload: { summaryCards } }],
+    [summaryCards, t],
+  );
+  useEffect(() => {
+    setContexts(inspectorContext);
+    return () => setContexts(null);
+  }, [inspectorContext, setContexts]);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -307,21 +324,10 @@ export default function ExportsDetailPage() {
           { label: t('projects'), component: ProjectsTab },
           { label: t('jobs'), component: JobsTab },
         ]}
-        metricsTabs={[{ label: t('summary'), component: () => (
-          <Box sx={{ p: 2 }}>
-            {summaryCards.map((card) => (
-              <Box key={card.title} sx={{ p: 2, mb: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                <Typography variant="caption" color="text.secondary">{card.title}</Typography>
-                <Typography variant="h6">{card.value}</Typography>
-              </Box>
-            ))}
-          </Box>
-        ) }]}
         loading={loading}
         error={error}
         onClose={() => window.history.back()}
         storageKey="carbonExportsDetail"
-        entityData={{ projects, jobs }}
       />
       <SystemDialog
         open={openDialog}

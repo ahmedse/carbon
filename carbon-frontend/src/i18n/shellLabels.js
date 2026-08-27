@@ -36,7 +36,6 @@ export const NAV_LABEL_KEYS = {
   'Data Entry': 'nav.dataEntry',
   'Row Detail': 'nav.rowDetail',
   'Activity Data Entry': 'nav.activityDataEntry',
-  'Table Manager': 'nav.tableManager',
   'Data Product': 'nav.dataProduct',
   'Scope Detail': 'nav.scopeDetail',
   Admin: 'nav.admin',

@@ -1,7 +1,7 @@
 // File: src/pages/dataschema/RowDetailPage.jsx
-// Row detail page — enterprise three-column layout with EntityDetailShell.
-// Main content: Overview, Edit, Evidence, History tabs.
-// Right panel: DQ Metrics, Lineage, Related tabs.
+// Row detail page — main content tabs (Overview, Edit, Evidence, History).
+// Right panel (DQ Metrics, Lineage, Related) now lives in the global
+// contextual inspector drawer (see inspector/tabs/rowDetailTabs.jsx).
 // Fetches table + module context and calculations for meaningful header.
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -14,6 +14,8 @@ import {
   IconButton,
   Tooltip,
   Typography,
+  Tab,
+  Tabs,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
@@ -23,14 +25,12 @@ import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useAuth } from '../../auth/AuthContext';
 import { authFetch } from '../../api/api';
-import EntityDetailShell from '../../components/entity/EntityDetailShell';
-import useDetailPanel from '../../components/entity/useDetailPanel';
 import RowOverviewTab from './tabs/RowOverviewTab';
 import RowEditTab from './tabs/RowEditTab';
 import RowEvidenceTab from './tabs/RowEvidenceTab';
-import DQMetricsTab from './metrics/DQMetricsTab';
-import RelatedRecordsTab from './metrics/RelatedRecordsTab';
 import { PanelTable } from '../../components/panel';
+import { useNotes } from '../../notes/NotesContext';
+import { registerRowDetailInspectorTabs } from '../../inspector/tabs/rowDetailTabs';
 
 function notify(message, type = 'info') {
   const event = new CustomEvent('notify', { detail: { message, type } });
@@ -60,27 +60,6 @@ export default function RowDetailPage() {
   const [activeMainTab, setActiveMainTab] = useState(() => {
     const saved = localStorage.getItem('carbonRowDetail:mainTab');
     return saved ? parseInt(saved, 10) : 0;
-  });
-
-  // DQ metrics state
-  const [dqLoading, setDqLoading] = useState(false);
-  const [dqError, setDqError] = useState(null);
-  const [dqMetrics, setDQMetrics] = useState(null);
-  const [dqFetched, setDqFetched] = useState(false);
-
-  // ── Right panel via useDetailPanel ────────────────────────────────────
-  const { metricsPanel, metricsTabs, activeMetricsTab, onMetricsTabChange } = useDetailPanel({
-    tabs: [
-      { label: 'DQ Metrics', description: 'Data quality rule evaluation results for this row', render: () => (
-        <Box sx={{ p: 2 }}>
-          {dqLoading ? <CircularProgress size={24} /> : dqError ? <Alert severity="warning" sx={{ fontSize: '0.75rem' }}>{dqError}</Alert> : <DQMetricsTab metrics={dqMetrics} rowId={rowId} tableId={tableId} token={token} />}
-        </Box>
-      )},
-      { label: 'Lineage', description: 'Emission factor provenance and calculation chain', render: () => <RowLineageTab rowId={rowId} tableId={tableId} token={token} calculations={calculations} /> },
-      { label: 'Related', description: 'Records linked by foreign keys, temporal neighbors, and relations', render: () => <RelatedRecordsTab rowId={rowId} tableId={tableId} token={token} rowData={rowData} /> },
-    ],
-    storageKey: 'carbonRowDetail:panelTab',
-    configurable: true,
   });
 
   // ── Listen for switchTab ────────────────────────────────────────────
@@ -143,28 +122,6 @@ export default function RowDetailPage() {
     })();
   }, [token, rowId, tableId, context?.modules]);
 
-  // ── Lazy-load DQ metrics on first mount (tab 0 is default) ───────────
-  useEffect(() => {
-    if (!dqFetched && rowId && tableId && token) {
-      setDqLoading(true);
-      setDqError(null);
-      (async () => {
-        try {
-          let res = await authFetch(`dq/metrics/table/${tableId}/?row_id=${rowId}`, { token });
-          if (!res.ok && res.status === 404)
-            res = await authFetch(`dq/metrics/table/${tableId}/`, { token });
-          if (res.ok) setDQMetrics(transformDqResponse(await res.json()));
-          else throw new Error(`Failed: ${res.status}`);
-        } catch (err) {
-          setDqError(err.message || 'Failed to load DQ metrics');
-        } finally {
-          setDqLoading(false);
-          setDqFetched(true);
-        }
-      })();
-    }
-  }, [rowId, tableId, token, dqFetched]);
-
   // ── Refresh ─────────────────────────────────────────────────────────
   const handleRefresh = async () => {
     const currentToken = token || localStorage.getItem('access');
@@ -188,6 +145,28 @@ export default function RowDetailPage() {
     }
     return `Row #${rowData.id}`;
   }, [rowData]);
+
+  // ── Contextual Inspector (global drawer) ────────────────────────────
+  const { setContexts } = useNotes();
+
+  // Register the row tabs once; unregister on unmount.
+  useEffect(() => registerRowDetailInspectorTabs(), []);
+
+  // Expose this row as the active inspector context with a payload fast-path
+  // ({ rowData, tableInfo, moduleInfo, calculations, tableId, rowId }).
+  const inspectorContext = useMemo(
+    () => [{
+      entityType: 'row',
+      entityId: rowId,
+      label: rowDisplayName,
+      payload: { rowData, tableInfo, moduleInfo, calculations, tableId, rowId },
+    }],
+    [rowDisplayName, rowData, tableInfo, moduleInfo, calculations, tableId, rowId],
+  );
+  useEffect(() => {
+    setContexts(inspectorContext);
+    return () => setContexts(null);
+  }, [inspectorContext, setContexts]);
 
   const tableDisplayName = tableInfo?.title || tableInfo?.name || `Table #${tableId}`;
   const moduleDisplayName = moduleInfo?.name || '—';
@@ -240,7 +219,7 @@ export default function RowDetailPage() {
   const header = (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minHeight: 44 }}>
       <IconButton size="small" onClick={handleClose} sx={{ flexShrink: 0 }}>
-        <ArrowBackIcon sx={{ fontSize: 18 }} />
+        <ArrowBackIcon sx={{ fontSize: '1.125rem' }} />
       </IconButton>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, lineHeight: 1.3 }} noWrap>
@@ -251,20 +230,20 @@ export default function RowDetailPage() {
         </Typography>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
-        {scopeMeta && <Chip label={scopeMeta.label} size="small" color={scopeMeta.color} sx={{ height: 20, fontSize: '0.68rem' }} />}
-        {totalCo2e > 0 && <Chip label={`${(totalCo2e / 1000).toFixed(2)} tCO₂e`} size="small" color="warning" variant="filled" sx={{ height: 20, fontSize: '0.68rem' }} />}
+        {scopeMeta && <Chip label={scopeMeta.label} size="small" color={scopeMeta.color} sx={{ height: 2.5, fontSize: '0.68rem' }} />}
+        {totalCo2e > 0 && <Chip label={`${(totalCo2e / 1000).toFixed(2)} tCO₂e`} size="small" color="warning" variant="filled" sx={{ height: 2.5, fontSize: '0.68rem' }} />}
       </Box>
       <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
         <Tooltip title="Switch to Edit tab">
           <IconButton size="small" onClick={() => { setActiveMainTab(1); localStorage.setItem('carbonRowDetail:mainTab', 1); }}>
-            <EditIcon sx={{ fontSize: 16 }} />
+            <EditIcon sx={{ fontSize: '1rem' }} />
           </IconButton>
         </Tooltip>
         <Tooltip title="Download CSV">
-          <IconButton size="small" onClick={handleDownload}><DownloadIcon sx={{ fontSize: 16 }} /></IconButton>
+          <IconButton size="small" onClick={handleDownload}><DownloadIcon sx={{ fontSize: '1rem' }} /></IconButton>
         </Tooltip>
         <Tooltip title="Refresh">
-          <IconButton size="small" onClick={handleRefresh}><RefreshIcon sx={{ fontSize: 16 }} /></IconButton>
+          <IconButton size="small" onClick={handleRefresh}><RefreshIcon sx={{ fontSize: '1rem' }} /></IconButton>
         </Tooltip>
       </Box>
     </Box>
@@ -279,47 +258,29 @@ export default function RowDetailPage() {
   ];
 
   return (
-    <EntityDetailShell
-      header={header}
-      mainTabs={mainTabs}
-      activeMainTab={activeMainTab}
-      onMainTabChange={(_event, next) => { setActiveMainTab(next); localStorage.setItem('carbonRowDetail:mainTab', next); }}
-      metricsPanel={metricsPanel}
-      metricsTabs={metricsTabs}
-      activeMetricsTab={activeMetricsTab}
-      onMetricsTabChange={onMetricsTabChange}
-      panelWidthKey="carbonRowDetail:panelWidth"
-    />
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.default' }}>
+      <Box sx={{ bgcolor: 'white', px: 2, pt: 1.5, pb: 0 }}>{header}</Box>
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: 1, borderColor: 'divider' }}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'white' }}>
+          <Tabs
+            value={activeMainTab}
+            onChange={(_event, next) => { setActiveMainTab(next); localStorage.setItem('carbonRowDetail:mainTab', next); }}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{
+              minHeight: 36,
+              '& .MuiTab-root': { textTransform: 'none', fontSize: '0.78rem', minHeight: 36, py: 0.5 },
+            }}
+          >
+            {mainTabs.map((tab, idx) => <Tab key={idx} label={tab.label} />)}
+          </Tabs>
+        </Box>
+        <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'white' }}>
+          {mainTabs[activeMainTab]?.render?.()}
+        </Box>
+      </Box>
+    </Box>
   );
-}
-
-// ── Transform DQ API response to DQMetricsTab-compatible format ─────────
-
-function transformDqResponse(apiData) {
-  const rules = apiData?.active_rules || [];
-  const completeness = apiData?.completeness_pct ?? 0;
-  const fieldProfiles = apiData?.field_profiles || [];
-
-  if (rules.length === 0) {
-    return { status: 'unknown', passed_count: 0, total_count: 0, results: [], last_run: null, completeness_pct: completeness, row_count: apiData?.row_count ?? 0 };
-  }
-
-  const results = rules.map((rule) => {
-    const fp = fieldProfiles.find(p => p.data_field === rule.data_field);
-    // Use DQResult pass/fail if available, else infer from severity
-    const passed = rule.latest_result?.passed ?? (rule.severity === 'info');
-    return {
-      rule_name: rule.rule_type + (rule.data_field_name ? ` · ${rule.data_field_name}` : ''),
-      passed,
-      severity: rule.severity,
-      message: fp ? `Completeness: ${fp.completeness_pct?.toFixed(1)}%` : rule.rule_type,
-    };
-  });
-
-  const passed_count = results.filter(r => r.passed).length;
-  const status = passed_count === results.length ? 'passed' : passed_count === 0 ? 'failed' : 'warning';
-
-  return { status, passed_count, total_count: results.length, results, last_run: apiData?.last_run || null, completeness_pct: completeness, row_count: apiData?.row_count ?? 0 };
 }
 
 // ── Row History Tab (inline) ──────────────────────────────────────────────
@@ -378,7 +339,7 @@ function RowHistoryTab({ rowId, tableId, token }) {
           render: (v) => {
             const cfg = KIND_CHIP[v] || KIND_CHIP.data;
             return <Chip label={cfg.label} size="small" color={cfg.color}
-              sx={{ height: 20, fontSize: '0.65rem' }} />;
+              sx={{ height: 2.5, fontSize: '0.65rem' }} />;
           },
         },
         {
@@ -415,75 +376,5 @@ function RowHistoryTab({ rowId, tableId, token }) {
       loading={loading}
       pagination={total > pageSize ? { page, pageSize, total, onChange: setPage } : null}
     />
-  );
-}
-
-// ── Row Lineage Tab ─────────────────────────────────────────────────
-// Shows emission provenance chain: Factor → Scope → Category → CO₂e output
-function RowLineageTab({ calculations }) {
-  const SCOPE_COLOR = { 1: 'error', 2: 'warning', 3: 'info' };
-
-  const totalTCO2e = calculations.reduce((sum, c) => sum + (Number(c.co2e_kg) || 0), 0) / 1000;
-
-  return (
-    <Box sx={{ p: 2 }}>
-      <PanelTable
-        title="Emission Lineage"
-        subtitle={totalTCO2e > 0 ? `Total: ${totalTCO2e.toFixed(3)} tCO₂e` : undefined}
-        columns={[
-          {
-            key: 'emission_factor_name',
-            header: 'Factor',
-            width: '35%',
-            render: (_v, row) => (
-              <Box>
-                <Typography sx={{ fontSize: '0.72rem', fontWeight: 600 }}>
-                  {row.emission_factor__name || row.emission_factor_name || `Factor #${row.emission_factor_id}`}
-                </Typography>
-                {(row.emission_factor__code || row.emission_factor_code) && (
-                  <Typography sx={{ fontSize: '0.62rem', color: 'text.disabled', fontFamily: 'monospace' }}>
-                    {row.emission_factor__code || row.emission_factor_code}
-                  </Typography>
-                )}
-              </Box>
-            ),
-          },
-          {
-            key: 'scope',
-            header: 'Scope',
-            width: '25%',
-            render: (_v, row) => (
-              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                {row.scope && (
-                  <Chip label={`Scope ${row.scope}`} size="small" color={SCOPE_COLOR[row.scope] || 'default'}
-                    sx={{ height: 20, fontSize: '0.65rem' }} />
-                )}
-                {row.category && (
-                  <Chip label={row.category} size="small" variant="outlined"
-                    sx={{ height: 20, fontSize: '0.65rem' }} />
-                )}
-              </Box>
-            ),
-          },
-          {
-            key: 'co2e_kg',
-            header: 'Output',
-            width: '40%',
-            render: (_v, row) => (
-              <Box>
-                <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'warning.main' }}>
-                  {(Number(row.co2e_kg) / 1000).toFixed(3)} tCO₂e
-                </Typography>
-                <Typography sx={{ fontSize: '0.6rem', color: 'text.disabled' }}>
-                  {fmtDate(row.calculated_at)}
-                </Typography>
-              </Box>
-            ),
-          },
-        ]}
-        rows={calculations}
-        emptyText="No calculations for this row. Run a calculation rule to see emission lineage."
-      />
-    </Box>
   );
 }

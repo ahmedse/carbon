@@ -150,7 +150,7 @@ export default function AIConversationsPage() {
               <List dense disablePadding>
                 {conversations.map((c) => (
                   <ListItemButton key={c.id} onClick={() => openConversation(c)} divider>
-                    <ChatIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 1 }} />
+                    <ChatIcon sx={{ fontSize: '1rem', color: 'text.secondary', mr: 1 }} />
                     <ListItemText
                       primary={c.title || `${TYPE_LABELS[c.conversation_type] || 'Conversation'} #${String(c.id).slice(0, 6)}`}
                       secondary={formatDate(c.created_at)}

@@ -43,11 +43,11 @@ export function PickerOption({
           color: active ? 'primary.main' : 'text.primary',
         },
         '&.Mui-selected': {
-          bgcolor: (t) => (t.palette.mode === 'light' ? 'rgba(14,165,233,0.07)' : 'rgba(56,189,248,0.1)'),
+          bgcolor: (t) => `${t.palette.primary.main}14`,
           color: 'primary.main',
         },
         '&.Mui-selected:hover': {
-          bgcolor: (t) => (t.palette.mode === 'light' ? 'rgba(14,165,233,0.07)' : 'rgba(56,189,248,0.1)'),
+          bgcolor: (t) => `${t.palette.primary.main}14`,
         },
         // Left-bar active indicator (matches ShellSidebar)
         ...(active && {
@@ -68,7 +68,7 @@ export function PickerOption({
         <Box
           component="span"
           sx={{
-            fontSize: 14,
+            fontSize: '0.875rem',
             flexShrink: 0,
             opacity: active ? 1 : 0.6,
             display: 'inline-flex',

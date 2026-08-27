@@ -17,6 +17,7 @@ import {
 } from '../../api/catalog';
 import { fetchUsers } from '../../api/users';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import PageContainer from '../../components/layout/PageContainer';
 import SystemDialog from '../../components/SystemDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
 
@@ -54,11 +55,12 @@ import LockIcon from '@mui/icons-material/Lock';
 // Quality Status Badge Component
 function QualityStatusBadge({ value, score }) {
   const { t } = useTranslation('catalog');
+  const theme = useTheme();
   const colorMap = {
-    passing: '#4caf50',
-    warning: '#ff9800',
-    failing: '#f44336',
-    unknown: '#9e9e9e',
+    passing: theme.palette.success.main,
+    warning: theme.palette.warning.main,
+    failing: theme.palette.error.main,
+    unknown: theme.palette.grey[500],
   };
 
   const _iconMap = {
@@ -76,7 +78,7 @@ function QualityStatusBadge({ value, score }) {
       size="small"
       sx={{
         backgroundColor: colorMap[value] || colorMap.unknown,
-        color: 'white',
+        color: theme.palette.common.white,
         fontWeight: 500,
       }}
     />
@@ -420,7 +422,7 @@ export default function AssetsPage() {
     searchText || filterDomain || filterClassification || filterQuality || filterAssetType;
 
   return (
-    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <PageContainer sx={{ overflow: 'hidden' }}>
       {error && <Alert severity="error" sx={{ mx: 2, mt: 2, flexShrink: 0 }}>{error}</Alert>}
 
       <FilteredDataGrid
@@ -620,6 +622,6 @@ export default function AssetsPage() {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirm(null)}
       />
-    </Box>
+    </PageContainer>
   );
 }

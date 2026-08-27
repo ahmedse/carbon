@@ -30,6 +30,8 @@ import {
   Typography,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import PageContainer from '../../components/layout/PageContainer';
+import { useTheme } from '@mui/material/styles';
 
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -54,6 +56,8 @@ import {
 
 export default function MetadataManagementPage() {
   useDocumentTitle("Metadata");
+  const theme = useTheme();
+  const TAG_DEFAULT_COLOR = theme.palette.primary.main;
   const { t } = useTranslation('catalog');
   const location = useLocation();
   const navigate = useNavigate();
@@ -124,7 +128,7 @@ export default function MetadataManagementPage() {
       setFormData({ name: '', definition: '', domain: '' });
     } else {
       // Tags
-      setFormData({ name: '', color: '#2563eb' });
+      setFormData({ name: '', color: TAG_DEFAULT_COLOR });
     }
     setDialogOpen(true);
   };
@@ -136,7 +140,7 @@ export default function MetadataManagementPage() {
     } else if (tabIndex === 1) {
       setFormData({ name: item.name, definition: item.definition || '', domain: item.domain || '' });
     } else {
-      setFormData({ name: item.name, color: item.color || '#2563eb' });
+      setFormData({ name: item.name, color: item.color || TAG_DEFAULT_COLOR });
     }
     setDialogOpen(true);
   };
@@ -356,8 +360,8 @@ export default function MetadataManagementPage() {
                       label={tag.name}
                       size="small"
                       sx={{
-                        bgcolor: tag.color || '#2563eb',
-                        color: '#fff',
+                        bgcolor: tag.color || TAG_DEFAULT_COLOR,
+                        color: theme.palette.common.white,
                       }}
                     />
                   </TableCell>
@@ -460,7 +464,7 @@ export default function MetadataManagementPage() {
               size="small"
               label={t('color')}
               type="color"
-              value={formData.color || '#2563eb'}
+              value={formData.color || TAG_DEFAULT_COLOR}
               onChange={(e) => setFormData({ ...formData, color: e.target.value })}
               margin="normal"
             />
@@ -472,16 +476,16 @@ export default function MetadataManagementPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+      <PageContainer sx={{ alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress />
-      </Box>
+      </PageContainer>
     );
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <PageContainer>
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" fontWeight={700} gutterBottom>
+        <Typography variant="h2" gutterBottom>
           {t('metadataManagementTitle')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
@@ -495,19 +499,19 @@ export default function MetadataManagementPage() {
             icon={<LocationOnIcon />}
             iconPosition="start"
             label={t('domains')}
-            sx={{ textTransform: 'none', minHeight: 48 }}
+            sx={{ textTransform: 'none', minHeight: 6 }}
           />
           <Tab
             icon={<MenuBookIcon />}
             iconPosition="start"
             label={t('glossary')}
-            sx={{ textTransform: 'none', minHeight: 48 }}
+            sx={{ textTransform: 'none', minHeight: 6 }}
           />
           <Tab
             icon={<LabelIcon />}
             iconPosition="start"
             label={t('tags')}
-            sx={{ textTransform: 'none', minHeight: 48 }}
+            sx={{ textTransform: 'none', minHeight: 6 }}
           />
         </Tabs>
       </Paper>
@@ -528,6 +532,6 @@ export default function MetadataManagementPage() {
         onConfirm={() => handleDelete(deleteConfirm)}
         onCancel={() => setDeleteConfirm(null)}
       />
-    </Box>
+    </PageContainer>
   );
 }

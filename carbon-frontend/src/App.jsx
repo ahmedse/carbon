@@ -22,7 +22,6 @@ import {
   AI_VIEW_CONSOLE,
 } from "./capabilities";
 // ── Lazy-loaded page imports ──────────────────────────────────────────
-const TableManagerPage = React.lazy(() => import("./pages/TableManagerPage"));
 const OrgUnitsPage = React.lazy(() => import("./pages/admin/OrgUnitsPage"));
 const OrgUnitDetailPage = React.lazy(() => import("./pages/admin/OrgUnitDetailPage"));
 const AccessControlPage = React.lazy(() => import("./pages/admin/AccessControlPage"));
@@ -268,17 +267,10 @@ export default function App() {
                 <Route path="/apps/healthy/reps" element={<RepHealthPage />} />
                 <Route path="/apps/healthy/collections" element={<ARQueuePage />} />
                 <Route path="/apps/healthy/inventory" element={<SlowMoversPage />} />
-                {/* Admin-only: Schema Admin > Table Manager */}
+                {/* Schema Manager decommissioned — schema authoring lives in Data Products (SchemaDetailPage). */}
                 {/* Namespace root redirect — bare /schema-admin root. RULE_22. */}
-                <Route path="/schema-admin" element={<Navigate to="/schema-admin/table-manager" replace />} />
-                <Route
-                  path="/schema-admin/table-manager"
-                  element={
-                    <AdminRoute>
-                      <TableManagerPage />
-                    </AdminRoute>
-                  }
-                />
+                <Route path="/schema-admin" element={<Navigate to="/catalog/products" replace />} />
+                <Route path="/schema-admin/*" element={<Navigate to="/catalog/products" replace />} />
                 {/* Namespace root redirect — the "Admin" breadcrumb parent links here. RULE_22. */}
                 <Route path="/admin" element={<Navigate to="/admin/users" replace />} />
                 <Route

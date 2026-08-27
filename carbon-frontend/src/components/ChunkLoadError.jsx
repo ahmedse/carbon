@@ -55,7 +55,7 @@ export default function ChunkLoadError({ error, onRetry }) {
         }}
       >
         <CloudOffIcon
-          sx={{ fontSize: 56, color: "warning.main", mb: 2 }}
+          sx={{ fontSize: '3.5rem', color: "warning.main", mb: 2 }}
         />
         <Typography variant="h6" gutterBottom fontWeight={600}>
           Failed to load this page

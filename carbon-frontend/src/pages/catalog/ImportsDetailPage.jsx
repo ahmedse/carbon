@@ -33,12 +33,15 @@ import { fetchDataSchemaTables } from '../../api/dataschema';
 import BaseDetailPage from '../../components/detail/BaseDetailPage';
 import DetailHeader from '../../components/detail/DetailHeader';
 import HomeIcon from '@mui/icons-material/Home';
+import { useNotes } from '../../notes/NotesContext';
+import { registerImportInspectorTabs } from '../../inspector/tabs/collectionTabs';
 
 export default function ImportsDetailPage() {
   useDocumentTitle("Imports");
   const { t } = useTranslation('catalog');
   const { token } = useAuth();
   const { notify } = useNotification();
+  const { setContexts } = useNotes();
 
   const [jobs, setJobs] = useState([]);
   const [tables, setTables] = useState([]);
@@ -225,6 +228,20 @@ export default function ImportsDetailPage() {
     [jobs, tables, t]
   );
 
+  // ── Contextual Inspector (global drawer) ────────────────────────────
+  // Collection pages have no single entity; anchor to a stable sentinel id (0)
+  // so the summary tab renders and notes stay scoped to this collection.
+  useEffect(() => registerImportInspectorTabs(), []);
+
+  const inspectorContext = useMemo(
+    () => [{ entityType: 'import', entityId: 0, label: t('imports'), payload: { summaryCards } }],
+    [summaryCards, t],
+  );
+  useEffect(() => {
+    setContexts(inspectorContext);
+    return () => setContexts(null);
+  }, [inspectorContext, setContexts]);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -249,21 +266,10 @@ export default function ImportsDetailPage() {
         { label: t('upload'), component: UploadTab },
         { label: t('history'), component: HistoryTab },
       ]}
-      metricsTabs={[{ label: t('summary'), component: () => (
-        <Box sx={{ p: 2 }}>
-          {summaryCards.map((card) => (
-            <Box key={card.title} sx={{ p: 2, mb: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-              <Typography variant="caption" color="text.secondary">{card.title}</Typography>
-              <Typography variant="h6">{card.value}</Typography>
-            </Box>
-          ))}
-        </Box>
-      ) }]}
       loading={loading}
       error={error}
       onClose={() => window.history.back()}
       storageKey="carbonImportsDetail"
-      entityData={{ jobs, tables }}
     />
   );
 }

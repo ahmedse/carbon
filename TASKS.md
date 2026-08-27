@@ -4645,6 +4645,54 @@ RULE_23: outcome copy only. lint + vitest + build must all pass.
 
 ---
 
+# Notes + Contextual Inspector Drawer (ADR-0019)
+
+## Phase 27 — Notes/Comments/Reactions + Contextual Inspector Drawer
+**Date:** 2026-08-27
+**Worker Role:** backend-worker + frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE (verified 2026-08-27: backend catalog 156 passed; frontend 901 passed; lint + build clean)
+**ADR:** `.ai-toolkit/decisions/0019-contextual-inspector-drawer.md`
+**Design docs:** `docs/DESIGN-NOTES-DRAWER.md` (backend + drawer), `docs/DESIGN-CONTEXTUAL-INSPECTOR-DRAWER.md` (migration plan), `docs/DESIGN-LOCK-REASON-AND-NOTES.md` (Layer A/B research).
+
+Unify two right-edge panels into ONE global **Contextual Inspector Drawer**:
+Notes (fixed first tab) + context-driven tabs (Health/Governance/Activity/Lineage/
+Overview/Data Quality/…) auto-discovered from the active entity. Replaces the
+per-page `EntityDetailShell` metrics panel across all 14 detail pages.
+
+### Backend (catalog app — Notes data layer)
+- `backend/catalog/models.py` — `Note`, `NoteComment` (flat 1-level), `NoteReaction`
+  (one-per-user-per-target), `NoteAnchor`; polymorphic `entity_type`/`entity_id`.
+- `backend/catalog/migrations/0011_notes_comments_reactions.py` + `0012_noteanchor.py`.
+- `backend/catalog/serializers.py`, `views.py`, `urls.py` — list/create/update/soft-delete
+  notes, lazy comments endpoint, reaction toggle, governance audit events.
+- `backend/catalog/tests/test_notes.py` — 29 tests.
+
+### Frontend (Notes drawer + Inspector migration)
+- `carbon-frontend/src/notes/` — `NotesContext`, `NotesDrawer`/`NotesPanel`/`NotesRail`,
+  `NotesTab`, `NoteCard`, `NoteComposer`, `CommentThread`, `ReactionBar`, `notesApi`.
+- `carbon-frontend/src/inspector/` — `InspectorTabRegistry` (contribution-point
+  singleton) + `tabs/` (`moduleTabs`, `catalogTabs`, `calculationTabs`, `collectionTabs`,
+  `dataEntryTabs`, `myDataTabs`, `orgUnitTabs`, `rowDetailTabs`, `ruleTabs`, `helpers`).
+- 14 migrated pages set inspector context via `useNotes().setContexts` and drop the
+  inline metrics panel: `ModuleWorkspacePage`, `MyDataPage`, `DataEntryPage`,
+  `RowDetailPage`, `CalculationsPage`, `OrgUnitDetailPage`, `AssetDetailPage`,
+  `DataProductDetailPage`, `DataSourcesDetailPage`, `DomainDetailPage`,
+  `ExportsDetailPage`, `ImportsDetailPage`, `ReferenceSetDetailPage`, `TagDetailPage`,
+  `RuleDetailPage`, `EmissionsDashboard`.
+- Deleted dead `src/components/entity/EntityDetailShell.jsx` + `useDetailPanel.jsx` (Phase D).
+- New tests: `notes.drawer.test.jsx`, `inspectorTabRegistry.test.jsx`,
+  `calculationTabs.test.jsx`, `EmissionsDashboard.notes.test.jsx`.
+
+### Phase E remaining (polish, not blocking)
+- Per-entity-type remembered active tab; per-user tab visibility (gear).
+- Playwright smoke on migrated pages (en + ar).
+
+### Results
+- `TASK-RESULTS-19-CONTEXTUAL-INSPECTOR-CALCULATIONS.md` (final page migration).
+
+---
+
 # Phase Set I18N — Dual-Language UI: English (default) + Arabic RTL
 
 **Authoritative context — read FIRST, before any worker prompt:**

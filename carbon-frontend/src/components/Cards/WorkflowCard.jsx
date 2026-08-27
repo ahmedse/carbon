@@ -38,7 +38,7 @@ function WorkflowCard({ icon, title, description, onClick, disabled }) {
         flexShrink: 0,
         transition: 'transform 0.2s ease'
       }}>
-        {icon && React.cloneElement(icon, { sx: { fontSize: 16, color: 'primary.main' } })}
+        {icon && React.cloneElement(icon, { sx: { fontSize: '1rem', color: 'primary.main' } })}
       </Box>
       <Box sx={{ minWidth: 0, textAlign: 'left', flex: 1 }}>
         <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.primary', lineHeight: 1.2 }}>{title}</Typography>

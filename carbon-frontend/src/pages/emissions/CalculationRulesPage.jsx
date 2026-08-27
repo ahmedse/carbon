@@ -32,6 +32,8 @@ import {
   Snackbar,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import PageContainer from '../../components/layout/PageContainer';
+import { FONT } from '../../theme/themeTokens';
 
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -64,7 +66,7 @@ function RuleTypeChip({ value }) {
       size="small"
       color={meta.palette === 'default' ? undefined : meta.palette}
       variant="outlined"
-      sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }}
+      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -127,7 +129,7 @@ function RulesDrawer({ open, rule, tables = [], factors = [], onSave, onClose })
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box sx={{ width: 420, p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 3, fontSize: '1rem', fontWeight: 600 }}>
+        <Typography variant="h5" sx={{ mb: 3 }}>
           {rule ? 'Edit Rule' : 'Create Rule'}
         </Typography>
         <Stack spacing={2}>
@@ -247,7 +249,7 @@ function ExecuteDialog({ open, rule, onClose, onConfirm, loading }) {
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Execute Rule</DialogTitle>
       <DialogContent>
-        <Typography sx={{ fontSize: '0.85rem', mb: 2 }}>
+        <Typography sx={{ ...FONT.body, mb: 2 }}>
           Run rule: <strong>{rule?.name || rule?.id}</strong>?
         </Typography>
         <TextField
@@ -381,18 +383,18 @@ export default function CalculationRulesPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+      <PageContainer sx={{ alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress />
-      </Box>
+      </PageContainer>
     );
   }
 
   // ── Render ───────────────────────────────────────────────────────────
 
   return (
-    <Box sx={{ p: 3 }}>
+    <PageContainer>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+        <Typography variant="h2">
           Calculation Rules
         </Typography>
         <Stack direction="row" spacing={1}>
@@ -411,7 +413,7 @@ export default function CalculationRulesPage() {
 
       {(!rules || rules.length === 0) && (
         <Box sx={{ textAlign: 'center', py: 8 }}>
-          <InboxIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+          <InboxIcon sx={{ fontSize: '4rem', color: 'text.disabled', mb: 2 }} />
           <Typography variant="h6" color="text.secondary">No calculation rules found</Typography>
           <Typography variant="body2" color="text.disabled">
             {isAdmin ? 'Click "New Rule" to create one.' : 'Contact an administrator to add items.'}
@@ -425,28 +427,28 @@ export default function CalculationRulesPage() {
         <Table>
           <TableHead sx={{ bgcolor: 'action.hover' }}>
             <TableRow>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>ID</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Name</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Data Table</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Activity Field</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Emission Factor</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Factor Code</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Rule Type</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Active</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Auto-Calc</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Last Executed</TableCell>
-              {isAdmin && <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Actions</TableCell>}
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>ID</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Name</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Data Table</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Activity Field</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Emission Factor</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Factor Code</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Rule Type</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Active</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Auto-Calc</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Last Executed</TableCell>
+              {isAdmin && <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Actions</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
             {rules.map((rule) => (
                 <TableRow key={rule.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                  <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{rule.id}</TableCell>
-                  <TableCell sx={{ fontSize: '0.82rem', fontWeight: 500 }}>{rule.name}</TableCell>
-                  <TableCell sx={{ fontSize: '0.78rem' }}>{rule.data_table_name || rule.data_table || '—'}</TableCell>
-                  <TableCell sx={{ fontSize: '0.78rem' }}>{rule.activity_field_name || rule.activity_field || '—'}</TableCell>
-                  <TableCell sx={{ fontSize: '0.78rem' }}>{rule.emission_factor_name || rule.emission_factor || '—'}</TableCell>
-                  <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{rule.emission_factor_code || '—'}</TableCell>
+                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{rule.id}</TableCell>
+                  <TableCell sx={{ ...FONT.body, fontWeight: 500 }}>{rule.name}</TableCell>
+                  <TableCell sx={{ ...FONT.body }}>{rule.data_table_name || rule.data_table || '—'}</TableCell>
+                  <TableCell sx={{ ...FONT.body }}>{rule.activity_field_name || rule.activity_field || '—'}</TableCell>
+                  <TableCell sx={{ ...FONT.body }}>{rule.emission_factor_name || rule.emission_factor || '—'}</TableCell>
+                  <TableCell sx={{ ...FONT.body, fontFamily: 'monospace' }}>{rule.emission_factor_code || '—'}</TableCell>
                   <TableCell><RuleTypeChip value={rule.rule_type} /></TableCell>
                   <TableCell>
                     <Chip
@@ -454,7 +456,7 @@ export default function CalculationRulesPage() {
                       size="small"
                       color={rule.is_active ? 'success' : 'default'}
                       variant="outlined"
-                      sx={{ height: 20, fontSize: '0.68rem' }}
+                      sx={{ height: 2.5, ...FONT.body }}
                     />
                   </TableCell>
                   <TableCell>
@@ -463,10 +465,10 @@ export default function CalculationRulesPage() {
                       size="small"
                       color={rule.auto_calculate ? 'info' : 'default'}
                       variant="outlined"
-                      sx={{ height: 20, fontSize: '0.68rem' }}
+                      sx={{ height: 2.5, ...FONT.body }}
                     />
                   </TableCell>
-                  <TableCell sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
+                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>
                     {rule.last_executed_at ? new Date(rule.last_executed_at).toLocaleDateString() : '—'}
                   </TableCell>
                   {isAdmin && (
@@ -522,7 +524,7 @@ export default function CalculationRulesPage() {
       <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
         <DialogTitle>Delete Rule?</DialogTitle>
         <DialogContent>
-          <Typography sx={{ fontSize: '0.85rem' }}>This action cannot be undone.</Typography>
+          <Typography sx={{ ...FONT.body }}>This action cannot be undone.</Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
@@ -543,6 +545,6 @@ export default function CalculationRulesPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </PageContainer>
   );
 }

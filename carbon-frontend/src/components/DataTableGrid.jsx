@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DataGrid } from "@mui/x-data-grid";
-import { Button, Dialog, Box, CircularProgress, IconButton, Tooltip, DialogTitle, DialogContent, DialogActions, Typography, Chip } from "@mui/material";
+import { Button, Dialog, Box, CircularProgress, IconButton, Tooltip, DialogTitle, DialogContent, DialogActions, Typography, Chip, useTheme } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
@@ -205,6 +205,7 @@ function buildColumns(fields, editable, token, project_id, module_id, uploadRowF
 }
 
 function FilterBar({ fields, filters, setFilters, onAddNew, onSearchChange }) {
+  const theme = useTheme();
   const filterFields = fields.filter(
     f => ["string", "number", "select"].includes(f.type)
   );
@@ -212,7 +213,7 @@ function FilterBar({ fields, filters, setFilters, onAddNew, onSearchChange }) {
   const inputStyle = {
     padding: "8px 12px",
     borderRadius: 6,
-    border: "1px solid #e2e8f0", // input style
+    border: `1px solid ${theme.palette.divider}`,
     fontSize: "0.8125rem",
     outline: "none",
     transition: "border-color 0.15s",

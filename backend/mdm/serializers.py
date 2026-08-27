@@ -99,6 +99,28 @@ class OrgUnitSerializer(serializers.ModelSerializer):
     children_count = serializers.SerializerMethodField(read_only=True)
     descendants_count = serializers.SerializerMethodField(read_only=True)
 
+    def to_internal_value(self, data):
+        """Normalize JSON null for optional fields (frontend `|| null` idiom).
+
+        The OrgUnit model contract is `blank=True` (empty string), NOT
+        null=True. The MDM edit dialog sends null for empty code/description
+        fields (e.g. when an admin changes only the parent) and null/'' for an
+        unset org_type (UI 'None' option) — previously these all surfaced as
+        DRF 400 "This field may not be null." / "not a valid choice".
+
+        Only JSON dict payloads are normalized: multipart/form-data arrives as
+        a QueryDict (values would be lists after dict()) and DRF must handle
+        it natively.
+        """
+        if isinstance(data, dict):
+            data = {k: v for k, v in data.items()}
+            for field in ('code', 'description'):
+                if field in data and data[field] is None:
+                    data[field] = ''
+            if 'org_type' in data and data['org_type'] in (None, ''):
+                data['org_type'] = 'other'  # model default for 'unspecified'
+        return super().to_internal_value(data)
+
     class Meta:
         model = OrgUnit
         fields = [

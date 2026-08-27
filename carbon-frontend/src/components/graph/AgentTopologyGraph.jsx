@@ -141,7 +141,7 @@ export default function AgentTopologyGraph({
         spacing={1}
         sx={{ px: 1.25, py: 0.625, borderBottom: 1, borderColor: 'divider' }}
       >
-        <SchemaOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
+        <SchemaOutlinedIcon sx={{ fontSize: '0.9375rem', color: 'text.secondary' }} />
         <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: '0.75rem' }}>
           Agent topology
         </Typography>

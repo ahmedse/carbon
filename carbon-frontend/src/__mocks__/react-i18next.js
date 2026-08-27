@@ -19,15 +19,16 @@ import enAuth from '../i18n/locales/en/auth.json';
 import enErrors from '../i18n/locales/en/errors.json';
 import enAi from '../i18n/locales/en/ai.json';
 import enCatalog from '../i18n/locales/en/catalog.json';
+import enNotes from '../i18n/locales/en/notes.json';
 
 const i18n = i18next.createInstance();
 i18n.init({
   resources: {
-    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog },
+    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog, notes: enNotes },
   },
   lng: 'en',
   fallbackLng: 'en',
-  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog'],
+  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog', 'notes'],
   defaultNS: 'common',
   interpolation: {
     // React already escapes — no double escaping.

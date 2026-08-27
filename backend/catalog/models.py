@@ -550,3 +550,133 @@ class FreshnessPolicy(models.Model):
 
     def __str__(self):
         return f"FreshnessPolicy({self.table.title} <= {self.max_age_hours}h)"
+
+
+class Note(models.Model):
+    """Polymorphic, centralized note/reflection attached to ANY entity.
+
+    ``entity_type`` + ``entity_id`` are plain strings/ints (no FK) so notes
+    survive entity deletion (post-mortem context — Collibra/ServiceNow pattern).
+    Deletion is SOFT (``is_active=False``) so the drawer can show a placeholder
+    instead of a hole. Edits are audited via ``GovernanceEvent``.
+    """
+    VISIBILITY_CHOICES = [
+        ('public', 'Public'),
+        ('internal', 'Internal'),
+    ]
+    entity_type = models.CharField(max_length=40, db_index=True)
+    entity_id = models.PositiveIntegerField(db_index=True)
+    body = models.TextField()
+    author = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='notes', help_text='NULL = system/background author (audited).')
+    visibility = models.CharField(
+        max_length=10, choices=VISIBILITY_CHOICES, default='public',
+        help_text='Internal notes are visible only to the author and admins.')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['entity_type', 'entity_id', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"Note #{self.pk} {self.entity_type}#{self.entity_id} by {self.author_id or 'system'}"
+
+
+class NoteAnchor(models.Model):
+    """ADDITIONAL entity anchors for a Note (many-to-many via this join).
+
+    The PRIMARY anchor stays on ``Note.entity_type/entity_id`` (non-null,
+    immutable, backwards-compatible). Extra anchors let ONE note surface in
+    multiple contexts without duplication — e.g. a dashboard note anchored to
+    both ``app:1`` (Carbon Footprint domain app) and ``reporting_year:2026``.
+
+    Why this exists: multiple domain apps share the notes layer. Anchoring to
+    the domain app keeps each app's thread separate (data is never mingled),
+    while the extra year anchor scopes the same note within the app.
+    """
+    note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name='anchors')
+    entity_type = models.CharField(max_length=40, db_index=True)
+    entity_id = models.PositiveIntegerField(db_index=True)
+
+    class Meta:
+        ordering = ['id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['note', 'entity_type', 'entity_id'],
+                name='uniq_note_anchor',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['entity_type', 'entity_id']),
+        ]
+
+    def __str__(self):
+        return f"Anchor {self.entity_type}#{self.entity_id} on Note #{self.note_id}"
+
+
+class NoteComment(models.Model):
+    """1-level comment on a Note. NO parent FK → flat threads by construction.
+
+    Comments are editable by author (or admin) and soft-deletable; edits emit
+    GovernanceEvent so the narrative stays human while the fact stays audited
+    (Jira comment-edit pattern).
+    """
+    note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name='comments')
+    body = models.TextField()
+    author = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='note_comments')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Comment #{self.pk} on Note #{self.note_id}"
+
+
+class NoteReaction(models.Model):
+    """Small feedback on a note OR a comment (one per user per target).
+
+    Exactly one target per row — enforced in ``clean()`` (note XOR comment).
+    Toggling = POST again with the same reaction removes it (idempotent toggle).
+    """
+    REACTIONS = [
+        ('like', 'Like'),
+        ('question', 'Question'),
+        ('star', 'Important'),
+    ]
+    note = models.ForeignKey(
+        Note, null=True, blank=True, on_delete=models.CASCADE, related_name='reactions')
+    comment = models.ForeignKey(
+        NoteComment, null=True, blank=True, on_delete=models.CASCADE, related_name='reactions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='note_reactions')
+    reaction = models.CharField(max_length=10, choices=REACTIONS)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'note', 'reaction'],
+                condition=models.Q(note__isnull=False),
+                name='uniq_user_note_reaction'),
+            models.UniqueConstraint(
+                fields=['user', 'comment', 'reaction'],
+                condition=models.Q(comment__isnull=False),
+                name='uniq_user_comment_reaction'),
+        ]
+
+    def clean(self):
+        if bool(self.note_id) == bool(self.comment_id):
+            raise ValidationError('A reaction must target exactly one of note or comment.')
+
+    def __str__(self):
+        target = f"note#{self.note_id}" if self.note_id else f"comment#{self.comment_id}"
+        return f"{self.user_id} {self.reaction} on {target}"

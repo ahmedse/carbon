@@ -1,12 +1,14 @@
 // src/pages/ModuleLandingPage.jsx
 import React, { useMemo, useState } from "react";
-import { Box, Typography, Card, CardContent, Grid, InputAdornment, TextField, Chip, Button } from "@mui/material";
+import { Box, Typography, Card, CardContent, Grid, InputAdornment, TextField, Chip, Button, useTheme } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { NatureRounded, BoltRounded, LocalShippingRounded } from "@mui/icons-material";
 import useDocumentTitle from '../hooks/useDocumentTitle';
+import PageContainer from '../components/layout/PageContainer';
+import { FONT } from '../theme/themeTokens';
 
 const scopeIcons = {
   1: <NatureRounded sx={{ color: 'success.main' }} />,
@@ -18,14 +20,15 @@ const scopeLabels = {
   2: "Scope 2",
   3: "Scope 3",
 };
-const scopeColors = {
-  1: { bg: '#e8f5e9', color: '#2e7d32' },
-  2: { bg: '#e3f2fd', color: '#1565c0' },
-  3: { bg: '#fff3e0', color: '#e65100' },
-};
 
 export default function ModuleLandingPage() {
   useDocumentTitle("Module");
+  const theme = useTheme();
+  const scopeColors = {
+    1: { bg: `${theme.palette.success.main}1A`, color: theme.palette.success.main },
+    2: { bg: `${theme.palette.primary.main}1A`, color: theme.palette.primary.main },
+    3: { bg: `${theme.palette.warning.main}1A`, color: theme.palette.warning.main },
+  };
   const { moduleId } = useParams();
   const navigate = useNavigate();
   const { context, tablesByModule } = useAuth();
@@ -44,9 +47,9 @@ export default function ModuleLandingPage() {
 
   if (!module) {
     return (
-      <Box p={4}>
+      <PageContainer sx={{ alignItems: 'center', justifyContent: 'center' }}>
         <Typography color="error" variant="h5">Module not found</Typography>
-      </Box>
+      </PageContainer>
     );
   }
 
@@ -54,7 +57,7 @@ export default function ModuleLandingPage() {
   const scopeColor = scopeColors[moduleScope] || scopeColors[1];
 
   return (
-    <Box p={3}>
+    <PageContainer>
       {/* Back navigation */}
       <Button
         startIcon={<ArrowBackIcon />}
@@ -84,8 +87,8 @@ export default function ModuleLandingPage() {
           sx={{
             bgcolor: scopeColor.bg,
             color: scopeColor.color,
+            ...FONT.body,
             fontWeight: 600,
-            fontSize: '0.75rem',
           }}
         />
       </Box>
@@ -130,11 +133,11 @@ export default function ModuleLandingPage() {
               <CardContent>
                 <Box display="flex" alignItems="center" gap={1} mb={1}>
                   {scopeIcons[table.scope || module.scope] || null}
-                  <Typography fontWeight={600} fontSize={18}>
+                  <Typography sx={{ ...FONT.body, fontSize: '1.125rem', fontWeight: 600 }}>
                     {table.title}
                   </Typography>
                 </Box>
-                <Typography color="text.secondary" fontSize={13} mb={1}>
+                <Typography color="text.secondary" sx={{ ...FONT.body, fontSize: '0.8125rem' }} mb={1}>
                   {table.description}
                 </Typography>
                 <Box mt={1} display="flex" alignItems="center" gap={1} flexWrap="wrap">
@@ -158,6 +161,6 @@ export default function ModuleLandingPage() {
           </Grid>
         ))}
       </Grid>
-    </Box>
+    </PageContainer>
   );
 }

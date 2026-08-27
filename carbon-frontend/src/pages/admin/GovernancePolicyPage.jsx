@@ -10,6 +10,7 @@ import {
   Divider, Stack,
 } from "@mui/material";
 import PageHeader from "../../components/Page/PageHeader";
+import PageContainer from "../../components/layout/PageContainer";
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 import AddIcon from "@mui/icons-material/Add";
@@ -205,14 +206,14 @@ export default function GovernancePolicyPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
+      <PageContainer sx={{ alignItems: "center", justifyContent: "center" }}>
         <CircularProgress />
-      </Box>
+      </PageContainer>
     );
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <PageContainer>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 3, flexWrap: "wrap", gap: 2 }}>
         <PageHeader
           icon={PolicyIcon}
@@ -387,6 +388,6 @@ export default function GovernancePolicyPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </PageContainer>
   );
 }

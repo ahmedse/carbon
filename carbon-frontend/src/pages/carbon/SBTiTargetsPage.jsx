@@ -32,6 +32,8 @@ import {
   LinearProgress,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import PageContainer from '../../components/layout/PageContainer';
+import { FONT } from '../../theme/themeTokens';
 
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -63,7 +65,7 @@ function ScopeChip({ value }) {
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
       variant="outlined"
-      sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }}
+      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -83,7 +85,7 @@ function StatusChip({ value }) {
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
       variant="filled"
-      sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }}
+      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -102,7 +104,7 @@ function TypeChip({ value }) {
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
       variant="outlined"
-      sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }}
+      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -122,9 +124,9 @@ function ReductionBar({ value }) {
         variant="determinate"
         value={Math.min(pct, 100)}
         color={color}
-        sx={{ flex: 1, height: 6, borderRadius: 1 }}
+        sx={{ flex: 1, height: 0.75, borderRadius: 1 }}
       />
-      <Typography variant="caption" sx={{ fontSize: '0.7rem', fontWeight: 600, minWidth: 40, textAlign: 'right' }}>
+      <Typography variant="caption" sx={{ ...FONT.body, fontWeight: 600, minWidth: 40, textAlign: 'right' }}>
         {pct.toFixed(1)}%
       </Typography>
     </Box>
@@ -186,7 +188,7 @@ function TargetsDrawer({ open, target, onSave, onClose }) {
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box sx={{ width: 420, p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 3, fontSize: '1rem', fontWeight: 600 }}>
+        <Typography variant="h5" sx={{ mb: 3 }}>
           {target ? 'Edit Target' : 'New Target'}
         </Typography>
         <Stack spacing={2}>
@@ -389,16 +391,16 @@ export default function SBTiTargetsPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+      <PageContainer sx={{ alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress />
-      </Box>
+      </PageContainer>
     );
   }
 
   // ── Render ───────────────────────────────────────────────────────────
 
   return (
-    <Box sx={{ p: 3 }}>
+    <PageContainer>
       <PageHeader
         title="SBTi Targets"
         description="Science-Based Targets initiative (SBTi) reduction goals. Define absolute or intensity targets per scope, set base/target years, and track progress toward Paris-aligned decarbonization."
@@ -423,45 +425,45 @@ export default function SBTiTargetsPage() {
         <Table>
           <TableHead sx={{ bgcolor: 'action.hover' }}>
             <TableRow>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>ID</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Name</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>ID</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Name</TableCell>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
                 <Tooltip title="The organisational unit responsible for meeting this target." arrow>
                   <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Org Unit</Typography>
                 </Tooltip>
               </TableCell>
-              <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+              <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
                 <Tooltip title="The baseline year against which emission reductions are measured." arrow>
                   <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Base Year</Typography>
                 </Tooltip>
               </TableCell>
-              <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+              <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
                 <Tooltip title="The deadline year by which the target must be achieved." arrow>
                   <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Target Year</Typography>
                 </Tooltip>
               </TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
                 <Tooltip title="Absolute = total tCO₂e reduction. Intensity = per-unit reduction (e.g., tCO₂e / MWh)." arrow>
                   <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Type</Typography>
                 </Tooltip>
               </TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
                 <Tooltip title="Which GHG Protocol scope(s) this target covers." arrow>
                   <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Scope</Typography>
                 </Tooltip>
               </TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
                 <Tooltip title="Targeted reduction as a percentage from base year emissions." arrow>
                   <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Reduction</Typography>
                 </Tooltip>
               </TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
                 <Tooltip title="Draft = planning, Committed = pledged, Approved = officially validated." arrow>
                   <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Status</Typography>
                 </Tooltip>
               </TableCell>
-              <TableCell sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Created</TableCell>
-              {isAdmin && <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.78rem' }}>Actions</TableCell>}
+              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Created</TableCell>
+              {isAdmin && <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Actions</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -474,16 +476,16 @@ export default function SBTiTargetsPage() {
             ) : (
               targets.map((t) => (
                 <TableRow key={t.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                  <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{t.id}</TableCell>
-                  <TableCell sx={{ fontSize: '0.82rem', fontWeight: 500 }}>{t.name}</TableCell>
-                  <TableCell sx={{ fontSize: '0.78rem' }}>{t.org_unit_name || t.org_unit || '—'}</TableCell>
-                  <TableCell align="center" sx={{ fontSize: '0.78rem' }}>{t.base_year || '—'}</TableCell>
-                  <TableCell align="center" sx={{ fontSize: '0.78rem' }}>{t.target_year || '—'}</TableCell>
+                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{t.id}</TableCell>
+                  <TableCell sx={{ ...FONT.body, fontWeight: 500 }}>{t.name}</TableCell>
+                  <TableCell sx={{ ...FONT.body }}>{t.org_unit_name || t.org_unit || '—'}</TableCell>
+                  <TableCell align="center" sx={{ ...FONT.body }}>{t.base_year || '—'}</TableCell>
+                  <TableCell align="center" sx={{ ...FONT.body }}>{t.target_year || '—'}</TableCell>
                   <TableCell><TypeChip value={t.target_type} /></TableCell>
                   <TableCell><ScopeChip value={t.scope} /></TableCell>
                   <TableCell><ReductionBar value={t.reduction_pct} /></TableCell>
                   <TableCell><StatusChip value={t.status} /></TableCell>
-                  <TableCell sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>{fmtDate(t.created_at)}</TableCell>
+                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{fmtDate(t.created_at)}</TableCell>
                   {isAdmin && (
                     <TableCell align="center">
                       <IconButton size="small" onClick={() => handleEdit(t)} title="Edit">
@@ -518,7 +520,7 @@ export default function SBTiTargetsPage() {
       <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
         <DialogTitle>Delete Target?</DialogTitle>
         <DialogContent>
-          <Typography sx={{ fontSize: '0.85rem' }}>This action cannot be undone.</Typography>
+          <Typography sx={{ ...FONT.body }}>This action cannot be undone.</Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
@@ -539,6 +541,6 @@ export default function SBTiTargetsPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </PageContainer>
   );
 }

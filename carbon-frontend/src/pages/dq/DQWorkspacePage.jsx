@@ -388,7 +388,7 @@ function SuggestionsTab() {
         </Paper>
       ) : suggestions.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-          <AutoAwesome sx={{ fontSize: 28, color: 'text.disabled', mb: 1 }} />
+          <AutoAwesome sx={{ fontSize: '1.75rem', color: 'text.disabled', mb: 1 }} />
           <Typography sx={{ color: 'text.secondary' }}>
             No pending suggestions. Run a Pulse suggestion job from the Rules tab to generate some.
           </Typography>

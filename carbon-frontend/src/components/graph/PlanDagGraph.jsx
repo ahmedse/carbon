@@ -161,14 +161,14 @@ function ParallelLaneBand({ groupId, name, steps, onConfirmStep, onDeclineStep, 
         onClick={() => setOpen((v) => !v)}
       >
         <IconButton size="small" sx={{ p: 0, m: 0 }} aria-label={`Toggle parallel lane ${name}`}>
-          {open ? <ExpandMoreIcon sx={{ fontSize: 15 }} /> : <ChevronRightIcon sx={{ fontSize: 15 }} />}
+          {open ? <ExpandMoreIcon sx={{ fontSize: '0.9375rem' }} /> : <ChevronRightIcon sx={{ fontSize: '0.9375rem' }} />}
         </IconButton>
         <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {name}
         </Typography>
-        <Chip size="small" variant="outlined" label="Runs together" sx={{ height: 16, fontSize: '0.5625rem' }} />
+        <Chip size="small" variant="outlined" label="Runs together" sx={{ height: 2, fontSize: '0.5625rem' }} />
         {attention && (
-          <Chip size="small" color="warning" variant="outlined" label={attention} sx={{ height: 16, fontSize: '0.5625rem' }} />
+          <Chip size="small" color="warning" variant="outlined" label={attention} sx={{ height: 2, fontSize: '0.5625rem' }} />
         )}
       </Stack>
       <Collapse in={open}>
@@ -184,7 +184,7 @@ function ParallelLaneBand({ groupId, name, steps, onConfirmStep, onDeclineStep, 
                 >
                   {s.intent || `Step ${s.step_id}`}
                 </Typography>
-                <Chip size="small" variant="outlined" label={label} color={chipColor} sx={{ height: 16, fontSize: '0.5625rem' }} />
+                <Chip size="small" variant="outlined" label={label} color={chipColor} sx={{ height: 2, fontSize: '0.5625rem' }} />
                 {s.status === 'awaiting_approval' && (onConfirmStep || onDeclineStep) && (
                   <Stack direction="row" spacing={0.5}>
                     <Button
@@ -425,7 +425,7 @@ export default function PlanDagGraph({
         data-testid={paneTestId}
       >
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.75 }}>
-          <SmartToyOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
+          <SmartToyOutlinedIcon sx={{ fontSize: '0.9375rem', color: 'text.secondary' }} />
           <Typography variant="body2" fontWeight={600} sx={{ flex: 1, fontSize: '0.75rem' }}>
             Step {selectedStep.step_id}
           </Typography>
@@ -493,7 +493,7 @@ export default function PlanDagGraph({
         {selectedDeps.length ? (
           selectedDeps.map((d) => (
             <Typography key={d.step_id} variant="body2" sx={{ fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <ArrowRightAltIcon sx={{ fontSize: 11 }} />
+              <ArrowRightAltIcon sx={{ fontSize: '0.6875rem' }} />
               {d.intent || `Step ${d.step_id}`}
             </Typography>
           ))
@@ -509,7 +509,7 @@ export default function PlanDagGraph({
         {selectedFeeds.length ? (
           selectedFeeds.map((d) => (
             <Typography key={d.step_id} variant="body2" sx={{ fontSize: '0.6875rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <ArrowRightAltIcon sx={{ fontSize: 11 }} />
+              <ArrowRightAltIcon sx={{ fontSize: '0.6875rem' }} />
               {d.intent || `Step ${d.step_id}`}
             </Typography>
           ))
@@ -557,7 +557,7 @@ export default function PlanDagGraph({
 
         <Button
           size="small"
-          startIcon={<CloseIcon sx={{ fontSize: 12 }} />}
+          startIcon={<CloseIcon sx={{ fontSize: '0.75rem' }} />}
           onClick={() => setSelected(null)}
           sx={{ mt: 1, fontSize: '0.625rem', textTransform: 'none', minWidth: 0 }}
         >

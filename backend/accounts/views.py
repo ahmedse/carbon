@@ -556,6 +556,7 @@ def platform_apps(request, app_id=None):
         if not config:
             config = PlatformAppConfig.objects.create(app_id=app_id, is_enabled=True)
         result.append({
+            'id': config.id,
             'app_id': app_id,
             'name': manifest.get('name', app_id),
             'version': manifest.get('version', '1.0.0'),

@@ -179,11 +179,7 @@ const ROUTE_CONFIG = {
     icon: StorageIcon,
     parent: '/carbon/data-entry',
   },
-  '/schema-admin': {
-    label: 'Table Manager',
-    icon: StorageIcon,
-    parent: '/dataschema',
-  },
+
   '/modules/:moduleId': {
     label: 'Data Product',
     icon: StorageIcon,

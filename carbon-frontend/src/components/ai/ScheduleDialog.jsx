@@ -304,7 +304,7 @@ export default function ScheduleDialog({ open, schedule, template, busy, onSave,
           size="small"
           color="inherit"
           onClick={() => setShowCron((v) => !v)}
-          endIcon={showCron ? <ExpandMoreIcon sx={{ fontSize: 15 }} /> : <ChevronRightIcon sx={{ fontSize: 15 }} />}
+          endIcon={showCron ? <ExpandMoreIcon sx={{ fontSize: '0.9375rem' }} /> : <ChevronRightIcon sx={{ fontSize: '0.9375rem' }} />}
           sx={{ mt: 1, fontSize: '0.625rem', textTransform: 'none', px: 0, minWidth: 0 }}
         >
           Schedule expression

@@ -51,7 +51,6 @@
     "dataEntry": "Data Entry",
     "rowDetail": "Row Detail",
     "activityDataEntry": "Activity Data Entry",
-    "tableManager": "Table Manager",
     "dataProduct": "Data Product",
     "scopeDetail": "Scope Detail",
     "admin": "Admin",
@@ -166,6 +165,7 @@
     "administrator": "Administrator",
     "operator": "Operator",
     "logo": "Logo",
+    "goHome": "Go to home",
     "showSidebar": "Show sidebar",
     "showSidebarShortcut": "Show Sidebar (Ctrl+B)",
     "hideSidebar": "Hide Sidebar",
@@ -194,5 +194,12 @@
     "ariaAppLabel": "Carbon Data Platform",
     "studioNavigation": "Studio navigation",
     "version": "v1.0"
+  },
+  "devBanner": {
+    "label": "Early preview",
+    "message": "Data Trust Platform, Pulse AI, and Carbon Footprint are under active development. Share feedback to help shape what we build next.",
+    "cta": "Share feedback",
+    "dismiss": "Dismiss",
+    "ariaLive": "Platform development notice"
   }
 }

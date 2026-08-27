@@ -1,0 +1,58 @@
+﻿scope,category,source_of_emission,activity_data,description_ar,existence,unit,quantity
+Scope 1,Stationary Combustion,Boilers / Water heaters,Natural Gas,إجمالي الوقود المستهلك في الغلايات او سخانات المياه التي تعمل بالوقود خلال العام,not_applicable,m³,
+Scope 1,Stationary Combustion,,Other fuel,,not_applicable,,
+Scope 1,Stationary Combustion,On-site Power Generators,Natural Gas,إجمالي الوقود المستهلك في مولدات القوى الكهربائية داخل المنشأة خلال العام,not_applicable,m³,
+Scope 1,Stationary Combustion,,Diesel,,present,L,3000.0
+Scope 1,Stationary Combustion,,Gasoline,,not_applicable,L,
+Scope 1,Stationary Combustion,"Laboratory
+ (lab burners and specialized combustion devices).",Natural Gas,استهلاك المعامل من الوقود خلال العام,not_applicable,m³,
+Scope 1,Stationary Combustion,,Diesel,,not_applicable,L,
+Scope 1,Stationary Combustion,,Gasoline,,not_applicable,L,
+Scope 1,Stationary Combustion,,LPG,,not_applicable,Kg,
+Scope 1,Stationary Combustion,Campus Kitchens / Canteens,Natural Gas,إجمالي استهلاك الوقود السنوي في المطاعم/ المطابخ/ الكافيتريات ( المملوكة للمنشأة),not_applicable,m³,
+Scope 1,Stationary Combustion,,LPG,,not_applicable,Kg,
+Scope 1,Mobile Combustion,Fuel burned in company-owned or controlled vehicles,Gasoline,اجمالي استهلاك الوقود السنوي المستخدم في وسائل المواصلات المملوكة للاكاديمية فقط,not_applicable,L,
+Scope 1,Mobile Combustion,,Diesel,,present,L,5161.0
+Scope 1,Mobile Combustion,,Natural gas,,not_applicable,m³,
+Scope 1,Fugitive Emissions,"Refrigeration and Air Conditioning Systems
+ Laboratory Gas Systems
+ Fire Suppression Systems",R-134a,اجمالي غاز الفريون المستخدم خلال العام في عمليات الصيانة ( أجهزة تكييف/ثلاجات),not_applicable,Kg,
+Scope 1,Fugitive Emissions,,R-410A,,not_applicable,Kg,
+Scope 1,Fugitive Emissions,,R-407C,,not_applicable,Kg,
+Scope 1,Fugitive Emissions,,Other,,not_applicable,Kg,
+Scope 1,Fugitive Emissions,Fire Suppression Systems,طفاية بودرة,اجمالي الانبعاثات المتسربة من طفايات الحريق خلال العام,present,Kg,246.0
+Scope 1,Fugitive Emissions,,طفاية CO2,,present,Kg,590.0
+Scope 1,Fugitive Emissions,,مسحوق كيماوي جاف,,present,Kg,12.0
+Scope 1,Fugitive Emissions,,FM200,,pending,Kg,
+Scope 1,Fugitive Emissions,Laboratory Gas Systems,SF₆,اجمالي الانبعاثات المسربة للغازات من المعامل (كهربية/ طبية/ كيميائية/ ....),not_applicable,Kg,
+Scope 1,Fugitive Emissions,,N₂O,,not_applicable,Kg,
+Scope 1,Fugitive Emissions,,Other,,not_applicable,Kg,
+Scope 2,Purchased Energy,Purchased electricity,KWh,أجمالي استهلاك الكهرباء من الشبكة الكهربية خلال العام,present,KWh,2704187.0
+Scope 2,Purchased Energy,Purchased steam,Ton/GJ,أجمالي استهلاك البخار من مصدر خارجي خلال العام,not_applicable,Ton/GJ,
+Scope 2,Purchased Energy,Purchased heating,KWh/GJ,أجمالي استهلاك التدفئة من مصدر خارجي خلال العام,not_applicable,KWh/GJ,
+Scope 2,Purchased Energy,Purchased cooling,KWh/ GJ,أجمالي استهلاك التبريد من مصدر خارجي خلال العام,not_applicable,KWh/ GJ,
+Scope 2,Purchased Energy,,Ton of Refrigeration,,present,TR,1962093.2
+Scope 3,Consumable Purchased goods and services,Papers Usage (Papers/Folders/Envelopes… etc),Paper,,present,paper,2500000.0
+Scope 3,Consumable Purchased goods and services,,Envelope,,present,Unit,50000.0
+Scope 3,Consumable Purchased goods and services,Inks (Printer cartridges/ Toners… etc),Cartridges / Toner,,present,Unit,400.0
+Scope 3,Consumable Purchased goods and services,Hygiene Supplies,Soap,,present,L,3600.0
+Scope 3,Consumable Purchased goods and services,,Tissues,,present,Tissue,1660000.0
+Scope 3,Consumable Purchased goods and services,Plastic Usage,Folders,,present,Unit,2000.0
+Scope 3,Consumable Purchased goods and services,Food Consumption,Meal,,pending,Unit,
+Scope 3,Capital Goods,Furniture,,,pending,,
+Scope 3,Capital Goods,Appliances,,,pending,,
+Scope 3,Capital Goods,Facilities,,,not_applicable,-,
+Scope 3,Fertilizers,"Urea, Ammonium nitrate, Ammonium sulfate, Calcium ammonium nitrate (CAN), Anhydrous ammonia, NPK, Compost.",Green Area (Grass cover),,present,m2,6000.0
+Scope 3,Fuel & Energy Related Emissions,Electricity Transmission&distribution (T&D) losses,,,not_applicable,-,
+Scope 3,Fuel & Energy Related Emissions,Fuel transportation to your site,,,not_applicable,-,
+Scope 3,Water Usage/Waste,Annual Water Consumption,,,present,m3,11490.0
+Scope 3,Water Usage/Waste,Water Waste,,,present,m3,10341.0
+Scope 3,Annual Commuting,Student Commuting,,,pending,km,
+Scope 3,Annual Commuting,Employee Commuting,,,pending,km,
+Scope 3,Waste,Waste Disposal,,,present,ton,73.0
+Scope 3,Waste,Waste Treatment,,,not_applicable,-,
+Scope 3,Business travel,Air Ticket,,,not_applicable,,
+Scope 3,Upstream Leased Assets,Rented vehicles,Fuel used (Diesel),,present,L,12900.0
+Scope 3,Upstream Leased Assets,Rented office buildings,Electricity,,not_applicable,,
+Scope 3,Upstream Leased Assets,,Water,,not_applicable,-,
+Scope 3,Upstream Leased Assets,,Diesel,,not_applicable,-,

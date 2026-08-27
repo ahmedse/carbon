@@ -523,7 +523,7 @@ export default function EnterpriseGraph({
       spacing={0.75}
       sx={{ px: 1.25, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
     >
-      <AccountTreeOutlinedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
+      <AccountTreeOutlinedIcon sx={{ fontSize: '0.9375rem', color: 'text.secondary' }} />
       <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
         {headerTitle}
       </Typography>
@@ -562,26 +562,26 @@ export default function EnterpriseGraph({
         </Typography>
       )}
       <Tool label="Zoom out" testId={`${testId}-zoom-out`} onClick={() => setZoomClamped((z) => z / ZOOM_STEP)}>
-        <ZoomOutIcon sx={{ fontSize: 15 }} />
+        <ZoomOutIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
       <Tool label="Zoom in" testId={`${testId}-zoom-in`} onClick={() => setZoomClamped((z) => z * ZOOM_STEP)}>
-        <ZoomInIcon sx={{ fontSize: 15 }} />
+        <ZoomInIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
       <Tool label="Zoom to fit" testId={`${testId}-fit`} onClick={fitView}>
-        <CenterFocusStrongOutlinedIcon sx={{ fontSize: 15 }} />
+        <CenterFocusStrongOutlinedIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
       <Tool label="Reset view" testId={`${testId}-reset`} onClick={resetView}>
-        <RestartAltIcon sx={{ fontSize: 15 }} />
+        <RestartAltIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
       <Tool label="Redraw layout" testId={`${testId}-redraw`} onClick={redraw}>
-        <AutoFixHighOutlinedIcon sx={{ fontSize: 15 }} />
+        <AutoFixHighOutlinedIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
       <Tool label="Export as PNG" testId={`${testId}-export`} onClick={exportPng}>
-        <FileDownloadOutlinedIcon sx={{ fontSize: 15 }} />
+        <FileDownloadOutlinedIcon sx={{ fontSize: '0.9375rem' }} />
       </Tool>
       {closeButton || (
         <Tool label="Maximize" testId={expandTestId} onClick={() => setExpanded(true)}>
-          <FullscreenIcon sx={{ fontSize: 15 }} />
+          <FullscreenIcon sx={{ fontSize: '0.9375rem' }} />
         </Tool>
       )}
     </Stack>
@@ -613,7 +613,7 @@ export default function EnterpriseGraph({
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           {renderHeader(
             <Tool label="Close full view" testId={modalCloseTestId} onClick={() => setExpanded(false)}>
-              <CloseIcon sx={{ fontSize: 18 }} />
+              <CloseIcon sx={{ fontSize: '1.125rem' }} />
             </Tool>,
             modalTitle,
           )}

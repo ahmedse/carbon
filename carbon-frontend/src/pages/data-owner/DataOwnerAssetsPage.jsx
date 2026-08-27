@@ -54,7 +54,7 @@ const QualityStatusBadge = ({ value, score, theme }) => {
 
   return (
     <Chip
-      icon={<Icon sx={{ fontSize: 16 }} />}
+      icon={<Icon sx={{ fontSize: '1rem' }} />}
       label={`${(value || 'unknown').charAt(0).toUpperCase() + (value || 'unknown').slice(1)} ${
         score ? `(${score}%)` : ''
       }`}
@@ -297,7 +297,7 @@ export default function DataOwnerAssetsPage() {
       {/* Results */}
       {filteredAssets.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <InfoIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
+          <InfoIcon sx={{ fontSize: '3rem', color: 'text.disabled', mb: 2 }} />
           <Typography variant="h6" color="text.secondary">
             No assets found
           </Typography>
@@ -317,13 +317,13 @@ export default function DataOwnerAssetsPage() {
             pageSizeOptions={[10, 25, 50, 100]}
             disableSelectionOnClick
             density="compact"
-            sx={{
-              border: '1px solid #e5e7eb',
+            sx={(theme) => ({
+              border: `1px solid ${theme.palette.divider}`,
               borderRadius: 1,
               '& .MuiDataGrid-cell': {
-                borderColor: '#e5e7eb',
+                borderColor: theme.palette.divider,
               },
-            }}
+            })}
           />
         </Box>
       )}

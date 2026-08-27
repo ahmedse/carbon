@@ -3,7 +3,7 @@
 // Audit tabs + metrics panel. Module fetched directly via API (not context — A3 fix).
 // AI-toolkit compliant: can() manage gate (CB-13), ConfirmDialog (no window.confirm),
 // CB-09 defensive arrays, theme tokens only, shared ProductForm (A7 fix).
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
@@ -27,7 +27,8 @@ import DataProductTablesTab from './tabs/DataProductTablesTab';
 import DataProductDQTab from './tabs/DataProductDQTab';
 import DataProductEditTab from './tabs/DataProductEditTab';
 import DataProductAuditTab from './tabs/DataProductAuditTab';
-import DataProductMetricsPanel from './tabs/DataProductMetricsPanel';
+import { useNotes } from '../../notes/NotesContext';
+import { registerModuleInspectorTabs } from '../../inspector/tabs/moduleTabs';
 
 function unwrap(data) {
   if (Array.isArray(data)) return data;
@@ -71,10 +72,12 @@ export default function DataProductDetailPage() {
       setLoading(true);
       setError(null);
 
-      // Module itself is authoritative (A3 — not (context?.modules||[]).find)
-      const [moduleData, tablesData, assetsData, orgUnitsData, qualityData, auditData] =
+      // Module itself is authoritative (A3 — not (context?.modules||[]).find).
+      // Fetch it first: if the product no longer exists (re-seeded DB / stale
+      // link) we fail fast instead of firing pointless dependent 404s.
+      const moduleData = await fetchModule(token, moduleId);
+      const [tablesData, assetsData, orgUnitsData, qualityData, auditData] =
         await Promise.all([
-          fetchModule(token, moduleId),
           fetchDataSchemaTables(token, null, moduleId).catch(() => []),
           fetchAssetProfiles(token).catch(() => []),
           fetchOrgUnits(token).catch(() => []),
@@ -107,6 +110,27 @@ export default function DataProductDetailPage() {
   const handleDataChanged = useCallback(async () => {
     await loadData();
   }, [loadData]);
+
+  // ── Contextual Inspector (global drawer) ────────────────────────────
+  const { setContexts } = useNotes();
+
+  // A data product is a module entity; reuse the module tabs so the drawer
+  // shows Health/Lineage/Governance/Activity consistently with the workspace.
+  useEffect(() => registerModuleInspectorTabs(), []);
+
+  const inspectorContext = useMemo(
+    () => [{
+      entityType: 'module',
+      entityId: moduleId,
+      label: product?.name,
+      payload: { module: product, tables, activity: auditEvents },
+    }],
+    [moduleId, product, tables, auditEvents],
+  );
+  useEffect(() => {
+    setContexts(inspectorContext);
+    return () => setContexts(null);
+  }, [inspectorContext, setContexts]);
 
   if (!product && !loading && moduleId !== 'new') {
     return (
@@ -152,9 +176,6 @@ export default function DataProductDetailPage() {
           ? [{ label: t('common:edit'), component: DataProductEditTab }]
           : []),
         { label: t('audit'), component: DataProductAuditTab },
-      ]}
-      metricsTabs={[
-        { label: t('metrics'), component: DataProductMetricsPanel },
       ]}
       loading={loading}
       error={error}
