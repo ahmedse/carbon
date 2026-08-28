@@ -25,12 +25,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - carbon_static:/static
-      - carbon_media:/media
-      - carbon_uploads:/app/dataschema_uploads
-      - carbon_evidence:/app/mediafiles/evidence
-      - carbon_exports:/app/mediafiles/exports
-      - carbon_imports:/app/mediafiles/imports
+      - static:/static
+      - media:/media
+      - uploads:/app/dataschema_uploads
+      - evidence:/app/mediafiles/evidence
+      - exports:/app/mediafiles/exports
+      - imports:/app/mediafiles/imports
     ports:
       - "${BACKEND_PORT:-8002}:8000"
     healthcheck:
@@ -41,9 +41,15 @@ services:
       start_period: 40s
 
 volumes:
-  carbon_static:
-  carbon_media:
-  carbon_uploads:
-  carbon_evidence:
-  carbon_exports:
-  carbon_imports:
+  static:
+    name: carbon_static
+  media:
+    name: carbon_media
+  uploads:
+    name: carbon_uploads
+  evidence:
+    name: carbon_evidence
+  exports:
+    name: carbon_exports
+  imports:
+    name: carbon_imports

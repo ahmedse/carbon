@@ -56,6 +56,8 @@ docker tag "carbon-backend:${IMAGE_TAG}" "carbon-backend:latest" 2>/dev/null || 
 
 info "Restarting container ..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
+# remove any legacy docker-run container (no compose labels) so `up` can reuse the name
+docker rm -f "${INSTANCE:-carbon}-backend" 2>/dev/null || true
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
 ok "Backend running as carbon-backend:${IMAGE_TAG}"
 
