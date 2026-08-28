@@ -8,6 +8,7 @@ import {
   List, ListItemButton, ListItemText, Chip, Stack, Paper,
 } from "@mui/material";
 import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import SearchIcon from "@mui/icons-material/Search";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import DatasetIcon from "@mui/icons-material/Dataset";
@@ -18,35 +19,36 @@ import useDocumentTitle from "../hooks/useDocumentTitle";
 
 /** Known platform paths for client-side search. */
 const KNOWN_PATHS = [
-  { label: "Dashboard", path: "/carbon/dashboard", keywords: "dashboard emissions overview" },
-  { label: "My Data", path: "/carbon/my-data", keywords: "my data entry tables modules" },
-  { label: "Console", path: "/carbon/console", keywords: "console analytics summary" },
-  { label: "Catalog", path: "/catalog", keywords: "catalog products assets metadata" },
-  { label: "Calculations", path: "/carbon/calculations", keywords: "calculations audit" },
-  { label: "Verification", path: "/carbon/verification", keywords: "verification review" },
-  { label: "Settings", path: "/settings", keywords: "settings preferences" },
-  { label: "Help", path: "/help", keywords: "help documentation support" },
-  { label: "Admin — Users", path: "/admin/users", keywords: "admin users management" },
-  { label: "Admin — Org Units", path: "/admin/org-units", keywords: "admin org units organization" },
-  { label: "Admin — Access Control", path: "/admin/access", keywords: "admin access control roles" },
-  { label: "Admin — Audit Log", path: "/admin/audit", keywords: "admin audit log" },
-  { label: "Reports", path: "/carbon/reporting", keywords: "reporting reports generate saved" },
-  { label: "DQ Workspace", path: "/dq", keywords: "data quality dq workspace rules jobs" },
-  { label: "Emission Factors", path: "/carbon/admin/factors", keywords: "emission factors admin" },
+  { labelKey: "npDashboard", path: "/carbon/dashboard", keywords: "dashboard emissions overview" },
+  { labelKey: "npMyData", path: "/carbon/my-data", keywords: "my data entry tables modules" },
+  { labelKey: "npConsole", path: "/carbon/console", keywords: "console analytics summary" },
+  { labelKey: "npCatalog", path: "/catalog", keywords: "catalog products assets metadata" },
+  { labelKey: "npCalculations", path: "/carbon/calculations", keywords: "calculations audit" },
+  { labelKey: "npVerification", path: "/carbon/verification", keywords: "verification review" },
+  { labelKey: "npSettings", path: "/settings", keywords: "settings preferences" },
+  { labelKey: "npHelp", path: "/help", keywords: "help documentation support" },
+  { labelKey: "npAdminUsers", path: "/admin/users", keywords: "admin users management" },
+  { labelKey: "npAdminOrgUnits", path: "/admin/org-units", keywords: "admin org units organization" },
+  { labelKey: "npAdminAccess", path: "/admin/access", keywords: "admin access control roles" },
+  { labelKey: "npAdminAudit", path: "/admin/audit", keywords: "admin audit log" },
+  { labelKey: "npReports", path: "/carbon/reporting", keywords: "reporting reports generate saved" },
+  { labelKey: "npDqWorkspace", path: "/dq", keywords: "data quality dq workspace rules jobs" },
+  { labelKey: "npEmissionFactors", path: "/carbon/admin/factors", keywords: "emission factors admin" },
 ];
 
 const SUGGESTED = [
-  { label: "Dashboard", path: "/carbon/dashboard", icon: DashboardIcon },
-  { label: "My Data", path: "/carbon/my-data", icon: DatasetIcon },
-  { label: "Catalog", path: "/catalog", icon: CategoryIcon },
-  { label: "Settings", path: "/settings", icon: SettingsIcon },
+  { labelKey: "npDashboard", path: "/carbon/dashboard", icon: DashboardIcon },
+  { labelKey: "npMyData", path: "/carbon/my-data", icon: DatasetIcon },
+  { labelKey: "npCatalog", path: "/catalog", icon: CategoryIcon },
+  { labelKey: "npSettings", path: "/settings", icon: SettingsIcon },
 ];
 
 /**
  * 404 Not Found page — recovery surface with search + suggested pages.
  */
 export default function NotFound() {
-  useDocumentTitle("Page Not Found");
+  const { t } = useTranslation('common');
+  useDocumentTitle(t("pageNotFound"));
   const location = useLocation();
   const [query, setQuery] = useState("");
 
@@ -54,9 +56,9 @@ export default function NotFound() {
     const q = query.trim().toLowerCase();
     if (!q) return [];
     return KNOWN_PATHS.filter(
-      (p) => p.label.toLowerCase().includes(q) || p.keywords.includes(q)
+      (p) => t(p.labelKey).toLowerCase().includes(q) || p.keywords.includes(q)
     ).slice(0, 6);
-  }, [query]);
+  }, [query, t]);
 
   return (
     <Box
@@ -73,14 +75,14 @@ export default function NotFound() {
         404
       </Typography>
       <Typography variant="h5" color="text.secondary" gutterBottom>
-        Page Not Found
+        {t("pageNotFound")}
       </Typography>
       <Typography
         variant="body2"
         color="text.secondary"
         sx={{ mb: 3, maxWidth: 480, textAlign: "center" }}
       >
-        The page{" "}
+        {t("notFoundSentence1")}{" "}
         <Box
           component="code"
           sx={{
@@ -92,12 +94,12 @@ export default function NotFound() {
         >
           {location.pathname}
         </Box>{" "}
-        doesn't exist. Try searching or pick from the most-used pages below.
+        {t("notFoundSentence2")}
       </Typography>
 
       {/* Search */}
       <TextField
-        placeholder="Search for a page…"
+        placeholder={t("searchForPage")}
         size="small"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -123,7 +125,7 @@ export default function NotFound() {
             {results.map((r) => (
               <ListItemButton key={r.path} component={Link} to={r.path}>
                 <ListItemText
-                  primary={r.label}
+                  primary={t(r.labelKey)}
                   secondary={r.path}
                   primaryTypographyProps={{ variant: "body2", fontWeight: 500 }}
                   secondaryTypographyProps={{
@@ -131,7 +133,7 @@ export default function NotFound() {
                     sx: { fontFamily: "monospace" },
                   }}
                 />
-                <Chip label="Go" size="small" variant="outlined" sx={{ ml: 1 }} />
+                <Chip label={t("go")} size="small" variant="outlined" sx={{ ml: 1 }} />
               </ListItemButton>
             ))}
           </List>
@@ -140,7 +142,7 @@ export default function NotFound() {
 
       {/* Suggested pages */}
       <Typography variant="overline" color="text.secondary" sx={{ mb: 1 }}>
-        Suggested pages
+        {t("suggestedPages")}
       </Typography>
       <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="center" sx={{ mb: 2 }}>
         {SUGGESTED.map((s) => {
@@ -154,7 +156,7 @@ export default function NotFound() {
               to={s.path}
               startIcon={<Icon fontSize="small" />}
             >
-              {s.label}
+              {t(s.labelKey)}
             </Button>
           );
         })}

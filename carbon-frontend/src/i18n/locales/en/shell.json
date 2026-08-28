@@ -193,7 +193,10 @@
     "navigateTo": "Navigate to {{label}}",
     "ariaAppLabel": "Carbon Data Platform",
     "studioNavigation": "Studio navigation",
-    "version": "v1.0"
+    "version": "v1.0",
+    "platformTitle": "Platform",
+    "noAppsAvailable": "No Applications Available",
+    "noAppsSubtext": "Contact your administrator to get access to domain applications."
   },
   "devBanner": {
     "label": "Early preview",

@@ -165,7 +165,7 @@ def _rule_def(
 # ── investigate (read-only pipeline) ─────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_investigate_empty_table_completes_with_five_done_steps(django_store, cfg):
     """A zero-row table yields 0 findings, 5 'done' plan steps, status completed."""
     from ai.engine_runtime import dispatch_task
@@ -193,7 +193,7 @@ def test_investigate_empty_table_completes_with_five_done_steps(django_store, cf
     assert all(s["status"] == "done" for s in steps), data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_investigate_failing_dq_rule_maps_severity(django_store, cfg):
     """A failing not_null rule yields a high-severity finding."""
     from ai.engine_runtime import dispatch_task
@@ -219,7 +219,7 @@ def test_investigate_failing_dq_rule_maps_severity(django_store, cfg):
     assert "email required" in findings[0]["title"], data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_investigate_warn_rule_maps_to_medium(django_store, cfg):
     """Severity mapping: DQ warn -> medium (frozen 9-B contract)."""
     from ai.engine_runtime import dispatch_task
@@ -236,7 +236,7 @@ def test_investigate_warn_rule_maps_to_medium(django_store, cfg):
     assert findings[0]["severity"] == "medium", data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_investigate_anomaly_payload_produces_high_finding(django_store, cfg):
     """An anomaly-derived finding surfaces with a mapped severity."""
     from ai.engine_runtime import dispatch_task
@@ -284,7 +284,7 @@ def test_investigate_anomaly_payload_produces_high_finding(django_store, cfg):
     assert findings[0]["entity_ref"] == "emissions.row_count", data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_investigate_insufficient_history_is_done_not_error(django_store, cfg):
     """anomaly_payload=None (insufficient history) → 'done' step, 0 anomalies."""
     from ai.engine_runtime import dispatch_task
@@ -302,7 +302,7 @@ def test_investigate_insufficient_history_is_done_not_error(django_store, cfg):
     assert steps[3]["detail"] == "insufficient history", data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_investigate_llm_outage_is_llm_unavailable_not_pulse_unavailable(django_store, cfg):
     """LLM outage degrades the summary only — findings remain, NOT pulse_unavailable."""
     from ai.engine_runtime import dispatch_task
@@ -330,7 +330,7 @@ def test_investigate_llm_outage_is_llm_unavailable_not_pulse_unavailable(django_
 # ── Routing: investigate conversation → _send_investigate_message ────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_investigate_conversation_routes_to_handler(user, table_graph, django_store, cfg):
     """An investigate conversation runs the read-only pipeline (not the staged placeholder)."""
     table = table_graph["table"]

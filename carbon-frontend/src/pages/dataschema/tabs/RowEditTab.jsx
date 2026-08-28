@@ -2,6 +2,7 @@
 // Edit form for row data with validation and save
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   TextField,
@@ -31,6 +32,7 @@ export default function RowEditTab({
   token,
   onClose: _onClose,
 }) {
+  const { t } = useTranslation('dataschema');
   // Extract editable field data from the 'values' object
   const extractEditableFields = (data) => {
     const metadataFields = ['created_at', 'updated_at', 'created_by', 'updated_by'];
@@ -165,7 +167,7 @@ export default function RowEditTab({
       setRowData(updated);
       setIsDirty(false);
       setHasChanges(false);
-      notify('Row saved successfully', 'success');
+      notify(t('edit.rowSaved'), 'success');
       console.log('✅ RowEditTab: Row saved successfully');
     } catch (err) {
       console.error('🔴 RowEditTab: Save error - full details:', {
@@ -175,8 +177,8 @@ export default function RowEditTab({
         formDataSent: formData,
         error: err,
       });
-      setError(err.message || 'Failed to save row');
-      notify(`Error: ${err.message}`, 'error');
+      setError(err.message || t('edit.saveError'));
+      notify(t('errors.prefix', { message: err.message }), 'error');
     } finally {
       setSaving(false);
     }
@@ -200,7 +202,7 @@ export default function RowEditTab({
       {/* Warning if unsaved changes */}
       {isDirty && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          You have unsaved changes. Save or reset before leaving.
+          {t('edit.unsavedChanges')}
         </Alert>
       )}
 
@@ -224,7 +226,7 @@ export default function RowEditTab({
             rows={typeof value === 'string' && value.length > 100 ? 4 : 1}
             variant="outlined"
             disabled={saving}
-            placeholder={`Enter ${field.replace(/_/g, ' ')}`}
+            placeholder={t('edit.enterField', { field: field.replace(/_/g, ' ') })}
           />
         ))}
       </Stack>
@@ -237,7 +239,7 @@ export default function RowEditTab({
           disabled={!hasChanges || saving}
           color="success"
         >
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? t('edit.saving') : t('edit.saveChanges')}
         </Button>
         <Button
           startIcon={<CancelIcon />}
@@ -246,7 +248,7 @@ export default function RowEditTab({
           color="warning"
           variant="outlined"
         >
-          Reset
+          {t('edit.reset')}
         </Button>
       </ButtonGroup>
 
@@ -261,7 +263,7 @@ export default function RowEditTab({
             fontWeight: 500,
           }}
         >
-          ✓ All changes saved
+          ✓ {t('edit.allSaved')}
         </Typography>
       )}
     </Box>

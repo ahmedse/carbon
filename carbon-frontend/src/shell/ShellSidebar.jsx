@@ -64,9 +64,11 @@ import { shellLabel, STUDIO_TITLE_KEYS } from '../i18n/shellLabels';
 // UI-driven icon mapping for Carbon sidebar items
 // This allows icons to be chosen at runtime without hardcoding
 const CARBON_ITEM_ICONS = {
+  'Chairman Overview':    AssessmentIcon,
+  'Carbon Console':       DashboardIcon,
   'Overview':             DashboardIcon,
   'Emissions Dashboard':  BarChartIcon,
-  'Analytics & Trends':   BarChartIcon,
+  'Analytics & Trends':   TimelineIcon,
   'Data Entry':           AddCircleOutlineIcon,
   'Reports':              AssessmentIcon,
   'Generate Report':      AssessmentIcon,
@@ -134,6 +136,7 @@ function getSidebarItems(studioId) {
         { label: 'Groups & Roles', path: '/admin/groups', icon: GroupIcon, role: 'admin' },
         { label: 'Org Units', path: '/admin/org-units', icon: AccountTreeIcon, role: 'admin' },
         { label: 'Access Control', path: '/admin/access', icon: SecurityIcon, role: 'admin' },
+        { label: 'Field Policies', path: '/admin/catalog/field-policies', icon: SecurityIcon, role: 'admin' },
         { label: 'Audit Log', path: '/admin/audit', icon: HistoryIcon, role: 'admin' },
         { label: 'System Logs', path: '/admin/logs', icon: ArticleIcon, role: 'admin' },
         { type: 'divider' },

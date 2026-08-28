@@ -92,12 +92,15 @@ class EmissionsDomainAI(DomainAIOperations):
     system_prompt_extension = (
         "You are analyzing Carbon emissions data for AASTMT university campus. "
         "The data follows the GHG Protocol Corporate Standard (Scope 1/2/3, IPCC AR6). "
-        "Emission factors are in tCO₂e per unit activity. "
+        "Emission factors are stored in kg CO₂e per unit activity (e.g., 0.4584 kg CO₂e/kWh). "
         "Electricity is measured in kWh (Scope 2), water in m³ (Scope 3), "
         "chilled water in TR (Scope 2). "
         "Key campus buildings: Building 401, Building 2401 (Smart Village). "
         "Reporting periods follow the fiscal year. "
-        "Always cite the specific table, field, and row counts when making data claims."
+        "Always cite the specific table, field, and row counts when making data claims. "
+        "Unit hierarchy: factors (kg CO₂e per activity unit) → calculations (kg CO₂e) → "
+        "dashboard/report totals (tonnes CO₂e = kg ÷ 1000). To answer any question about factors, "
+        "calculations, or totals, call the host API to read live data — never state a factor value from memory."
     )
 
     # ── Manifest: workspace context enrichment ────────────────────────────

@@ -22,6 +22,7 @@ import {
   Typography,
   MenuItem,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
@@ -30,7 +31,8 @@ import { useAITaskTransfer } from '../../shell/useAITaskTransfer';
 import { fetchReportingPeriods, generateReport, downloadReportCsv, createReportConfig } from '../../api/emissions-extended';
 
 export default function ReportGeneratorPage() {
-  useDocumentTitle("Generate Report");
+  const { t } = useTranslation('emissions');
+  useDocumentTitle(t('reportGeneratorTitle'));
   const { user: _user, token } = useAuth();
   const { transferTask } = useAITaskTransfer();
   const [loading, setLoading] = useState(false);
@@ -112,7 +114,7 @@ export default function ReportGeneratorPage() {
 
   const handleSaveConfig = async () => {
     if (!configName.trim()) {
-      setError('Please enter a configuration name');
+      setError(t('configNameRequired'));
       return;
     }
 
@@ -122,7 +124,7 @@ export default function ReportGeneratorPage() {
         ...state,
         name: configName,
       }, token);
-      setSnackbar({ message: 'Configuration saved successfully', severity: 'success' });
+      setSnackbar({ message: t('configSaved'), severity: 'success' });
       setConfigName('');
     } catch (err) {
       setError(err.message);
@@ -162,7 +164,7 @@ export default function ReportGeneratorPage() {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-          Report Generator
+          {t('reportGenerator')}
         </Typography>
         <Button
           size="small"
@@ -170,7 +172,7 @@ export default function ReportGeneratorPage() {
           startIcon={<AutoAwesomeIcon />}
           onClick={handleAskAI}
         >
-          Ask AI
+          {t('askAi')}
         </Button>
       </Box>
 
@@ -181,19 +183,19 @@ export default function ReportGeneratorPage() {
         <Card>
           <CardContent>
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
-              Report Configuration
+              {t('reportConfiguration')}
             </Typography>
 
             <Stack spacing={2}>
               {/* Period Selection */}
               <TextField
-                label="Reporting Period"
+                label={t('reportingPeriod')}
                 select
                 value={state.reporting_period_id}
                 onChange={(e) => handleStateChange('reporting_period_id', e.target.value)}
                 fullWidth
               >
-                <MenuItem value="">Select Period</MenuItem>
+                <MenuItem value="">{t('selectPeriod')}</MenuItem>
                 {periods.map(period => (
                   <MenuItem key={period.id} value={period.id}>
                     {period.name}
@@ -204,7 +206,7 @@ export default function ReportGeneratorPage() {
               {/* Custom Date Range */}
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                 <TextField
-                  label="Custom Start Date (YYYY-MM-DD)"
+                  label={t('customStartDate')}
                   type="date"
                   value={state.custom_start}
                   onChange={(e) => handleStateChange('custom_start', e.target.value)}
@@ -212,7 +214,7 @@ export default function ReportGeneratorPage() {
                   sx={{ flex: 1 }}
                 />
                 <TextField
-                  label="Custom End Date (YYYY-MM-DD)"
+                  label={t('customEndDate')}
                   type="date"
                   value={state.custom_end}
                   onChange={(e) => handleStateChange('custom_end', e.target.value)}
@@ -224,7 +226,7 @@ export default function ReportGeneratorPage() {
               {/* Scopes */}
               <Box>
                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                  GHG Scopes
+                  {t('ghgScopes')}
                 </Typography>
                 <FormGroup row>
                   {[1, 2, 3].map(scope => (
@@ -236,7 +238,7 @@ export default function ReportGeneratorPage() {
                           onChange={() => handleScopeToggle(scope)}
                         />
                       }
-                      label={`Scope ${scope}`}
+                      label={t('scopeChip', { scope })}
                     />
                   ))}
                 </FormGroup>
@@ -244,15 +246,15 @@ export default function ReportGeneratorPage() {
 
               {/* Grouping */}
               <TextField
-                label="Grouping"
+                label={t('grouping')}
                 select
                 value={state.grouping}
                 onChange={(e) => handleStateChange('grouping', e.target.value)}
                 fullWidth
               >
-                <MenuItem value="scope">By Scope</MenuItem>
-                <MenuItem value="category">By Category</MenuItem>
-                <MenuItem value="module">By Module</MenuItem>
+                <MenuItem value="scope">{t('byScope')}</MenuItem>
+                <MenuItem value="category">{t('byCategory')}</MenuItem>
+                <MenuItem value="module">{t('byModule')}</MenuItem>
               </TextField>
 
               <Button
@@ -260,7 +262,7 @@ export default function ReportGeneratorPage() {
                 onClick={handleGenerateReport}
                 disabled={loading}
               >
-                {loading ? <CircularProgress size={24} /> : 'Generate Report'}
+                {loading ? <CircularProgress size={24} /> : t('generateReport')}
               </Button>
             </Stack>
           </CardContent>
@@ -271,12 +273,12 @@ export default function ReportGeneratorPage() {
           <Card>
             <CardContent>
               <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
-                Report Preview
+                {t('reportPreview')}
               </Typography>
 
               <Box sx={{ mb: 2, p: 2, bgcolor: 'background.dark', borderRadius: 1 }}>
                 <Typography variant="body2">
-                  <strong>Total Emissions:</strong> {reportData.total_co2e_tonnes?.toFixed(2) || 0} tonnes CO₂e
+                  <strong>{t('totalEmissions')}</strong> {reportData.total_co2e_tonnes?.toFixed(2) || 0} {t('tonnesCo2e')}
                 </Typography>
               </Box>
 
@@ -286,15 +288,15 @@ export default function ReportGeneratorPage() {
                   <Table size="small">
                     <TableHead sx={{ bgcolor: 'background.dark' }}>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 'bold' }}>Scope</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>CO₂e (tonnes)</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Records</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>{t('scope')}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>{t('co2eTonnes')}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>{t('records')}</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {Object.entries(reportData.scope_breakdown).map(([scope, data]) => (
                         <TableRow key={scope}>
-                          <TableCell>Scope {scope}</TableCell>
+                          <TableCell>{t('scopeChip', { scope })}</TableCell>
                           <TableCell align="right">{data.total_co2e_tonnes?.toFixed(2) || 0}</TableCell>
                           <TableCell align="right">{data.count || 0}</TableCell>
                         </TableRow>
@@ -306,10 +308,10 @@ export default function ReportGeneratorPage() {
 
               <Stack direction="row" spacing={2}>
                 <Button variant="contained" onClick={handleDownloadCsv}>
-                  Download CSV
+                  {t('downloadCsv')}
                 </Button>
                 <Button variant="outlined" onClick={() => setShowPreview(false)}>
-                  Back to Config
+                  {t('backToConfig')}
                 </Button>
               </Stack>
             </CardContent>
@@ -321,15 +323,15 @@ export default function ReportGeneratorPage() {
           <Card>
             <CardContent>
               <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
-                Save Configuration for Reuse
+                {t('saveConfigForReuse')}
               </Typography>
 
               <Stack spacing={2}>
                 <TextField
-                  label="Configuration Name"
+                  label={t('configName')}
                   value={configName}
                   onChange={(e) => setConfigName(e.target.value)}
-                  placeholder="e.g., Q3 2024 Scope 1&2 Report"
+                  placeholder={t('configNamePlaceholder')}
                   fullWidth
                 />
                 <Button
@@ -337,7 +339,7 @@ export default function ReportGeneratorPage() {
                   onClick={handleSaveConfig}
                   disabled={loading || !configName.trim()}
                 >
-                  {loading ? <CircularProgress size={24} /> : 'Save Configuration'}
+                  {loading ? <CircularProgress size={24} /> : t('saveConfiguration')}
                 </Button>
               </Stack>
             </CardContent>

@@ -4,6 +4,7 @@
 import React from "react";
 import PropTypes from "prop-types";
 import { IconButton, Tooltip } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { helpTexts } from "../help/helpTexts";
 
@@ -15,6 +16,7 @@ import { helpTexts } from "../help/helpTexts";
  * @param {object} props - Additional props for IconButton.
  */
 export default function MicroHelp({ helpKey, lang = "en", ...props }) {
+  const { t } = useTranslation('common');
   // Determine text direction for the current language
   const dir = lang === "ar" ? "rtl" : "ltr";
   // Attempt to find localized help text, fallback to English, else show missing key
@@ -27,7 +29,7 @@ export default function MicroHelp({ helpKey, lang = "en", ...props }) {
         `[MicroHelp] Missing help text for key "${helpKey}" in language "${lang}".`
       );
     }
-    text = `Help not available for "${helpKey}"`;
+    text = t('helpNotAvailable', { helpKey });
   }
 
   // Security: never render HTML, always plain text
@@ -45,7 +47,7 @@ export default function MicroHelp({ helpKey, lang = "en", ...props }) {
       <IconButton
         size="small"
         tabIndex={-1}
-        aria-label="Show help"
+        aria-label={t('showHelp')}
         {...props}
         sx={{
           color: "action.active",

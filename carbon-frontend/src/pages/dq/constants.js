@@ -54,6 +54,84 @@ export const JOB_STATUS_LABELS = {
   canceled: 'Canceled',
 };
 
+// ── i18n label helpers (I18N-3) ──────────────────────────────────────────────
+// The `*_LABELS` maps above stay as ENGLISH strings: they are also consumed by
+// out-of-scope pages that do not use `t()` yet (inspector/tabs/ruleTabs.jsx,
+// pages/catalog/tabs/DQRulesTab.jsx). Migrated pages resolve display labels
+// through these key maps + helpers instead, so every rendered label goes
+// through `t()`. Keys are prefix-free and live in the `dq` namespace.
+export const RULE_TYPE_LABEL_KEYS = {
+  not_null: 'ruleType.notNull',
+  unique: 'ruleType.unique',
+  allowed_values: 'ruleType.allowedValues',
+  range: 'ruleType.range',
+  regex: 'ruleType.regex',
+  reference_integrity: 'ruleType.referenceIntegrity',
+  threshold: 'ruleType.threshold',
+  nl_check: 'ruleType.nlCheck',
+  anomaly_detect: 'ruleType.anomalyDetect',
+};
+
+export const RULE_LEVEL_LABEL_KEYS = {
+  field_validation: 'ruleLevel.fieldValidation',
+  business_rule: 'ruleLevel.businessRule',
+};
+
+export const DIMENSION_LABEL_KEYS = {
+  completeness: 'dimension.completeness',
+  validity: 'dimension.validity',
+  accuracy: 'dimension.accuracy',
+  consistency: 'dimension.consistency',
+  timeliness: 'dimension.timeliness',
+  uniqueness: 'dimension.uniqueness',
+  integrity: 'dimension.integrity',
+  reasonability: 'dimension.reasonability',
+};
+
+export const SEVERITY_LABEL_KEYS = {
+  info: 'severity.info',
+  warn: 'severity.warning',
+  error: 'severity.error',
+};
+
+export const JOB_TYPE_LABEL_KEYS = {
+  rule_run: 'jobType.ruleRun',
+  profile: 'jobType.profile',
+  freshness: 'jobType.freshness',
+  schema: 'jobType.schemaSnapshot',
+  nl_check: 'jobType.nlCheck',
+  suggest: 'jobType.suggestion',
+  anomaly: 'jobType.anomalyScan',
+};
+
+export const JOB_STATUS_LABEL_KEYS = {
+  queued: 'jobStatus.queued',
+  running: 'jobStatus.running',
+  done: 'jobStatus.done',
+  failed: 'jobStatus.failed',
+  canceled: 'jobStatus.canceled',
+};
+
+export const FIELD_TYPE_LABEL_KEYS = {
+  string: 'fieldType.string',
+  text: 'fieldType.text',
+  number: 'fieldType.number',
+  date: 'fieldType.date',
+  boolean: 'fieldType.boolean',
+  select: 'fieldType.select',
+  multiselect: 'fieldType.multiselect',
+  file: 'fieldType.file',
+  reference: 'fieldType.reference',
+};
+
+export const ruleTypeLabel = (t, key) => t(RULE_TYPE_LABEL_KEYS[key] || key);
+export const ruleLevelLabel = (t, key) => t(RULE_LEVEL_LABEL_KEYS[key] || key);
+export const dimensionLabel = (t, key) => t(DIMENSION_LABEL_KEYS[key] || key);
+export const severityLabel = (t, key) => t(SEVERITY_LABEL_KEYS[key] || key);
+export const jobTypeLabel = (t, key) => t(JOB_TYPE_LABEL_KEYS[key] || key);
+export const jobStatusLabel = (t, key) => t(JOB_STATUS_LABEL_KEYS[key] || key);
+export const fieldTypeLabel = (t, key) => t(FIELD_TYPE_LABEL_KEYS[key] || key);
+
 // MUI theme-chip color tokens (no raw hex).
 export const SEVERITY_COLORS = {
   info: 'info',

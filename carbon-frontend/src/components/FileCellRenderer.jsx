@@ -3,11 +3,13 @@
 import React, { useRef, useState } from "react";
 import { Box, IconButton, Link, CircularProgress, Tooltip } from "@mui/material";
 import { AttachFile, Delete, CloudUpload } from "@mui/icons-material";
+import { useTranslation } from "react-i18next";
 import { useNotification } from "./NotificationProvider";
 
 export default function FileCellRenderer({
   value, onChange, disabled, rowId, fieldName, uploadRowFile, token, context_id
 }) {
+  const { t } = useTranslation('common');
   const fileInputRef = useRef();
   const [uploading, setUploading] = useState(false);
   const notifyCtx = useNotification();
@@ -19,16 +21,16 @@ export default function FileCellRenderer({
     const file = e.target.files?.[0];
     if (!file) return;
     if (!rowId) {
-      notify({ message: "Please save the row before uploading a file.", type: "error" });
+      notify({ message: t("saveRowFirst"), type: "error" });
       return;
     }
     setUploading(true);
     try {
       const uploaded = await uploadRowFile(token, rowId, fieldName, file, context_id);
       onChange(uploaded); // inform parent/grid of new value
-      notify({ message: "File uploaded.", type: "success" });
+      notify({ message: t("fileUploaded"), type: "success" });
     } catch (err) {
-      notify({ message: err?.message || "File upload failed", type: "error" });
+      notify({ message: err?.message || t("fileUploadFailed"), type: "error" });
     }
     setUploading(false);
   };
@@ -42,8 +44,8 @@ export default function FileCellRenderer({
               <AttachFile fontSize="small" />
             </Link>
             {!disabled && (
-              <Tooltip title="Delete file">
-                <IconButton size="small" onClick={() => onChange(null)} aria-label="Delete file">
+              <Tooltip title={t("deleteFile")}>
+                <IconButton size="small" onClick={() => onChange(null)} aria-label={t("deleteFile")}>
                   <Delete fontSize="small" />
                 </IconButton>
               </Tooltip>
@@ -60,19 +62,19 @@ export default function FileCellRenderer({
                 onChange={handleUpload}
                 accept=".pdf,image/*"
               />
-              <Tooltip title={rowId ? "Upload file" : "Save row first"}>
+              <Tooltip title={rowId ? t("uploadFile") : t("saveRowFirstHint")}>
                 <span>
                   <IconButton
                     size="small"
                     onClick={() => {
                       if (!rowId) {
-                        notify({ message: "Please save the row before uploading a file.", type: "error" });
+                        notify({ message: t("saveRowFirst"), type: "error" });
                         return;
                       }
                       fileInputRef.current?.click();
                     }}
                     disabled={uploading || !rowId}
-                    aria-label="Upload file"
+                    aria-label={t("uploadFile")}
                   >
                     {uploading ? <CircularProgress size={20} /> : <CloudUpload fontSize="small" />}
                   </IconButton>

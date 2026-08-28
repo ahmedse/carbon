@@ -24,9 +24,11 @@ import {
 } from '../../../api/dq';
 import { fetchDataSchemaFields } from '../../../api/dataschema';
 import {
-  RULE_TYPE_LABELS, DIMENSION_LABELS,
-  SEVERITY_LABELS, SEVERITY_COLORS, RESULT_STATUS_COLORS,
-  FIELD_TYPE_LABELS, RULE_FIELD_TYPE_COMPAT, isRuleCompatibleWithField,
+  RULE_TYPE_LABELS,
+  SEVERITY_COLORS, RESULT_STATUS_COLORS,
+  RULE_FIELD_TYPE_COMPAT, isRuleCompatibleWithField,
+  DIMENSION_LABEL_KEYS,
+  ruleTypeLabel, dimensionLabel, severityLabel, fieldTypeLabel,
 } from '../../dq/constants';
 
 function unwrap(data) {
@@ -39,6 +41,8 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
   const { token } = useAuth();
   const { notify } = useNotification();
   const { t } = useTranslation('catalog');
+  // DQ label helpers resolve keys in the `dq` namespace.
+  const { t: tDq } = useTranslation('dq');
 
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -301,11 +305,11 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                   <TableRow key={rule.id} sx={{ '&:hover': { bgcolor: 'grey.50' } }}>
                     <TableCell sx={{ fontWeight: 500 }}>{rule.name || '—'}</TableCell>
                     <TableCell>
-                      <Chip label={RULE_TYPE_LABELS[rule.rule_type] || rule.rule_type} size="small" variant="outlined" />
+                      <Chip label={ruleTypeLabel(tDq, rule.rule_type)} size="small" variant="outlined" />
                     </TableCell>
                     <TableCell>
                       {rule.dimension
-                        ? <Chip label={DIMENSION_LABELS[rule.dimension] || rule.dimension} size="small" variant="outlined" />
+                        ? <Chip label={dimensionLabel(tDq, rule.dimension)} size="small" variant="outlined" />
                         : '—'}
                     </TableCell>
                     <TableCell>
@@ -325,7 +329,7 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={SEVERITY_LABELS[rule.severity] || rule.severity}
+                        label={severityLabel(tDq, rule.severity)}
                         size="small"
                         color={SEVERITY_COLORS[rule.severity] || 'default'}
                         variant="outlined"
@@ -440,7 +444,7 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
               <InputLabel>{t('dimension')}</InputLabel>
               <Select label={t('dimension')} value={dimensionFilter} onChange={(e) => setDimensionFilter(e.target.value)}>
                 <MenuItem value="">{t('allDimensions')}</MenuItem>
-                {Object.entries(DIMENSION_LABELS).map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+                {Object.entries(DIMENSION_LABEL_KEYS).map(([v, key]) => <MenuItem key={v} value={v}>{tDq(key)}</MenuItem>)}
               </Select>
             </FormControl>
           </Stack>
@@ -471,9 +475,9 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                           variant="outlined"
                           color={r.rule_level === 'business_rule' ? 'secondary' : 'info'}
                         />
-                        <Chip label={RULE_TYPE_LABELS[r.rule_type] || r.rule_type} size="small" variant="outlined" />
-                        {r.dimension ? <Chip label={DIMENSION_LABELS[r.dimension] || r.dimension} size="small" variant="outlined" /> : null}
-                        <Chip label={SEVERITY_LABELS[r.severity] || r.severity} size="small" color={SEVERITY_COLORS[r.severity] || 'default'} variant="outlined" />
+                        <Chip label={ruleTypeLabel(tDq, r.rule_type)} size="small" variant="outlined" />
+                        {r.dimension ? <Chip label={dimensionLabel(tDq, r.dimension)} size="small" variant="outlined" /> : null}
+                        <Chip label={severityLabel(tDq, r.severity)} size="small" color={SEVERITY_COLORS[r.severity] || 'default'} variant="outlined" />
                       </Stack>
                     )}
                   />
@@ -497,7 +501,7 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: 2 }}>
                         <span>{f.label || f.name || f.id}</span>
                         <Typography component="span" variant="caption" color="text.secondary">
-                          {FIELD_TYPE_LABELS[f.type] || f.type}{compatible ? '' : ` · ${t('incompatible')}`}
+                          {fieldTypeLabel(tDq, f.type)}{compatible ? '' : ` · ${t('incompatible')}`}
                         </Typography>
                       </Box>
                     </MenuItem>
@@ -507,10 +511,10 @@ export default function DQRulesTab({ tableId, fields: fieldsProp = [] }) {
               <FormHelperText>
                 {(() => {
                   const allowed = RULE_FIELD_TYPE_COMPAT[selectedRule.rule_type];
-                  const typeLabel = RULE_TYPE_LABELS[selectedRule.rule_type] || selectedRule.rule_type;
+                  const typeLabel = ruleTypeLabel(tDq, selectedRule.rule_type);
                   const target = !allowed
                     ? t('anyFieldType')
-                    : allowed.map((t) => FIELD_TYPE_LABELS[t] || t).join(', ');
+                    : allowed.map((ft) => fieldTypeLabel(tDq, ft)).join(', ');
                   return t('rulesApplyTo', { type: typeLabel, target });
                 })()}
               </FormHelperText>

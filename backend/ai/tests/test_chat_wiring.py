@@ -95,7 +95,7 @@ def stub_llm():
 # ── Tests ────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dispatch_chat_returns_completed(django_store, single_pass, stub_llm):
     """dispatch_task('chat') completes with a real result via the Store."""
     from ai.engine_runtime import dispatch_task
@@ -129,7 +129,7 @@ def test_dispatch_chat_returns_completed(django_store, single_pass, stub_llm):
     assert llm_logs.count() >= 1
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dispatch_chat_is_fail_visible(django_store, single_pass, monkeypatch):
     """An engine error (no LLM client / API key) yields pulse_unavailable."""
     from ai.engine_runtime import dispatch_task
@@ -151,7 +151,7 @@ def test_dispatch_chat_is_fail_visible(django_store, single_pass, monkeypatch):
     assert data.get("error"), data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_all_module_tasks_are_wired(django_store, single_pass, cfg, stub_llm):
     """Every advertised task type resolves to a handler — no ``not_wired`` remains.
 

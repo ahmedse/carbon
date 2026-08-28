@@ -1,3 +1,220 @@
+# TASK-RESULTS.md
+
+## [2026-08-28] Master Architect — I18N-3 DQ Workspace + Dataschema i18n: dispatched, verified DONE
+
+**Role:** master-architect (dispatch + gates) · **Worker:** frontend-worker (DeepSeek V4-Flash) · **Kind:** frontend (I18N track — ADR-0018 dual-language UI)
+
+### Delivered
+- `dq` namespace (**358 keys**): `src/pages/dq/DQWorkspacePage.jsx`, `RuleDetailPage.jsx`, `tabs/*` (Overview, Rules, Definition, Test, Operations, Results, Stats, Jobs, Usage) → `useTranslation('dq')`. New locale catalogs `en/dq.json` + `ar/dq.json` (Arabic native quality: مساحة عمل جودة البيانات، غير فارغ، الاكتمال، تشغيل القاعدة، القيم المسموحة، العتبة، تكامل المرجع، التعبير النمطي).
+- `dataschema` namespace (**104 keys**): `src/pages/dataschema/RowDetailPage.jsx`, `tabs/RowOverviewTab.jsx`, `RowEditTab.jsx`, `metrics/DQMetricsTab.jsx`, `DataLineageTab.jsx`, `RelatedRecordsTab.jsx`. New `en/dataschema.json` + `ar/dataschema.json`.
+- `dq/constants.js` — dual-map pattern: English `*_LABELS` maps stay (still consumed by out-of-scope pages); new `*_LABEL_KEYS` maps + helpers `ruleTypeLabel`/`ruleLevelLabel`/`dimensionLabel`/`severityLabel`/`jobTypeLabel`/`jobStatusLabel`/`fieldTypeLabel` — all `(t, key) => t(KEYS[key] || key)`.
+- `catalog.json` +24 keys (en+ar) for the table DQ Rules tab (`rulesApplyTo`, assign dialog, empty state, etc.).
+- Namespace registration: `src/i18n/index.js` + `src/__mocks__/react-i18next.js` — 13 namespaces total (added dq/dataschema).
+- Content scope respected (ADR-0018): rule **names/descriptions** stay English (never translate rule definitions), numerals Latin, SQL/data values untouched.
+- 18 files under `src/pages/{dq,dataschema}` + 4 new catalogs + 2 catalog.json edits.
+
+### Master fixes
+- 3 ESLint `no-undef` errors from `<Trans>` children `{{var}}` shorthand compiling to in-scope object-literal references: `count` undefined (OperationsTab delete/archive messages), `type` undefined (TestTab messages). Fixed by defining in-scope consts + `values={{ name, count }}` shorthand.
+- **DQRulesTab literal-map gap (completeness fix)**: `src/pages/catalog/tabs/DQRulesTab.jsx` (already on `catalog` ns) still rendered English label maps (RULE_TYPE_LABELS/DIMENSION_LABELS/SEVERITY_LABELS/FIELD_TYPE_LABELS) → English in Arabic mode. Added `FIELD_TYPE_LABEL_KEYS` + `fieldTypeLabel` helper to `dq/constants.js`, `fieldType` section (+9 keys ×2 locales: string/text/number/date/boolean/select/multiselect/file/reference), and migrated all 8 rendered usages (rule type/dimension/severity chips, filter dropdown, candidate chips, field-type labels) to tDq helpers.
+
+### Gates (master-run)
+- lint: 0 errors / 29 warnings (baseline) ✓
+- key-parity: `node scripts/check-i18n-keys.js` → **OK — 2098 keys in parity (en === ar)** ✓ (was 1636 at I18N-4)
+- full-suite vitest: **898 passed / 8 failed** — all 8 failures identical to I18N-4 baseline (cbac, routes, AITaskPanel ×2, DiscoveryComposer ×3, AISharedThreads), proven **pre-existing** (stash-baseline at I18N-4). ✓
+- `npm run build` ✓ (only pre-existing chunk-size warning)
+- `./.ai-toolkit/scripts/verify.sh frontend`: **GATE PASSED** — 83 paths resolve / 17 namespace roots ✓
+- **RTL manual smoke** (browser, master-run): DQ Workspace tabs نظرة عامة/القواعد/المهام/الاقتراحات/المراقبة + rule types in Arabic (التعبير النمطي، العتبة، تكامل المرجع، القيم المسموحة) while rule names/descriptions stay English ✓; `/catalog/tables/3` DQ Rules tab: تعيين قاعدة button, empty-state Arabic, assign dialog rule types + dimensions (الصلاحية/التكامل) + severities (خطأ) + field types (نص، نص طويل) + interpolated `rulesApplyTo` "قواعد التعبير النمطي تنطبق على نص، نص طويل." ✓
+
+### Notes / follow-ups
+- **Worker-report verification lesson**: worker claimed constants.js + DQ tabs "already migrated" and dataschema "unchanged" — ALL FALSE (19 files modified, parity grew 1636→2089). Always verify worker claims against `git status` + parity script.
+- **Trans gotcha**: `<Trans i18nKey ns values>` children using `{{var}}` shorthand compile to in-scope object-literal references — undefined vars → ESLint `no-undef` + runtime ReferenceError. Fix: in-scope consts + `values={{ name, count }}`.
+- Pre-existing (non-blocking, tracked): 8 AI/route test failures from uncommitted EPH-4C/ChairmanDashboard/AuthContext work.
+- I18N-5 open items unchanged: deep AI workspace chrome (22 shell files) + 25 admin panels.
+
+---
+
+## [2026-08-28] Master Architect — I18N-4 Hosted + Tools i18n: dispatched, verified DONE
+
+**Role:** master-architect (dispatch + gates) · **Worker:** frontend-worker (DeepSeek V4-Flash) · **Kind:** frontend (I18N track — ADR-0018 dual-language UI)
+
+### Delivered
+- `emissions` namespace (**297 keys**): `src/pages/emissions/*` (CalculationRules, EmissionFactors, FactorsHub, GWPReference, ReportGenerator, ReportingPeriods, SavedReports) + `EmissionsDashboard`, `EmissionsReport`, `ScopeInfoPage` → `useTranslation('emissions')`; `useDocumentTitle` titles translated.
+- `evidence` namespace (**18 keys**): `src/components/evidence/EvidenceUploader.jsx`, `EvidenceViewer.jsx`.
+- `importexport` namespace (**37 keys**): `src/components/import/BulkImportWizard.jsx`.
+- `connections` namespace (**10 keys**): `SettingsPage` Pulse/AI-Copilot section (multi-ns `useTranslation(['common','connections','shell'])`); rest of SettingsPage → `common`. `ConnectionsPage.jsx` left on `catalog` ns (already migrated); `McpServersPanel` left unmigrated (matches sibling admin/ai convention).
+- Root pages → `common`/`shell`/`errors`: `NotFound` (common), `PlatformHome` (shell), `AnalyticsDashboard` (common — incl. `<Trans>` for the Chairman Overview sentence), healthy app `HealthyDashboard`/`RepHealthPage` (common), `ChunkLoadError` (errors).
+- Shared components → `common`: `DataTableGrid`, `FilteredDataGrid`, `DataRowFormDrawer`, `TableDataPage`, `BulkActionBar`, `FileCellRenderer`, `GridActionCell`, `NetworkStatusBanner`, `ResizableLayout`, `MicroHelp`. Module-level helpers (`buildColumns`, `validateField`) now take `t` as param (no hook at module scope).
+- Namespace registration: `src/i18n/index.js` + `src/__mocks__/react-i18next.js` — 11 namespaces total (added emissions/evidence/importexport/connections).
+- Content scope respected: pipeline names, branding (PLATFORM_TITLE), chart legend internals, API error detail strings, data values left untranslated. Numerals Latin. Arabic = native quality (spot-checked).
+- No tests required changes (en catalog values match original hardcoded strings; vitest mock resolves identically). `EmissionsDashboard.notes.test.jsx` 3/3.
+
+### Master fixes
+- None required (worker code lint-clean; the 1 remaining lint fix need from EPH-4C already applied).
+
+### Gates (master-run)
+- lint: 0 errors / 29 warnings (baseline) ✓
+- key-parity: `node scripts/check-i18n-keys.js` → **OK — 1636 keys in parity (en === ar)** ✓ (was 1036 at I18N-6)
+- full-suite vitest: **898 passed / 8 failed** — all 8 failures (cbac, routes, AITaskPanel ×2, DiscoveryComposer ×3, AISharedThreads) proven **pre-existing**: identical failure set reproduced with all 19 worker files stashed (`git stash` baseline run: 8 failed / 213 passed in same 6 files). Sources: EPH-4C route/capability additions, ChairmanDashboard redirect, AuthContext perspective-refresh — earlier session work, not I18N-4. ✓
+- `npm run build` ✓ (31.72s, only pre-existing chunk-size warning)
+- `./.ai-toolkit/scripts/verify.sh frontend`: **GATE PASSED** — 83 paths resolve / 17 namespace roots ✓
+
+### Notes / follow-ups
+- Pre-existing (non-blocking, tracked): 8 AI/route test failures from uncommitted EPH-4C/ChairmanDashboard/AuthContext work — should be fixed when those changes are committed/verified.
+- `common.json` has 2 duplicate keys (`bulkDeleteFailed`, `csvExportFailed`) — harmless (last-wins), dedupe in a cleanup pass.
+
+---
+
+## [2026-08-28] Master Architect — EPH-4C Field Visibility + Masking UI: dispatched, verified DONE
+
+**Role:** master-architect (dispatch + gates) · **Worker:** frontend-worker (DeepSeek V4-Flash) · **Kind:** frontend (closes P0-1 column-level RBAC UI + P0-2 data masking UI)
+
+### Delivered
+- `src/pages/catalog/tabs/SchemaStructureTab.jsx` — `access_denied` rows: LockIcon (`action.disabled`) + "(Access Restricted)" (`text.secondary`), row cells muted (`text.disabled`), action buttons suppressed; `is_masked` rows: VisibilityOffIcon (`warning.main`) + "Masked" Chip + tooltip; admin-only inline masking-strategy `Select` (none/redact/hash/truncate/null) → PATCH → notify + `onChanged`.
+- `src/pages/admin/catalog/FieldPoliciesPanel.jsx` (NEW) — `/admin/catalog/field-policies`, gated `AdminRoute requiredCapability={DATASCHEMA_MANAGE}` ('dataschema:manage' = backend gate). Canonical shell (PageContainer + PageHeader + StandardDataGrid + SystemDialog + ConfirmDialog). Field search + policies table (capability/action/created_by/created_at/delete) + masking Select + Add-Policy dialog (capability + deny/mask).
+- `src/api/fieldPolicies.js` (NEW) — apiFetch-only (RULE_10): getFieldPolicies / createFieldPolicy / deleteFieldPolicy / updateFieldMaskingStrategy (PATCH `dataschema/fields/{id}/`) / fetchAllFields (unfiltered list, defensive `.results` unwrap for CarbonPageNumberPagination).
+- i18n: 10 keys added to `catalog.json` (en + ar) — accessRestricted, masked, maskedTooltip, masking, maskingNone/Redact/Hash/Truncate/Null, maskingUpdated, maskingUpdateFailed. Admin panel plain English (matches AuditLogPage convention).
+- Wiring: App.jsx lazy route (after `/admin/audit`), `capabilities.js` ROUTE_CAPABILITIES `'/admin/catalog/field-policies': DATASCHEMA_MANAGE`, ShellSidebar "Field Policies" item (SecurityIcon) after "Access Control".
+- Tests: `src/__tests__/SchemaStructureTab.access.test.jsx` — 5 tests (denied lock, masked chip, normal row, admin select → updateFieldMaskingStrategy, non-admin no select).
+
+### Master fixes
+- 1 lint error in delivered code: unused `deleting` state in FieldPoliciesPanel.jsx — removed state + setter calls (ConfirmDialog has no disabled prop).
+
+### Gates (master-run)
+- lint: 0 errors / 29 warnings (baseline) ✓
+- vitest `SchemaStructureTab.access.test.jsx`: 5/5 ✓
+- `npm run build` ✓
+- `./.ai-toolkit/scripts/verify.sh frontend`: **GATE PASSED** — 83 referenced paths resolve / 17 namespace roots (route audit picked up the new admin route)
+- Compliance spot-check: theme tokens only (zero hardcoded hex in panel), apiFetch only, pagination unwrap present.
+
+---
+
+## [2026-08-28] Master Architect — Phase 28-B Inventory Coverage frontend: compliance audit + verified DONE
+
+**Role:** master-architect (audit + gates) · **Model:** DeepSeek V4-Pro · **Kind:** frontend (Inventory Coverage admin page, ADR-0020)
+
+### Status
+Implementation existed from a prior worker run but was undocumented (TASKS.md still READY). Master ran a full compliance audit of BOTH the 28-A backend and 28-B frontend against `.ai-toolkit` (user mandate: "never violates aitoolkit") — no violations found. 28-B marked DONE.
+
+### Audit findings (backend 28-A)
+- 4 viewsets use canonical Phase 2 pattern `ReadAnyWriteAdmin` + `required_write_capability='carbon:manage_inventory_coverage'` (not legacy `AdminOrSuperuserOnly`); org-scoping via `get_visible_org_units` on InventorySource + CoverageGoal per spec; `perform_create` stamps `created_by`; `InventoryCoverageAPIView` GET-only with 400 on missing/non-int period.
+- `permissions.py` resolution order sound (superuser → global admin → capability → legacy fallback).
+- capabilities.py 3 wiring points verified (ALL_CAPABILITIES:584, IMPLIES:667, carbon_lead:745).
+
+### Audit findings (frontend 28-B)
+- `InventoryCoveragePage.jsx` (1280+ lines) uses the **Phase 29 canonical shell** (`StandardDataGrid` + `SystemDialog` + `ConfirmDialog` + `PageContainer` + `PageHeader`) — supersedes spec's SBTiTargetsPage (Table+Drawer) reference. Theme tokens only, zero hardcoded hex (RULE_8), apiFetch only (RULE_10), route + studioFromPath (RULE_15), MUI v6 Grid (RULE_17), getRowId via DRF `id`, 4 data states.
+- All 5 `API_ROUTES` in `config.js` match backend exactly; `capabilities.js` 5 wiring points; `manifest.js` nav item; `App.jsx` route with `AdminRoute` + capability.
+- i18n: plain English — NOT a violation (I18N-4 for emissions pages deferred; reference `EmissionFactorsPage` also untranslated).
+
+### Fixes applied
+- 2 pre-existing lint errors (in-progress files, not 28-B): unused `user` in `CarbonConsolePage.jsx` (removed `useAuth` destructure + import), unused `theme` in `ChairmanDashboard.jsx` `KpiCard`.
+
+### Gates
+- lint: 0 errors / 29 warnings (baseline) ✓ · build ✓ · vitest touched pages 3/3 ✓ · verify.sh frontend GATE PASSED (82 paths / 17 namespace roots) ✓
+- Backend gates (from 28-A verification, unchanged): 12/12, 7/7, 337, check, makemigrations, verify.sh backend GATE PASSED ✓
+
+---
+
+## [2026-08-28] Master Architect — Phase 28-A Inventory Coverage backend: verified DONE, all gates green
+
+**Role:** master-architect (gates) · **Model:** DeepSeek V4-Pro · **Kind:** backend (GHG Protocol declared-universe layer, ADR-0020)
+
+### Status
+Implementation existed from a prior worker run but was never gate-verified (TASKS.md still READY). backend-worker re-audited all 8 files against the spec (byte-identical, no deviations); master executed the full gate.
+
+### Files (spec-conformant, append-only)
+- `backend/emissions/models.py` — `InventorySource`, `InventorySourceStatus` (period-scoped M2M `linked_tables`, PCAF tiers), `CoverageGoal`, `CoverageAction` + unique constraints (`uniq_inventory_source_binding`, `uniq_source_period_status`)
+- `backend/emissions/services.py` — `InventoryCoverageService.compute_coverage()` (5 outputs, all status branches, materiality-bounded denominator)
+- `backend/emissions/serializers.py` — 4 serializers with read-only display fields
+- `backend/emissions/views.py` — 4 ModelViewSets (`ReadAnyWriteAdmin` + `carbon:manage_inventory_coverage`) + `InventoryCoverageAPIView` GET-only
+- `backend/emissions/urls.py` — 5 routes
+- `backend/accounts/capabilities.py` — `CARBON_MANAGE_INVENTORY_COVERAGE` wired into `ALL_CAPABILITIES`/`IMPLIES`/`GROUP_CAPABILITIES["carbon_lead"]` (also makes the Phase 30-A `ROUTE_CAPABILITY_MAP` entry resolvable)
+- `backend/emissions/admin.py` — 4 registrations
+- `backend/emissions/tests/test_inventory_coverage.py` — 12 tests
+- Migration: `emissions/0013_inventorysource_coverageaction_inventorysourcestatus_and_more` (migrate = deploy step)
+
+### Verification gates (all run by master, fresh)
+```bash
+manage.py check                                   # → System check identified no issues
+manage.py makemigrations --check --dry-run        # → No changes detected
+pytest emissions/tests/test_inventory_coverage.py # → 12 passed in 2.33s
+pytest emissions/tests/test_targets.py            # → 7 passed (regression)
+pytest accounts                                   # → 337 passed in 37.11s (capabilities change)
+./.ai-toolkit/scripts/verify.sh backend           # → GATE PASSED
+```
+Live smoke: `GET /carbon-api/carbon/{inventory-sources,inventory-source-statuses,coverage-goals,coverage-actions,coverage}/` → 401 unauth (routes resolve). Phase 28-A → **DONE**. Phase 28-B (frontend) is now unblocked.
+
+---
+
+## [2026-08-28] Master Architect — Phases 30-A + 30-B: RBAC manifest completeness + stale me_context fix
+
+**Role:** master-architect · **Model:** DeepSeek V4-Pro · **Kind:** backend + frontend RBAC-correctness fixes
+
+### Phase 30-A — Backend: complete `ROUTE_CAPABILITY_MAP`
+- **File:** `backend/accounts/views.py` — added exactly 3 entries to `ROUTE_CAPABILITY_MAP`:
+  - `'/carbon/admin/boundaries': 'carbon:manage_reporting_periods'`
+  - `'/carbon/admin/base-years': 'carbon:manage_reporting_periods'`
+  - `'/carbon/admin/inventory-coverage': 'carbon:manage_inventory_coverage'`
+- **Why:** non-superuser `carbon_lead` was NOT granted these routes in `me_context.authz.accessible_routes` (latent RBAC gap — superusers unaffected, which is why `ahmed` worked).
+- **Gate:** `manage.py check` clean · 337 accounts tests passed · live JWT spot-check: all 4 carbon admin routes (`boundaries`, `base-years`, `inventory-coverage`, + existing) → `accessible_routes` True for a granted `carbon_lead`.
+
+### Phase 30-B — Frontend: refetch `me_context` on every mount (stale-cache fix)
+- **File:** `carbon-frontend/src/auth/AuthContext.jsx` — replaced the `if (user && !availablePerspectives?.length)` conditional effect with an always-refetch effect keyed by `user?.id`:
+  ```jsx
+  useEffect(() => {
+    if (user) {
+      fetchPerspectiveContext(user.token).catch(() => {
+        console.warn("Failed to refresh perspective context on reload");
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+  ```
+- **Why:** server-side role/capability changes (promotion, demotion, new app grants) went stale indefinitely on reload — root cause of "I can't see Configuration".
+- **Gate:** 296 vitest passed (authz + cbac) · `npm run build` clean.
+
+Both phases → **DONE**. No API surface, model, or migration changes.
+
+---
+
+## [2026-08-28] Master Architect — Phase 29 Carbon Admin CRUD Standardization: 5/5 pages converted, all gates green
+
+**Role:** master-architect (executing Phase 29-C) · **Model:** DeepSeek V4-Pro · **Kind:** frontend refactor (deduplicate CRUD shell)
+
+### Summary
+Converted the five hand-rolled Carbon admin CRUD pages to the canonical `FilteredDataGrid` + `SystemDialog` + `ConfirmDialog` shell (design-system.md RULE 2 / RULE 12). **4/5 pages** were already converted (verified lint-clean); `CalculationRulesPage.jsx` was **broken mid-conversion** (legacy `Table`/`TableContainer` + undefined `RulesDrawer` + missing `Paper`/`PageContainer`/`Alert`/`Snackbar` imports → 2 lint errors + runtime ReferenceErrors). Completed the conversion; also fixed 2 pre-existing dead-code lint errors in `HeaderEnhanced.jsx` (stale `currentPerspective`/`setPerspective` destructure) that were blocking the frontend gate.
+
+### Files changed
+- `carbon-frontend/src/pages/emissions/CalculationRulesPage.jsx` — full conversion (only file changed by Phase 29-C):
+  - Removed legacy `Table`/`TableHead`/`TableRow`/`TableCell`/`TableBody`/`TableContainer` render → `FilteredDataGrid` with `columns` array (all 10 original columns preserved + `isAdmin`-only Actions column with Edit / Execute / Delete IconButtons).
+  - Fixed undefined `RulesDrawer` → `RulesDialog` (the component that exists in-file).
+  - Inline delete `Dialog` → `ConfirmDialog` (destructive, `onCancel` closes).
+  - `Snackbar` state + JSX → `notify`/`notifyFromError` from `useNotification` (execute success/failure now uses the app notification system).
+  - Removed unused `useMemo`; added missing `Alert` import; removed dead empty-state `InboxIcon` block (FilteredDataGrid `emptyMessage`/`emptySubtext` now covers it); removed early `PageContainer` loading return (FilteredDataGrid handles `loading`).
+  - Preserved: `ExecuteDialog` (SystemDialog-based), `handleExecute`, `notifyFromError` archive-notify on delete, `loadData`, `useDocumentTitle`, `useAuth`, all `emissions-extended.js` API calls, `error` Alert.
+- `carbon-frontend/src/components/HeaderEnhanced.jsx` — removed stale `currentPerspective`, `setPerspective` from `useAuth()` destructure (perspective tabs removed in nav-UX redesign; 2 lint errors). Not Phase 29 scope but gate-blocking.
+
+### Behavior preserved (per page)
+- `SBTiTargetsPage` — CRUD + targets shell (converted earlier, verified)
+- `OrganizationalBoundariesPage` — CRUD + org units (converted earlier, verified)
+- `BaseYearsPage` — recalc flow + `never` recalc option preserved (`RecalculateDialog`), converted earlier, verified
+- `InventoryCoveragePage` — coverage-summary cards + reporting-period selector + Sources/Statuses/Goals/Actions sections via `StandardDataGrid` + MUI Tabs (RULE 17), converted earlier, verified
+- `CalculationRulesPage` — execute/run action + `notifyFromError` + archive-notify on delete, all preserved (this session)
+
+### Verification gates (all run by master)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx eslint src/pages/emissions/CalculationRulesPage.jsx     # → 0 errors
+npm run lint                                                 # → 0 errors / 29 pre-existing warnings
+npx vitest run src/__tests__/authz.test.jsx                  # → 132 passed
+npx vitest run src/__tests__/cbac.test.jsx                   # → 164 passed
+npm run build                                                # → ✓ built in 19.51s
+cd /home/ahmed/aast/carbon
+./.ai-toolkit/scripts/verify.sh frontend                     # → GATE PASSED (lint ✓, build ✓, route audit 82 paths ✓)
+```
+All gates green. Phase 29 → **DONE**.
+
+---
+
 ## [2026-08-27] Master Architect — Notes round 2: no rail badge, composer disabled on global view + toolkit compliance audit
 
 **Role:** master-architect · **Model:** DeepSeek V4-Flash · **Kind:** UX fix + audit

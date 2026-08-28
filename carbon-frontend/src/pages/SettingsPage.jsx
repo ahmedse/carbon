@@ -2,6 +2,7 @@
 // Settings page with Profile, Security, Preferences, and Pulse tabs
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import {
   Box,
@@ -100,13 +101,6 @@ function RoleBadge({ role }) {
   );
 }
 
-const SHORTCUTS = [
-  { keys: ["Ctrl", "K"], desc: "Open Command Palette" },
-  { keys: ["Ctrl", "B"], desc: "Toggle sidebar" },
-  { keys: ["Tab"], desc: "Next perspective" },
-  { keys: ["Shift", "Tab"], desc: "Previous perspective" },
-];
-
 const VALID_TABS = new Set(["profile", "security", "preferences", "pulse", "shortcuts"]);
 const PULSE_HOST = import.meta.env.VITE_PULSE_HOST || "http://127.0.0.1:9100";
 
@@ -158,7 +152,8 @@ function KbdKey({ k }) {
 }
 
 export default function SettingsPage() {
-  useDocumentTitle("Settings");
+  const { t } = useTranslation(["common", "connections", "shell"]);
+  useDocumentTitle(t("nav.settings"));
   const { user } = useAuth();
   const location = useLocation();
   const requestedTab = new URLSearchParams(location.search).get("tab");
@@ -229,33 +224,33 @@ export default function SettingsPage() {
         roles: data.roles,
         connected: true,
       });
-      setToast("Pulse key generated — it has been saved to this browser.");
+      setToast(t("pulseKeyGenerated"));
     } catch (err) {
       setPulseError(err.message);
     } finally {
       setPulseLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const handleDisconnectPulse = useCallback(() => {
     localStorage.removeItem("pulse_key");
     setPulseKeyInfo(null);
     setPulseNewKey("");
-    setToast("Pulse AI disconnected from this browser.");
-  }, []);
+    setToast(t("pulseDisconnected"));
+  }, [t]);
 
   const handleChangePassword = useCallback(async () => {
     setPwError("");
     if (!currentPw || !newPw || !confirmPw) {
-      setPwError("All fields are required.");
+      setPwError(t("allFieldsRequired"));
       return;
     }
     if (newPw !== confirmPw) {
-      setPwError("New passwords do not match.");
+      setPwError(t("newPasswordsNotMatch"));
       return;
     }
     if (newPw.length < 8) {
-      setPwError("Password must be at least 8 characters.");
+      setPwError(t("passwordTooShort"));
       return;
     }
 
@@ -268,23 +263,30 @@ export default function SettingsPage() {
       setCurrentPw("");
       setNewPw("");
       setConfirmPw("");
-      setToast("Password changed successfully.");
+      setToast(t("passwordChanged"));
     } catch (err) {
-      setPwError(err?.message || "Network error — could not change password.");
+      setPwError(err?.message || t("networkErrorPw"));
     } finally {
       setPwLoading(false);
     }
-  }, [currentPw, newPw, confirmPw]);
+  }, [currentPw, newPw, confirmPw, t]);
 
   const profile = meData || user || {};
   const roles = profile.roles || (user?.roles ?? []);
 
   const TABS = [
-    { id: "profile", label: "Profile", icon: PersonOutlineIcon },
-    { id: "security", label: "Security", icon: LockOutlinedIcon },
-    { id: "preferences", label: "Preferences", icon: SettingsOutlinedIcon },
-    { id: "pulse", label: "Pulse AI", icon: AutoAwesomeOutlinedIcon },
-    { id: "shortcuts", label: "Shortcuts", icon: KeyboardOutlinedIcon },
+    { id: "profile", label: t("tabProfile"), icon: PersonOutlineIcon },
+    { id: "security", label: t("tabSecurity"), icon: LockOutlinedIcon },
+    { id: "preferences", label: t("tabPreferences"), icon: SettingsOutlinedIcon },
+    { id: "pulse", label: t("tabPulse"), icon: AutoAwesomeOutlinedIcon },
+    { id: "shortcuts", label: t("tabShortcuts"), icon: KeyboardOutlinedIcon },
+  ];
+
+  const SHORTCUTS = [
+    { keys: ["Ctrl", "K"], desc: t("shortcutCommandPalette") },
+    { keys: ["Ctrl", "B"], desc: t("shortcutToggleSidebar") },
+    { keys: ["Tab"], desc: t("shortcutNextPerspective") },
+    { keys: ["Shift", "Tab"], desc: t("shortcutPrevPerspective") },
   ];
 
   return (
@@ -292,10 +294,10 @@ export default function SettingsPage() {
       {/* Page header */}
       <Box sx={{ px: 2.5, pt: 1.75, pb: 1.5, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
         <Typography variant="h4">
-          Account Settings
+          {t("accountSettings")}
         </Typography>
         <Typography sx={{ ...FONT.body, color: "text.disabled", mt: 0.25 }}>
-          {profile.username && `Signed in as ${profile.username}`}
+          {profile.username && t("signedInAs", { username: profile.username })}
         </Typography>
       </Box>
 
@@ -338,17 +340,17 @@ export default function SettingsPage() {
             <>
               {meLoading && <LinearProgress sx={{ mb: 2, maxWidth: 240 }} />}
               <Box sx={SECTION_SX}>
-                <SectionHead icon={PersonOutlineIcon} label="Identity" />
+                <SectionHead icon={PersonOutlineIcon} label={t("identity")} />
                 <Box sx={{ py: 0.5 }}>
-                  <InfoRow label="Username" value={profile.username} />
-                  <InfoRow label="Email" value={profile.email} />
-                  <InfoRow label="Account type" value={profile.is_superuser ? "Superuser" : "Standard"} />
+                  <InfoRow label={t("username")} value={profile.username} />
+                  <InfoRow label={t("email")} value={profile.email} />
+                  <InfoRow label={t("accountType")} value={profile.is_superuser ? t("superuser") : t("standard")} />
                 </Box>
               </Box>
 
               {roles.length > 0 && (
                 <Box sx={SECTION_SX}>
-                  <SectionHead icon={PersonOutlineIcon} label="Roles" />
+                  <SectionHead icon={PersonOutlineIcon} label={t("roles")} />
                   <Box sx={{ px: 2, py: 1.5, display: "flex", flexWrap: "wrap", gap: 0.75 }}>
                     {roles.map((r, idx) => (
                       <RoleBadge key={idx} role={r} />
@@ -362,7 +364,7 @@ export default function SettingsPage() {
           {/* ── Security ── */}
           {tab === "security" && (
             <Box sx={SECTION_SX}>
-              <SectionHead icon={LockOutlinedIcon} label="Change Password" />
+              <SectionHead icon={LockOutlinedIcon} label={t("changePassword")} />
               <Box sx={{ px: 2, py: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
                 {pwError && (
                   <Alert severity="error" sx={{ ...FONT.body, py: 0.25 }}>
@@ -371,7 +373,7 @@ export default function SettingsPage() {
                 )}
                 <TextField
                   size="small"
-                  label="Current password"
+                  label={t("currentPassword")}
                   type="password"
                   value={currentPw}
                   onChange={(e) => setCurrentPw(e.target.value)}
@@ -380,17 +382,17 @@ export default function SettingsPage() {
                 />
                 <TextField
                   size="small"
-                  label="New password"
+                  label={t("newPassword")}
                   type="password"
                   value={newPw}
                   onChange={(e) => setNewPw(e.target.value)}
                   autoComplete="new-password"
-                  helperText="Minimum 8 characters"
+                  helperText={t("min8Chars")}
                   sx={{ "& .MuiInputBase-input": { ...FONT.body } }}
                 />
                 <TextField
                   size="small"
-                  label="Confirm new password"
+                  label={t("confirmNewPassword")}
                   type="password"
                   value={confirmPw}
                   onChange={(e) => setConfirmPw(e.target.value)}
@@ -398,7 +400,7 @@ export default function SettingsPage() {
                   error={confirmPw.length > 0 && confirmPw !== newPw}
                   helperText={
                     confirmPw.length > 0 && confirmPw !== newPw
-                      ? "Passwords do not match"
+                      ? t("passwordsDontMatch")
                       : ""
                   }
                   sx={{ "& .MuiInputBase-input": { ...FONT.body } }}
@@ -417,7 +419,7 @@ export default function SettingsPage() {
                     px: 2,
                   }}
                 >
-                  Update Password
+                  {t("updatePassword")}
                 </Button>
               </Box>
             </Box>
@@ -426,10 +428,10 @@ export default function SettingsPage() {
           {/* ── Preferences ── */}
           {tab === "preferences" && (
             <Box sx={SECTION_SX}>
-              <SectionHead icon={SettingsOutlinedIcon} label="Preferences" />
+              <SectionHead icon={SettingsOutlinedIcon} label={t("preferences")} />
               <Box sx={{ px: 2, py: 2 }}>
                 <Typography sx={{ ...FONT.body, color: "text.secondary", mb: 1 }}>
-                  Preference settings coming soon. Customize your dashboard and notification settings here.
+                  {t("preferencesComingSoon")}
                 </Typography>
               </Box>
             </Box>
@@ -439,7 +441,7 @@ export default function SettingsPage() {
           {tab === "pulse" && (
             <>
               <Box sx={SECTION_SX}>
-                <SectionHead icon={AutoAwesomeOutlinedIcon} label="AI Copilot Connection" />
+                <SectionHead icon={AutoAwesomeOutlinedIcon} label={t("pulseSectionTitle")} />
                 <Box sx={{ px: 2, py: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
                   {pulseError && (
                     <Alert severity="error" sx={{ ...FONT.body, py: 0.25 }}>
@@ -451,10 +453,10 @@ export default function SettingsPage() {
                     <>
                       <Box>
                         <Typography sx={{ ...FONT.sectionTitle, color: "text.disabled", mb: 0.5 }}>
-                          Status
+                          {t("pulseStatus")}
                         </Typography>
                         <Chip
-                          label="Connected"
+                          label={t("pulseConnected")}
                           color="success"
                           variant="outlined"
                           size="small"
@@ -464,7 +466,7 @@ export default function SettingsPage() {
 
                       <Box>
                         <Typography sx={{ ...FONT.sectionTitle, color: "text.disabled", mb: 0.5 }}>
-                          Key
+                          {t("pulseKey")}
                         </Typography>
                         <Typography sx={{ ...FONT.body, fontFamily: "monospace", color: "text.primary", wordBreak: "break-all" }}>
                           {pulseKeyInfo.key_prefix}
@@ -482,13 +484,13 @@ export default function SettingsPage() {
                           ...FONT.body,
                         }}
                       >
-                        Disconnect
+                        {t("pulseDisconnect")}
                       </Button>
                     </>
                   ) : (
                     <>
                       <Alert severity="info" sx={{ ...FONT.body, py: 0.5 }}>
-                        Generate a Pulse AI key to enable AI-powered features in your Carbon workflows.
+                        {t("pulseGenerateHint")}
                       </Alert>
                       {pulseLoading && <LinearProgress />}
                       <Button
@@ -502,7 +504,7 @@ export default function SettingsPage() {
                           ...FONT.body,
                         }}
                       >
-                        Generate Pulse Key
+                        {t("pulseGenerateKey")}
                       </Button>
                     </>
                   )}
@@ -510,7 +512,7 @@ export default function SettingsPage() {
                   {pulseNewKey && (
                     <Alert severity="warning" sx={{ ...FONT.body, py: 0.5 }}>
                       <Typography sx={{ ...FONT.bodySmall, fontWeight: 600, mb: 0.5 }}>
-                        Your Pulse AI Key (save this securely):
+                        {t("pulseNewKeyTitle")}
                       </Typography>
                       <Typography
                         sx={{
@@ -534,7 +536,7 @@ export default function SettingsPage() {
           {/* ── Shortcuts ── */}
           {tab === "shortcuts" && (
             <Box sx={SECTION_SX}>
-              <SectionHead icon={KeyboardOutlinedIcon} label="Keyboard Shortcuts" />
+              <SectionHead icon={KeyboardOutlinedIcon} label={t("keyboardShortcuts")} />
               <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.25 }}>
                 {SHORTCUTS.map((shortcut, idx) => (
                   <Box key={idx} sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>

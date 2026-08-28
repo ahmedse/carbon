@@ -4,6 +4,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { Box, Typography, Snackbar, Alert } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
 
 const NetworkStatusContext = createContext({ online: true });
@@ -19,6 +20,7 @@ export function useNetworkStatus() {
  * Wrap near the root (in App.jsx) so the entire tree can check before API calls.
  */
 export function NetworkStatusProvider({ children }) {
+  const { t } = useTranslation('common');
   const [online, setOnline] = useState(navigator.onLine);
   const [showBackBanner, setShowBackBanner] = useState(false);
 
@@ -63,7 +65,7 @@ export function NetworkStatusProvider({ children }) {
         >
           <WifiOffIcon fontSize="small" />
           <Typography variant="body2" fontWeight={500}>
-            You are offline. Changes will be saved locally.
+            {t('offlineBanner')}
           </Typography>
         </Box>
       )}
@@ -76,7 +78,7 @@ export function NetworkStatusProvider({ children }) {
         anchorOrigin={{ vertical: "top", horizontal: "center" }}
       >
         <Alert severity="success" variant="filled" sx={{ width: "100%" }}>
-          Back online
+          {t('backOnline')}
         </Alert>
       </Snackbar>
     </NetworkStatusContext.Provider>

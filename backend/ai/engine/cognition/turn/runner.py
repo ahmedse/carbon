@@ -69,6 +69,13 @@ def _filter_draft_tools(
 _CHAT_STATIC_TOOLS = frozenset({
     "search_knowledge", "get_entity_details",
     "learn_fact", "forget_fact",
+    # call_host_api is the ONLY way the chat planner reaches live host data
+    # (list_emission_factors, get_calculation_summary, …). The system prompt's
+    # "Available Host API Endpoints" section tells the model to call these via
+    # call_host_api, so it MUST be in the chat tool set — otherwise the model
+    # falls back to search_knowledge (KG-only) or hallucinates the endpoint
+    # names as raw tool calls ("Unknown tool: get_calculation_summary").
+    "call_host_api",
 })
 
 
@@ -86,6 +93,205 @@ async def _write_trajectory_own_session(run_id: str) -> None:
     factory = get_store().get_session_factory()
     async with factory() as traj_db:
         await write_trajectory(run_id, traj_db)
+
+
+def _render_tool_results_for_synthesis(
+    completed_tools: list[dict],
+    max_chars: int = 20000,
+) -> str:
+    """Render executed tool results as readable JSON for the synthesis LLM.
+
+    Unwraps the host envelope ``{"status_code": 200, "data": {...}}`` and
+    surfaces the inner payload, capping at ``max_chars`` to bound token cost.
+    List payloads record their total row count so the model can still answer
+    "how many" even when the rendered rows are truncated.
+    """
+    import json as _json
+
+    sections: list[str] = []
+    used = 0
+    for tr in completed_tools:
+        name = tr.get("tool_name", "unknown")
+        raw = tr.get("result")
+
+        data = raw
+        if isinstance(raw, str):
+            try:
+                data = _json.loads(raw)
+            except (TypeError, ValueError):
+                data = raw
+
+        # Unwrap the host executor envelope.
+        if isinstance(data, dict) and "status_code" in data and "data" in data:
+            data = data["data"]
+
+        list_payload = None
+        list_key = None
+        if isinstance(data, dict):
+            for key in ("results", "items", "rows"):
+                if key in data and isinstance(data[key], list):
+                    list_payload = data[key]
+                    list_key = key
+                    break
+
+        header = f"### {name}\n"
+        if list_payload is not None:
+            header += f"(total rows: {len(list_payload)})\n"
+            body = _json.dumps(list_payload, ensure_ascii=False, default=str)
+        else:
+            body = _json.dumps(data, ensure_ascii=False, indent=2, default=str)
+
+        section = header + body
+        if used + len(section) > max_chars:
+            remaining = max_chars - used
+            section = section[:remaining] + "\n…(truncated)"
+        sections.append(section)
+        used += len(section)
+        if used >= max_chars:
+            break
+
+    return "\n\n".join(sections)
+
+
+# Delivery (cognitive-intent) axis — how the user wants the answer DELIVERED,
+# distinct from WHICH endpoint. Maps the intent classifier's `delivery` value
+# to (a) the S3 directive phrase and (b) the GAP-W9 synthesis guidance.
+_DELIVERY_INJECTION = {
+    "list": "see the full list of records",
+    "lookup": "find one specific value",
+    "explain": "understand what this is, how it is used, and why it matters",
+    "analyze": "get insight — patterns, extremes, and what drives it",
+    "compare": "compare the relevant entries side by side",
+    "summarize": "get a high-level summary",
+}
+
+_DELIVERY_SYNTHESIS = {
+    "list": (
+        "The user wants the complete record set — present every row in a clean "
+        "Markdown table (meaningful columns only) and add a chart if the values "
+        "are comparable."
+    ),
+    "lookup": (
+        "The user wants one specific value — answer with that value directly, "
+        "bold it, and keep surrounding detail minimal."
+    ),
+    "explain": (
+        "The user wants to UNDERSTAND this dataset, not just see rows. Lead "
+        "with what it IS and how it is used, group it meaningfully (by "
+        "category/scope), name the notable entries and what they mean, and "
+        "present the data as a Markdown table PLUS a Mermaid chart so it is "
+        "both readable and visual. End with one natural next step."
+    ),
+    "analyze": (
+        "The user wants insight — surface the extremes (highest/lowest), the "
+        "groupings, and patterns. Lead with the finding, then support it with "
+        "a Markdown table and a Mermaid chart."
+    ),
+    "compare": (
+        "The user wants a side-by-side comparison — contrast the entries on the "
+        "dimensions that matter using a Markdown table and a Mermaid bar chart."
+    ),
+    "summarize": (
+        "The user wants a roll-up — give headline numbers, a compact table and "
+        "chart of the main groups, no exhaustive list."
+    ),
+}
+
+
+async def _synthesize_tool_results(
+    *,
+    instance_id: str,
+    conversation_id: str,
+    user_message: str,
+    completed_tools: list[dict],
+    draft_text: str,
+    model: str | None = None,
+    delivery: str = "explain",
+) -> dict | None:
+    """Ask the LLM to write a grounded final answer from executed tool results.
+
+    Fires only when tools returned usable data AND the draft prose is empty or
+    a short "promise to fetch" (the common tool-only turn where the model
+    writes "I'll fetch …" and the fetched data is otherwise discarded).
+
+    Returns ``{"text", "tokens", "model"}`` on success, or ``None`` when
+    synthesis is unnecessary or the call fails (callers keep the original).
+    """
+    usable: list[dict] = []
+    for tr in completed_tools or []:
+        if tr.get("error"):
+            continue
+        if tr.get("requires_confirmation"):
+            continue
+        if tr.get("result") is None:
+            continue
+        usable.append(tr)
+
+    if not usable:
+        return None
+
+    stripped = (draft_text or "").strip()
+    # A substantial prose answer already exists — don't re-synthesize.
+    if len(stripped) >= 300:
+        return None
+
+    results_text = _render_tool_results_for_synthesis(usable)
+    if not results_text.strip():
+        return None
+
+    from ai.engine.llm.router import route_chat
+
+    delivery_guide = _DELIVERY_SYNTHESIS.get(delivery or "explain", _DELIVERY_SYNTHESIS["explain"])
+    system = (
+        "You are finalising an answer for a data-platform assistant. Write the "
+        "final reply to the user's question using ONLY the tool results below.\n"
+        f"Delivery intent: {delivery_guide}\n"
+        "FORMAT — rich, publication-grade: open with a **bold one-line "
+        "takeaway**; if there are 3+ records, ALWAYS include a Markdown table "
+        "of the meaningful columns; if the records carry comparable numbers, "
+        "ALSO emit a Mermaid chart (```mermaid pie``` for proportions, "
+        "```mermaid xychart-beta``` with a `bar` series for ranking/magnitude "
+        "and `line` for a trend). Mermaid line rules (critical): open the "
+        "```mermaid fence on its OWN line after a blank line, close ``` on its "
+        "own line, and put every directive on its own line — never inline the "
+        "fence after prose or collapse the chart to one line. Use ## / ### "
+        "headings, **bold** key figures "
+        "and field names, and close with 2-4 “Key takeaways” as a bold-lead "
+        "bullet list. State actual values — never invent numbers. Omit verbose "
+        "metadata (raw source strings, internal ids, tags). Do not mention "
+        "tools, API calls, fetching, or that you 'found' the data. If the data "
+        "has no matching rows, say so plainly."
+    )
+
+    try:
+        result = await route_chat(
+            task="cognition",
+            instance_id=instance_id,
+            conversation_id=f"synthesis-{conversation_id}",
+            messages=[
+                {"role": "system", "content": system},
+                {
+                    "role": "user",
+                    "content": (
+                        f"User's question: {user_message}\n\n"
+                        f"Tool results (JSON):\n{results_text}"
+                    ),
+                },
+            ],
+            temperature=0.3,
+            model=model,
+            tools=None,
+        )
+    except Exception:
+        logger.warning("Tool-result synthesis LLM call failed", exc_info=True)
+        return None
+
+    synthesized = (result.get("content") or "").strip()
+    if not synthesized:
+        return None
+
+    tokens = int(result.get("input_tokens", 0) or 0) + int(result.get("output_tokens", 0) or 0)
+    return {"text": synthesized, "tokens": tokens, "model": result.get("model", "")}
 
 
 class TurnPipelineRunner:
@@ -109,8 +315,8 @@ class TurnPipelineRunner:
         self.db = db
         # Curated tool set exposed to the S3 planner when an executor is
         # wired. Mutation/confirmation tools (create_dq_rule) plus read tools
-        # that ground answers; host-API/misc tools are excluded so the planner
-        # never wastes turns on endpoints it cannot reach from chat.
+        # that ground answers, including call_host_api so the planner can reach
+        # the live host endpoints listed in the system prompt.
         self._draft_tools: list[dict] | None = None
         if executor is not None:
             try:
@@ -289,6 +495,111 @@ class TurnPipelineRunner:
             _wm.set_focus(conversation_id, _entity.name, _entity.entity_type)
         _pref_store = get_session_preference_store()
         _pref_store.update(conversation_id, PreferenceClassifier().classify(user_message))
+
+        # ── S1.5 — Intent Resolution (LLM-as-classifier, no local models) ──
+        # Recognises which read-only endpoint the user is after, with a
+        # confidence ladder that answers / disambiguates / clarifies. Falls
+        # through silently on any failure — never blocks the turn.
+        _intent_resolution = None
+        if settings.INTENT_RESOLVER_ENABLED:
+            try:
+                from ai.engine.cognition.turn.intent import IntentResolver
+                from ai.engine.cognition.dialogue.anaphora import AnaphoraResolver
+                _resolved_for_intent = AnaphoraResolver(_wm).resolve(
+                    conversation_id, user_message
+                )
+                _intent_resolution = await IntentResolver().resolve(
+                    user_message=_resolved_for_intent,
+                    api_catalog=(instance_config or {}).get("api_catalog"),
+                    conversation_history=conversation_history,
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    db=self.db,
+                    model=settings.INTENT_RESOLVER_MODEL or None,
+                    min_confidence=settings.INTENT_RESOLVER_MIN_CONFIDENCE,
+                    ambiguity_gap=settings.INTENT_RESOLVER_AMBIGUITY_GAP,
+                )
+            except Exception:
+                logger.warning(
+                    "[%s] Intent resolution failed; continuing without it",
+                    turn_id[:8], exc_info=True,
+                )
+
+        if _intent_resolution is not None:
+            total_llm_calls += 1
+            total_tokens += (
+                _intent_resolution.input_tokens + _intent_resolution.output_tokens
+            )
+            await self._write_ledger_row(
+                turn_id, instance_id, conversation_id, host_user_id,
+                "intent", 0, {
+                    "action": _intent_resolution.action,
+                    "intent": _intent_resolution.intent,
+                    "confidence": _intent_resolution.confidence,
+                    "candidates": [
+                        {"name": c.name, "confidence": c.confidence}
+                        for c in _intent_resolution.candidates
+                    ],
+                },
+                (time.monotonic() - s1_start) * 1000,
+                tokens_used=_intent_resolution.input_tokens + _intent_resolution.output_tokens,
+                model_used=_intent_resolution.model_used, verdict="pass",
+            )
+
+            # Confidence ladder short-circuits: ask / offer options instead of
+            # guessing. These return before S2/S3 so no hallucinated tool runs.
+            if _intent_resolution.action in ("clarify", "disambiguate"):
+                if _intent_resolution.action == "clarify":
+                    _short_text = _intent_resolution.clarification or (
+                        "Could you clarify what you'd like me to look up?"
+                    )
+                else:
+                    _opts = _intent_resolution.options or [
+                        c.name for c in _intent_resolution.candidates[:3]
+                    ]
+                    _short_text = (
+                        "I can look that up a few different ways — which do "
+                        "you mean?\n" + "\n".join(f"- {o}" for o in _opts)
+                    )
+                total_latency = (time.monotonic() - t0) * 1000
+                await self._write_ledger_row(
+                    turn_id, instance_id, conversation_id, host_user_id,
+                    "final", 5,
+                    {
+                        "total_latency_ms": total_latency,
+                        "total_tokens": total_tokens,
+                        "total_llm_calls": total_llm_calls,
+                        "intent_shortcircuit": _intent_resolution.action,
+                    },
+                    total_latency, verdict="pass",
+                )
+                if self.db is not None:
+                    await self.db.commit()
+
+                ledger.final_response = _short_text[:500]
+                ledger.total_latency_ms = total_latency
+                ledger.total_tokens = total_tokens
+                ledger.total_llm_calls = total_llm_calls
+
+                response = AgentResponse(
+                    text=_short_text,
+                    sources_cited=[],
+                    tools_used=[],
+                    confidence=0.7,
+                    total_tokens=total_tokens,
+                    llm_calls=total_llm_calls,
+                    model="",
+                    response_type="clarification",
+                    confidence_label="medium",
+                )
+                await _broadcast_run(instance_id, "run.completed", {
+                    "run_id": turn_id,
+                    "total_latency_ms": total_latency,
+                    "total_tokens": total_tokens,
+                    "total_llm_calls": total_llm_calls,
+                    "intent_shortcircuit": _intent_resolution.action,
+                })
+                return response, ledger
 
         # S2 — Retrieval
         s2_start = time.monotonic()
@@ -654,6 +965,35 @@ class TurnPipelineRunner:
             from ai.engine.knowledge.terminology import TerminologyResolver
             system_prompt = TerminologyResolver().inject(system_prompt, _skill_terminology)
 
+        # [S1.5] Inject the intent resolver's matched endpoint into S3 so the
+        # planner *confirms* the tool instead of lecturing from memory. This is
+        # the mechanism that stops "tell me about emission factors here" from
+        # becoming a textbook answer — the matched tool is now named up front.
+        if (
+            _intent_resolution is not None
+            and _intent_resolution.action == "answer"
+            and _intent_resolution.candidates
+        ):
+            from ai.engine.cognition.turn.intent import _endpoint_to_domain_phrase
+            _top_cand = _intent_resolution.candidates[0]
+            _phrases = [_endpoint_to_domain_phrase(c.name) for c in _intent_resolution.candidates[:3]]
+            _delivery_phrase = _DELIVERY_INJECTION.get(
+                _intent_resolution.delivery, _DELIVERY_INJECTION["explain"]
+            )
+            system_prompt = (
+                f"{system_prompt}\n\n"
+                "INTENT (already recognised): the user is asking about "
+                f"\"{_phrases[0]}\" and wants to {_delivery_phrase}. The "
+                f"intent resolver matched `{_top_cand.name}` with confidence "
+                f"{_top_cand.confidence:.2f}. Call `{_top_cand.name}` via "
+                "call_host_api right away to answer from real data in the "
+                "system — do NOT give a generic or textbook answer, and do "
+                "NOT re-ask what the user means. Synthesise the result into a "
+                "direct answer: do not dump the raw rows, name the material "
+                "facts and cite real values inline, and only render a table "
+                "if the user asked to see everything."
+            )
+
         draft = await draft_witness.draft(
             instance_id=instance_id,
             conversation_id=conversation_id,
@@ -667,11 +1007,16 @@ class TurnPipelineRunner:
             tools=draft_tools,
             temperature=temperature,
         )
-        # [GAP-1] Fallback handler: ensure non-empty response
+        # [GAP-1] Fallback handler: ensure non-empty response.
+        # Skip when the draft already has tool calls — a tool-only turn (LLM
+        # emits no prose but calls a tool to answer) is legitimate and GAP-W8
+        # surfaces the tool results as text after S5. Firing the fallback here
+        # would replace that with a fake refusal, which the anti-hallucination
+        # gate then strips, leaving an empty reply (empty-content regression).
         import dataclasses as _dc
         from ai.engine.cognition.dialogue.fallback import FallbackHandler
         _fallback_text = FallbackHandler().handle(user_message, draft.text)
-        if _fallback_text != draft.text:
+        if _fallback_text != draft.text and not draft.tool_calls:
             draft = _dc.replace(
                 draft,
                 text=_fallback_text,
@@ -750,9 +1095,10 @@ class TurnPipelineRunner:
                 )
                 total_tokens += draft.tokens_used
                 total_llm_calls += 1
-                # Re-run FallbackHandler in case escalated model also returns empty.
+                # Re-run FallbackHandler in case escalated model also returns
+                # empty (but not for a tool-only turn — see GAP-1 above).
                 _fallback_text = FallbackHandler().handle(_resolved_user_message, draft.text)
-                if _fallback_text != draft.text:
+                if _fallback_text != draft.text and not draft.tool_calls:
                     import dataclasses as _dc
                     draft = _dc.replace(draft, text=_fallback_text, confidence=0.4)
                 critic = await critic_witness.review(
@@ -795,6 +1141,7 @@ class TurnPipelineRunner:
         )
 
         # Use rewritten text if critic provided one
+        _draft_text_was_empty = not (critic.rewritten_text or draft.text or "").strip()
         final_text = critic.rewritten_text if critic.rewritten_text else draft.text
 
         # S5 — Execute (real parallel tool dispatch + streaming)
@@ -848,6 +1195,40 @@ class TurnPipelineRunner:
             },
             s5_latency, verdict="pass",
         )
+
+        # [GAP-W8/W9] Tool-result grounding: when the planner executed tools, the
+        # pre-tool draft is either empty or a short "I'll fetch …" promise — the
+        # fetched data is otherwise discarded. Re-synthesize the final answer from
+        # the ACTUAL tool results (GAP-W9, LLM → clean prose + real values), then
+        # fall back to a deterministic summary (GAP-W8) only when synthesis is
+        # unavailable. Order matters: the LLM synthesis produces the values the
+        # user asked for; the deterministic summary is the "never blank" net.
+        _synth = await _synthesize_tool_results(
+            instance_id=instance_id,
+            conversation_id=conversation_id,
+            user_message=_resolved_user_message,
+            completed_tools=execution.completed_tools,
+            draft_text=final_text,
+            model=draft.model_used or model,
+            delivery=_intent_resolution.delivery if _intent_resolution else "explain",
+        )
+        if _synth and _synth.get("text"):
+            final_text = _synth["text"]
+            total_tokens += int(_synth.get("tokens") or 0)
+            total_llm_calls += 1
+            logger.info(
+                "[%s] Tool-result synthesis — final answer written from %d tool result(s) (%d tokens)",
+                turn_id[:8], len(execution.completed_tools), int(_synth.get("tokens") or 0),
+            )
+        elif _draft_text_was_empty and execution.completed_tools:
+            from ai.engine.cognition.turn.execute import _build_tool_result_summary
+            injected = _build_tool_result_summary(execution.completed_tools)
+            if injected:
+                final_text = injected
+                logger.info(
+                    "[%s] Tool-only response — injected tool results as text (draft was empty, %d tools executed)",
+                    turn_id[:8], len(execution.completed_tools),
+                )
 
         # S6 — Final ledger summary
         s6_start = time.monotonic()

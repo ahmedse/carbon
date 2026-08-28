@@ -99,7 +99,7 @@ def _feedback_url(conversation, message):
 # ── 1. real-time trigger ─────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_feedback_post_triggers_learning(django_store, user):
     from rest_framework.test import APIClient
     from ai.models import KgFeedbackRecord, MemoryLongTerm
@@ -125,7 +125,7 @@ def test_feedback_post_triggers_learning(django_store, user):
     assert MemoryLongTerm.objects.filter(category="learned", content="AI answer").exists()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_feedback_learning_failure_does_not_fail_feedback(django_store, user, monkeypatch):
     from rest_framework.test import APIClient
     from ai import learning
@@ -156,7 +156,7 @@ def test_feedback_learning_failure_does_not_fail_feedback(django_store, user, mo
 # ── 2. flywheel status + run API ─────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_learning_status_reports_flywheel(auth_client, django_store, admin_user):
     conversation = _make_conversation(admin_user)
     _make_message(conversation, content="done", outcome="accepted", learned=True)
@@ -174,7 +174,7 @@ def test_learning_status_reports_flywheel(auth_client, django_store, admin_user)
     assert data["by_outcome"] == {"accepted": 1}
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_learning_run_consumes_pending(auth_client, django_store, admin_user):
     from ai.models import AIMessage
 
@@ -190,7 +190,7 @@ def test_learning_run_consumes_pending(auth_client, django_store, admin_user):
     assert resp.data["status"]["pending"] == 0
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_learning_status_requires_auth(api_client):
     assert api_client.get(f"{BASE}/learning-status/").status_code == 401
 
@@ -198,7 +198,7 @@ def test_learning_status_requires_auth(api_client):
 # ── 3. run_learning_loop command ─────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_run_learning_loop_status(django_store, user):
     from io import StringIO
     import json
@@ -212,7 +212,7 @@ def test_run_learning_loop_status(django_store, user):
     assert json.loads(out.getvalue()) == {"pending": 2}
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_run_learning_loop_run_once(django_store, user):
     from io import StringIO
     import json

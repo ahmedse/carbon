@@ -32,6 +32,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import PageContainer from '../../components/layout/PageContainer';
 
@@ -62,15 +63,7 @@ import {
 
 // ── Period status config ────────────────────────────────────────────────
 
-const STATUS_CFG = {
-  draft:     { label: 'Draft',     color: 'default' },
-  open:      { label: 'Open',      color: 'info' },
-  locked:    { label: 'Locked',    color: 'warning' },
-  submitted: { label: 'Submitted', color: 'secondary' },
-  verified:  { label: 'Verified',  color: 'success' },
-  rejected:  { label: 'Rejected',  color: 'error' },
-  closed:    { label: 'Closed',    color: 'default' },
-};
+// (Moved inside component — labels need t())
 
 // ── State machine: which transitions are valid per status ───────────────
 
@@ -84,25 +77,34 @@ const VALID_TRANSITIONS = {
   closed:    [],
 };
 
-// ── Transition button config ────────────────────────────────────────────
-
-const TRANSITION_BTN = {
-  open:      { label: 'Open',      icon: <OpenIcon fontSize="small" />,     color: 'info' },
-  locked:    { label: 'Lock',      icon: <LockIcon fontSize="small" />,    color: 'warning' },
-  submitted: { label: 'Submit',    icon: <SubmitIcon fontSize="small" />,   color: 'primary' },
-  verified:  { label: 'Verify',    icon: <ApproveIcon fontSize="small" />,  color: 'success' },
-  rejected:  { label: 'Reject',    icon: <RejectIcon fontSize="small" />,   color: 'error' },
-  closed:    { label: 'Close',     icon: <CloseIcon fontSize="small" />,    color: 'default' },
-};
-
 // ── Actions that require admin privilege ────────────────────────────────
 
 const ADMIN_ACTIONS = new Set(['lock', 'close', 'verified', 'rejected']);
 
 export default function ReportingPeriodsPage() {
-  useDocumentTitle("Reporting Periods");
+  const { t } = useTranslation('emissions');
+  useDocumentTitle(t('reportingPeriodsTitle'));
   const { token, canManageAllModules } = useAuth();
   const isAdmin = canManageAllModules();
+
+  const STATUS_CFG = {
+    draft:     { label: t('statusDraft'),     color: 'default' },
+    open:      { label: t('statusOpen'),      color: 'info' },
+    locked:    { label: t('statusLocked'),    color: 'warning' },
+    submitted: { label: t('statusSubmitted'), color: 'secondary' },
+    verified:  { label: t('statusVerified'),  color: 'success' },
+    rejected:  { label: t('statusRejected'),  color: 'error' },
+    closed:    { label: t('statusClosed'),    color: 'default' },
+  };
+
+  const TRANSITION_BTN = {
+    open:      { label: t('actionOpen'),      icon: <OpenIcon fontSize="small" />,     color: 'info' },
+    locked:    { label: t('actionLock'),      icon: <LockIcon fontSize="small" />,    color: 'warning' },
+    submitted: { label: t('actionSubmit'),    icon: <SubmitIcon fontSize="small" />,   color: 'primary' },
+    verified:  { label: t('actionVerify'),    icon: <ApproveIcon fontSize="small" />,  color: 'success' },
+    rejected:  { label: t('actionReject'),    icon: <RejectIcon fontSize="small" />,   color: 'error' },
+    closed:    { label: t('actionClose'),     icon: <CloseIcon fontSize="small" />,    color: 'default' },
+  };
 
   const [error, setError] = useState(null);
   const [periods, setPeriods] = useState([]);
@@ -128,12 +130,12 @@ export default function ReportingPeriodsPage() {
       const data = await fetchReportingPeriods(token);
       setPeriods(Array.isArray(data) ? data : data?.results || []);
     } catch (err) {
-      setError(err.message || 'Failed to load reporting periods');
+      setError(err.message || t('failedToLoadPeriods'));
       console.error('Error loading periods:', err);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     loadPeriods();
@@ -156,11 +158,11 @@ export default function ReportingPeriodsPage() {
       };
       if (actionMap[action]) {
         await actionMap[action]();
-        setSnackbar({ open: true, message: `Period "${period.name}" → ${STATUS_CFG[action]?.label || action}`, severity: 'success' });
+        setSnackbar({ open: true, message: t('periodTransitioned', { name: period.name, status: STATUS_CFG[action]?.label || action }), severity: 'success' });
         await loadPeriods();
       }
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || `Transition to ${action} failed`, severity: 'error' });
+      setSnackbar({ open: true, message: err.message || t('transitionFailed', { action }), severity: 'error' });
     } finally {
       setActionLoading(false);
     }
@@ -210,7 +212,7 @@ export default function ReportingPeriodsPage() {
 
   const handleSave = async () => {
     if (!form.name || !form.start_date || !form.end_date || !form.period_type) {
-      setError('Please fill in all required fields');
+      setError(t('fillRequiredFields'));
       return;
     }
 
@@ -224,19 +226,19 @@ export default function ReportingPeriodsPage() {
       handleCloseDialog();
       await loadPeriods();
     } catch (err) {
-      setError(err.message || 'Failed to save reporting period');
+      setError(err.message || t('failedToSavePeriod'));
       console.error('Error saving period:', err);
     }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this reporting period?')) {
+    if (window.confirm(t('confirmDeletePeriod'))) {
       try {
         setError(null);
         await deleteReportingPeriod(id, token);
         await loadPeriods();
       } catch (err) {
-        setError(err.message || 'Failed to delete reporting period');
+        setError(err.message || t('failedToDeletePeriod'));
         console.error('Error deleting period:', err);
       }
     }
@@ -279,10 +281,10 @@ export default function ReportingPeriodsPage() {
 
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
-          Reporting Periods
+          {t('reportingPeriodsTitle')}
         </Typography>
         <Stack direction="row" gap={1}>
-          <Tooltip title="Refresh">
+          <Tooltip title={t('refresh')}>
             <IconButton
               onClick={loadPeriods}
               size="small"
@@ -297,7 +299,7 @@ export default function ReportingPeriodsPage() {
             startIcon={<AddIcon />}
             onClick={() => handleOpenDialog()}
           >
-            New Period
+            {t('newPeriod')}
           </Button>
         </Stack>
       </Stack>
@@ -307,13 +309,13 @@ export default function ReportingPeriodsPage() {
           <Table>
             <TableHead sx={{ backgroundColor: 'action.hover' }}>
               <TableRow>
-                <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Start Date</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>End Date</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Transitions</TableCell>
-                <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('name')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('periodType')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('startDate')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('endDate')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('statusLabel')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{t('transitions')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }} align="right">{t('actions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -322,14 +324,14 @@ export default function ReportingPeriodsPage() {
                   <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
                     <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
                       <CircularProgress size={18} />
-                      <Typography color="text.secondary">Loading...</Typography>
+                      <Typography color="text.secondary">{t('loading')}</Typography>
                     </Stack>
                   </TableCell>
                 </TableRow>
               ) : periods.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
-                    <Typography color="text.secondary">No reporting periods found</Typography>
+                    <Typography color="text.secondary">{t('noPeriodsFound')}</Typography>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -361,13 +363,13 @@ export default function ReportingPeriodsPage() {
                         <Stack direction="row" spacing={0.5}>
                           {buttons.length > 0 ? buttons : (
                             <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled' }}>
-                              Terminal
+                              {t('terminal')}
                             </Typography>
                           )}
                         </Stack>
                       </TableCell>
                       <TableCell align="right">
-                        <Tooltip title="Edit">
+                        <Tooltip title={t('edit')}>
                           <IconButton
                             size="small"
                             onClick={() => handleOpenDialog(period)}
@@ -377,7 +379,7 @@ export default function ReportingPeriodsPage() {
                             <EditIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Delete">
+                        <Tooltip title={t('delete')}>
                           <IconButton
                             size="small"
                             onClick={() => handleDelete(period.id)}
@@ -400,21 +402,21 @@ export default function ReportingPeriodsPage() {
       {/* ── Create/Edit Dialog ── */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {editingPeriod ? 'Edit Reporting Period' : 'Create New Reporting Period'}
+          {editingPeriod ? t('editPeriodTitle') : t('createPeriodTitle')}
         </DialogTitle>
         <Divider />
         <DialogContent sx={{ pt: 2 }}>
           <Stack spacing={2}>
             <TextField
-              label="Period Name"
+              label={t('periodName')}
               name="name"
               value={form.name}
               onChange={handleChange}
-              placeholder="e.g., FY 2024"
+              placeholder={t('periodNamePlaceholder')}
               fullWidth
             />
             <TextField
-              label="Start Date"
+              label={t('startDate')}
               name="start_date"
               type="date"
               value={form.start_date}
@@ -423,7 +425,7 @@ export default function ReportingPeriodsPage() {
               fullWidth
             />
             <TextField
-              label="End Date"
+              label={t('endDate')}
               name="end_date"
               type="date"
               value={form.end_date}
@@ -433,23 +435,23 @@ export default function ReportingPeriodsPage() {
             />
             <TextField
               select
-              label="Period Type"
+              label={t('periodType')}
               name="period_type"
               value={form.period_type}
               onChange={handleChange}
               fullWidth
               required
             >
-              <MenuItem value="annual">Annual</MenuItem>
-              <MenuItem value="quarterly">Quarterly</MenuItem>
-              <MenuItem value="monthly">Monthly</MenuItem>
-              <MenuItem value="custom">Custom</MenuItem>
+              <MenuItem value="annual">{t('annual')}</MenuItem>
+              <MenuItem value="quarterly">{t('quarterly')}</MenuItem>
+              <MenuItem value="monthly">{t('monthly')}</MenuItem>
+              <MenuItem value="custom">{t('custom')}</MenuItem>
             </TextField>
             {/* Status is read-only in edit mode — managed by state machine */}
             {editingPeriod && (
               <Box>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                  Status (state-machine managed)
+                  {t('statusManaged')}
                 </Typography>
                 <Chip
                   label={(STATUS_CFG[form.status] || STATUS_CFG.draft).label}
@@ -463,23 +465,23 @@ export default function ReportingPeriodsPage() {
             {!editingPeriod && (
               <TextField
                 select
-                label="Status"
+                label={t('statusLabel')}
                 name="status"
                 value={form.status}
                 onChange={handleChange}
                 fullWidth
                 required
               >
-                <MenuItem value="draft">Draft</MenuItem>
-                <MenuItem value="open">Open for Data Entry</MenuItem>
+                <MenuItem value="draft">{t('statusDraft')}</MenuItem>
+                <MenuItem value="open">{t('openForDataEntry')}</MenuItem>
               </TextField>
             )}
             <TextField
-              label="Description"
+              label={t('descriptionLabel')}
               name="description"
               value={form.description}
               onChange={handleChange}
-              placeholder="Optional description"
+              placeholder={t('descriptionPlaceholder')}
               multiline
               rows={3}
               fullWidth
@@ -492,15 +494,15 @@ export default function ReportingPeriodsPage() {
                   name="is_baseline"
                 />
               }
-              label="Baseline Period (used for year-over-year comparisons)"
+              label={t('baselinePeriod')}
             />
           </Stack>
         </DialogContent>
         <Divider />
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button onClick={handleCloseDialog}>{t('cancel')}</Button>
           <Button variant="contained" onClick={handleSave}>
-            {editingPeriod ? 'Update' : 'Create'}
+            {editingPeriod ? t('update') : t('create')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,0 +1,20 @@
+{
+  "rejected": "Rejected: {{names}}",
+  "authFailed": "Authentication failed. Please refresh the page or log in again.",
+  "uploadFailed": "Upload failed. Please try again.",
+  "uploadError": "Upload error: {{message}}",
+  "dropHere": "Drop files here",
+  "dragDrop": "Drag & drop evidence files",
+  "browseHint": "or click to browse (PDF, Images, Excel, CSV, Word)",
+  "maxSize": "Max: 50MB",
+  "uploading": "Uploading...",
+  "failed": "Failed",
+  "success": "Success",
+  "failedLoad": "Failed to load evidence ({{status}})",
+  "errorPrefix": "Error: {{message}}",
+  "confirmDelete": "Delete this evidence?",
+  "noEvidence": "No evidence yet",
+  "download": "Download",
+  "delete": "Delete",
+  "by": "By {{name}}"
+}

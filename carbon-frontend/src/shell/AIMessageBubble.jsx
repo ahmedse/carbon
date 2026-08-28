@@ -803,7 +803,10 @@ function AIMessageBubble({
           <Paper key={executionId} variant="outlined" sx={{ p: 1.25 }}>
             <Stack spacing={1}>
               <Stack direction="row" flexWrap="wrap" gap={0.5}>
-                {executeMode ? (
+                {/* Memory proposals (learn/forget) are personal, user-requested
+                    writes — confirmable in Chat mode. System mutations
+                    (DQ rule / host) stay gated behind Agent mode. */}
+                {executeMode || isMemory ? (
                   <>
                     <Button
                       size="small"

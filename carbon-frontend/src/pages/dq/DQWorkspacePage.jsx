@@ -27,6 +27,7 @@ import {
   Visibility,
 } from '@mui/icons-material';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import { useAITaskTransfer } from '../../shell/useAITaskTransfer';
@@ -51,9 +52,10 @@ import {
   getSchemaChanges,
 } from '../../api/dq';
 import {
-  RULE_TYPE_LABELS,
-  DIMENSION_LABELS,
-  JOB_TYPE_LABELS,
+  ruleTypeLabel,
+  dimensionLabel,
+  jobTypeLabel,
+  severityLabel,
   RESULT_STATUS_COLORS,
   SCHEMA_CHANGE_COLORS,
 } from './constants';
@@ -69,11 +71,11 @@ function unwrap(data) {
 
 const TAB_IDS = ['overview', 'rules', 'jobs', 'suggestions', 'monitoring'];
 const TAB_LABELS = [
-  { id: 'overview', label: 'Overview', icon: <Dashboard fontSize="small" /> },
-  { id: 'rules', label: 'Rules', icon: <RuleIcon fontSize="small" /> },
-  { id: 'jobs', label: 'Jobs', icon: <History fontSize="small" /> },
-  { id: 'suggestions', label: 'Suggestions', icon: <AutoAwesome fontSize="small" /> },
-  { id: 'monitoring', label: 'Monitoring', icon: <Insights fontSize="small" /> },
+  { id: 'overview', labelKey: 'tab.overview', icon: <Dashboard fontSize="small" /> },
+  { id: 'rules', labelKey: 'tab.rules', icon: <RuleIcon fontSize="small" /> },
+  { id: 'jobs', labelKey: 'tab.jobs', icon: <History fontSize="small" /> },
+  { id: 'suggestions', labelKey: 'tab.suggestions', icon: <AutoAwesome fontSize="small" /> },
+  { id: 'monitoring', labelKey: 'tab.monitoring', icon: <Insights fontSize="small" /> },
 ];
 
 function scoreColor(score) {
@@ -86,6 +88,7 @@ function scoreColor(score) {
 // ─── Overview ────────────────────────────────────────────────────────────────
 
 function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefresh, onAskAI }) {
+  const { t } = useTranslation('dq');
   const trendData = useMemo(() => {
     const sorted = [...results].sort((a, b) => new Date(a.run_at) - new Date(b.run_at));
     const buckets = new Map();
@@ -112,28 +115,28 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
     () => [
       {
         field: 'rule_name',
-        headerName: 'Rule',
+        headerName: t('columns.rule'),
         flex: 1.4,
         minWidth: 200,
         renderCell: ({ row }) => (
           <Stack spacing={0.25}>
             <Typography sx={{ fontWeight: 600 }}>{row.rule_name || '–'}</Typography>
             <Typography sx={{ color: 'text.secondary' }}>
-              {RULE_TYPE_LABELS[row.rule_type] || row.rule_type}
+              {ruleTypeLabel(t, row.rule_type)}
             </Typography>
           </Stack>
         ),
       },
       {
         field: 'run_at',
-        headerName: 'Run At',
+        headerName: t('columns.runAt'),
         width: 160,
         renderCell: ({ row }) =>
           row.run_at ? new Date(row.run_at).toLocaleString() : '—',
       },
       {
         field: 'status',
-        headerName: 'Status',
+        headerName: t('columns.status'),
         width: 140,
         renderCell: ({ row }) => (
           <Chip
@@ -141,16 +144,18 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
             color={RESULT_STATUS_COLORS[row.status] || 'default'}
             label={
               row.status === 'skipped_unavailable'
-                ? 'Skipped (Pulse n/a)'
-                : row.status || (row.passed ? 'passed' : 'failed')
+                ? t('status.skippedUnavailable')
+                : row.status === 'passed' || row.status === 'failed'
+                  ? t(`status.${row.status}`)
+                  : row.status || (row.passed ? t('status.passed') : t('status.failed'))
             }
           />
         ),
       },
-      { field: 'checked_count', headerName: 'Checked', width: 100, type: 'number' },
+      { field: 'checked_count', headerName: t('columns.checked'), width: 100, type: 'number' },
       {
         field: 'failed_count',
-        headerName: 'Failed',
+        headerName: t('columns.failed'),
         width: 90,
         type: 'number',
         renderCell: ({ row }) =>
@@ -164,7 +169,7 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
       },
       {
         field: 'score',
-        headerName: 'Score',
+        headerName: t('columns.score'),
         width: 90,
         renderCell: ({ row }) =>
           row.score != null ? (
@@ -174,13 +179,13 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
           ),
       },
     ],
-    []
+    [t]
   );
 
   if (loading) {
     return (
       <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
-        <Typography sx={{ color: 'text.secondary' }}>Loading overview…</Typography>
+        <Typography sx={{ color: 'text.secondary' }}>{t('overview.loading')}</Typography>
       </Paper>
     );
   }
@@ -193,20 +198,20 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
       <Grid container spacing={1.5} sx={{ mb: 1.5 }}>
         <Grid size={{ xs: 6, md: 3 }}>
           <StatCard
-            title="Overall Score"
+            title={t('overview.overallScore')}
             value={metrics_.overall_score != null ? metrics_.overall_score.toFixed(1) : '—'}
             unit="%"
             color={scoreColor(metrics_.overall_score)}
             sparkline={trendData}
-            tooltip="Pass-rate trend over the last 14 days of DQ results"
+            tooltip={t('overview.scoreTrendTooltip')}
           />
         </Grid>
         <Grid size={{ xs: 6, md: 3 }}>
-          <StatCard title="Tables Profiled" value={metrics_.table_count ?? '—'} color="info" />
+          <StatCard title={t('overview.tablesProfiled')} value={metrics_.table_count ?? '—'} color="info" />
         </Grid>
         <Grid size={{ xs: 6, md: 3 }}>
           <StatCard
-            title="Completeness"
+            title={t('overview.completeness')}
             value={metrics_.completeness_pct != null ? metrics_.completeness_pct.toFixed(1) : '—'}
             unit="%"
             color={scoreColor(metrics_.completeness_pct)}
@@ -214,10 +219,10 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
         </Grid>
         <Grid size={{ xs: 6, md: 3 }}>
           <StatCard
-            title="Rules"
+            title={t('overview.rules')}
             value={metrics_.total_rules ?? '—'}
             color="primary"
-            tooltip={`${metrics_.passing_rules ?? 0} passing · ${metrics_.failing_rules ?? 0} failing · ${metrics_.skipped_rules ?? 0} skipped`}
+            tooltip={t('overview.rulesBreakdown', { passing: metrics_.passing_rules ?? 0, failing: metrics_.failing_rules ?? 0, skipped: metrics_.skipped_rules ?? 0 })}
           />
         </Grid>
       </Grid>
@@ -226,14 +231,14 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
         <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5, borderRadius: 2 }}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
             <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary' }}>
-              Running jobs:
+              {t('overview.runningJobs')}
             </Typography>
             {runningJobs.map((job) => (
               <Chip
                 key={job.id}
                 size="small"
                 color="primary"
-                label={`#${job.id} ${JOB_TYPE_LABELS[job.job_type] || job.job_type}`}
+                label={`#${job.id} ${jobTypeLabel(t, job.job_type)}`}
                 onClick={onGoJobs}
               />
             ))}
@@ -243,13 +248,13 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
 
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
         <Typography sx={{ fontSize: '0.875rem', fontWeight: 700 }}>
-          Recent failures & skipped
+          {t('overview.recentFailures')}
           {attentionResults.length ? ` (${attentionResults.length})` : ''}
         </Typography>
         <Stack direction="row" spacing={1}>
-          <AIActionButton title="Ask AI about DQ health" onClick={onAskAI} />
+          <AIActionButton title={t('overview.askAiAboutHealth')} onClick={onAskAI} />
           <Button size="small" variant="outlined" onClick={onRefresh}>
-            Refresh
+            {t('refresh')}
           </Button>
         </Stack>
       </Stack>
@@ -259,7 +264,7 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
           rows={attentionResults}
           loading={loading}
           getRowId={(row) => row.id || `${row.rule}-${row.run_at}`}
-          emptyMessage="No recent failures — all recent checks passed"
+          emptyMessage={t('overview.emptyRecentFailures')}
           onRowClick={() => undefined}
         />
       </Paper>
@@ -267,13 +272,13 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
       {dimensionEntries.length > 0 ? (
         <Box sx={{ mt: 2 }}>
           <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>
-            Scores by Dimension
+            {t('overview.scoresByDimension')}
           </Typography>
           <Grid container spacing={1.5}>
             {dimensionEntries.map(([dim, score]) => (
               <Grid key={dim} size={{ xs: 6, md: 3 }}>
                 <StatCard
-                  title={DIMENSION_LABELS[dim] || dim}
+                  title={dimensionLabel(t, dim)}
                   value={score != null ? Number(score).toFixed(1) : '—'}
                   unit="%"
                   color={scoreColor(score)}
@@ -290,6 +295,7 @@ function OverviewTab({ metrics, results, loading, runningJobs, onGoJobs, onRefre
 // ─── Suggestions ─────────────────────────────────────────────────────────────
 
 function SuggestionsTab() {
+  const { t } = useTranslation('dq');
   const { token } = useAuth();
   const navigate = useNavigate();
   const { notify, notifyFromError } = useNotification();
@@ -307,11 +313,11 @@ function SuggestionsTab() {
       const payload = await listDQSuggestions(token, { status: 'pending' });
       setSuggestions(unwrap(payload));
     } catch (err) {
-      notifyFromError(err, 'Could not load suggestions');
+      notifyFromError(err, t('suggestions.loadError'));
     } finally {
       setLoading(false);
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   useEffect(() => {
     load();
@@ -321,10 +327,10 @@ function SuggestionsTab() {
     setBusyId(`accept-${suggestion.id}`);
     try {
       const rule = await acceptDQSuggestion(token, suggestion.id);
-      notify({ message: `Suggestion accepted — rule "${rule.name}" created`, type: 'success' });
+      notify({ message: t('suggestions.accepted', { name: rule.name }), type: 'success' });
       navigate(`/dq/rules/${rule.id}`);
     } catch (err) {
-      notifyFromError(err, 'Could not accept suggestion');
+      notifyFromError(err, t('suggestions.acceptError'));
     } finally {
       setBusyId(null);
     }
@@ -335,12 +341,12 @@ function SuggestionsTab() {
     setBusyId(`reject-${rejectTarget.id}`);
     try {
       await rejectDQSuggestion(token, rejectTarget.id, rejectReason || undefined);
-      notify({ message: 'Suggestion rejected', type: 'info' });
+      notify({ message: t('suggestions.rejected'), type: 'info' });
       setRejectTarget(null);
       setRejectReason('');
       load();
     } catch (err) {
-      notifyFromError(err, 'Could not reject suggestion');
+      notifyFromError(err, t('suggestions.rejectError'));
     } finally {
       setBusyId(null);
     }
@@ -355,7 +361,7 @@ function SuggestionsTab() {
         table_name: suggestion.table_name,
       },
       {
-        title: `Refine suggestion #${suggestion.id}`,
+        title: t('suggestions.refineTitle', { id: suggestion.id }),
         source_page: 'dq-workspace-suggestions',
         workspaceContext: {
           workspace: 'dq',
@@ -374,23 +380,23 @@ function SuggestionsTab() {
     <Box>
       <Stack direction="row" alignItems="center" sx={{ mb: 2 }}>
         <Typography sx={{ fontSize: '0.875rem', fontWeight: 700 }}>
-          Pulse rule suggestions awaiting review
+          {t('suggestions.title')}
         </Typography>
         <Box sx={{ flexGrow: 1 }} />
         <Button size="small" variant="outlined" onClick={load}>
-          Refresh
+          {t('refresh')}
         </Button>
       </Stack>
 
       {loading ? (
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-          <Typography sx={{ color: 'text.secondary' }}>Loading suggestions…</Typography>
+          <Typography sx={{ color: 'text.secondary' }}>{t('suggestions.loading')}</Typography>
         </Paper>
       ) : suggestions.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
           <AutoAwesome sx={{ fontSize: '1.75rem', color: 'text.disabled', mb: 1 }} />
           <Typography sx={{ color: 'text.secondary' }}>
-            No pending suggestions. Run a Pulse suggestion job from the Rules tab to generate some.
+            {t('suggestions.empty')}
           </Typography>
         </Paper>
       ) : (
@@ -400,18 +406,20 @@ function SuggestionsTab() {
               <Stack direction="row" alignItems="flex-start" spacing={1.5} flexWrap="wrap">
                 <Box sx={{ flexGrow: 1, minWidth: 280 }}>
                   <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                    <Chip size="small" color="primary" label={`Table: ${s.table_name || s.data_table}`} />
+                    <Chip size="small" color="primary" label={t('suggestions.tableChip', { table: s.table_name || s.data_table })} />
                     {s.confidence != null ? (
                       <Chip
                         size="small"
                         variant="outlined"
-                        label={`Confidence ${Number(s.confidence).toFixed(0)}%`}
+                        label={t('suggestions.confidence', { value: Number(s.confidence).toFixed(0) })}
                         color={s.confidence >= 0.7 ? 'success' : s.confidence >= 0.4 ? 'warning' : 'default'}
                       />
                     ) : null}
                     <Typography sx={{ color: 'text.secondary' }}>
-                      by {s.created_by_name || 'Pulse'} ·{' '}
-                      {s.created_at ? new Date(s.created_at).toLocaleString() : '—'}
+                      {t('suggestions.byLine', {
+                        name: s.created_by_name || 'Pulse',
+                        date: s.created_at ? new Date(s.created_at).toLocaleString() : '—',
+                      })}
                     </Typography>
                   </Stack>
                   {s.rationale ? (
@@ -421,7 +429,7 @@ function SuggestionsTab() {
                   ) : null}
                   <Box sx={{ mt: 1 }}>
                     <Button size="small" onClick={() => setExpanded(expanded === s.id ? null : s.id)}>
-                      {expanded === s.id ? 'Hide payload' : 'Show payload JSON'}
+                      {expanded === s.id ? t('suggestions.hidePayload') : t('suggestions.showPayload')}
                     </Button>
                   </Box>
                   {expanded === s.id ? (
@@ -450,7 +458,7 @@ function SuggestionsTab() {
                     disabled={busyId === `accept-${s.id}`}
                     onClick={() => handleAccept(s)}
                   >
-                    Accept
+                    {t('suggestions.accept')}
                   </Button>
                   <Button
                     size="small"
@@ -462,10 +470,10 @@ function SuggestionsTab() {
                       setRejectReason('');
                     }}
                   >
-                    Reject
+                    {t('suggestions.reject')}
                   </Button>
                   <AIActionButton
-                    title="Refine this suggestion with AI"
+                    title={t('suggestions.refineWithAi')}
                     onClick={() => handleRefineWithAI(s)}
                   />
                 </Stack>
@@ -477,10 +485,10 @@ function SuggestionsTab() {
 
       <SystemDialog
         open={!!rejectTarget}
-        title="Reject suggestion"
+        title={t('suggestions.rejectDialogTitle')}
         onClose={() => setRejectTarget(null)}
         onCancel={() => setRejectTarget(null)}
-        cancelLabel="Cancel"
+        cancelLabel={t('cancel')}
         width={480}
         height={280}
         minWidth={400}
@@ -489,7 +497,7 @@ function SuggestionsTab() {
         maxHeight="calc(100vh - 32px)"
         actions={
           <Button variant="contained" color="error" size="small" onClick={handleReject} disabled={busyId}>
-            Reject suggestion
+            {t('suggestions.rejectButton')}
           </Button>
         }
       >
@@ -500,7 +508,7 @@ function SuggestionsTab() {
             multiline
             minRows={3}
             size="small"
-            label="Reason (optional)"
+            label={t('suggestions.reasonOptional')}
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
             sx={{ mt: 1 }}
@@ -514,16 +522,17 @@ function SuggestionsTab() {
 // ─── Schema Snapshot Dialog ──────────────────────────────────────────────────
 
 function SchemaDialog({ open, onClose, snapshot }) {
+  const { t } = useTranslation('dq');
   if (!snapshot) return null;
   const cols = snapshot.column_schema || {};
   const entries = Object.entries(cols);
   return (
     <SystemDialog
       open={open}
-      title={`Schema Snapshot — ${snapshot.table_name || snapshot.data_table}`}
+      title={t('monitoring.schemaSnapshotTitle', { table: snapshot.table_name || snapshot.data_table })}
       onClose={onClose}
       onCancel={onClose}
-      cancelLabel="Close"
+      cancelLabel={t('close')}
       width={760}
       height={520}
       minWidth={560}
@@ -533,22 +542,25 @@ function SchemaDialog({ open, onClose, snapshot }) {
     >
       <Box px={2} py={1}>
         <Typography sx={{ color: 'text.secondary', mb: 1 }}>
-          Snapshot at: {snapshot.snapshot_at ? new Date(snapshot.snapshot_at).toLocaleString() : '—'}
-          &nbsp;| Rows: {snapshot.row_count ?? '—'} &nbsp;| Columns: {entries.length}
+          {t('monitoring.snapshotSummary', {
+            at: snapshot.snapshot_at ? new Date(snapshot.snapshot_at).toLocaleString() : '—',
+            rows: snapshot.row_count ?? '—',
+            columns: entries.length,
+          })}
         </Typography>
         <PanelTable
-          title="Column Schema"
-          subtitle={`${entries.length} columns`}
+          title={t('monitoring.columnSchema')}
+          subtitle={t('monitoring.columnsCount', { count: entries.length })}
           columns={[
-            { key: 'col', header: 'Column' },
-            { key: 'type', header: 'Type' },
+            { key: 'col', header: t('columns.column') },
+            { key: 'type', header: t('columns.type') },
           ]}
           rows={entries.map(([col, def]) => ({
             id: col,
             col,
             type: typeof def === 'object' ? def.type || JSON.stringify(def) : String(def),
           }))}
-          emptyText="No column schema data."
+          emptyText={t('monitoring.noColumnSchema')}
         />
       </Box>
     </SystemDialog>
@@ -558,6 +570,7 @@ function SchemaDialog({ open, onClose, snapshot }) {
 // ─── Monitoring ──────────────────────────────────────────────────────────────
 
 function MonitoringTab() {
+  const { t } = useTranslation('dq');
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
   const { transferTask } = useAITaskTransfer();
@@ -580,12 +593,12 @@ function MonitoringTab() {
       const payload = await getTableProfiles({}, token);
       setProfiles(unwrap(payload));
     } catch (err) {
-      setProfilesError(err?.message || 'Failed to load profiles');
-      notifyFromError(err, 'Failed to load profiles');
+      setProfilesError(err?.message || t('monitoring.loadProfilesError'));
+      notifyFromError(err, t('monitoring.loadProfilesError'));
     } finally {
       setProfilesLoading(false);
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   const loadMonitoring = useCallback(async () => {
     setFreshnessLoading(true);
@@ -602,12 +615,12 @@ function MonitoringTab() {
       setSchemaChanges(unwrap(sc));
       setAnomalies(unwrap(a));
     } catch (err) {
-      setMonitoringError(err?.message || 'Failed to load monitoring data');
-      notifyFromError(err, 'Failed to load freshness/schema/anomaly data');
+      setMonitoringError(err?.message || t('monitoring.loadMonitoringError'));
+      notifyFromError(err, t('monitoring.loadMonitoringNotifyError'));
     } finally {
       setFreshnessLoading(false);
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   useEffect(() => {
     loadProfiles();
@@ -632,7 +645,7 @@ function MonitoringTab() {
             prompt: `Analyze anomaly risk and recent profile drift for ${row?.table_name || `Table #${tableId}`}.`,
           },
           {
-            title: `Anomaly Scan: ${row?.table_name || `Table #${tableId}`}`,
+            title: t('monitoring.anomalyScanTitle', { table: row?.table_name || t('monitoring.tableNumber', { id: tableId }) }),
             source_page: 'dq-workspace-monitoring',
             workspaceContext: {
               workspace: 'dq',
@@ -649,25 +662,25 @@ function MonitoringTab() {
         setAnomalyBusyTableId(null);
       }
     },
-    [transferTask],
+    [transferTask, t],
   );
 
   const profileColumns = useMemo(
     () => [
       {
         field: 'table_name',
-        headerName: 'Table',
+        headerName: t('columns.table'),
         flex: 1.5,
         minWidth: 200,
         renderCell: ({ row }) => (
           <Typography sx={{ fontWeight: 600 }}>{row.table_name || '—'}</Typography>
         ),
       },
-      { field: 'row_count', headerName: 'Row Count', width: 110, type: 'number' },
-      { field: 'column_count', headerName: 'Columns', width: 90, type: 'number' },
+      { field: 'row_count', headerName: t('columns.rowCount'), width: 110, type: 'number' },
+      { field: 'column_count', headerName: t('columns.columns'), width: 90, type: 'number' },
       {
         field: 'null_pct',
-        headerName: 'Null %',
+        headerName: t('columns.nullPct'),
         width: 90,
         type: 'number',
         renderCell: ({ row }) =>
@@ -675,14 +688,14 @@ function MonitoringTab() {
       },
       {
         field: 'distinctness',
-        headerName: 'Distinctness',
+        headerName: t('columns.distinctness'),
         width: 110,
         type: 'number',
         renderCell: ({ row }) => (row.distinctness != null ? Number(row.distinctness).toFixed(2) : '—'),
       },
       {
         field: 'profiled_at',
-        headerName: 'Profiled At',
+        headerName: t('columns.profiledAt'),
         width: 170,
         renderCell: ({ row }) => (row.profiled_at ? new Date(row.profiled_at).toLocaleString() : '—'),
       },
@@ -695,7 +708,7 @@ function MonitoringTab() {
           const tableId = row?.data_table || row?.table_id || row?.id;
           return (
             <AIActionButton
-              title="Analyze anomalies with AI"
+              title={t('monitoring.analyzeAnomalies')}
               disabled={!tableId}
               busy={anomalyBusyTableId === tableId}
               onClick={() => handleAnalyzeAnomaliesWithAI(row)}
@@ -704,30 +717,30 @@ function MonitoringTab() {
         },
       },
     ],
-    [handleAnalyzeAnomaliesWithAI, anomalyBusyTableId]
+    [handleAnalyzeAnomaliesWithAI, anomalyBusyTableId, t]
   );
 
   const freshnessColumns = useMemo(
     () => [
       {
         field: 'table_name',
-        headerName: 'Table',
+        headerName: t('columns.table'),
         flex: 1.5,
         minWidth: 200,
         renderCell: ({ row }) => (
           <Typography sx={{ fontWeight: 600 }}>{row.table_name || '—'}</Typography>
         ),
       },
-      { field: 'expected_max_age_hours', headerName: 'Max Age (hrs)', width: 120, type: 'number' },
+      { field: 'expected_max_age_hours', headerName: t('columns.maxAgeHours'), width: 120, type: 'number' },
       {
         field: 'is_fresh',
-        headerName: 'Fresh?',
+        headerName: t('columns.fresh'),
         width: 100,
         renderCell: ({ row }) => (
           <Chip
             size="small"
             icon={row.is_fresh ? <CheckCircle /> : <ErrorOutline />}
-            label={row.is_fresh ? 'Yes' : 'No'}
+            label={row.is_fresh ? t('monitoring.yes') : t('monitoring.no')}
             color={row.is_fresh ? 'success' : 'error'}
             variant="outlined"
           />
@@ -735,25 +748,25 @@ function MonitoringTab() {
       },
       {
         field: 'last_data_timestamp',
-        headerName: 'Last Data',
+        headerName: t('columns.lastData'),
         width: 170,
         renderCell: ({ row }) => (row.last_data_timestamp ? new Date(row.last_data_timestamp).toLocaleString() : '—'),
       },
       {
         field: 'checked_at',
-        headerName: 'Checked At',
+        headerName: t('columns.checkedAt'),
         width: 170,
         renderCell: ({ row }) => (row.checked_at ? new Date(row.checked_at).toLocaleString() : '—'),
       },
     ],
-    []
+    [t]
   );
 
   const schemaChangeColumns = useMemo(
     () => [
       {
         field: 'table_name',
-        headerName: 'Table',
+        headerName: t('columns.table'),
         flex: 1.2,
         minWidth: 160,
         renderCell: ({ row }) => (
@@ -762,39 +775,39 @@ function MonitoringTab() {
       },
       {
         field: 'change_type',
-        headerName: 'Change',
+        headerName: t('columns.change'),
         width: 110,
         renderCell: ({ row }) => (
           <Chip size="small" color={SCHEMA_CHANGE_COLORS[row.change_type] || 'default'} label={row.change_type} />
         ),
       },
-      { field: 'field_name', headerName: 'Field', width: 150 },
+      { field: 'field_name', headerName: t('columns.field'), width: 150 },
       {
         field: 'detected_at',
-        headerName: 'Detected At',
+        headerName: t('columns.detectedAt'),
         width: 170,
         renderCell: ({ row }) => (row.detected_at ? new Date(row.detected_at).toLocaleString() : '—'),
       },
     ],
-    []
+    [t]
   );
 
   const snapshotColumns = useMemo(
     () => [
       {
         field: 'table_name',
-        headerName: 'Table',
+        headerName: t('columns.table'),
         flex: 1.2,
         minWidth: 160,
         renderCell: ({ row }) => (
           <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{row.table_name || '—'}</Typography>
         ),
       },
-      { field: 'row_count', headerName: 'Row Count', width: 100, type: 'number' },
-      { field: 'column_count', headerName: 'Columns', width: 90, type: 'number' },
+      { field: 'row_count', headerName: t('columns.rowCount'), width: 100, type: 'number' },
+      { field: 'column_count', headerName: t('columns.columns'), width: 90, type: 'number' },
       {
         field: 'snapshot_at',
-        headerName: 'Snapshot At',
+        headerName: t('columns.snapshotAt'),
         width: 170,
         renderCell: ({ row }) => (row.snapshot_at ? new Date(row.snapshot_at).toLocaleString() : '—'),
       },
@@ -804,7 +817,7 @@ function MonitoringTab() {
         width: 80,
         sortable: false,
         renderCell: ({ row }) => (
-          <Tooltip title="View schema">
+          <Tooltip title={t('monitoring.viewSchema')}>
             <IconButton size="small" onClick={() => setSchemaDialog(row)}>
               <Visibility fontSize="small" />
             </IconButton>
@@ -812,17 +825,17 @@ function MonitoringTab() {
         ),
       },
     ],
-    []
+    [t]
   );
 
   return (
     <Box>
       <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mb: 1 }}>
         <Button size="small" variant="outlined" onClick={loadProfiles}>
-          Refresh Profiles
+          {t('monitoring.refreshProfiles')}
         </Button>
         <Button size="small" variant="outlined" onClick={loadMonitoring}>
-          Refresh Monitoring
+          {t('monitoring.refreshMonitoring')}
         </Button>
       </Stack>
 
@@ -837,78 +850,78 @@ function MonitoringTab() {
         </Alert>
       ) : null}
 
-      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Table Profiles</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>{t('monitoring.tableProfiles')}</Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>
         <CarbonDataGrid
           columns={profileColumns}
           rows={profiles}
           loading={profilesLoading}
           getRowId={(row) => row.id || row.data_table}
-          emptyMessage="No profiles yet — run a profiling job from the Jobs tab"
+          emptyMessage={t('monitoring.noProfiles')}
         />
       </Paper>
 
-      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Freshness</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>{t('monitoring.freshness')}</Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>
         <CarbonDataGrid
           columns={freshnessColumns}
           rows={freshness}
           loading={freshnessLoading}
           getRowId={(row) => row.id || row.data_table}
-          emptyMessage="No freshness checks configured"
+          emptyMessage={t('monitoring.noFreshness')}
         />
       </Paper>
 
-      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Schema Snapshots</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>{t('monitoring.schemaSnapshots')}</Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>
         <CarbonDataGrid
           columns={snapshotColumns}
           rows={schemaSnapshots}
           loading={freshnessLoading}
           getRowId={(row) => row.id}
-          emptyMessage="No schema snapshots yet"
+          emptyMessage={t('monitoring.noSchemaSnapshots')}
         />
       </Paper>
 
-      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Anomalies</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>{t('monitoring.anomalies')}</Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>
         <CarbonDataGrid
           columns={[
             {
               field: 'table_name',
-              headerName: 'Table',
+              headerName: t('columns.table'),
               flex: 1.1,
               minWidth: 160,
               renderCell: ({ row }) => <Typography sx={{ fontWeight: 600 }}>{row.table_name || '—'}</Typography>,
             },
-            { field: 'metric', headerName: 'Metric', width: 180 },
+            { field: 'metric', headerName: t('columns.metric'), width: 180 },
             {
               field: 'severity',
-              headerName: 'Severity',
+              headerName: t('columns.severity'),
               width: 110,
               renderCell: ({ row }) => (
                 <Chip
                   size="small"
                   color={row.severity === 'error' ? 'error' : row.severity === 'warn' ? 'warning' : 'info'}
-                  label={row.severity || 'info'}
+                  label={severityLabel(t, row.severity || 'info')}
                 />
               ),
             },
             {
               field: 'score',
-              headerName: 'Score',
+              headerName: t('columns.score'),
               width: 90,
               renderCell: ({ row }) => (row.score != null ? Number(row.score).toFixed(2) : '—'),
             },
             {
               field: 'observed',
-              headerName: 'Observed',
+              headerName: t('columns.observed'),
               width: 100,
               renderCell: ({ row }) => (row.observed != null ? Number(row.observed).toFixed(2) : '—'),
             },
             {
               field: 'detected_at',
-              headerName: 'Detected At',
+              headerName: t('columns.detectedAt'),
               width: 170,
               renderCell: ({ row }) => (row.detected_at ? new Date(row.detected_at).toLocaleString() : '—'),
             },
@@ -916,18 +929,18 @@ function MonitoringTab() {
           rows={anomalies}
           loading={freshnessLoading}
           getRowId={(row) => row.id}
-          emptyMessage="No anomalies recorded"
+          emptyMessage={t('monitoring.noAnomalies')}
         />
       </Paper>
 
-      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Schema Changes</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>{t('monitoring.schemaChanges')}</Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2 }}>
         <CarbonDataGrid
           columns={schemaChangeColumns}
           rows={schemaChanges}
           loading={freshnessLoading}
           getRowId={(row) => row.id}
-          emptyMessage="No schema changes detected"
+          emptyMessage={t('monitoring.noSchemaChanges')}
         />
       </Paper>
 
@@ -939,7 +952,8 @@ function MonitoringTab() {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function DQWorkspacePage() {
-  useDocumentTitle('DQ Workspace');
+  const { t } = useTranslation('dq');
+  useDocumentTitle(t('pageTitle'));
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
   const { transferTask } = useAITaskTransfer();
@@ -996,11 +1010,11 @@ export default function DQWorkspacePage() {
       const payload = await listDQJobs(token, {});
       setJobs(unwrap(payload));
     } catch (err) {
-      notifyFromError(err, 'Could not load jobs');
+      notifyFromError(err, t('jobs.loadError'));
     } finally {
       setJobsLoading(false);
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   useEffect(() => {
     reloadJobs();
@@ -1036,12 +1050,12 @@ export default function DQWorkspacePage() {
       setMetrics(m || null);
       setResults(unwrap(r));
     } catch (err) {
-      setOverviewError(err?.message || 'Could not load overview');
-      notifyFromError(err, 'Could not load overview');
+      setOverviewError(err?.message || t('overview.loadError'));
+      notifyFromError(err, t('overview.loadError'));
     } finally {
       setOverviewLoading(false);
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   useEffect(() => {
     loadOverview();
@@ -1084,12 +1098,12 @@ export default function DQWorkspacePage() {
         columns: ['status', 'rule_type', 'score', 'failed_count', 'run_at'],
       },
       {
-        title: 'DQ Health Summary',
+        title: t('overview.healthSummaryTitle'),
         source_page: 'dq-workspace-overview',
         workspaceContext: buildWorkspaceContext(),
       },
     );
-  }, [transferTask, results.length, buildWorkspaceContext]);
+  }, [transferTask, results.length, buildWorkspaceContext, t]);
 
   const handleSuggestRulesAI = useCallback(async () => {
     await transferTask(
@@ -1099,12 +1113,12 @@ export default function DQWorkspacePage() {
         table_name: tableFilter ? `Table #${tableFilter}` : null,
       },
       {
-        title: tableFilter ? `Suggest Rules: Table #${tableFilter}` : 'Suggest Rules',
+        title: tableFilter ? t('rules.suggestTitleTable', { id: tableFilter }) : t('rules.suggestTitle'),
         source_page: 'dq-workspace-rules',
         workspaceContext: buildWorkspaceContext(),
       },
     );
-  }, [transferTask, tableFilter, buildWorkspaceContext]);
+  }, [transferTask, tableFilter, buildWorkspaceContext, t]);
 
   const handleAnalyzeFailuresAI = useCallback(async () => {
     await transferTask(
@@ -1115,18 +1129,18 @@ export default function DQWorkspacePage() {
         columns: ['job_type', 'status', 'error_message', 'created_at'],
       },
       {
-        title: 'Analyze DQ Failures',
+        title: t('jobs.analyzeFailuresTitle'),
         source_page: 'dq-workspace-jobs',
         workspaceContext: buildWorkspaceContext(),
       },
     );
-  }, [transferTask, runningJobs.length, buildWorkspaceContext]);
+  }, [transferTask, runningJobs.length, buildWorkspaceContext, t]);
 
   return (
     <PageContainer>
       <DetailHeader
-        title="DQ Workspace"
-        description="Rules, jobs, suggestions & schema monitoring"
+        title={t('pageTitle')}
+        description={t('pageDescription')}
         icon={RuleIcon}
         onClose={() => navigate(-1)}
       />
@@ -1137,8 +1151,8 @@ export default function DQWorkspacePage() {
           variant="scrollable"
           scrollButtons="auto"
         >
-          {TAB_LABELS.map((t) => (
-            <Tab key={t.id} label={t.label} icon={t.icon} iconPosition="start" />
+          {TAB_LABELS.map((tabItem) => (
+            <Tab key={tabItem.id} label={t(tabItem.labelKey)} icon={tabItem.icon} iconPosition="start" />
           ))}
         </Tabs>
       </Box>
@@ -1150,7 +1164,7 @@ export default function DQWorkspacePage() {
           <Alert severity="error" sx={{ mb: 1 }}>
             {overviewError}
             <Button size="small" variant="outlined" sx={{ ml: 1 }} onClick={loadOverview}>
-              Retry
+              {t('retry')}
             </Button>
           </Alert>
         ) : (
@@ -1168,7 +1182,7 @@ export default function DQWorkspacePage() {
       {mountedTabs.has(1) ? (
         <Box sx={{ display: tab === 1 ? 'block' : 'none' }}>
           <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
-            <AIActionButton title="Suggest rules with AI" onClick={handleSuggestRulesAI} />
+            <AIActionButton title={t('rules.suggestWithAi')} onClick={handleSuggestRulesAI} />
           </Stack>
           <RulesTab onJobCreated={handleJobCreated} tableFilter={tableFilter} />
         </Box>
@@ -1176,7 +1190,7 @@ export default function DQWorkspacePage() {
       {mountedTabs.has(2) ? (
         <Box sx={{ display: tab === 2 ? 'block' : 'none' }}>
           <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
-            <AIActionButton title="Analyze failures with AI" onClick={handleAnalyzeFailuresAI} />
+            <AIActionButton title={t('jobs.analyzeFailuresWithAi')} onClick={handleAnalyzeFailuresAI} />
           </Stack>
           <JobsTab jobs={jobs} loading={jobsLoading} reload={reloadJobs} />
         </Box>

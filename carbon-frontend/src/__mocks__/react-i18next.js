@@ -20,15 +20,21 @@ import enErrors from '../i18n/locales/en/errors.json';
 import enAi from '../i18n/locales/en/ai.json';
 import enCatalog from '../i18n/locales/en/catalog.json';
 import enNotes from '../i18n/locales/en/notes.json';
+import enEmissions from '../i18n/locales/en/emissions.json';
+import enEvidence from '../i18n/locales/en/evidence.json';
+import enImportExport from '../i18n/locales/en/importexport.json';
+import enConnections from '../i18n/locales/en/connections.json';
+import enDq from '../i18n/locales/en/dq.json';
+import enDataschema from '../i18n/locales/en/dataschema.json';
 
 const i18n = i18next.createInstance();
 i18n.init({
   resources: {
-    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog, notes: enNotes },
+    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog, notes: enNotes, emissions: enEmissions, evidence: enEvidence, importexport: enImportExport, connections: enConnections, dq: enDq, dataschema: enDataschema },
   },
   lng: 'en',
   fallbackLng: 'en',
-  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog', 'notes'],
+  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog', 'notes', 'emissions', 'evidence', 'importexport', 'connections', 'dq', 'dataschema'],
   defaultNS: 'common',
   interpolation: {
     // React already escapes — no double escaping.

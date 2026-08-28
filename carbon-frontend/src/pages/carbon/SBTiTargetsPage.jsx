@@ -1,38 +1,21 @@
 // src/pages/carbon/SBTiTargetsPage.jsx
 // SBTi Targets admin — CRUD for Science-Based Targets initiative reduction targets
-// Pattern: GWPReferencePage style — MUI Table with icons, Drawer for create/edit
+// Canonical shell: FilteredDataGrid + SystemDialog + ConfirmDialog (see EmissionFactorsPage / GWPReferencePage)
 // All colours via theme.palette, zero hardcoded hex
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Drawer,
-  Alert,
   TextField,
   MenuItem,
-  CircularProgress,
-  Tooltip,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Stack,
   IconButton,
-  Snackbar,
+  Typography,
   LinearProgress,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
-import PageContainer from '../../components/layout/PageContainer';
 import { FONT } from '../../theme/themeTokens';
 
 import AddIcon from '@mui/icons-material/Add';
@@ -40,7 +23,10 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useAuth } from '../../auth/AuthContext';
-import PageHeader from '../../components/Page/PageHeader';
+import { useNotification } from '../../components/NotificationProvider';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import SystemDialog from '../../components/SystemDialog';
 import {
   fetchSBTiTargets,
   createSBTiTarget,
@@ -133,9 +119,9 @@ function ReductionBar({ value }) {
   );
 }
 
-// ── TargetsDrawer ──────────────────────────────────────────────────────
+// ── TargetsDialog ──────────────────────────────────────────────────────
 
-function TargetsDrawer({ open, target, onSave, onClose }) {
+function TargetsDialog({ open, target, onSave, onClose }) {
   const [form, setForm] = useState({
     name: '',
     org_unit: '',
@@ -186,11 +172,25 @@ function TargetsDrawer({ open, target, onSave, onClose }) {
   };
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 420, p: 3 }}>
-        <Typography variant="h5" sx={{ mb: 3 }}>
-          {target ? 'Edit Target' : 'New Target'}
-        </Typography>
+    <SystemDialog
+      open={open}
+      title={target ? 'Edit Target' : 'New Target'}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel="Cancel"
+      actions={
+        <Button variant="contained" size="small" onClick={handleSubmit}>
+          {target ? 'Update' : 'Create'}
+        </Button>
+      }
+      width={520}
+      height={660}
+      minWidth={420}
+      minHeight={460}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
         <Stack spacing={2}>
           <TextField
             label="Name"
@@ -295,17 +295,9 @@ function TargetsDrawer({ open, target, onSave, onClose }) {
             rows={3}
             size="small"
           />
-          <Stack direction="row" spacing={2} sx={{ pt: 1 }}>
-            <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
-              Cancel
-            </Button>
-            <Button variant="contained" onClick={handleSubmit} sx={{ flex: 1 }}>
-              {target ? 'Update' : 'Create'}
-            </Button>
-          </Stack>
         </Stack>
       </Box>
-    </Drawer>
+    </SystemDialog>
   );
 }
 
@@ -314,28 +306,29 @@ function TargetsDrawer({ open, target, onSave, onClose }) {
 export default function SBTiTargetsPage() {
   useDocumentTitle("SBTi Targets");
   const { user, token, availablePerspectives } = useAuth();
+  const { notify, notifyFromError } = useNotification();
+
   const [targets, setTargets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [currentTarget, setCurrentTarget] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [searchText, setSearchText] = useState('');
 
   const isAdmin = user?.is_staff || user?.is_superuser || (availablePerspectives || []).includes('carbon-admin');
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      setError(null);
       const data = await fetchSBTiTargets(token);
       setTargets(Array.isArray(data) ? data : data?.results || []);
     } catch (err) {
-      setError(err.message || 'Failed to load SBTi targets');
+      notifyFromError(err, 'Failed to load SBTi targets');
+      setTargets([]);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, notifyFromError]);
 
   useEffect(() => {
     loadData();
@@ -361,24 +354,27 @@ export default function SBTiTargetsPage() {
     try {
       if (currentTarget) {
         await updateSBTiTarget(currentTarget.id, payload, token);
+        notify({ message: 'Target updated', type: 'success' });
       } else {
         await createSBTiTarget(payload, token);
+        notify({ message: 'Target created', type: 'success' });
       }
       setDrawerOpen(false);
       setCurrentTarget(null);
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to save target');
+      notifyFromError(err, 'Failed to save target');
     }
   };
 
   const handleDelete = async (targetId) => {
     try {
       await deleteSBTiTarget(targetId, token);
+      notify({ message: 'Target deleted', type: 'success' });
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to delete target');
+      notifyFromError(err, 'Failed to delete target');
     }
   };
 
@@ -387,129 +383,134 @@ export default function SBTiTargetsPage() {
     try { return new Date(d).toLocaleDateString(); } catch { return '—'; }
   };
 
-  // ── Loading state ────────────────────────────────────────────────────
+  const filteredTargets = useMemo(() => {
+    let filtered = targets;
+    if (searchText.trim()) {
+      const query = searchText.toLowerCase();
+      filtered = filtered.filter(
+        (t) =>
+          (t.name && t.name.toLowerCase().includes(query)) ||
+          (t.org_unit_name && t.org_unit_name.toLowerCase().includes(query)) ||
+          (t.org_unit && String(t.org_unit).toLowerCase().includes(query))
+      );
+    }
+    return filtered;
+  }, [targets, searchText]);
 
-  if (loading) {
-    return (
-      <PageContainer sx={{ alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress />
-      </PageContainer>
-    );
-  }
-
-  // ── Render ───────────────────────────────────────────────────────────
+  const columns = [
+    { field: 'id', headerName: 'ID', width: 70 },
+    { field: 'name', headerName: 'Name', flex: 1, minWidth: 180 },
+    {
+      field: 'org_unit',
+      headerName: 'Org Unit',
+      flex: 1,
+      minWidth: 140,
+      valueGetter: (value, row) => row.org_unit_name || row.org_unit || '—',
+    },
+    {
+      field: 'base_year',
+      headerName: 'Base Year',
+      width: 100,
+      align: 'center',
+      headerAlign: 'center',
+      valueFormatter: (value) => value ?? '—',
+    },
+    {
+      field: 'target_year',
+      headerName: 'Target Year',
+      width: 110,
+      align: 'center',
+      headerAlign: 'center',
+      valueFormatter: (value) => value ?? '—',
+    },
+    {
+      field: 'target_type',
+      headerName: 'Type',
+      width: 110,
+      renderCell: (params) => <TypeChip value={params.value} />,
+    },
+    {
+      field: 'scope',
+      headerName: 'Scope',
+      width: 130,
+      renderCell: (params) => <ScopeChip value={params.value} />,
+    },
+    {
+      field: 'reduction_pct',
+      headerName: 'Reduction',
+      width: 160,
+      renderCell: (params) => <ReductionBar value={params.row.reduction_pct} />,
+    },
+    {
+      field: 'status',
+      headerName: 'Status',
+      width: 120,
+      renderCell: (params) => <StatusChip value={params.value} />,
+    },
+    {
+      field: 'created_at',
+      headerName: 'Created',
+      width: 120,
+      valueFormatter: (value) => fmtDate(value),
+    },
+    ...(isAdmin
+      ? [
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 100,
+            sortable: false,
+            renderCell: (params) => (
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton size="small" onClick={() => handleEdit(params.row)}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => setDeleteConfirm(params.row.id)}
+                  sx={{ color: 'error.main' }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ),
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <PageContainer>
-      <PageHeader
+    <>
+      <FilteredDataGrid
         title="SBTi Targets"
+        subtitle={`${filteredTargets.length} of ${targets.length} targets`}
         description="Science-Based Targets initiative (SBTi) reduction goals. Define absolute or intensity targets per scope, set base/target years, and track progress toward Paris-aligned decarbonization."
         actions={
           <Stack direction="row" spacing={1}>
-            <IconButton onClick={loadData} size="small" sx={{ mr: 0.5 }}>
+            <IconButton onClick={loadData} size="small" aria-label="Refresh targets">
               <RefreshIcon />
             </IconButton>
             {isAdmin && (
-              <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
+              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreate}>
                 New Target
               </Button>
             )}
           </Stack>
         }
+        rows={filteredTargets}
+        loading={loading}
+        columns={columns}
+        countLabel={`${filteredTargets.length} of ${targets.length} targets`}
+        searchValue={searchText}
+        onSearchChange={setSearchText}
+        filterDefs={[]}
+        onClearFilters={() => setSearchText('')}
+        emptyMessage="No SBTi targets found"
+        emptySubtext="Try adjusting your search"
       />
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      {/* Table */}
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead sx={{ bgcolor: 'action.hover' }}>
-            <TableRow>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>ID</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Name</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
-                <Tooltip title="The organisational unit responsible for meeting this target." arrow>
-                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Org Unit</Typography>
-                </Tooltip>
-              </TableCell>
-              <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
-                <Tooltip title="The baseline year against which emission reductions are measured." arrow>
-                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Base Year</Typography>
-                </Tooltip>
-              </TableCell>
-              <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
-                <Tooltip title="The deadline year by which the target must be achieved." arrow>
-                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Target Year</Typography>
-                </Tooltip>
-              </TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
-                <Tooltip title="Absolute = total tCO₂e reduction. Intensity = per-unit reduction (e.g., tCO₂e / MWh)." arrow>
-                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Type</Typography>
-                </Tooltip>
-              </TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
-                <Tooltip title="Which GHG Protocol scope(s) this target covers." arrow>
-                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Scope</Typography>
-                </Tooltip>
-              </TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
-                <Tooltip title="Targeted reduction as a percentage from base year emissions." arrow>
-                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Reduction</Typography>
-                </Tooltip>
-              </TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>
-                <Tooltip title="Draft = planning, Committed = pledged, Approved = officially validated." arrow>
-                  <Typography component="span" sx={{ fontSize: 'inherit', fontWeight: 'inherit' }}>Status</Typography>
-                </Tooltip>
-              </TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Created</TableCell>
-              {isAdmin && <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Actions</TableCell>}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {targets.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={isAdmin ? 11 : 10} align="center" sx={{ py: 3, color: 'text.secondary' }}>
-                  No SBTi targets found. Click "New Target" to create one.
-                </TableCell>
-              </TableRow>
-            ) : (
-              targets.map((t) => (
-                <TableRow key={t.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{t.id}</TableCell>
-                  <TableCell sx={{ ...FONT.body, fontWeight: 500 }}>{t.name}</TableCell>
-                  <TableCell sx={{ ...FONT.body }}>{t.org_unit_name || t.org_unit || '—'}</TableCell>
-                  <TableCell align="center" sx={{ ...FONT.body }}>{t.base_year || '—'}</TableCell>
-                  <TableCell align="center" sx={{ ...FONT.body }}>{t.target_year || '—'}</TableCell>
-                  <TableCell><TypeChip value={t.target_type} /></TableCell>
-                  <TableCell><ScopeChip value={t.scope} /></TableCell>
-                  <TableCell><ReductionBar value={t.reduction_pct} /></TableCell>
-                  <TableCell><StatusChip value={t.status} /></TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{fmtDate(t.created_at)}</TableCell>
-                  {isAdmin && (
-                    <TableCell align="center">
-                      <IconButton size="small" onClick={() => handleEdit(t)} title="Edit">
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => setDeleteConfirm(t.id)}
-                        sx={{ color: 'error.main' }}
-                        title="Delete"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* Create/Edit Drawer */}
-      <TargetsDrawer
+      {/* Create/Edit Dialog (modal — design system primitive) */}
+      <TargetsDialog
         open={drawerOpen}
         target={currentTarget}
         onSave={handleSave}
@@ -517,30 +518,15 @@ export default function SBTiTargetsPage() {
       />
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Delete Target?</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ ...FONT.body }}>This action cannot be undone.</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-          <Button onClick={() => handleDelete(deleteConfirm)} variant="contained" color="error">
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Snackbar */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </PageContainer>
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete Target?"
+        message="This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => handleDelete(deleteConfirm)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
+    </>
   );
 }

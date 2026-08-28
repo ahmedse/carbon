@@ -16,6 +16,7 @@ import {
   Chip,
   useTheme,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import Co2Icon from '@mui/icons-material/Co2';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import LayersIcon from '@mui/icons-material/Layers';
@@ -108,20 +109,22 @@ function AppCard({ app }) {
 }
 
 function NoAppsPlaceholder() {
+  const { t } = useTranslation('shell');
   return (
     <Box sx={{ textAlign: 'center', py: 8 }}>
       <Typography variant="h5" color="text.secondary" gutterBottom>
-        No Applications Available
+        {t('ui.noAppsAvailable')}
       </Typography>
       <Typography variant="body2" color="text.secondary">
-        Contact your administrator to get access to domain applications.
+        {t('ui.noAppsSubtext')}
       </Typography>
     </Box>
   );
 }
 
 export default function PlatformHome() {
-  useDocumentTitle("Platform");
+  const { t } = useTranslation('shell');
+  useDocumentTitle(t('ui.platformTitle'));
   const { availablePerspectives, user, context, loading, userCapabilities } = useAuth();
   const { isAppEnabled } = useEnabledApps();
 

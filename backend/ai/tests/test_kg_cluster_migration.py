@@ -128,7 +128,7 @@ async def _roundtrip_crud(db, instance_id: str = "carbon") -> None:
 # ── Tests ────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_node_edge_crud_roundtrip_is_durable(django_store, cfg):
     """Node/edge CRUD lands in PostgreSQL via the Django Store.
 
@@ -147,7 +147,7 @@ def test_node_edge_crud_roundtrip_is_durable(django_store, cfg):
     assert not KnowledgeEdge.objects.filter(id=edge.id).exists()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_store_table_profile_persists_profile_keys(django_store, cfg):
     """store_table_profile merges profile keys into the ENTITY node's props."""
     from ai.engine.knowledge_graph.data_profiler import ColumnProfile, TableProfile
@@ -209,7 +209,7 @@ def test_store_table_profile_persists_profile_keys(django_store, cfg):
     asyncio.run(_run())
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_run_schema_analysis_runs_and_is_idempotent(django_store, cfg):
     """run_schema_analysis returns a summary and skips on a second run."""
     from ai.engine.knowledge_graph.schema_analyzer import run_schema_analysis
@@ -260,7 +260,7 @@ def test_run_schema_analysis_runs_and_is_idempotent(django_store, cfg):
     asyncio.run(_run())
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dispatch_schema_analyze_completed_with_schema(django_store, cfg):
     """dispatch_task('carbon.schema.analyze') with a schema → completed + KG result."""
     from ai.engine_runtime import dispatch_task
@@ -293,7 +293,7 @@ def test_dispatch_schema_analyze_completed_with_schema(django_store, cfg):
     assert bootstrap.get("attributes", 0) >= 2
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dispatch_schema_analyze_degrades_without_schema(django_store, cfg):
     """No schema supplied → deterministic analysis only, still completed."""
     from ai.engine_runtime import dispatch_task
@@ -315,7 +315,7 @@ def test_dispatch_schema_analyze_degrades_without_schema(django_store, cfg):
     assert (data2.get("result") or {}).get("kg_analysis") == {}
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cluster_imports_no_sqlalchemy(django_store, cfg):
     """Gate 5 literal check: migrated cluster files carry no SQLAlchemy refs.
 

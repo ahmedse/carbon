@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Box, IconButton, Tooltip } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight } from '@mui/icons-material';
 
 /**
@@ -15,6 +16,7 @@ const ResizableLayout = ({
   minAIPanelWidth = 320,
   maxAIPanelWidth = 600,
 }) => {
+  const { t } = useTranslation('common');
   const [aiPanelCollapsed, setAIPanelCollapsed] = useState(() => {
     const saved = localStorage.getItem('aiPanelCollapsed');
     return saved ? JSON.parse(saved) : false;
@@ -130,7 +132,7 @@ const ResizableLayout = ({
         }}
       >
         {/* Collapse/Expand Button */}
-        <Tooltip title={aiPanelCollapsed ? 'Expand AI Panel' : 'Collapse AI Panel'}>
+        <Tooltip title={aiPanelCollapsed ? t('expandAiPanel') : t('collapseAiPanel')}>
           <IconButton
             onClick={toggleAIPanel}
             sx={{

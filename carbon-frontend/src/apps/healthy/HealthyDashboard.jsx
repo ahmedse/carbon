@@ -3,6 +3,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Box, Button, Chip, Grid, Paper, Stack, Typography } from '@mui/material';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -31,7 +32,8 @@ const PIPELINES = [
 ];
 
 export default function HealthyDashboard() {
-  useDocumentTitle('Healthy Foods Factory');
+  const { t } = useTranslation('common');
+  useDocumentTitle(t('healthyFactoryName'));
   const navigate = useNavigate();
   const { token } = useAuth();
   const [summary, setSummary] = useState(null);
@@ -43,9 +45,9 @@ export default function HealthyDashboard() {
     setError(null);
     fetchHealthySummary(token)
       .then((data) => setSummary(data))
-      .catch((err) => setError(err?.message || 'Unable to load the Healthy dashboard.'))
+      .catch((err) => setError(err?.message || t('healthyDashboardError')))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     load();
@@ -55,20 +57,20 @@ export default function HealthyDashboard() {
 
   const kpis = useMemo(
     () => [
-      { title: 'Data pipelines', value: Object.keys(pipelines).length, color: 'primary', icon: <DashboardIcon /> },
-      { title: 'Snapshots complete', value: summary?.snapshots_done ?? 0, color: 'success', icon: <CheckCircleOutlineIcon /> },
-      { title: 'Forecasts ready', value: summary?.predictions ?? 0, color: 'info', icon: <InsightsIcon /> },
-      { title: 'Loadout sheets', value: summary?.loadout_sheets ?? 0, color: 'warning', icon: <TableChartIcon /> },
-      { title: 'Rep health cards', value: summary?.rep_health_cards ?? 0, color: 'primary', icon: <PeopleIcon /> },
-      { title: 'Dataset versions', value: summary?.dataset_versions ?? 0, color: 'success', icon: <StorageIcon /> },
+      { title: t('kpiDataPipelines'), value: Object.keys(pipelines).length, color: 'primary', icon: <DashboardIcon /> },
+      { title: t('kpiSnapshotsComplete'), value: summary?.snapshots_done ?? 0, color: 'success', icon: <CheckCircleOutlineIcon /> },
+      { title: t('kpiForecastsReady'), value: summary?.predictions ?? 0, color: 'info', icon: <InsightsIcon /> },
+      { title: t('kpiLoadoutSheets'), value: summary?.loadout_sheets ?? 0, color: 'warning', icon: <TableChartIcon /> },
+      { title: t('kpiRepHealthCards'), value: summary?.rep_health_cards ?? 0, color: 'primary', icon: <PeopleIcon /> },
+      { title: t('kpiDatasetVersions'), value: summary?.dataset_versions ?? 0, color: 'success', icon: <StorageIcon /> },
     ],
-    [pipelines, summary],
+    [pipelines, summary, t],
   );
 
   if (loading) {
     return (
       <PageContainer>
-        <PageHeader icon={DashboardIcon} title="Healthy Foods Factory" subtitle="Operational health overview" />
+        <PageHeader icon={DashboardIcon} title={t('healthyFactoryName')} subtitle={t('healthyOverview')} />
         <LoadingSkeleton variant="console" />
       </PageContainer>
     );
@@ -77,7 +79,7 @@ export default function HealthyDashboard() {
   if (error) {
     return (
       <PageContainer>
-        <PageHeader icon={DashboardIcon} title="Healthy Foods Factory" subtitle="Operational health overview" />
+        <PageHeader icon={DashboardIcon} title={t('healthyFactoryName')} subtitle={t('healthyOverview')} />
         <ErrorAlert message={error} onRetry={load} />
       </PageContainer>
     );
@@ -86,11 +88,11 @@ export default function HealthyDashboard() {
   if (!summary) {
     return (
       <PageContainer>
-        <PageHeader icon={DashboardIcon} title="Healthy Foods Factory" subtitle="Operational health overview" />
+        <PageHeader icon={DashboardIcon} title={t('healthyFactoryName')} subtitle={t('healthyOverview')} />
         <EmptyState
           icon={<DashboardIcon />}
-          title="No dashboard data yet"
-          description="Once Healthy pipelines complete their first run, operational health metrics will appear here."
+          title={t('healthyNoData')}
+          description={t('healthyNoDataDesc')}
         />
       </PageContainer>
     );
@@ -100,9 +102,9 @@ export default function HealthyDashboard() {
     <PageContainer>
       <PageHeader
         icon={DashboardIcon}
-        title="Healthy Foods Factory"
-        subtitle="Operational health overview"
-        description="A single view of forecast, collections, and inventory health across the Healthy Foods operation."
+        title={t('healthyFactoryName')}
+        subtitle={t('healthyOverview')}
+        description={t('healthyDescription')}
       />
 
       <Stack spacing={2}>
@@ -115,7 +117,7 @@ export default function HealthyDashboard() {
         </Grid>
 
         <Box>
-          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 1 }}>Pipelines</Typography>
+          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 1 }}>{t('pipelines')}</Typography>
           <Stack spacing={1}>
             {PIPELINES.map((pipeline) => {
               const count = pipelines[pipeline.key] ?? 0;
@@ -129,12 +131,12 @@ export default function HealthyDashboard() {
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{pipeline.name}</Typography>
                     <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}>
-                      {ready ? `${count} snapshot${count === 1 ? '' : 's'} completed` : 'No snapshots yet'}
+                      {ready ? t('snapshotsCompleted', { count }) : t('noSnapshotsYet')}
                     </Typography>
                   </Box>
                   <Chip
                     size="small"
-                    label={ready ? pipeline.outcome : 'Awaiting data'}
+                    label={ready ? pipeline.outcome : t('awaitingData')}
                     color={ready ? 'success' : 'default'}
                     variant="outlined"
                   />
@@ -145,7 +147,7 @@ export default function HealthyDashboard() {
                       onClick={() => navigate(pipeline.path)}
                       sx={{ whiteSpace: 'nowrap' }}
                     >
-                      Open
+                      {t('open')}
                     </Button>
                   )}
                 </Paper>

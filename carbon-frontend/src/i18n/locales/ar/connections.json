@@ -1,0 +1,12 @@
+{
+  "pulseSectionTitle": "اتصال المساعد بالذكاء الاصطناعي",
+  "pulseStatus": "الحالة",
+  "pulseConnected": "متصل",
+  "pulseKey": "المفتاح",
+  "pulseDisconnect": "قطع الاتصال",
+  "pulseGenerateHint": "أنشئ مفتاح Pulse AI لتفعيل الميزات المدعومة بالذكاء الاصطناعي في سير عمل Carbon.",
+  "pulseGenerateKey": "إنشاء مفتاح Pulse",
+  "pulseNewKeyTitle": "مفتاح Pulse AI الخاص بك (احفظه في مكان آمن):",
+  "pulseKeyGenerated": "تم إنشاء مفتاح Pulse — وقد تم حفظه في هذا المتصفح.",
+  "pulseDisconnected": "تم فصل Pulse AI عن هذا المتصفح."
+}

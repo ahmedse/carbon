@@ -109,6 +109,12 @@ class Settings(BaseSettings):
     COGNITION_HEARTBEAT_INTERVAL: int = 60          # Phase H: supervisor liveness tick (seconds)
     COGNITION_HEARTBEAT_FILE: str = "/tmp/cognition_loop.heartbeat"  # Phase H: supervisor healthcheck target
 
+    # ── Intent Resolution (S1.5 — LLM-as-classifier, no local models) ──
+    INTENT_RESOLVER_ENABLED: bool = True    # run the LLM intent classifier on each turn
+    INTENT_RESOLVER_MODEL: str = ""         # override model; empty → introspect task lane
+    INTENT_RESOLVER_MIN_CONFIDENCE: float = 0.6  # below this → disambiguate/clarify instead of answer
+    INTENT_RESOLVER_AMBIGUITY_GAP: float = 0.15  # top-2 candidate gap below this → ambiguous
+
     # ── Consolidation Sweep (P4.2) ──
     CONSOLIDATION_SWEEP_MAX_LLM_CALLS: int = 10        # max LLM calls per sweep
     CONSOLIDATION_SWEEP_MIN_CONFIDENCE: float = 0.6     # min confidence to create a skill
@@ -295,6 +301,7 @@ class Settings(BaseSettings):
     _CHEAP_FALLBACK_MODEL = "anthropic/claude-haiku-4.5"
     _MODEL_FIELDS = (
         "LLM_MODEL", "LLM_NORMAL_MODEL", "LLM_COGNITION_MODEL", "LLM_INTROSPECT_MODEL",
+        "INTENT_RESOLVER_MODEL",
     )
 
     @field_validator("DEFAULT_AUTONOMY_LEVEL")

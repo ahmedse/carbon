@@ -4758,17 +4758,52 @@ Gate: lint + vitest + build + `verify.sh frontend`; key-parity script `node scri
 
 ## I18N-3: Core apps — catalog + mdm + dq + dataschema (frontend-worker, per-app sub-phases)
 
-**Status:** READY — remaining (pages live in `src/pages/{catalog,dq,dataschema}`, not `src/apps/*`)
+**Status:** DONE (verified by master-architect 2026-08-28) — dispatched to
+frontend-worker; all gates green: lint 0 errors/29 warnings, key-parity **2098
+keys (en===ar)**, full-suite vitest 898 passed (8 pre-existing AI/route failures
+proven identical with worker changes stashed — NOT regressions), build ✓,
+`verify.sh frontend` GATE PASSED (83 paths / 17 namespace roots), RTL manual
+smoke ✓ (DQ Workspace + table DQ Rules tab verified Arabic).
 
 `src/apps/catalog/*`, `src/apps/mdm/*`, `src/apps/dq/*`, `src/apps/dataschema/*` pages, dialogs, tables, forms → `t()` with namespaces `catalog`, `mdm`, `dq`, `dataschema`. RTL-correct markup only (logical props; MUI handles most via theme). Arabic catalogs for each namespace. Charts/data tables: numerals stay Latin; tooltips localized.
 
-Gate: per-app lint + vitest + build; key-parity zero-missing; RTL manual smoke per app (no clipped text — Arabic is ~25-40% longer in some strings, allow flexible widths; no directionally-broken icons).
+Delivered (actual paths, per spec-stale-note): `src/pages/dq/*` (DQWorkspacePage,
+RuleDetailPage, tabs ×9 → `dq` ns) + `src/pages/dataschema/*` (RowDetailPage,
+RowOverviewTab, RowEditTab, metrics tabs ×3 → `dataschema` ns) — 18 files; new
+namespaces `dq` (**358 keys**) + `dataschema` (**104 keys**) in `en`/`ar`,
+registered in `index.js` + vitest mock (13 namespaces total). Dual-map pattern in
+`dq/constants.js`: English `*_LABELS` maps stay (consumed by out-of-scope pages),
+new `*_LABEL_KEYS` maps + `ruleTypeLabel`/`ruleLevelLabel`/`dimensionLabel`/
+`severityLabel`/`jobTypeLabel`/`jobStatusLabel`/`fieldTypeLabel` helpers
+`(t, key) => t(KEYS[key] || key)`. `catalog.json` +24 keys (en+ar) for the table
+DQ Rules tab. DQRulesTab gap closed: literal label maps migrated to tDq helpers
+(fieldType section +9 keys ×2 locales).
+
+Gate: same as I18N-3 + full-suite vitest + build + `verify.sh frontend`. Details:
+`docs/TASK-RESULTS-17-I18N-DUAL-LANG.md`.
 
 ## I18N-4: Hosted + tools — emissions, evidence, connections, importexport (frontend-worker)
 
-**Status:** READY — remaining (evidence/import live in `src/components/{evidence,import}`)
+**Status:** DONE (verified by master-architect 2026-08-28) — dispatched to
+frontend-worker; all gates green: lint 0 errors/29 warnings, key-parity **1636
+keys (en===ar)**, full-suite vitest 898 passed (8 pre-existing AI/route failures
+proven identical with worker changes stashed — NOT regressions), build ✓,
+`verify.sh frontend` GATE PASSED (83 paths / 17 namespace roots).
 
 Same pattern as I18N-3 for `src/apps/emissions/*`, `src/apps/evidence/*`, `src/apps/connections/*`, `src/apps/importexport/*` (namespaces `emissions`, `evidence`, `connections`, `importexport`). Also `src/components/` shared dialogs and `src/pages/*` root pages (dashboard/health/404) → `common`/`shell`.
+
+Delivered (actual paths, per spec-stale-note): `src/pages/emissions/*` (7 pages)
++ `EmissionsDashboard`/`EmissionsReport`/`ScopeInfoPage` → `emissions` (297 keys);
+`src/components/evidence/*` → `evidence` (18); `src/components/import/*` →
+`importexport` (37); `SettingsPage` Pulse section → `connections` (10);
+`NotFound`/`PlatformHome`/`AnalyticsDashboard`/healthy app → `common`/`shell`;
+shared components (`DataTableGrid`, `FilteredDataGrid`, `DataRowFormDrawer`,
+`TableDataPage`, `BulkActionBar`, `FileCellRenderer`, `GridActionCell`,
+`NetworkStatusBanner`, `ResizableLayout`, `MicroHelp`, `ChunkLoadError`) →
+`common`/`shell`/`errors`. New namespaces registered in `index.js` + vitest mock.
+`ConnectionsPage.jsx` left on `catalog` ns (already migrated); `McpServersPanel`
+left unmigrated (matches sibling admin/ai convention). Details:
+`docs/TASK-RESULTS-17-I18N-DUAL-LANG.md`.
 
 Gate: same as I18N-3 + full-suite vitest + build + `verify.sh frontend`.
 
@@ -4809,7 +4844,7 @@ Deferred to W7-B: directional-icon flip (~92 matches/40 files, 90% W7-B dirty)
 **Date:** 2026-08-27
 **Worker Role:** backend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY
+**Status:** DONE — verified by master-architect 2026-08-28: implementation (from prior run, spec-conformant per backend-worker audit) + fresh gates all green: `manage.py check` clean, `makemigrations --check --dry-run` "No changes detected", 12/12 `test_inventory_coverage.py` passed, 7/7 `test_targets.py` regression, 337 accounts passed, `verify.sh backend` GATE PASSED, live smoke: all 5 new routes resolve (`/carbon-api/carbon/{inventory-sources,inventory-source-statuses,coverage-goals,coverage-actions,coverage}/` → 401 unauth). Migration `0013_inventorysource_coverageaction_inventorysourcestatus_and_more` (migrate = deploy step via `./manage.sh migrate`).
 **Depends on:** nothing (greenfield — grep confirms no InventorySource/CoverageGoal exists yet)
 
 **Files to Read First:**
@@ -5189,7 +5224,7 @@ Register all 4 with `list_display`/`list_filter`/`search_fields`/`ordering` matc
 **Date:** 2026-08-27
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** READY (after 28-A backend green)
+**Status:** DONE — implementation (from prior run) verified + documented by master-architect 2026-08-28: full compliance audit vs .ai-toolkit (ReadAnyWriteAdmin backend pattern, canonical shell, RULE_8/10/15/16/17, getRowId, 4 data states, org-scoping) — no violations. Frontend gates all green: lint 0 errors/29 warnings (baseline), build ✓, vitest 3/3 (touched pages), verify.sh frontend GATE PASSED (82 paths / 17 namespace roots). Implementation uses Phase 29 canonical shell (StandardDataGrid + SystemDialog + ConfirmDialog) — supersedes spec's SBTiTargetsPage reference. i18n deferred to I18N-4 (consistent with all emissions pages).
 **Depends on:** Phase 28-A (API contract above)
 
 **Files to Read First:**
@@ -5231,13 +5266,219 @@ Register all 4 with `list_display`/`list_filter`/`search_fields`/`ordering` matc
 
 Gate: ALL green — lint, vitest, build, verify.sh frontend, pytest smoke, E2E both languages, key parity.
 
+---
+
+## Phase 29 — Carbon Admin CRUD Standardization (frontend-worker)
+
+**Date:** 2026-08-28
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE — 5/5 pages converted, all gates green (verified by master-architect 2026-08-28)
+**Scope:** frontend only — NO backend, NO API, NO model/migration changes. One domain (admin CRUD shells), one concern (deduplicate the hand-rolled list/form shell).
+
+**Goal:** The five Carbon admin CRUD pages each hand-roll the same `MUI Table` + `Drawer` + `Dialog` + `Snackbar` shell (~300 lines each, 5× duplication). Replace that shell with the canonical `FilteredDataGrid` + `SystemDialog` + `ConfirmDialog` composition already shipped in `EmissionFactorsPage` and `GWPReferencePage`. This enforces design-system.md RULE 2 (reuse before create) and RULE 12 (consistency), while preserving every existing route, capability, API call, field, and behavior.
+
+**Registry-first (base-rules.md §5):** every primitive already exists — `FilteredDataGrid`, `SystemDialog`, `ConfirmDialog`, `StandardDataGrid`, `PageContainer`, `PageHeader`, `EmptyState`, `ErrorAlert`, `LoadingSkeleton`. **Do NOT create any new component or hook.**
+
+### Files to Read First
+- `carbon-frontend/src/pages/emissions/EmissionFactorsPage.jsx` — REFERENCE (FilteredDataGrid + SystemDialog + ConfirmDialog)
+- `carbon-frontend/src/pages/emissions/GWPReferencePage.jsx` — REFERENCE (same shell, simpler single entity)
+- `carbon-frontend/src/components/FilteredDataGrid.jsx` — exact props contract (title, subtitle, description, actions, rows, loading, columns, countLabel, searchValue, onSearchChange, filterDefs, filterValues, onFilterChange, onClearFilters, emptyMessage, emptySubtext)
+- `carbon-frontend/src/components/SystemDialog.jsx` — form dialog props contract
+- `carbon-frontend/src/components/ConfirmDialog.jsx` — delete/confirm props contract
+- `carbon-frontend/src/components/StandardDataGrid.jsx` — columns/rows/getRowId contract
+- `.ai-toolkit/shared/design-system.md` (RULE 1–12), `.ai-toolkit/shared/compact-ui.md`, `.ai-toolkit/shared/ux-patterns.md` (getRowId rule)
+
+### Files to Change (exact, convert in this order — lint after EACH page)
+1. `carbon-frontend/src/pages/carbon/SBTiTargetsPage.jsx`
+2. `carbon-frontend/src/pages/carbon/OrganizationalBoundariesPage.jsx`
+3. `carbon-frontend/src/pages/carbon/BaseYearsPage.jsx`
+4. `carbon-frontend/src/pages/carbon/InventoryCoveragePage.jsx`
+5. `carbon-frontend/src/pages/emissions/CalculationRulesPage.jsx`
+
+### Implementation (per page)
+- Keep the existing `useDocumentTitle`, `useAuth`/token, and existing API calls (`emissions-extended.js` fns / `fetchCalculationRules`) unchanged — only the render shell changes.
+- Replace `Table`/`TableHead`/`TableRow`/`Drawer` with `<FilteredDataGrid rows={...} columns={...} actions={...} />`; replace the in-Drawer form with `<SystemDialog>`; replace inline delete confirmation with `<ConfirmDialog>`.
+- Preserve page-specific features verbatim:
+  - `BaseYearsPage`: the "Trigger Base Year Recalculation" flow and the `never` recalc option stay (recalc becomes an `actions` button + its own `SystemDialog`/`ConfirmDialog`, NOT a separate Drawer).
+  - `InventoryCoveragePage`: keep the coverage-summary header cards, the reporting-period selector, and the Sources/Statuses/Goals/Actions sections; render each section's table via `FilteredDataGrid` (or `StandardDataGrid` inside a tabbed layout per RULE 17 — MUI Tabs + Tab, no drawer-entries).
+  - `CalculationRulesPage`: keep the execute/run action and `notifyFromError`; render the rule list via `FilteredDataGrid` with execute as a deliberate row action (design-principles.md #11 — row click highlights only, actions are explicit buttons).
+- Every color via `theme.palette.*`, spacing via `spacing()`/`Stack`/`Grid gap`, zero hardcoded hex, `density="compact"` on grids, all four data states (loading/error/empty/loaded) covered.
+- Pass `getRowId={(row) => row.id}` (or the entity's real pk) explicitly per ux-patterns.md.
+
+### DO NOT TOUCH
+- `backend/**` — any file (pure frontend phase)
+- `carbon-frontend/src/api/api.js`, `src/auth/**`, `src/theme/**` (consume tokens only)
+- `carbon-frontend/src/capabilities.js`, `src/config.js`, `src/apps/carbon/manifest.js`, `src/App.jsx` (routes/caps/menu already wired)
+- `carbon-frontend/src/components/FilteredDataGrid.jsx`, `SystemDialog.jsx`, `ConfirmDialog.jsx`, `StandardDataGrid.jsx`
+- Existing tests `src/__tests__/authz.test.jsx`, `src/__tests__/cbac.test.jsx` (route/capability mapping must stay green)
+- `docs/**`, `.ai-toolkit/**`
+
+### Verification Gate (frontend-worker MUST run — paste terminal output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint                       # 0 new errors (baseline pre-existing allowed, no regressions)
+npx vitest run src/__tests__/authz.test.jsx
+npx vitest run src/__tests__/cbac.test.jsx
+npm run build                      # clean, once per phase (MASTER DIRECTIVE)
+cd /home/ahmed/aast/carbon
+./.ai-toolkit/scripts/verify.sh frontend
+```
+Report in `TASK-RESULTS.md`: files changed, per-page "converted / behavior preserved" notes, and the gate output. `DONE` requires all green with output pasted.
+
+### Audit checkpoint (master-architect, 2026-08-28)
+- ✅ `SBTiTargetsPage.jsx` — converted (FilteredDataGrid + SystemDialog + ConfirmDialog), eslint clean
+- ✅ `OrganizationalBoundariesPage.jsx` — converted, eslint clean
+- ✅ `BaseYearsPage.jsx` — converted, recalc flow + `never` option preserved (RecalculateDialog), eslint clean
+- ✅ `InventoryCoveragePage.jsx` — converted (StandardDataGrid + Tabs per RULE 17, coverage summary/period selector/sections preserved), eslint clean
+- ❌ `CalculationRulesPage.jsx` — BROKEN mid-conversion: dialogs already converted to SystemDialog (RulesDialog, ExecuteDialog) but main render still uses legacy `TableContainer/Table/TableHead`, undefined `RulesDrawer` (should be `RulesDialog`), inline `Dialog` delete, `Snackbar`. ESLint: 2 errors (`useMemo` unused at 6:41, `Paper` undefined at 435:34). → Phase 29-C
+
+---
+
+## Phase 29-C — Finish `CalculationRulesPage.jsx` conversion (frontend-worker)
+
+**Date:** 2026-08-28
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE — executed by master-architect (user directive "dispatch yourself"); all gates green, results in TASK-RESULTS.md
+**Scope:** ONE file — `carbon-frontend/src/pages/emissions/CalculationRulesPage.jsx`. Do not touch the other four pages (already converted + lint-clean).
+
+**Goal:** Complete the half-finished conversion to the canonical shell. Current state: `RulesDialog` and `ExecuteDialog` are already `SystemDialog`-based, but the main render still has the legacy shell with broken references.
+
+### Exact remaining work (in order)
+1. **Render the rule list with `FilteredDataGrid`** (already imported at line 30). Replace the `TableContainer/Table/TableHead/TableBody` block (L435–~470) with:
+   ```jsx
+   <FilteredDataGrid
+     title="Calculation Rules"
+     subtitle={`${rules.length} rule${rules.length === 1 ? '' : 's'}`}
+     actions={isAdmin ? (
+       <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreate}>New Rule</Button>
+     ) : undefined}
+     rows={rules}
+     columns={columns}
+     loading={loading}
+     getRowId={(row) => row.id}
+     emptyMessage="No calculation rules found"
+     emptySubtext={isAdmin ? 'Click "New Rule" to create one.' : 'Contact an administrator to add items.'}
+   />
+   ```
+   Build the `columns` array (useMemo) with the SAME fields as the current Table: ID, Name, Data Table, Activity Field, Emission Factor, Factor Code, Rule Type (`RuleTypeChip`), Active (Chip), Auto-Calc (Chip), Last Executed, and an Actions column (only `isAdmin`) with Edit / Execute (`PlayArrowIcon`, `setExecutingRule`+`setExecuteOpen`) / Delete (`setDeleteConfirm(rule.id)`) IconButtons — mirror `EmissionFactorsPage.jsx` `actions` renderer exactly.
+2. **Fix the broken `RulesDrawer` reference** (L~476) → `RulesDialog` (the component that exists in this file).
+3. **Replace the inline delete `Dialog`** (L~490–507) with `<ConfirmDialog open={!!deleteConfirm} title="Delete Rule?" message="This action cannot be undone." confirmLabel="Delete" onClose={() => setDeleteConfirm(null)} onConfirm={() => handleDelete(deleteConfirm)} />` (already imported at line 31).
+4. **Replace the `Snackbar`** (L~510–523) with `notify`/`notifyFromError` from `useNotification` (already in scope): in `handleExecute`, replace `setSnackbar({...})` with `notify({ message: ..., type: 'success' })` / `notifyFromError(err, 'Execution failed')`, then DELETE the `snackbar` state + `Snackbar` JSX + now-unused imports (`Snackbar`, `Alert`, `Paper`, `TableContainer`, `Table`, `TableHead`, `TableRow`, `TableCell`, `TableBody`, `Dialog`, `DialogTitle`, `DialogContent`, `DialogActions`, `InboxIcon` if unused, `useMemo` if unused — keep it if the `columns` array uses it).
+5. Keep: `ExecuteDialog` (SystemDialog-based), `handleExecute`, `notifyFromError`, `loadData`, `useDocumentTitle`, `useAuth`, all `emissions-extended.js` API calls, and the `error` Alert.
+
+### Files to Read First
+- `carbon-frontend/src/pages/emissions/EmissionFactorsPage.jsx` — REFERENCE for FilteredDataGrid columns/actions pattern
+- `carbon-frontend/src/components/FilteredDataGrid.jsx` — props contract
+- `carbon-frontend/src/components/ConfirmDialog.jsx` — props contract
+- Current `carbon-frontend/src/pages/emissions/CalculationRulesPage.jsx` (the broken file)
+
+### DO NOT TOUCH
+- The other four Phase 29 pages, `backend/**`, `api.js`, `auth/**`, `theme/**`, `capabilities.js`, `config.js`, `manifest.js`, `App.jsx`, shared components, tests, `docs/**`, `.ai-toolkit/**`
+
+### Verification Gate (frontend-worker MUST run — paste terminal output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx eslint src/pages/emissions/CalculationRulesPage.jsx   # → 0 errors
+npm run lint                                              # → no new errors vs baseline
+npx vitest run src/__tests__/authz.test.jsx
+npx vitest run src/__tests__/cbac.test.jsx
+npm run build                                             # → clean
+cd /home/ahmed/aast/carbon
+./.ai-toolkit/scripts/verify.sh frontend
+```
+Report in `TASK-RESULTS.md`: the final diff of `CalculationRulesPage.jsx`, behavior-preservation notes (execute action, archived-notify on delete, notifyFromError), and the gate output. `DONE` requires all green with output pasted.
+
+---
+
+## Phase 30-A — Backend: complete `ROUTE_CAPABILITY_MAP` (missing carbon admin routes)
+
+**Date:** 2026-08-28
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE — verified by master-architect 2026-08-28: 3 entries added to `ROUTE_CAPABILITY_MAP` (`boundaries`/`base-years` → `carbon:manage_reporting_periods`, `inventory-coverage` → `carbon:manage_inventory_coverage`), 337 accounts tests passed, live JWT spot-check of all 4 carbon admin routes → accessible_routes True. Results in `TASK-RESULTS.md`.
+**Scope:** backend only — one file, no models, no migrations, no API surface change.
+
+**Context:** `me_context` builds an `authz.accessible_routes` manifest from `ROUTE_CAPABILITY_MAP` in `backend/accounts/views.py`. That map is missing three carbon admin routes that already exist in the router, the frontend `ROUTE_CAPABILITIES` (capabilities.js), and the `AdminRoute` guards: `/carbon/admin/boundaries`, `/carbon/admin/base-years`, `/carbon/admin/inventory-coverage`. Consequence: a **non-superuser** `carbon_lead` (who has `carbon:manage_reporting_periods` / `carbon:manage_inventory_coverage`) is NOT granted these routes in the manifest — a latent RBAC-correctness gap. Superusers are unaffected (global-admin wildcard), which is why `ahmed` works today.
+
+### Files to Read First
+- `backend/accounts/views.py` — `ROUTE_CAPABILITY_MAP` (~L43) + `_resolve_authz_manifest` (~L69)
+- `backend/accounts/capabilities.py` — capability keys to reference
+- `carbon-frontend/src/capabilities.js` — `ROUTE_CAPABILITIES` (authoritative route→cap list; mirror it)
+
+### Files to Change
+- `backend/accounts/views.py` — add exactly three entries to `ROUTE_CAPABILITY_MAP`:
+  - `'/carbon/admin/boundaries': 'carbon:manage_reporting_periods'`
+  - `'/carbon/admin/base-years': 'carbon:manage_reporting_periods'`
+  - `'/carbon/admin/inventory-coverage': 'carbon:manage_inventory_coverage'`
+  (Insert alphabetically/consistently alongside the existing `/carbon/admin/*` entries.)
+
+### DO NOT TOUCH
+- `backend/accounts/capabilities.py`, `backend/accounts/rbac_utils.py`, `backend/accounts/models.py`
+- Any frontend file; any other backend app.
+
+### Verification Gate (backend-worker MUST run — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check                       # → "System check identified no issues"
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest accounts -q --maxfail=5 --disable-warnings -p no:cacheprovider   # → green
+```
+Report: confirm the three routes now appear in `authz.accessible_routes` for a `carbon_lead` (spot-check via `me_context`), plus the gate output.
+
+---
+
+## Phase 30-B — Frontend: refetch `me_context` on every mount (stale-cache fix)
+
+**Date:** 2026-08-28
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE — verified by master-architect 2026-08-28: `AuthContext.jsx` now re-fetches `me_context` on mount keyed by `user?.id` (replaces `availablePerspectives.length === 0` gate), 296 vitest passed, clean build. Results in `TASK-RESULTS.md`.
+**Scope:** frontend only — one file, no new components.
+
+**Context:** `AuthContext.fetchPerspectiveContext` (which stores `capabilities`, `is_global_admin`, `perspectives` into state + localStorage) is only invoked when `availablePerspectives.length === 0`. On a reload with a logged-in user, the persisted perspectives are non-empty, so `me_context` is **never re-fetched** — server-side role/capability changes (promotion, demotion, new app grants) go stale indefinitely and only a full logout clears them. This is the root cause of "I can't see Configuration" for users whose grants changed.
+
+### Files to Read First
+- `carbon-frontend/src/auth/AuthContext.jsx` — the `useEffect` at ~L111 (`if (user && !availablePerspectives?.length)`) and `fetchPerspectiveContext` (~L47)
+- `carbon-frontend/src/capabilities.js`, `carbon-frontend/src/authz.js` (consumers of the cached flags — no change needed)
+
+### Files to Change
+- `carbon-frontend/src/auth/AuthContext.jsx` — replace the conditional effect so a logged-in user ALWAYS re-fetches `me_context` on mount, keyed by `user?.id` (NOT `availablePerspectives.length`, to avoid a re-render loop):
+  ```jsx
+  useEffect(() => {
+    if (user) {
+      fetchPerspectiveContext(user.token).catch(() => {
+        console.warn("Failed to refresh perspective context on reload");
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+  ```
+  Keep `fetchPerspectiveContext` behavior unchanged (it already persists to localStorage, so this only refreshes state).
+
+### DO NOT TOUCH
+- `carbon-frontend/src/api/api.js`, `src/capabilities.js`, `src/authz.js`, `src/theme/**`
+- Any backend file; any page component.
+
+### Verification Gate (frontend-worker MUST run — paste output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/authz.test.jsx
+npx vitest run src/__tests__/cbac.test.jsx
+npm run build
+```
+Report: confirm `me_context` is re-fetched on reload for a logged-in user (network tab / log), plus the gate output.
+
+---
+
 ## I18N dispatch order
-1. I18N-1 (foundation) — frontend-worker
-2. I18N-2 (shell+auth) — frontend-worker
-3. I18N-3 (core apps) — frontend-worker (per-app)
-4. I18N-4 (hosted+tools) — frontend-worker
-5. I18N-5 (ai chrome + backend prefs) — frontend-worker + backend-worker (parallel-safe: separate repos of files)
-6. I18N-6 (QA/audit/E2E) — qa-validator
+1. I18N-1 (foundation) — frontend-worker ✅
+2. I18N-2 (shell+auth) — frontend-worker ✅
+3. I18N-3 (core apps) — frontend-worker (per-app) ✅ (DONE 2026-08-28)
+4. I18N-4 (hosted+tools) — frontend-worker ✅ (DONE 2026-08-28)
+5. I18N-5 (ai chrome + backend prefs) — frontend-worker + backend-worker (parallel-safe: separate repos of files) — deep per-panel chrome REMAINING
+6. I18N-6 (QA/audit/E2E) — qa-validator ✅ (DONE 2026-08-27)
 Each phase requires the previous gate green before dispatch. Master Architect runs all terminal gates.
 
 
@@ -6089,7 +6330,7 @@ masking_strategy = models.CharField(max_length=20, choices=MASKING_STRATEGY_CHOI
 **Date:** 2026-08-26
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash
-**Status:** PLANNED
+**Status:** DONE — verified by master-architect 2026-08-28: frontend-worker implemented SchemaStructureTab access annotations (LockIcon + muted row for `access_denied`, VisibilityOffIcon + "Masked" chip + tooltip for `is_masked`), admin-only inline masking-strategy Select, `FieldPoliciesPanel.jsx` admin panel at `/admin/catalog/field-policies` (StandardDataGrid + SystemDialog + ConfirmDialog canonical shell, `DATASCHEMA_MANAGE` gate), `api/fieldPolicies.js` (apiFetch-only, defensive `.results` unwrap), 10 i18n keys (en+ar), route + ROUTE_CAPABILITIES + sidebar wired. Master fixed 1 lint error (unused `deleting` state). Gates: lint 0 errors/29 warnings (baseline), vitest 5/5, build ✓, verify.sh frontend GATE PASSED (83 paths / 17 namespace roots). Results in `TASK-RESULTS.md`.
 **Kind:** Frontend. Medium.
 **Depends on:** EPH-4A + EPH-4B done.
 

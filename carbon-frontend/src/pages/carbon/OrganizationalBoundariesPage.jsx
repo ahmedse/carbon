@@ -1,37 +1,21 @@
 // src/pages/carbon/OrganizationalBoundariesPage.jsx
 // GHG Protocol organizational boundaries — admin CRUD
-// Pattern: SBTiTargetsPage style — MUI Table, Drawer for create/edit, zero hardcoded hex
+// Canonical shell: FilteredDataGrid + SystemDialog + ConfirmDialog (see EmissionFactorsPage / GWPReferencePage)
+// All colours via theme.palette, zero hardcoded hex
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Drawer,
-  Alert,
   TextField,
   MenuItem,
-  CircularProgress,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Stack,
   IconButton,
-  Snackbar,
   Switch,
   FormControlLabel,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
-import PageContainer from '../../components/layout/PageContainer';
 import { FONT } from '../../theme/themeTokens';
 
 import AddIcon from '@mui/icons-material/Add';
@@ -39,7 +23,10 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useAuth } from '../../auth/AuthContext';
-import PageHeader from '../../components/Page/PageHeader';
+import { useNotification } from '../../components/NotificationProvider';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import SystemDialog from '../../components/SystemDialog';
 import {
   fetchOrganizationalBoundaries,
   createOrganizationalBoundary,
@@ -83,9 +70,9 @@ function ActiveChip({ value }) {
   );
 }
 
-// ── BoundaryDrawer ─────────────────────────────────────────────────────
+// ── BoundaryDialog ─────────────────────────────────────────────────────
 
-function BoundaryDrawer({ open, boundary, orgUnits, onSave, onClose }) {
+function BoundaryDialog({ open, boundary, orgUnits, onSave, onClose }) {
   const [form, setForm] = useState({
     name: '',
     consolidation_approach: 'operational_control',
@@ -122,11 +109,25 @@ function BoundaryDrawer({ open, boundary, orgUnits, onSave, onClose }) {
   const handleSubmit = () => onSave(form);
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 440, p: 3 }}>
-        <Typography variant="h5" sx={{ mb: 3 }}>
-          {boundary ? 'Edit Boundary' : 'New Boundary'}
-        </Typography>
+    <SystemDialog
+      open={open}
+      title={boundary ? 'Edit Boundary' : 'New Boundary'}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel="Cancel"
+      actions={
+        <Button variant="contained" size="small" onClick={handleSubmit}>
+          {boundary ? 'Update' : 'Create'}
+        </Button>
+      }
+      width={540}
+      height={560}
+      minWidth={420}
+      minHeight={420}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
         <Stack spacing={2}>
           <TextField
             label="Name"
@@ -183,17 +184,9 @@ function BoundaryDrawer({ open, boundary, orgUnits, onSave, onClose }) {
             }
             label="Active"
           />
-          <Stack direction="row" spacing={2} sx={{ pt: 1 }}>
-            <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
-              Cancel
-            </Button>
-            <Button variant="contained" onClick={handleSubmit} sx={{ flex: 1 }}>
-              {boundary ? 'Update' : 'Create'}
-            </Button>
-          </Stack>
         </Stack>
       </Box>
-    </Drawer>
+    </SystemDialog>
   );
 }
 
@@ -202,21 +195,21 @@ function BoundaryDrawer({ open, boundary, orgUnits, onSave, onClose }) {
 export default function OrganizationalBoundariesPage() {
   useDocumentTitle('Organizational Boundaries');
   const { user, token, availablePerspectives } = useAuth();
+  const { notify, notifyFromError } = useNotification();
+
   const [boundaries, setBoundaries] = useState([]);
   const [orgUnits, setOrgUnits] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [current, setCurrent] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [searchText, setSearchText] = useState('');
 
   const isAdmin = user?.is_staff || user?.is_superuser || (availablePerspectives || []).includes('carbon-admin');
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      setError(null);
       const [bData, ouData] = await Promise.all([
         fetchOrganizationalBoundaries(token),
         fetchOrgUnits(token),
@@ -224,11 +217,13 @@ export default function OrganizationalBoundariesPage() {
       setBoundaries(Array.isArray(bData) ? bData : bData?.results || []);
       setOrgUnits(Array.isArray(ouData) ? ouData : ouData?.results || []);
     } catch (err) {
-      setError(err.message || 'Failed to load organizational boundaries');
+      notifyFromError(err, 'Failed to load organizational boundaries');
+      setBoundaries([]);
+      setOrgUnits([]);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, notifyFromError]);
 
   useEffect(() => {
     loadData();
@@ -249,26 +244,27 @@ export default function OrganizationalBoundariesPage() {
     try {
       if (current) {
         await updateOrganizationalBoundary(current.id, payload, token);
+        notify({ message: 'Boundary updated', type: 'success' });
       } else {
         await createOrganizationalBoundary(payload, token);
+        notify({ message: 'Boundary created', type: 'success' });
       }
       setDrawerOpen(false);
       setCurrent(null);
-      setSnackbar({ open: true, message: 'Organizational boundary saved', severity: 'success' });
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to save boundary');
+      notifyFromError(err, 'Failed to save boundary');
     }
   };
 
   const handleDelete = async (id) => {
     try {
       await deleteOrganizationalBoundary(id, token);
+      notify({ message: 'Boundary deleted', type: 'success' });
       setDeleteConfirm(null);
-      setSnackbar({ open: true, message: 'Organizational boundary deleted', severity: 'success' });
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to delete boundary');
+      notifyFromError(err, 'Failed to delete boundary');
     }
   };
 
@@ -277,89 +273,109 @@ export default function OrganizationalBoundariesPage() {
     try { return new Date(d).toLocaleDateString(); } catch { return '—'; }
   };
 
-  if (loading) {
-    return (
-      <PageContainer sx={{ alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress />
-      </PageContainer>
-    );
-  }
+  const filteredBoundaries = useMemo(() => {
+    let filtered = boundaries;
+    if (searchText.trim()) {
+      const query = searchText.toLowerCase();
+      filtered = filtered.filter(
+        (b) =>
+          (b.name && b.name.toLowerCase().includes(query)) ||
+          (Array.isArray(b.included_org_units_names) &&
+            b.included_org_units_names.some((n) => n && n.toLowerCase().includes(query)))
+      );
+    }
+    return filtered;
+  }, [boundaries, searchText]);
+
+  const columns = [
+    { field: 'id', headerName: 'ID', width: 70 },
+    { field: 'name', headerName: 'Name', flex: 1, minWidth: 180 },
+    {
+      field: 'consolidation_approach',
+      headerName: 'Approach',
+      width: 170,
+      renderCell: (params) => <ApproachChip value={params.value} />,
+    },
+    {
+      field: 'included_org_units_names',
+      headerName: 'Included Org Units',
+      flex: 1,
+      minWidth: 220,
+      valueGetter: (value, row) =>
+        Array.isArray(row.included_org_units_names) && row.included_org_units_names.length
+          ? row.included_org_units_names.join(', ')
+          : '—',
+    },
+    {
+      field: 'is_active',
+      headerName: 'Status',
+      width: 100,
+      renderCell: (params) => <ActiveChip value={params.value} />,
+    },
+    {
+      field: 'created_at',
+      headerName: 'Created',
+      width: 120,
+      valueFormatter: (value) => fmtDate(value),
+    },
+    ...(isAdmin
+      ? [
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 100,
+            sortable: false,
+            renderCell: (params) => (
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton size="small" onClick={() => handleEdit(params.row)}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => setDeleteConfirm(params.row.id)}
+                  sx={{ color: 'error.main' }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ),
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <PageContainer>
-      <PageHeader
+    <>
+      <FilteredDataGrid
         title="Organizational Boundaries"
+        subtitle={`${filteredBoundaries.length} of ${boundaries.length} boundaries`}
         description="GHG Protocol organizational boundaries define which entities, assets, and operations are included in the GHG inventory and under which consolidation approach."
         actions={
           <Stack direction="row" spacing={1}>
-            <IconButton onClick={loadData} size="small" sx={{ mr: 0.5 }}>
+            <IconButton onClick={loadData} size="small" aria-label="Refresh boundaries">
               <RefreshIcon />
             </IconButton>
             {isAdmin && (
-              <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
+              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreate}>
                 New Boundary
               </Button>
             )}
           </Stack>
         }
+        rows={filteredBoundaries}
+        loading={loading}
+        columns={columns}
+        countLabel={`${filteredBoundaries.length} of ${boundaries.length} boundaries`}
+        searchValue={searchText}
+        onSearchChange={setSearchText}
+        filterDefs={[]}
+        onClearFilters={() => setSearchText('')}
+        emptyMessage="No organizational boundaries found"
+        emptySubtext="Try adjusting your search"
       />
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead sx={{ bgcolor: 'action.hover' }}>
-            <TableRow>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>ID</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Name</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Approach</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Included Org Units</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Status</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Created</TableCell>
-              {isAdmin && <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Actions</TableCell>}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {boundaries.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={isAdmin ? 7 : 6} align="center" sx={{ py: 3, color: 'text.secondary' }}>
-                  No organizational boundaries found. Click "New Boundary" to create one.
-                </TableCell>
-              </TableRow>
-            ) : (
-              boundaries.map((b) => (
-                <TableRow key={b.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{b.id}</TableCell>
-                  <TableCell sx={{ ...FONT.body, fontWeight: 500 }}>{b.name}</TableCell>
-                  <TableCell><ApproachChip value={b.consolidation_approach} /></TableCell>
-                  <TableCell sx={{ ...FONT.body }}>
-                    {b.included_org_units_names?.length ? b.included_org_units_names.join(', ') : '—'}
-                  </TableCell>
-                  <TableCell><ActiveChip value={b.is_active} /></TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{fmtDate(b.created_at)}</TableCell>
-                  {isAdmin && (
-                    <TableCell align="center">
-                      <IconButton size="small" onClick={() => handleEdit(b)} title="Edit">
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => setDeleteConfirm(b.id)}
-                        sx={{ color: 'error.main' }}
-                        title="Delete"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      <BoundaryDrawer
+      {/* Create/Edit Dialog (modal — design system primitive) */}
+      <BoundaryDialog
         open={drawerOpen}
         boundary={current}
         orgUnits={orgUnits}
@@ -367,29 +383,16 @@ export default function OrganizationalBoundariesPage() {
         onClose={() => setDrawerOpen(false)}
       />
 
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Delete Boundary?</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ ...FONT.body }}>This action cannot be undone.</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-          <Button onClick={() => handleDelete(deleteConfirm)} variant="contained" color="error">
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </PageContainer>
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete Boundary?"
+        message="This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => handleDelete(deleteConfirm)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
+    </>
   );
 }

@@ -745,3 +745,14 @@ export async function fetchCoverage({ reporting_period, org_unit } = {}, token) 
   const qs = params.toString();
   return apiFetch(`${API_ROUTES.emissionsCoverage}${qs ? `?${qs}` : ""}`, { token });
 }
+
+/**
+ * Fetch the chairman overview payload (single round-trip for the Tier-1 screen).
+ * GET /carbon/chairman/?reporting_period_id=<id>
+ */
+export async function fetchChairmanData({ reporting_period_id } = {}, token) {
+  const params = new URLSearchParams();
+  if (reporting_period_id) params.append("reporting_period_id", reporting_period_id);
+  const qs = params.toString();
+  return apiFetch(`${API_ROUTES.emissionsChairman}${qs ? `?${qs}` : ""}`, { token });
+}

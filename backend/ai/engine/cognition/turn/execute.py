@@ -473,6 +473,72 @@ def _safe_summary(result: dict) -> str:
         return str(result)[:500]
 
 
+def _build_tool_result_summary(completed_tools: list[dict]) -> str:
+    """Render a prose summary from executed tool results.
+
+    Used when the LLM drafts a tool-only turn (calls tools but emits no prose
+    text). Without this, the turn would be saved with empty content and appear
+    as a blank/"removed" message in the UI (GAP-W8 regression).
+
+    Handles the real pipeline shape (``result`` is a JSON string from
+    ``_safe_serialize``) as well as raw dict results. Deterministic and
+    side-effect free so it can be unit-tested directly.
+    """
+    if not completed_tools:
+        return ""
+
+    def _normalize(raw):
+        """Return a dict/list from a result payload (JSON string or object).
+
+        Also unwraps the host-executor envelope ``{"status_code": 200,
+        "data": ...}`` and nests one level (``data: {"results": [...]}``).
+        """
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, (dict, list)):
+                    raw = parsed
+            except (TypeError, ValueError):
+                pass
+        if isinstance(raw, dict) and "status_code" in raw and "data" in raw:
+            raw = raw.get("data")
+        if isinstance(raw, dict):
+            for key in ("data", "results", "items", "rows"):
+                if key in raw and isinstance(raw[key], list):
+                    return raw[key]
+        return raw
+
+    tool_summaries: list[str] = []
+    for tool_result in completed_tools:
+        tool_name = tool_result.get("tool_name", "unknown")
+        result_data = _normalize(tool_result.get("result", {}))
+        error = tool_result.get("error")
+        if error:
+            tool_summaries.append(f"**{tool_name}**: Error — {error}")
+        elif isinstance(result_data, dict):
+            items = list(result_data.items())[:10]
+            list_payload = None
+            for key in ("data", "results"):
+                if key in result_data and isinstance(result_data[key], list):
+                    list_payload = result_data[key]
+                    break
+            if list_payload is not None:
+                row_count = len(list_payload)
+                tool_summaries.append(f"**{tool_name}**: Retrieved {row_count} row(s)")
+            elif items:
+                brief = ", ".join(f"{k}={v}" for k, v in items[:3])
+                tool_summaries.append(f"**{tool_name}**: {brief}...")
+            else:
+                tool_summaries.append(f"**{tool_name}**: (empty result)")
+        elif isinstance(result_data, list):
+            tool_summaries.append(f"**{tool_name}**: Retrieved {len(result_data)} row(s)")
+        else:
+            summary_text = str(result_data)[:200]
+            tool_summaries.append(f"**{tool_name}**: {summary_text}")
+
+    return "Here's what I found:\n\n" + "\n\n".join(tool_summaries)
+
+
 async def _broadcast_tool_events(event_type: str, tool_calls: list[dict], run_id: str, instance_id: str):
     """Broadcast tool.started events for a batch of tool calls."""
     global broadcast_run_event

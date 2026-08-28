@@ -1,0 +1,12 @@
+{
+  "pulseSectionTitle": "AI Copilot Connection",
+  "pulseStatus": "Status",
+  "pulseConnected": "Connected",
+  "pulseKey": "Key",
+  "pulseDisconnect": "Disconnect",
+  "pulseGenerateHint": "Generate a Pulse AI key to enable AI-powered features in your Carbon workflows.",
+  "pulseGenerateKey": "Generate Pulse Key",
+  "pulseNewKeyTitle": "Your Pulse AI Key (save this securely):",
+  "pulseKeyGenerated": "Pulse key generated — it has been saved to this browser.",
+  "pulseDisconnected": "Pulse AI disconnected from this browser."
+}

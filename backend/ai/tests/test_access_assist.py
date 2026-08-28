@@ -168,15 +168,22 @@ def test_users_with_capability_scoped(make_user, make_role, make_org):
 
 def test_propose_grant_least_privilege_group(make_user, db):
     """'grant this user carbon:enter_data' → smallest non-wildcard role."""
+    from accounts.capabilities import GROUP_CAPABILITIES
+
     user = make_user("data-owner-candidate")
     before = ScopedRole.objects.count()
     result = access_assist.propose_grant(user.id, "carbon:enter_data")
     assert result["requires_confirmation"] is True
     assert result["never_executes"] is True
     prop = result["proposal"]
-    # carbon_lead (10 declared caps) < dataowners_group (13 declared caps)
+    # carbon_lead is the smallest non-wildcard group granting carbon:enter_data;
+    # counts come from the live GROUP_CAPABILITIES registry so the invariant
+    # (not a hardcoded count) is what we lock in.
+    lead_count = len(GROUP_CAPABILITIES["carbon_lead"])
+    owners_count = len(GROUP_CAPABILITIES["dataowners_group"])
     assert prop["group"] == "carbon_lead"
-    assert prop["group_capability_count"] == 10
+    assert prop["group_capability_count"] == lead_count
+    assert lead_count < owners_count  # least-privilege invariant
     assert prop["capability"] == "carbon:enter_data"
     assert prop["scope"] == {"scope": "global"}
     assert ScopedRole.objects.count() == before  # nothing was written

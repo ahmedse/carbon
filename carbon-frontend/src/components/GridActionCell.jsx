@@ -4,6 +4,7 @@
 import React from 'react';
 import { Box, IconButton, Tooltip, Chip } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
@@ -22,6 +23,7 @@ export function EvidenceCell({ params }) {
 }
 
 export function ActionCell({ params, onDeleteRow }) {
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const tableId = params.row.table_id;
   const rowId = params.row.id;
@@ -39,7 +41,7 @@ export function ActionCell({ params, onDeleteRow }) {
 
   return (
     <Box sx={{ display: 'flex', gap: 0.5 }}>
-      <Tooltip title="View Details">
+      <Tooltip title={t('viewDetails')}>
         <IconButton
           size="small"
           onClick={(e) => {
@@ -50,7 +52,7 @@ export function ActionCell({ params, onDeleteRow }) {
           <VisibilityIcon fontSize="small" />
         </IconButton>
       </Tooltip>
-      <Tooltip title="Delete">
+      <Tooltip title={t('delete')}>
         <IconButton size="small" onClick={handleDelete}>
           <DeleteIcon fontSize="small" />
         </IconButton>

@@ -76,7 +76,7 @@ def test_outcome_signal_map_is_pure():
 # ── 2. accepted ──────────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_accepted_learns_feedback_and_memory(user):
     from ai.learning import learn_from_message
 
@@ -100,7 +100,7 @@ def test_accepted_learns_feedback_and_memory(user):
 # ── 3. corrected ─────────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_corrected_learns_correction_feedback_and_memory(user):
     from ai.learning import learn_from_message
 
@@ -130,7 +130,7 @@ def test_corrected_learns_correction_feedback_and_memory(user):
 # ── 4. rejected ──────────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_rejected_records_feedback_without_memory(user):
     from ai.learning import learn_from_message
 
@@ -149,7 +149,7 @@ def test_rejected_records_feedback_without_memory(user):
 # ── 5. ignored / unset outcome are no-ops ────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_ignored_and_unset_outcome_are_noop(user):
     from ai.learning import learn_from_message
 
@@ -172,7 +172,7 @@ def test_ignored_and_unset_outcome_are_noop(user):
 # ── 6. failure leaves retryable ──────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_failure_leaves_retryable(user, monkeypatch):
     from ai import learning
 
@@ -194,7 +194,7 @@ def test_failure_leaves_retryable(user, monkeypatch):
 # ── 6b. retry after partial failure is idempotent ────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_retry_after_partial_failure_does_not_duplicate_feedback(user, monkeypatch):
     """A retry re-runs the memory write but never duplicates KgFeedbackRecord.
 
@@ -245,7 +245,7 @@ def test_retry_after_partial_failure_does_not_duplicate_feedback(user, monkeypat
 # ── 7. learn_all_pending idempotency ─────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_learn_all_pending_is_idempotent(user):
     from ai.learning import learn_all_pending
 
@@ -271,7 +271,7 @@ def test_learn_all_pending_is_idempotent(user):
 # ── 8. management command ────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_management_command_limit_and_dry_run(user):
     from io import StringIO
 

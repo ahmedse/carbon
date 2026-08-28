@@ -10,6 +10,7 @@
 //   5. Build collapsible relationship groups with PanelTable
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Typography,
@@ -28,6 +29,7 @@ import { PanelTable } from '../../../components/panel';
 const MAX_FK_GROUPS = 8;
 
 export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
+  const { t } = useTranslation('dataschema');
   const navigate = useNavigate();
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +72,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
                 const data = await res.json();
                 const rows = Array.isArray(data.results) ? data.results : (Array.isArray(data) ? data : []);
                 if (rows.length > 0) {
-                  let refTableName = `Table #${fk.reference_table}`;
+                  let refTableName = t('related.tableNumber', { id: fk.reference_table });
                   try {
                     const tblRes = await authFetch(`dataschema/tables/?id=${fk.reference_table}`, { token });
                     if (tblRes.ok) {
@@ -82,8 +84,8 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
                   } catch { /* use default */ }
                   return {
                     type: 'fk',
-                    label: `Linked by ${fk.label || fk.display_name || fk.name}`,
-                    sharedValue: `${fk.label || fk.name}: ${fkValue}`,
+                    label: t('related.linkedBy', { name: fk.label || fk.display_name || fk.name }),
+                    sharedValue: t('related.sharedValue', { field: fk.label || fk.name, value: fkValue }),
                     tables: [{ name: refTableName, tableId: fk.reference_table, rows }],
                   };
                 }
@@ -115,8 +117,8 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
             for (const rel of relations) {
               const targetTableId = String(rel.from_table) === String(tableId) ? rel.to_table : rel.from_table;
               const targetName = String(rel.from_table) === String(tableId)
-                ? (rel.to_table_name || `Table #${rel.to_table}`)
-                : (rel.from_table_name || `Table #${rel.from_table}`);
+                ? (rel.to_table_name || t('related.tableNumber', { id: rel.to_table }))
+                : (rel.from_table_name || t('related.tableNumber', { id: rel.from_table }));
               let rows = [];
               try {
                 const rowsRes = await authFetch(`dataschema/rows/?data_table=${targetTableId}&page_size=5`, { token });
@@ -127,7 +129,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
               } catch { /* skip */ }
               relGroups.push({
                 type: 'relation',
-                label: rel.label || rel.relation_type || 'Related',
+                label: rel.label || rel.relation_type || t('related.relatedFallback'),
                 sharedValue: rel.relation_type || 'reference',
                 tables: [{ name: targetName, tableId: targetTableId, rows }],
               });
@@ -148,14 +150,14 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
                 const allRows = Array.isArray(data.results) ? data.results : (Array.isArray(data) ? data : []);
                 const idx = allRows.findIndex(r => String(r.id) === String(rowId));
                 const neighbors = [];
-                if (idx > 0) neighbors.push({ ...allRows[idx - 1], _relation: 'Previous' });
-                if (idx >= 0 && idx < allRows.length - 1) neighbors.push({ ...allRows[idx + 1], _relation: 'Next' });
+                if (idx > 0) neighbors.push({ ...allRows[idx - 1], _relation: t('related.previous') });
+                if (idx >= 0 && idx < allRows.length - 1) neighbors.push({ ...allRows[idx + 1], _relation: t('related.next') });
                 if (neighbors.length > 0) {
                   return {
                     type: 'temporal',
-                    label: 'Temporal Neighbors',
-                    sharedValue: `Period: ${periodMonth}`,
-                    tables: [{ name: 'This table', tableId, rows: neighbors }],
+                    label: t('related.temporalNeighbors'),
+                    sharedValue: t('related.period', { period: periodMonth }),
+                    tables: [{ name: t('related.thisTable'), tableId, rows: neighbors }],
                   };
                 }
               }
@@ -175,12 +177,12 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
       }
     } catch (err) {
       console.error('RelatedRecords discovery error:', err);
-      setError('Failed to discover relationships.');
+      setError(t('related.discoverError'));
     }
 
     setGroups(built);
     setLoading(false);
-  }, [tableId, token, rowData, rowId]);
+  }, [tableId, token, rowData, rowId, t]);
 
   useEffect(() => {
     discoverRelationships();
@@ -189,7 +191,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
   function renderGroupRows(rows) {
     return rows.map(r => {
       const vals = r.values || {};
-      const label = vals.period_month || vals.name || vals.building_id || vals.meter_id || `Row #${r.id}`;
+      const label = vals.period_month || vals.name || vals.building_id || vals.meter_id || t('related.rowNumber', { id: r.id });
       const detailKeys = Object.keys(vals).filter(k => k !== 'notes' && k !== 'period_month').slice(0, 2);
       return {
         id: r.id,
@@ -207,7 +209,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
       <Box sx={{ p: 3, textAlign: 'center' }}>
         <CircularProgress size={20} />
         <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled', mt: 1 }}>
-          Discovering relationships...
+          {t('related.discovering')}
         </Typography>
       </Box>
     );
@@ -225,7 +227,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
     return (
       <Box sx={{ p: 2 }}>
         <Alert severity="info" sx={{ fontSize: '0.75rem' }}>
-          No related records found — this row has no foreign key relationships, temporal neighbors, or calculation links.
+          {t('related.noneFound')}
         </Alert>
       </Box>
     );
@@ -234,7 +236,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
   return (
     <Box>
       <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'text.secondary', mb: 1.5, px: 2, pt: 2 }}>
-        Related Records
+        {t('related.title')}
       </Typography>
 
       {groups.map((group, gi) => (
@@ -257,7 +259,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               <Typography sx={{ fontSize: '0.72rem', fontWeight: 700 }}>{group.label}</Typography>
               <Chip label={group.sharedValue} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />
-              <Chip label={`${group.tables.reduce((s, t) => s + t.rows.length, 0)} rows`} size="small" color="primary"
+              <Chip label={t('related.rowCount', { count: group.tables.reduce((s, t) => s + t.rows.length, 0) })} size="small" color="primary"
                 sx={{ height: 18, fontSize: '0.6rem' }} />
             </Box>
           </AccordionSummary>
@@ -277,7 +279,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
                     columns={[
                       {
                         key: 'label',
-                        header: 'Row',
+                        header: t('related.row'),
                         width: group.type === 'temporal' ? '55%' : '50%',
                         render: (v, row) => (
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -297,7 +299,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
                       },
                       ...(group.type !== 'temporal' ? [{
                         key: 'detail',
-                        header: 'Values',
+                        header: t('related.values'),
                         width: '35%',
                         render: (v) => (
                           <Typography sx={{ fontSize: '0.65rem', color: 'text.secondary' }}>{v || '—'}</Typography>
@@ -305,7 +307,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
                       }] : []),
                       {
                         key: 'dqScore',
-                        header: 'DQ%',
+                        header: t('related.dqScore'),
                         width: '15%',
                         align: 'right',
                         render: (v) => (
@@ -318,7 +320,7 @@ export default function RelatedRecordsTab({ rowId, tableId, token, rowData }) {
                       },
                     ]}
                     rows={tableRows}
-                    emptyText="No rows in this group."
+                    emptyText={t('related.noRows')}
                   />
                 </Box>
               );

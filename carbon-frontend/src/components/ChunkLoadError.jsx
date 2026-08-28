@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Box, Typography, Button, Paper, Stack, Chip } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import CloudOffIcon from "@mui/icons-material/CloudOff";
 import WifiIcon from "@mui/icons-material/Wifi";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -14,6 +15,7 @@ import HomeIcon from "@mui/icons-material/Home";
  * "Human sentence + retry, log detail for debugger — not the user."
  */
 export default function ChunkLoadError({ error, onRetry }) {
+  const { t } = useTranslation('errors');
   const [online, setOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -58,18 +60,17 @@ export default function ChunkLoadError({ error, onRetry }) {
           sx={{ fontSize: '3.5rem', color: "warning.main", mb: 2 }}
         />
         <Typography variant="h6" gutterBottom fontWeight={600}>
-          Failed to load this page
+          {t('chunkLoadFailed')}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          A required part of the application couldn't be loaded. This usually
-          happens when the network connection is unstable.
+          {t('chunkLoadBody')}
         </Typography>
 
         {/* Network status indicator */}
         <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 3 }}>
           <Chip
             icon={online ? <WifiIcon /> : <CloudOffIcon />}
-            label={online ? "Online" : "Offline"}
+            label={online ? t('online') : t('offline')}
             size="small"
             color={online ? "success" : "warning"}
             variant="outlined"
@@ -82,7 +83,7 @@ export default function ChunkLoadError({ error, onRetry }) {
             startIcon={<RefreshIcon />}
             onClick={handleRetry}
           >
-            Retry
+            {t('retry', { ns: 'common' })}
           </Button>
           <Button
             variant="outlined"
@@ -90,7 +91,7 @@ export default function ChunkLoadError({ error, onRetry }) {
             component="a"
             href="/"
           >
-            Go to Dashboard
+            {t('goToDashboard')}
           </Button>
         </Stack>
 

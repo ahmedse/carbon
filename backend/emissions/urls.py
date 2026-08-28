@@ -35,6 +35,7 @@ from .views import (
     CoverageGoalViewSet,
     CoverageActionViewSet,
     InventoryCoverageAPIView,
+    ChairmanAPIView,
 )
 
 app_name = 'emissions'
@@ -118,6 +119,9 @@ urlpatterns = [
     
     # Dashboard API
     path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),
+
+    # Chairman overview API (Tier 1 single-call payload)
+    path('chairman/', ChairmanAPIView.as_view(), name='chairman'),
     
     # Owner APIs (org-unit scoped)
     path('owner-dashboard/', OwnerDashboardAPIView.as_view(), name='owner-dashboard'),

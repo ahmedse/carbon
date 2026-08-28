@@ -99,6 +99,54 @@ api_catalog:
     requires_auth: true
     requires_confirmation: true
 
+  - name: list_emission_factors
+    method: GET
+    path: /carbon-api/carbon/factors
+    description: >
+      List active emission factors (GLOBAL reference data, kg CO2e per
+      activity unit). Fields: name, code, category, scope, factor_value,
+      factor_unit, activity_unit, country, source, tags.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_gwp_gases
+    method: GET
+    path: /carbon-api/carbon/gwp
+    description: >
+      List global warming potentials (GLOBAL reference data) with AR5/AR6
+      GWP values for the 20-year and 100-year horizons.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_reporting_periods
+    method: GET
+    path: /carbon-api/carbon/periods
+    description: >
+      List reporting periods (GLOBAL) with name, start/end dates, status,
+      and baseline flag.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: get_calculation_summary
+    method: GET
+    path: /carbon-api/carbon/calculations/summary
+    description: >
+      Aggregated calculation summary (ORG-SCOPED) for the reporting period
+      given by optional query param reporting_period_id. Totals are in
+      kg CO2e by scope/status/module plus latest run and last audit.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: get_chairman_overview
+    method: GET
+    path: /carbon-api/carbon/chairman
+    description: >
+      Single-call chairman overview (ORG-SCOPED): footprint in tonnes CO2e
+      (kg / 1000), coverage, SBTi targets, actions, and trajectory.
+      Optional query param reporting_period_id.
+    requires_auth: true
+    requires_confirmation: false
+
 navigation_routes:
   - name: dq_rule_detail
     path: /dq/rules/{id}

@@ -352,6 +352,11 @@ class CarbonIntelligence:
         except AIConversation.DoesNotExist:
             raise ValueError(f"Conversation {conversation_id} not found.")
 
+        # Normalize a blank/whitespace message to a greeting so the assistant
+        # still responds helpfully (the serializer allows blank; a raw API caller
+        # might send one even though the UI never does).
+        content = (content or "").strip() or "Hello"
+
         # Phase 21-A — request-time quota gate (before any user message is saved).
         self._enforce_quota(user)
 

@@ -9,5 +9,10 @@
   "permissionDenied": "You don't have permission to perform this action.",
   "timeout": "The request timed out. Please try again.",
   "invalidCredentials": "Invalid credentials",
-  "validation": "Please check the information you entered and try again."
+  "validation": "Please check the information you entered and try again.",
+  "chunkLoadFailed": "Failed to load this page",
+  "chunkLoadBody": "A required part of the application couldn't be loaded. This usually happens when the network connection is unstable.",
+  "online": "Online",
+  "offline": "Offline",
+  "goToDashboard": "Go to Dashboard"
 }

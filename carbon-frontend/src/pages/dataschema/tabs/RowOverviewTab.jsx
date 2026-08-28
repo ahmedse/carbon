@@ -3,6 +3,7 @@
 // Now receives tableInfo, moduleInfo, calculations from parent for richer display.
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Paper,
@@ -21,6 +22,7 @@ function fmtDate(v) {
 }
 
 export default function RowOverviewTab({ rowData, _tableInfo, _moduleInfo, calculations }) {
+  const { t } = useTranslation('dataschema');
 
   // ── Extract metadata and field data ────────────────────────────────
   const metadataFields = ['created_at', 'updated_at', 'created_by', 'updated_by'];
@@ -54,12 +56,12 @@ export default function RowOverviewTab({ rowData, _tableInfo, _moduleInfo, calcu
       {calcCount > 0 && (
         <Card sx={{ mb: 3, borderLeft: '4px solid', borderColor: 'warning.main' }}>
           <CardContent sx={{ py: 1.5 }}>
-            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>Emission Calculations</Typography>
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>{t('overview.emissionCalculations')}</Typography>
             {(calculations || []).map((c, i) => (
               <Box key={c.id || i} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5, borderBottom: i < calcCount - 1 ? '1px solid' : 'none', borderColor: 'divider' }}>
                 <Box sx={{ minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.78rem', fontWeight: 500 }}>
-                    {c.emission_factor__name || c.emission_factor_name || `Factor #${c.emission_factor_id}`}
+                    {c.emission_factor__name || c.emission_factor_name || t('overview.factorNumber', { id: c.emission_factor_id })}
                   </Typography>
                   <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled' }}>
                     {c.calculation_rule__name || c.calculation_rule_name || '—'} · {c.category || '—'} · {fmtDate(c.calculated_at)}
@@ -77,7 +79,7 @@ export default function RowOverviewTab({ rowData, _tableInfo, _moduleInfo, calcu
             ))}
             {calcCount > 1 && (
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
-                <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>Total</Typography>
+                <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>{t('overview.total')}</Typography>
                 <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'warning.main' }}>
                   {(totalCo2e / 1000).toFixed(3)} tCO₂e
                 </Typography>
@@ -91,7 +93,7 @@ export default function RowOverviewTab({ rowData, _tableInfo, _moduleInfo, calcu
       {/* ── Data fields ────────────────────────────────────────────── */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Row Data</Typography>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>{t('overview.rowData')}</Typography>
           <Grid container spacing={2}>
             {Object.entries(fieldData).map(([key, value]) => (
               <Grid size={{ xs: 12, sm: 6 }} key={key}>
@@ -100,7 +102,7 @@ export default function RowOverviewTab({ rowData, _tableInfo, _moduleInfo, calcu
                     {key.replace(/_/g, ' ')}
                   </Typography>
                   <Typography variant="body2" sx={{ color: 'text.primary', wordBreak: 'break-word', fontFamily: 'monospace', fontSize: '0.9rem' }}>
-                    {value !== null && value !== undefined ? String(value) : '(empty)'}
+                    {value !== null && value !== undefined ? String(value) : t('overview.emptyValue')}
                   </Typography>
                 </Box>
               </Grid>
@@ -113,17 +115,17 @@ export default function RowOverviewTab({ rowData, _tableInfo, _moduleInfo, calcu
       {Object.keys(metadata).length > 0 && (
         <Card>
           <CardContent>
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Metadata</Typography>
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>{t('overview.metadata')}</Typography>
             <Stack spacing={1.5}>
               {metadata.created_at && (
                 <Box>
-                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: 'text.secondary', mb: 0.3 }}>Created</Typography>
+                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: 'text.secondary', mb: 0.3 }}>{t('overview.created')}</Typography>
                   <Typography variant="body2">{new Date(metadata.created_at).toLocaleString()}</Typography>
                 </Box>
               )}
               {metadata.updated_at && (
                 <Box>
-                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: 'text.secondary', mb: 0.3 }}>Updated</Typography>
+                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, color: 'text.secondary', mb: 0.3 }}>{t('overview.updated')}</Typography>
                   <Typography variant="body2">{new Date(metadata.updated_at).toLocaleString()}</Typography>
                 </Box>
               )}

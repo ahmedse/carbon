@@ -74,6 +74,11 @@ const ROUTE_CONFIG = {
     icon: Co2Icon,
     parent: null,
   },
+  '/carbon/chairman': {
+    label: 'Chairman Overview',
+    icon: DashboardIcon,
+    parent: '/carbon/console',
+  },
   '/carbon/dashboard': {
     label: 'Emissions Dashboard',
     icon: DashboardIcon,

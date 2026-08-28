@@ -1,34 +1,20 @@
 // src/pages/carbon/InventoryCoveragePage.jsx
 // Inventory Coverage admin — declared-universe completeness for GHG accounting (ADR-0020)
-// Pattern: SBTiTargetsPage / BaseYearsPage — MUI Table + Drawer CRUD, zero hardcoded hex
+// Canonical shell: StandardDataGrid + SystemDialog + ConfirmDialog (see EmissionFactorsPage / GWPReferencePage)
+// All colours via theme.palette, zero hardcoded hex
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Button,
   Card,
   CardContent,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Drawer,
-  Alert,
   TextField,
   MenuItem,
-  CircularProgress,
   Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Stack,
   IconButton,
-  Snackbar,
   Switch,
   FormControlLabel,
   Tabs,
@@ -44,6 +30,10 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useAuth } from '../../auth/AuthContext';
+import { useNotification } from '../../components/NotificationProvider';
+import StandardDataGrid from '../../components/StandardDataGrid';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import SystemDialog from '../../components/SystemDialog';
 import PageHeader from '../../components/Page/PageHeader';
 import {
   fetchReportingPeriods,
@@ -258,9 +248,9 @@ function CoverageBar({ value }) {
   );
 }
 
-// ── SourceDrawer ───────────────────────────────────────────────────────
+// ── SourceDialog ───────────────────────────────────────────────────────
 
-function SourceDrawer({ open, source, onSave, onClose }) {
+function SourceDialog({ open, source, onSave, onClose }) {
   const [form, setForm] = useState({
     org_unit: '',
     scope: '1',
@@ -291,11 +281,25 @@ function SourceDrawer({ open, source, onSave, onClose }) {
   };
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 440, p: 3 }}>
-        <Typography variant="h5" sx={{ mb: 3 }}>
-          {source ? 'Edit Source' : 'New Source'}
-        </Typography>
+    <SystemDialog
+      open={open}
+      title={source ? 'Edit Source' : 'New Source'}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel="Cancel"
+      actions={
+        <Button variant="contained" size="small" onClick={() => onSave(form)}>
+          {source ? 'Update' : 'Create'}
+        </Button>
+      }
+      width={540}
+      height={560}
+      minWidth={420}
+      minHeight={420}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
         <Stack spacing={2}>
           <TextField
             label="Org Unit"
@@ -361,21 +365,15 @@ function SourceDrawer({ open, source, onSave, onClose }) {
             }
             label="Active"
           />
-          <Stack direction="row" spacing={2} sx={{ pt: 1 }}>
-            <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>Cancel</Button>
-            <Button variant="contained" onClick={() => onSave(form)} sx={{ flex: 1 }}>
-              {source ? 'Update' : 'Create'}
-            </Button>
-          </Stack>
         </Stack>
       </Box>
-    </Drawer>
+    </SystemDialog>
   );
 }
 
-// ── GoalDrawer ─────────────────────────────────────────────────────────
+// ── GoalDialog ─────────────────────────────────────────────────────────
 
-function GoalDrawer({ open, goal, onSave, onClose }) {
+function GoalDialog({ open, goal, onSave, onClose }) {
   const [form, setForm] = useState({
     org_unit: '',
     name: '',
@@ -415,11 +413,25 @@ function GoalDrawer({ open, goal, onSave, onClose }) {
   };
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 440, p: 3 }}>
-        <Typography variant="h5" sx={{ mb: 3 }}>
-          {goal ? 'Edit Goal' : 'New Goal'}
-        </Typography>
+    <SystemDialog
+      open={open}
+      title={goal ? 'Edit Goal' : 'New Goal'}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel="Cancel"
+      actions={
+        <Button variant="contained" size="small" onClick={() => onSave(form)}>
+          {goal ? 'Update' : 'Create'}
+        </Button>
+      }
+      width={540}
+      height={680}
+      minWidth={420}
+      minHeight={460}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
         <Stack spacing={2}>
           <TextField label="Org Unit" name="org_unit" value={form.org_unit} onChange={handleChange} fullWidth size="small" placeholder="Org unit ID" />
           <TextField label="Name" name="name" value={form.name} onChange={handleChange} fullWidth required size="small" />
@@ -477,21 +489,15 @@ function GoalDrawer({ open, goal, onSave, onClose }) {
             <MenuItem value="active">Active</MenuItem>
             <MenuItem value="archived">Archived</MenuItem>
           </TextField>
-          <Stack direction="row" spacing={2} sx={{ pt: 1 }}>
-            <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>Cancel</Button>
-            <Button variant="contained" onClick={() => onSave(form)} sx={{ flex: 1 }}>
-              {goal ? 'Update' : 'Create'}
-            </Button>
-          </Stack>
         </Stack>
       </Box>
-    </Drawer>
+    </SystemDialog>
   );
 }
 
-// ── ActionDrawer ───────────────────────────────────────────────────────
+// ── ActionDialog ───────────────────────────────────────────────────────
 
-function ActionDrawer({ open, action, sources, onSave, onClose }) {
+function ActionDialog({ open, action, sources, onSave, onClose }) {
   const [form, setForm] = useState({
     source: '',
     action_type: 'collect_data',
@@ -522,11 +528,25 @@ function ActionDrawer({ open, action, sources, onSave, onClose }) {
   };
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 440, p: 3 }}>
-        <Typography variant="h5" sx={{ mb: 3 }}>
-          {action ? 'Edit Action' : 'New Action'}
-        </Typography>
+    <SystemDialog
+      open={open}
+      title={action ? 'Edit Action' : 'New Action'}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel="Cancel"
+      actions={
+        <Button variant="contained" size="small" onClick={() => onSave(form)}>
+          {action ? 'Update' : 'Create'}
+        </Button>
+      }
+      width={540}
+      height={520}
+      minWidth={420}
+      minHeight={400}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
         <Stack spacing={2}>
           <TextField label="Source" select name="source" value={form.source} onChange={handleChange} fullWidth required size="small">
             {(sources || []).map((s) => (
@@ -557,15 +577,9 @@ function ActionDrawer({ open, action, sources, onSave, onClose }) {
           />
           <TextField label="Owner" name="owner" value={form.owner} onChange={handleChange} fullWidth size="small" placeholder="User ID" />
           <TextField label="Notes" name="notes" value={form.notes} onChange={handleChange} fullWidth multiline rows={3} size="small" />
-          <Stack direction="row" spacing={2} sx={{ pt: 1 }}>
-            <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>Cancel</Button>
-            <Button variant="contained" onClick={() => onSave(form)} sx={{ flex: 1 }}>
-              {action ? 'Update' : 'Create'}
-            </Button>
-          </Stack>
         </Stack>
       </Box>
-    </Drawer>
+    </SystemDialog>
   );
 }
 
@@ -574,6 +588,7 @@ function ActionDrawer({ open, action, sources, onSave, onClose }) {
 export default function InventoryCoveragePage() {
   useDocumentTitle('Inventory Coverage');
   const { user, token, availablePerspectives } = useAuth();
+  const { notify, notifyFromError } = useNotification();
 
   const [periods, setPeriods] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState('');
@@ -584,25 +599,22 @@ export default function InventoryCoveragePage() {
   const [actions, setActions] = useState([]);
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [tab, setTab] = useState(0);
 
-  const [sourceDrawerOpen, setSourceDrawerOpen] = useState(false);
-  const [goalDrawerOpen, setGoalDrawerOpen] = useState(false);
-  const [actionDrawerOpen, setActionDrawerOpen] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(false);
+  const [actionOpen, setActionOpen] = useState(false);
   const [currentSource, setCurrentSource] = useState(null);
   const [currentGoal, setCurrentGoal] = useState(null);
   const [currentAction, setCurrentAction] = useState(null);
 
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { kind, id }
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   const isAdmin = user?.is_staff || user?.is_superuser || (availablePerspectives || []).includes('carbon-admin');
 
   const loadAll = useCallback(async () => {
     try {
       setLoading(true);
-      setError(null);
       const [pData, sData, gData, aData] = await Promise.all([
         fetchReportingPeriods(token),
         fetchInventorySources(token),
@@ -614,11 +626,15 @@ export default function InventoryCoveragePage() {
       setGoals(Array.isArray(gData) ? gData : gData?.results || []);
       setActions(Array.isArray(aData) ? aData : aData?.results || []);
     } catch (err) {
-      setError(err.message || 'Failed to load inventory coverage data');
+      notifyFromError(err, 'Failed to load inventory coverage data');
+      setPeriods([]);
+      setSources([]);
+      setGoals([]);
+      setActions([]);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, notifyFromError]);
 
   useEffect(() => {
     loadAll();
@@ -641,9 +657,9 @@ export default function InventoryCoveragePage() {
       setStatuses(Array.isArray(statusData) ? statusData : statusData?.results || []);
       setCoverage(covData);
     } catch (err) {
-      setError(err.message || 'Failed to load coverage');
+      notifyFromError(err, 'Failed to load coverage');
     }
-  }, [token]);
+  }, [token, notifyFromError]);
 
   useEffect(() => {
     loadPeriodScoped(selectedPeriod);
@@ -659,14 +675,18 @@ export default function InventoryCoveragePage() {
       scope3_category: formData.scope3_category ? Number(formData.scope3_category) : null,
     };
     try {
-      if (currentSource) await updateInventorySource(currentSource.id, payload, token);
-      else await createInventorySource(payload, token);
-      setSourceDrawerOpen(false);
+      if (currentSource) {
+        await updateInventorySource(currentSource.id, payload, token);
+        notify({ message: 'Inventory source updated', type: 'success' });
+      } else {
+        await createInventorySource(payload, token);
+        notify({ message: 'Inventory source created', type: 'success' });
+      }
+      setSourceOpen(false);
       setCurrentSource(null);
-      setSnackbar({ open: true, message: 'Inventory source saved', severity: 'success' });
       await loadAll();
     } catch (err) {
-      setError(err.message || 'Failed to save source');
+      notifyFromError(err, 'Failed to save source');
     }
   };
 
@@ -680,14 +700,18 @@ export default function InventoryCoveragePage() {
       sbti_target: formData.sbti_target ? Number(formData.sbti_target) : null,
     };
     try {
-      if (currentGoal) await updateCoverageGoal(currentGoal.id, payload, token);
-      else await createCoverageGoal(payload, token);
-      setGoalDrawerOpen(false);
+      if (currentGoal) {
+        await updateCoverageGoal(currentGoal.id, payload, token);
+        notify({ message: 'Coverage goal updated', type: 'success' });
+      } else {
+        await createCoverageGoal(payload, token);
+        notify({ message: 'Coverage goal created', type: 'success' });
+      }
+      setGoalOpen(false);
       setCurrentGoal(null);
-      setSnackbar({ open: true, message: 'Coverage goal saved', severity: 'success' });
       await loadAll();
     } catch (err) {
-      setError(err.message || 'Failed to save goal');
+      notifyFromError(err, 'Failed to save goal');
     }
   };
 
@@ -699,14 +723,18 @@ export default function InventoryCoveragePage() {
       due_date: formData.due_date || null,
     };
     try {
-      if (currentAction) await updateCoverageAction(currentAction.id, payload, token);
-      else await createCoverageAction(payload, token);
-      setActionDrawerOpen(false);
+      if (currentAction) {
+        await updateCoverageAction(currentAction.id, payload, token);
+        notify({ message: 'Coverage action updated', type: 'success' });
+      } else {
+        await createCoverageAction(payload, token);
+        notify({ message: 'Coverage action created', type: 'success' });
+      }
+      setActionOpen(false);
       setCurrentAction(null);
-      setSnackbar({ open: true, message: 'Coverage action saved', severity: 'success' });
       await loadAll();
     } catch (err) {
-      setError(err.message || 'Failed to save action');
+      notifyFromError(err, 'Failed to save action');
     }
   };
 
@@ -717,12 +745,12 @@ export default function InventoryCoveragePage() {
       if (kind === 'source') await deleteInventorySource(id, token);
       else if (kind === 'goal') await deleteCoverageGoal(id, token);
       else if (kind === 'action') await deleteCoverageAction(id, token);
+      notify({ message: 'Record deleted', type: 'success' });
       setDeleteConfirm(null);
-      setSnackbar({ open: true, message: 'Record deleted', severity: 'success' });
       await loadAll();
       if (kind === 'source') await loadPeriodScoped(selectedPeriod);
     } catch (err) {
-      setError(err.message || 'Failed to delete record');
+      notifyFromError(err, 'Failed to delete record');
     }
   };
 
@@ -731,15 +759,197 @@ export default function InventoryCoveragePage() {
     try { return new Date(d).toLocaleDateString(); } catch { return '—'; }
   };
 
-  // ── Loading state ────────────────────────────────────────────────────
+  // ── Columns ──────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <PageContainer sx={{ alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress />
-      </PageContainer>
-    );
-  }
+  const sourceColumns = [
+    { field: 'id', headerName: 'ID', width: 70 },
+    {
+      field: 'org_unit',
+      headerName: 'Org Unit',
+      flex: 1,
+      minWidth: 120,
+      valueGetter: (value, row) => row.org_unit_name || row.org_unit || '—',
+    },
+    { field: 'scope', headerName: 'Scope', width: 110, renderCell: (params) => <ScopeChip value={params.value} /> },
+    {
+      field: 'scope3_category',
+      headerName: 'Scope 3 Cat',
+      width: 110,
+      align: 'center',
+      headerAlign: 'center',
+      valueFormatter: (value) => value ?? '—',
+    },
+    { field: 'source_name', headerName: 'Source Name', flex: 1, minWidth: 160 },
+    {
+      field: 'description',
+      headerName: 'Description',
+      flex: 1,
+      minWidth: 200,
+      valueFormatter: (value) => value || '—',
+    },
+    {
+      field: 'is_active',
+      headerName: 'Active',
+      width: 100,
+      renderCell: (params) => <ActiveChip value={params.value} />,
+    },
+    ...(isAdmin
+      ? [
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 100,
+            sortable: false,
+            renderCell: (params) => (
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton size="small" onClick={() => { setCurrentSource(params.row); setSourceOpen(true); }}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => setDeleteConfirm({ kind: 'source', id: params.row.id })}
+                  sx={{ color: 'error.main' }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  const statusColumns = [
+    { field: 'id', headerName: 'ID', width: 70 },
+    {
+      field: 'source_name',
+      headerName: 'Source',
+      flex: 1,
+      minWidth: 140,
+      valueGetter: (value, row) => row.source_name || row.source || '—',
+    },
+    {
+      field: 'reporting_period_name',
+      headerName: 'Period',
+      flex: 1,
+      minWidth: 140,
+      valueGetter: (value, row) => row.reporting_period_name || row.reporting_period || '—',
+    },
+    { field: 'status', headerName: 'Status', width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: 'data_quality_tier', headerName: 'Tier', width: 120, renderCell: (params) => <TierChip value={params.value} /> },
+    { field: 'exclusion_reason', headerName: 'Exclusion', width: 150, renderCell: (params) => <ExclusionChip value={params.value} /> },
+    {
+      field: 'linked_tables',
+      headerName: 'Linked Tables',
+      width: 120,
+      align: 'center',
+      headerAlign: 'center',
+      valueFormatter: (value) => (Array.isArray(value) ? value.length : '—'),
+    },
+    { field: 'notes', headerName: 'Notes', flex: 1, minWidth: 180, valueFormatter: (value) => value || '—' },
+  ];
+
+  const goalColumns = [
+    { field: 'id', headerName: 'ID', width: 70 },
+    {
+      field: 'org_unit',
+      headerName: 'Org Unit',
+      flex: 1,
+      minWidth: 120,
+      valueGetter: (value, row) => row.org_unit_name || row.org_unit || '—',
+    },
+    { field: 'name', headerName: 'Name', flex: 1, minWidth: 150 },
+    { field: 'scope', headerName: 'Scope', width: 110, renderCell: (params) => <ScopeChip value={params.value} /> },
+    {
+      field: 'target_coverage_pct',
+      headerName: 'Target %',
+      width: 100,
+      align: 'right',
+      headerAlign: 'right',
+      valueGetter: (value, row) => (row.target_coverage_pct != null ? `${row.target_coverage_pct}%` : '—'),
+    },
+    { field: 'min_quality_tier', headerName: 'Min Tier', width: 110, renderCell: (params) => <TierChip value={params.value} /> },
+    { field: 'completeness_definition', headerName: 'Completeness', width: 180, renderCell: (params) => <CompletenessChip value={params.value} /> },
+    {
+      field: 'target_year',
+      headerName: 'Target Year',
+      width: 110,
+      align: 'center',
+      headerAlign: 'center',
+      valueFormatter: (value) => value ?? '—',
+    },
+    { field: 'sbti_target', headerName: 'SBTi', width: 90, valueFormatter: (value) => value ?? '—' },
+    { field: 'status', headerName: 'Status', width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
+    ...(isAdmin
+      ? [
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 100,
+            sortable: false,
+            renderCell: (params) => (
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton size="small" onClick={() => { setCurrentGoal(params.row); setGoalOpen(true); }}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => setDeleteConfirm({ kind: 'goal', id: params.row.id })}
+                  sx={{ color: 'error.main' }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  const actionColumns = [
+    { field: 'id', headerName: 'ID', width: 70 },
+    {
+      field: 'source',
+      headerName: 'Source',
+      flex: 1,
+      minWidth: 140,
+      valueGetter: (value, row) => row.source_name || row.source || '—',
+    },
+    { field: 'action_type', headerName: 'Action Type', width: 170, renderCell: (params) => <ActionTypeChip value={params.value} /> },
+    { field: 'status', headerName: 'Status', width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: 'due_date', headerName: 'Due Date', width: 120, valueFormatter: (value) => fmtDate(value) },
+    {
+      field: 'owner',
+      headerName: 'Owner',
+      width: 120,
+      valueGetter: (value, row) => row.owner_username || row.owner || '—',
+    },
+    { field: 'notes', headerName: 'Notes', flex: 1, minWidth: 180, valueFormatter: (value) => value || '—' },
+    ...(isAdmin
+      ? [
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 100,
+            sortable: false,
+            renderCell: (params) => (
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton size="small" onClick={() => { setCurrentAction(params.row); setActionOpen(true); }}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => setDeleteConfirm({ kind: 'action', id: params.row.id })}
+                  sx={{ color: 'error.main' }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ),
+          },
+        ]
+      : []),
+  ];
 
   // ── Render ───────────────────────────────────────────────────────────
 
@@ -750,14 +960,12 @@ export default function InventoryCoveragePage() {
         description="Declared-universe completeness for GHG accounting. Declare the emission sources you are accountable for, track per-period coverage status and PCAF data-quality tiers, maintain an exclusions register, and set coverage goals (ADR-0020)."
         actions={
           <Stack direction="row" spacing={1}>
-            <IconButton onClick={loadAll} size="small" sx={{ mr: 0.5 }}>
+            <IconButton onClick={loadAll} size="small" aria-label="Refresh coverage">
               <RefreshIcon />
             </IconButton>
           </Stack>
         }
       />
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {/* Reporting period selector */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
@@ -804,278 +1012,82 @@ export default function InventoryCoveragePage() {
 
       {/* ── Sources ── */}
       {tab === 0 && (
-        <>
+        <Box>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
             {isAdmin && (
-              <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setCurrentSource(null); setSourceDrawerOpen(true); }}>
+              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => { setCurrentSource(null); setSourceOpen(true); }}>
                 New Source
               </Button>
             )}
           </Box>
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead sx={{ bgcolor: 'action.hover' }}>
-                <TableRow>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>ID</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Org Unit</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Scope</TableCell>
-                  <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Scope 3 Cat</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Source Name</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Description</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Active</TableCell>
-                  {isAdmin && <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Actions</TableCell>}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sources.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={isAdmin ? 8 : 7} align="center" sx={{ py: 3, color: 'text.secondary' }}>
-                      No inventory sources found. Click "New Source" to declare one.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  sources.map((s) => (
-                    <TableRow key={s.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                      <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{s.id}</TableCell>
-                      <TableCell sx={{ ...FONT.body }}>{s.org_unit_name || s.org_unit || '—'}</TableCell>
-                      <TableCell><ScopeChip value={s.scope} /></TableCell>
-                      <TableCell align="center" sx={{ ...FONT.body }}>{s.scope3_category ?? '—'}</TableCell>
-                      <TableCell sx={{ ...FONT.body, fontWeight: 500 }}>{s.source_name}</TableCell>
-                      <TableCell sx={{ ...FONT.body, color: 'text.secondary' }}>{s.description || '—'}</TableCell>
-                      <TableCell><ActiveChip value={s.is_active} /></TableCell>
-                      {isAdmin && (
-                        <TableCell align="center">
-                          <IconButton size="small" onClick={() => { setCurrentSource(s); setSourceDrawerOpen(true); }} title="Edit">
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton size="small" onClick={() => setDeleteConfirm({ kind: 'source', id: s.id })} sx={{ color: 'error.main' }} title="Delete">
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </>
+          <StandardDataGrid rows={sources} columns={sourceColumns} loading={loading} toolbar pageSize={25} />
+        </Box>
       )}
 
       {/* ── Statuses (read-only) ── */}
       {tab === 1 && (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead sx={{ bgcolor: 'action.hover' }}>
-              <TableRow>
-                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>ID</TableCell>
-                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Source</TableCell>
-                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Period</TableCell>
-                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Status</TableCell>
-                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Tier</TableCell>
-                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Exclusion</TableCell>
-                <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Linked Tables</TableCell>
-                <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Notes</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {statuses.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 3, color: 'text.secondary' }}>
-                    No per-period statuses for the selected reporting period.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                statuses.map((s) => (
-                  <TableRow key={s.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                    <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{s.id}</TableCell>
-                    <TableCell sx={{ ...FONT.body, fontWeight: 500 }}>{s.source_name || s.source || '—'}</TableCell>
-                    <TableCell sx={{ ...FONT.body }}>{s.reporting_period_name || s.reporting_period || '—'}</TableCell>
-                    <TableCell><StatusChip value={s.status} /></TableCell>
-                    <TableCell><TierChip value={s.data_quality_tier} /></TableCell>
-                    <TableCell><ExclusionChip value={s.exclusion_reason} /></TableCell>
-                    <TableCell align="center" sx={{ ...FONT.body }}>
-                      {Array.isArray(s.linked_tables) ? s.linked_tables.length : '—'}
-                    </TableCell>
-                    <TableCell sx={{ ...FONT.body, color: 'text.secondary' }}>{s.notes || '—'}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <StandardDataGrid rows={statuses} columns={statusColumns} loading={loading} toolbar pageSize={25} />
       )}
 
       {/* ── Goals ── */}
       {tab === 2 && (
-        <>
+        <Box>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
             {isAdmin && (
-              <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setCurrentGoal(null); setGoalDrawerOpen(true); }}>
+              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => { setCurrentGoal(null); setGoalOpen(true); }}>
                 New Goal
               </Button>
             )}
           </Box>
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead sx={{ bgcolor: 'action.hover' }}>
-                <TableRow>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>ID</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Org Unit</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Name</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Scope</TableCell>
-                  <TableCell align="right" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Target %</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Min Tier</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Completeness</TableCell>
-                  <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Target Year</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>SBTi</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Status</TableCell>
-                  {isAdmin && <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Actions</TableCell>}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {goals.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={isAdmin ? 11 : 10} align="center" sx={{ py: 3, color: 'text.secondary' }}>
-                      No coverage goals found. Click "New Goal" to define one.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  goals.map((g) => (
-                    <TableRow key={g.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                      <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{g.id}</TableCell>
-                      <TableCell sx={{ ...FONT.body }}>{g.org_unit_name || g.org_unit || '—'}</TableCell>
-                      <TableCell sx={{ ...FONT.body, fontWeight: 500 }}>{g.name}</TableCell>
-                      <TableCell><ScopeChip value={g.scope} /></TableCell>
-                      <TableCell align="right" sx={{ ...FONT.body }}>{g.target_coverage_pct ?? '—'}%</TableCell>
-                      <TableCell><TierChip value={g.min_quality_tier} /></TableCell>
-                      <TableCell><CompletenessChip value={g.completeness_definition} /></TableCell>
-                      <TableCell align="center" sx={{ ...FONT.body }}>{g.target_year ?? '—'}</TableCell>
-                      <TableCell sx={{ ...FONT.body }}>{g.sbti_target ?? '—'}</TableCell>
-                      <TableCell><StatusChip value={g.status} /></TableCell>
-                      {isAdmin && (
-                        <TableCell align="center">
-                          <IconButton size="small" onClick={() => { setCurrentGoal(g); setGoalDrawerOpen(true); }} title="Edit">
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton size="small" onClick={() => setDeleteConfirm({ kind: 'goal', id: g.id })} sx={{ color: 'error.main' }} title="Delete">
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </>
+          <StandardDataGrid rows={goals} columns={goalColumns} loading={loading} toolbar pageSize={25} />
+        </Box>
       )}
 
       {/* ── Actions ── */}
       {tab === 3 && (
-        <>
+        <Box>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
             {isAdmin && (
-              <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setCurrentAction(null); setActionDrawerOpen(true); }}>
+              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => { setCurrentAction(null); setActionOpen(true); }}>
                 New Action
               </Button>
             )}
           </Box>
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead sx={{ bgcolor: 'action.hover' }}>
-                <TableRow>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>ID</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Source</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Action Type</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Status</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Due Date</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Owner</TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Notes</TableCell>
-                  {isAdmin && <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Actions</TableCell>}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {actions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={isAdmin ? 8 : 7} align="center" sx={{ py: 3, color: 'text.secondary' }}>
-                      No coverage actions found. Click "New Action" to create a remediation item.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  actions.map((a) => (
-                    <TableRow key={a.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                      <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{a.id}</TableCell>
-                      <TableCell sx={{ ...FONT.body, fontWeight: 500 }}>{a.source_name || a.source || '—'}</TableCell>
-                      <TableCell><ActionTypeChip value={a.action_type} /></TableCell>
-                      <TableCell><StatusChip value={a.status} /></TableCell>
-                      <TableCell sx={{ ...FONT.body }}>{fmtDate(a.due_date)}</TableCell>
-                      <TableCell sx={{ ...FONT.body }}>{a.owner_username || a.owner || '—'}</TableCell>
-                      <TableCell sx={{ ...FONT.body, color: 'text.secondary' }}>{a.notes || '—'}</TableCell>
-                      {isAdmin && (
-                        <TableCell align="center">
-                          <IconButton size="small" onClick={() => { setCurrentAction(a); setActionDrawerOpen(true); }} title="Edit">
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton size="small" onClick={() => setDeleteConfirm({ kind: 'action', id: a.id })} sx={{ color: 'error.main' }} title="Delete">
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </>
+          <StandardDataGrid rows={actions} columns={actionColumns} loading={loading} toolbar pageSize={25} />
+        </Box>
       )}
 
-      {/* Create/Edit Drawers */}
-      <SourceDrawer
-        open={sourceDrawerOpen}
+      {/* Create/Edit Dialogs (modal — design system primitive) */}
+      <SourceDialog
+        open={sourceOpen}
         source={currentSource}
         onSave={handleSaveSource}
-        onClose={() => setSourceDrawerOpen(false)}
+        onClose={() => setSourceOpen(false)}
       />
-      <GoalDrawer
-        open={goalDrawerOpen}
+      <GoalDialog
+        open={goalOpen}
         goal={currentGoal}
         onSave={handleSaveGoal}
-        onClose={() => setGoalDrawerOpen(false)}
+        onClose={() => setGoalOpen(false)}
       />
-      <ActionDrawer
-        open={actionDrawerOpen}
+      <ActionDialog
+        open={actionOpen}
         action={currentAction}
         sources={sources}
         onSave={handleSaveAction}
-        onClose={() => setActionDrawerOpen(false)}
+        onClose={() => setActionOpen(false)}
       />
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Delete Record?</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ ...FONT.body }}>This action cannot be undone.</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-          <Button onClick={handleDelete} variant="contained" color="error">Delete</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Snackbar */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete Record?"
+        message="This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </PageContainer>
   );
 }

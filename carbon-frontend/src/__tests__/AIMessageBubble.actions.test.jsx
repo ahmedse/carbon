@@ -256,6 +256,33 @@ describe('AIMessageBubble AI-driven actions', () => {
     expect(screen.getByRole('button', { name: /Show details/i })).toBeInTheDocument();
   });
 
+  it('shows Confirm & remember in Chat mode (memory is not gated by Agent mode)', () => {
+    const message = {
+      ...assistantMessage,
+      metadata: {
+        pending_actions: [
+          {
+            kind: 'memory',
+            execution_id: 'exec-mem',
+            tool: 'learn_fact',
+            operation: 'learn',
+            fact: 'Ahmed means the platform when he talks to me',
+            category: 'preference',
+            confirmation_message: 'Remember this preference: Ahmed means the platform when he talks to me',
+          },
+        ],
+      },
+    };
+    // executeMode defaults to false (Chat/Ask mode) — memory must still confirm.
+    renderBubble(message, {
+      onConfirmExecution: vi.fn(),
+      onDeclineExecution: vi.fn(),
+    });
+    expect(screen.getByRole('button', { name: /Confirm and remember/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Decline/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Agent mode is OFF/i)).not.toBeInTheDocument();
+  });
+
   // ── Proposal review: details + JSON + modify ─────────────────────────
 
   it('expands Details & JSON showing definition and POST body', () => {

@@ -78,7 +78,7 @@ function RoleBadge({ role, theme }) {
 export default function HeaderEnhanced() {
   const { t } = useTranslation('shell');
   const { t: tAuth } = useTranslation('auth');
-  const { user, logout, availablePerspectives, currentPerspective, setPerspective } = useAuth();
+  const { user, logout, availablePerspectives } = useAuth();
   const { unreadCount } = useNotifications();
   const { mode, toggle } = useThemeMode();
   const theme = useTheme();
@@ -153,42 +153,6 @@ export default function HeaderEnhanced() {
 
         <Box sx={{ flexGrow: 1 }} />
 
-        {/* Perspective tabs - show only if user has multiple perspectives */}
-        {availablePerspectives && availablePerspectives.length > 1 && (
-          <Tabs
-            value={currentPerspective || availablePerspectives[0]}
-            onChange={(_, value) => setPerspective(value)}
-            sx={{
-              mr: 2,
-              '& .MuiTab-root': {
-                textTransform: 'none',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-                color: 'text.secondary',
-                '&.Mui-selected': {
-                  color: 'success.main',
-                  fontWeight: 600,
-                },
-                minWidth: 'auto',
-                px: 1.5,
-              },
-              '& .MuiTabs-indicator': {
-                backgroundColor: 'success.main',
-              },
-            }}
-          >
-            {availablePerspectives.map(perspective => (
-              <Tab
-                key={perspective}
-                value={perspective}
-                label={PERSPECTIVE_LABEL_KEYS[perspective] ? t(PERSPECTIVE_LABEL_KEYS[perspective]) : perspective}
-              />
-            ))}
-          </Tabs>
-        )}
-
-        <Box sx={{ flexGrow: 1 }} />
-
         {/* Right side controls */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
           <Tooltip title={mode === "light" ? t('ui.darkMode') : t('ui.lightMode')}>
@@ -220,42 +184,59 @@ export default function HeaderEnhanced() {
 
           <LanguageSwitcher />
 
-          {/* User menu trigger */}
-          <Box
-            onClick={handleMenuOpen}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              cursor: "pointer",
-              borderRadius: 2,
-              px: 1,
-              py: 0.5,
-              "&:hover": { bgcolor: "action.hover" },
-            }}
-          >
-            <Avatar
+          {/* User menu trigger - styled as profile card for clarity */}
+          <Tooltip title={t('ui.userProfileTooltip') || 'User Profile — manage account, language, or logout'} arrow placement="bottom">
+            <Box
+              onClick={handleMenuOpen}
               sx={{
-                width: 32,
-                height: 32,
-                fontSize: "0.8125rem",
-                bgcolor: "success.main",
-                color: "common.white",
-                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                cursor: "pointer",
+                borderRadius: 2,
+                px: 1.25,
+                py: 0.625,
+                bgcolor: "action.hover",
+                border: `1px solid ${theme.palette.divider}`,
+                transition: "all 0.15s ease",
+                "&:hover": { 
+                  bgcolor: "action.selected",
+                  borderColor: theme.palette.primary.main,
+                  boxShadow: `0 0 0 1px ${theme.palette.primary.main}`,
+                },
               }}
             >
-              {initials}
-            </Avatar>
-            <Box sx={{ display: { xs: "none", sm: "block" } }}>
-              <Typography fontSize="0.8125rem" fontWeight={500} color="text.primary" lineHeight={1.2}>
-                {user?.username}
-              </Typography>
-              <Typography fontSize="0.6875rem" color="text.secondary" lineHeight={1.2}>
-                {availablePerspectives?.includes("admin") ? t('ui.administrator') : t('ui.operator')}
-              </Typography>
+              <Avatar
+                sx={{
+                  width: 32,
+                  height: 32,
+                  fontSize: "0.8125rem",
+                  bgcolor: availablePerspectives?.includes("admin") ? "primary.main" : "success.main",
+                  color: "common.white",
+                  fontWeight: 600,
+                }}
+              >
+                {initials}
+              </Avatar>
+              <Box sx={{ display: { xs: "none", sm: "block" } }}>
+                <Typography fontSize="0.8125rem" fontWeight={600} color="text.primary" lineHeight={1.2}>
+                  {user?.username}
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                  <Box sx={{ 
+                    px: 0.5, py: 0.125, borderRadius: 0.5, 
+                    bgcolor: availablePerspectives?.includes("admin") ? "primary.light" : "success.light",
+                    display: 'inline-block',
+                  }}>
+                    <Typography fontSize="0.5625rem" fontWeight={700} color={availablePerspectives?.includes("admin") ? "primary.dark" : "success.dark"} textTransform="uppercase" letterSpacing="0.05em">
+                      {availablePerspectives?.includes("admin") ? "Admin" : "User"}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+              <KeyboardArrowDown sx={{ color: "text.disabled", fontSize: '1.125rem' }} />
             </Box>
-            <KeyboardArrowDown sx={{ color: "text.disabled", fontSize: '1.125rem' }} />
-          </Box>
+          </Tooltip>
         </Box>
 
         {/* User menu popover */}

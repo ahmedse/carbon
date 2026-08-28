@@ -163,7 +163,7 @@ def _rule_verdict(
 # ── dq.rule_test ──────────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_nl_rule_test_parses_and_previews_not_null(django_store, cfg):
     """A not_null rule against mixed rows completes with a pass/fail preview."""
     from ai.engine_runtime import dispatch_task
@@ -202,7 +202,7 @@ def test_nl_rule_test_parses_and_previews_not_null(django_store, cfg):
     assert sum(1 for e in detail if not e["passed"]) == summary["failed"], data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_nl_rule_test_zero_row_table_passes(django_store, cfg):
     """A zero-row table yields no failures (nothing to violate)."""
     from ai.engine_runtime import dispatch_task
@@ -220,7 +220,7 @@ def test_nl_rule_test_zero_row_table_passes(django_store, cfg):
     assert (data.get("result") or {}).get("violations") == [], data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_nl_rule_test_all_fail_table_has_zero_pass(django_store, cfg):
     """Every row violating a range rule yields passed == 0."""
     from ai.engine_runtime import dispatch_task
@@ -245,7 +245,7 @@ def test_nl_rule_test_all_fail_table_has_zero_pass(django_store, cfg):
     assert len((data.get("result") or {}).get("violations") or []) == 3, data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_nl_rule_test_returns_per_row_detail_for_threshold(django_store, cfg):
     """A threshold rule returns per-applicable-row actual/expected/passed."""
     from ai.engine_runtime import dispatch_task
@@ -277,7 +277,7 @@ def test_nl_rule_test_returns_per_row_detail_for_threshold(django_store, cfg):
     assert by_id[2]["expected"] == {"operator": "gte", "value": 50}, data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_nl_rule_test_llm_outage_is_fail_visible(django_store, cfg):
     """An LLM outage yields pulse_unavailable/llm_unavailable — no fake preview."""
     from ai.engine_runtime import dispatch_task
@@ -292,7 +292,7 @@ def test_nl_rule_test_llm_outage_is_fail_visible(django_store, cfg):
     assert data.get("error", {}).get("code") == "llm_unavailable", data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_nl_rule_test_unparseable_llm_is_fail_visible(django_store, cfg):
     """An unparseable LLM response degrades to pulse_unavailable."""
     from ai.engine_runtime import dispatch_task
@@ -307,7 +307,7 @@ def test_nl_rule_test_unparseable_llm_is_fail_visible(django_store, cfg):
     assert data.get("error", {}).get("code") == "llm_unavailable", data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_nl_rule_test_unsupported_rule_type_is_fail_visible(django_store, cfg):
     """nl_check/anomaly_detect are never dry-run; they degrade visibly."""
     from ai.engine_runtime import dispatch_task
@@ -322,7 +322,7 @@ def test_nl_rule_test_unsupported_rule_type_is_fail_visible(django_store, cfg):
     assert data.get("error", {}).get("code") == "llm_unavailable", data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_nl_rule_test_empty_nl_returns_no_preview(django_store, cfg):
     """No NL rule text -> completed with a null preview and no failures."""
     from ai.engine_runtime import dispatch_task
@@ -342,7 +342,7 @@ def test_nl_rule_test_empty_nl_returns_no_preview(django_store, cfg):
 # ── Routing: nl_rule_test conversation → _send_nl_rule_test_message ──────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_nl_rule_test_conversation_routes_to_handler(user, table_graph, django_store, cfg):
     """A nl_rule_test conversation dry-runs a rule and persists an nl_rule_test message."""
     table = table_graph["table"]

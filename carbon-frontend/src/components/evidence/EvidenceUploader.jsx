@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Button, Typography, LinearProgress, Alert, List, ListItem, ListItemText, ListItemIcon } from '@mui/material';
 import { CloudUpload as UploadIcon, CheckCircle as SuccessIcon, Error as ErrorIcon } from '@mui/icons-material';
 import { useDropzone } from 'react-dropzone';
@@ -15,6 +16,7 @@ const ALLOWED_TYPES = {
 };
 
 export default function EvidenceUploader({ dataRowId, onUploadComplete }) {
+  const { t } = useTranslation('evidence');
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState([]);
@@ -25,7 +27,7 @@ export default function EvidenceUploader({ dataRowId, onUploadComplete }) {
     setResults([]);
 
     if (rejectedFiles.length > 0) {
-      setError(`Rejected: ${rejectedFiles.map(f => f.file.name).join(', ')}`);
+      setError(t('rejected', { names: rejectedFiles.map(f => f.file.name).join(', ') }));
       return;
     }
 
@@ -48,16 +50,16 @@ export default function EvidenceUploader({ dataRowId, onUploadComplete }) {
         setProgress(100);
         if (onUploadComplete) onUploadComplete(data.results.filter(r => r.status === 'success'));
       } else if (response.status === 401) {
-        setError('Authentication failed. Please refresh the page or log in again.');
+        setError(t('authFailed'));
       } else {
-        setError(data.detail || 'Upload failed. Please try again.');
+        setError(data.detail || t('uploadFailed'));
       }
     } catch (err) {
-      setError(`Upload error: ${err.message}`);
+      setError(t('uploadError', { message: err.message }));
     } finally {
       setUploading(false);
     }
-  }, [dataRowId, onUploadComplete]);
+  }, [dataRowId, onUploadComplete, t]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -86,17 +88,17 @@ export default function EvidenceUploader({ dataRowId, onUploadComplete }) {
         <input {...getInputProps()} disabled={uploading && results.length === 0} />
         <UploadIcon sx={{ fontSize: '3rem', color: 'primary.main', mb: 2 }} />
         <Typography variant="h6" gutterBottom>
-          {isDragActive ? 'Drop files here' : 'Drag & drop evidence files'}
+          {isDragActive ? t('dropHere') : t('dragDrop')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          or click to browse (PDF, Images, Excel, CSV, Word)
+          {t('browseHint')}
         </Typography>
-        <Typography variant="caption" color="text.secondary">Max: 50MB</Typography>
+        <Typography variant="caption" color="text.secondary">{t('maxSize')}</Typography>
       </Box>
 
       {uploading && (
         <Box sx={{ mt: 2 }}>
-          <Typography variant="body2">Uploading...</Typography>
+          <Typography variant="body2">{t('uploading')}</Typography>
           <LinearProgress variant="determinate" value={progress} />
         </Box>
       )}
@@ -112,7 +114,7 @@ export default function EvidenceUploader({ dataRowId, onUploadComplete }) {
               </ListItemIcon>
               <ListItemText
                 primary={result.filename}
-                secondary={result.status === 'error' ? 'Failed' : 'Success'}
+                secondary={result.status === 'error' ? t('failed') : t('success')}
               />
             </ListItem>
           ))}

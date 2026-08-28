@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { Close, InfoOutlined } from '@mui/icons-material';
 import { useAuth } from '../../../auth/AuthContext';
+import { useTranslation } from 'react-i18next';
 import { useNotification } from '../../../components/NotificationProvider';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
 import PanelTable from '../../../components/panel/PanelTable';
@@ -30,6 +31,7 @@ function FailuresDrawer({ result, onClose }) {
   const { notifyFromError } = useNotification();
   const [failures, setFailures] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation('dq');
 
   useEffect(() => {
     if (!result) return undefined;
@@ -40,7 +42,7 @@ function FailuresDrawer({ result, onClose }) {
       .then((payload) => {
         if (active) setFailures(payload);
       })
-      .catch((err) => notifyFromError(err, 'Could not load failure details'))
+      .catch((err) => notifyFromError(err, t('results.failureDetailsError')))
       .finally(() => {
         if (active) setLoading(false);
       });
@@ -48,7 +50,7 @@ function FailuresDrawer({ result, onClose }) {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, result?.id, notifyFromError]);
+  }, [token, result?.id, notifyFromError, t]);
 
   if (!result) return null;
   const failureRows = failures?.failures || [];
@@ -57,9 +59,11 @@ function FailuresDrawer({ result, onClose }) {
   return (
     <Drawer anchor="right" open onClose={onClose} PaperProps={{ sx: { width: 560, p: 3 } }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>Result #{result.id}</Typography>
+        <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>
+          {t('results.resultNumber', { id: result.id })}
+        </Typography>
         <Button size="small" startIcon={<Close />} onClick={onClose}>
-          Close
+          {t('close')}
         </Button>
       </Stack>
 
@@ -67,36 +71,47 @@ function FailuresDrawer({ result, onClose }) {
         <Chip
           size="small"
           color={RESULT_STATUS_COLORS[result.status] || 'default'}
-          label={result.status || (result.passed ? 'passed' : 'failed')}
+          label={
+            result.status === 'skipped_unavailable'
+              ? t('status.skippedUnavailable')
+              : result.status === 'passed'
+                ? t('status.passed')
+                : result.status === 'failed'
+                  ? t('status.failed')
+                  : result.status || (result.passed ? t('status.passed') : t('status.failed'))
+          }
         />
         {result.run_at ? (
           <Chip size="small" variant="outlined" label={new Date(result.run_at).toLocaleString()} />
         ) : null}
         {result.score != null ? (
-          <Chip size="small" variant="outlined" label={`Score ${Number(result.score).toFixed(1)}%`} />
+          <Chip size="small" variant="outlined" label={t('results.scoreChip', { score: Number(result.score).toFixed(1) })} />
         ) : null}
       </Stack>
 
       {isSkipped ? (
         <Box sx={{ mb: 2 }}>
           <Typography sx={{ color: 'text.secondary' }}>
-            Pulse could not evaluate this run (skipped_unavailable) — no failure rows were produced.
+            {t('results.skippedExplanation')}
           </Typography>
         </Box>
       ) : null}
 
       {loading ? (
-        <Typography sx={{ color: 'text.secondary' }}>Loading failures…</Typography>
+        <Typography sx={{ color: 'text.secondary' }}>{t('results.loadingFailures')}</Typography>
       ) : (
         <PanelTable
-          title="Failure Rows"
-          subtitle={`${failures?.failed_count ?? failureRows.length} failed · sample of ${failures?.sample_size ?? failureRows.length}`}
+          title={t('results.failureRows')}
+          subtitle={t('results.failureSummary', {
+            failed: failures?.failed_count ?? failureRows.length,
+            sample: failures?.sample_size ?? failureRows.length,
+          })}
           columns={[
-            { key: 'row', header: 'Row' },
-            { key: 'field', header: 'Field' },
+            { key: 'row', header: t('columns.row') },
+            { key: 'field', header: t('columns.field') },
             {
               key: 'value',
-              header: 'Value',
+              header: t('columns.value'),
               render: (value) => (
                 <Box sx={{ fontFamily: 'monospace', fontSize: '0.75rem', maxWidth: 140, overflowWrap: 'anywhere' }}>
                   {value}
@@ -105,7 +120,7 @@ function FailuresDrawer({ result, onClose }) {
             },
             {
               key: 'reason',
-              header: 'Reason',
+              header: t('columns.reason'),
               render: (reason) => <Box sx={{ maxWidth: 220 }}>{reason}</Box>,
             },
           ]}
@@ -118,8 +133,8 @@ function FailuresDrawer({ result, onClose }) {
           }))}
           emptyText={
             isSkipped
-              ? 'No failure details available for a skipped run.'
-              : 'No failure rows recorded — the check passed.'
+              ? t('results.noFailureDetailsSkipped')
+              : t('results.noFailureRows')
           }
         />
       )}
@@ -130,6 +145,7 @@ function FailuresDrawer({ result, onClose }) {
 function ResultsTab({ rule, onExplainAI }) {
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
+  const { t } = useTranslation('dq');
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -141,26 +157,26 @@ function ResultsTab({ rule, onExplainAI }) {
       .then((payload) => {
         if (active) setRows(unwrap(payload));
       })
-      .catch((err) => notifyFromError(err, 'Could not load results'))
+      .catch((err) => notifyFromError(err, t('results.loadError')))
       .finally(() => {
         if (active) setLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [token, rule?.id, notifyFromError]);
+  }, [token, rule?.id, notifyFromError, t]);
 
   const columns = useMemo(
     () => [
       {
         field: 'run_at',
-        headerName: 'Run At',
+        headerName: t('columns.runAt'),
         width: 170,
         renderCell: ({ row }) => (row.run_at ? new Date(row.run_at).toLocaleString() : '—'),
       },
       {
         field: 'status',
-        headerName: 'Status',
+        headerName: t('columns.status'),
         width: 160,
         renderCell: ({ row }) => (
           <Chip
@@ -169,16 +185,20 @@ function ResultsTab({ rule, onExplainAI }) {
             icon={row.status === 'skipped_unavailable' ? <InfoOutlined /> : undefined}
             label={
               row.status === 'skipped_unavailable'
-                ? 'Skipped (Pulse n/a)'
-                : row.status || (row.passed ? 'Passed' : 'Failed')
+                ? t('status.skippedUnavailable')
+                : row.status === 'passed'
+                  ? t('status.passed')
+                  : row.status === 'failed'
+                    ? t('status.failed')
+                    : row.status || (row.passed ? t('status.passed') : t('status.failed'))
             }
           />
         ),
       },
-      { field: 'checked_count', headerName: 'Checked', width: 100, type: 'number' },
+      { field: 'checked_count', headerName: t('columns.checked'), width: 100, type: 'number' },
       {
         field: 'failed_count',
-        headerName: 'Failed',
+        headerName: t('columns.failed'),
         width: 90,
         type: 'number',
         renderCell: ({ row }) =>
@@ -192,7 +212,7 @@ function ResultsTab({ rule, onExplainAI }) {
       },
       {
         field: 'score',
-        headerName: 'Score',
+        headerName: t('columns.score'),
         width: 90,
         renderCell: ({ row }) =>
           row.score != null ? `${Number(row.score).toFixed(1)}%` : '—',
@@ -211,18 +231,18 @@ function ResultsTab({ rule, onExplainAI }) {
               setSelected(row);
             }}
           >
-            Failures
+            {t('results.failuresButton')}
           </Button>
         ),
       },
     ],
-    []
+    [t]
   );
 
   return (
     <Box sx={{ p: 3 }}>
       <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
-        <AIActionButton title="Explain failures with AI" onClick={onExplainAI} />
+        <AIActionButton title={t('results.explainWithAi')} onClick={onExplainAI} />
       </Stack>
       <Paper variant="outlined" sx={{ borderRadius: 2 }}>
         <CarbonDataGrid
@@ -230,7 +250,7 @@ function ResultsTab({ rule, onExplainAI }) {
           rows={rows}
           loading={loading}
           getRowId={(row) => row.id || `${row.rule}-${row.run_at}`}
-          emptyMessage="No results yet — run this rule to generate results"
+          emptyMessage={t('results.empty')}
           onRowClick={({ row }) => setSelected(row)}
         />
       </Paper>

@@ -1,6 +1,7 @@
 // src/pages/ScopeInfoPage.jsx
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Box,
@@ -23,42 +24,31 @@ import {
 import SearchIcon from "@mui/icons-material/Search";
 import { useAuth } from "../auth/AuthContext";
 
-const SCOPE_DETAILS = {
-  1: {
-    label: "Scope 1: Direct Emissions",
-    icon: <Scope1Icon sx={{ fontSize: '2.5rem', color: "success.main", verticalAlign: "middle" }} />,
-    description: "Direct greenhouse gas (GHG) emissions from sources owned or controlled by your organization, such as company vehicles, on-site fuel combustion, or manufacturing activities.",
-    examples: [
-      "Company-owned vehicles",
-      "Stationary combustion (boilers, furnaces)",
-      "Process emissions from chemical production"
-    ]
-  },
-  2: {
-    label: "Scope 2: Indirect Energy Emissions",
-    icon: <Scope2Icon sx={{ fontSize: '2.5rem', color: "primary.main", verticalAlign: "middle" }} />,
-    description: "Indirect GHG emissions from the generation of purchased electricity, steam, heating, and cooling consumed by your organization.",
-    examples: [
-      "Purchased electricity for offices and factories",
-      "Purchased steam or heating/cooling utilities"
-    ]
-  },
-  3: {
-    label: "Scope 3: Value Chain Emissions",
-    icon: <Scope3Icon sx={{ fontSize: '2.5rem', color: "warning.main", verticalAlign: "middle" }} />,
-    description: "Other indirect GHG emissions that occur in the value chain of your organization, both upstream and downstream (including suppliers and product use by customers).",
-    examples: [
-      "Business travel and employee commuting",
-      "Waste disposal",
-      "Use of sold products",
-      "Transportation and distribution",
-      "Purchased goods and services"
-    ]
-  },
-};
-
 export default function ScopeInfoPage() {
-  useDocumentTitle("Scope Detail");
+  const { t } = useTranslation("emissions");
+  useDocumentTitle(t("scopeDetailTitle"));
+
+  const SCOPE_DETAILS = React.useMemo(() => ({
+    1: {
+      label: t("scope1Label"),
+      icon: <Scope1Icon sx={{ fontSize: '2.5rem', color: "success.main", verticalAlign: "middle" }} />,
+      description: t("scope1Detail"),
+      examples: t("scope1Examples", { returnObjects: true }),
+    },
+    2: {
+      label: t("scope2Label"),
+      icon: <Scope2Icon sx={{ fontSize: '2.5rem', color: "primary.main", verticalAlign: "middle" }} />,
+      description: t("scope2Detail"),
+      examples: t("scope2Examples", { returnObjects: true }),
+    },
+    3: {
+      label: t("scope3Label"),
+      icon: <Scope3Icon sx={{ fontSize: '2.5rem', color: "warning.main", verticalAlign: "middle" }} />,
+      description: t("scope3Detail"),
+      examples: t("scope3Examples", { returnObjects: true }),
+    },
+  }), [t]);
+
   const { scopeId } = useParams();
   const scope = SCOPE_DETAILS[scopeId];
   const { context, tablesByModule } = useAuth();
@@ -82,7 +72,7 @@ export default function ScopeInfoPage() {
     return { tablesCount: tables.length, totalRows };
   }
 
-  if (!scope) return <Typography>Scope not found.</Typography>;
+  if (!scope) return <Typography>{t("scopeNotFound")}</Typography>;
 
   return (
     <Box
@@ -119,7 +109,7 @@ export default function ScopeInfoPage() {
         mb={1}
         sx={{ px: { xs: 0, sm: 1 } }}
       >
-        Real-world examples:
+        {t("realWorldExamples")}:
       </Typography>
       <ul style={{ marginLeft: 24 }}>
         {scope.examples.map((ex, i) => (
@@ -129,10 +119,10 @@ export default function ScopeInfoPage() {
 
       <Box mt={6} mb={2}>
         <Typography variant="h5" mb={2} fontWeight={700}>
-          Modules in this Scope
+          {t("modulesInScope")}
         </Typography>
         <TextField
-          placeholder="Filter modules..."
+          placeholder={t("filterModules")}
           value={search}
           onChange={e => setSearch(e.target.value)}
           InputProps={{
@@ -149,7 +139,7 @@ export default function ScopeInfoPage() {
       <Grid container spacing={3}>
         {modules.length === 0 && (
           <Grid size={{ xs: 12 }}>
-            <Typography color="text.secondary">No modules found for this scope.</Typography>
+            <Typography color="text.secondary">{t("noModulesForScope")}</Typography>
           </Grid>
         )}
         {modules.map(mod => {
@@ -181,8 +171,8 @@ export default function ScopeInfoPage() {
                     {mod.description}
                   </Typography>
                   <Box mt={1} display="flex" alignItems="center" gap={1} flexWrap="wrap">
-                    <Chip size="small" label={`Tables: ${stats.tablesCount}`} />
-                    <Chip size="small" label={`Rows: ${stats.totalRows}`} />
+                    <Chip size="small" label={t("tablesCount", { count: stats.tablesCount })} />
+                    <Chip size="small" label={t("rowsCount", { count: stats.totalRows })} />
                   </Box>
                 </CardContent>
               </Card>

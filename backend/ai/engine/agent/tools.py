@@ -51,7 +51,7 @@ STATIC_TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "call_host_api",
-            "description": "Call the host system's REST API. Use for reading data via GET endpoints (no confirmation needed) or for mutations (POST/PUT/DELETE) which require user confirmation. Consult the instance's API catalog (available through search_knowledge) for the exact endpoint names. Endpoints typically follow patterns like: list entities, get entity details, get entity records, get latest results, get daily summaries, trigger actions. IMPORTANT: for any question about a specific calendar date, you MUST pass the date through query_params (date / date_from / date_to) — never rely on 'latest' endpoints for a historical or arbitrary date.",
+            "description": "Call the host system's REST API to read LIVE operational data. Use this for any question about the user's actual data (emission factors, calculations, reporting periods, GWP values, footprint summaries, tables, DQ rules) — a GET endpoint needs no confirmation; mutations (POST/PUT/DELETE) require user confirmation. Use the EXACT api_name values listed in the 'Available Host API Endpoints' section of your system prompt. Do NOT use search_knowledge for live data — search_knowledge only searches the knowledge graph, not the data catalog. IMPORTANT: for any question about a specific calendar date, you MUST pass the date through query_params (date / date_from / date_to) — never rely on 'latest' endpoints for a historical or arbitrary date.",
             "parameters": {
                 "type": "object",
                 "properties": {

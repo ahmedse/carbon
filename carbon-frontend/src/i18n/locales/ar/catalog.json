@@ -689,5 +689,16 @@
   "freshnessUnknown": "غير معروف",
   "failedToLoadProfile": "فشل تحميل ملف الجدول",
   "failedToRunProfile": "فشل تشغيل الفحص",
-  "failedToLoadScorecard": "فشل تحميل بطاقة نتائج الجودة"
+  "failedToLoadScorecard": "فشل تحميل بطاقة نتائج الجودة",
+  "accessRestricted": "الوصول مقيد",
+  "masked": "مقنّع",
+  "maskedTooltip": "تُقنَّع القيم وفقًا لسياسة البيانات",
+  "masking": "الإخفاء",
+  "maskingNone": "لا شيء",
+  "maskingRedact": "حجب",
+  "maskingHash": "تجزئة",
+  "maskingTruncate": "اقتطاع",
+  "maskingNull": "قيمة فارغة",
+  "maskingUpdated": "تم تحديث إخفاء القيم",
+  "maskingUpdateFailed": "فشل تحديث إخفاء القيم"
 }

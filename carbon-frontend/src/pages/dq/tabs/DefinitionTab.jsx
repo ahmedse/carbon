@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { Save } from '@mui/icons-material';
 import { useAuth } from '../../../auth/AuthContext';
+import { useTranslation } from 'react-i18next';
 import { useNotification } from '../../../components/NotificationProvider';
 import { useAITaskTransfer } from '../../../shell/useAITaskTransfer';
 import RuleJsonEditor from '../../../components/dq/RuleJsonEditor';
@@ -25,6 +26,7 @@ function DefinitionTab({ rule, onChanged }) {
   const { token } = useAuth();
   const { notify } = useNotification();
   const { transferTask } = useAITaskTransfer();
+  const { t } = useTranslation('dq');
 
   const [definitionText, setDefinitionText] = useState('');
   const [name, setName] = useState('');
@@ -41,7 +43,7 @@ function DefinitionTab({ rule, onChanged }) {
     setDefinitionText(rule?.definition ? JSON.stringify(rule.definition, null, 2) : '');
     setName(rule?.name || '');
     setDescription(rule?.description || '');
-    setSelectedTags((rule?.tags || []).map((t) => t.id));
+    setSelectedTags((rule?.tags || []).map((tag) => tag.id));
     setServerErrors([]);
   }, [rule]);
 
@@ -99,7 +101,7 @@ function DefinitionTab({ rule, onChanged }) {
       fields,
       prompt: `Validate rule "${rule.name}" (type: ${rule.rule_type})`,
     }, {
-      title: `DQ: ${rule.name}`,
+      title: t('definition.transferTitle', { name: rule.name }),
       source_page: 'dq-rule-definition',
       workspaceContext: {
         workspace: 'dq',
@@ -119,7 +121,7 @@ function DefinitionTab({ rule, onChanged }) {
     try {
       parsed = JSON.parse(definitionText);
     } catch (err) {
-      setServerErrors([{ field: '_root', code: 'parse', message: `Invalid JSON: ${err.message}` }]);
+      setServerErrors([{ field: '_root', code: 'parse', message: t('errors.invalidJson', { message: err.message }) }]);
       return;
     }
     const clientErrors = validateDefinitionClient(parsed);
@@ -142,7 +144,7 @@ function DefinitionTab({ rule, onChanged }) {
       };
       if (assignments.length > 0) body.field_assignments_write = assignments;
       await updateDQRule(token, rule.id, body);
-      notify({ message: `Rule updated — new version saved`, type: 'success' });
+      notify({ message: t('definition.updated'), type: 'success' });
       onChanged?.();
     } catch (err) {
       setServerErrors(normalizeServerErrors(err?.data || err));
@@ -154,17 +156,17 @@ function DefinitionTab({ rule, onChanged }) {
   return (
     <Box sx={{ p: 3 }}>
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
-        <Chip size="small" variant="outlined" label={`Version ${rule?.version ?? 1}`} />
+        <Chip size="small" variant="outlined" label={t('definition.version', { version: rule?.version ?? 1 })} />
         <Chip
           size="small"
           variant="outlined"
           color={rule?.is_active ? 'success' : 'default'}
-          label={rule?.is_active ? 'Active' : 'Inactive'}
+          label={rule?.is_active ? t('status.active') : t('status.inactive')}
         />
-        {rule?.archived ? <Chip size="small" variant="outlined" color="default" label="Archived" /> : null}
+        {rule?.archived ? <Chip size="small" variant="outlined" color="default" label={t('status.archived')} /> : null}
         <Box sx={{ flexGrow: 1 }} />
         <AIActionButton
-          title="Validate with AI"
+          title={t('definition.validateWithAi')}
           onClick={handleTransferToAI}
           disabled={rule?.archived}
           busy={transferring}
@@ -176,18 +178,18 @@ function DefinitionTab({ rule, onChanged }) {
           onClick={handleSave}
           disabled={saving || rule?.archived}
         >
-          {saving ? 'Saving…' : 'Save Definition'}
+          {saving ? t('definition.saving') : t('definition.saveDefinition')}
         </Button>
       </Stack>
 
       <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
-        Name & Description
+        {t('definition.nameDescription')}
       </Typography>
       <Stack spacing={1.5} sx={{ mb: 2 }}>
-        <TextField size="small" label="Rule name" value={name} onChange={(e) => setName(e.target.value)} />
+        <TextField size="small" label={t('definition.ruleName')} value={name} onChange={(e) => setName(e.target.value)} />
         <TextField
           size="small"
-          label="Description"
+          label={t('definition.description')}
           multiline
           minRows={2}
           value={description}
@@ -196,11 +198,11 @@ function DefinitionTab({ rule, onChanged }) {
       </Stack>
 
       <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
-        Tags
+        {t('definition.tags')}
       </Typography>
       <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mb: 2 }}>
         {tags.length === 0 ? (
-          <Typography sx={{ color: 'text.secondary' }}>No tags configured.</Typography>
+          <Typography sx={{ color: 'text.secondary' }}>{t('definition.noTags')}</Typography>
         ) : (
           tags.map((tag) => (
             <Chip
@@ -216,12 +218,12 @@ function DefinitionTab({ rule, onChanged }) {
       </Stack>
 
       <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
-        Bindings (from definition)
+        {t('definition.bindingsFromDefinition')}
       </Typography>
       <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mb: 2 }}>
         {bindings.length === 0 ? (
           <Typography sx={{ color: 'text.secondary' }}>
-            No table bindings — add them to definition.bindings.
+            {t('definition.noBindings')}
           </Typography>
         ) : (
           bindings.map((b) => (
@@ -237,12 +239,12 @@ function DefinitionTab({ rule, onChanged }) {
 
       {rule?.archived ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          This rule is archived and read-only. Unarchive by deleting the archive flag in Operations.
+          {t('definition.archivedReadOnly')}
         </Alert>
       ) : null}
 
       <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase', mb: 0.5 }}>
-        Schema v1 JSON Definition
+        {t('definition.schemaV1Json')}
       </Typography>
       <RuleJsonEditor
         value={definitionText}

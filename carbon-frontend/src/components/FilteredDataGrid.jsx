@@ -18,6 +18,7 @@ import {
   MenuItem,
   Chip,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import SearchIcon from '@mui/icons-material/Search';
 import TuneIcon from '@mui/icons-material/Tune';
 import StandardDataGrid from './StandardDataGrid';
@@ -41,11 +42,15 @@ export default function FilteredDataGrid({
   onClearFilters,
   pageSize = 25,
   rowsPerPageOptions = [25, 50, 100],
-  emptyMessage = 'No records found',
-  emptySubtext = 'Try adjusting your filters.',
+  emptyMessage,
+  emptySubtext,
   _toolbar = false,
 }) {
+  const { t } = useTranslation('common');
   const [showFilters, setShowFilters] = useState(false);
+
+  const resolvedEmptyMessage = emptyMessage ?? t('noRecordsFound');
+  const resolvedEmptySubtext = emptySubtext ?? t('tryAdjustingFilters');
 
   const activeFilters = filterDefs
     .map((def) => {
@@ -67,7 +72,7 @@ export default function FilteredDataGrid({
       <Paper sx={{ p: 2, mb: 3, bgcolor: 'background.dark' }}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
           <TextField
-            placeholder="Search by name or description..."
+            placeholder={t('searchByName')}
             value={searchValue}
             onChange={(e) => onSearchChange?.(e.target.value)}
             size="small"
@@ -85,7 +90,7 @@ export default function FilteredDataGrid({
               onClick={() => setShowFilters((v) => !v)}
               color={activeFilters.length > 0 ? 'primary' : 'inherit'}
             >
-              Filters{activeFilters.length > 0 ? ` (${activeFilters.length})` : ''}
+              {t('filters')}{activeFilters.length > 0 ? ` (${activeFilters.length})` : ''}
             </Button>
           )}
 
@@ -103,7 +108,7 @@ export default function FilteredDataGrid({
           {hasFilters && (
             <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
               <Button size="small" onClick={onClearFilters}>
-                Clear
+                {t('clear')}
               </Button>
             </Box>
           )}
@@ -120,7 +125,7 @@ export default function FilteredDataGrid({
                     label={def.label}
                     onChange={(e) => onFilterChange?.(def.key, e.target.value)}
                   >
-                    <MenuItem value="">{def.emptyLabel || `All ${def.label}`}</MenuItem>
+                    <MenuItem value="">{def.emptyLabel || t('allX', { label: def.label })}</MenuItem>
                     {Array.isArray(def.options)
                       ? def.options.map((option) => (
                           <MenuItem key={option.value} value={option.value}>
@@ -156,10 +161,10 @@ export default function FilteredDataGrid({
         {rows.length === 0 && !loading && (
           <Paper sx={{ p: 4, mt: 2, textAlign: 'center' }}>
             <Typography color="text.secondary" gutterBottom>
-              {emptyMessage}
+              {resolvedEmptyMessage}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {hasFilters ? emptySubtext : 'No data is available yet.'}
+              {hasFilters ? resolvedEmptySubtext : t('noDataAvailable')}
             </Typography>
           </Paper>
         )}

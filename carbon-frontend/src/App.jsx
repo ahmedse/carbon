@@ -21,11 +21,13 @@ import {
   CARBON_GENERATE_REPORTS, CARBON_MANAGE_REPORTING_PERIODS,
   CARBON_MANAGE_INVENTORY_COVERAGE,
   AI_VIEW_CONSOLE,
+  DATASCHEMA_MANAGE,
 } from "./capabilities";
 // ── Lazy-loaded page imports ──────────────────────────────────────────
 const OrgUnitsPage = React.lazy(() => import("./pages/admin/OrgUnitsPage"));
 const OrgUnitDetailPage = React.lazy(() => import("./pages/admin/OrgUnitDetailPage"));
 const AccessControlPage = React.lazy(() => import("./pages/admin/AccessControlPage"));
+const FieldPoliciesPanel = React.lazy(() => import("./pages/admin/catalog/FieldPoliciesPanel"));
 const UsersPage = React.lazy(() => import("./pages/admin/UsersPage"));
 const GroupsPage = React.lazy(() => import("./pages/admin/GroupsPage"));
 const RoleRegistryPage = React.lazy(() => import("./pages/admin/RoleRegistryPage"));
@@ -73,6 +75,8 @@ const InventoryCoveragePage = React.lazy(() => import("./pages/carbon/InventoryC
 const ReportingPeriodsPage = React.lazy(() => import("./pages/emissions/ReportingPeriodsPage"));
 const CarbonConsolePage = React.lazy(() => import("./pages/carbon/CarbonConsolePage"));
 const CarbonDashboardPage = React.lazy(() => import("./pages/carbon/CarbonDashboardPage"));
+const AnalyticsDashboard = React.lazy(() => import("./pages/dashboards/AnalyticsDashboard"));
+const ChairmanDashboard = React.lazy(() => import("./pages/carbon/ChairmanDashboard"));
 const ReportsPage = React.lazy(() => import("./pages/carbon/ReportsPage"));
 const MyDataPage = React.lazy(() => import("./pages/carbon/MyDataPage"));
 const ModuleWorkspacePage = React.lazy(() => import("./pages/carbon/ModuleWorkspacePage"));
@@ -226,10 +230,11 @@ export default function App() {
                 {/* Carbon App — all routes under /carbon/* namespace */}
                 {/* Namespace root redirect — hitting the bare /carbon root (e.g. the
                     /carbon/ deployment mount path) must never 404. RULE_22. */}
-                <Route path="/carbon" element={<Navigate to="/carbon/console" replace />} />
+                <Route path="/carbon" element={<Navigate to="/carbon/chairman" replace />} />
+                <Route path="/carbon/chairman" element={<ChairmanDashboard />} />
                 <Route path="/carbon/console" element={<CarbonConsolePage />} />
                 <Route path="/carbon/dashboard" element={<CarbonDashboardPage />} />
-                <Route path="/carbon/analytics" element={<Navigate to="/carbon/dashboard" replace />} />
+                <Route path="/carbon/analytics" element={<AdminRoute appId="carbon" requiredCapability={CARBON_VIEW_ANALYTICS}><AnalyticsDashboard /></AdminRoute>} />
                 {/* Carbon-domain admin routes — accessible by global admins OR carbon_lead Domain Leads */}
                 <Route path="/carbon/my-data" element={<MyDataPage />} />
                 <Route path="/carbon/my-data/:moduleId" element={<ModuleWorkspacePage />} />
@@ -340,6 +345,14 @@ export default function App() {
                   }
                 />
                 <Route path="/admin/audit" element={<AdminRoute><AuditLogPage /></AdminRoute>} />
+                <Route
+                  path="/admin/catalog/field-policies"
+                  element={
+                    <AdminRoute requiredCapability={DATASCHEMA_MANAGE}>
+                      <FieldPoliciesPanel />
+                    </AdminRoute>
+                  }
+                />
                 <Route path="/admin/logs" element={<AdminRoute><LogViewerPage /></AdminRoute>} />
                 <Route path="/admin/config" element={<AdminRoute><PlatformConfigPage /></AdminRoute>} />
                 <Route path="/admin/ai" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><PulseOverviewPage /></AdminRoute>} />

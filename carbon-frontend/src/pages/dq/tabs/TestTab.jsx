@@ -23,7 +23,8 @@ import {
   Typography,
 } from '@mui/material';
 import { PlayArrow, CheckCircle, Cancel, RemoveCircle } from '@mui/icons-material';
-import { RULE_TYPE_LABELS } from '../constants';
+import { useTranslation, Trans } from 'react-i18next';
+import { ruleTypeLabel } from '../constants';
 import { useAITaskTransfer } from '../../../shell/useAITaskTransfer';
 import AIActionButton from '../../../components/dq/AIActionButton';
 
@@ -35,7 +36,7 @@ function isEmpty(v) {
   return v === null || v === undefined || v === '';
 }
 
-function evaluateRule(definition, sampleRows) {
+function evaluateRule(definition, sampleRows, t) {
   const ruleType = definition.type || '';
   const params = definition.params || {};
   const bindings = definition.bindings || [];
@@ -63,7 +64,7 @@ function evaluateRule(definition, sampleRows) {
     sampleRows.forEach((row, i) => {
       const v = fieldName ? row[fieldName] : undefined;
       const passed = !isEmpty(v);
-      results.push({ index: i, value: v, passed, reason: passed ? null : 'Value is null or empty' });
+      results.push({ index: i, value: v, passed, reason: passed ? null : t('test.reasonNull') });
       if (!passed) failures.push({ index: i, value: v });
     });
   } else if (ruleType === 'unique') {
@@ -88,7 +89,9 @@ function evaluateRule(definition, sampleRows) {
         index: i,
         value: v,
         passed,
-        reason: passed ? null : `Duplicate value "${v}" found in rows ${dupes.map((d) => d + 1).join(', ')}`,
+        reason: passed
+          ? null
+          : t('test.reasonDuplicate', { value: v, rows: dupes.map((d) => d + 1).join(', ') }),
       });
       if (!passed) failures.push({ index: i, value: v });
     });
@@ -105,7 +108,9 @@ function evaluateRule(definition, sampleRows) {
         index: i,
         value: v,
         passed,
-        reason: passed ? null : `"${v}" not in allowed values: [${[...allowed].join(', ')}]`,
+        reason: passed
+          ? null
+          : t('test.reasonNotAllowed', { value: v, values: [...allowed].join(', ') }),
       });
       if (!passed) failures.push({ index: i, value: v });
     });
@@ -120,7 +125,7 @@ function evaluateRule(definition, sampleRows) {
       }
       const fv = Number(v);
       if (isNaN(fv)) {
-        results.push({ index: i, value: v, passed: false, reason: `"${v}" is not a number` });
+        results.push({ index: i, value: v, passed: false, reason: t('test.reasonNotNumber', { value: v }) });
         failures.push({ index: i, value: v });
         return;
       }
@@ -128,8 +133,8 @@ function evaluateRule(definition, sampleRows) {
       const above = hi !== undefined && hi !== null && fv > Number(hi);
       const passed = !below && !above;
       let reason = null;
-      if (below) reason = `${fv} < min ${lo}`;
-      if (above) reason = `${fv} > max ${hi}`;
+      if (below) reason = t('test.reasonBelowMin', { value: fv, min: lo });
+      if (above) reason = t('test.reasonAboveMax', { value: fv, max: hi });
       results.push({ index: i, value: v, passed, reason });
       if (!passed) failures.push({ index: i, value: v });
     });
@@ -150,7 +155,7 @@ function evaluateRule(definition, sampleRows) {
         index: i,
         value: v,
         passed,
-        reason: passed ? null : `"${v}" does not match /${pattern}/`,
+        reason: passed ? null : t('test.reasonNoMatch', { value: v, pattern }),
       });
       if (!passed) failures.push({ index: i, value: v });
     });
@@ -165,7 +170,7 @@ function evaluateRule(definition, sampleRows) {
       }
       const fv = Number(v);
       if (isNaN(fv)) {
-        results.push({ index: i, value: v, passed: false, reason: `"${v}" is not a number` });
+        results.push({ index: i, value: v, passed: false, reason: t('test.reasonNotNumber', { value: v }) });
         failures.push({ index: i, value: v });
         return;
       }
@@ -184,7 +189,7 @@ function evaluateRule(definition, sampleRows) {
         index: i,
         value: v,
         passed,
-        reason: passed ? null : `${fv} ${opLabels[op] || op} ${tv} is false`,
+        reason: passed ? null : t('test.reasonCompareFalse', { value: fv, op: opLabels[op] || op, threshold: tv }),
       });
       if (!passed) failures.push({ index: i, value: v });
     });
@@ -267,6 +272,7 @@ function defaultSampleForRule(definition) {
 // ── Component ───────────────────────────────────────────────────────────────
 
 export default function TestTab({ rule }) {
+  const { t } = useTranslation('dq');
   const definition = useMemo(() => rule?.definition || {}, [rule?.definition]);
   const ruleType = definition.type || rule?.rule_type || '';
   const { transferTask } = useAITaskTransfer();
@@ -279,7 +285,10 @@ export default function TestTab({ rule }) {
   const [transferring, setTransferring] = useState(false);
 
   const isUnsupported = UNSUPPORTED_TYPES.includes(ruleType);
-  const ruleTypeLabel = RULE_TYPE_LABELS[ruleType] || ruleType;
+  const typeLabel = ruleTypeLabel(t, ruleType);
+  // In-scope alias for <Trans> children interpolation ({{type}} shorthand
+  // compiles to an object-literal reference on `type`).
+  const type = typeLabel;
 
   const handleTransferToAI = async () => {
     setTransferring(true);
@@ -293,7 +302,7 @@ export default function TestTab({ rule }) {
       fields,
       prompt: `Test rule "${rule.name}" against data`,
     }, {
-      title: `DQ Test: ${rule.name}`,
+      title: t('test.transferTitle', { name: rule.name }),
       source_page: 'dq-rule-test',
       workspaceContext: {
         workspace: 'dq',
@@ -314,18 +323,18 @@ export default function TestTab({ rule }) {
     try {
       parsed = JSON.parse(sampleText);
     } catch (err) {
-      setParseError(`Invalid JSON: ${err.message}`);
+      setParseError(t('errors.invalidJson', { message: err.message }));
       setResults(null);
       return;
     }
     if (!Array.isArray(parsed)) {
-      setParseError('Sample data must be a JSON array of objects');
+      setParseError(t('test.sampleArrayError'));
       setResults(null);
       return;
     }
-    const evalResult = evaluateRule(definition, parsed);
+    const evalResult = evaluateRule(definition, parsed, t);
     setResults(evalResult);
-  }, [sampleText, definition]);
+  }, [sampleText, definition, t]);
 
   const scoreColor = useMemo(() => {
     if (results?.score == null) return 'text.secondary';
@@ -340,13 +349,18 @@ export default function TestTab({ rule }) {
         {/* Info banner */}
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: 'action.hover' }}>
           <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 0.5 }}>
-            Test Rule: {rule?.name || 'Rule'}
+            {t('test.testRule', { name: rule?.name || t('test.ruleFallback') })}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Rule type: <strong>{ruleTypeLabel}</strong>
-            {UNSUPPORTED_TYPES.includes(ruleType)
-              ? ' — this rule type requires Pulse AI and cannot be tested locally. Use the Jobs tab to run it against real data.'
-              : ' — provide sample rows below to preview how this rule evaluates data.'}
+            {isUnsupported ? (
+              <Trans i18nKey="test.ruleTypeLineUnsupported" ns="dq" values={{ type }}>
+                Rule type: <strong>{{type}}</strong> — this rule type requires Pulse AI and cannot be tested locally. Use the Jobs tab to run it against real data.
+              </Trans>
+            ) : (
+              <Trans i18nKey="test.ruleTypeLine" ns="dq" values={{ type }}>
+                Rule type: <strong>{{type}}</strong> — provide sample rows below to preview how this rule evaluates data.
+              </Trans>
+            )}
           </Typography>
         </Paper>
 
@@ -354,14 +368,14 @@ export default function TestTab({ rule }) {
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
             <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700 }}>
-              Sample Data (JSON)
+              {t('test.sampleData')}
             </Typography>
             <Button
               variant="outlined"
               size="small"
               onClick={() => setSampleText(JSON.stringify(defaultSampleForRule(definition), null, 2))}
             >
-              Reset to template
+              {t('test.resetTemplate')}
             </Button>
           </Stack>
           <TextField
@@ -394,10 +408,10 @@ export default function TestTab({ rule }) {
               onClick={handleTest}
               disabled={isUnsupported}
             >
-              Test
+              {t('test.testButton')}
             </Button>
             <AIActionButton
-              title="Check with AI"
+              title={t('test.checkWithAi')}
               onClick={handleTransferToAI}
               busy={transferring}
             />
@@ -409,26 +423,31 @@ export default function TestTab({ rule }) {
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
             <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1.5 }}>
               <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700 }}>
-                Results
+                {t('test.results')}
               </Typography>
               <Chip
                 size="small"
-                label={`${results.passedCount ?? results.checked - results.failed} / ${results.checked} passed`}
+                label={t('test.passedCount', {
+                  passed: results.passedCount ?? results.checked - results.failed,
+                  checked: results.checked,
+                })}
                 color={results.failed === 0 ? 'success' : 'warning'}
                 variant="outlined"
               />
               <Typography variant="body2" sx={{ color: scoreColor, fontWeight: 700 }}>
-                Score: {results.score}%
+                {t('test.score', { score: results.score })}
               </Typography>
             </Stack>
 
             {results.failed > 0 ? (
               <Alert severity="warning" sx={{ mb: 1.5 }}>
-                {results.failed} row{results.failed !== 1 ? 's' : ''} failed — fix the rule definition or sample data.
+                {results.failed === 1
+                  ? t('test.failedAlertOne', { count: results.failed })
+                  : t('test.failedAlertMany', { count: results.failed })}
               </Alert>
             ) : (
               <Alert severity="success" sx={{ mb: 1.5 }}>
-                All rows passed — the rule logic is valid for this sample data.
+                {t('test.allPassed')}
               </Alert>
             )}
 
@@ -436,12 +455,12 @@ export default function TestTab({ rule }) {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase' }}>Row</TableCell>
+                    <TableCell sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase' }}>{t('columns.row')}</TableCell>
                     <TableCell sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase' }}>
-                      {results.fieldName || 'Value'}
+                      {results.fieldName || t('test.value')}
                     </TableCell>
-                    <TableCell sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase' }}>Verdict</TableCell>
-                    <TableCell sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase' }}>Reason</TableCell>
+                    <TableCell sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase' }}>{t('columns.verdict')}</TableCell>
+                    <TableCell sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase' }}>{t('columns.reason')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -456,14 +475,20 @@ export default function TestTab({ rule }) {
                         {r.index + 1}
                       </TableCell>
                       <TableCell sx={{ fontSize: '0.6875rem', py: 0.5, fontFamily: 'monospace' }}>
-                        {r.value === null ? <em>null</em> : r.value === '' ? <em>empty</em> : String(r.value)}
+                        {r.value === null ? (
+                          <em>{t('test.nullValue')}</em>
+                        ) : r.value === '' ? (
+                          <em>{t('test.emptyValue')}</em>
+                        ) : (
+                          String(r.value)
+                        )}
                       </TableCell>
                       <TableCell sx={{ py: 0.5 }}>
                         {r.passed ? (
                           <Chip
                             size="small"
                             icon={<CheckCircle />}
-                            label="Passed"
+                            label={t('status.passed')}
                             color="success"
                             variant="outlined"
                           />
@@ -471,7 +496,7 @@ export default function TestTab({ rule }) {
                           <Chip
                             size="small"
                             icon={<Cancel />}
-                            label="Failed"
+                            label={t('status.failed')}
                             color="error"
                             variant="outlined"
                           />

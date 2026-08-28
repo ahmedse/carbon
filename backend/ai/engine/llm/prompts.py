@@ -157,6 +157,21 @@ async def build_chat_prompt(
             # Never break chat for A/B bookkeeping
             logger.debug(f"A/B candidate check skipped: {_ab_exc}")
 
+    # ── Host API endpoint catalog (appended to every path) — the model can
+    # only discover ``call_host_api`` endpoint names here; search_knowledge
+    # searches the knowledge graph, not the catalog.
+    api_catalog_section = _build_api_catalog_section(api_catalog)
+    if api_catalog_section:
+        result = f"{result}\n\n{api_catalog_section}" if result else api_catalog_section
+
+    # ── Live-data grounding directive (derived from the catalog) — bridges the
+    # semantic gap between "tell me about emission factors here" and the
+    # `list_emission_factors` endpoint, so the S3 planner queries live data
+    # instead of lecturing from parametric knowledge.
+    grounding_section = _build_grounding_directive(api_catalog)
+    if grounding_section:
+        result = f"{result}\n\n{grounding_section}" if result else grounding_section
+
     # ── Capability-scoped access inventory (per-user, appended to every path) ──
     # The assistant may only ever mention items from this inventory — apps,
     # work areas, modules or capabilities the user cannot reach must not leak,
@@ -172,6 +187,96 @@ async def build_chat_prompt(
     result = f"{result}\n\n{RENDERING_CAPABILITIES}" if result else RENDERING_CAPABILITIES
 
     return result
+
+
+def _build_api_catalog_section(api_catalog: list | None) -> str:
+    """Render the host API endpoints into the system prompt.
+
+    ``call_host_api`` resolves an endpoint by its catalog ``name``, but
+    ``search_knowledge`` only searches the knowledge graph — so this section is
+    the model's only reliable source of the available endpoint names.  Kept
+    terse (name + method + one-line description) for prefix-cache stability
+    (RULE_25/26).
+    """
+    if not api_catalog:
+        return ""
+    lines = [
+        "## Available Host API Endpoints",
+        "",
+        "Call these live endpoints via `call_host_api(api_name, ...)` — use the "
+        "exact names below. Read-only (GET) endpoints need no confirmation.",
+    ]
+    for ep in api_catalog:
+        name = ep.get("name", "unknown")
+        method = (ep.get("method", "GET") or "GET").upper()
+        desc = (ep.get("description", "") or "").replace("\n", " ").strip()
+        confirm = " [requires user confirmation]" if ep.get("requires_confirmation") else ""
+        lines.append(f"- `{name}` ({method}): {desc}{confirm}")
+    return "\n".join(lines)
+
+
+def _endpoint_to_domain_phrase(name: str) -> str:
+    """`list_emission_factors` → `emission factors` (human-readable domain)."""
+    for prefix in ("list_", "get_", "search_", "query_"):
+        if name.startswith(prefix):
+            name = name[len(prefix):]
+            break
+    return name.replace("_", " ").strip()
+
+
+def _build_grounding_directive(api_catalog: list | None) -> str:
+    """Render a live-data grounding rule derived from the endpoint catalog.
+
+    The model's parametric knowledge is generic textbook reference data; the
+    platform's actual records (emission factors, calculation summaries, DQ
+    rules, …) live behind ``call_host_api``. This directive names each read
+    domain so the model maps a natural-language question ("tell me about
+    emission factors here") to the matching endpoint instead of lecturing from
+    memory. Derived entirely from ``instance.yaml`` (ADR-0017), so it
+    generalises to any instance with zero code changes.
+    """
+    if not api_catalog:
+        return ""
+
+    read_domains: list[str] = []
+    for ep in api_catalog:
+        if (ep.get("method", "GET") or "GET").upper() != "GET":
+            continue
+        name = ep.get("name", "")
+        if not name:
+            continue
+        read_domains.append(f"- {_endpoint_to_domain_phrase(name)} → `{name}`")
+
+    if not read_domains:
+        return ""
+
+    lines = [
+        "## Live data grounding (non-negotiable)",
+        "",
+        "This platform holds LIVE operational data that is NOT part of your "
+        "training knowledge — do not answer about it from general knowledge or "
+        "textbook reference values. When the user asks about any domain below "
+        "(especially with words like \"here\", \"in the system\", \"our\", "
+        "\"my\", \"on the platform\", \"what we have\", \"show me\", \"list\"), "
+        "call the matching endpoint via `call_host_api` and answer from the "
+        "returned data only:",
+        "",
+    ] + read_domains + [
+        "",
+        "If a domain maps to more than one endpoint, call the one that answers "
+        "the user's specific question. Never invent values; if the data has no "
+        "matching rows, say so plainly.",
+        "",
+        "ANSWER WITH DEPTH, NOT A DUMP. After calling the endpoint, synthesise "
+        "the result into a direct, insightful answer: name the material facts "
+        "(the count, the highest/lowest, the specific item they asked about), "
+        "cite real values inline, and present the data richly — a clean table "
+        "of the meaningful columns plus a chart (see the rich-rendering rules). "
+        "Keep it to the relevant rows and columns — never every field of every "
+        "record. Never invent values; if the data has no matching rows, say so "
+        "plainly.",
+    ]
+    return "\n".join(lines)
 
 
 def _build_access_section(instance_config: dict | None) -> str:
@@ -254,6 +359,30 @@ right construct instead of describing things in prose:
   When a workflow, flow, process, relationship or structure is clearer as a
   picture, ALWAYS emit a mermaid diagram instead of prose. You CAN draw
   diagrams — never say you cannot.
+- **Mermaid line rules (critical)** — the opening ```mermaid fence MUST start
+  on its OWN line, preceded by a blank line; the closing ``` MUST be on its own
+  line too. Put EVERY mermaid directive on its OWN line. NEVER place the fence
+  inline after prose, and NEVER collapse a diagram to a single line — a
+  single-line or inline fence will NOT render as a diagram in the UI.
+- **Data charts** — when your answer holds 3+ comparable numeric records, emit a
+  Mermaid chart IN ADDITION to a table: ```mermaid pie``` for proportions of a
+  whole; ```mermaid xychart-beta``` with a `bar` series for ranking/magnitude
+  (`line` for a trend). Keep labels ≤ 14 chars and use only real values. Every
+  directive (`title`, `x-axis`, `y-axis`, `bar`, `line`, each `pie` slice) goes
+  on its own line. For example:
+  ```mermaid
+  pie title Scope breakdown
+      "Scope 1" : 4
+      "Scope 2" : 2
+      "Scope 3" : 1
+  ```
+  ```mermaid
+  xychart-beta
+      title "kg CO2e per unit"
+      x-axis [Diesel, Gasoline, LPG]
+      y-axis "kg CO2e" 0 --> 3
+      bar [2.51, 2.19, 1.52]
+  ```
 - **Math** — $inline$ and $$block$$ render with KaTeX.
 - **Figures** — images with a title render with a caption below them.
 - **Links** — internal platform routes (starting with /) render as in-app links.

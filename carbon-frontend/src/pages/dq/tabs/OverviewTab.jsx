@@ -3,11 +3,12 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import {
-  RULE_TYPE_LABELS,
-  RULE_LEVEL_LABELS,
-  DIMENSION_LABELS,
-  SEVERITY_LABELS,
+  ruleTypeLabel,
+  ruleLevelLabel,
+  dimensionLabel,
+  severityLabel,
   SEVERITY_COLORS,
 } from '../constants';
 
@@ -21,6 +22,7 @@ function Field({ label, children }) {
 }
 
 export default function OverviewTab({ rule }) {
+  const { t } = useTranslation('dq');
   const def = rule?.definition || {};
   const bindings = def.bindings || [];
   const assignments = rule?.field_assignments || [];
@@ -36,29 +38,29 @@ export default function OverviewTab({ rule }) {
         {/* Identity */}
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1.5 }}>
-            Identity
+            {t('overview.identity')}
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <Field label="Name">
+            <Field label={t('overview.name')}>
               <Typography variant="body2">{rule?.name || '—'}</Typography>
             </Field>
-            <Field label="Version">
+            <Field label={t('overview.version')}>
               <Typography variant="body2">{rule?.version ?? 1}</Typography>
             </Field>
-            <Field label="Description">
+            <Field label={t('overview.description')}>
               <Typography variant="body2" sx={{ color: rule?.description ? 'text.primary' : 'text.disabled' }}>
-                {rule?.description || 'No description'}
+                {rule?.description || t('overview.noDescription')}
               </Typography>
             </Field>
-            <Field label="Status">
+            <Field label={t('overview.status')}>
               <Stack direction="row" spacing={0.5}>
                 {rule?.archived ? (
-                  <Chip size="small" color="default" variant="outlined" label="Archived" />
+                  <Chip size="small" color="default" variant="outlined" label={t('status.archived')} />
                 ) : (
                   <Chip
                     size="small"
                     color={rule?.is_active ? 'success' : 'default'}
-                    label={rule?.is_active ? 'Active' : 'Inactive'}
+                    label={rule?.is_active ? t('status.active') : t('status.inactive')}
                   />
                 )}
               </Stack>
@@ -69,29 +71,29 @@ export default function OverviewTab({ rule }) {
         {/* Classification */}
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1.5 }}>
-            Classification
+            {t('overview.classification')}
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <Field label="Type">
+            <Field label={t('overview.type')}>
               <Typography variant="body2">
-                {RULE_TYPE_LABELS[def.type] || def.type || RULE_TYPE_LABELS[rule?.rule_type] || rule?.rule_type || '—'}
+                {ruleTypeLabel(t, def.type) || def.type || ruleTypeLabel(t, rule?.rule_type) || rule?.rule_type || '—'}
               </Typography>
             </Field>
-            <Field label="Level">
+            <Field label={t('overview.level')}>
               <Typography variant="body2">
-                {RULE_LEVEL_LABELS[def.level] || def.level || RULE_LEVEL_LABELS[rule?.rule_level] || rule?.rule_level || '—'}
+                {ruleLevelLabel(t, def.level) || def.level || ruleLevelLabel(t, rule?.rule_level) || rule?.rule_level || '—'}
               </Typography>
             </Field>
-            <Field label="Dimension">
+            <Field label={t('overview.dimension')}>
               <Typography variant="body2">
-                {DIMENSION_LABELS[def.dimension] || def.dimension || DIMENSION_LABELS[rule?.dimension] || rule?.dimension || '—'}
+                {dimensionLabel(t, def.dimension) || def.dimension || dimensionLabel(t, rule?.dimension) || rule?.dimension || '—'}
               </Typography>
             </Field>
-            <Field label="Severity">
+            <Field label={t('overview.severity')}>
               <Chip
                 size="small"
                 color={SEVERITY_COLORS[def.severity || rule?.severity] || 'default'}
-                label={SEVERITY_LABELS[def.severity] || def.severity || SEVERITY_LABELS[rule?.severity] || rule?.severity || '—'}
+                label={severityLabel(t, def.severity) || def.severity || severityLabel(t, rule?.severity) || rule?.severity || '—'}
               />
             </Field>
           </Box>
@@ -100,7 +102,7 @@ export default function OverviewTab({ rule }) {
         {/* Bindings */}
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1.5 }}>
-            Bound Tables & Fields
+            {t('overview.boundTablesFields')}
           </Typography>
           {boundEntries.length > 0 ? (
             <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
@@ -110,7 +112,7 @@ export default function OverviewTab({ rule }) {
             </Stack>
           ) : (
             <Typography variant="body2" sx={{ color: 'text.disabled' }}>
-              No bindings configured
+              {t('overview.noBindings')}
             </Typography>
           )}
         </Paper>
@@ -119,7 +121,7 @@ export default function OverviewTab({ rule }) {
         {def.params && Object.keys(def.params).length > 0 ? (
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
             <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1.5 }}>
-              Parameters
+              {t('overview.parameters')}
             </Typography>
             <Box
               component="pre"
@@ -141,14 +143,14 @@ export default function OverviewTab({ rule }) {
         {/* Enforcement */}
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1.5 }}>
-            Enforcement
+            {t('overview.enforcement')}
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <Field label="On Write">
+            <Field label={t('overview.onWrite')}>
               <Chip
                 size="small"
                 color={def.enforcement?.on_write ? 'warning' : 'default'}
-                label={def.enforcement?.on_write ? 'Enforced' : 'Not enforced'}
+                label={def.enforcement?.on_write ? t('overview.enforced') : t('overview.notEnforced')}
               />
             </Field>
           </Box>
@@ -157,21 +159,21 @@ export default function OverviewTab({ rule }) {
         {/* Metadata */}
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1.5 }}>
-            Metadata
+            {t('overview.metadata')}
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <Field label="Results">
+            <Field label={t('overview.results')}>
               <Typography variant="body2">{rule?.results_count ?? 0}</Typography>
             </Field>
-            <Field label="Created">
+            <Field label={t('overview.created')}>
               <Typography variant="body2">
                 {rule?.created_at ? new Date(rule.created_at).toLocaleString() : '—'}
               </Typography>
             </Field>
-            <Field label="Created By">
+            <Field label={t('overview.createdBy')}>
               <Typography variant="body2">{rule?.created_by_name || '—'}</Typography>
             </Field>
-            <Field label="Last Modified">
+            <Field label={t('overview.lastModified')}>
               <Typography variant="body2">
                 {rule?.updated_at ? new Date(rule.updated_at).toLocaleString() : '—'}
               </Typography>

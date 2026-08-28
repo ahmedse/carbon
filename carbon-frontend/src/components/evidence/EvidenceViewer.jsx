@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Typography, List, ListItem, ListItemText, ListItemIcon, IconButton, CircularProgress, Alert } from '@mui/material';
 import { InsertDriveFile as FileIcon, Download as DownloadIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { authFetch } from '../../api/api';
@@ -16,6 +17,7 @@ function formatDate(dateString) {
 }
 
 export default function EvidenceViewer({ dataRowId, token, onDelete }) {
+  const { t } = useTranslation('evidence');
   const [evidence, setEvidence] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -40,22 +42,22 @@ export default function EvidenceViewer({ dataRowId, token, onDelete }) {
         console.error('🔴 EvidenceViewer: 401 Unauthorized - token may be invalid or expired');
         localStorage.removeItem('access');
         localStorage.removeItem('refresh');
-        setError('Authentication failed. Please refresh the page or log in again.');
+        setError(t('authFailed'));
       } else if (response.ok) {
         const data = await response.json();
         setEvidence(data.results || data);
         console.log('🟩 EvidenceViewer: Evidence loaded', { count: (data.results || data).length });
       } else {
         console.error('🔴 EvidenceViewer: HTTP error', { status: response.status, statusText: response.statusText });
-        setError(`Failed to load evidence (${response.status})`);
+        setError(t('failedLoad', { status: response.status }));
       }
     } catch (err) {
       console.error('🔴 EvidenceViewer: Fetch error', err);
-      setError(`Error: ${err.message}`);
+      setError(t('errorPrefix', { message: err.message }));
     } finally {
       setLoading(false);
     }
-  }, [dataRowId]);
+  }, [dataRowId, t]);
 
   useEffect(() => {
     fetchEvidence();
@@ -94,7 +96,7 @@ export default function EvidenceViewer({ dataRowId, token, onDelete }) {
   };
 
   const handleDelete = async (evidenceId) => {
-    if (!confirm('Delete this evidence?')) return;
+    if (!confirm(t('confirmDelete'))) return;
 
     try {
       const response = await authFetch(`evidence/${evidenceId}/`, {
@@ -113,7 +115,7 @@ export default function EvidenceViewer({ dataRowId, token, onDelete }) {
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>;
   if (error) return <Alert severity="error">{error}</Alert>;
   if (evidence.length === 0) {
-    return <Box sx={{ p: 3, textAlign: 'center' }}><Typography variant="body2" color="text.secondary">No evidence yet</Typography></Box>;
+    return <Box sx={{ p: 3, textAlign: 'center' }}><Typography variant="body2" color="text.secondary">{t('noEvidence')}</Typography></Box>;
   }
 
   return (
@@ -123,10 +125,10 @@ export default function EvidenceViewer({ dataRowId, token, onDelete }) {
           key={item.id}
           secondaryAction={
             <Box>
-              <IconButton size="small" onClick={() => handleDownload(item.id, item.original_filename)} title="Download">
+              <IconButton size="small" onClick={() => handleDownload(item.id, item.original_filename)} title={t('download')}>
                 <DownloadIcon />
               </IconButton>
-              <IconButton size="small" onClick={() => handleDelete(item.id)} title="Delete">
+              <IconButton size="small" onClick={() => handleDelete(item.id)} title={t('delete')}>
                 <DeleteIcon />
               </IconButton>
             </Box>
@@ -139,7 +141,7 @@ export default function EvidenceViewer({ dataRowId, token, onDelete }) {
               <>
                 {formatFileSize(item.file_size)} • {formatDate(item.uploaded_at)}
                 <br />
-                By {item.uploaded_by_name}
+                {t('by', { name: item.uploaded_by_name })}
               </>
             }
           />

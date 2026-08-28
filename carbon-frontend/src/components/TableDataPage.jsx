@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Box, Typography, Button } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import UploadIcon from "@mui/icons-material/Upload";
 import DownloadIcon from "@mui/icons-material/Download";
 import { API_BASE_URL } from "../config";
@@ -40,7 +41,8 @@ export default function TableDataPage({
   _lang,
   token
 }) {
-  useDocumentTitle("Table Data");
+  const { t } = useTranslation('common');
+  useDocumentTitle(t("tableDataTitle"));
 
   const [fields, setFields] = useState([]);
   const [table, setTable] = useState(null);
@@ -70,8 +72,7 @@ export default function TableDataPage({
       err?.detail?.toLowerCase?.().includes("permission")
     ) {
       notify({
-        message:
-          "You do not have permission to perform this action. If you believe this is an error, please contact your administrator.",
+        message: t("permissionDeniedMsg"),
         type: "error",
       });
     } else if (
@@ -80,8 +81,7 @@ export default function TableDataPage({
       err?.message?.includes("Network error")
     ) {
       notify({
-        message:
-          "Could not connect to the server. Please check your internet connection or try again later.",
+        message: t("networkErrorMsg"),
         type: "error",
       });
     } else {
@@ -90,11 +90,11 @@ export default function TableDataPage({
           err?.message ||
           err?.detail ||
           defaultMsg ||
-          "An error occurred. Please try again or contact support.",
+          t("genericErrorMsg"),
         type: "error",
       });
     }
-  }, [notify]);
+  }, [notify, t]);
 
   // Defensive: ensure fetches are always safe
   const fetchRows = useCallback(() => {
@@ -109,9 +109,9 @@ export default function TableDataPage({
       })
       .catch((err) => {
         setLoading(false);
-        handleError(err, "Failed to fetch rows");
+        handleError(err, t("failedFetchRows"));
       });
-  }, [token, tableId, filters, project_id, module_id, handleError]);
+  }, [token, tableId, filters, project_id, module_id, handleError, t]);
 
   // Fetch schema on mount
   useEffect(() => {
@@ -130,10 +130,10 @@ export default function TableDataPage({
       })
       .catch((err) => {
         setLoading(false);
-        handleError(err, "Failed to fetch schema");
+        handleError(err, t("failedFetchSchema"));
       });
     // eslint-disable-next-line
-  }, [tableId, moduleId, module_id, project_id, token]);
+  }, [tableId, moduleId, module_id, project_id, token, t]);
 
   useEffect(() => {
     if (table) fetchRows();
@@ -147,9 +147,9 @@ export default function TableDataPage({
       await bulkDeleteDataRows(token, selected, project_id, module_id);
       setSelected([]);
       fetchRows();
-      notify({ message: "Rows deleted.", type: "success" });
+      notify({ message: t("rowsDeleted"), type: "success" });
     } catch (err) {
-      handleError(err, "Bulk delete failed");
+      handleError(err, t("bulkDeleteFailed"));
       setLoading(false);
     }
   };
@@ -161,9 +161,9 @@ export default function TableDataPage({
         ? rows.filter((row) => selected.includes(row.id))
         : rows;
       exportRowsToCsv(exportRows, fields);
-      notify({ message: "Exported to CSV.", type: "success" });
+      notify({ message: t("exportedToCsv"), type: "success" });
     } catch (err) {
-      handleError(err, "CSV export failed");
+      handleError(err, t("csvExportFailed"));
     }
   };
 
@@ -175,14 +175,14 @@ export default function TableDataPage({
       const rowValues = values.values || values;
       if (!idOrNull) {
         await createDataRow(token, rowValues, data_table, project_id, module_id);
-        notify({ message: "Row added.", type: "success" });
+        notify({ message: t("rowAdded"), type: "success" });
       } else {
         await updateDataRow(token, idOrNull, { values: rowValues }, project_id, module_id, true);
-        notify({ message: "Row updated.", type: "success" });
+        notify({ message: t("rowUpdated"), type: "success" });
       }
       fetchRows();
     } catch (err) {
-      handleError(err, "Failed to save row");
+      handleError(err, t("failedSaveRow"));
       setLoading(false);
     }
   };
@@ -194,9 +194,9 @@ export default function TableDataPage({
     try {
       await deleteDataRow(token, row.id, project_id, module_id);
       fetchRows();
-      notify({ message: "Row deleted.", type: "success" });
+      notify({ message: t("rowDeleted"), type: "success" });
     } catch (err) {
-      handleError(err, "Failed to delete row");
+      handleError(err, t("failedDeleteRow"));
       setLoading(false);
     }
   };
@@ -216,18 +216,18 @@ export default function TableDataPage({
   const handleImportComplete = (result) => {
     if (result.created > 0 && result.failed === 0) {
       notify({
-        message: `Successfully imported ${result.created} rows.`,
+        message: t("importSuccess", { count: result.created }),
         type: "success",
       });
     } else if (result.created > 0 && result.failed > 0) {
       notify({
-        message: `Imported ${result.created} rows with ${result.failed} errors. Check console for details.`,
+        message: t("importWithErrors", { count: result.created, errors: result.failed }),
         type: "warning",
       });
       console.warn("[BulkImport] Errors:", result.errors);
     } else {
       notify({
-        message: `Import failed. ${result.failed} rows had errors.`,
+        message: t("importFailedCount", { count: result.failed }),
         type: "error",
       });
       console.error("[BulkImport] Errors:", result.errors);
@@ -239,7 +239,7 @@ export default function TableDataPage({
   // Handle template download
   const handleDownloadTemplate = async () => {
     try {
-      const includeExample = window.confirm("Include example row in template?");
+      const includeExample = window.confirm(t("confirmTemplateExample"));
       const endpoint = `datarows/download-template/?data_table=${tableId}&include_example=${includeExample}`;
       
       const response = await authFetch(endpoint, {
@@ -264,11 +264,11 @@ export default function TableDataPage({
       window.URL.revokeObjectURL(downloadUrl);
 
       notify({
-        message: "Template downloaded successfully.",
+        message: t("templateDownloaded"),
         type: "success",
       });
     } catch (err) {
-      handleError(err, "Failed to download template");
+      handleError(err, t("failedDownloadTemplate"));
     }
   };
 
@@ -291,7 +291,7 @@ export default function TableDataPage({
           variant="contained"
           size="small"
         >
-          Bulk Import
+          {t("bulkImport")}
         </Button>
 
         <Button
@@ -300,7 +300,7 @@ export default function TableDataPage({
           variant="outlined"
           size="small"
         >
-          Download Template
+          {t("downloadTemplate")}
         </Button>
       </Box>
 

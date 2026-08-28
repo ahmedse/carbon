@@ -1,0 +1,20 @@
+{
+  "rejected": "تم رفض: {{names}}",
+  "authFailed": "فشل التحقق من الهوية. يرجى تحديث الصفحة أو تسجيل الدخول مرة أخرى.",
+  "uploadFailed": "فشل الرفع. يرجى المحاولة مرة أخرى.",
+  "uploadError": "خطأ في الرفع: {{message}}",
+  "dropHere": "أفلت الملفات هنا",
+  "dragDrop": "اسحب ملفات الأدلة وأفلتها",
+  "browseHint": "أو انقر للتصفح (PDF، صور، Excel، CSV، Word)",
+  "maxSize": "الحد الأقصى: 50 ميجابايت",
+  "uploading": "جارٍ الرفع...",
+  "failed": "فشل",
+  "success": "نجاح",
+  "failedLoad": "تعذّر تحميل الأدلة ({{status}})",
+  "errorPrefix": "خطأ: {{message}}",
+  "confirmDelete": "حذف هذا الدليل؟",
+  "noEvidence": "لا توجد أدلة بعد",
+  "download": "تنزيل",
+  "delete": "حذف",
+  "by": "بواسطة {{name}}"
+}

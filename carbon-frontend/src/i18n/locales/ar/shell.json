@@ -193,7 +193,10 @@
     "navigateTo": "الانتقال إلى {{label}}",
     "ariaAppLabel": "منصة بيانات الكربون",
     "studioNavigation": "التنقل بين الأستوديوهات",
-    "version": "v1.0"
+    "version": "v1.0",
+    "platformTitle": "المنصة",
+    "noAppsAvailable": "لا توجد تطبيقات متاحة",
+    "noAppsSubtext": "تواصل مع المسؤول للحصول على حق الوصول إلى تطبيقات المجال."
   },
   "devBanner": {
     "label": "عرض مبكر",

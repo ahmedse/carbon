@@ -16,6 +16,7 @@ import SystemDialog from '../../../components/SystemDialog';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { Add, DeleteOutline, Visibility, Tune } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
@@ -37,10 +38,10 @@ import {
 } from '../../../api/dq';
 import { fetchAssetProfiles } from '../../../api/catalog';
 import {
-  RULE_TYPE_LABELS,
-  RULE_LEVEL_LABELS,
-  DIMENSION_LABELS,
-  SEVERITY_LABELS,
+  ruleTypeLabel,
+  ruleLevelLabel,
+  dimensionLabel,
+  severityLabel,
   SEVERITY_COLORS,
 } from '../constants';
 import { resolveBindings } from '../bindings';
@@ -61,6 +62,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
   const { token } = useAuth();
   const navigate = useNavigate();
   const { notify, notifyFromError } = useNotification();
+  const { t } = useTranslation('dq');
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -94,11 +96,11 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
       const payload = await listDQRules(token, params);
       setRows(Array.isArray(payload) ? payload : payload?.results || []);
     } catch (err) {
-      notifyFromError(err, 'Could not load DQ rules');
+      notifyFromError(err, t('rules.loadError'));
     } finally {
       setLoading(false);
     }
-  }, [token, filters, notifyFromError]);
+  }, [token, filters, notifyFromError, t]);
 
   useEffect(() => {
     load();
@@ -166,7 +168,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
     try {
       parsed = JSON.parse(definitionText);
     } catch (err) {
-      setServerErrors([{ field: '_root', code: 'parse', message: `Invalid JSON: ${err.message}` }]);
+      setServerErrors([{ field: '_root', code: 'parse', message: t('errors.invalidJson', { message: err.message }) }]);
       return;
     }
     const clientErrors = validateDefinitionClient(parsed);
@@ -184,7 +186,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
       const body = { definition: parsed };
       if (assignments.length > 0) body.field_assignments_write = assignments;
       await createDQRule(token, body);
-      notify({ message: 'Rule created', type: 'success' });
+      notify({ message: t('rules.created'), type: 'success' });
       setCreateOpen(false);
       load();
     } catch (err) {
@@ -199,12 +201,14 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
     try {
       await updateDQRule(token, rule.id, { is_active: !rule.is_active });
       notify({
-        message: `"${rule.name}" ${rule.is_active ? 'deactivated' : 'activated'}`,
+        message: rule.is_active
+          ? t('rules.deactivated', { name: rule.name })
+          : t('rules.activated', { name: rule.name }),
         type: 'success',
       });
       load();
     } catch (err) {
-      notifyFromError(err, 'Could not update rule');
+      notifyFromError(err, t('rules.updateError'));
     } finally {
       setActionBusyId(null);
     }
@@ -217,16 +221,19 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
       const result = await deleteDQRule(token, deleteTarget.id);
       if (result && result.archived) {
         notify({
-          message: `Rule "${deleteTarget.name}" archived. ${result.results_count || 0} historical results preserved.`,
+          message: t('rules.archivedWithResults', {
+            name: deleteTarget.name,
+            count: result.results_count || 0,
+          }),
           type: 'info',
         });
       } else {
-        notify({ message: `Rule "${deleteTarget.name}" deleted`, type: 'success' });
+        notify({ message: t('rules.deleted', { name: deleteTarget.name }), type: 'success' });
       }
       setDeleteTarget(null);
       load();
     } catch (err) {
-      notifyFromError(err, 'Could not delete rule');
+      notifyFromError(err, t('rules.deleteError'));
     } finally {
       setActionBusyId(null);
     }
@@ -236,7 +243,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
     () => [
       {
         field: 'name',
-        headerName: 'Rule',
+        headerName: t('columns.rule'),
         flex: 1.6,
         minWidth: 220,
         renderCell: ({ row }) => (
@@ -252,41 +259,41 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
       },
       {
         field: 'rule_type',
-        headerName: 'Type',
+        headerName: t('columns.type'),
         width: 150,
         // DataGrid v8: valueGetter receives positional (value, row) — v7 ({ row }) object signature was removed
-        valueGetter: (_value, row) => RULE_TYPE_LABELS[row.rule_type] || row.rule_type,
+        valueGetter: (_value, row) => ruleTypeLabel(t, row.rule_type),
       },
       {
         field: 'dimension',
-        headerName: 'Dimension',
+        headerName: t('columns.dimension'),
         width: 140,
         renderCell: ({ row }) =>
           row.dimension ? (
-            <Chip size="small" variant="outlined" label={DIMENSION_LABELS[row.dimension] || row.dimension} />
+            <Chip size="small" variant="outlined" label={dimensionLabel(t, row.dimension)} />
           ) : null,
       },
       {
         field: 'severity',
-        headerName: 'Severity',
+        headerName: t('columns.severity'),
         width: 110,
         renderCell: ({ row }) => (
           <Chip
             size="small"
             color={SEVERITY_COLORS[row.severity] || 'default'}
-            label={SEVERITY_LABELS[row.severity] || row.severity}
+            label={severityLabel(t, row.severity)}
           />
         ),
       },
       {
         field: 'level',
-        headerName: 'Level',
+        headerName: t('columns.level'),
         width: 130,
-        valueGetter: (_value, row) => RULE_LEVEL_LABELS[row.rule_level] || row.rule_level,
+        valueGetter: (_value, row) => ruleLevelLabel(t, row.rule_level),
       },
       {
         field: 'tables',
-        headerName: 'Bound Tables',
+        headerName: t('columns.boundTables'),
         width: 180,
         renderCell: ({ row }) => {
           const names = (row.field_assignments || []).map((a) => a.table_name).filter(Boolean);
@@ -305,22 +312,22 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
       },
       {
         field: 'is_active',
-        headerName: 'Active',
+        headerName: t('columns.active'),
         width: 100,
         renderCell: ({ row }) =>
           row.archived ? (
-            <Chip size="small" color="default" variant="outlined" label="Archived" />
+            <Chip size="small" color="default" variant="outlined" label={t('status.archived')} />
           ) : (
             <Chip
               size="small"
               color={row.is_active ? 'success' : 'default'}
-              label={row.is_active ? 'Active' : 'Inactive'}
+              label={row.is_active ? t('status.active') : t('status.inactive')}
             />
           ),
       },
       {
         field: 'version',
-        headerName: 'Ver',
+        headerName: t('columns.ver'),
         width: 70,
         valueGetter: (_value, row) => row.version,
       },
@@ -332,7 +339,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
         align: 'right',
         renderCell: ({ row }) => (
           <Stack direction="row" spacing={0}>
-            <Tooltip title="Open rule detail">
+            <Tooltip title={t('rules.openDetail')}>
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -343,11 +350,11 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
                 <Visibility fontSize="small" />
               </IconButton>
             </Tooltip>
-            <Tooltip title={row.is_active ? 'Deactivate' : 'Activate'}>
+            <Tooltip title={row.is_active ? t('operations.deactivate') : t('operations.activate')}>
               <span>
                 <IconButton
                   size="small"
-                  aria-label={row.is_active ? 'Deactivate' : 'Activate'}
+                  aria-label={row.is_active ? t('operations.deactivate') : t('operations.activate')}
                   disabled={actionBusyId === `toggle-${row.id}`}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -358,11 +365,11 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
                 </IconButton>
               </span>
             </Tooltip>
-            <Tooltip title="Delete / archive">
+            <Tooltip title={t('rules.deleteArchive')}>
               <span>
                 <IconButton
                   size="small"
-                  aria-label="Delete / archive"
+                  aria-label={t('rules.deleteArchive')}
                   disabled={actionBusyId === `delete-${row.id}`}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -378,7 +385,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [navigate, actionBusyId]
+    [navigate, actionBusyId, t]
   );
 
   return (
@@ -386,7 +393,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
         <TextField
           size="small"
-          placeholder="Search rules…"
+          placeholder={t('rules.searchPlaceholder')}
           value={filters.search}
           onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
           sx={{ width: 240 }}
@@ -397,20 +404,20 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
           startIcon={<Tune />}
           onClick={() => setShowFilters((v) => !v)}
         >
-          Filters
+          {t('rules.filters')}
         </Button>
         {filters.data_table ? (
           <Chip
             size="small"
             variant="outlined"
             color="primary"
-            label={`Table: ${filteredTableName || `#${filters.data_table}`}`}
+            label={t('rules.tableChip', { table: filteredTableName || `#${filters.data_table}` })}
             onDelete={() => setFilters((f) => ({ ...f, data_table: '' }))}
           />
         ) : null}
         <Box sx={{ flexGrow: 1 }} />
         <Button variant="contained" size="small" startIcon={<Add />} onClick={openCreate}>
-          New Rule
+          {t('rules.newRule')}
         </Button>
       </Stack>
 
@@ -419,87 +426,87 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
           <TextField
             select
             size="small"
-            label="Level"
+            label={t('columns.level')}
             value={filters.rule_level}
             onChange={(e) => setFilters((f) => ({ ...f, rule_level: e.target.value }))}
             sx={{ minWidth: 160 }}
           >
-            <MenuItem value="">All</MenuItem>
+            <MenuItem value="">{t('all')}</MenuItem>
             {RULE_LEVELS.map((l) => (
               <MenuItem key={l} value={l}>
-                {RULE_LEVEL_LABELS[l] || l}
+                {ruleLevelLabel(t, l)}
               </MenuItem>
             ))}
           </TextField>
           <TextField
             select
             size="small"
-            label="Type"
+            label={t('columns.type')}
             value={filters.rule_type}
             onChange={(e) => setFilters((f) => ({ ...f, rule_type: e.target.value }))}
             sx={{ minWidth: 170 }}
           >
-            <MenuItem value="">All</MenuItem>
-            {RULE_TYPES.map((t) => (
-              <MenuItem key={t} value={t}>
-                {RULE_TYPE_LABELS[t] || t}
+            <MenuItem value="">{t('all')}</MenuItem>
+            {RULE_TYPES.map((rt) => (
+              <MenuItem key={rt} value={rt}>
+                {ruleTypeLabel(t, rt)}
               </MenuItem>
             ))}
           </TextField>
           <TextField
             select
             size="small"
-            label="Dimension"
+            label={t('columns.dimension')}
             value={filters.dimension}
             onChange={(e) => setFilters((f) => ({ ...f, dimension: e.target.value }))}
             sx={{ minWidth: 160 }}
           >
-            <MenuItem value="">All</MenuItem>
+            <MenuItem value="">{t('all')}</MenuItem>
             {DIMENSION_CODES.map((d) => (
               <MenuItem key={d} value={d}>
-                {DIMENSION_LABELS[d] || d}
+                {dimensionLabel(t, d)}
               </MenuItem>
             ))}
           </TextField>
           <TextField
             select
             size="small"
-            label="Severity"
+            label={t('columns.severity')}
             value={filters.severity}
             onChange={(e) => setFilters((f) => ({ ...f, severity: e.target.value }))}
             sx={{ minWidth: 130 }}
           >
-            <MenuItem value="">All</MenuItem>
+            <MenuItem value="">{t('all')}</MenuItem>
             {SEVERITY_VALUES.map((s) => (
               <MenuItem key={s} value={s}>
-                {SEVERITY_LABELS[s] || s}
+                {severityLabel(t, s)}
               </MenuItem>
             ))}
           </TextField>
           <TextField
             select
             size="small"
-            label="State"
+            label={t('rules.state')}
             value={filters.active}
             onChange={(e) => setFilters((f) => ({ ...f, active: e.target.value }))}
             sx={{ minWidth: 120 }}
           >
-            <MenuItem value="active">Active</MenuItem>
-            <MenuItem value="inactive">Inactive</MenuItem>
-            <MenuItem value="all">All</MenuItem>
+            <MenuItem value="active">{t('status.active')}</MenuItem>
+            <MenuItem value="inactive">{t('status.inactive')}</MenuItem>
+            <MenuItem value="all">{t('all')}</MenuItem>
           </TextField>
           <TextField
             select
             size="small"
-            label="Tag"
+            label={t('rules.tag')}
             value={filters.tag}
             onChange={(e) => setFilters((f) => ({ ...f, tag: e.target.value }))}
             sx={{ minWidth: 140 }}
           >
-            <MenuItem value="">All</MenuItem>
-            {tags.map((t) => (
-              <MenuItem key={t.id} value={t.id}>
-                {t.name}
+            <MenuItem value="">{t('all')}</MenuItem>
+            {tags.map((tag) => (
+              <MenuItem key={tag.id} value={tag.id}>
+                {tag.name}
               </MenuItem>
             ))}
           </TextField>
@@ -509,7 +516,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
             onClick={() => setFilters((f) => ({ ...f, include_archived: !f.include_archived }))}
             variant={filters.include_archived ? 'contained' : 'outlined'}
           >
-            Include archived
+            {t('rules.includeArchived')}
           </Button>
         </Stack>
       ) : null}
@@ -519,7 +526,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
         rows={rows}
         loading={loading}
         getRowId={(row) => row.id}
-        emptyMessage="No rules match the current filters"
+        emptyMessage={t('rules.emptyFiltered')}
         onRowClick={({ row }) => setSelectedRowId(row.id === selectedRowId ? null : row.id)}
         highlightRow={(row) => row.id === selectedRowId}
       />
@@ -527,10 +534,10 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
       {/* New rule — JSON-first authoring (no rule-builder form) */}
       <SystemDialog
         open={createOpen}
-        title="New DQ Rule"
+        title={t('rules.newRuleTitle')}
         onClose={() => setCreateOpen(false)}
         onCancel={() => setCreateOpen(false)}
-        cancelLabel="Cancel"
+        cancelLabel={t('cancel')}
         width={820}
         height={620}
         minWidth={640}
@@ -539,14 +546,13 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
         maxHeight="calc(100vh - 32px)"
         actions={
           <Button variant="contained" size="small" onClick={handleCreate} disabled={saving}>
-            {saving ? 'Creating…' : 'Create Rule'}
+            {saving ? t('creating') : t('createRule')}
           </Button>
         }
       >
         <Box px={2} py={1}>
           <Typography sx={{ color: 'text.secondary', mb: 1.5 }}>
-            Author the rule definition as schema v1 JSON. Tables are matched by name to assets in
-            your scope; fields are resolved against the live schema.
+            {t('rules.authorHint')}
           </Typography>
           <RuleJsonEditor
             value={definitionText}
@@ -561,13 +567,11 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
       {/* Delete confirmation (ConfirmDialog — no window.confirm) */}
       <ConfirmDialog
         open={!!deleteTarget}
-        title="Delete rule?"
+        title={t('deleteRuleTitle')}
         message={
-          deleteTarget
-            ? `Delete "${deleteTarget.name}"? It will be archived if results exist.`
-            : ''
+          deleteTarget ? t('rules.deleteMessage', { name: deleteTarget.name }) : ''
         }
-        confirmLabel="Delete"
+        confirmLabel={t('delete')}
         destructive
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}

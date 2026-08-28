@@ -9,6 +9,7 @@ import React, { useMemo, useState } from 'react';
 import { Box, Tabs, Tab } from '@mui/material';
 import ScienceIcon from '@mui/icons-material/Science';
 import EnergySavingsLeafIcon from '@mui/icons-material/EnergySavingsLeaf';
+import { useTranslation } from 'react-i18next';
 
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
@@ -17,7 +18,8 @@ import EmissionFactorsPage from './EmissionFactorsPage';
 import GWPReferencePage from './GWPReferencePage';
 
 export default function FactorsHubPage() {
-  useDocumentTitle('Emission Factors');
+  const { t } = useTranslation('emissions');
+  useDocumentTitle(t('title'));
   const { user, availablePerspectives, isGlobalAdminFlag, userCapabilities, context } = useAuth();
   const [tab, setTab] = useState(0);
 
@@ -40,9 +42,9 @@ export default function FactorsHubPage() {
         onChange={(_e, v) => setTab(v)}
         sx={{ flexShrink: 0, borderBottom: 1, borderColor: 'divider', px: 2 }}
       >
-        <Tab label="Emission Factors" icon={<ScienceIcon />} iconPosition="start" />
+        <Tab label={t('tabEmissionFactors')} icon={<ScienceIcon />} iconPosition="start" />
         {canManageGwp ? (
-          <Tab label="GWP Reference" icon={<EnergySavingsLeafIcon />} iconPosition="start" />
+          <Tab label={t('tabGwpReference')} icon={<EnergySavingsLeafIcon />} iconPosition="start" />
         ) : null}
       </Tabs>
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>

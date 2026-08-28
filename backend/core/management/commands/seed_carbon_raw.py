@@ -428,4 +428,48 @@ class Command(BaseCommand):
             created, skipped, errors = rule.calculate_for_table(reporting_period=period)
             total_created += created
             self.stdout.write(f"  Rule '{rule_name}': created={created} skipped={skipped} errors={errors}")
+
+        # South Valley scope 1+2 is a DENORMALIZED table (single `quantity`
+        # column + `activity_data` discriminator), so it needs one selector
+        # rule instead of one-rule-per-fuel. Activities without a mapped
+        # factor (R-404A / Other refrigerants) fall through to an INACTIVE
+        # sentinel factor and are skipped — they stay `declared` until their
+        # GWP factors are wired.
+        if "sv_scope12" in tables:
+            sv12 = tables["sv_scope12"]
+            sentinel, _ = EmissionFactor.objects.get_or_create(
+                code="UNMAPPED_NO_FACTOR",
+                defaults=dict(
+                    name="Unmapped activity — skip (no factor)",
+                    category="stationary_combustion", scope=1,
+                    factor_value=Decimal("0"), factor_unit="kg CO2e",
+                    activity_unit="unit", source="internal",
+                    valid_from=date(2020, 1, 1), is_active=False,
+                ),
+            )
+            sv_rule, _ = rule_model.objects.get_or_create(
+                data_table=sv12,
+                activity_field=field(sv12, "quantity"),
+                factor_selector_field=field(sv12, "activity_data"),
+                defaults=dict(
+                    name="Scope 1+2 activity → CO2e (South Valley, FY 2025-26)",
+                    emission_factor=sentinel,
+                    factor_selector_mapping={
+                        "Electricity": "EG_GRID_2024",
+                        "Gasoline": "DEFRA_GASOLINE",
+                        "Diesel": "DEFRA_DIESEL",
+                    },
+                    rule_type="direct", unit_conversion_factor=Decimal("1"),
+                    scope2_calculation_method="location_based",
+                    data_quality_tier=3,
+                    is_active=True, auto_calculate=True,
+                ),
+            )
+            created, skipped, errors = sv_rule.calculate_for_table(reporting_period=fy2526)
+            total_created += created
+            self.stdout.write(
+                f"  Rule 'Scope 1+2 activity → CO2e (South Valley)': "
+                f"created={created} skipped={skipped} errors={errors}"
+            )
+
         return total_created

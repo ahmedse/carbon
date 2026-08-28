@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import { useAuth } from '../../../auth/AuthContext';
+import { useTranslation } from 'react-i18next';
 import { useNotification } from '../../../components/NotificationProvider';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
 import { listDQRules } from '../../../api/dq';
@@ -33,6 +34,7 @@ function qualityColor(status) {
 function UsageTab({ rule }) {
   const { token } = useAuth();
   const { notifyFromError } = useNotification();
+  const { t } = useTranslation('dq');
   const [assets, setAssets] = useState([]);
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -50,14 +52,14 @@ function UsageTab({ rule }) {
         setAssets(unwrap(assetPayload));
         setRules(unwrap(rulePayload).filter((r) => r.id !== rule?.id));
       })
-      .catch((err) => notifyFromError(err, 'Could not load usage data'))
+      .catch((err) => notifyFromError(err, t('usage.loadError')))
       .finally(() => {
         if (active) setLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [token, rule?.id, notifyFromError]);
+  }, [token, rule?.id, notifyFromError, t]);
 
   const relatedAssets = useMemo(
     () =>
@@ -80,24 +82,27 @@ function UsageTab({ rule }) {
         notes.push({
           key: `${b.data_table}-${b.data_field}`,
           kind: 'warning',
-          text: `No other rule covers field "${b.field_name}" on "${b.table_name}".`,
+          text: t('usage.noCoverage', { field: b.field_name, table: b.table_name }),
         });
       } else {
         notes.push({
           key: `${b.data_table}-${b.data_field}`,
           kind: 'info',
-          text: `Field "${b.field_name}" on "${b.table_name}" is also covered by ${others.length} other rule(s).`,
+          text:
+            others.length === 1
+              ? t('usage.alsoCoveredOne', { field: b.field_name, table: b.table_name, count: others.length })
+              : t('usage.alsoCoveredMany', { field: b.field_name, table: b.table_name, count: others.length }),
         });
       }
     });
     return notes;
-  }, [bindings, rules]);
+  }, [bindings, rules, t]);
 
   const assetColumns = useMemo(
     () => [
       {
         field: 'title',
-        headerName: 'Catalog Asset',
+        headerName: t('usage.catalogAsset'),
         flex: 1.4,
         minWidth: 200,
         renderCell: ({ row }) => (
@@ -106,15 +111,19 @@ function UsageTab({ rule }) {
       },
       {
         field: 'asset_type',
-        headerName: 'Type',
+        headerName: t('columns.type'),
         width: 100,
         renderCell: ({ row }) => (
-          <Chip size="small" variant="outlined" label={row.asset_type === 'field' ? 'Field' : 'Table'} />
+          <Chip
+            size="small"
+            variant="outlined"
+            label={row.asset_type === 'field' ? t('usage.field') : t('usage.table')}
+          />
         ),
       },
       {
         field: 'quality_status',
-        headerName: 'Quality',
+        headerName: t('usage.quality'),
         width: 150,
         renderCell: ({ row }) =>
           row.quality_status ? (
@@ -124,28 +133,32 @@ function UsageTab({ rule }) {
               label={`${row.quality_status}${row.quality_score != null ? ` · ${row.quality_score}` : ''}`}
             />
           ) : (
-            <Typography sx={{ color: 'text.secondary' }}>Not assessed</Typography>
+            <Typography sx={{ color: 'text.secondary' }}>{t('usage.notAssessed')}</Typography>
           ),
       },
     ],
-    []
+    [t]
   );
 
   return (
     <Box sx={{ p: 3 }}>
       <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>
-        Bound Tables & Fields
+        {t('usage.boundTablesFields')}
         <Chip
           size="small"
           variant="outlined"
-          label={`${bindings.length} binding${bindings.length === 1 ? '' : 's'}`}
+          label={
+            bindings.length === 1
+              ? t('usage.bindingCountOne', { count: bindings.length })
+              : t('usage.bindingCountMany', { count: bindings.length })
+          }
           sx={{ ml: 1 }}
         />
       </Typography>
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 3 }}>
         {bindings.length === 0 ? (
           <Typography sx={{ color: 'text.secondary' }}>
-            This rule has no table bindings.
+            {t('usage.noBindings')}
           </Typography>
         ) : (
           <Stack direction="row" spacing={0.5} flexWrap="wrap">
@@ -163,7 +176,9 @@ function UsageTab({ rule }) {
       </Paper>
 
       <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>
-        Used by {relatedAssets.length} catalog asset{relatedAssets.length === 1 ? '' : 's'}
+        {relatedAssets.length === 1
+          ? t('usage.usedByOne', { count: relatedAssets.length })
+          : t('usage.usedByMany', { count: relatedAssets.length })}
       </Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>
         <CarbonDataGrid
@@ -171,14 +186,14 @@ function UsageTab({ rule }) {
           rows={relatedAssets}
           loading={loading}
           getRowId={(row) => row.id}
-          emptyMessage="No catalog assets reference the bound tables/fields"
+          emptyMessage={t('usage.noAssets')}
         />
       </Paper>
 
-      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>Field Coverage</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, mb: 1 }}>{t('usage.fieldCoverage')}</Typography>
       {coverageNotes.length === 0 ? (
         <Alert severity="info">
-          No field-level bindings — coverage notes apply to field-bound rules only.
+          {t('usage.noFieldBindings')}
         </Alert>
       ) : (
         <Stack spacing={1}>

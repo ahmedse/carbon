@@ -68,7 +68,7 @@ def auth_client(api_client, get_token_for_user, user):
 # ── _for_each_instance ───────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_for_each_instance_iterates_active_instances(django_store, cfg):
     """Active instances are visited; inactive ones are not."""
     from ai.engine.cognition.loop import _for_each_instance
@@ -118,7 +118,7 @@ def test_for_each_instance_iterates_active_instances(django_store, cfg):
 # ── run-once ─────────────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_run_once_health_check_writes_sweep_run(django_store, cfg):
     """health_check returns ok and writes a durable CognitionSweepRun row."""
     from ai.engine.cognition.loop import trigger_task
@@ -148,7 +148,7 @@ def test_run_once_health_check_writes_sweep_run(django_store, cfg):
     assert rows[0].last_error is None
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_run_once_unknown_task_is_fail_visible(django_store, cfg):
     """Unknown task returns the {error, available} envelope — not an exception."""
     from ai.engine.cognition.loop import trigger_task
@@ -163,7 +163,7 @@ def test_run_once_unknown_task_is_fail_visible(django_store, cfg):
 # ── CognitionSweepRun upsert ─────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_tracked_upserts_single_row(django_store, cfg):
     """Running _tracked twice for one task yields one row with run_count=2."""
     from ai.engine.cognition.loop import _tracked
@@ -187,7 +187,7 @@ def test_tracked_upserts_single_row(django_store, cfg):
 # ── sweeps/ endpoint ─────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_sweeps_endpoint_returns_tasks(auth_client):
     resp = auth_client.get(f"{BASE}/sweeps/")
     assert resp.status_code == 200
@@ -197,7 +197,7 @@ def test_sweeps_endpoint_returns_tasks(auth_client):
     assert "live" in body
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_sweeps_endpoint_lists_seeded_runs(auth_client):
     from ai.models.core import CognitionSweepRun
     from django.utils import timezone
@@ -219,12 +219,12 @@ def test_sweeps_endpoint_lists_seeded_runs(auth_client):
     assert tasks[task]["last_duration_ms"] == 12
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_sweeps_endpoint_requires_auth(api_client):
     assert api_client.get(f"{BASE}/sweeps/").status_code == 401
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_sweeps_endpoint_rejects_post(auth_client):
     assert auth_client.post(f"{BASE}/sweeps/", {}).status_code == 405
 

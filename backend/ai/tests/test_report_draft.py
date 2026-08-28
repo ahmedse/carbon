@@ -153,7 +153,7 @@ def _run_handler(user, module_graph, conversation, *, response=None):
 # ── Routing: report_draft conversation → _send_report_draft_message ──────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_report_draft_conversation_routes_to_handler(user, module_graph, django_store, cfg):
     """A report_draft conversation runs the typed handler, not the staged placeholder."""
     conversation = _conversation(
@@ -182,7 +182,7 @@ def test_report_draft_conversation_routes_to_handler(user, module_graph, django_
 # ── Parameter resolution ──────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_report_draft_period_id_resolution(user, module_graph, django_store, cfg):
     """A period_id resolves to start/end dates and a period-type→report_type map."""
     period = ReportingPeriod.objects.create(
@@ -214,7 +214,7 @@ def test_report_draft_period_id_resolution(user, module_graph, django_store, cfg
     assert meta["period_end"] == "2026-12-31", result
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_report_draft_direct_params(user, module_graph, django_store, cfg):
     """Without period_id, report_type/period_start/period_end pass through."""
     conversation = _conversation(
@@ -242,7 +242,7 @@ def test_report_draft_direct_params(user, module_graph, django_store, cfg):
 # ── Frozen metadata contract ──────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_report_draft_metadata_shape(user, module_graph, django_store, cfg):
     """Serialized metadata matches the frozen 10-B contract (title/sections/needs_input)."""
     conversation = _conversation(
@@ -277,7 +277,7 @@ def test_report_draft_metadata_shape(user, module_graph, django_store, cfg):
 # ── Deterministic fallback (engine-level) ─────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_report_draft_deterministic_fallback(django_store, cfg):
     """LLM outage → still 'completed' with a deterministic, non-empty summary."""
     from ai.engine_runtime import dispatch_task

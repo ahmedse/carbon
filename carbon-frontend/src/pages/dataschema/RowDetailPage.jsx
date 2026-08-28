@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Chip,
@@ -46,7 +47,8 @@ function fmtDate(v) {
 }
 
 export default function RowDetailPage() {
-  useDocumentTitle("Row Detail");
+  const { t } = useTranslation('dataschema');
+  useDocumentTitle(t('pageTitle'));
   const { tableId, rowId } = useParams();
   const { token, context } = useAuth();
   const navigate = useNavigate();
@@ -73,7 +75,7 @@ export default function RowDetailPage() {
   useEffect(() => {
     const currentToken = token || localStorage.getItem('access');
     if (!currentToken || !rowId || !tableId) {
-      setError('Authentication required. Please log in.');
+      setError(t('authRequired'));
       setLoading(false);
       return;
     }
@@ -114,13 +116,13 @@ export default function RowDetailPage() {
         } catch { /* non-critical */ }
 
       } catch (err) {
-        setError(err.message || 'Failed to load row data');
-        notify(`Error: ${err.message}`, 'error');
+        setError(err.message || t('loadError'));
+        notify(t('errors.prefix', { message: err.message }), 'error');
       } finally {
         setLoading(false);
       }
     })();
-  }, [token, rowId, tableId, context?.modules]);
+  }, [token, rowId, tableId, context?.modules, t]);
 
   // ── Refresh ─────────────────────────────────────────────────────────
   const handleRefresh = async () => {
@@ -129,7 +131,7 @@ export default function RowDetailPage() {
       const res = await authFetch(`dataschema/rows/${rowId}/?data_table=${tableId}`, { token: currentToken });
       if (res.ok) setRowData(await res.json());
     } catch (err) {
-      notify(`Refresh error: ${err.message}`, 'error');
+      notify(t('errors.prefix', { message: err.message }), 'error');
     }
   };
 
@@ -137,14 +139,14 @@ export default function RowDetailPage() {
 
   // ── Computed display values ─────────────────────────────────────────
   const rowDisplayName = useMemo(() => {
-    if (!rowData) return 'Row Details';
+    if (!rowData) return t('rowDetailsFallback');
     const v = rowData.values || {};
     const nameFields = ['name', 'title', 'building', 'building_id', 'meter_id', 'supplier', 'period_month', 'period'];
     for (const f of nameFields) {
       if (v[f] != null && v[f] !== '') return `${v[f]}`;
     }
-    return `Row #${rowData.id}`;
-  }, [rowData]);
+    return t('rowNumber', { id: rowData.id });
+  }, [rowData, t]);
 
   // ── Contextual Inspector (global drawer) ────────────────────────────
   const { setContexts } = useNotes();
@@ -168,7 +170,7 @@ export default function RowDetailPage() {
     return () => setContexts(null);
   }, [inspectorContext, setContexts]);
 
-  const tableDisplayName = tableInfo?.title || tableInfo?.name || `Table #${tableId}`;
+  const tableDisplayName = tableInfo?.title || tableInfo?.name || t('tableNumber', { id: tableId });
   const moduleDisplayName = moduleInfo?.name || '—';
   const scope = moduleInfo?.scope;
   const totalCo2e = calculations.reduce((sum, c) => sum + (Number(c.co2e_kg) || 0), 0);
@@ -202,14 +204,14 @@ export default function RowDetailPage() {
   );
   if (error) return (
     <Box sx={{ p: 3 }}>
-      <Alert severity="error"><strong>Error:</strong> {error}</Alert>
-      <Box sx={{ mt: 2 }}><Chip label="← Back" onClick={handleClose} variant="outlined" /></Box>
+      <Alert severity="error">{t('errors.prefix', { message: error })}</Alert>
+      <Box sx={{ mt: 2 }}><Chip label={t('back')} onClick={handleClose} variant="outlined" /></Box>
     </Box>
   );
   if (!rowData) return (
     <Box sx={{ p: 3 }}>
-      <Alert severity="warning">Row not found</Alert>
-      <Box sx={{ mt: 2 }}><Chip label="← Back" onClick={handleClose} variant="outlined" /></Box>
+      <Alert severity="warning">{t('rowNotFound')}</Alert>
+      <Box sx={{ mt: 2 }}><Chip label={t('back')} onClick={handleClose} variant="outlined" /></Box>
     </Box>
   );
 
@@ -234,15 +236,15 @@ export default function RowDetailPage() {
         {totalCo2e > 0 && <Chip label={`${(totalCo2e / 1000).toFixed(2)} tCO₂e`} size="small" color="warning" variant="filled" sx={{ height: 2.5, fontSize: '0.68rem' }} />}
       </Box>
       <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
-        <Tooltip title="Switch to Edit tab">
+        <Tooltip title={t('switchToEdit')}>
           <IconButton size="small" onClick={() => { setActiveMainTab(1); localStorage.setItem('carbonRowDetail:mainTab', 1); }}>
             <EditIcon sx={{ fontSize: '1rem' }} />
           </IconButton>
         </Tooltip>
-        <Tooltip title="Download CSV">
+        <Tooltip title={t('downloadCsv')}>
           <IconButton size="small" onClick={handleDownload}><DownloadIcon sx={{ fontSize: '1rem' }} /></IconButton>
         </Tooltip>
-        <Tooltip title="Refresh">
+        <Tooltip title={t('refresh')}>
           <IconButton size="small" onClick={handleRefresh}><RefreshIcon sx={{ fontSize: '1rem' }} /></IconButton>
         </Tooltip>
       </Box>
@@ -251,10 +253,10 @@ export default function RowDetailPage() {
 
   // ── Tabs ────────────────────────────────────────────────────────────
   const mainTabs = [
-    { label: 'Overview',  render: () => <RowOverviewTab rowData={rowData} tableInfo={tableInfo} moduleInfo={moduleInfo} calculations={calculations} onRefresh={handleRefresh} onClose={handleClose} /> },
-    { label: 'Edit',      render: () => <RowEditTab rowData={rowData} setRowData={setRowData} tableId={tableId} rowId={rowId} token={token} onClose={handleClose} /> },
-    { label: 'Evidence',  render: () => <RowEvidenceTab rowId={rowId} tableId={tableId} token={token} rowData={rowData} /> },
-    { label: 'History',   render: () => <RowHistoryTab rowId={rowId} tableId={tableId} token={token} /> },
+    { label: t('tab.overview'), render: () => <RowOverviewTab rowData={rowData} tableInfo={tableInfo} moduleInfo={moduleInfo} calculations={calculations} onRefresh={handleRefresh} onClose={handleClose} /> },
+    { label: t('tab.edit'),     render: () => <RowEditTab rowData={rowData} setRowData={setRowData} tableId={tableId} rowId={rowId} token={token} onClose={handleClose} /> },
+    { label: t('tab.evidence'), render: () => <RowEvidenceTab rowId={rowId} tableId={tableId} token={token} rowData={rowData} /> },
+    { label: t('tab.history'),  render: () => <RowHistoryTab rowId={rowId} tableId={tableId} token={token} /> },
   ];
 
   return (
@@ -286,6 +288,7 @@ export default function RowDetailPage() {
 // ── Row History Tab (inline) ──────────────────────────────────────────────
 
 function RowHistoryTab({ rowId, tableId, token }) {
+  const { t } = useTranslation('dataschema');
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -301,13 +304,13 @@ function RowHistoryTab({ rowId, tableId, token }) {
           const results = Array.isArray(data.results) ? data.results : (Array.isArray(data) ? data : []);
           setEvents(results.map(e => ({
             id: e.id,
-            action: e.rule_name || (e.trigger_type === 'batch' ? 'Batch calc' : e.trigger_type === 'single' ? 'Rule calc' : 'Calc update'),
+            action: e.rule_name || (e.trigger_type === 'batch' ? t('history.batchCalc') : e.trigger_type === 'single' ? t('history.ruleCalc') : t('history.calcUpdate')),
             description: [
               e.rule_name ? `${e.rule_name}` : '',
-              e.triggered_by_name ? `by ${e.triggered_by_name}` : '',
-              e.created_count ? `${e.created_count} created` : '',
-              e.skipped_count ? `${e.skipped_count} skipped` : '',
-              e.error_count ? `${e.error_count} errors` : '',
+              e.triggered_by_name ? t('history.by', { name: e.triggered_by_name }) : '',
+              e.created_count ? t('history.created', { count: e.created_count }) : '',
+              e.skipped_count ? t('history.skipped', { count: e.skipped_count }) : '',
+              e.error_count ? t('history.errors', { count: e.error_count }) : '',
             ].filter(Boolean).join(' · '),
             timestamp: e.triggered_at || e.timestamp || e.created_at || e.performed_at,
             kind: 'calc',
@@ -316,25 +319,25 @@ function RowHistoryTab({ rowId, tableId, token }) {
       } catch { /* ok if empty */ }
       setLoading(false);
     })();
-  }, [token, rowId, tableId]);
+  }, [token, rowId, tableId, t]);
 
   const total = events.length;
   const paged = events.slice((page - 1) * pageSize, page * pageSize);
 
   const KIND_CHIP = {
-    calc: { label: 'Calc', color: 'warning' },
-    data: { label: 'Data', color: 'info' },
-    dq: { label: 'DQ', color: 'success' },
-    gov: { label: 'Gov', color: 'secondary' },
+    calc: { label: t('history.kindCalc'), color: 'warning' },
+    data: { label: t('history.kindData'), color: 'info' },
+    dq: { label: t('history.kindDq'), color: 'success' },
+    gov: { label: t('history.kindGov'), color: 'secondary' },
   };
 
   return (
     <PanelTable
-      title="Activity Log"
+      title={t('history.activityLog')}
       columns={[
         {
           key: 'kind',
-          header: 'Type',
+          header: t('history.type'),
           width: '15%',
           render: (v) => {
             const cfg = KIND_CHIP[v] || KIND_CHIP.data;
@@ -344,12 +347,12 @@ function RowHistoryTab({ rowId, tableId, token }) {
         },
         {
           key: 'action',
-          header: 'Detail',
+          header: t('history.detail'),
           width: '55%',
           render: (_v, row) => (
             <Box>
               <Typography sx={{ fontSize: '0.72rem', fontWeight: 600 }}>
-                {row.action || 'event'}
+                {row.action || t('history.eventFallback')}
               </Typography>
               {row.description && (
                 <Typography sx={{ fontSize: '0.65rem', color: 'text.secondary' }}>
@@ -361,7 +364,7 @@ function RowHistoryTab({ rowId, tableId, token }) {
         },
         {
           key: 'timestamp',
-          header: 'When',
+          header: t('history.when'),
           width: '30%',
           align: 'right',
           render: (v) => (
@@ -372,7 +375,7 @@ function RowHistoryTab({ rowId, tableId, token }) {
         },
       ]}
       rows={paged}
-      emptyText="No history recorded for this row yet. Changes and calculations are logged when data is edited or recalculated."
+      emptyText={t('history.empty')}
       loading={loading}
       pagination={total > pageSize ? { page, pageSize, total, onChange: setPage } : null}
     />

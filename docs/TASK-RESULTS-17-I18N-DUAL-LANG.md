@@ -1,14 +1,16 @@
-# Task Results — I18N Dual-Language UI (progress: I18N-1, I18N-2, I18N-5)
+# Task Results — I18N Dual-Language UI (progress: I18N-1, I18N-2, I18N-3, I18N-4, I18N-5)
 
-**Date:** 2026-08-24
+**Date:** 2026-08-24 (updated 2026-08-28)
 **Authored by:** Master Architect
 **Track:** Phase Set I18N (ADR-0018) — English (default) + Arabic RTL
 
 ## Scope of this report
 
 This documents the I18N phases completed to date. I18N-3 (core apps), I18N-4
-(hosted + tools), and I18N-6 (QA / RTL audit / E2E) remain open and are tracked
-with accurate `READY` status in `TASKS.md`.
+(hosted + tools), and I18N-6 (QA / RTL audit / E2E) — with I18N-3 and I18N-4
+**DONE** (verified 2026-08-28, see `TASK-RESULTS.md` for full gate reports);
+I18N-6 DONE (2026-08-27). I18N-5 deep per-panel AI chrome remains
+open (22 AI shell files + 25 admin panels).
 
 ## Completed
 
@@ -59,18 +61,24 @@ with accurate `READY` status in `TASKS.md`.
 
 ## Remaining (accurate, tracked in TASKS.md)
 
-- **I18N-3** — migrate `src/pages/{catalog,dq,dataschema}` to `catalog`/`mdm`/`dq`/`dataschema`
-  namespaces + Arabic catalogs. NOTE: actual pages live in `src/pages/*`, NOT the
-  `src/apps/*` paths in the spec (stale naming). ~27 files / ~10k lines.
-- **I18N-4** — migrate `src/pages/emissions/*`, `src/components/{evidence,import}/*`,
-  connections UI, shared dialogs, root pages → `emissions`/`evidence`/`connections`/
-  `importexport`/`common`/`shell`.
+- **I18N-3** — ✅ DONE (verified 2026-08-28): `dq` namespace (358 keys:
+  DQWorkspacePage, RuleDetailPage, tabs ×9) + `dataschema` namespace (104 keys:
+  RowDetailPage, RowOverviewTab, RowEditTab, metrics tabs ×3); dual-map constants
+  pattern (`*_LABEL_KEYS` + `(t,key)=>t(KEYS[key]||key)` helpers) in
+  `dq/constants.js`; `catalog.json` +24 keys for the table DQ Rules tab
+  (literal-map gap closed with `fieldType` section +9 keys ×2 locales). Key
+  parity 2098 (en===ar); RTL browser smoke ✓ (assign dialog chips + interpolated
+  `rulesApplyTo` render Arabic; rule names/descriptions stay English per
+  ADR-0018). Full gate report in `TASK-RESULTS.md`.
+- **I18N-4** — ✅ DONE (verified 2026-08-28): emissions (297 keys), evidence (18),
+  importexport (37), connections (10); root pages + shared components →
+  `common`/`shell`/`errors`; `ConnectionsPage` left on `catalog`; `McpServersPanel`
+  left unmigrated (sibling convention). Full gate report in `TASK-RESULTS.md`.
 - **I18N-5 remaining** — deep per-panel AI chrome: 22 remaining `src/shell/AI*.jsx`
   files + 25 `src/pages/admin/ai/*` panels (tabs/panel headers/buttons/status labels);
   AIConversationView status-label flow (currently passed as resolved `label` prop).
-- **I18N-6** — RTL sweep (DataGrid/Monaco/Chart.js/mermaid/katex), directional-icon
-  audit, numerals audit, Arabic quality pass, Playwright E2E (EN + AR), deliverable
-  `TASK-RESULTS-17-I18N-DUAL-LANG.md`.
+- **I18N-6** — ✅ DONE (2026-08-27). Deferred to W7-B: directional-icon flip,
+  Arabic plural keys.
 
 ## Migration pattern (for the remaining phases)
 

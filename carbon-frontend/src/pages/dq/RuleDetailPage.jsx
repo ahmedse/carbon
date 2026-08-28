@@ -2,6 +2,7 @@
 // Rule detail — Overview | Definition | Test | Lifecycle | Usage & Data Products | Stats | Execution Log
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Alert, Box, CircularProgress } from '@mui/material';
 import RuleIcon from '@mui/icons-material/Rule';
 import { useAuth } from '../../auth/AuthContext';
@@ -22,7 +23,8 @@ import StatsTab from './tabs/StatsTab';
 import ResultsTab from './tabs/ResultsTab';
 
 export default function RuleDetailPage() {
-  useDocumentTitle('Rule Detail');
+  const { t } = useTranslation('dq');
+  useDocumentTitle(t('ruleDetail.title'));
   const { id } = useParams();
   const { token } = useAuth();
   const { notify } = useNotification();
@@ -40,13 +42,13 @@ export default function RuleDetailPage() {
       const data = await getDQRule(token, id);
       setRule(data);
     } catch (err) {
-      const msg = err.message || 'Rule not found';
+      const msg = err.message || t('ruleDetail.notFound');
       setError(msg);
       notify({ message: msg, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [id, token, notify]);
+  }, [id, token, notify, t]);
 
   useEffect(() => {
     loadRule();
@@ -84,15 +86,15 @@ export default function RuleDetailPage() {
   if (!rule) {
     return (
       <Box sx={{ p: 3 }}>
-        <Alert severity="error">{error || 'Rule not found'}</Alert>
+        <Alert severity="error">{error || t('ruleDetail.notFound')}</Alert>
       </Box>
     );
   }
 
   const headerComponent = (
     <DetailHeader
-      title={rule.name || 'Rule'}
-      description={rule.description || 'Data quality rule'}
+      title={rule.name || t('ruleDetail.fallbackName')}
+      description={rule.description || t('ruleDetail.fallbackDescription')}
       icon={RuleIcon}
       onClose={handleClose}
     />
@@ -118,7 +120,7 @@ export default function RuleDetailPage() {
         prompt: `Analyze trend and reliability for rule "${rule.name}" over recent runs.`,
       },
       {
-        title: `Trend Analysis: ${rule.name}`,
+        title: t('stats.trendAnalysisTitle', { name: rule.name }),
         source_page: 'dq-rule-stats',
         workspaceContext,
       },
@@ -134,7 +136,7 @@ export default function RuleDetailPage() {
         prompt: `Explain recurring failure patterns for rule "${rule.name}" and suggest improvements.`,
       },
       {
-        title: `Failure Analysis: ${rule.name}`,
+        title: t('results.failureAnalysisTitle', { name: rule.name }),
         source_page: 'dq-rule-results',
         workspaceContext,
       },
@@ -145,13 +147,13 @@ export default function RuleDetailPage() {
     <BaseDetailPage
       headerComponent={headerComponent}
       mainTabs={[
-        { label: 'Overview', component: () => <OverviewTab rule={rule} /> },
-        { label: 'Definition', component: () => <DefinitionTab rule={rule} onChanged={loadRule} /> },
-        { label: 'Test', component: () => <TestTab rule={rule} /> },
-        { label: 'Lifecycle', component: () => <OperationsTab rule={rule} onChanged={loadRule} /> },
-        { label: 'Usage & Data Products', component: () => <UsageTab rule={rule} /> },
-        { label: 'Stats', component: () => <StatsTab rule={rule} onAnalyzeAI={handleAnalyzeTrendWithAI} /> },
-        { label: 'Execution Log', component: () => <ResultsTab rule={rule} onExplainAI={handleExplainFailuresWithAI} /> },
+        { label: t('tab.overview'), component: () => <OverviewTab rule={rule} /> },
+        { label: t('tab.definition'), component: () => <DefinitionTab rule={rule} onChanged={loadRule} /> },
+        { label: t('tab.test'), component: () => <TestTab rule={rule} /> },
+        { label: t('tab.lifecycle'), component: () => <OperationsTab rule={rule} onChanged={loadRule} /> },
+        { label: t('tab.usageDataProducts'), component: () => <UsageTab rule={rule} /> },
+        { label: t('tab.stats'), component: () => <StatsTab rule={rule} onAnalyzeAI={handleAnalyzeTrendWithAI} /> },
+        { label: t('tab.executionLog'), component: () => <ResultsTab rule={rule} onExplainAI={handleExplainFailuresWithAI} /> },
       ]}
       loading={false}
       error={null}

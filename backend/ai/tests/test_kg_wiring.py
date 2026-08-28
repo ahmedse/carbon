@@ -92,7 +92,7 @@ def stub_llm():
 # ── Completed-path tests ─────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_query_nl_returns_completed(django_store, cfg, stub_llm):
     from ai.engine_runtime import dispatch_task
     from ai.models.knowledge_graph import KgQueryFeedback
@@ -128,7 +128,7 @@ def test_query_nl_returns_completed(django_store, cfg, stub_llm):
     assert KgQueryFeedback.objects.count() >= 1
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_query_nl_execution_failure_is_fail_visible(django_store, cfg, stub_llm):
     from ai.engine_runtime import dispatch_task
     from ai.engine.knowledge_graph.engine import (
@@ -159,7 +159,7 @@ def test_query_nl_execution_failure_is_fail_visible(django_store, cfg, stub_llm)
     assert data.get("error", {}).get("code") == "engine_error", data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_query_explain_returns_completed(django_store, cfg, stub_llm):
     from ai.engine_runtime import dispatch_task
 
@@ -172,7 +172,7 @@ def test_query_explain_returns_completed(django_store, cfg, stub_llm):
     assert isinstance(result.get("caveats"), list)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_schema_analyze_returns_completed(django_store, cfg):
     from ai.engine_runtime import dispatch_task
 
@@ -194,7 +194,7 @@ def test_schema_analyze_returns_completed(django_store, cfg):
     assert row["severity"] == "high"  # dropping a column is destructive
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_anomaly_detect_returns_completed(django_store, cfg):
     from ai.engine_runtime import dispatch_task
 
@@ -223,7 +223,7 @@ def test_anomaly_detect_returns_completed(django_store, cfg):
             assert key in a, (key, data)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_anomaly_detect_live_profile_grounds_real_row_count(django_store, cfg):
     """G1 — live host-DB profile is attempted (fallback to Django default DB)
     and a large live/snapshot deviation is flagged with ``.row_count.live``."""
@@ -269,7 +269,7 @@ def test_anomaly_detect_live_profile_grounds_real_row_count(django_store, cfg):
     assert "emissions.row_count.live" in live_metrics, data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_anomaly_explain_returns_completed(django_store, cfg, stub_llm):
     from ai.engine_runtime import dispatch_task
 
@@ -285,7 +285,7 @@ def test_anomaly_explain_returns_completed(django_store, cfg, stub_llm):
     assert isinstance(result.get("investigation_steps"), list)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_report_draft_returns_completed(django_store, cfg, stub_llm):
     from ai.engine_runtime import dispatch_task
 
@@ -302,7 +302,7 @@ def test_report_draft_returns_completed(django_store, cfg, stub_llm):
     assert sections[0].get("narrative") or sections[0].get("content"), data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_report_draft_includes_host_metrics(django_store, cfg, stub_llm):
     """G2 — report.draft pulls live pg_stat_user_tables volume and exposes it
     as a second "Data Volume (Live)" section plus a host_metrics key."""
@@ -343,7 +343,7 @@ def test_report_draft_includes_host_metrics(django_store, cfg, stub_llm):
     assert volume_section.get("data_table") == host_metrics, data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_fix_suggest_returns_completed(django_store, cfg, stub_llm):
     from ai.engine_runtime import dispatch_task
 
@@ -364,7 +364,7 @@ def test_fix_suggest_returns_completed(django_store, cfg, stub_llm):
 # ── Fail-visible + deterministic-fallback tests ──────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("task_type", KG_TASKS)
 def test_kg_dispatch_is_fail_visible(django_store, cfg, monkeypatch, task_type):
     """A raising handler surfaces pulse_unavailable (never a fabricated win)."""
@@ -380,7 +380,7 @@ def test_kg_dispatch_is_fail_visible(django_store, cfg, monkeypatch, task_type):
     assert data.get("error", {}).get("code") == "engine_error", (task_type, data)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_query_nl_engine_error_is_fail_visible(django_store, cfg, stub_llm):
     """A genuine engine error (host-DB failure) is surfaced, not swallowed."""
     from ai.engine_runtime import dispatch_task
@@ -397,7 +397,7 @@ def test_query_nl_engine_error_is_fail_visible(django_store, cfg, stub_llm):
     assert data.get("error", {}).get("code") == "engine_error", data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_llm_unavailable_degrades_to_deterministic(django_store, cfg):
     """With no LLM, the explain handler still completes via its deterministic
     fallback — nothing is fabricated and nothing raises."""

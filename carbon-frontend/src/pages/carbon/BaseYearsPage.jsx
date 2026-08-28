@@ -1,37 +1,21 @@
 // src/pages/carbon/BaseYearsPage.jsx
 // GHG Protocol base years — admin CRUD + recalculation trigger
-// Pattern: SBTiTargetsPage style — MUI Table, Drawer for create/edit, zero hardcoded hex
+// Canonical shell: FilteredDataGrid + SystemDialog + ConfirmDialog (see EmissionFactorsPage / GWPReferencePage)
+// All colours via theme.palette, zero hardcoded hex
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Drawer,
-  Alert,
   TextField,
   MenuItem,
-  CircularProgress,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Stack,
   IconButton,
-  Snackbar,
   Switch,
   FormControlLabel,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
-import PageContainer from '../../components/layout/PageContainer';
 import { FONT } from '../../theme/themeTokens';
 
 import AddIcon from '@mui/icons-material/Add';
@@ -40,7 +24,10 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ReplayIcon from '@mui/icons-material/Replay';
 import { useAuth } from '../../auth/AuthContext';
-import PageHeader from '../../components/Page/PageHeader';
+import { useNotification } from '../../components/NotificationProvider';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import SystemDialog from '../../components/SystemDialog';
 import {
   fetchBaseYears,
   createBaseYear,
@@ -83,9 +70,9 @@ function ActiveChip({ value }) {
   );
 }
 
-// ── BaseYearDrawer ─────────────────────────────────────────────────────
+// ── BaseYearDialog ─────────────────────────────────────────────────────
 
-function BaseYearDrawer({ open, baseYear, periods, onSave, onClose }) {
+function BaseYearDialog({ open, baseYear, periods, onSave, onClose }) {
   const [form, setForm] = useState({
     year: '',
     reporting_period: '',
@@ -125,11 +112,25 @@ function BaseYearDrawer({ open, baseYear, periods, onSave, onClose }) {
   const handleSubmit = () => onSave(form);
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 440, p: 3 }}>
-        <Typography variant="h5" sx={{ mb: 3 }}>
-          {baseYear ? 'Edit Base Year' : 'New Base Year'}
-        </Typography>
+    <SystemDialog
+      open={open}
+      title={baseYear ? 'Edit Base Year' : 'New Base Year'}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel="Cancel"
+      actions={
+        <Button variant="contained" size="small" onClick={handleSubmit}>
+          {baseYear ? 'Update' : 'Create'}
+        </Button>
+      }
+      width={540}
+      height={620}
+      minWidth={420}
+      minHeight={460}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
         <Stack spacing={2}>
           <TextField
             label="Year"
@@ -198,17 +199,9 @@ function BaseYearDrawer({ open, baseYear, periods, onSave, onClose }) {
             }
             label="Active"
           />
-          <Stack direction="row" spacing={2} sx={{ pt: 1 }}>
-            <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
-              Cancel
-            </Button>
-            <Button variant="contained" onClick={handleSubmit} sx={{ flex: 1 }}>
-              {baseYear ? 'Update' : 'Create'}
-            </Button>
-          </Stack>
         </Stack>
       </Box>
-    </Drawer>
+    </SystemDialog>
   );
 }
 
@@ -241,10 +234,26 @@ function RecalculateDialog({ open, onClose, onConfirm }) {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Trigger Base Year Recalculation</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
+    <SystemDialog
+      open={open}
+      title="Trigger Base Year Recalculation"
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel="Cancel"
+      actions={
+        <Button variant="contained" size="small" onClick={handleConfirm}>
+          Trigger
+        </Button>
+      }
+      width={540}
+      height={420}
+      minWidth={420}
+      minHeight={340}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
+        <Stack spacing={2}>
           <TextField
             label="Trigger Type"
             select
@@ -280,12 +289,8 @@ function RecalculateDialog({ open, onClose, onConfirm }) {
             size="small"
           />
         </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleConfirm} variant="contained">Trigger</Button>
-      </DialogActions>
-    </Dialog>
+      </Box>
+    </SystemDialog>
   );
 }
 
@@ -294,22 +299,22 @@ function RecalculateDialog({ open, onClose, onConfirm }) {
 export default function BaseYearsPage() {
   useDocumentTitle('Base Years');
   const { user, token, availablePerspectives } = useAuth();
+  const { notify, notifyFromError } = useNotification();
+
   const [baseYears, setBaseYears] = useState([]);
   const [periods, setPeriods] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [recalcTarget, setRecalcTarget] = useState(null);
   const [current, setCurrent] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [searchText, setSearchText] = useState('');
 
   const isAdmin = user?.is_staff || user?.is_superuser || (availablePerspectives || []).includes('carbon-admin');
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      setError(null);
       const [byData, pData] = await Promise.all([
         fetchBaseYears(token),
         fetchReportingPeriods(token),
@@ -317,11 +322,13 @@ export default function BaseYearsPage() {
       setBaseYears(Array.isArray(byData) ? byData : byData?.results || []);
       setPeriods(Array.isArray(pData) ? pData : pData?.results || []);
     } catch (err) {
-      setError(err.message || 'Failed to load base years');
+      notifyFromError(err, 'Failed to load base years');
+      setBaseYears([]);
+      setPeriods([]);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, notifyFromError]);
 
   useEffect(() => {
     loadData();
@@ -349,37 +356,38 @@ export default function BaseYearsPage() {
     try {
       if (current) {
         await updateBaseYear(current.id, payload, token);
+        notify({ message: 'Base year updated', type: 'success' });
       } else {
         await createBaseYear(payload, token);
+        notify({ message: 'Base year created', type: 'success' });
       }
       setDrawerOpen(false);
       setCurrent(null);
-      setSnackbar({ open: true, message: 'Base year saved', severity: 'success' });
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to save base year');
+      notifyFromError(err, 'Failed to save base year');
     }
   };
 
   const handleDelete = async (id) => {
     try {
       await deleteBaseYear(id, token);
+      notify({ message: 'Base year deleted', type: 'success' });
       setDeleteConfirm(null);
-      setSnackbar({ open: true, message: 'Base year deleted', severity: 'success' });
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to delete base year');
+      notifyFromError(err, 'Failed to delete base year');
     }
   };
 
   const handleRecalculate = async (data) => {
     try {
       await recalculateBaseYear(recalcTarget.id, data, token);
+      notify({ message: 'Recalculation trigger created', type: 'success' });
       setRecalcTarget(null);
-      setSnackbar({ open: true, message: 'Recalculation trigger created', severity: 'success' });
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to trigger recalculation');
+      notifyFromError(err, 'Failed to trigger recalculation');
     }
   };
 
@@ -388,94 +396,133 @@ export default function BaseYearsPage() {
     try { return new Date(d).toLocaleDateString(); } catch { return '—'; }
   };
 
-  if (loading) {
-    return (
-      <PageContainer sx={{ alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress />
-      </PageContainer>
-    );
-  }
+  const filteredBaseYears = useMemo(() => {
+    let filtered = baseYears;
+    if (searchText.trim()) {
+      const query = searchText.toLowerCase();
+      filtered = filtered.filter(
+        (by) =>
+          (by.year != null && String(by.year).includes(query)) ||
+          (by.reporting_period_name && by.reporting_period_name.toLowerCase().includes(query)) ||
+          (by.recalculation_policy && by.recalculation_policy.toLowerCase().includes(query))
+      );
+    }
+    return filtered;
+  }, [baseYears, searchText]);
+
+  const columns = [
+    { field: 'id', headerName: 'ID', width: 70 },
+    {
+      field: 'year',
+      headerName: 'Year',
+      width: 90,
+      align: 'center',
+      headerAlign: 'center',
+      valueFormatter: (value) => value ?? '—',
+    },
+    {
+      field: 'reporting_period',
+      headerName: 'Reporting Period',
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (value, row) => row.reporting_period_name || row.reporting_period || '—',
+    },
+    {
+      field: 'recalculation_policy',
+      headerName: 'Recalculation Policy',
+      width: 190,
+      renderCell: (params) => <PolicyChip value={params.value} />,
+    },
+    {
+      field: 'significance_threshold_pct',
+      headerName: 'Threshold',
+      width: 110,
+      align: 'center',
+      headerAlign: 'center',
+      valueGetter: (value, row) =>
+        row.significance_threshold_pct != null ? `${row.significance_threshold_pct}%` : '—',
+    },
+    {
+      field: 'open_triggers_count',
+      headerName: 'Open Triggers',
+      width: 130,
+      align: 'center',
+      headerAlign: 'center',
+      valueFormatter: (value) => value ?? 0,
+    },
+    {
+      field: 'is_active',
+      headerName: 'Status',
+      width: 100,
+      renderCell: (params) => <ActiveChip value={params.value} />,
+    },
+    {
+      field: 'created_at',
+      headerName: 'Created',
+      width: 120,
+      valueFormatter: (value) => fmtDate(value),
+    },
+    ...(isAdmin
+      ? [
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 150,
+            sortable: false,
+            renderCell: (params) => (
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton size="small" onClick={() => handleEdit(params.row)}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                <IconButton size="small" onClick={() => setRecalcTarget(params.row)}>
+                  <ReplayIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => setDeleteConfirm(params.row.id)}
+                  sx={{ color: 'error.main' }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ),
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <PageContainer>
-      <PageHeader
+    <>
+      <FilteredDataGrid
         title="Base Years"
+        subtitle={`${filteredBaseYears.length} of ${baseYears.length} base years`}
         description="GHG Protocol base years with recalculation policy. A base year is the benchmark against which future emission reductions are measured."
         actions={
           <Stack direction="row" spacing={1}>
-            <IconButton onClick={loadData} size="small" sx={{ mr: 0.5 }}>
+            <IconButton onClick={loadData} size="small" aria-label="Refresh base years">
               <RefreshIcon />
             </IconButton>
             {isAdmin && (
-              <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
+              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreate}>
                 New Base Year
               </Button>
             )}
           </Stack>
         }
+        rows={filteredBaseYears}
+        loading={loading}
+        columns={columns}
+        countLabel={`${filteredBaseYears.length} of ${baseYears.length} base years`}
+        searchValue={searchText}
+        onSearchChange={setSearchText}
+        filterDefs={[]}
+        onClearFilters={() => setSearchText('')}
+        emptyMessage="No base years found"
+        emptySubtext="Try adjusting your search"
       />
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead sx={{ bgcolor: 'action.hover' }}>
-            <TableRow>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>ID</TableCell>
-              <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Year</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Reporting Period</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Recalculation Policy</TableCell>
-              <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Threshold</TableCell>
-              <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Open Triggers</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Status</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Created</TableCell>
-              {isAdmin && <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Actions</TableCell>}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {baseYears.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={isAdmin ? 9 : 8} align="center" sx={{ py: 3, color: 'text.secondary' }}>
-                  No base years found. Click "New Base Year" to create one.
-                </TableCell>
-              </TableRow>
-            ) : (
-              baseYears.map((by) => (
-                <TableRow key={by.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{by.id}</TableCell>
-                  <TableCell align="center" sx={{ ...FONT.body, fontWeight: 500 }}>{by.year}</TableCell>
-                  <TableCell sx={{ ...FONT.body }}>{by.reporting_period_name || by.reporting_period || '—'}</TableCell>
-                  <TableCell><PolicyChip value={by.recalculation_policy} /></TableCell>
-                  <TableCell align="center" sx={{ ...FONT.body }}>{by.significance_threshold_pct ?? '—'}%</TableCell>
-                  <TableCell align="center" sx={{ ...FONT.body }}>{by.open_triggers_count ?? 0}</TableCell>
-                  <TableCell><ActiveChip value={by.is_active} /></TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{fmtDate(by.created_at)}</TableCell>
-                  {isAdmin && (
-                    <TableCell align="center">
-                      <IconButton size="small" onClick={() => handleEdit(by)} title="Edit">
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => setRecalcTarget(by)} title="Trigger recalculation">
-                        <ReplayIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => setDeleteConfirm(by.id)}
-                        sx={{ color: 'error.main' }}
-                        title="Delete"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      <BaseYearDrawer
+      {/* Create/Edit Dialog (modal — design system primitive) */}
+      <BaseYearDialog
         open={drawerOpen}
         baseYear={current}
         periods={periods}
@@ -489,29 +536,16 @@ export default function BaseYearsPage() {
         onConfirm={handleRecalculate}
       />
 
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Delete Base Year?</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ ...FONT.body }}>This action cannot be undone.</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-          <Button onClick={() => handleDelete(deleteConfirm)} variant="contained" color="error">
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </PageContainer>
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete Base Year?"
+        message="This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => handleDelete(deleteConfirm)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
+    </>
   );
 }

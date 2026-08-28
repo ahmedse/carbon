@@ -2,8 +2,10 @@
 
 import React, { useState } from "react";
 import { Box, Button, CircularProgress } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { useNotification } from "./NotificationProvider";
 export default function BulkActionBar({ selected, onDelete, onExport }) {
+  const { t } = useTranslation('common');
   const [deleting, setDeleting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const notifyCtx = useNotification();
@@ -17,9 +19,9 @@ export default function BulkActionBar({ selected, onDelete, onExport }) {
     setDeleting(true);
     try {
       await onDelete?.();
-      notify({ message: "Selected rows deleted.", type: "success" });
+      notify({ message: t("bulkRowsDeleted"), type: "success" });
     } catch (err) {
-      notify({ message: err?.message || "Failed to delete selected rows.", type: "error" });
+      notify({ message: err?.message || t("bulkDeleteFailed"), type: "error" });
     }
     setDeleting(false);
   };
@@ -28,9 +30,9 @@ export default function BulkActionBar({ selected, onDelete, onExport }) {
     setExporting(true);
     try {
       await onExport?.();
-      notify({ message: "CSV exported.", type: "success" });
+      notify({ message: t("csvExported"), type: "success" });
     } catch (err) {
-      notify({ message: err?.message || "Failed to export CSV.", type: "error" });
+      notify({ message: err?.message || t("csvExportFailed"), type: "error" });
     }
     setExporting(false);
   };
@@ -43,21 +45,21 @@ export default function BulkActionBar({ selected, onDelete, onExport }) {
         onClick={handleDelete}
         disabled={deleting}
         startIcon={deleting ? <CircularProgress color="inherit" size={18} /> : null}
-        aria-label="Delete selected rows"
+        aria-label={t("deleteSelectedAria")}
       >
-        Delete Selected
+        {t("deleteSelected")}
       </Button>
       <Button
         variant="outlined"
         onClick={handleExport}
         disabled={exporting}
         startIcon={exporting ? <CircularProgress color="inherit" size={18} /> : null}
-        aria-label="Export selected rows as CSV"
+        aria-label={t("exportSelectedAria")}
       >
-        Export CSV
+        {t("exportCsv")}
       </Button>
       <Box flex={1} />
-      <span aria-live="polite">{selected.length} selected</span>
+      <span aria-live="polite">{t("selectedCount", { count: selected.length })}</span>
     </Box>
   );
 }

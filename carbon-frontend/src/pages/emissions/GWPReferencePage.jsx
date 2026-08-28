@@ -5,6 +5,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Button, Stack, IconButton, TextField } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -34,6 +35,7 @@ function fmtNum(v) {
 // ── GwpDialog ──────────────────────────────────────────────────────────
 
 function GwpDialog({ open, gwpValue, onSave, onClose }) {
+  const { t } = useTranslation('emissions');
   const [form, setForm] = useState({
     gas_name: '',
     gas_formula: '',
@@ -83,13 +85,13 @@ function GwpDialog({ open, gwpValue, onSave, onClose }) {
   return (
     <SystemDialog
       open={open}
-      title={gwpValue ? 'Edit GWP Value' : 'Create GWP Value'}
+      title={gwpValue ? t('editGwpTitle') : t('createGwpTitle')}
       onClose={onClose}
       onCancel={onClose}
-      cancelLabel="Cancel"
+      cancelLabel={t('cancel')}
       actions={
         <Button variant="contained" size="small" onClick={handleSubmit}>
-          {gwpValue ? 'Update' : 'Create'}
+          {gwpValue ? t('update') : t('create')}
         </Button>
       }
       width={520}
@@ -102,7 +104,7 @@ function GwpDialog({ open, gwpValue, onSave, onClose }) {
       <Box px={2} py={1}>
         <Stack spacing={2}>
           <TextField
-            label="Gas Name"
+            label={t('gasName')}
             name="gas_name"
             value={form.gas_name}
             onChange={handleChange}
@@ -111,17 +113,17 @@ function GwpDialog({ open, gwpValue, onSave, onClose }) {
             size="small"
           />
           <TextField
-            label="Gas Formula"
+            label={t('gasFormula')}
             name="gas_formula"
             value={form.gas_formula}
             onChange={handleChange}
             fullWidth
             size="small"
-            placeholder="e.g. CH₄, N₂O"
+            placeholder={t('gasFormulaPlaceholder')}
           />
           <Stack direction="row" spacing={2}>
             <TextField
-              label="AR5 100yr GWP"
+              label={t('ar5_100')}
               name="gwp_ar5_100yr"
               type="number"
               value={form.gwp_ar5_100yr}
@@ -131,7 +133,7 @@ function GwpDialog({ open, gwpValue, onSave, onClose }) {
               inputProps={{ step: 0.1 }}
             />
             <TextField
-              label="AR6 100yr GWP"
+              label={t('ar6_100')}
               name="gwp_ar6_100yr"
               type="number"
               value={form.gwp_ar6_100yr}
@@ -143,7 +145,7 @@ function GwpDialog({ open, gwpValue, onSave, onClose }) {
           </Stack>
           <Stack direction="row" spacing={2}>
             <TextField
-              label="AR5 20yr GWP"
+              label={t('ar5_20')}
               name="gwp_ar5_20yr"
               type="number"
               value={form.gwp_ar5_20yr}
@@ -153,7 +155,7 @@ function GwpDialog({ open, gwpValue, onSave, onClose }) {
               inputProps={{ step: 0.1 }}
             />
             <TextField
-              label="AR6 20yr GWP"
+              label={t('ar6_20')}
               name="gwp_ar6_20yr"
               type="number"
               value={form.gwp_ar6_20yr}
@@ -164,16 +166,16 @@ function GwpDialog({ open, gwpValue, onSave, onClose }) {
             />
           </Stack>
           <TextField
-            label="CAS Number"
+            label={t('casNumber')}
             name="cas_number"
             value={form.cas_number}
             onChange={handleChange}
             fullWidth
             size="small"
-            placeholder="e.g. 74-82-8"
+            placeholder={t('casPlaceholder')}
           />
           <TextField
-            label="Notes"
+            label={t('notes')}
             name="notes"
             value={form.notes}
             onChange={handleChange}
@@ -191,7 +193,8 @@ function GwpDialog({ open, gwpValue, onSave, onClose }) {
 // ── Main Component ─────────────────────────────────────────────────────
 
 export default function GWPReferencePage() {
-  useDocumentTitle("GWP Reference");
+  const { t } = useTranslation('emissions');
+  useDocumentTitle(t('gwpTitle'));
   const { user, token, availablePerspectives, isGlobalAdminFlag, userCapabilities, context } = useAuth();
   const { notify, notifyFromError } = useNotification();
 
@@ -217,12 +220,12 @@ export default function GWPReferencePage() {
       // Defensive: always ensure arrays (CB-09)
       setGwpValues(Array.isArray(data) ? data : data?.results || []);
     } catch (err) {
-      notifyFromError(err, 'Failed to load GWP values');
+      notifyFromError(err, t('failedToLoadGwp'));
       setGwpValues([]);
     } finally {
       setLoading(false);
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   useEffect(() => {
     loadData();
@@ -250,27 +253,27 @@ export default function GWPReferencePage() {
     try {
       if (currentGwp) {
         await updateGWPValue(currentGwp.id, payload, token);
-        notify({ message: 'GWP value updated', type: 'success' });
+        notify({ message: t('gwpUpdated'), type: 'success' });
       } else {
         await createGWPValue(payload, token);
-        notify({ message: 'GWP value created', type: 'success' });
+        notify({ message: t('gwpCreated'), type: 'success' });
       }
       setDialogOpen(false);
       setCurrentGwp(null);
       await loadData();
     } catch (err) {
-      notifyFromError(err, 'Failed to save GWP value');
+      notifyFromError(err, t('failedToSaveGwp'));
     }
   };
 
   const handleDelete = async (gwpId) => {
     try {
       await deleteGWPValue(gwpId, token);
-      notify({ message: 'GWP value deleted', type: 'success' });
+      notify({ message: t('gwpDeleted'), type: 'success' });
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
-      notifyFromError(err, 'Failed to delete GWP value');
+      notifyFromError(err, t('failedToDeleteGwp'));
     }
   };
 
@@ -295,11 +298,11 @@ export default function GWPReferencePage() {
   };
 
   const columns = [
-    { field: 'gas_name', headerName: 'Gas Name', flex: 1, minWidth: 170 },
-    { field: 'gas_formula', headerName: 'Formula', width: 110 },
+    { field: 'gas_name', headerName: t('gasName'), flex: 1, minWidth: 170 },
+    { field: 'gas_formula', headerName: t('gasFormula'), width: 110 },
     {
       field: 'gwp_ar5_100yr',
-      headerName: 'AR5 100yr',
+      headerName: t('ar5_100'),
       width: 105,
       align: 'right',
       headerAlign: 'right',
@@ -307,7 +310,7 @@ export default function GWPReferencePage() {
     },
     {
       field: 'gwp_ar6_100yr',
-      headerName: 'AR6 100yr',
+      headerName: t('ar6_100'),
       width: 105,
       align: 'right',
       headerAlign: 'right',
@@ -315,7 +318,7 @@ export default function GWPReferencePage() {
     },
     {
       field: 'gwp_ar5_20yr',
-      headerName: 'AR5 20yr',
+      headerName: t('ar5_20'),
       width: 105,
       align: 'right',
       headerAlign: 'right',
@@ -323,19 +326,19 @@ export default function GWPReferencePage() {
     },
     {
       field: 'gwp_ar6_20yr',
-      headerName: 'AR6 20yr',
+      headerName: t('ar6_20'),
       width: 105,
       align: 'right',
       headerAlign: 'right',
       valueFormatter: (value) => fmtNum(value),
     },
-    { field: 'cas_number', headerName: 'CAS #', width: 130 },
-    { field: 'notes', headerName: 'Notes', width: 220 },
+    { field: 'cas_number', headerName: t('casNumber'), width: 130 },
+    { field: 'notes', headerName: t('notes'), width: 220 },
     ...(isAdmin
       ? [
           {
             field: 'actions',
-            headerName: 'Actions',
+            headerName: t('actions'),
             width: 100,
             sortable: false,
             renderCell: (params) => (
@@ -360,26 +363,26 @@ export default function GWPReferencePage() {
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <FilteredDataGrid
-        title="GWP Reference"
-        subtitle={`${filteredGwp.length} of ${gwpValues.length} gases`}
-        description="IPCC Global Warming Potential reference values used to convert greenhouse gases to CO₂-equivalent for carbon accounting."
+        title={t('gwpTitle')}
+        subtitle={t('gwpSubtitle', { count: filteredGwp.length, total: gwpValues.length })}
+        description={t('gwpDescription')}
         actions={
           isAdmin ? (
             <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreate}>
-              New GWP
+              {t('newGwp')}
             </Button>
           ) : null
         }
         rows={filteredGwp}
         loading={loading}
         columns={columns}
-        countLabel={`${filteredGwp.length} of ${gwpValues.length} gases`}
+        countLabel={t('gwpSubtitle', { count: filteredGwp.length, total: gwpValues.length })}
         searchValue={searchText}
         onSearchChange={setSearchText}
         filterDefs={[]}
         onClearFilters={handleClearFilters}
-        emptyMessage="No GWP values found"
-        emptySubtext="Try adjusting your search"
+        emptyMessage={t('noGwpFound')}
+        emptySubtext={t('tryAdjustingSearch')}
       />
 
       {/* Create/Edit Dialog (modal — design system primitive) */}
@@ -393,9 +396,9 @@ export default function GWPReferencePage() {
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         open={!!deleteConfirm}
-        title="Delete GWP Value?"
-        message="This action cannot be undone. Calculations using this gas may be affected."
-        confirmLabel="Delete"
+        title={t('deleteGwpTitle')}
+        message={t('deleteGwpMessage')}
+        confirmLabel={t('delete')}
         destructive
         onConfirm={() => handleDelete(deleteConfirm)}
         onCancel={() => setDeleteConfirm(null)}

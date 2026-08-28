@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { DataGrid } from "@mui/x-data-grid";
 import { Button, Dialog, Box, CircularProgress, IconButton, Tooltip, DialogTitle, DialogContent, DialogActions, Typography, Chip, useTheme } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
@@ -34,6 +35,7 @@ function mapRows(rows, fields) {
 }
 
 function ActionCellComponent({ row, onDeleteRow, tableId, rowId }) {
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
 
   const handleViewRow = () => {
@@ -47,12 +49,12 @@ function ActionCellComponent({ row, onDeleteRow, tableId, rowId }) {
 
   return (
     <Box sx={{ display: 'flex', gap: 0.5 }}>
-      <Tooltip title="View Details">
+      <Tooltip title={t('viewDetails')}>
         <IconButton size="small" onClick={e => { e.stopPropagation(); handleViewRow(); }}>
           <VisibilityIcon fontSize="small" />
         </IconButton>
       </Tooltip>
-      <Tooltip title="Delete">
+      <Tooltip title={t('delete')}>
         <IconButton size="small" onClick={e => { e.stopPropagation(); onDeleteRow(row); }}>
           <DeleteIcon fontSize="small" />
         </IconButton>
@@ -61,7 +63,7 @@ function ActionCellComponent({ row, onDeleteRow, tableId, rowId }) {
   );
 }
 
-function buildColumns(fields, editable, token, project_id, module_id, uploadRowFile, onEditRow, onDeleteRow, tableId) {
+function buildColumns(fields, editable, token, project_id, module_id, uploadRowFile, onEditRow, onDeleteRow, tableId, t) {
   const columns = fields.map(field => {
     const valueOptions = safeArray(field.options).map(opt =>
       typeof opt === "object"
@@ -166,7 +168,7 @@ function buildColumns(fields, editable, token, project_id, module_id, uploadRowF
   // Add evidence column (if evidence exists)
   columns.push({
     field: "evidence_count",
-    headerName: "Evidence",
+    headerName: t('evidence'),
     width: 100,
     sortable: false,
     filterable: false,
@@ -187,7 +189,7 @@ function buildColumns(fields, editable, token, project_id, module_id, uploadRowF
   // Add actions column at end
   columns.push({
     field: "actions",
-    headerName: "Actions",
+    headerName: t('actions'),
     width: 160,
     sortable: false,
     filterable: false,
@@ -205,6 +207,7 @@ function buildColumns(fields, editable, token, project_id, module_id, uploadRowF
 }
 
 function FilterBar({ fields, filters, setFilters, onAddNew, onSearchChange }) {
+  const { t } = useTranslation('common');
   const theme = useTheme();
   const filterFields = fields.filter(
     f => ["string", "number", "select"].includes(f.type)
@@ -230,7 +233,7 @@ function FilterBar({ fields, filters, setFilters, onAddNew, onSearchChange }) {
     }}>
       <input
         type="text"
-        placeholder="Search..."
+        placeholder={t('searchDots')}
         value={filters._search || ""}
         onChange={e => onSearchChange(e.target.value)}
         style={{ ...inputStyle, width: 200 }}
@@ -264,7 +267,7 @@ function FilterBar({ fields, filters, setFilters, onAddNew, onSearchChange }) {
       })}
       <span style={{ flex: 1 }} />
       <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={onAddNew}>
-        Add Row
+        {t('addRow')}
       </Button>
     </div>
   );
@@ -290,6 +293,7 @@ export default function DataTableGrid({
   selected,
   onExportCsv: _onExportCsv,
 }) {
+  const { t } = useTranslation('common');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState("edit");
   const [editingRow, setEditingRow] = useState(null);
@@ -330,10 +334,10 @@ export default function DataTableGrid({
       await onEditRow(rowId, values);
       setDrawerOpen(false);
       setEditingRow(null);
-      notify({ message: rowId ? "Row updated" : "Row added", type: "success" });
+      notify({ message: rowId ? t('dgRowUpdated') : t('dgRowAdded'), type: "success" });
       fetchRows?.();
     } catch (err) {
-      notify({ message: err?.message || "Failed to save row", type: "error" });
+      notify({ message: err?.message || t('failedSaveRow'), type: "error" });
     }
   };
 
@@ -346,17 +350,17 @@ export default function DataTableGrid({
   const handleConfirmDelete = async () => {
     try {
       await onDeleteRow(deleteRow);
-      notify({ message: "Row deleted", type: "success" });
+      notify({ message: t('dgRowDeleted'), type: "success" });
       fetchRows?.();
     } catch (err) {
-      notify({ message: err?.message || "Failed to delete row", type: "error" });
+      notify({ message: err?.message || t('failedDeleteRow'), type: "error" });
     }
     setDeleteRow(null);
   };
 
   const columns = useMemo(
-    () => buildColumns(fields, false, token, project_id, module_id, uploadRowFile, handleEditRow, handleDeleteRow, tableId),
-    [fields, token, project_id, module_id, uploadRowFile, tableId]
+    () => buildColumns(fields, false, token, project_id, module_id, uploadRowFile, handleEditRow, handleDeleteRow, tableId, t),
+    [fields, token, project_id, module_id, uploadRowFile, tableId, t]
   );
   const mappedRows = useMemo(
     () => mapRows(rows.filter(row => row && row.id), fields),
@@ -442,7 +446,7 @@ export default function DataTableGrid({
         }}
       >
         <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
-          <span>{drawerMode === 'edit' ? 'Edit Row' : 'Add New Row'}</span>
+          <span>{drawerMode === 'edit' ? t('editRowTitle') : t('addNewRowTitle')}</span>
           <IconButton
             edge="end"
             color="inherit"
@@ -473,7 +477,7 @@ export default function DataTableGrid({
         
         <DialogActions sx={{ px: 2, py: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
           <Button onClick={() => { setDrawerOpen(false); setEditingRow(null); }} variant="outlined">
-            Cancel
+            {t('cancel')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -494,7 +498,7 @@ export default function DataTableGrid({
         }}
       >
         <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Delete Row</span>
+          <span>{t('deleteRowTitle')}</span>
           <IconButton
             edge="end"
             color="inherit"
@@ -506,15 +510,15 @@ export default function DataTableGrid({
         </DialogTitle>
         
         <DialogContent>
-          <Typography>Are you sure you want to delete this row? This action cannot be undone.</Typography>
+          <Typography>{t('confirmDeleteRow')}</Typography>
         </DialogContent>
         
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={() => setDeleteRow(null)} variant="outlined">
-            Cancel
+            {t('cancel')}
           </Button>
           <Button onClick={handleConfirmDelete} color="error" variant="contained">
-            Delete
+            {t('delete')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -34,6 +34,7 @@ import { useTheme } from "@mui/material/styles";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
+import { useTranslation, Trans } from "react-i18next";
 import {
   TrendingDown,
   TrendingUp,
@@ -99,16 +100,18 @@ const GlassCard = ({ children, sx = {}, ...props }) => (
 );
 
 const QUICK_SELECT_OPTIONS = [
-  { label: "Year to Date", value: "ytd" },
-  { label: "Last 12 Months", value: "last12" },
-  { label: "Last Quarter", value: "lastQuarter" },
-  { label: "Last Year", value: "lastYear" },
-  { label: "Custom Range", value: "custom" },
+  { labelKey: "qsYtd", value: "ytd" },
+  { labelKey: "qsLast12", value: "last12" },
+  { labelKey: "qsLastQuarter", value: "lastQuarter" },
+  { labelKey: "qsLastYear", value: "lastYear" },
+  { labelKey: "qsCustom", value: "custom" },
 ];
 
 // ============ Date Range Picker Component ============
 
-const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, quickSelect, onQuickSelectChange }) => (
+const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, quickSelect, onQuickSelectChange }) => {
+  const { t } = useTranslation('common');
+  return (
   <Paper
     elevation={0}
     sx={{
@@ -126,16 +129,16 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
     <CalendarMonth sx={{ color: 'text.secondary' }} />
     
     <FormControl size="small" sx={{ minWidth: 140 }}>
-      <InputLabel>Quick Select</InputLabel>
+      <InputLabel>{t('quickSelect')}</InputLabel>
       <Select
         value={quickSelect}
-        label="Quick Select"
+        label={t('quickSelect')}
         onChange={(e) => onQuickSelectChange(e.target.value)}
         sx={{ bgcolor: 'background.default' }}
       >
         {QUICK_SELECT_OPTIONS.map((opt) => (
           <MenuItem key={opt.value} value={opt.value}>
-            {opt.label}
+            {t(opt.labelKey)}
           </MenuItem>
         ))}
       </Select>
@@ -145,16 +148,16 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
     
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <DatePicker
-        label="Start Date"
+        label={t('startDate')}
         value={startDate}
         onChange={onStartChange}
         slotProps={{
           textField: { size: "small", sx: { width: 160, bgcolor: "background.default" } },
         }}
       />
-      <Typography color="text.secondary">to</Typography>
+      <Typography color="text.secondary">{t('to')}</Typography>
       <DatePicker
-        label="End Date"
+        label={t('endDate')}
         value={endDate}
         onChange={onEndChange}
         slotProps={{
@@ -165,7 +168,7 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
     
     <Box sx={{ flex: 1 }} />
     
-    <Tooltip title="Compare with previous period">
+    <Tooltip title={t('compareWithPrevious')}>
       <Button
         variant="outlined"
         size="small"
@@ -176,22 +179,24 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
           "&:hover": { bgcolor: "action.hover", borderColor: "divider" },
         }}
       >
-        Compare
+        {t('compare')}
       </Button>
     </Tooltip>
     
-    <Tooltip title="Export data">
+    <Tooltip title={t('exportData')}>
       <IconButton size="small" sx={{ color: 'text.secondary' }}>
         <Download />
       </IconButton>
     </Tooltip>
   </Paper>
-);
+  );
+};
 
 // ============ Metric Cards ============
 
 const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, color = null }) => {
   const theme = useTheme();
+  const { t } = useTranslation('common');
   const accent = color || theme.palette.primary.light;
   const isPositive = change < 0; // For emissions, reduction is positive
   
@@ -228,7 +233,7 @@ const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, colo
           <Chip
             size="small"
             icon={isPositive ? <TrendingDown fontSize="small" /> : <TrendingUp fontSize="small" />}
-            label={`${isPositive ? "" : "+"}${change.toFixed(1)}% ${changeLabel || "vs last period"}`}
+            label={`${isPositive ? "" : "+"}${change.toFixed(1)}% ${changeLabel || t("vsLastPeriod")}`}
             sx={{
               bgcolor: isPositive ? "success.light" : "error.light",
               color: isPositive ? "success.dark" : "error.dark",
@@ -246,6 +251,7 @@ const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, colo
 
 const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) => {
   const theme = useTheme();
+  const { t } = useTranslation('common');
   const scopeColors = {
     1: theme.palette.success.main,
     2: theme.palette.primary.light,
@@ -259,7 +265,7 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
     labels: months,
     datasets: [
       {
-        label: "Total Emissions (tonnes)",
+        label: t("chartTotalEmissions"),
         data: monthlyTotals,
         borderColor: theme.palette.primary.light,
         backgroundColor: `${theme.palette.primary.light}1A`,
@@ -339,7 +345,7 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
     <GlassCard sx={{ height: "100%" }}>
       <CardContent sx={{ p: 3 }}>
         <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
-          Monthly Emissions Trend
+          {t('monthlyEmissionsTrend')}
         </Typography>
         <Box sx={{ height: 300 }}>
           <Line data={chartData} options={options} />
@@ -351,11 +357,12 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
 
 const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
   const theme = useTheme();
+  const { t } = useTranslation('common');
   const total = scope1 + scope2 + scope3;
   const scopeColors = {
-    scope1: { main: theme.palette.success.main, label: "Scope 1 (Direct)" },
-    scope2: { main: theme.palette.primary.light, label: "Scope 2 (Energy)" },
-    scope3: { main: theme.palette.warning.main, label: "Scope 3 (Value Chain)" },
+    scope1: { main: theme.palette.success.main, label: t("anScope1Direct") },
+    scope2: { main: theme.palette.primary.light, label: t("anScope2Energy") },
+    scope3: { main: theme.palette.warning.main, label: t("anScope3ValueChain") },
   };
   
   const data = {
@@ -386,7 +393,7 @@ const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
     <GlassCard sx={{ height: "100%" }}>
       <CardContent sx={{ p: 3 }}>
         <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
-          Scope Distribution
+          {t('scopeDistribution')}
         </Typography>
         
         <Grid container spacing={2}>
@@ -429,10 +436,11 @@ const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
 
 const CategoryBreakdownChart = ({ categories }) => {
   const theme = useTheme();
+  const { t } = useTranslation('common');
   const data = {
     labels: categories.map((c) => c.name),
     datasets: [{
-      label: "Emissions",
+      label: t("chartEmissions"),
       data: categories.map((c) => c.value),
       backgroundColor: [
         theme.palette.primary.light,
@@ -476,7 +484,7 @@ const CategoryBreakdownChart = ({ categories }) => {
     <GlassCard sx={{ height: "100%" }}>
       <CardContent sx={{ p: 3 }}>
         <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
-          Emissions by Category
+          {t('emissionsByCategory')}
         </Typography>
         <Box sx={{ height: 280 }}>
           <Bar data={data} options={options} />
@@ -488,6 +496,7 @@ const CategoryBreakdownChart = ({ categories }) => {
 
 const DetailedTable = ({ data }) => {
   const theme = useTheme();
+  const { t } = useTranslation('common');
   const scopeChipColors = {
     1: { bg: theme.palette.success.light, fg: theme.palette.success.dark },
     2: { bg: theme.palette.primary.light, fg: theme.palette.primary.dark },
@@ -497,7 +506,7 @@ const DetailedTable = ({ data }) => {
     <GlassCard>
       <CardContent sx={{ p: 3 }}>
         <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
-          Detailed Breakdown
+          {t('detailedBreakdown')}
         </Typography>
         <TableContainer
           component={Paper}
@@ -507,11 +516,11 @@ const DetailedTable = ({ data }) => {
           <Table size="small" sx={{ "& th, & td": { textAlign: "left" } }}>
             <TableHead>
               <TableRow sx={{ bgcolor: "background.dark" }}>
-                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>Category</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>Scope</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>Emissions (t CO₂e)</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>% of Total</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>vs Last Period</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>{t('colCategory')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>{t('colScope')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>{t('colEmissions')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>{t('colPercentOfTotal')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: "text.primary" }}>{t('colVsLastPeriod')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -521,7 +530,7 @@ const DetailedTable = ({ data }) => {
                   <TableCell>
                     <Chip
                       size="small"
-                      label={`Scope ${row.scope}`}
+                      label={t('anScopeChip', { scope: row.scope })}
                       sx={{
                         bgcolor: scopeChipColors[row.scope]?.bg || theme.palette.secondary.light,
                         color: scopeChipColors[row.scope]?.fg || theme.palette.secondary.main,
@@ -557,7 +566,8 @@ const DetailedTable = ({ data }) => {
 // ============ Main Component ============
 
 export default function AnalyticsDashboard() {
-  useDocumentTitle("Analytics & Trends");
+  const { t } = useTranslation('common');
+  useDocumentTitle(t("analyticsTitle"));
   const theme = useTheme();
   const { user, context } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -635,7 +645,7 @@ export default function AnalyticsDashboard() {
   if (error) {
     return (
       <PageContainer>
-        <Alert severity="error">Failed to load analytics data: {error}</Alert>
+        <Alert severity="error">{t('anLoadFailed')}{error}</Alert>
       </PageContainer>
     );
   }
@@ -677,17 +687,63 @@ export default function AnalyticsDashboard() {
   return (
     <PageContainer sx={{ maxWidth: 1400, mx: "auto", overflow: "auto" }}>
       {/* Header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Analytics
+      <Box sx={{ mb: 2.5, pb: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'flex-start' }} justifyContent="space-between" gap={1.5}>
+          <Box>
+            <Typography variant="h5" fontWeight={700} gutterBottom>
+              {t('analyticsTitle')}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 680, lineHeight: 1.6 }}>
+              {t('anDescription')}{" "}
+              <Trans i18nKey="anDescriptionKpis" ns="common">For board-level KPIs see <strong>Chairman Overview</strong>.</Trans>
+            </Typography>
+          </Box>
+          {/* Export toolbar */}
+          <Stack direction="row" gap={1} flexShrink={0} alignItems="center">
+            <Tooltip title={t('exportCurrentView')}>
+              <Button size="small" variant="outlined" startIcon={<Download fontSize="small" />}
+                sx={{ fontSize: '0.7rem', borderColor: 'divider', color: 'text.secondary', height: 30 }}>
+                {t('exportCsv')}
+              </Button>
+            </Tooltip>
+            <Tooltip title={t('refreshData')}>
+              <Button size="small" variant="outlined" startIcon={<Refresh fontSize="small" />}
+                onClick={() => { setData(null); }}
+                sx={{ fontSize: '0.7rem', borderColor: 'divider', color: 'text.secondary', height: 30 }}>
+                {t('refresh')}
+              </Button>
+            </Tooltip>
+          </Stack>
+        </Stack>
+      </Box>
+
+      {/* Scope filter chips */}
+      <Box sx={{ mb: 2.5 }}>
+        <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.disabled', mb: 0.75 }}>
+          {t('filterByScope')}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Deep dive into your emissions data with full date range analysis
-        </Typography>
+        <Stack direction="row" gap={0.75} flexWrap="wrap">
+          {[
+            { label: t('allScopes'), value: 'all', color: undefined },
+            { label: t('scope1Combustion'), value: '1', color: theme.palette.success.main },
+            { label: t('scope2Purchased'), value: '2', color: theme.palette.primary.main },
+            { label: t('scope3Chain'), value: '3', color: theme.palette.warning.main },
+          ].map((s) => (
+            <Chip key={s.value} label={s.label} size="small" variant="outlined"
+              sx={{ fontSize: '0.7rem', cursor: 'pointer',
+                borderColor: s.color || 'divider',
+                color: s.color ? s.color : 'text.secondary',
+                '&:hover': { bgcolor: s.color ? `${s.color}12` : 'action.hover' },
+              }} />
+          ))}
+        </Stack>
       </Box>
 
       {/* Date Range Selector */}
-      <Box sx={{ mb: 3 }}>
+      <Box sx={{ mb: 2 }}>
+        <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.disabled', mb: 0.75 }}>
+          {t('dateRange')}
+        </Typography>
         <DateRangeSelector
           startDate={startDate}
           endDate={endDate}
@@ -699,10 +755,12 @@ export default function AnalyticsDashboard() {
       </Box>
 
       {/* View Toggle */}
-      <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <Box sx={{ mb: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <Chip
-          label={`Showing: ${startDate.format("MMM D, YYYY")} - ${endDate.format("MMM D, YYYY")}`}
-          sx={{ bgcolor: 'background.dark', color: 'text.primary', fontWeight: 500 }}
+          label={`${startDate.format("MMM D, YYYY")} — ${endDate.format("MMM D, YYYY")}`}
+          size="small"
+          icon={<CalendarMonth fontSize="small" />}
+          sx={{ bgcolor: 'background.dark', color: 'text.secondary', fontWeight: 500, fontSize: '0.72rem' }}
         />
         
         <ToggleButtonGroup
@@ -712,19 +770,26 @@ export default function AnalyticsDashboard() {
           size="small"
         >
           <ToggleButton value="charts">
-            <BarChartIcon fontSize="small" sx={{ mr: 0.5 }} /> Charts
+            <BarChartIcon fontSize="small" sx={{ mr: 0.5 }} /> {t('charts')}
           </ToggleButton>
           <ToggleButton value="table">
-            <TableChart fontSize="small" sx={{ mr: 0.5 }} /> Table
+            <TableChart fontSize="small" sx={{ mr: 0.5 }} /> {t('table')}
           </ToggleButton>
         </ToggleButtonGroup>
       </Box>
 
+      {/* Key Metrics — section label */}
+      <Box sx={{ mb: 1 }}>
+        <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.disabled' }}>
+          {t('periodTotals')}
+        </Typography>
+        <Typography sx={{ fontSize: '0.63rem', color: 'text.disabled' }}>{t('periodTotalsDesc')}</Typography>
+      </Box>
       {/* Key Metrics */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
-            title="Total Emissions"
+            title={t('metricTotalEmissions')}
             value={emissions.total}
             unit="t CO₂e"
             icon={TrendingDown}
@@ -733,7 +798,7 @@ export default function AnalyticsDashboard() {
         </Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
-            title="Scope 1 - Direct"
+            title={t('metricScope1')}
             value={emissions.scope1}
             unit="t CO₂e"
             icon={ShowChart}
@@ -742,7 +807,7 @@ export default function AnalyticsDashboard() {
         </Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
-            title="Scope 2 - Energy"
+            title={t('metricScope2')}
             value={emissions.scope2}
             unit="t CO₂e"
             icon={ShowChart}
@@ -751,7 +816,7 @@ export default function AnalyticsDashboard() {
         </Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
-            title="Scope 3 - Value Chain"
+            title={t('metricScope3')}
             value={emissions.scope3}
             unit="t CO₂e"
             icon={ShowChart}
@@ -763,6 +828,13 @@ export default function AnalyticsDashboard() {
       {/* Charts or Table View */}
       {viewMode === "charts" ? (
         <>
+          {/* Trend Analysis section */}
+          <Box sx={{ mb: 1, mt: 1 }}>
+            <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.disabled' }}>
+              {t('trendAnalysis')}
+            </Typography>
+            <Typography sx={{ fontSize: '0.63rem', color: 'text.disabled' }}>{t('trendAnalysisDesc')}</Typography>
+          </Box>
           <Grid container spacing={3} sx={{ mb: 3 }}>
             <Grid size={{ xs: 12, lg: 8 }}>
               <MonthlyTrendChart monthlyTrend={data?.monthly_trend} showComparison={_showComparison} />
@@ -775,7 +847,14 @@ export default function AnalyticsDashboard() {
               />
             </Grid>
           </Grid>
-          
+
+          {/* Category Breakdown section */}
+          <Box sx={{ mb: 1 }}>
+            <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.disabled' }}>
+              {t('categoryBreakdown')}
+            </Typography>
+            <Typography sx={{ fontSize: '0.63rem', color: 'text.disabled' }}>{t('categoryBreakdownDesc')}</Typography>
+          </Box>
           <Grid container spacing={3}>
             <Grid size={12}>
               <CategoryBreakdownChart categories={categories} />
@@ -789,9 +868,9 @@ export default function AnalyticsDashboard() {
       {/* Footer */}
       <Box sx={{ mt: 4, pt: 3, borderTop: '1px solid', borderColor: 'divider' }}>
         <Typography variant="body2" color="text.disabled" textAlign="center">
-          Data refreshed: {dayjs().format("MMM D, YYYY h:mm A")} • 
+          {t('dataRefreshed')}{dayjs().format("MMM D, YYYY h:mm A")} • 
           <Button size="small" startIcon={<Refresh fontSize="small" />} sx={{ ml: 1 }}>
-            Refresh
+            {t('refresh')}
           </Button>
         </Typography>
       </Box>

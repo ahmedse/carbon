@@ -14,10 +14,11 @@ import {
 } from '@mui/material';
 import { Cancel, Close, InfoOutlined } from '@mui/icons-material';
 import { useAuth } from '../../../auth/AuthContext';
+import { useTranslation } from 'react-i18next';
 import { useNotification } from '../../../components/NotificationProvider';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
 import { cancelDQJob } from '../../../api/dq';
-import { JOB_TYPE_LABELS, JOB_STATUS_LABELS, JOB_STATUS_COLORS } from '../constants';
+import { jobTypeLabel, jobStatusLabel, JOB_STATUS_COLORS } from '../constants';
 
 const JOB_TYPES = ['rule_run', 'profile', 'freshness', 'schema', 'nl_check', 'suggest', 'anomaly'];
 const JOB_STATUSES = ['queued', 'running', 'done', 'failed', 'canceled'];
@@ -42,6 +43,7 @@ function formatTimestamp(value) {
 
 function JobDetailDrawer({ job, onClose, onCancel }) {
   const [canceling, setCanceling] = useState(false);
+  const { t } = useTranslation('dq');
   if (!job) return null;
   const resultSummary =
     job.result && typeof job.result === 'object'
@@ -56,50 +58,55 @@ function JobDetailDrawer({ job, onClose, onCancel }) {
   return (
     <Drawer anchor="right" open onClose={onClose} PaperProps={{ sx: { width: 440, p: 3 } }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>Job #{job.id}</Typography>
+        <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>
+          {t('jobs.jobNumber', { id: job.id })}
+        </Typography>
         <Button size="small" startIcon={<Close />} onClick={onClose}>
-          Close
+          {t('close')}
         </Button>
       </Stack>
       <Stack spacing={1.5}>
         <Box>
           <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
-            Type
+            {t('columns.type')}
           </Typography>
-          <Typography>{JOB_TYPE_LABELS[job.job_type] || job.job_type}</Typography>
+          <Typography>{jobTypeLabel(t, job.job_type)}</Typography>
         </Box>
         <Box>
           <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
-            Status
+            {t('columns.status')}
           </Typography>
           <Chip
             size="small"
             color={JOB_STATUS_COLORS[job.status] || 'default'}
-            label={JOB_STATUS_LABELS[job.status] || job.status}
+            label={jobStatusLabel(t, job.status)}
           />
         </Box>
         <Box>
           <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
-            Target
+            {t('columns.target')}
           </Typography>
           <Typography>
-            {job.rule_name ? `Rule: ${job.rule_name} (${job.rule ?? '–'})` : ''}
+            {job.rule_name ? t('jobs.ruleTarget', { name: job.rule_name, id: job.rule ?? '–' }) : ''}
             {job.rule_name && job.table_name ? ' · ' : ''}
-            {job.table_name ? `Table: ${job.table_name} (${job.data_table ?? '–'})` : ''}
+            {job.table_name ? t('jobs.tableTarget', { name: job.table_name, id: job.data_table ?? '–' }) : ''}
             {!job.rule_name && !job.table_name ? '–' : ''}
           </Typography>
         </Box>
         <Box>
           <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
-            Created
+            {t('columns.created')}
           </Typography>
           <Typography>
-            {formatTimestamp(job.created_at)} by {job.created_by_name || 'system'}
+            {t('jobs.createdBy', {
+              timestamp: formatTimestamp(job.created_at),
+              name: job.created_by_name || t('jobs.system'),
+            })}
           </Typography>
         </Box>
         <Box>
           <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
-            Duration
+            {t('columns.duration')}
           </Typography>
           <Typography>
             {formatDuration(job.created_at, job.updated_at)}
@@ -108,7 +115,7 @@ function JobDetailDrawer({ job, onClose, onCancel }) {
         {job.pulse_task_id ? (
           <Box>
             <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
-              Pulse Task
+              {t('jobs.pulseTask')}
             </Typography>
             <Typography sx={{ fontFamily: 'monospace' }}>{job.pulse_task_id}</Typography>
           </Box>
@@ -116,7 +123,7 @@ function JobDetailDrawer({ job, onClose, onCancel }) {
         {job.error ? (
           <Box>
             <Typography sx={{ color: 'error.main', textTransform: 'uppercase' }}>
-              Error
+              {t('columns.error')}
             </Typography>
             <Typography sx={{ color: 'error.main' }}>{job.error}</Typography>
           </Box>
@@ -124,7 +131,7 @@ function JobDetailDrawer({ job, onClose, onCancel }) {
         {resultSummary ? (
           <Box>
             <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
-              Result
+              {t('columns.result')}
             </Typography>
             <Box
               component="pre"
@@ -144,7 +151,7 @@ function JobDetailDrawer({ job, onClose, onCancel }) {
         {job.payload ? (
           <Box>
             <Typography sx={{ color: 'text.secondary', textTransform: 'uppercase' }}>
-              Payload
+              {t('columns.payload')}
             </Typography>
             <Box
               component="pre"
@@ -176,7 +183,7 @@ function JobDetailDrawer({ job, onClose, onCancel }) {
               }
             }}
           >
-            Cancel job
+            {t('jobs.cancelJob')}
           </Button>
         )}
       </Stack>
@@ -187,6 +194,7 @@ function JobDetailDrawer({ job, onClose, onCancel }) {
 function JobsTab({ jobs, loading, reload }) {
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
+  const { t } = useTranslation('dq');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [selected, setSelected] = useState(null);
@@ -202,28 +210,28 @@ function JobsTab({ jobs, loading, reload }) {
   const handleCancel = async (job) => {
     try {
       await cancelDQJob(token, job.id);
-      notify({ message: `Job #${job.id} cancel requested`, type: 'info' });
+      notify({ message: t('jobs.cancelRequested', { id: job.id }), type: 'info' });
       setSelected(null);
       reload();
     } catch (err) {
-      notifyFromError(err, 'Could not cancel job');
+      notifyFromError(err, t('jobs.cancelError'));
     }
   };
 
   const columns = useMemo(
     () => [
-      { field: 'id', headerName: 'ID', width: 60 },
+      { field: 'id', headerName: t('columns.id'), width: 60 },
       {
         field: 'job_type',
-        headerName: 'Type',
+        headerName: t('columns.type'),
         width: 150,
         renderCell: ({ row }) => (
-          <Chip size="small" variant="outlined" label={JOB_TYPE_LABELS[row.job_type] || row.job_type} />
+          <Chip size="small" variant="outlined" label={jobTypeLabel(t, row.job_type)} />
         ),
       },
       {
         field: 'target',
-        headerName: 'Target',
+        headerName: t('columns.target'),
         flex: 1.4,
         minWidth: 200,
         renderCell: ({ row }) => {
@@ -233,7 +241,7 @@ function JobsTab({ jobs, loading, reload }) {
               <Typography>{label}</Typography>
               {row.rule && row.table_name ? (
                 <Typography sx={{ color: 'text.secondary' }}>
-                  rule #{row.rule} · table #{row.data_table}
+                  {t('jobs.ruleTableRef', { rule: row.rule, table: row.data_table })}
                 </Typography>
               ) : null}
             </Stack>
@@ -242,15 +250,15 @@ function JobsTab({ jobs, loading, reload }) {
       },
       {
         field: 'status',
-        headerName: 'Status',
+        headerName: t('columns.status'),
         width: 120,
         renderCell: ({ row }) => (
-          <Chip size="small" color={JOB_STATUS_COLORS[row.status] || 'default'} label={JOB_STATUS_LABELS[row.status] || row.status} />
+          <Chip size="small" color={JOB_STATUS_COLORS[row.status] || 'default'} label={jobStatusLabel(t, row.status)} />
         ),
       },
       {
         field: 'progress',
-        headerName: 'Progress',
+        headerName: t('columns.progress'),
         width: 140,
         renderCell: ({ row }) => {
           if (row.status === 'running') {
@@ -269,24 +277,24 @@ function JobsTab({ jobs, loading, reload }) {
       },
       {
         field: 'created_at',
-        headerName: 'Created',
+        headerName: t('columns.created'),
         width: 150,
         valueGetter: (_value, row) => formatTimestamp(row.created_at),
       },
       {
         field: 'duration',
-        headerName: 'Duration',
+        headerName: t('columns.duration'),
         width: 90,
         valueGetter: (_value, row) => formatDuration(row.created_at, row.updated_at),
       },
       {
         field: 'created_by_name',
-        headerName: 'By',
+        headerName: t('columns.by'),
         width: 110,
-        valueGetter: (_value, row) => row.created_by_name || 'system',
+        valueGetter: (_value, row) => row.created_by_name || t('jobs.system'),
       },
     ],
-    []
+    [t]
   );
 
   return (
@@ -295,36 +303,36 @@ function JobsTab({ jobs, loading, reload }) {
         <TextField
           select
           size="small"
-          label="Status"
+          label={t('columns.status')}
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           sx={{ minWidth: 130 }}
         >
-          <MenuItem value="">All</MenuItem>
+          <MenuItem value="">{t('all')}</MenuItem>
           {JOB_STATUSES.map((s) => (
             <MenuItem key={s} value={s}>
-              {JOB_STATUS_LABELS[s] || s}
+              {jobStatusLabel(t, s)}
             </MenuItem>
           ))}
         </TextField>
         <TextField
           select
           size="small"
-          label="Type"
+          label={t('columns.type')}
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
           sx={{ minWidth: 170 }}
         >
-          <MenuItem value="">All</MenuItem>
-          {JOB_TYPES.map((t) => (
-            <MenuItem key={t} value={t}>
-              {JOB_TYPE_LABELS[t] || t}
+          <MenuItem value="">{t('all')}</MenuItem>
+          {JOB_TYPES.map((jt) => (
+            <MenuItem key={jt} value={jt}>
+              {jobTypeLabel(t, jt)}
             </MenuItem>
           ))}
         </TextField>
         <Box sx={{ flexGrow: 1 }} />
         <Button size="small" variant="outlined" onClick={reload}>
-          Refresh
+          {t('refresh')}
         </Button>
       </Stack>
 
@@ -333,7 +341,7 @@ function JobsTab({ jobs, loading, reload }) {
         rows={filtered}
         loading={loading}
         getRowId={(row) => row.id}
-        emptyMessage="No jobs yet — run a rule or trigger Pulse from the Suggestions tab"
+        emptyMessage={t('jobs.empty')}
         onRowClick={({ row }) => setSelected(row)}
       />
 

@@ -63,8 +63,10 @@ class ArtifactUpdateSerializer(serializers.Serializer):
 
 
 class SendMessageSerializer(serializers.Serializer):
-    # trim_whitespace ensures " " is treated as blank and rejected.
-    content = serializers.CharField(required=True, allow_blank=False, trim_whitespace=True)
+    # trim_whitespace ensures " " is treated as blank. Blank is ALLOWED here —
+    # an empty/whitespace message is normalized to a greeting downstream in
+    # Intelligence.send_message (never a 400; the assistant responds helpfully).
+    content = serializers.CharField(required=True, allow_blank=True, trim_whitespace=True)
     model = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
 
 

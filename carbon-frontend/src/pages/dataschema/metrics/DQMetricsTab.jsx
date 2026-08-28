@@ -2,6 +2,7 @@
 // DQ Metrics display with results and re-run button — uses PanelTable.
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Typography,
@@ -24,12 +25,13 @@ function notify(message, type = 'info') {
 }
 
 export default function DQMetricsTab({ metrics, rowId, tableId, token: _token }) {
+  const { t } = useTranslation('dataschema');
   const [running, setRunning] = useState(false);
   const [rerunError, setRerunError] = useState(null);
 
   const getStatusChip = (passed) => {
-    if (passed) return <Chip icon={<CheckCircleIcon />} label="Pass" size="small" color="success" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />;
-    return <Chip icon={<ErrorIcon />} label="Fail" size="small" color="error" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />;
+    if (passed) return <Chip icon={<CheckCircleIcon />} label={t('metrics.pass')} size="small" color="success" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />;
+    return <Chip icon={<ErrorIcon />} label={t('metrics.fail')} size="small" color="error" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />;
   };
 
   const handleRerun = async () => {
@@ -42,12 +44,12 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
         body: { data_table: tableId, row_id: rowId },
       });
       if (!response.ok) throw new Error(`Validation failed: ${response.status}`);
-      notify('Validation run started', 'info');
+      notify(t('metrics.runStarted'), 'info');
       setTimeout(() => { window.location.reload(); }, 2000);
     } catch (err) {
       console.error('Rerun error:', err);
       setRerunError(err.message);
-      notify(`Error: ${err.message}`, 'error');
+      notify(t('errors.prefix', { message: err.message }), 'error');
     } finally {
       setRunning(false);
     }
@@ -56,7 +58,7 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
   if (!metrics) {
     return (
       <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
-        No DQ metrics available for this row
+        {t('metrics.noMetrics')}
       </Alert>
     );
   }
@@ -86,14 +88,14 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Chip
-            label={hasRules ? `${passed}/${total} Checks Passed` : 'No rules'}
+            label={hasRules ? t('metrics.checksPassed', { passed, total }) : t('metrics.noRules')}
             color={hasRules ? statusColor : 'default'}
             size="small"
             variant="outlined"
           />
           {timestamp && (
             <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
-              Last: {new Date(timestamp).toLocaleString()}
+              {t('metrics.lastRun', { timestamp: new Date(timestamp).toLocaleString() })}
             </Typography>
           )}
         </Box>
@@ -105,7 +107,7 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
           variant="outlined"
           sx={{ minWidth: 'auto', fontSize: '0.68rem', py: 0.25 }}
         >
-          {running ? 'Running...' : 'Re-run'}
+          {running ? t('metrics.running') : t('metrics.rerun')}
         </Button>
       </Box>
 
@@ -119,18 +121,18 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
 
       {/* Results table via PanelTable */}
       <PanelTable
-        title="Validation Rules"
-        subtitle={hasRules ? `${passed}/${total} passing` : undefined}
+        title={t('metrics.validationRules')}
+        subtitle={hasRules ? t('metrics.passing', { passed, total }) : undefined}
         columns={[
           {
             key: 'passed',
-            header: 'Status',
+            header: t('metrics.status'),
             width: '25%',
             render: (v) => getStatusChip(v),
           },
           {
             key: 'rule_name',
-            header: 'Rule',
+            header: t('metrics.rule'),
             width: '35%',
             render: (v) => (
               <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>{v}</Typography>
@@ -138,7 +140,7 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
           },
           {
             key: 'message',
-            header: 'Detail',
+            header: t('metrics.detail'),
             width: '40%',
             render: (v) => (
               <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
@@ -148,7 +150,7 @@ export default function DQMetricsTab({ metrics, rowId, tableId, token: _token })
           },
         ]}
         rows={results}
-        emptyText="No validation rules configured for this table. Add rules in Catalog Studio to enable quality checks."
+        emptyText={t('metrics.noRulesConfigured')}
         loading={false}
       />
     </Box>

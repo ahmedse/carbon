@@ -12,6 +12,7 @@ import {
   Chip,
   Tooltip,
 } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import WarningIcon from "@mui/icons-material/Warning";
 import FileCellRenderer from "./FileCellRenderer";
 import { DatePicker } from "@mui/x-date-pickers";
@@ -40,7 +41,7 @@ function coerceValue(field, value) {
 }
 
 // Helper to validate a single value based on field config and type
-function validateField(field, value, _values) {
+function validateField(field, value, _values, t) {
   if (field.required) {
     if (
       value === "" ||
@@ -48,50 +49,52 @@ function validateField(field, value, _values) {
       value === undefined ||
       (Array.isArray(value) && value.length === 0)
     ) {
-      return `${field.label} is required.`;
+      return t('fieldRequired', { label: field.label });
     }
   }
   // Type-specific validation
   if (field.type === "number") {
     if (value !== null && value !== undefined && value !== "") {
       if (typeof value === "string" && value.trim() === "") {
-        return `${field.label} is required.`;
+        return t('fieldRequired', { label: field.label });
       }
       const num = Number(value);
       if (isNaN(num)) {
-        return `${field.label} must be a number (e.g. 123).`;
+        return t('mustBeNumber', { label: field.label });
       }
       if (num < 0) {
-        return `${field.label} cannot be negative. Please enter zero or a positive number.`;
+        return t('cannotBeNegative', { label: field.label });
       }
     }
   }
   if (field.type === "boolean") {
     if (typeof value !== "boolean") {
-      return `${field.label} must be true or false (checkbox).`;
+      return t('mustBeBoolean', { label: field.label });
     }
   }
   if (field.type === "select") {
     const allowed = (field.options || []).map((opt) => opt.value);
     if (value && !allowed.includes(value)) {
-      return `${field.label} must be one of: ${allowed.join(", ")}.`;
+      return t('mustBeOneOf', { label: field.label, values: allowed.join(", ") });
     }
   }
   if (field.type === "multiselect") {
     const allowed = (field.options || []).map((opt) => opt.value);
     if (!Array.isArray(value)) {
-      return `${field.label} must be a list (select one or more).`;
+      return t('mustBeList', { label: field.label });
     }
     const invalid = value.filter((v) => !allowed.includes(v));
     if (invalid.length > 0) {
-      return `${field.label} contains invalid values: ${invalid.join(
-        ", "
-      )}. Allowed: ${allowed.join(", ")}.`;
+      return t('containsInvalid', {
+        label: field.label,
+        invalid: invalid.join(", "),
+        allowed: allowed.join(", "),
+      });
     }
   }
   if (field.type === "date") {
     if (value && !dayjs(value).isValid()) {
-      return `${field.label} must be a valid date.`;
+      return t('mustBeDate', { label: field.label });
     }
   }
   // Custom (JSON) validation
@@ -104,7 +107,7 @@ function validateField(field, value, _values) {
       // Regex for string input
       if (rules.regex && typeof value === "string" && value) {
         const re = new RegExp(rules.regex);
-        if (!re.test(value)) return rules.message || `Invalid format.`;
+        if (!re.test(value)) return rules.message || t('invalidFormat');
       }
       // Number: min/max
       if (
@@ -115,9 +118,9 @@ function validateField(field, value, _values) {
       ) {
         const num = Number(value);
         if (rules.min !== undefined && num < rules.min)
-          return `${field.label} must be at least ${rules.min}.`;
+          return t('minValue', { label: field.label, value: rules.min });
         if (rules.max !== undefined && num > rules.max)
-          return `${field.label} must be at most ${rules.max}.`;
+          return t('maxValue', { label: field.label, value: rules.max });
       }
       // String: min/max length
       if (typeof value === "string") {
@@ -125,12 +128,12 @@ function validateField(field, value, _values) {
           rules.minLength !== undefined &&
           value.length < rules.minLength
         )
-          return `${field.label} must be at least ${rules.minLength} characters.`;
+          return t('minLength', { label: field.label, count: rules.minLength });
         if (
           rules.maxLength !== undefined &&
           value.length > rules.maxLength
         )
-          return `${field.label} must be at most ${rules.maxLength} characters.`;
+          return t('maxLength', { label: field.label, count: rules.maxLength });
       }
       // Array: minItems/maxItems
       if (Array.isArray(value)) {
@@ -138,12 +141,12 @@ function validateField(field, value, _values) {
           rules.minItems !== undefined &&
           value.length < rules.minItems
         )
-          return `${field.label}: select at least ${rules.minItems}.`;
+          return t('minItems', { label: field.label, count: rules.minItems });
         if (
           rules.maxItems !== undefined &&
           value.length > rules.maxItems
         )
-          return `${field.label}: select at most ${rules.maxItems}.`;
+          return t('maxItems', { label: field.label, count: rules.maxItems });
       }
     } catch (_e) {
       // ignore validation parse error
@@ -165,6 +168,7 @@ export default function DataRowFormDrawer({
   rowId,
   mode,
 }) {
+  const { t } = useTranslation('common');
   const [values, setValues] = useState({});
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -201,7 +205,7 @@ export default function DataRowFormDrawer({
     // Re-validate the field
     setErrors((prev) => ({
       ...prev,
-      [fieldName]: validateField(field, coerced, values),
+      [fieldName]: validateField(field, coerced, values, t),
     }));
   };
 
@@ -210,7 +214,7 @@ export default function DataRowFormDrawer({
     (fields || []).forEach((field) => {
       if (!field.is_active) return;
       const val = coerceValue(field, values[field.name]);
-      const err = validateField(field, val, values);
+      const err = validateField(field, val, values, t);
       if (err) newErrors[field.name] = err;
     });
     setErrors(newErrors);
@@ -221,8 +225,7 @@ export default function DataRowFormDrawer({
     const newErrors = validateAll();
     if (Object.keys(newErrors).length) {
       notify({
-        message:
-          "Please fix the errors in the form (see highlighted fields).",
+        message: t('fixFormErrors'),
         type: "error",
       });
       return;
@@ -259,7 +262,7 @@ export default function DataRowFormDrawer({
       await onSubmit(submitVals, rowId);
     } catch (err) {
       // Improved: Parse all backend field errors and show them
-      let msg = err?.message || "Failed to save row";
+      let msg = err?.message || t('failedSaveRow');
       if (err?.response?.data) {
         const backendErrors = err.response.data;
         setErrors((prev) => ({
@@ -267,17 +270,17 @@ export default function DataRowFormDrawer({
           ...Object.fromEntries(
             Object.entries(backendErrors).map(([field, errs]) => [
               field,
-              errs[0] || "Invalid value",
+              errs[0] || t('invalidValue'),
             ])
           ),
         }));
         const msgFields = Object.entries(backendErrors)
           .map(
             ([f, errs]) =>
-              `${f}: ${errs[0] || "Invalid"}`
+              `${f}: ${errs[0] || t('invalid')}`
           )
           .join("; ");
-        msg = `Validation error: ${msgFields}`;
+        msg = t('validationError', { details: msgFields });
       }
       notify({ message: msg, type: "error" });
     }
@@ -297,7 +300,7 @@ export default function DataRowFormDrawer({
           >
             <Chip
               icon={<WarningIcon />}
-              label={`${dqFlags.length} DQ warning(s)`}
+              label={t('dqWarnings', { count: dqFlags.length })}
               color="warning"
               size="small"
               variant="outlined"

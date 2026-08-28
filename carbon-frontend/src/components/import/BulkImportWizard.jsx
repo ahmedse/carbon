@@ -1,6 +1,7 @@
 // carbon-frontend/src/components/import/BulkImportWizard.jsx
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogTitle,
@@ -33,6 +34,7 @@ import { API_BASE_URL } from '../../config';
 import { authFetch } from '../../api/api';
 
 export default function BulkImportWizard({ open, onClose, tableId, fields, token, onImportComplete }) {
+  const { t } = useTranslation('importexport');
   const [activeStep, setActiveStep] = useState(0);
   const [file, setFile] = useState(null);
   const [parsedData, setParsedData] = useState(null);
@@ -43,7 +45,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
   const [importOnlyValid, setImportOnlyValid] = useState(true);
   const [error, setError] = useState(null);
 
-  const steps = ['Upload File', 'Map Columns', 'Validation Preview'];
+  const steps = [t('stepUpload'), t('stepMap'), t('stepValidate')];
 
   // Reset state when dialog closes
   const handleClose = () => {
@@ -72,7 +74,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
       skipEmptyLines: true,
       complete: (results) => {
         if (results.errors.length > 0) {
-          setError(`CSV parse error: ${results.errors[0].message}`);
+          setError(t('csvParseError', { message: results.errors[0].message }));
           return;
         }
 
@@ -111,7 +113,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
         setActiveStep(1); // Move to mapping step
       },
       error: (err) => {
-        setError(`Failed to parse CSV: ${err.message}`);
+        setError(t('csvParseFailed', { message: err.message }));
       }
     });
   };
@@ -170,7 +172,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
         
         // Required field validation
         if (field.required && (value === null || value === undefined || value === '')) {
-          rowErrors.push(`Missing required field '${field.label}'`);
+          rowErrors.push(t('missingRequired', { label: field.label }));
         }
         
         // Type validation
@@ -178,23 +180,23 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
           if (field.type === 'number') {
             const numValue = Number(value);
             if (isNaN(numValue)) {
-              rowErrors.push(`'${field.label}' must be a number (got: ${value})`);
+              rowErrors.push(t('mustBeNumber', { label: field.label, value }));
             } else if (numValue < 0) {
-              rowErrors.push(`'${field.label}' cannot be negative`);
+              rowErrors.push(t('cannotBeNegative', { label: field.label }));
             }
           }
           
           if (field.type === 'boolean') {
             const boolValue = String(value).toLowerCase();
             if (!['true', 'false', '1', '0', 'yes', 'no'].includes(boolValue)) {
-              rowErrors.push(`'${field.label}' must be true/false (got: ${value})`);
+              rowErrors.push(t('mustBeBoolean', { label: field.label, value }));
             }
           }
           
           if (field.type === 'select' && field.options) {
             const allowedValues = field.options.map(opt => opt.value);
             if (!allowedValues.includes(value)) {
-              rowErrors.push(`'${field.label}' must be one of: ${allowedValues.join(', ')}`);
+              rowErrors.push(t('mustBeOneOf', { label: field.label, values: allowedValues.join(', ') }));
             }
           }
         }
@@ -255,7 +257,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Import failed');
+        throw new Error(errorData.error || t('importFailed'));
       }
 
       const result = await response.json();
@@ -264,7 +266,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
       onImportComplete?.(result);
       handleClose();
     } catch (err) {
-      setError(err.message || 'Import failed');
+      setError(err.message || t('importFailed'));
     } finally {
       setImporting(false);
     }
@@ -297,7 +299,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
         sx: { minHeight: '60vh', maxHeight: '90vh' }
       }}
     >
-      <DialogTitle>Bulk Import Data</DialogTitle>
+      <DialogTitle>{t('title')}</DialogTitle>
       
       <DialogContent>
         <Stepper activeStep={activeStep} sx={{ mb: 3, mt: 1 }}>
@@ -318,7 +320,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
         {activeStep === 0 && (
           <Box>
             <Typography variant="body2" color="text.secondary" gutterBottom>
-              Upload a CSV or Excel file containing data rows. The first row should contain column headers.
+              {t('uploadHint')}
             </Typography>
             
             <Box
@@ -337,16 +339,16 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
             >
               <input {...getInputProps()} />
               <Typography variant="body1" color={isDragActive ? 'primary' : 'text.primary'}>
-                {isDragActive ? 'Drop file here...' : 'Drag & drop CSV/Excel file or click to browse'}
+                {isDragActive ? t('dropHere') : t('dragDrop')}
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                Supported: .csv, .xlsx, .xls (max 10MB)
+                {t('supported')}
               </Typography>
             </Box>
             
             {file && (
               <Alert severity="success" sx={{ mt: 2 }}>
-                <strong>Selected:</strong> {file.name} ({parsedData?.length || 0} rows detected)
+                <strong>{t('selected')}</strong> {file.name} ({t('rowsDetected', { count: parsedData?.length || 0 })})
               </Alert>
             )}
           </Box>
@@ -356,26 +358,26 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
         {activeStep === 1 && parsedData && (
           <Box>
             <Alert severity="info" sx={{ mb: 2 }}>
-              {getMappedCount()} columns mapped, {getUnmappedCount()} unmapped
+              {t('mappedCount', { mapped: getMappedCount(), unmapped: getUnmappedCount() })}
             </Alert>
             
             <Typography variant="body2" color="text.secondary" gutterBottom>
-              Map CSV columns to table fields. Unmapped columns will be ignored.
+              {t('mappingHint')}
             </Typography>
             
             <Table size="small" sx={{ mt: 2 }}>
               <TableHead>
                 <TableRow>
-                  <TableCell><strong>CSV Column</strong></TableCell>
-                  <TableCell><strong>→</strong></TableCell>
-                  <TableCell><strong>Table Field</strong></TableCell>
+                  <TableCell><strong>{t('csvColumn')}</strong></TableCell>
+                  <TableCell><strong>{t('arrow')}</strong></TableCell>
+                  <TableCell><strong>{t('tableField')}</strong></TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {csvHeaders.map(csvCol => (
                   <TableRow key={csvCol}>
                     <TableCell>{csvCol}</TableCell>
-                    <TableCell>→</TableCell>
+                    <TableCell>{t('arrow')}</TableCell>
                     <TableCell>
                       <FormControl fullWidth size="small">
                         <Select
@@ -383,7 +385,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
                           onChange={(e) => handleMappingChange(csvCol, e.target.value)}
                           displayEmpty
                         >
-                          <MenuItem value="">-- Skip --</MenuItem>
+                          <MenuItem value="">{t('skip')}</MenuItem>
                           {fields.map(field => (
                             <MenuItem key={field.name} value={field.name}>
                               {field.label} ({field.type}){field.required && ' *'}
@@ -406,16 +408,16 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
               severity={validationResults.errorCount === 0 ? 'success' : 'warning'} 
               sx={{ mb: 2 }}
             >
-              <strong>✅ {validationResults.validCount} rows valid</strong><br />
+              <strong>✅ {t('rowsValid', { count: validationResults.validCount })}</strong><br />
               {validationResults.errorCount > 0 && (
-                <span>❌ {validationResults.errorCount} rows have errors</span>
+                <span>❌ {t('rowsHaveErrors', { count: validationResults.errorCount })}</span>
               )}
             </Alert>
 
             {validationResults.errorCount > 0 && (
               <Box>
                 <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
-                  Errors by type:
+                  {t('errorsByType')}
                 </Typography>
                 
                 {getErrorSummary().map((errType, idx) => (
@@ -430,18 +432,18 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
                 ))}
 
                 <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
-                  Error details (showing first 10):
+                  {t('errorDetails')}
                 </Typography>
                 
                 <Box sx={{ maxHeight: 200, overflow: 'auto', bgcolor: 'grey.50', p: 1, borderRadius: 1 }}>
                   {validationResults.errors.slice(0, 10).map((err, idx) => (
                     <Typography key={idx} variant="body2" color="error" sx={{ mb: 0.5 }}>
-                      <strong>Row {err.row}:</strong> {err.errors.join(', ')}
+                      <strong>{t('rowN', { row: err.row })}</strong> {err.errors.join(', ')}
                     </Typography>
                   ))}
                   {validationResults.errors.length > 10 && (
                     <Typography variant="body2" color="text.secondary">
-                      ... and {validationResults.errors.length - 10} more errors
+                      {t('moreErrors', { count: validationResults.errors.length - 10 })}
                     </Typography>
                   )}
                 </Box>
@@ -453,7 +455,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
                       onChange={(e) => setImportOnlyValid(e.target.checked)}
                     />
                   }
-                  label={`Import only valid rows (${validationResults.validCount})`}
+                  label={t('importOnlyValid', { count: validationResults.validCount })}
                   sx={{ mt: 2 }}
                 />
               </Box>
@@ -461,7 +463,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
 
             {validationResults.errorCount === 0 && (
               <Typography variant="body2" color="success.main" sx={{ mt: 2 }}>
-                All rows passed validation. Ready to import!
+                {t('allValid')}
               </Typography>
             )}
           </Box>
@@ -470,11 +472,11 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
 
       <DialogActions>
         <Button onClick={handleClose} disabled={importing}>
-          Cancel
+          {t('cancel')}
         </Button>
         {activeStep > 0 && (
           <Button onClick={handleBack} disabled={importing}>
-            Back
+            {t('back')}
           </Button>
         )}
         {activeStep < steps.length - 1 && (
@@ -483,7 +485,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
             variant="contained" 
             disabled={!file || (activeStep === 1 && getMappedCount() === 0)}
           >
-            Next
+            {t('next')}
           </Button>
         )}
         {activeStep === steps.length - 1 && (
@@ -493,7 +495,7 @@ export default function BulkImportWizard({ open, onClose, tableId, fields, token
             disabled={importing || validationResults.validCount === 0}
             startIcon={importing ? <CircularProgress size={18} /> : null}
           >
-            {importing ? 'Importing...' : 'Import'}
+            {importing ? t('importing') : t('import')}
           </Button>
         )}
       </DialogActions>

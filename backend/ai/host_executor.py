@@ -55,6 +55,11 @@ _IN_PROCESS_ENDPOINTS: dict[str, str] = {
     "carbon-api/dataschema/tables": "tables",
     "carbon-api/dataschema/tables/detail": "table_detail",
     "carbon-api/dq/rule-assignments": "rule_assignments",
+    "carbon-api/carbon/factors": "emission_factors",
+    "carbon-api/carbon/gwp": "gwp_gases",
+    "carbon-api/carbon/periods": "reporting_periods",
+    "carbon-api/carbon/calculations/summary": "calculation_summary",
+    "carbon-api/carbon/chairman": "chairman_overview",
 }
 
 
@@ -511,6 +516,169 @@ class CarbonHostExecutor(HostAPIExecutor):
             logger.exception("In-process rule binding failed")
             raise ToolExecutionError(f"Rule binding failed: {exc}") from exc
         return {"status_code": 201, "data": data}
+
+    # ── Carbon emissions read-only grounding (Tier 1, RULE_21) ──────────
+
+    async def _emission_factors_in_process(
+        self, method: str = "GET", params: dict | None = None, body: dict | None = None
+    ) -> dict:
+        """GET /carbon-api/carbon/factors/ — GLOBAL active emission factors (RULE_12)."""
+        if method != "GET":
+            return {"status_code": 405, "data": {"detail": "Method not allowed"}}
+        from asgiref.sync import sync_to_async
+
+        user = await self._resolve_user()
+        if user is None:
+            return {"status_code": 401, "data": {"detail": "Authentication required"}}
+
+        def _list() -> list[dict]:
+            from emissions.models import EmissionFactor
+
+            return [
+                {
+                    "id": f.pk,
+                    "name": f.name,
+                    "code": f.code,
+                    "category": f.category,
+                    "subcategory": f.subcategory,
+                    "scope": f.scope,
+                    "factor_value": float(f.factor_value),
+                    "factor_unit": f.factor_unit,
+                    "activity_unit": f.activity_unit,
+                    "country": f.country,
+                    "source": f.source,
+                    "tags": f.tags,
+                }
+                for f in EmissionFactor.objects.filter(is_active=True)[:200]
+            ]
+
+        try:
+            data = await sync_to_async(_list, thread_sensitive=True)()
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("In-process emission factor listing failed")
+            raise ToolExecutionError(f"Emission factor listing failed: {exc}") from exc
+        return {"status_code": 200, "data": {"results": data}}
+
+    async def _gwp_gases_in_process(
+        self, method: str = "GET", params: dict | None = None, body: dict | None = None
+    ) -> dict:
+        """GET /carbon-api/carbon/gwp/ — GLOBAL global warming potentials (RULE_12)."""
+        if method != "GET":
+            return {"status_code": 405, "data": {"detail": "Method not allowed"}}
+        from asgiref.sync import sync_to_async
+
+        user = await self._resolve_user()
+        if user is None:
+            return {"status_code": 401, "data": {"detail": "Authentication required"}}
+
+        def _list() -> list[dict]:
+            from emissions.models import GWP
+
+            return [
+                {
+                    "id": g.pk,
+                    "gas_name": g.gas_name,
+                    "gas_formula": g.gas_formula,
+                    "gwp_ar5_100yr": float(g.gwp_ar5_100yr) if g.gwp_ar5_100yr is not None else None,
+                    "gwp_ar6_100yr": float(g.gwp_ar6_100yr) if g.gwp_ar6_100yr is not None else None,
+                    "gwp_ar5_20yr": float(g.gwp_ar5_20yr) if g.gwp_ar5_20yr is not None else None,
+                    "gwp_ar6_20yr": float(g.gwp_ar6_20yr) if g.gwp_ar6_20yr is not None else None,
+                }
+                for g in GWP.objects.all()[:200]
+            ]
+
+        try:
+            data = await sync_to_async(_list, thread_sensitive=True)()
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("In-process GWP listing failed")
+            raise ToolExecutionError(f"GWP listing failed: {exc}") from exc
+        return {"status_code": 200, "data": {"results": data}}
+
+    async def _reporting_periods_in_process(
+        self, method: str = "GET", params: dict | None = None, body: dict | None = None
+    ) -> dict:
+        """GET /carbon-api/carbon/periods/ — GLOBAL reporting periods (RULE_12)."""
+        if method != "GET":
+            return {"status_code": 405, "data": {"detail": "Method not allowed"}}
+        from asgiref.sync import sync_to_async
+
+        user = await self._resolve_user()
+        if user is None:
+            return {"status_code": 401, "data": {"detail": "Authentication required"}}
+
+        def _list() -> list[dict]:
+            from emissions.models import ReportingPeriod
+
+            return [
+                {
+                    "id": p.pk,
+                    "name": p.name,
+                    "start_date": p.start_date.isoformat(),
+                    "end_date": p.end_date.isoformat(),
+                    "status": p.status,
+                    "is_baseline": p.is_baseline,
+                }
+                for p in ReportingPeriod.objects.order_by('-start_date')[:50]
+            ]
+
+        try:
+            data = await sync_to_async(_list, thread_sensitive=True)()
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("In-process reporting period listing failed")
+            raise ToolExecutionError(f"Reporting period listing failed: {exc}") from exc
+        return {"status_code": 200, "data": {"results": data}}
+
+    async def _calculation_summary_in_process(
+        self, method: str = "GET", params: dict | None = None, body: dict | None = None
+    ) -> dict:
+        """GET /carbon-api/carbon/calculations/summary/ — ORG-SCOPED summary."""
+        if method != "GET":
+            return {"status_code": 405, "data": {"detail": "Method not allowed"}}
+        from asgiref.sync import sync_to_async
+
+        user = await self._resolve_user()
+        if user is None:
+            return {"status_code": 401, "data": {"detail": "Authentication required"}}
+
+        period_id = (params or {}).get('reporting_period_id')
+
+        def _summary() -> dict:
+            from emissions.services import CalculationSummaryService
+
+            return CalculationSummaryService.get_summary(user, period_id)
+
+        try:
+            summary = await sync_to_async(_summary, thread_sensitive=True)()
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("In-process calculation summary failed")
+            raise ToolExecutionError(f"Calculation summary failed: {exc}") from exc
+        return {"status_code": 200, "data": summary}
+
+    async def _chairman_overview_in_process(
+        self, method: str = "GET", params: dict | None = None, body: dict | None = None
+    ) -> dict:
+        """GET /carbon-api/carbon/chairman/ — ORG-SCOPED chairman overview."""
+        if method != "GET":
+            return {"status_code": 405, "data": {"detail": "Method not allowed"}}
+        from asgiref.sync import sync_to_async
+
+        user = await self._resolve_user()
+        if user is None:
+            return {"status_code": 401, "data": {"detail": "Authentication required"}}
+
+        period_id = (params or {}).get('reporting_period_id')
+
+        def _overview() -> dict:
+            from emissions.services import ChairmanService
+
+            return ChairmanService.get_chairman_data(user, period_id)
+
+        try:
+            payload = await sync_to_async(_overview, thread_sensitive=True)()
+        except Exception as exc:  # noqa: BLE001 - fail-visible
+            logger.exception("In-process chairman overview failed")
+            raise ToolExecutionError(f"Chairman overview failed: {exc}") from exc
+        return {"status_code": 200, "data": payload}
 
     async def _resolve_user(self):
         """Resolve the Django user for ``host_user_id`` (or ``None``)."""

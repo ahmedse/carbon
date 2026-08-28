@@ -142,7 +142,7 @@ def _suggest_verdict() -> str:
 # ── dq.validate ──────────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dq_validate_returns_completed_with_fail(django_store, cfg):
     """A rule with a failing row completes with status='fail' + row details."""
     from ai.engine_runtime import dispatch_task
@@ -162,7 +162,7 @@ def test_dq_validate_returns_completed_with_fail(django_store, cfg):
     assert details[1] == {"passed": False, "explanation": "negative co2e"}, data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dq_validate_all_rows_pass(django_store, cfg):
     """A rule satisfied by every row completes with status='pass'."""
     from ai.engine_runtime import dispatch_task
@@ -184,7 +184,7 @@ def test_dq_validate_all_rows_pass(django_store, cfg):
     assert all(d["passed"] for d in rule["details"]), data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dq_validate_missing_verdict_indices_fail_open(django_store, cfg):
     """Rows absent from the LLM verdict are treated as failed (never a pass)."""
     from ai.engine_runtime import dispatch_task
@@ -200,7 +200,7 @@ def test_dq_validate_missing_verdict_indices_fail_open(django_store, cfg):
     assert rule["details"][1]["passed"] is False, data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dq_validate_llm_outage_is_fail_visible(django_store, cfg):
     """An LLM outage yields pulse_unavailable/llm_unavailable — no fake verdict."""
     from ai.engine_runtime import dispatch_task
@@ -212,7 +212,7 @@ def test_dq_validate_llm_outage_is_fail_visible(django_store, cfg):
     assert data.get("error", {}).get("code") == "llm_unavailable", data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dq_validate_unparseable_verdict_skips_rule(django_store, cfg):
     """An unparseable verdict degrades that rule to skipped_unavailable."""
     from ai.engine_runtime import dispatch_task
@@ -227,7 +227,7 @@ def test_dq_validate_unparseable_verdict_skips_rule(django_store, cfg):
     assert rule["details"] == [], data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dq_validate_empty_inputs_is_noop(django_store, cfg):
     """No rules or no rows -> completed with an empty results list."""
     from ai.engine_runtime import dispatch_task
@@ -243,7 +243,7 @@ def test_dq_validate_empty_inputs_is_noop(django_store, cfg):
 # ── dq.suggest ───────────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dq_suggest_returns_completed(django_store, cfg):
     """A valid suggestion payload completes with the full suggestion shape."""
     from ai.engine_runtime import dispatch_task
@@ -262,7 +262,7 @@ def test_dq_suggest_returns_completed(django_store, cfg):
     assert suggestion["confidence"] == 0.95, data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dq_suggest_confidence_is_coerced_and_clamped(django_store, cfg):
     """Confidence is coerced to float and clamped to [0.0, 1.0]."""
     from ai.engine_runtime import dispatch_task
@@ -306,7 +306,7 @@ def test_dq_suggest_confidence_is_coerced_and_clamped(django_store, cfg):
     assert suggestions[2]["suggested_severity"] == "warn", data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dq_suggest_llm_outage_is_fail_visible(django_store, cfg):
     """An LLM outage yields pulse_unavailable/llm_unavailable — no fake rules."""
     from ai.engine_runtime import dispatch_task
@@ -318,7 +318,7 @@ def test_dq_suggest_llm_outage_is_fail_visible(django_store, cfg):
     assert data.get("error", {}).get("code") == "llm_unavailable", data
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_dq_suggest_unparseable_verdict_is_fail_visible(django_store, cfg):
     """An unparseable suggestion payload is fail-visible, never fabricated."""
     from ai.engine_runtime import dispatch_task

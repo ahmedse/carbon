@@ -23,6 +23,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 import {
@@ -36,8 +37,8 @@ import {
 import { useAuth } from '../../auth/AuthContext';
 import { fetchReportConfigs, runReportConfig, deleteReportConfig, downloadReportCsv } from '../../api/emissions-extended';
 
-const formatRelativeTime = (dateString) => {
-  if (!dateString) return 'Never';
+const formatRelativeTime = (dateString, t) => {
+  if (!dateString) return t('never');
   const date = new Date(dateString);
   const now = new Date();
   const diffMs = now - date;
@@ -45,19 +46,20 @@ const formatRelativeTime = (dateString) => {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-  if (diffDays < 30) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  if (diffMins < 1) return t('justNow');
+  if (diffMins < 60) return t('minutesAgo', { count: diffMins });
+  if (diffHours < 24) return t('hoursAgo', { count: diffHours });
+  if (diffDays < 30) return t('daysAgo', { count: diffDays });
   return date.toLocaleDateString();
 };
 
 const ScopeChip = ({ scope }) => {
-  const scopeLabels = { 1: 'Scope 1', 2: 'Scope 2', 3: 'Scope 3' };
+  const { t } = useTranslation('emissions');
+  const scopeLabels = { 1: t('scope1'), 2: t('scope2'), 3: t('scope3') };
   const scopeColors = { 1: 'error.light', 2: 'info.light', 3: 'success.light' };
   return (
     <Chip
-      label={scopeLabels[scope] || `Scope ${scope}`}
+      label={scopeLabels[scope] || t('scopeChip', { scope })}
       size="small"
       sx={{ backgroundColor: scopeColors[scope] || 'action.disabledBackground', color: 'common.white' }}
     />
@@ -65,6 +67,7 @@ const ScopeChip = ({ scope }) => {
 };
 
 const ReportResultPanel = ({ report, loading }) => {
+  const { t } = useTranslation('emissions');
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
@@ -80,14 +83,14 @@ const ReportResultPanel = ({ report, loading }) => {
       <Stack spacing={2}>
         <Box>
           <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-            Total Emissions: {report.total_co2e_tonnes?.toFixed(2) || 0} tonnes CO₂e
+            {t('totalEmissions')} {report.total_co2e_tonnes?.toFixed(2) || 0} {t('tonnesCo2e')}
           </Typography>
         </Box>
 
         {report.scope_breakdown && Object.keys(report.scope_breakdown).length > 0 && (
           <Box>
             <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
-              Scope Breakdown
+              {t('scopeBreakdown')}
             </Typography>
             <Stack spacing={1}>
               {Object.entries(report.scope_breakdown).map(([scope, data]) => (
@@ -96,7 +99,7 @@ const ReportResultPanel = ({ report, loading }) => {
                     <ScopeChip scope={parseInt(scope)} />
                   </Typography>
                   <Typography variant="body2">
-                    {data.total_co2e_tonnes?.toFixed(2) || 0} tonnes ({data.count || 0} records)
+                    {data.total_co2e_tonnes?.toFixed(2) || 0} {t('tonnesCo2e')} ({t('recordCount', { count: data.count || 0 })})
                   </Typography>
                 </Box>
               ))}
@@ -109,7 +112,8 @@ const ReportResultPanel = ({ report, loading }) => {
 };
 
 export default function SavedReportsPage() {
-  useDocumentTitle("Saved Reports");
+  const { t } = useTranslation('emissions');
+  useDocumentTitle(t('savedReportsTitle'));
   const { user: _user, token } = useAuth();
   const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -205,13 +209,13 @@ export default function SavedReportsPage() {
         <Card sx={{ textAlign: 'center', py: 6 }}>
           <CardContent>
             <Typography variant="h6" sx={{ mb: 2, color: 'text.secondary' }}>
-              No Saved Reports Yet
+              {t('noSavedReports')}
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.disabled', mb: 3 }}>
-              Generate your first report to save and reuse configurations.
+              {t('noSavedReportsSubtext')}
             </Typography>
             <Button variant="contained" href="/carbon/reporting">
-              Generate Report
+              {t('generateReport')}
             </Button>
           </CardContent>
         </Card>
@@ -222,19 +226,19 @@ export default function SavedReportsPage() {
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold' }}>
-        Saved Report Configurations
+        {t('savedConfigsTitle')}
       </Typography>
 
       <TableContainer component={Paper}>
         <Table>
           <TableHead sx={{ backgroundColor: 'background.dark' }}>
             <TableRow>
-              <TableCell sx={{ fontWeight: 'bold' }}>Configuration Name</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Created By</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Last Run</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Reporting Period</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Org Unit</TableCell>
-              <TableCell align="center" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+              <TableCell sx={{ fontWeight: 'bold' }}>{t('configNameCol')}</TableCell>
+              <TableCell sx={{ fontWeight: 'bold' }}>{t('createdBy')}</TableCell>
+              <TableCell sx={{ fontWeight: 'bold' }}>{t('lastRun')}</TableCell>
+              <TableCell sx={{ fontWeight: 'bold' }}>{t('reportingPeriodCol')}</TableCell>
+              <TableCell sx={{ fontWeight: 'bold' }}>{t('orgUnit')}</TableCell>
+              <TableCell align="center" sx={{ fontWeight: 'bold' }}>{t('actions')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -251,18 +255,18 @@ export default function SavedReportsPage() {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      {formatRelativeTime(config.last_run_at)}
+                      {formatRelativeTime(config.last_run_at, t)}
                     </Typography>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">{config.reporting_period_name || '-'}</Typography>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2">{config.org_unit_name || 'All'}</Typography>
+                    <Typography variant="body2">{config.org_unit_name || t('all')}</Typography>
                   </TableCell>
                   <TableCell align="center">
                     <Stack direction="row" spacing={0.5} justifyContent="center">
-                      <Tooltip title="Run Report">
+                      <Tooltip title={t('runReport')}>
                         <IconButton
                           size="small"
                           onClick={() => handleRun(config.id)}
@@ -271,7 +275,7 @@ export default function SavedReportsPage() {
                           {running[config.id] ? <CircularProgress size={20} /> : <PlayIcon fontSize="small" />}
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Download CSV">
+                      <Tooltip title={t('downloadCsv')}>
                         <IconButton
                           size="small"
                           onClick={() => handleDownload(config.id)}
@@ -280,12 +284,12 @@ export default function SavedReportsPage() {
                           <DownloadIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Edit">
+                      <Tooltip title={t('edit')}>
                         <IconButton size="small">
                           <EditIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Delete">
+                      <Tooltip title={t('delete')}>
                         <IconButton
                           size="small"
                           onClick={() => setDeleteConfirmId(config.id)}
@@ -294,7 +298,7 @@ export default function SavedReportsPage() {
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title={expandedId === config.id ? 'Collapse' : 'Expand'}>
+                      <Tooltip title={expandedId === config.id ? t('collapse') : t('expand')}>
                         <IconButton
                           size="small"
                           onClick={() => setExpandedId(expandedId === config.id ? null : config.id)}
@@ -328,20 +332,20 @@ export default function SavedReportsPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteConfirmId} onClose={() => setDeleteConfirmId(null)}>
-        <DialogTitle>Delete Report Configuration?</DialogTitle>
+        <DialogTitle>{t('deleteConfigTitle')}</DialogTitle>
         <DialogContent>
           <Typography>
-            This action cannot be undone. The configuration will be permanently deleted.
+            {t('deleteConfigMessage')}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteConfirmId(null)}>Cancel</Button>
+          <Button onClick={() => setDeleteConfirmId(null)}>{t('cancel')}</Button>
           <Button
             onClick={() => handleDelete(deleteConfirmId)}
             variant="contained"
             color="error"
           >
-            Delete
+            {t('delete')}
           </Button>
         </DialogActions>
       </Dialog>

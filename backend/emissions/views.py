@@ -56,6 +56,8 @@ from .services import (
     VerificationService,
     PeriodLockService,
     InventoryCoverageService,
+    ChairmanService,
+    CalculationSummaryService,
 )
 from core.services import NotificationService
 
@@ -621,76 +623,8 @@ class CalculationSummaryAPIView(APIView):
     )
     def get(self, request):
         period_id = request.query_params.get('reporting_period_id')
-        qs = scope_calculations(
-            request.user,
-            Calculation.objects.select_related('module', 'reporting_period', 'emission_factor')
-        )
-        if period_id:
-            qs = qs.filter(reporting_period_id=period_id)
-
-        total_calculations = qs.count()
-        stale_count = qs.filter(is_stale=True).count()  # E3-3
-
-        if total_calculations == 0:
-            return Response({
-                'period_id': int(period_id) if period_id else None,
-                'total_calculations': 0,
-                'stale_count': 0,
-                'by_scope': {},
-                'by_status': {},
-                'by_module': [],
-                'latest_run_at': None,
-                'last_audit': None,
-            })
-
-        by_scope_list = list(qs.values('scope').annotate(count=Count('id'), total_co2e_kg=Sum('co2e_kg')).values('scope', 'count', 'total_co2e_kg'))
-        by_scope_dict = {}
-        for item in by_scope_list:
-            scope_val = item.pop('scope')
-            by_scope_dict[scope_val] = item
-
-        by_module_data = qs.values('module_id', 'module__name').annotate(
-            count=Count('id'), total_co2e_kg=Sum('co2e_kg')
-        ).order_by('-total_co2e_kg')
-        by_module = [
-            {
-                'module_id': m['module_id'],
-                'module_name': m['module__name'],
-                'count': m['count'],
-                'total_co2e_kg': float(m['total_co2e_kg'] or 0),
-            }
-            for m in by_module_data
-        ]
-
-        latest_run = qs.aggregate(latest=Max('calculated_at'))
-        latest_run_at = latest_run['latest']
-
-        last_audit = None
-        if period_id:
-            audit = CalculationAudit.objects.filter(
-                reporting_period_id=period_id
-            ).order_by('-triggered_at').first()
-            if audit:
-                last_audit = {
-                    'id': audit.id,
-                    'trigger_type': audit.trigger_type,
-                    'triggered_by_name': audit.triggered_by.username if audit.triggered_by else None,
-                    'triggered_at': audit.triggered_at,
-                    'created_count': audit.created_count,
-                    'skipped_count': audit.skipped_count,
-                    'error_count': audit.error_count,
-                }
-
-        return Response({
-            'period_id': int(period_id) if period_id else None,
-            'total_calculations': total_calculations,
-            'stale_count': stale_count,
-            'by_scope': by_scope_dict,
-            'by_status': {},
-            'by_module': by_module,
-            'latest_run_at': latest_run_at,
-            'last_audit': last_audit,
-        })
+        return Response(CalculationSummaryService.get_summary(
+            request.user, int(period_id) if period_id else None))
 
 
 class CalculationRuleViewSet(viewsets.ModelViewSet):
@@ -1281,6 +1215,26 @@ class ConsoleAPIView(APIView):
 
     def get(self, request):
         data = ConsoleService.get_console_data(request.user)
+        return Response(data)
+
+
+class ChairmanAPIView(APIView):
+    """
+    Single-call payload for the chairman overview screen (Tier 1).
+
+    GET /carbon/chairman/?reporting_period_id=<id>
+
+    Composes headline KPIs, scope breakdown, coverage (declared universe),
+    SBTi targets, coverage actions, and trajectory in one response.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        period_id = request.query_params.get('reporting_period_id')
+        data = ChairmanService.get_chairman_data(
+            request.user,
+            period_id=int(period_id) if period_id else None,
+        )
         return Response(data)
 
 

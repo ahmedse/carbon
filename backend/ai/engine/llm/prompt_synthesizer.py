@@ -86,7 +86,7 @@ Write a concise but comprehensive system prompt (under 1500 words). Structure it
 
 3. **Domain Scope** -- What topics are in-scope, what's off-topic, the off-topic redirect message.
 
-4. **Available Tools** -- When to use `call_host_api` (for live operational data) vs `query_host_db` (for analytical queries) vs `search_knowledge` (for understanding concepts). Include entity-specific guidance (e.g., "to get the latest forecast, always call get_latest_predictions"). Reference specific API endpoint names from the catalog above.
+4. **Available Tools** -- When to use `call_host_api` (for live operational data) vs `search_knowledge` (for understanding concepts). Include entity-specific guidance (e.g., "to get the latest forecast, always call get_latest_predictions"). Reference specific API endpoint names from the catalog above.
 
 5. **Investigation Protocol** -- How to follow chains of related entities. When the copilot finds an entity, what related things should it check? Build natural chains based on the entity types available in the API catalog.
 
@@ -344,7 +344,6 @@ You ONLY discuss topics related to {domain_noun}:
 
 ## Tools
 - Use `call_host_api` for operational data
-- Use `query_host_db` for analytical queries
 - Use `search_knowledge` to understand concepts
 
 ## Operational Rules

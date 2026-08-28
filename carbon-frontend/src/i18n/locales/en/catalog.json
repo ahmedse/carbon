@@ -689,5 +689,16 @@
   "freshnessUnknown": "Unknown",
   "failedToLoadProfile": "Failed to load table profile",
   "failedToRunProfile": "Failed to run profile",
-  "failedToLoadScorecard": "Failed to load quality scorecard"
+  "failedToLoadScorecard": "Failed to load quality scorecard",
+  "accessRestricted": "Access Restricted",
+  "masked": "Masked",
+  "maskedTooltip": "Values masked per data policy",
+  "masking": "Masking",
+  "maskingNone": "None",
+  "maskingRedact": "Redact",
+  "maskingHash": "Hash",
+  "maskingTruncate": "Truncate",
+  "maskingNull": "Null",
+  "maskingUpdated": "Masking updated",
+  "maskingUpdateFailed": "Failed to update masking"
 }

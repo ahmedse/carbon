@@ -18,7 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.conf import settings
 
-from .models import ReportingPeriod, EmissionFactor, Calculation, CalculationRule, VerificationRecord, ExportAudit
+from .models import ReportingPeriod, EmissionFactor, Calculation, CalculationRule, VerificationRecord, ExportAudit, CalculationAudit
 from core.models import Module
 from core.services import NotificationService
 from catalog.models import AssetProfile
@@ -52,6 +52,86 @@ MONTH_NAMES = [
     '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ]
+
+
+# ── Calculation Summary Service ──────────────────────────────────────────
+
+class CalculationSummaryService:
+    """Aggregated calculation summary shared by the HTTP view and the in-process
+    AI host executor (single source of truth — no logic drift)."""
+
+    @staticmethod
+    def get_summary(user, period_id=None):
+        qs = scope_calculations(
+            user,
+            Calculation.objects.select_related('module', 'reporting_period', 'emission_factor')
+        )
+        if period_id:
+            qs = qs.filter(reporting_period_id=period_id)
+
+        total_calculations = qs.count()
+        stale_count = qs.filter(is_stale=True).count()  # E3-3
+
+        if total_calculations == 0:
+            return {
+                'period_id': int(period_id) if period_id else None,
+                'total_calculations': 0,
+                'stale_count': 0,
+                'by_scope': {},
+                'by_status': {},
+                'by_module': [],
+                'latest_run_at': None,
+                'last_audit': None,
+            }
+
+        by_scope_list = list(qs.values('scope').annotate(count=Count('id'), total_co2e_kg=Sum('co2e_kg')).values('scope', 'count', 'total_co2e_kg'))
+        by_scope_dict = {}
+        for item in by_scope_list:
+            scope_val = item.pop('scope')
+            by_scope_dict[scope_val] = item
+
+        by_module_data = qs.values('module_id', 'module__name').annotate(
+            count=Count('id'), total_co2e_kg=Sum('co2e_kg')
+        ).order_by('-total_co2e_kg')
+        by_module = [
+            {
+                'module_id': m['module_id'],
+                'module_name': m['module__name'],
+                'count': m['count'],
+                'total_co2e_kg': float(m['total_co2e_kg'] or 0),
+            }
+            for m in by_module_data
+        ]
+
+        latest_run = qs.aggregate(latest=Max('calculated_at'))
+        latest_run_at = latest_run['latest']
+
+        last_audit = None
+        if period_id:
+            audit = CalculationAudit.objects.filter(
+                reporting_period_id=period_id
+            ).order_by('-triggered_at').first()
+            if audit:
+                last_audit = {
+                    'id': audit.id,
+                    'trigger_type': audit.trigger_type,
+                    'triggered_by_name': audit.triggered_by.username if audit.triggered_by else None,
+                    'triggered_at': audit.triggered_at,
+                    'created_count': audit.created_count,
+                    'skipped_count': audit.skipped_count,
+                    'error_count': audit.error_count,
+                }
+
+        return {
+            'period_id': int(period_id) if period_id else None,
+            'total_calculations': total_calculations,
+            'stale_count': stale_count,
+            'by_scope': by_scope_dict,
+            'by_status': {},
+            'by_module': by_module,
+            'latest_run_at': latest_run_at,
+            'last_audit': last_audit,
+        }
 
 
 # ── Dashboard Service ──────────────────────────────────────────────────────
@@ -1792,3 +1872,225 @@ class InventoryCoverageService:
             'min_quality_tier': goal.min_quality_tier if goal else None,
             'target_coverage_pct': float(goal.target_coverage_pct) if goal else None,
         }
+
+
+# ── Chairman Service ──────────────────────────────────────────────────────
+
+class ChairmanService:
+    """Single-call payload for the chairman overview screen (Tier 1).
+
+    Aggregates the PLATFORM-WIDE picture (all calculations and the full declared
+    universe across every reporting period), not a single period. No new
+    persistence — every number traces to existing Calculation / InventorySource /
+    SBTiTarget records, and org-scope visibility is respected via
+    scope_calculations + get_visible_org_units.
+    """
+
+    @staticmethod
+    def get_chairman_data(user, period_id=None):
+        from .models import InventorySource, InventorySourceStatus, CoverageAction, SBTiTarget
+
+        now = timezone.now()
+
+        # Active reporting period (header label only; figures are platform-wide).
+        period = None
+        if period_id:
+            period = ReportingPeriod.objects.filter(id=period_id).first()
+        if period is None:
+            period = ReportingPeriod.objects.filter(
+                status__in=['open', 'locked', 'submitted']
+            ).order_by('-start_date').first()
+        if period is None:
+            period = ReportingPeriod.objects.order_by('-start_date').first()
+
+        period_data = None
+        if period:
+            period_data = {
+                'id': period.id,
+                'name': period.name,
+                'start_date': period.start_date.isoformat(),
+                'end_date': period.end_date.isoformat(),
+                'status': period.status,
+                'days_remaining': (period.end_date - now.date()).days,
+                'is_baseline': period.is_baseline,
+            }
+
+        # 1) Footprint — ALL calculations (org-scoped by module), not period-scoped.
+        calc_qs = scope_calculations(user, Calculation.objects.all())
+        scope_rows = DashboardService._build_scope_breakdown(calc_qs)
+        grand_total_kg = sum((s['total_kg'] for s in scope_rows), Decimal('0'))
+        total_tonnes = round(grand_total_kg / 1000, 2)
+        scope_breakdown = [
+            {
+                'scope': s['scope'],
+                'scope_name': s['scope_name'],
+                'total_kg': s['total_kg'],
+                'count': s['count'],
+                'co2e_tonnes': round(s['total_kg'] / 1000, 2),
+                'percentage': round((s['total_kg'] / grand_total_kg * 100) if grand_total_kg else 0, 2),
+            }
+            for s in scope_rows
+        ]
+        monthly_trend = DashboardService._build_monthly_trend(calc_qs)
+        months_with_data = len([m for m in monthly_trend if m['total'] > 0])
+        data_quality = min(100, int((months_with_data / 36) * 100 * 3))
+        last_updated = calc_qs.order_by('-calculated_at').values_list('calculated_at', flat=True).first()
+
+        # 2) Coverage — full declared universe across ALL periods (org-scoped).
+        visible_ous = get_visible_org_units(user)
+        visible_ou_ids = [ou.id for ou in visible_ous]
+
+        sources = InventorySource.objects.filter(
+            is_active=True, org_unit_id__in=visible_ou_ids
+        ).select_related('org_unit')
+        covered_ids = set(
+            InventorySourceStatus.objects.filter(
+                status='covered', source__in=sources
+            ).values_list('source_id', flat=True)
+        )
+        tier_values = list(
+            InventorySourceStatus.objects.filter(
+                status='covered', source__in=sources, data_quality_tier__isnull=False
+            ).values_list('data_quality_tier', flat=True)
+        )
+        avg_quality_tier = round(sum(tier_values) / len(tier_values), 2) if tier_values else None
+
+        total = sources.count()
+        covered = len(covered_ids)
+        pct = round(100 * covered / total, 1) if total else 0.0
+        coverage = {
+            'total': total,
+            'covered': covered,
+            'pct': pct,
+            'avg_quality_tier': avg_quality_tier,
+            'gaps_count': total - covered,
+        }
+
+        campus_breakdown, scope_coverage = ChairmanService._build_coverage_breakdowns(
+            sources, covered_ids
+        )
+
+        # 3) SBTi targets (org-scoped).
+        target_qs = SBTiTarget.objects.filter(org_unit_id__in=visible_ou_ids)
+        targets = list(target_qs.order_by('target_year'))
+        sbti = {
+            'count': len(targets),
+            'committed': sum(1 for t in targets if t.status in ('committed', 'approved')),
+            'draft': sum(1 for t in targets if t.status == 'draft'),
+            'items': [
+                {
+                    'id': t.id,
+                    'name': t.name,
+                    'scope': t.scope,
+                    'base_year': t.base_year,
+                    'target_year': t.target_year,
+                    'reduction_pct': float(t.reduction_pct),
+                    'status': t.status,
+                    'target_type': t.target_type,
+                }
+                for t in targets
+            ],
+        }
+
+        # 4) Coverage actions (still to do) — org-scoped via source.org_unit.
+        action_qs = CoverageAction.objects.select_related('source', 'owner').filter(
+            source__org_unit_id__in=visible_ou_ids
+        )
+        actions = [
+            {
+                'id': a.id,
+                'source_name': a.source.source_name if a.source else None,
+                'source_org_unit': a.source.org_unit.name if a.source and a.source.org_unit else None,
+                'action_type': a.action_type,
+                'status': a.status,
+                'due_date': a.due_date.isoformat() if a.due_date else None,
+                'owner': (a.owner.get_full_name() or a.owner.username) if a.owner else None,
+            }
+            for a in action_qs.order_by('due_date', '-created_at')
+        ]
+
+        # 5) Trajectory (actuals vs SBTi glidepath).
+        baseline_year = YearlyComparisonService.get_comparison(user, [now.year])['baseline_year']
+        max_target_year = max((t.target_year for t in targets), default=2030)
+        years = list(range(baseline_year, max(max_target_year, now.year) + 1))
+        comparison = YearlyComparisonService.get_comparison(user, years)
+        trajectory = {
+            'baseline_year': comparison['baseline_year'],
+            'baseline_total_tonnes': comparison['baseline_total_tonnes'],
+            'yearly_comparison': comparison['yearly_comparison'],
+            'targets': comparison['targets'],
+        }
+
+        action_status_counts = defaultdict(int)
+        for a in actions:
+            action_status_counts[a['status']] += 1
+
+        return {
+            'as_of': now.isoformat(),
+            'period': period_data,
+            'headline': {
+                'footprint_tonnes': total_tonnes,
+                'calculation_count': calc_qs.count(),
+                'coverage_total': total,
+                'coverage_covered': covered,
+                'coverage_pct': pct,
+                'avg_quality_tier': avg_quality_tier,
+                'data_quality_score': data_quality,
+                'sbti_count': sbti['count'],
+                'sbti_committed': sbti['committed'],
+                'actions_total': len(actions),
+                'actions_open': action_status_counts.get('open', 0),
+                'actions_in_progress': action_status_counts.get('in_progress', 0),
+            },
+            'scope_breakdown': scope_breakdown,
+            'coverage': coverage,
+            'coverage_by_campus': campus_breakdown,
+            'coverage_by_scope': scope_coverage,
+            'sbti': sbti,
+            'actions': actions,
+            'trajectory': trajectory,
+            'last_updated': last_updated.isoformat() if last_updated else None,
+        }
+
+    @staticmethod
+    def _build_coverage_breakdowns(sources, covered_ids):
+        """Split the declared universe into per-campus and per-scope coverage.
+
+        A source counts as 'covered' when it has a 'covered' status in ANY
+        reporting period; otherwise it remains 'declared' (unmeasured).
+        """
+        campus_agg = defaultdict(lambda: {'covered': 0, 'declared': 0, 'excluded': 0})
+        scope_agg = defaultdict(lambda: {'covered': 0, 'declared': 0, 'excluded': 0})
+        for s in sources:
+            name = s.org_unit.name if s.org_unit else 'Unknown'
+            key = 'covered' if s.id in covered_ids else 'declared'
+            campus_agg[name][key] += 1
+            scope_agg[s.scope][key] += 1
+
+        campus = []
+        for name, d in sorted(campus_agg.items()):
+            total = d['covered'] + d['declared']
+            campus.append({
+                'campus': name,
+                'covered': d['covered'],
+                'declared': d['declared'],
+                'excluded': d['excluded'],
+                'total': total,
+                'pct': round(100 * d['covered'] / total, 1) if total else 0.0,
+            })
+
+        scopes = []
+        for scope in (1, 2, 3):
+            d = scope_agg.get(scope, {'covered': 0, 'declared': 0, 'excluded': 0})
+            total = d['covered'] + d['declared']
+            scopes.append({
+                'scope': scope,
+                'scope_name': SCOPE_NAMES.get(scope, f'Scope {scope}'),
+                'covered': d['covered'],
+                'declared': d['declared'],
+                'excluded': d['excluded'],
+                'total': total,
+                'pct': round(100 * d['covered'] / total, 1) if total else 0.0,
+            })
+
+        return campus, scopes

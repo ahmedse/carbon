@@ -108,13 +108,13 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    if (user && !availablePerspectives?.length) {
+    if (user) {
       fetchPerspectiveContext(user.token).catch(() => {
-        // If perspective fetch fails on reload, clear stale auth state to avoid broken nav.
-        console.warn("Failed to restore perspectives on reload");
+        console.warn("Failed to refresh perspective context on reload");
       });
     }
-  }, [user, availablePerspectives.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // --- Inactivity & periodic token refresh logic ---
   useEffect(() => {

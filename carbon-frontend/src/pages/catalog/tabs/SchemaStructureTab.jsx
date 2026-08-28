@@ -6,8 +6,11 @@ import {
   Box,
   Button,
   Chip,
+  FormControl,
   IconButton,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -22,6 +25,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import LockIcon from '@mui/icons-material/Lock';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
@@ -33,11 +38,20 @@ import {
   updateDataSchemaField,
   updateDataSchemaFieldOrder,
 } from '../../../api/dataschema';
+import { updateFieldMaskingStrategy } from '../../../api/fieldPolicies';
 import FieldEditorDialog from './FieldEditorDialog';
 
 function sortFields(fields = []) {
   return [...fields].sort((a, b) => (Number(a.order ?? 0) - Number(b.order ?? 0)) || (Number(a.id ?? 0) - Number(b.id ?? 0)));
 }
+
+const MASKING_STRATEGIES = [
+  { value: 'none', labelKey: 'maskingNone' },
+  { value: 'redact', labelKey: 'maskingRedact' },
+  { value: 'hash', labelKey: 'maskingHash' },
+  { value: 'truncate', labelKey: 'maskingTruncate' },
+  { value: 'null', labelKey: 'maskingNull' },
+];
 
 export default function SchemaStructureTab({ _entityData, tableId, table, fields = [], onChanged, isAdmin, onEditMetadata }) {
   const { t } = useTranslation('catalog');
@@ -139,6 +153,19 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
     }
   };
 
+  const handleMaskingChange = async (field, strategy) => {
+    setWorking(true);
+    try {
+      await updateFieldMaskingStrategy(token, field.id, strategy);
+      notify({ message: t('maskingUpdated'), type: 'success' });
+      if (onChanged) await onChanged();
+    } catch (err) {
+      notify({ message: err.message || t('maskingUpdateFailed'), type: 'error' });
+    } finally {
+      setWorking(false);
+    }
+  };
+
   const handleDeleteTable = () => setDeleteTarget({ kind: 'table', item: null });
 
   return (
@@ -195,58 +222,107 @@ export default function SchemaStructureTab({ _entityData, tableId, table, fields
                   <TableCell sx={{ fontWeight: 600 }}>{t('name')}</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>{t('label')}</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>{t('type')}</TableCell>
+                  {effectiveIsAdmin && <TableCell sx={{ fontWeight: 600 }}>{t('masking')}</TableCell>}
                   <TableCell sx={{ fontWeight: 600 }}>{t('required')}</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>{t('description')}</TableCell>
                   {effectiveIsAdmin && <TableCell sx={{ fontWeight: 600 }}>{t('actions')}</TableCell>}
                 </TableRow>
               </TableHead>
               <TableBody>
-                {visibleFields.map((field) => (
-                  <TableRow key={field.id} hover>
-                    <TableCell>{field.order ?? 1}</TableCell>
-                    <TableCell>{field.name}</TableCell>
-                    <TableCell>{field.label || field.name}</TableCell>
-                    <TableCell>
-                      <Chip label={field.type || 'string'} size="small" variant="outlined" />
-                    </TableCell>
-                    <TableCell>{field.required ? t('yes') : t('no')}</TableCell>
-                    <TableCell>{field.description || '—'}</TableCell>
-                    {effectiveIsAdmin && (
+                {visibleFields.map((field) => {
+                  const denied = field.access_denied === true;
+                  const muted = denied ? { color: 'text.disabled' } : undefined;
+                  return (
+                    <TableRow key={field.id} hover>
+                      <TableCell sx={muted}>{field.order ?? 1}</TableCell>
                       <TableCell>
-                        <Stack direction="row" spacing={0.5}>
-                          <Tooltip title={hasData ? t('tableHasData') : t('moveUp')}>
-                            <span>
-                              <IconButton size="small" onClick={() => handleReorder(field, 'up')} disabled={working || hasData}>
-                                <ArrowUpwardIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title={hasData ? t('tableHasData') : t('moveDown')}>
-                            <span>
-                              <IconButton size="small" onClick={() => handleReorder(field, 'down')} disabled={working || hasData}>
-                                <ArrowDownwardIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title={hasData ? t('tableHasData') : t('edit')}>
-                            <span>
-                              <IconButton size="small" onClick={() => handleOpenEdit(field)} disabled={working || hasData}>
-                                <EditIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title={hasData ? t('tableHasData') : t('delete')}>
-                            <span>
-                              <IconButton size="small" color="error" onClick={() => handleDeleteField(field)} disabled={working || hasData}>
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
+                        <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+                          {denied && <LockIcon fontSize="small" sx={{ color: 'action.disabled' }} />}
+                          {field.is_masked === true && (
+                            <Tooltip title={t('maskedTooltip')}>
+                              <Chip
+                                icon={<VisibilityOffIcon fontSize="small" sx={{ color: 'warning.main' }} />}
+                                label={t('masked')}
+                                size="small"
+                                variant="outlined"
+                              />
+                            </Tooltip>
+                          )}
+                          <Typography component="span" variant="body2">
+                            {field.name}
+                          </Typography>
+                          {denied && (
+                            <Typography component="span" variant="body2" color="text.secondary">
+                              ({t('accessRestricted')})
+                            </Typography>
+                          )}
                         </Stack>
                       </TableCell>
-                    )}
-                  </TableRow>
-                ))}
+                      <TableCell sx={muted}>{field.label || field.name}</TableCell>
+                      <TableCell>
+                        <Chip label={field.type || 'string'} size="small" variant="outlined" sx={muted} />
+                      </TableCell>
+                      {effectiveIsAdmin && (
+                        <TableCell sx={muted}>
+                          <FormControl size="small" variant="standard">
+                            <Select
+                              value={field.masking_strategy ?? 'none'}
+                              onChange={(e) => handleMaskingChange(field, e.target.value)}
+                              size="small"
+                              variant="standard"
+                              disabled={working || denied}
+                              sx={{ minWidth: 96 }}
+                            >
+                              {MASKING_STRATEGIES.map((strategy) => (
+                                <MenuItem key={strategy.value} value={strategy.value}>
+                                  {t(strategy.labelKey)}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </TableCell>
+                      )}
+                      <TableCell sx={muted}>{field.required ? t('yes') : t('no')}</TableCell>
+                      <TableCell sx={muted}>{field.description || '—'}</TableCell>
+                      {effectiveIsAdmin && (
+                        <TableCell>
+                          {denied ? null : (
+                            <Stack direction="row" spacing={0.5}>
+                              <Tooltip title={hasData ? t('tableHasData') : t('moveUp')}>
+                                <span>
+                                  <IconButton size="small" onClick={() => handleReorder(field, 'up')} disabled={working || hasData}>
+                                    <ArrowUpwardIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              <Tooltip title={hasData ? t('tableHasData') : t('moveDown')}>
+                                <span>
+                                  <IconButton size="small" onClick={() => handleReorder(field, 'down')} disabled={working || hasData}>
+                                    <ArrowDownwardIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              <Tooltip title={hasData ? t('tableHasData') : t('edit')}>
+                                <span>
+                                  <IconButton size="small" onClick={() => handleOpenEdit(field)} disabled={working || hasData}>
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              <Tooltip title={hasData ? t('tableHasData') : t('delete')}>
+                                <span>
+                                  <IconButton size="small" color="error" onClick={() => handleDeleteField(field)} disabled={working || hasData}>
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            </Stack>
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </Paper>

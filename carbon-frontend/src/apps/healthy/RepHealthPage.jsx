@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Box, Chip, Grid, Paper, Stack, Typography } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import PeopleIcon from '@mui/icons-material/People';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
@@ -26,7 +27,8 @@ function Metric({ label, value }) {
 }
 
 export default function RepHealthPage() {
-  useDocumentTitle('Rep Health');
+  const { t } = useTranslation('common');
+  useDocumentTitle(t('repHealthTitle'));
   const { token } = useAuth();
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,14 +42,14 @@ export default function RepHealthPage() {
         const list = Array.isArray(data?.results) ? data.results : [];
         setCards(list);
       })
-      .catch((err) => setError(err?.message || 'Unable to load rep health.'))
+      .catch((err) => setError(err?.message || t('repHealthError')))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, t]);
 
   if (loading) {
     return (
       <PageContainer>
-        <PageHeader icon={PeopleIcon} title="Rep Health" subtitle="Churn risk across the sales team" />
+        <PageHeader icon={PeopleIcon} title={t('repHealthTitle')} subtitle={t('repHealthSubtitle')} />
         <LoadingSkeleton variant="console" />
       </PageContainer>
     );
@@ -56,7 +58,7 @@ export default function RepHealthPage() {
   if (error) {
     return (
       <PageContainer>
-        <PageHeader icon={PeopleIcon} title="Rep Health" subtitle="Churn risk across the sales team" />
+        <PageHeader icon={PeopleIcon} title={t('repHealthTitle')} subtitle={t('repHealthSubtitle')} />
         <ErrorAlert message={error} onRetry={() => window.location.reload()} />
       </PageContainer>
     );
@@ -65,11 +67,11 @@ export default function RepHealthPage() {
   if (cards.length === 0) {
     return (
       <PageContainer>
-        <PageHeader icon={PeopleIcon} title="Rep Health" subtitle="Churn risk across the sales team" />
+        <PageHeader icon={PeopleIcon} title={t('repHealthTitle')} subtitle={t('repHealthSubtitle')} />
         <EmptyState
           icon={<PeopleIcon />}
-          title="No rep health cards yet"
-          description="Rep health cards are generated from the churn forecast. Check back after the next pipeline run."
+          title={t('repHealthNoCards')}
+          description={t('repHealthNoCardsDesc')}
         />
       </PageContainer>
     );
@@ -79,9 +81,9 @@ export default function RepHealthPage() {
     <PageContainer>
       <PageHeader
         icon={PeopleIcon}
-        title="Rep Health"
-        subtitle="Churn risk across the sales team"
-        description="Prioritise rep retention using churn probability alongside each rep's book of business."
+        title={t('repHealthTitle')}
+        subtitle={t('repHealthSubtitle')}
+        description={t('repHealthDescription')}
       />
 
       <Grid container spacing={2}>
@@ -96,7 +98,7 @@ export default function RepHealthPage() {
                     size="small"
                     color={risk.color}
                     variant="outlined"
-                    label={`${formatPercent(card.churn_probability)} churn · ${risk.label}`}
+                    label={t('churnLabel', { percent: formatPercent(card.churn_probability), risk: risk.label })}
                   />
                 </Stack>
                 <Box
@@ -106,10 +108,10 @@ export default function RepHealthPage() {
                     gridTemplateColumns: '1fr 1fr',
                   }}
                 >
-                  <Metric label="Active customers" value={card.active_customer_count ?? '—'} />
-                  <Metric label="Visit coverage" value={formatPercent(card.visit_coverage)} />
-                  <Metric label="Avg order value" value={formatCurrency(card.avg_order_value)} />
-                  <Metric label="AR overdue" value={formatCurrency(card.ar_overdue_amount)} />
+                  <Metric label={t('metricActiveCustomers')} value={card.active_customer_count ?? '—'} />
+                  <Metric label={t('metricVisitCoverage')} value={formatPercent(card.visit_coverage)} />
+                  <Metric label={t('metricAvgOrderValue')} value={formatCurrency(card.avg_order_value)} />
+                  <Metric label={t('metricArOverdue')} value={formatCurrency(card.ar_overdue_amount)} />
                 </Box>
               </Paper>
             </Grid>

@@ -51,8 +51,13 @@ export default {
   navigation: {
     section: 'Carbon Footprint',
     items: [
-      // ── Overview (all roles) ──
-      { label: 'Overview',             path: '/carbon/console',            role: '*' },
+      // ── Executive (strategic read — board / management) ──
+      { type: 'group', label: 'Executive' },
+      { label: 'Chairman Overview',    path: '/carbon/chairman',           role: '*' },
+      { type: 'divider' },
+
+      // ── Operations (day-to-day tracking) ──
+      { label: 'Carbon Console',       path: '/carbon/console',            role: '*' },
       { label: 'Emissions Dashboard',  path: '/carbon/dashboard',          role: '*' },
       { type: 'divider' },
 
@@ -61,6 +66,11 @@ export default {
       { label: 'Data Entry',           path: '/carbon/my-data',              role: 'carbon:data_owner' },
       { label: 'Calculations',         path: '/carbon/calculations',         role: 'carbon:data_owner' },
       { label: 'Verification',         path: '/carbon/verification',         role: 'carbon:data_owner' },
+      { type: 'divider' },
+
+      // ── BI & Analytics (analyst role, separate from ops) ──
+      { type: 'group', label: 'BI & Analytics' },
+      { label: 'Analytics & Trends',   path: '/carbon/analytics',          role: 'carbon:analyst' },
       { type: 'divider' },
 
       // ── Reporting (analyst) ──

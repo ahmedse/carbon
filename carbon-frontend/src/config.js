@@ -141,6 +141,7 @@ export const API_ROUTES = {
   // Carbon app APIs
   emissionsAPI: "carbon/",
   emissionsDashboard: "carbon/dashboard/",
+  emissionsChairman: "carbon/chairman/",
   emissionsYearlyComparison: "carbon/yearly-comparison/",
   emissionsReport: "carbon/report/",
   emissionsCalculate: "carbon/calculate/",

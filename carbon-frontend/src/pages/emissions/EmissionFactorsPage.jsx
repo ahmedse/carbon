@@ -8,6 +8,7 @@ import {
   Stack,
   IconButton,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -28,11 +29,12 @@ import {
 } from '../../api/emissions-extended';
 
 const ScopeChip = ({ scope }) => {
+  const { t } = useTranslation('emissions');
   const scopeColors = { 1: 'error', 2: 'warning', 3: 'info' };
-  const scopeLabels = { 1: 'Scope 1', 2: 'Scope 2', 3: 'Scope 3' };
+  const scopeLabels = { 1: t('scope1'), 2: t('scope2'), 3: t('scope3') };
   return (
     <Chip
-      label={scopeLabels[scope] || `Scope ${scope}`}
+      label={scopeLabels[scope] || t('scopeChip', { scope })}
       color={scopeColors[scope] || 'default'}
       size="small"
       variant="filled"
@@ -57,7 +59,8 @@ function fmtDate(v) {
 }
 
 export default function EmissionFactorsPage() {
-  useDocumentTitle("Emission Factors");
+  const { t } = useTranslation('emissions');
+  useDocumentTitle(t('title'));
   const { user, token, availablePerspectives, isGlobalAdminFlag, userCapabilities, context } = useAuth();
   const { notify, notifyFromError } = useNotification();
 
@@ -90,14 +93,14 @@ export default function EmissionFactorsPage() {
       setFactors(Array.isArray(factorsData) ? factorsData : []);
       setCategories(Array.isArray(categoriesData) ? categoriesData : []);
     } catch (err) {
-      notifyFromError(err, 'Failed to load emission factors');
+      notifyFromError(err, t('failedToLoadFactors'));
       // Reset to empty arrays so .filter() calls don't break
       setFactors([]);
       setCategories([]);
     } finally {
       setLoading(false);
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   useEffect(() => {
     loadData();
@@ -117,27 +120,27 @@ export default function EmissionFactorsPage() {
     try {
       if (currentFactor) {
         await updateEmissionFactor(currentFactor.id, formData, token);
-        notify({ message: 'Factor updated', type: 'success' });
+        notify({ message: t('factorUpdated'), type: 'success' });
       } else {
         await createEmissionFactor(formData, token);
-        notify({ message: 'Factor created', type: 'success' });
+        notify({ message: t('factorCreated'), type: 'success' });
       }
       setDrawerOpen(false);
       setCurrentFactor(null);
       await loadData();
     } catch (err) {
-      notifyFromError(err, 'Failed to save factor');
+      notifyFromError(err, t('failedToSaveFactor'));
     }
   };
 
   const handleDelete = async (factorId) => {
     try {
       await deleteEmissionFactor(factorId, token);
-      notify({ message: 'Factor deactivated', type: 'success' });
+      notify({ message: t('factorDeactivated'), type: 'success' });
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
-      notifyFromError(err, 'Failed to delete factor');
+      notifyFromError(err, t('failedToDeleteFactor'));
     }
   };
 
@@ -171,18 +174,18 @@ export default function EmissionFactorsPage() {
   };
 
   const columns = [
-    { field: 'name', headerName: 'Name', flex: 1, minWidth: 200 },
-    { field: 'code', headerName: 'Code', width: 150 },
-    { field: 'category', headerName: 'Category', width: 180 },
+    { field: 'name', headerName: t('name'), flex: 1, minWidth: 200 },
+    { field: 'code', headerName: t('code'), width: 150 },
+    { field: 'category', headerName: t('category'), width: 180 },
     {
       field: 'scope',
-      headerName: 'Scope',
+      headerName: t('scope'),
       width: 110,
       renderCell: (params) => <ScopeChip scope={params.value} />,
     },
     {
       field: 'factor_value',
-      headerName: 'Value',
+      headerName: t('value'),
       width: 120,
       align: 'right',
       headerAlign: 'right',
@@ -190,16 +193,16 @@ export default function EmissionFactorsPage() {
     },
     {
       field: 'activity_unit',
-      headerName: 'Unit',
+      headerName: t('unit'),
       width: 90,
     },
     {
       field: 'is_active',
-      headerName: 'Active',
+      headerName: t('active'),
       width: 80,
       renderCell: (params) => (
         <Chip
-          label={params.value ? 'Yes' : 'No'}
+          label={params.value ? t('yes') : t('no')}
           color={params.value ? 'success' : 'default'}
           size="small"
           variant={params.value ? 'filled' : 'outlined'}
@@ -208,7 +211,7 @@ export default function EmissionFactorsPage() {
     },
     {
       field: 'updated_at',
-      headerName: 'Last Modified',
+      headerName: t('lastModified'),
       width: 170,
       sortable: true,
       valueFormatter: (value) => fmtDate(value),
@@ -217,7 +220,7 @@ export default function EmissionFactorsPage() {
       ? [
           {
             field: 'actions',
-            headerName: 'Actions',
+            headerName: t('actions'),
             width: 100,
             sortable: false,
             renderCell: (params) => (
@@ -242,37 +245,37 @@ export default function EmissionFactorsPage() {
   return (
     <>
       <FilteredDataGrid
-        title="Emission Factors"
-        subtitle={`${filteredFactors.length} of ${factors.length} factors`}
-        description="Manage emission conversion factors for carbon accounting — browse, create, edit, and deactivate factors used in emissions calculations."
+        title={t('title')}
+        subtitle={t('factorsSubtitle', { count: filteredFactors.length, total: factors.length })}
+        description={t('factorsDescription')}
         actions={
           isAdmin ? (
             <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreate}>
-              Add Factor
+              {t('addFactor')}
             </Button>
           ) : null
         }
         rows={filteredFactors}
         loading={loading}
         columns={columns}
-        countLabel={`${filteredFactors.length} of ${factors.length} factors`}
+        countLabel={t('factorsSubtitle', { count: filteredFactors.length, total: factors.length })}
         searchValue={searchText}
         onSearchChange={setSearchText}
         filterDefs={[
           {
             key: 'category',
-            label: 'Category',
-            emptyLabel: 'All Categories',
+            label: t('category'),
+            emptyLabel: t('allCategories'),
             options: categories,
           },
           {
             key: 'scope',
-            label: 'Scope',
-            emptyLabel: 'All Scopes',
+            label: t('scope'),
+            emptyLabel: t('allScopes'),
             options: [
-              { value: '1', label: 'Scope 1' },
-              { value: '2', label: 'Scope 2' },
-              { value: '3', label: 'Scope 3' },
+              { value: '1', label: t('scope1') },
+              { value: '2', label: t('scope2') },
+              { value: '3', label: t('scope3') },
             ],
           },
         ]}
@@ -282,8 +285,8 @@ export default function EmissionFactorsPage() {
           if (key === 'scope') setFilterScope(value);
         }}
         onClearFilters={handleClearFilters}
-        emptyMessage="No factors found"
-        emptySubtext="Try adjusting your filters"
+        emptyMessage={t('noFactorsFound')}
+        emptySubtext={t('tryAdjustingFilters')}
       />
 
       {/* Create/Edit Dialog (modal — design system primitive) */}
@@ -298,9 +301,9 @@ export default function EmissionFactorsPage() {
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         open={!!deleteConfirm}
-        title="Deactivate Factor?"
-        message="This deactivates the factor (soft delete). Factors referenced by calculation rules cannot be removed."
-        confirmLabel="Deactivate"
+        title={t('deactivateFactorTitle')}
+        message={t('deactivateFactorMessage')}
+        confirmLabel={t('deactivate')}
         destructive
         onConfirm={() => handleDelete(deleteConfirm)}
         onCancel={() => setDeleteConfirm(null)}
@@ -310,6 +313,7 @@ export default function EmissionFactorsPage() {
 }
 
 function FactorDialog({ open, factor, categories, onSave, onClose }) {
+  const { t } = useTranslation('emissions');
   const [form, setForm] = useState({
     name: '',
     code: '',
@@ -376,13 +380,13 @@ function FactorDialog({ open, factor, categories, onSave, onClose }) {
   return (
     <SystemDialog
       open={open}
-      title={factor ? 'Edit Factor' : 'Create Factor'}
+      title={factor ? t('editFactorTitle') : t('createFactorTitle')}
       onClose={onClose}
       onCancel={onClose}
-      cancelLabel="Cancel"
+      cancelLabel={t('cancel')}
       actions={
         <Button variant="contained" size="small" onClick={handleSubmit}>
-          Save
+          {t('save')}
         </Button>
       }
       width={560}
@@ -395,7 +399,7 @@ function FactorDialog({ open, factor, categories, onSave, onClose }) {
       <Box px={2} py={1}>
         <Stack spacing={2}>
           <TextField
-            label="Name"
+            label={t('name')}
             name="name"
             value={form.name}
             onChange={handleChange}
@@ -403,7 +407,7 @@ function FactorDialog({ open, factor, categories, onSave, onClose }) {
             size="small"
           />
           <TextField
-            label="Code"
+            label={t('code')}
             name="code"
             value={form.code}
             onChange={handleChange}
@@ -411,7 +415,7 @@ function FactorDialog({ open, factor, categories, onSave, onClose }) {
             size="small"
           />
           <TextField
-            label="Category"
+            label={t('category')}
             select
             name="category"
             value={form.category}
@@ -426,7 +430,7 @@ function FactorDialog({ open, factor, categories, onSave, onClose }) {
             ))}
           </TextField>
           <TextField
-            label="Scope"
+            label={t('scope')}
             select
             name="scope"
             value={form.scope}
@@ -434,12 +438,12 @@ function FactorDialog({ open, factor, categories, onSave, onClose }) {
             fullWidth
             size="small"
           >
-            <MenuItem value={1}>Scope 1 - Direct</MenuItem>
-            <MenuItem value={2}>Scope 2 - Indirect (Energy)</MenuItem>
-            <MenuItem value={3}>Scope 3 - Value Chain</MenuItem>
+            <MenuItem value={1}>{t('scope1Direct')}</MenuItem>
+            <MenuItem value={2}>{t('scope2Indirect')}</MenuItem>
+            <MenuItem value={3}>{t('scope3ValueChain')}</MenuItem>
           </TextField>
           <TextField
-            label="Factor Value"
+            label={t('factorValue')}
             name="factor_value"
             type="number"
             value={form.factor_value}
@@ -449,26 +453,26 @@ function FactorDialog({ open, factor, categories, onSave, onClose }) {
             inputProps={{ step: '0.0001' }}
           />
           <TextField
-            label="Activity Unit"
+            label={t('activityUnit')}
             name="activity_unit"
             value={form.activity_unit}
             onChange={handleChange}
             fullWidth
             size="small"
-            placeholder="e.g., kWh, liter, km"
+            placeholder={t('activityUnitPlaceholder')}
           />
           <TextField
-            label="Source *"
+            label={t('source')}
             name="source"
             value={form.source}
             onChange={handleChange}
             fullWidth
             size="small"
-            placeholder="e.g., EPA eGRID 2024"
+            placeholder={t('sourcePlaceholder')}
           />
           <Stack direction="row" spacing={2}>
             <TextField
-              label="Valid From *"
+              label={t('validFrom')}
               name="valid_from"
               type="date"
               value={form.valid_from}
@@ -478,7 +482,7 @@ function FactorDialog({ open, factor, categories, onSave, onClose }) {
               InputLabelProps={{ shrink: true }}
             />
             <TextField
-              label="Valid To"
+              label={t('validTo')}
               name="valid_to"
               type="date"
               value={form.valid_to}
@@ -489,13 +493,13 @@ function FactorDialog({ open, factor, categories, onSave, onClose }) {
             />
           </Stack>
           <TextField
-            label="Tags"
+            label={t('tags')}
             name="tags"
             value={form.tags}
             onChange={handleChange}
             fullWidth
             size="small"
-            placeholder="comma-separated, e.g., electricity, grid, kwh"
+            placeholder={t('tagsPlaceholder')}
           />
         </Stack>
       </Box>

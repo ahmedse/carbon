@@ -131,6 +131,29 @@ cd /home/ahmed/aast/carbon/carbon-frontend && npx playwright test e2e/journeys/j
 | S19 | Transparency | Hover `Why this answer` tooltip → assert provenance lines (Conversation/App/Org units). Hover usage chip → assert model/tokens/cost/latency breakdown. |
 | S20 | Infinite scroll | In a 60+ message conversation, scroll to top → assert older messages load (`listMessages` `before` paging fires; message count grows, no duplicates). |
 
+### S21–S27 — Intent Resolution (S1.5 LLM-as-classifier) — CONSOLE ONLY (curl + log grep)
+
+These validate the new `IntentResolver` (`backend/ai/engine/cognition/turn/intent.py`,
+ADR-0023). They are **backend LLM behaviour** — validate via `curl` against
+`http://127.0.0.1:8009/carbon-api/` + grep `backend/logs/carbon.log` for `IntentResolver:`,
+NOT via Playwright. For every query: (a) capture the assistant reply, (b) capture the
+matching `IntentResolver:` log line (action / top / conf), (c) assess grounding (real DB
+values vs textbook lecture).
+
+| # | Query | Expected intent (log) | Expected behaviour | Severity if wrong |
+|---|-------|----------------------|--------------------|-------------------|
+| S21 | "what global warming potential values do we track?" | `top=list_gwp_gases conf≥0.6` | Answer is a real AR6 GWP table (SF6 23,500 … CO2 1.0), NOT a textbook definition | P0 |
+| S22 | "what emission factors are in the system?" | `top=list_emission_factors` | Real factor rows from `list_emission_factors` | P0 |
+| S23 | "what are those?" (after S21/S22 in same conversation) | `action=clarify` (no referent) OR `answer` resolved to prior endpoint | If `clarify` → asks ONE short question; if `answer` → re-grounds prior endpoint | P1 |
+| S24 | "hello" | `top=None conf=0.00 action=answer` | Plain greeting, no tool call, no generic data dump | P2 |
+| S25 | A query straddling two endpoints (e.g. "compare factors and gases") | `action=disambiguate` with 2+ options | Runner returns options, does NOT fabricate data | P2 |
+| S26 | "create a DQ rule for…" (mutation) | `top=None` (mutations excluded from label set) | Must NOT auto-call `create_dq_rule`; either answers generally or asks to confirm | P0 (side-effect leak) |
+| S27 | Degradation — resolve a non-data general-knowledge question | `top=None` | Falls through to old behaviour (no crash, no hallucinated endpoint) | P2 |
+
+**Grounding assertion (applies to S21–S22):** the reply must contain concrete values that
+originate from the DB (GWP table rows, factor rows) — verify against
+`curl /carbon-api/carbon/factors` and the GWP endpoint, not from the model's training data.
+
 > **Seeding note:** S16/S20 need >50 messages. Seed via the API with a tight loop and a
 > short assistant echo; use the `request` fixture (not the browser) to avoid UI flakiness.
 > Do NOT depend on a real LLM for every seed message — reuse `editMessage`/direct create.

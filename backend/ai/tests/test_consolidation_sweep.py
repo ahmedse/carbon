@@ -133,7 +133,7 @@ def _run_sweep(instance_id: str) -> dict:
 # ── Tests ────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_sweep_disabled_short_circuits_no_llm(django_store, cfg, monkeypatch):
     """CONSOLIDATION_SWEEP_ENABLED=false → zero candidates, zero LLM calls."""
     monkeypatch.setenv("CONSOLIDATION_SWEEP_ENABLED", "false")
@@ -154,7 +154,7 @@ def test_sweep_disabled_short_circuits_no_llm(django_store, cfg, monkeypatch):
     route.assert_not_called()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_sweep_reflects_and_curates_skill(django_store, cfg):
     """Repeated success + stub LLM → one draft Skill with gate_status pending."""
     from ai.models.core import Skill
@@ -187,7 +187,7 @@ def test_sweep_reflects_and_curates_skill(django_store, cfg):
     assert skills[0].author_user_id == "system"
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cold_instance_yields_no_candidates(django_store, cfg):
     """A single trajectory row is below the extraction floor — no LLM burn."""
     instance_id = asyncio.run(

@@ -1,38 +1,25 @@
 // src/pages/emissions/CalculationRulesPage.jsx
 // Calculation Rules admin — CRUD + execute actions
-// Pattern: EmissionFactorsPage style — MUI Table with icons, dialogs for create/edit
+// Canonical shell: FilteredDataGrid + SystemDialog + ConfirmDialog (see EmissionFactorsPage / GWPReferencePage)
 // All colours via theme.palette, zero hardcoded hex
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Drawer,
-  Alert,
   TextField,
   MenuItem,
   Switch,
   FormControlLabel,
   CircularProgress,
   Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Stack,
   IconButton,
-  Snackbar,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
-import PageContainer from '../../components/layout/PageContainer';
 import { FONT } from '../../theme/themeTokens';
 
 import AddIcon from '@mui/icons-material/Add';
@@ -40,9 +27,11 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import InboxIcon from '@mui/icons-material/Inbox';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import SystemDialog from '../../components/SystemDialog';
 import {
   fetchCalculationRules,
   createCalculationRule,
@@ -54,10 +43,11 @@ import {
 // ── RuleTypeChip ────────────────────────────────────────────────────────
 
 function RuleTypeChip({ value }) {
+  const { t } = useTranslation('emissions');
   const cfg = {
-    direct:       { label: 'Direct',       palette: 'success' },
-    unit_convert: { label: 'Unit Convert', palette: 'info' },
-    formula:      { label: 'Formula',      palette: 'warning' },
+    direct:       { label: t('ruleTypeDirect'),       palette: 'success' },
+    unit_convert: { label: t('ruleTypeUnitConvert'), palette: 'info' },
+    formula:      { label: t('ruleTypeFormula'),      palette: 'warning' },
   };
   const meta = cfg[value] || { label: value, palette: 'default' };
   return (
@@ -71,9 +61,10 @@ function RuleTypeChip({ value }) {
   );
 }
 
-// ── RulesDrawer ─────────────────────────────────────────────────────────
+// ── RulesDialog ─────────────────────────────────────────────────────────
 
-function RulesDrawer({ open, rule, tables = [], factors = [], onSave, onClose }) {
+function RulesDialog({ open, rule, tables = [], factors = [], onSave, onClose }) {
+  const { t } = useTranslation('emissions');
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -127,14 +118,28 @@ function RulesDrawer({ open, rule, tables = [], factors = [], onSave, onClose })
   };
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 420, p: 3 }}>
-        <Typography variant="h5" sx={{ mb: 3 }}>
-          {rule ? 'Edit Rule' : 'Create Rule'}
-        </Typography>
+    <SystemDialog
+      open={open}
+      title={rule ? t('editRuleTitle') : t('createRuleTitle')}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel={t('cancel')}
+      actions={
+        <Button variant="contained" size="small" onClick={handleSubmit}>
+          {rule ? t('update') : t('create')}
+        </Button>
+      }
+      width={540}
+      height={680}
+      minWidth={420}
+      minHeight={460}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
         <Stack spacing={2}>
           <TextField
-            label="Name"
+            label={t('name')}
             name="name"
             value={form.name}
             onChange={handleChange}
@@ -143,7 +148,7 @@ function RulesDrawer({ open, rule, tables = [], factors = [], onSave, onClose })
             size="small"
           />
           <TextField
-            label="Description"
+            label={t('description')}
             name="description"
             value={form.description}
             onChange={handleChange}
@@ -153,7 +158,7 @@ function RulesDrawer({ open, rule, tables = [], factors = [], onSave, onClose })
             size="small"
           />
           <TextField
-            label="Data Table"
+            label={t('dataTable')}
             select
             name="data_table"
             value={form.data_table}
@@ -161,22 +166,22 @@ function RulesDrawer({ open, rule, tables = [], factors = [], onSave, onClose })
             fullWidth
             size="small"
           >
-            <MenuItem value="">Select table…</MenuItem>
-            {tables.map((t) => (
-              <MenuItem key={t.id} value={t.id}>{t.name || t.label || t.id}</MenuItem>
+            <MenuItem value="">{t('selectTable')}</MenuItem>
+            {tables.map((tableItem) => (
+              <MenuItem key={tableItem.id} value={tableItem.id}>{tableItem.name || tableItem.label || tableItem.id}</MenuItem>
             ))}
           </TextField>
           <TextField
-            label="Activity Field"
+            label={t('activityField')}
             name="activity_field"
             value={form.activity_field}
             onChange={handleChange}
             fullWidth
             size="small"
-            placeholder="Field name or ID"
+            placeholder={t('fieldNameOrId')}
           />
           <TextField
-            label="Emission Factor"
+            label={t('emissionFactor')}
             select
             name="emission_factor"
             value={form.emission_factor}
@@ -184,13 +189,13 @@ function RulesDrawer({ open, rule, tables = [], factors = [], onSave, onClose })
             fullWidth
             size="small"
           >
-            <MenuItem value="">Select factor…</MenuItem>
+            <MenuItem value="">{t('selectFactor')}</MenuItem>
             {factors.map((f) => (
               <MenuItem key={f.id} value={f.id}>{f.name || f.id}</MenuItem>
             ))}
           </TextField>
           <TextField
-            label="Rule Type"
+            label={t('ruleType')}
             select
             name="rule_type"
             value={form.rule_type}
@@ -198,13 +203,13 @@ function RulesDrawer({ open, rule, tables = [], factors = [], onSave, onClose })
             fullWidth
             size="small"
           >
-            <MenuItem value="direct">Direct</MenuItem>
-            <MenuItem value="unit_convert">Unit Convert</MenuItem>
-            <MenuItem value="formula">Formula</MenuItem>
+            <MenuItem value="direct">{t('ruleTypeDirect')}</MenuItem>
+            <MenuItem value="unit_convert">{t('ruleTypeUnitConvert')}</MenuItem>
+            <MenuItem value="formula">{t('ruleTypeFormula')}</MenuItem>
           </TextField>
           {form.rule_type === 'unit_convert' && (
             <TextField
-              label="Unit Conversion Factor"
+              label={t('unitConversionFactor')}
               name="unit_conversion_factor"
               type="number"
               value={form.unit_conversion_factor}
@@ -216,29 +221,22 @@ function RulesDrawer({ open, rule, tables = [], factors = [], onSave, onClose })
           )}
           <FormControlLabel
             control={<Switch checked={form.is_active} onChange={handleChange} name="is_active" size="small" />}
-            label="Active"
+            label={t('active')}
           />
           <FormControlLabel
             control={<Switch checked={form.auto_calculate} onChange={handleChange} name="auto_calculate" size="small" />}
-            label="Auto-Calculate"
+            label={t('autoCalculate')}
           />
-          <Stack direction="row" spacing={2} sx={{ pt: 1 }}>
-            <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
-              Cancel
-            </Button>
-            <Button variant="contained" onClick={handleSubmit} sx={{ flex: 1 }}>
-              {rule ? 'Update' : 'Create'}
-            </Button>
-          </Stack>
         </Stack>
       </Box>
-    </Drawer>
+    </SystemDialog>
   );
 }
 
 // ── ExecuteDialog ──────────────────────────────────────────────────────
 
 function ExecuteDialog({ open, rule, onClose, onConfirm, loading }) {
+  const { t } = useTranslation('emissions');
   const [periodId, setPeriodId] = useState('');
 
   useEffect(() => {
@@ -246,42 +244,59 @@ function ExecuteDialog({ open, rule, onClose, onConfirm, loading }) {
   }, [open]);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Execute Rule</DialogTitle>
-      <DialogContent>
+    <SystemDialog
+      open={open}
+      title={t('executeRuleTitle')}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel={t('cancel')}
+      showCancel={false}
+      actions={
+        <>
+          <Button onClick={onClose} color="inherit" disabled={loading}>
+            {t('cancel')}
+          </Button>
+          <Button
+            onClick={() => onConfirm(rule, periodId)}
+            variant="contained"
+            color="success"
+            disabled={loading}
+            startIcon={loading ? <CircularProgress size={16} /> : <PlayArrowIcon />}
+          >
+            {loading ? t('running') : t('execute')}
+          </Button>
+        </>
+      }
+      width={480}
+      height={320}
+      minWidth={400}
+      minHeight={260}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
         <Typography sx={{ ...FONT.body, mb: 2 }}>
-          Run rule: <strong>{rule?.name || rule?.id}</strong>?
+          {t('runRule')} <strong>{rule?.name || rule?.id}</strong>?
         </Typography>
         <TextField
-          label="Reporting Period ID (optional)"
+          label={t('reportingPeriodId')}
           name="period_id"
           value={periodId}
           onChange={(e) => setPeriodId(e.target.value)}
           fullWidth
           size="small"
-          placeholder="Leave blank to use active period"
+          placeholder={t('reportingPeriodHint')}
         />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={loading}>Cancel</Button>
-        <Button
-          onClick={() => onConfirm(rule, periodId)}
-          variant="contained"
-          color="success"
-          disabled={loading}
-          startIcon={loading ? <CircularProgress size={16} /> : <PlayArrowIcon />}
-        >
-          {loading ? 'Running…' : 'Execute'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      </Box>
+    </SystemDialog>
   );
 }
 
 // ── Main Component ─────────────────────────────────────────────────────
 
 export default function CalculationRulesPage() {
-  useDocumentTitle("Calculation Rules");
+  const { t } = useTranslation('emissions');
+  useDocumentTitle(t('calculationRulesTitle'));
   const { user, token } = useAuth();
   const [rules, setRules] = useState([]);
   const [factors, _setFactors] = useState([]);
@@ -294,7 +309,6 @@ export default function CalculationRulesPage() {
   const [executingRule, setExecutingRule] = useState(null);
   const [executing, setExecuting] = useState(false);
   const [currentRule, setCurrentRule] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   const { notify, notifyFromError } = useNotification();
   const isAdmin = user?.is_superuser || user?.groups?.includes('admins_group');
@@ -306,12 +320,12 @@ export default function CalculationRulesPage() {
       const rulesData = await fetchCalculationRules(token);
       setRules(Array.isArray(rulesData) ? rulesData : rulesData?.results || []);
     } catch (err) {
-      notifyFromError(err, 'Failed to load calculation rules');
-      setError(err.message || 'Failed to load calculation rules');
+      notifyFromError(err, t('failedToLoadRules'));
+      setError(err.message || t('failedToLoadRules'));
     } finally {
       setLoading(false);
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   useEffect(() => {
     loadData();
@@ -338,8 +352,8 @@ export default function CalculationRulesPage() {
       setCurrentRule(null);
       await loadData();
     } catch (err) {
-      notifyFromError(err, 'Failed to save rule');
-      setError(err.message || 'Failed to save rule');
+      notifyFromError(err, t('failedToSaveRule'));
+      setError(err.message || t('failedToSaveRule'));
     }
   };
 
@@ -348,17 +362,17 @@ export default function CalculationRulesPage() {
       const result = await deleteCalculationRule(ruleId, token);
       if (result && result.archived) {
         notify({
-          message: `Rule archived. ${result.audit_count || 0} audit records preserved.`,
+          message: t('ruleArchived', { count: result.audit_count || 0 }),
           type: 'info',
         });
       } else {
-        notify({ message: 'Rule deleted', type: 'success' });
+        notify({ message: t('ruleDeleted'), type: 'success' });
       }
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
-      notifyFromError(err, 'Failed to delete rule');
-      setError(err.message || 'Failed to delete rule');
+      notifyFromError(err, t('failedToDeleteRule'));
+      setError(err.message || t('failedToDeleteRule'));
     }
   };
 
@@ -369,140 +383,151 @@ export default function CalculationRulesPage() {
       await executeCalculationRule(rule.id, payload, token);
       setExecuteOpen(false);
       setExecutingRule(null);
-      setSnackbar({ open: true, message: `Rule "${rule.name || rule.id}" executed successfully`, severity: 'success' });
+      notify({ message: t('ruleExecuted', { name: rule.name || rule.id }), type: 'success' });
       await loadData();
     } catch (err) {
-      notifyFromError(err, 'Execution failed');
-      setSnackbar({ open: true, message: err.message || 'Execution failed', severity: 'error' });
+      notifyFromError(err, t('executionFailed'));
     } finally {
       setExecuting(false);
     }
   };
 
-  // ── Loading state ────────────────────────────────────────────────────
+  // ── Columns ───────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <PageContainer sx={{ alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress />
-      </PageContainer>
-    );
-  }
+  const columns = [
+    { field: 'id', headerName: t('id'), width: 70 },
+    { field: 'name', headerName: t('name'), flex: 1, minWidth: 160 },
+    {
+      field: 'data_table',
+      headerName: t('dataTable'),
+      width: 140,
+      valueGetter: (value, row) => row?.data_table_name || row?.data_table || '—',
+    },
+    {
+      field: 'activity_field',
+      headerName: t('activityField'),
+      width: 140,
+      valueGetter: (value, row) => row?.activity_field_name || row?.activity_field || '—',
+    },
+    {
+      field: 'emission_factor',
+      headerName: t('emissionFactor'),
+      width: 150,
+      valueGetter: (value, row) => row?.emission_factor_name || row?.emission_factor || '—',
+    },
+    {
+      field: 'emission_factor_code',
+      headerName: t('factorCode'),
+      width: 130,
+      valueGetter: (value, row) => row?.emission_factor_code || '—',
+    },
+    {
+      field: 'rule_type',
+      headerName: t('ruleType'),
+      width: 120,
+      renderCell: (params) => <RuleTypeChip value={params.value} />,
+    },
+    {
+      field: 'is_active',
+      headerName: t('active'),
+      width: 90,
+      renderCell: (params) => (
+        <Chip
+          label={params.value ? t('yes') : t('no')}
+          size="small"
+          color={params.value ? 'success' : 'default'}
+          variant="outlined"
+          sx={{ height: 2.5, ...FONT.body }}
+        />
+      ),
+    },
+    {
+      field: 'auto_calculate',
+      headerName: t('autoCalculate'),
+      width: 110,
+      renderCell: (params) => (
+        <Chip
+          label={params.value ? t('yes') : t('no')}
+          size="small"
+          color={params.value ? 'info' : 'default'}
+          variant="outlined"
+          sx={{ height: 2.5, ...FONT.body }}
+        />
+      ),
+    },
+    {
+      field: 'last_executed_at',
+      headerName: t('lastModified'),
+      width: 140,
+      valueFormatter: (value) => (value ? new Date(value).toLocaleDateString() : '—'),
+    },
+    ...(isAdmin
+      ? [
+          {
+            field: 'actions',
+            headerName: t('actions'),
+            width: 130,
+            sortable: false,
+            renderCell: (params) => (
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton size="small" onClick={() => handleEdit(params.row)} title={t('edit')}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  color="success"
+                  onClick={() => { setExecutingRule(params.row); setExecuteOpen(true); }}
+                  title={t('executeNow')}
+                >
+                  <PlayArrowIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => setDeleteConfirm(params.row.id)}
+                  sx={{ color: 'error.main' }}
+                  title={t('delete')}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ),
+          },
+        ]
+      : []),
+  ];
 
   // ── Render ───────────────────────────────────────────────────────────
 
   return (
-    <PageContainer>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="h2">
-          Calculation Rules
-        </Typography>
-        <Stack direction="row" spacing={1}>
-          <IconButton onClick={loadData} size="small">
-            <RefreshIcon />
-          </IconButton>
-          {isAdmin && (
-            <Button variant="contained" startIcon={<AddIcon />} onClick={handleCreate}>
-              New Rule
-            </Button>
-          )}
-        </Stack>
-      </Stack>
-
+    <>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-      {(!rules || rules.length === 0) && (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <InboxIcon sx={{ fontSize: '4rem', color: 'text.disabled', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary">No calculation rules found</Typography>
-          <Typography variant="body2" color="text.disabled">
-            {isAdmin ? 'Click "New Rule" to create one.' : 'Contact an administrator to add items.'}
-          </Typography>
-        </Box>
-      )}
+      <FilteredDataGrid
+        title={t('calculationRulesTitle')}
+        subtitle={t('rulesSubtitle', { count: rules.length })}
+        description={t('rulesDescription')}
+        actions={
+          <Stack direction="row" spacing={1}>
+            <IconButton onClick={loadData} size="small" title={t('refresh')}>
+              <RefreshIcon />
+            </IconButton>
+            {isAdmin && (
+              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleCreate}>
+                {t('newRule')}
+              </Button>
+            )}
+          </Stack>
+        }
+        rows={rules}
+        loading={loading}
+        columns={columns}
+        countLabel={t('rulesCountLabel', { count: rules.length })}
+        emptyMessage={t('noRulesFound')}
+        emptySubtext={isAdmin ? t('noRulesAdmin') : t('noRulesUser')}
+      />
 
-      {rules && rules.length > 0 && (
-      /* Table */
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead sx={{ bgcolor: 'action.hover' }}>
-            <TableRow>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>ID</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Name</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Data Table</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Activity Field</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Emission Factor</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Factor Code</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Rule Type</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Active</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Auto-Calc</TableCell>
-              <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Last Executed</TableCell>
-              {isAdmin && <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600 }}>Actions</TableCell>}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rules.map((rule) => (
-                <TableRow key={rule.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{rule.id}</TableCell>
-                  <TableCell sx={{ ...FONT.body, fontWeight: 500 }}>{rule.name}</TableCell>
-                  <TableCell sx={{ ...FONT.body }}>{rule.data_table_name || rule.data_table || '—'}</TableCell>
-                  <TableCell sx={{ ...FONT.body }}>{rule.activity_field_name || rule.activity_field || '—'}</TableCell>
-                  <TableCell sx={{ ...FONT.body }}>{rule.emission_factor_name || rule.emission_factor || '—'}</TableCell>
-                  <TableCell sx={{ ...FONT.body, fontFamily: 'monospace' }}>{rule.emission_factor_code || '—'}</TableCell>
-                  <TableCell><RuleTypeChip value={rule.rule_type} /></TableCell>
-                  <TableCell>
-                    <Chip
-                      label={rule.is_active ? 'Yes' : 'No'}
-                      size="small"
-                      color={rule.is_active ? 'success' : 'default'}
-                      variant="outlined"
-                      sx={{ height: 2.5, ...FONT.body }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={rule.auto_calculate ? 'Yes' : 'No'}
-                      size="small"
-                      color={rule.auto_calculate ? 'info' : 'default'}
-                      variant="outlined"
-                      sx={{ height: 2.5, ...FONT.body }}
-                    />
-                  </TableCell>
-                  <TableCell sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>
-                    {rule.last_executed_at ? new Date(rule.last_executed_at).toLocaleDateString() : '—'}
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell align="center">
-                      <IconButton size="small" onClick={() => handleEdit(rule)} title="Edit">
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        color="success"
-                        onClick={() => { setExecutingRule(rule); setExecuteOpen(true); }}
-                        title="Execute Now"
-                      >
-                        <PlayArrowIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => setDeleteConfirm(rule.id)}
-                        sx={{ color: 'error.main' }}
-                        title="Delete"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-      )}
-
-      {/* Create/Edit Drawer */}
-      <RulesDrawer
+      {/* Create/Edit Dialog */}
+      <RulesDialog
         open={drawerOpen}
         rule={currentRule}
         tables={tables}
@@ -521,30 +546,15 @@ export default function CalculationRulesPage() {
       />
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Delete Rule?</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ ...FONT.body }}>This action cannot be undone.</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-          <Button onClick={() => handleDelete(deleteConfirm)} variant="contained" color="error">
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Snackbar */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </PageContainer>
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title={t('deleteRuleTitle')}
+        message={t('deleteRuleMessage')}
+        confirmLabel={t('delete')}
+        destructive
+        onConfirm={() => handleDelete(deleteConfirm)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
+    </>
   );
 }
