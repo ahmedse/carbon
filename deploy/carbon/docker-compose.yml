@@ -17,20 +17,20 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-    image: ${INSTANCE:-carbon}-backend:${IMAGE_TAG:-latest}
-    container_name: ${INSTANCE:-carbon}-backend
+    image: carbon-backend:${IMAGE_TAG:-latest}
+    container_name: carbon-backend
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-../../backend/.env.carbon}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ${INSTANCE:-carbon}_static:/static
-      - ${INSTANCE:-carbon}_media:/media
-      - ${INSTANCE:-carbon}_uploads:/app/dataschema_uploads
-      - ${INSTANCE:-carbon}_evidence:/app/mediafiles/evidence
-      - ${INSTANCE:-carbon}_exports:/app/mediafiles/exports
-      - ${INSTANCE:-carbon}_imports:/app/mediafiles/imports
+      - carbon_static:/static
+      - carbon_media:/media
+      - carbon_uploads:/app/dataschema_uploads
+      - carbon_evidence:/app/mediafiles/evidence
+      - carbon_exports:/app/mediafiles/exports
+      - carbon_imports:/app/mediafiles/imports
     ports:
       - "${BACKEND_PORT:-8002}:8000"
     healthcheck:
@@ -41,9 +41,9 @@ services:
       start_period: 40s
 
 volumes:
-  ${INSTANCE:-carbon}_static:
-  ${INSTANCE:-carbon}_media:
-  ${INSTANCE:-carbon}_uploads:
-  ${INSTANCE:-carbon}_evidence:
-  ${INSTANCE:-carbon}_exports:
-  ${INSTANCE:-carbon}_imports:
+  carbon_static:
+  carbon_media:
+  carbon_uploads:
+  carbon_evidence:
+  carbon_exports:
+  carbon_imports:
