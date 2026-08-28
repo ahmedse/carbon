@@ -502,6 +502,28 @@ _FAILED_ACTION_COPY = (
 )
 
 
+def _clarification_question(missing: list[str] | None) -> str:
+    """Friendly next-step question when a tool needs more info to proceed.
+
+    ``missing`` carries internal field ids (``data_table`` / ``data_field``);
+    this maps them to plain product language so the user is told *what* to
+    provide rather than a generic "try again" (RULE_23: no internal names).
+    """
+    missing = list(missing or [])
+    needs_field = "data_field" in missing
+    needs_table = "data_table" in missing
+    if needs_field and needs_table:
+        return (
+            "ℹ️ I need to know which table and field this rule applies to "
+            "before I can stage it — which column should I check?"
+        )
+    if needs_field:
+        return "ℹ️ Which field/column should this rule apply to?"
+    if needs_table:
+        return "ℹ️ Which table should this rule apply to?"
+    return "ℹ️ A little more information is needed before I can stage this."
+
+
 def _md_escape(text: str) -> str:
     """Escape GFM table-cell metacharacters (``|`` and newlines)."""
     return str(text or "").replace("|", "\\|").replace("\n", " ")
@@ -616,7 +638,15 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
         if not isinstance(data, dict):
             continue
         if data.get("error"):
-            lines.append(_FAILED_ACTION_COPY)
+            # A structured clarification (e.g. a deterministic DQ rule missing
+            # its field binding) is a user-facing question, not an internal
+            # exception — surface the actionable next step instead of the
+            # generic "try again" copy.
+            clarification = data.get("clarification") or {}
+            if clarification.get("needed"):
+                lines.append(_clarification_question(clarification.get("missing")))
+            else:
+                lines.append(_FAILED_ACTION_COPY)
             continue
         if data.get("requires_confirmation"):
             kind, payload = _classify_pending(data, item)
@@ -736,6 +766,18 @@ _CLAIM_PATTERNS: dict[str, "re.Pattern"] = {
     ),
 }
 
+# Future-tense staging promises that are false when a staging tool FAILED
+# (no confirmation card was created). "I will stage a rule… confirm to
+# proceed" contradicts a failed outcome and is stripped so the grounded
+# clarification/failure note stands alone. Applied only on _FAILED.
+_FAILED_STAGING_CLAIMS: dict[str, "re.Pattern"] = {
+    "create_dq_rule": re.compile(
+        r"\bI\s+(?:will|'ll)\s+(?:stage|create|add|propose|write)\b[^.!?\n]*[.!?]?"
+        r"|\b(?:confirm|click|press|hit)\s+(?:to\s+)?(?:proceed|create|confirm)\b[^.!?\n]*[.!?]?",
+        re.IGNORECASE,
+    ),
+}
+
 # A concrete-work execution claim ("I ran the audit", "I completed the
 # validation"). Without a successful tool result, this is fabricated reasoning.
 _EXECUTION_NARRATION_RE = re.compile(
@@ -847,11 +889,17 @@ def apply_anti_hallucination_gate(
         if outcome == _SUCCEEDED:
             continue
         pattern = _CLAIM_PATTERNS.get(tool_name)
-        if pattern is None:
-            continue
-        corrected, removed = pattern.subn("", corrected)
-        if removed:
-            flags.append(f"{outcome}_success_claim_corrected:{tool_name}")
+        if pattern is not None:
+            corrected, removed = pattern.subn("", corrected)
+            if removed:
+                flags.append(f"{outcome}_success_claim_corrected:{tool_name}")
+        # A FAILED staging tool cannot promise a confirmation flow.
+        if outcome == _FAILED:
+            failed_pattern = _FAILED_STAGING_CLAIMS.get(tool_name)
+            if failed_pattern is not None:
+                corrected, removed = failed_pattern.subn("", corrected)
+                if removed:
+                    flags.append(f"failed_staging_claim_corrected:{tool_name}")
 
     # Gate 2 — anti-reasoning: no tool succeeded, yet the prose narrates a
     # concrete execution ("I ran the audit"). That chain is fabricated.
