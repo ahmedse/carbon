@@ -383,6 +383,10 @@ right construct instead of describing things in prose:
       y-axis "kg CO2e" 0 --> 3
       bar [2.51, 2.19, 1.52]
   ```
+  NEVER write `axis x`, `axis y`, or per-point `bar x: 1 y: 2.51` lines —
+  those are invalid Mermaid and the chart will NOT render. Use exactly the
+  `x-axis [...]` / `y-axis "..." 0 --> N` / `bar [...]` form above (one `bar`
+  line holding ALL values, comma-separated).
 - **Math** — $inline$ and $$block$$ render with KaTeX.
 - **Figures** — images with a title render with a caption below them.
 - **Links** — internal platform routes (starting with /) render as in-app links.

@@ -1,0 +1,10 @@
+name,slug,color
+Carbon,carbon,#0ea5e9
+GHG Protocol,ghg-protocol,#10b981
+Scope 1,scope-1,#ef4444
+Scope 2,scope-2,#f59e0b
+Scope 3,scope-3,#8b5cf6
+Electricity,electricity,#facc15
+Fuel,fuel,#fb7185
+Water,water,#38bdf8
+Refrigerants,refrigerants,#14b8a6

@@ -127,6 +127,97 @@ function reflowSingleLineMermaid(code) {
 }
 
 /**
+ * Repair invalid ``xychart-beta`` grammar the model sometimes emits. Three
+ * forms the renderer rejects ("Diagram could not be rendered"):
+ *
+ * 1. ``axis x`` / ``axis y`` markers with per-point ``bar x: N y: V`` lines.
+ * 2. pie-style slices glued onto a ``bar`` line: ``bar "A" : 1 "B" : 2 …``.
+ *
+ * Convert them to the line-oriented directives mermaid accepts: one
+ * ``x-axis [...]``, one ``y-axis "title" 0 --> max``, one ``bar [...]``.
+ */
+function repairXychart(code) {
+  if (!code || typeof code !== 'string') return code;
+  if (!/^xychart-beta\b/m.test(code.trim())) return code;
+
+  const lines = code.split('\n').map((l) => l.trim()).filter(Boolean);
+  // Only repair when a known-bad bar form is present — an already-correct
+  // body (bar [...]) or any other diagram passes through untouched.
+  const hasPointBar = lines.some((l) => /^bar\s+x\s*:/i.test(l));
+  const hasSliceBar = lines.some((l) => /^bar\s+"[^"]*"\s*:/i.test(l));
+  if (!hasPointBar && !hasSliceBar) return code;
+
+  const pointRe = /^bar\s+x\s*:\s*\S+\s+y\s*:\s*([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)/i;
+  const sliceRe = /"([^"]*)"\s*:\s*([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)/g;
+  const values = [];
+  const sliceLabels = [];
+  let xTitle = '';
+  let yTitle = '';
+  let xCategories = '';
+
+  for (const line of lines) {
+    const pm = line.match(pointRe);
+    if (pm) {
+      values.push(pm[1]);
+      continue;
+    }
+    // pie-style slices on a bar line: "A" : 1  "B" : 2 …
+    if (/^bar\s+"[^"]*"\s*:/i.test(line)) {
+      let sm;
+      while ((sm = sliceRe.exec(line)) !== null) {
+        sliceLabels.push(sm[1]);
+        values.push(sm[2]);
+      }
+      continue;
+    }
+    // "title \"Scope\" axis y" → the title belongs to the x-axis; "axis y" is a stray marker.
+    let m = line.match(/^title\s+"([^"]+)"\s+axis\s+y\b/i);
+    if (m) { xTitle = m[1]; continue; }
+    m = line.match(/^title\s+"([^"]+)"\s+axis\s+x\b/i);
+    if (m) { yTitle = m[1]; continue; }
+    // Plain "title \"...\"" → first unused axis title (x then y).
+    m = line.match(/^title\s+"([^"]+)"\s*$/i);
+    if (m) {
+      if (!xTitle) xTitle = m[1];
+      else if (!yTitle) yTitle = m[1];
+      continue;
+    }
+    // Already-correct axis lines (in case they're mixed with stray bars).
+    m = line.match(/^x-axis\s+"([^"]+)"/i);
+    if (m) { xTitle = m[1]; continue; }
+    m = line.match(/^x-axis\s+\[(.*)\]$/i);
+    if (m) { xCategories = m[1]; continue; }
+    m = line.match(/^y-axis\s+"([^"]+)"/i);
+    if (m) { yTitle = m[1]; continue; }
+  }
+
+  if (values.length === 0) return code;
+
+  let xAxis;
+  if (xCategories) {
+    xAxis = `x-axis [${xCategories}]`;
+  } else if (sliceLabels.length === values.length && sliceLabels.length > 0) {
+    xAxis = `x-axis [${sliceLabels.map((lbl) => `"${lbl}"`).join(', ')}]`;
+  } else if (xTitle) {
+    const cats = values.map((_, i) => `"${xTitle} ${i + 1}"`).join(', ');
+    xAxis = `x-axis [${cats}]`;
+  } else {
+    xAxis = `x-axis [${values.map((_, i) => i + 1).join(', ')}]`;
+  }
+
+  const maxVal = values.reduce((a, v) => Math.max(a, Number(v)), 0);
+  const yMax = Math.ceil(maxVal * 1.1) || 1;
+  const yLabel = yTitle ? ` "${yTitle}"` : '';
+
+  return [
+    'xychart-beta',
+    xAxis,
+    `y-axis${yLabel} 0 --> ${yMax}`,
+    `bar [${values.join(', ')}]`,
+  ].join('\n    ');
+}
+
+/**
  * Reflow structural markdown the model sometimes collapses onto a single line.
  * gpt-4o frequently emits a whole section as one run-on line: ATX headings
  * glued to prose, ordered-list items concatenated, and bullets concatenated.
@@ -215,7 +306,7 @@ const mermaidIdRef = { current: 0 };
 function MermaidBlock({ code }) {
   const [svg, setSvg] = useState('');
   const [error, setError] = useState('');
-  const effectiveCode = reflowSingleLineMermaid(code);
+  const effectiveCode = repairXychart(reflowSingleLineMermaid(code));
 
   useEffect(() => {
     let cancelled = false;
@@ -492,6 +583,7 @@ const components = {
 export {
   normalizeMermaidFences,
   reflowSingleLineMermaid,
+  repairXychart,
   reflowMarkdownStructure,
 };
 

@@ -279,44 +279,6 @@ def build_definition(args: dict) -> tuple[dict, list[dict]]:
     return definition, _validate_definition(definition)
 
 
-def _binding_errors(rule_type: str, args: dict) -> list[dict]:
-    """Return binding-target errors for deterministic rules.
-
-    Deterministic rules (``not_null``, ``unique``, ``allowed_values``,
-    ``range``, ``regex``) evaluate a specific column, so they must bind to a
-    real field — ``data_table`` + ``data_field`` ids. The host POST maps
-    exactly those two to a ``RuleFieldAssignment``; without them the rule is
-    created bound to nothing (a phantom rule). Fail-visible with a targeted
-    clarifying question instead of staging an unusable rule silently.
-
-    Business/``nl_check``/``reference_integrity``/``threshold`` rules skip
-    this check — they either don't need a field or resolve it elsewhere.
-    """
-    if rule_type not in _DETERMINISTIC_TYPES:
-        return []
-
-    errors: list[dict] = []
-    if not args.get("data_table"):
-        errors.append({
-            "field": "data_table",
-            "code": "missing_binding",
-            "message": (
-                "Which table should this rule apply to? Provide data_table "
-                "(the DataTable id)."
-            ),
-        })
-    if not args.get("data_field"):
-        errors.append({
-            "field": "data_field",
-            "code": "missing_binding",
-            "message": (
-                "Which field/column should this rule check? Provide data_field "
-                "(the DataField id)."
-            ),
-        })
-    return errors
-
-
 # ── Plugin ────────────────────────────────────────────────────────────────
 
 
@@ -374,15 +336,15 @@ class CreateDQRule(ToolPlugin):
             "data_table": {
                 "type": "integer",
                 "description": (
-                    "DataTable id to bind the rule to. REQUIRED for deterministic "
-                    "rule types (not_null, unique, allowed_values, range, regex)."
+                    "Optional DataTable id to bind the rule to. Omit for a "
+                    "general/unbound rule (bind later via bind_dq_rules)."
                 ),
             },
             "data_field": {
                 "type": ["integer", "null"],
                 "description": (
-                    "DataField id the rule checks. REQUIRED for deterministic "
-                    "rule types (not_null, unique, allowed_values, range, regex)."
+                    "Optional DataField id the rule checks. Omit for a "
+                    "general/unbound rule (bind later via bind_dq_rules)."
                 ),
             },
             "sample_rows": {
@@ -412,12 +374,11 @@ class CreateDQRule(ToolPlugin):
             }
 
         definition, errors = build_definition(args)
-        # Intelligence gate (2026-08-27): a deterministic rule evaluates a
-        # specific column, so it MUST bind to a real field (data_table +
-        # data_field). Without them the host POST creates a rule bound to
-        # nothing — a phantom rule. Fail-visible with a targeted
-        # clarifying question instead of silently staging an unusable rule.
-        errors.extend(_binding_errors(definition.get("type"), args))
+        # Field binding is OPTIONAL: a rule is a reusable definition that can
+        # be created unbound (a "general" rule the user binds later via
+        # bind_dq_rules) or pre-bound by passing data_table/data_field, which
+        # map to field_assignments_write. The host POST supports an empty
+        # assignment list (standalone authoring), so an unbound rule is valid.
         if errors:
             messages = "; ".join(e.get("message", "") for e in errors if e.get("message"))
             return {

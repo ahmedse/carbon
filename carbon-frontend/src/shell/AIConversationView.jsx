@@ -1010,29 +1010,6 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
     [conversationId, token, notify, notifyFromError, onForked],
   );
 
-  // Phase 19-A — "context cleared" separators. Detect real context resets by
-  // comparing the context_signature of consecutive assistant replies (user
-  // turns carry an empty signature, so a user-vs-prev comparison is invalid).
-  // A boundary is drawn before the user turn immediately preceding the first
-  // assistant reply whose signature differs from the previous reply's.
-  // (Must be declared before the early returns below — hooks rule.)
-  const contextClearedUserIds = React.useMemo(() => {
-    const ids = new Set();
-    let prevSig = null;
-    let prevUser = null;
-    for (const m of messages) {
-      if (m.role === 'user') {
-        prevUser = m;
-      } else if (m.role === 'assistant' && m.context_signature) {
-        if (prevSig && prevSig !== m.context_signature && prevUser) {
-          ids.add(prevUser.id);
-        }
-        prevSig = m.context_signature;
-      }
-    }
-    return ids;
-  }, [messages]);
-
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -1273,32 +1250,9 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
             />
           ))}
         </Collapse>
-        {recentMessages.map((msg, idx) => {
-          // Context-cleared separator: only where a real context reset was detected
-          const contextCleared =
-            idx > 0 && msg.role === 'user' && contextClearedUserIds.has(msg.id);
-          
+        {recentMessages.map((msg) => {
           return (
             <React.Fragment key={msg.id}>
-              {contextCleared && (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    py: 1,
-                    opacity: 0.4,
-                    fontSize: '0.75rem',
-                    color: 'text.disabled',
-                  }}
-                >
-                  <Box sx={{ flex: 1, height: '1px', bgcolor: 'divider' }} />
-                  <Typography variant="caption" sx={{ fontStyle: 'italic', fontSize: '0.7rem' }}>
-                    context cleared
-                  </Typography>
-                  <Box sx={{ flex: 1, height: '1px', bgcolor: 'divider' }} />
-                </Box>
-              )}
               <AIMessageBubble
                 message={msg}
                 onNotify={notify}

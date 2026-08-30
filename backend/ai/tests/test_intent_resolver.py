@@ -14,6 +14,7 @@ from ai.engine.cognition.turn.intent import (
     _apply_ladder,
     _build_label_set,
     _endpoint_to_domain_phrase,
+    _is_mutation_request,
     _parse_json,
     _to_resolution,
 )
@@ -229,7 +230,47 @@ def test_ladder_respects_explicit_disambiguate_with_options():
     assert res.options == ["emission factors", "GWP gases"]
 
 
+# ── Mutation-request gate ──────────────────────────────────────────────────
+
+
+def test_is_mutation_request_detects_create():
+    assert _is_mutation_request("create a new dq rule to validate a string")
+    assert _is_mutation_request("add a table for emissions")
+    assert _is_mutation_request("make a new rule")
+    assert _is_mutation_request("delete the old rule")
+    assert _is_mutation_request("a new dq rule")  # noun phrase, no verb
+
+
+def test_is_mutation_request_ignores_reads():
+    assert not _is_mutation_request("list dq rules")
+    assert not _is_mutation_request("show me the emission factors")
+    assert not _is_mutation_request("what rules do we have?")
+    assert not _is_mutation_request("")  # empty → False
+
+
 # ── Resolver graceful degradation (no network) ──────────────────────────────
+
+@pytest.mark.asyncio
+async def test_resolve_mutation_request_skips_classifier(monkeypatch):
+    # "create a dq rule" is a mutation — the read-only resolver must return
+    # None WITHOUT calling the LLM, so the full pipeline (create_dq_rule tool)
+    # can run instead of looping on "view existing or create?".
+    import ai.engine.llm.router as router_mod
+
+    def should_not_be_called(**kwargs):
+        raise AssertionError("classifier must not run for a mutation request")
+
+    monkeypatch.setattr(router_mod, "route_chat", should_not_be_called)
+    resolver = IntentResolver()
+    result = await resolver.resolve(
+        user_message="create a new dq rule to validate a string is 3+ chars",
+        api_catalog=[
+            {"name": "list_dq_rules", "method": "GET", "description": "list rules"},
+            {"name": "create_dq_rule", "method": "POST", "requires_confirmation": True},
+        ],
+    )
+    assert result is None
+
 
 @pytest.mark.asyncio
 async def test_resolve_empty_catalog_returns_none():

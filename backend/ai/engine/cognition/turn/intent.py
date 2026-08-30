@@ -36,6 +36,39 @@ _READ_ONLY = {"GET"}
 # (understand), NOT `list` (enumerate).
 _DELIVERY_MODES = {"list", "lookup", "explain", "analyze", "compare", "summarize"}
 
+# ── Mutation-request gate (2026-08-28) ────────────────────────────────────
+# The intent resolver only matches READ endpoints. A clear action/mutation
+# request ("create a dq rule") must NOT be intercepted here — matching it to
+# the closest read endpoint (e.g. ``list_dq_rules``) at low confidence
+# produced an endless clarify/disambiguate loop ("create new or view
+# existing?"). These turns belong to the full pipeline, where the mutation
+# tools (create_dq_rule, learn_fact, plan_task, …) actually run.
+_MUTATION_VERB_RE = re.compile(
+    r"\b(?:create|creating|created|add|adding|added|delete|deleting|deleted|"
+    r"remove|removing|removed|drop|dropping|insert|inserting|write|writing|"
+    r"setup|set\s+up|generate|generating|bind|binding|make)\b",
+    re.IGNORECASE,
+)
+
+# "a new <thing>" — strongly implies creation even without a verb ("a new
+# dq rule", "new table").
+_NEW_THING_RE = re.compile(
+    r"\b(?:a\s+|another\s+)?new\s+"
+    r"(?:data-?quality\s+)?(?:dq\s+)?(?:rule|table|field|column|schema|row|record)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_mutation_request(text: str) -> bool:
+    """True when the user is clearly requesting an action/mutation, not a read.
+
+    Mutation turns are owned by the full pipeline (tool execution), never by
+    the read-only intent resolver.
+    """
+    if not text:
+        return False
+    return bool(_MUTATION_VERB_RE.search(text)) or bool(_NEW_THING_RE.search(text))
+
 
 @dataclass
 class IntentCandidate:
@@ -111,6 +144,17 @@ def _build_system_prompt(labels: list[dict]) -> str:
         "  the system\") — MUST name the matching endpoint in `endpoint`.",
         "- Resolve pronouns from conversation context (\"what are THEY\", "
         "  \"show me THOSE\") against the previous turns.",
+        "- Resolve BARE follow-ups against the previous turn: \"all\", "
+        "  \"all about it\", \"everything\", \"more\", \"tell me more\", "
+        "  \"yes\", \"ok\" continue the PREVIOUS topic — return the SAME "
+        "  endpoint at high confidence (action = \"answer\"), never clarify.",
+        "- When the user names a specific branch / campus / module (e.g. "
+        "  \"South Valley\", \"Smart Village\", \"Abu Qir\", \"Alamein\") and "
+        "  asks about its emissions / footprint / carbon, that is the "
+        "  calculation-summary endpoint (it breaks down totals by module): "
+        "  action = \"answer\" with `endpoint` set to it and delivery = "
+        "  \"analyze\" or \"summarize\" — do NOT clarify just because a branch "
+        "  name is present.",
         "- If exactly one endpoint clearly matches, action = \"answer\" and set "
         "  `endpoint` to its name.",
         "- If two or more endpoints are nearly as likely and the user could mean "
@@ -118,6 +162,11 @@ def _build_system_prompt(labels: list[dict]) -> str:
         "  endpoint names) in `options`.",
         "- If the referent is genuinely missing, action = \"clarify\" and put "
         "  ONE short question in `clarification`.",
+        "- If the user asks to CREATE, ADD, MAKE, WRITE, GENERATE, DELETE, "
+        "  REMOVE, or otherwise CHANGE something (e.g. 'create a rule', 'add a "
+        "  table'), this is an ACTION request, NOT a data lookup. Return "
+        "  action = \"answer\" with `endpoint` = null — never match it to a "
+        "  read endpoint like a 'list…' or 'get…' endpoint.",
         "- If the user is greeting, chatting, or asking general knowledge that "
         "  needs NO system data, action = \"answer\" with `endpoint` = null.",
         "- Confidence must be a number 0.0–1.0.",
@@ -245,6 +294,13 @@ class IntentResolver:
 
         ``None`` means "no usable signal — behave exactly as before".
         """
+        # Mutation/action requests are out of scope for read-only intent
+        # resolution — skip the classifier entirely so the full pipeline can
+        # run the actual mutation tool (create_dq_rule, learn_fact, …) instead
+        # of looping on "which read endpoint did you mean?".
+        if _is_mutation_request(user_message):
+            return None
+
         labels = _build_label_set(api_catalog)
         if not labels:
             return None

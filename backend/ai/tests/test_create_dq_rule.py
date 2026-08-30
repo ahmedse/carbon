@@ -208,38 +208,28 @@ def test_create_dq_rule_with_invalid_rule_type_returns_error():
     assert result["requires_confirmation"] is False
 
 
-def test_execute_deterministic_rule_requires_field_binding():
-    """Intelligence gate (2026-08-27): a deterministic rule (not_null/unique/
-    allowed_values/range/regex) must bind to a real data_table + data_field.
-    Without them the host would create a rule bound to nothing — fail-visible
-    with a targeted clarifying question, never a silent staged write."""
+def test_execute_deterministic_rule_unbound_stages_confirmation():
+    """A deterministic rule CAN be created unbound (a general rule the user
+    binds later via bind_dq_rules). The host supports standalone authoring
+    (empty field_assignments_write), so no data_table/data_field is required —
+    the plugin stages the write instead of blocking it."""
     host_api = FakeHostAPI()
     result = _run({
-        "name": "mobile number valid",
+        "name": "Validate Minimum String Length",
         "rule_type": "regex",
         "level": "field",
-        "params": {"pattern": r"^01[0-9]{9}$"},
+        "params": {"pattern": r".{3,}"},
     }, host_api=host_api)
 
     assert result is not None
-    assert result["requires_confirmation"] is False
-    assert "error" in result
-    assert result["clarification"]["needed"] is True
-    missing = set(result["clarification"]["missing"])
-    assert {"data_table", "data_field"} <= missing
-    assert host_api.staged == []  # nothing staged — phantom write impossible
-
-
-def test_binding_errors_skipped_for_non_deterministic_rules():
-    """Business/nl_check/threshold/reference_integrity rules don't need a field
-    binding, so the intelligence gate must not block them."""
-    from ai.plugins.create_dq_rule import _binding_errors
-
-    assert _binding_errors("nl_check", {}) == []
-    assert _binding_errors("threshold", {}) == []
-    assert _binding_errors("reference_integrity", {}) == []
-    assert _binding_errors("not_null", {})  # deterministic → errors present
-    assert _binding_errors("not_null", {"data_table": 5, "data_field": 7}) == []
+    assert result["requires_confirmation"] is True
+    assert "error" not in result
+    assert host_api.staged
+    body = host_api.staged[0]["body"]
+    # Unbound: no field_assignments_write emitted (bind later).
+    assert "field_assignments_write" not in body
+    assert body["rule_type"] == "regex"
+    assert body["definition"]["params"] == {"pattern": ".{3,}"}
 
 
 def test_execute_dry_run_stages_confirmation_not_write():

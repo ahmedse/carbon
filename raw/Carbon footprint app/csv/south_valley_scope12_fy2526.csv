@@ -1,0 +1,7 @@
+﻿scope,category,source,activity_data,unit,quantity
+1,Stationary Combustion,On-site generators,Diesel,L,25000
+1,Mobile Combustion,Owned/leased vehicles,Gasoline,L,3680
+1,Mobile Combustion,Owned/leased vehicles,Diesel,L,125500
+1,Fugitive Emissions,Refrigeration/AC systems,R-404A,kg,25
+1,Fugitive Emissions,Refrigeration/AC systems,Other,kg,80
+2,Purchased Electricity,Purchased electricity,Electricity,kWh,700000

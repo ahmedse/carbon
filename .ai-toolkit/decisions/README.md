@@ -37,5 +37,6 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0015](0015-multi-instance-single-tenant-deployment.md) | Multi-instance single-tenant deployment — one codebase, N isolated deployments; no fork, no tenant_id | Accepted |
 | [0016](0016-domain-app-ai-contract.md) | Domain App AI Contract — manifest-driven extension model (`DomainAIOperations` ABC) | Accepted |
 | [0019](0019-contextual-inspector-drawer.md) | Contextual Inspector Drawer — unify Notes drawer + per-page metrics panels into one registry-driven global drawer | Proposed |
+| [0024](0024-pulse-0.2-north-star.md) | Pulse 0.2 north star, invariants I1–I8 & anti-drift rails (import-boundary gate + UX acceptance rubric) | Accepted |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

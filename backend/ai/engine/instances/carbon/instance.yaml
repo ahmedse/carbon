@@ -131,9 +131,13 @@ api_catalog:
     method: GET
     path: /carbon-api/carbon/calculations/summary
     description: >
-      Aggregated calculation summary (ORG-SCOPED) for the reporting period
-      given by optional query param reporting_period_id. Totals are in
-      kg CO2e by scope/status/module plus latest run and last audit.
+      Aggregated calculation summary for the reporting period given by
+      optional query param reporting_period_id. Totals are in kg CO2e
+      broken down by scope, status, and MODULE (branch/campus — e.g.
+      South Valley, Smart Village, Abu Qir, Alamein). This is the endpoint
+      for questions about a specific branch's emissions/footprint: filter
+      the by_module breakdown to the named branch. Plus latest run and
+      last audit.
     requires_auth: true
     requires_confirmation: false
 

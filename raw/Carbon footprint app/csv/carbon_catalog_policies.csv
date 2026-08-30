@@ -1,0 +1,5 @@
+policy_type,name,description,enabled,scope_type,emission_scope,org_unit,domain,config,error_message
+module_delete,Protect Scope 1 Carbon Modules,Prevent deletion of carbon modules holding Scope 1 data,true,scope,1,,Emissions & Sustainability,check_row_count=true,Cannot delete modules with active Scope 1 data.
+table_delete,Verified Period Table Lock,Lock tables linked to verified Scope 2 reporting periods,true,scope,2,,Emissions & Sustainability,block_verified_periods=true,Tables linked to verified reporting periods cannot be deleted.
+module_update,Scope 1 Update Requires Review,Require reviewer approval for Scope 1 module updates,true,scope,1,,Emissions & Sustainability,require_approval=true,Changes to Scope 1 modules require reviewer approval.
+table_delete,Carbon Data Owner Protection,Review tables with more than 10 rows before deletion,true,global,,,Emissions & Sustainability,min_rows_warning=10,Tables with more than 10 rows must be reviewed before deletion.

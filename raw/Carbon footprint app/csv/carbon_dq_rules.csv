@@ -1,0 +1,37 @@
+﻿module,table,field,rule_type,level,dimension,severity,rule_name,description,min,max,values,reference_set,operator,value,active
+Smart Village,monthly_electricity,building_401_kwh,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Smart Village,monthly_electricity,building_2401_kwh,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Smart Village,monthly_electricity,total_kwh,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Smart Village,monthly_chilled_water,meter_2401_1_tr,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Smart Village,monthly_chilled_water,meter_2401_2_tr,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Smart Village,monthly_chilled_water,total_tr,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Smart Village,monthly_water,building_401_m3,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Smart Village,monthly_water,building_2401_m3,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Smart Village,monthly_water,total_m3,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Smart Village,ghg_inventory,quantity,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Abu Qir,monthly_electricity,total_kwh,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Abu Qir,monthly_fuel,gasoline_92_l,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Abu Qir,monthly_fuel,gasoline_95_l,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Abu Qir,monthly_fuel,diesel_l,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Abu Qir,refrigerants,cylinders_count,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+South Valley,scope12_activity,quantity,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+South Valley,scope3_activity,quantity,range,field,validity,error,carbon.numeric.non_negative,Numeric values must be non-negative (>= 0),0,,,,,,true
+Smart Village,monthly_electricity,month,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+Smart Village,monthly_chilled_water,month,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+Smart Village,monthly_water,month,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+Abu Qir,monthly_electricity,month,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+Abu Qir,monthly_fuel,month,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+Smart Village,ghg_inventory,scope,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+Smart Village,ghg_inventory,category,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+Smart Village,ghg_inventory,existence,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+South Valley,scope12_activity,scope,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+South Valley,scope12_activity,category,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+South Valley,scope3_activity,category,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+Abu Qir,refrigerants,campus,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+Abu Qir,refrigerants,refrigerant,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+Abu Qir,refrigerants,cylinders_count,not_null,field,completeness,error,carbon.required_field,Required field must not be empty,,,,,,,true
+Smart Village,ghg_inventory,existence,allowed_values,field,validity,error,carbon.allowed.existence,"Existence must be one of: present, not_applicable, pending",,,present|not_applicable|pending,,,,true
+Smart Village,ghg_inventory,scope,allowed_values,field,validity,error,carbon.allowed.scope,"Scope must be one of: Scope 1, Scope 2, Scope 3",,,Scope 1|Scope 2|Scope 3,,,,true
+South Valley,scope12_activity,scope,allowed_values,field,validity,error,carbon.allowed.scope_short,"Scope must be one of: 1, 2",,,1|2,,,,true
+Abu Qir,refrigerants,refrigerant,reference_integrity,field,integrity,error,carbon.ref.refrigerant,Refrigerant must exist in the refrigerants reference set,,,,refrigerants,,,true
+Abu Qir,refrigerants,campus,reference_integrity,field,integrity,error,carbon.ref.campus,Campus must exist in the campuses reference set,,,,campuses,,,true

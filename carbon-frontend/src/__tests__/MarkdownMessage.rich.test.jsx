@@ -12,6 +12,7 @@ import { MemoryRouter } from 'react-router-dom';
 import MarkdownMessage, {
   normalizeMermaidFences,
   reflowSingleLineMermaid,
+  repairXychart,
   reflowMarkdownStructure,
 } from '../shell/MarkdownMessage';
 
@@ -142,6 +143,56 @@ describe('MarkdownMessage rich renderer', () => {
     it('passes through already multi-line mermaid unchanged', () => {
       const multi = 'pie\n    title Scope\n    "Scope 1" : 4';
       expect(reflowSingleLineMermaid(multi)).toBe(multi);
+    });
+  });
+
+  describe('repairXychart', () => {
+    it('repairs per-point bar x: N y: V syntax into a valid bar series', () => {
+      const bad = [
+        'xychart-beta',
+        '    axis x',
+        '    title "Scope" axis y',
+        '    title "Total CO₂e (kg)"',
+        '    bar x: 1 y: 2257628.88',
+        '    bar x: 2 y: 8032225.88',
+        '    bar x: 3 y: 6264.93',
+      ].join('\n');
+      const out = repairXychart(bad);
+      expect(out).toContain('xychart-beta');
+      expect(out).toContain('x-axis ["Scope 1", "Scope 2", "Scope 3"]');
+      expect(out).toContain('y-axis "Total CO₂e (kg)" 0 --> ');
+      expect(out).toContain('bar [2257628.88, 8032225.88, 6264.93]');
+      // No stray axis / per-point markers may survive.
+      expect(out).not.toMatch(/axis\s+[xy]/i);
+      expect(out).not.toMatch(/bar\s+x\s*:/i);
+    });
+
+    it('repairs pie-style bar slices ("A" : 1 "B" : 2) into a valid bar series', () => {
+      const bad = [
+        'xychart-beta',
+        '    bar "Scope 1" : 2257628.88 "Scope 2" : 8032225.88 "Scope 3" : 6264.93',
+      ].join('\n');
+      const out = repairXychart(bad);
+      expect(out).toContain('xychart-beta');
+      expect(out).toContain('x-axis ["Scope 1", "Scope 2", "Scope 3"]');
+      expect(out).toContain('y-axis 0 --> ');
+      expect(out).toContain('bar [2257628.88, 8032225.88, 6264.93]');
+      expect(out).not.toMatch(/bar\s+"[^"]*"\s*:/i);
+    });
+
+    it('leaves an already-valid xychart-beta untouched', () => {
+      const good = [
+        'xychart-beta',
+        '    x-axis [Diesel, Gasoline, LPG]',
+        '    y-axis "kg CO2e" 0 --> 3',
+        '    bar [2.51, 2.19, 1.52]',
+      ].join('\n');
+      expect(repairXychart(good)).toBe(good);
+    });
+
+    it('leaves non-xychart bodies untouched', () => {
+      const flow = 'flowchart LR\n    A --> B';
+      expect(repairXychart(flow)).toBe(flow);
     });
   });
 
