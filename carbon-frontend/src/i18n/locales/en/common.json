@@ -81,6 +81,10 @@
   "npDqWorkspace": "DQ Workspace",
   "npEmissionFactors": "Emission Factors",
 
+  "peopleTitle": "People",
+  "peopleSubtitle": "Nibras HR & payroll",
+  "peopleDescription": "Manage employees, compliance rules, and payroll runs from a single workspace.",
+
   "healthyFactoryName": "Healthy Foods Factory",
   "healthyOverview": "Operational health overview",
   "healthyDashboardError": "Unable to load the Healthy dashboard.",

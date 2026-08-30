@@ -196,7 +196,17 @@
     "version": "v1.0",
     "platformTitle": "Platform",
     "noAppsAvailable": "No Applications Available",
-    "noAppsSubtext": "Contact your administrator to get access to domain applications."
+    "noAppsSubtext": "Contact your administrator to get access to domain applications.",
+    "insights": {
+      "title": "AI Insights",
+      "empty": "No insights yet…",
+      "error": "Couldn't load insights",
+      "retry": "Retry",
+      "severityCritical": "Critical",
+      "severityWarning": "Warning",
+      "severityInfo": "Info",
+      "markAllRead": "Mark all read"
+    }
   },
   "devBanner": {
     "label": "Early preview",

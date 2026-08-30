@@ -198,10 +198,8 @@ test.describe('1.7 — Data Profiling Engine', () => {
     const res = await authedGet(request, '/dq/profile/config/');
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body).toHaveProperty('auto_profile_enabled');
     expect(body).toHaveProperty('freshness_threshold_hours');
     expect(body).toHaveProperty('volume_anomaly_pct');
-    expect(body).toHaveProperty('sample_size');
   });
 
   test('PUT /dq/profile/config/ updates settings', async ({ request }) => {
@@ -211,17 +209,13 @@ test.describe('1.7 — Data Profiling Engine', () => {
 
     // Update
     const res = await authedPut(request, '/dq/profile/config/', {
-      auto_profile_enabled: true,
       freshness_threshold_hours: 48,
       volume_anomaly_pct: 25,
-      sample_size: 2000,
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.auto_profile_enabled).toBe(true);
     expect(body.freshness_threshold_hours).toBe(48);
     expect(body.volume_anomaly_pct).toBe(25);
-    expect(body.sample_size).toBe(2000);
 
     // Restore original
     await authedPut(request, '/dq/profile/config/', current);

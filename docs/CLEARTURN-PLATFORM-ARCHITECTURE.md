@@ -92,7 +92,7 @@ enabled apps + isolated DB — **no fork, no new codebase.**
 |------|-----------|-------------|
 | **Branding** | `carbon-frontend/src/config/branding.js` — env-driven (`VITE_INSTANCE_NAME`, `VITE_PLATFORM_NAME`, `VITE_PLATFORM_TITLE`, `INSTANCE_LOGO`, `PLATFORM_TAGLINE`, `PLATFORM_TAGLINE`, `PLATFORM_DESCRIPTION`, `CANONICAL_URL`) | ✅ Done — wired through header, login, home, status bar, doc title, `<meta>` |
 | **Enabled apps** | Backend `appregistry/` + `/accounts/platform-apps/` + frontend `useEnabledApps()` / `isAppEnabled()` | ✅ Exists — per-instance enable/disable works |
-| **App registration** | `carbon-frontend/src/apps/registry.js` (`APP_REGISTRY`) + `src/apps/<app>/manifest.js` | ⚠️ Static (only `carbon` registered) — needs instance-aware or register-all-enable-per-instance |
+| **App registration** | `carbon-frontend/src/apps/registry.js` (`APP_REGISTRY`) + `src/apps/<app>/manifest.js` | ✅ Register-all + enable-per-instance (`carbon`, `healthy`, `stub` registered; visibility gated by `PlatformAppConfig.is_enabled`) |
 | **Data** | Separate database per deployment | ✅ By deployment (see `docs/` deployment notes) |
 | **Code boundaries** | Core never imports apps (RULE_3); apps never import sibling apps | ✅ Both gates in `.ai-toolkit/scripts/audit-imports.sh` — engine boundary (I1) + app-to-app boundary (I2); excludes tests/management tooling |
 | **Instance .env presets** | Per-instance preset files deployers copy to `.env` | ✅ `carbon-frontend/.env.instance.{aastmt,nibras,tectona}` |
@@ -109,9 +109,10 @@ None are blockers; the model works today. Items marked ✅ are already done.
    commands are excluded (tooling exemption). Wired into `verify.sh`.
 2. ✅ **Per-instance branding presets.** `carbon-frontend/.env.instance.{aastmt,nibras,tectona}`
    — deployers `cp` the relevant preset to `.env` and adjust API URL/ports.
-3. ⚠️ **Instance-aware app registration.** Make `apps/registry.js` register the app set
-   for the active instance (env-driven list), or register all apps and rely on backend
-   `appregistry` enablement to gate them. Decide one and document it.
+3. ✅ **Instance-aware app registration.** Decision: register-all + enable-per-instance.
+   `apps/registry.js` registers every installed manifest (`carbon`, `healthy`, `stub`);
+   per-instance visibility is gated by backend `PlatformAppConfig.is_enabled` via
+   `useEnabledApps()`/`isAppEnabled` plus `hasAppAccess`.
 4. ⚠️ **DB isolation checklist.** Document the deploy guarantee that each instance uses
    its own database and cannot reach another instance's data.
 5. ⚠️ **Theme per instance (deferred).** Allow palette/logo overrides per instance

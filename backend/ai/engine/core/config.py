@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     PULSE_DB_URL: str = ""           # if non-empty, overrides PULSE_DB_PATH (e.g. postgresql+asyncpg://...)
     PULSE_LOG_LEVEL: str = "INFO"
 
+    # ── Ephemeral Memory (Pulse 0.2 Phase A1 — Redis-backed short-term/working) ──
+    PULSE_INSTANCE_ID: str = "default"                        # namespaces ephemeral keys across instances
+    PULSE_MEMORY_REDIS_URL: str = "redis://127.0.0.1:6379/0"  # Redis URL for short-term/working memory
+    PULSE_MEMORY_REDIS_TTL_SECONDS: int = 86400               # default 24h TTL for ephemeral memory keys
+
     # ── Frontend Dev Servers ──
     WIDGET_PORT: int = 5174
     STUDIO_PORT: int = 5177
@@ -48,7 +53,11 @@ class Settings(BaseSettings):
     LLM_EMBEDDING_MODEL: str = "text-embedding-3-small"
     LLM_COGNITION_MODEL: str = "anthropic/claude-haiku-4.5"
     LLM_INTROSPECT_MODEL: str = ""               # schema enrichment; falls back to LLM_MODEL
-    # When set, knowledge-gap responses escalate here instead of admitting ignorance.
+    # When set, genuinely hard problems (deep salience or a knowledge_gap)
+    # escalate to this reasoning-grade model via the "reason" task lane.
+    LLM_REASON_MODEL: str = ""                   # e.g. gpt-4o; empty = fall back to LLM_MODEL
+    # Legacy: knowledge-gap responses escalated here before the "reason" lane.
+    # Still honored as a fallback so existing .env files keep working.
     LLM_ESCALATION_MODEL: str = ""               # e.g. gpt-4o; empty = use honest-uncertainty path
     EVAL_MODEL: str | None = None                # eval/judge model; falls back to LLM_MODEL
     PULSE_ALLOW_EXPENSIVE_MODELS: bool = False  # override cost guardrail
@@ -121,6 +130,7 @@ class Settings(BaseSettings):
     CONSOLIDATION_SWEEP_ENABLED: bool = True
 
     # ── Skills Admission Gate (P4.3) ──
+    SKILL_ADMISSION_ENABLED: bool = True
     SKILL_GATE_STRUCTURAL_ENABLED: bool = True
     SKILL_GATE_HARMLESSNESS_ENABLED: bool = True
     SKILL_GATE_CONSISTENCY_ENABLED: bool = True
@@ -301,7 +311,7 @@ class Settings(BaseSettings):
     _CHEAP_FALLBACK_MODEL = "anthropic/claude-haiku-4.5"
     _MODEL_FIELDS = (
         "LLM_MODEL", "LLM_NORMAL_MODEL", "LLM_COGNITION_MODEL", "LLM_INTROSPECT_MODEL",
-        "INTENT_RESOLVER_MODEL",
+        "LLM_REASON_MODEL", "INTENT_RESOLVER_MODEL",
     )
 
     @field_validator("DEFAULT_AUTONOMY_LEVEL")

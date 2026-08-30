@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 
 from ai.engine.core.clock import utcnow
+from ai.engine.core import event_bus
 
 from ai.engine.core.models import Notification, generate_uuid
 
@@ -87,11 +88,12 @@ async def create_notification(
 
 
 async def push_to_subscribers(instance_id: str, notification: Notification):
-    """Broadcast a notification to all connected WebSocket clients for this instance."""
-    subscribers = _subscribers.get(instance_id, set())
-    if not subscribers:
-        return
+    """Broadcast a notification to all connected WebSocket clients for this instance.
 
+    Also publishes the notification to the Redis event bus (Phase A2) so other
+    processes — e.g. the SSE delivery layer — receive it too. The in-process
+    fan-out stays: same-process Studio sockets still depend on it.
+    """
     payload = {
         "type": "notification",
         "notification": {
@@ -104,6 +106,13 @@ async def push_to_subscribers(instance_id: str, notification: Notification):
             else utcnow().isoformat(),
         },
     }
+
+    # Cross-process fan-out via the Redis pub/sub bus (transient transport only).
+    await _publish_to_bus(instance_id, "notification.created", payload)
+
+    subscribers = _subscribers.get(instance_id, set())
+    if not subscribers:
+        return
 
     dead = set()
     for ws in subscribers:
@@ -135,6 +144,18 @@ async def _broadcast_studio(instance_id: str, payload: dict):
 
     for ws in dead:
         subscribers.discard(ws)
+
+
+async def _publish_to_bus(instance_id: str, event_type: str, payload: dict) -> None:
+    """Publish an engine event frame to the Redis pub/sub bus (Phase A2).
+
+    Best-effort: ``event_bus.publish`` logs and no-ops if Redis is unreachable,
+    so this never fails a caller.
+    """
+    await event_bus.publish(
+        event_bus.events_channel(),
+        event_bus.build_event_frame(event_type, instance_id, payload),
+    )
 
 
 async def broadcast_cognition_event(
@@ -197,4 +218,6 @@ async def broadcast_run_event(instance_id: str, event_type: str, payload: dict):
         "timestamp": utcnow().isoformat(),
         "payload": payload,
     }
+    # Cross-process fan-out via the Redis pub/sub bus (transient transport only).
+    await _publish_to_bus(instance_id, event_type, msg)
     await _broadcast_studio(instance_id, msg)

@@ -358,3 +358,75 @@ export async function apiFetch(
     throw finalErr;
   }
 }
+
+/**
+ * Streaming variant of authFetch for Server-Sent Events (SSE).
+ *
+ * Resolves a valid access token via the shared `getValidAccessToken`
+ * (refresh-if-expired, logout-on-failure), opens the stream with a single
+ * `fetch`, and on 401 mirrors `authFetch`'s refresh-once-and-retry. Returns
+ * the RAW `Response` WITHOUT consuming the body, so callers can read
+ * `response.body` (e.g. via `response.body.getReader()`).
+ *
+ * @param {string} endpoint - endpoint relative to API_BASE_URL
+ * @param {object} opts - { token, headers, signal }
+ * @returns {Promise<Response>}
+ */
+export async function apiFetchStream(
+  endpoint,
+  { token, headers: customHeaders = {}, signal } = {}
+) {
+  let url = joinUrl(API_BASE_URL, endpoint);
+  url = sanitizeUrl(url);
+
+  let accessToken = await getValidAccessToken(
+    token || localStorage.getItem("access")
+  );
+
+  const headers = {
+    Accept: "text/event-stream",
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...customHeaders,
+  };
+
+  let response;
+  try {
+    response = await fetch(url, { method: "GET", headers, signal });
+
+    // Mirror authFetch: on 401 (and not just-refreshed), refresh once and retry.
+    const timeSinceLastRefresh = Date.now() - getLastRefreshTimestamp();
+    const justRefreshed = timeSinceLastRefresh < 2000;
+
+    if (response.status === 401 && accessToken && !justRefreshed) {
+      try {
+        accessToken = await refreshAccessToken();
+        headers.Authorization = `Bearer ${accessToken}`;
+        response = await fetch(url, { method: "GET", headers, signal });
+      } catch (_refreshError) {
+        globalLogout();
+        throw new Error("Session expired");
+      }
+    }
+
+    if (!response.ok) {
+      const normalized = normalizeError(
+        { message: `API Error: ${response.status}`, status: response.status },
+        { endpoint, method: "GET" }
+      );
+      const err = new Error(normalized.message);
+      err.normalized = normalized;
+      err.status = response.status;
+      throw err;
+    }
+
+    return response;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw error; // intentional close — caller distinguishes abort
+    }
+    if (error.message === "Failed to fetch") {
+      throw new Error("Network error");
+    }
+    throw error;
+  }
+}

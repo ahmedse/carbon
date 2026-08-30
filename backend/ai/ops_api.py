@@ -17,6 +17,7 @@ from dataclasses import asdict
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.ai_scoping import scope_ai_queryset
 from accounts.permissions import AdminOrSuperuserOnly
 from ai.engine_runtime import get_task, list_modules
 from ai.intelligence import CarbonIntelligence
@@ -72,6 +73,42 @@ class PulseTaskStatusView(APIView):
 
     def get(self, request, task_id):
         return Response(get_task(task_id))
+
+
+class SkillsTelemetryView(APIView):
+    """GET /skills/ — observable read-only skill reuse counters (Pulse 0.2 #3).
+
+    Proves a promoted skill is actually REUSED on the hot path by exposing
+    ``usage_count`` / ``success_rate`` / ``avg_latency_ms`` /
+    ``last_executed_at`` for the current instance's skills. CBAC-scoped,
+    GET-only, never mutates.
+    """
+
+    permission_classes = [AdminOrSuperuserOnly]
+    required_capability = "ai:view_console"
+
+    def get(self, request):
+        from ai.models.core import Skill
+
+        skills = scope_ai_queryset(Skill.objects, request.user).order_by("name")
+        return Response([
+            {
+                "name": skill.name,
+                "kind": skill.kind,
+                "status": skill.status,
+                "usage_count": skill.usage_count,
+                "success_rate": skill.success_rate,
+                "avg_latency_ms": skill.avg_latency_ms,
+                "last_executed_at": (
+                    skill.last_executed_at.isoformat()
+                    if skill.last_executed_at else None
+                ),
+                "promoted_at": (
+                    skill.promoted_at.isoformat() if skill.promoted_at else None
+                ),
+            }
+            for skill in skills
+        ])
 
 
 # ── Domain App Manifest API ───────────────────────────────────────────────

@@ -81,6 +81,10 @@
   "npDqWorkspace": "مساحة عمل جودة البيانات",
   "npEmissionFactors": "عوامل الانبعاثات",
 
+  "peopleTitle": "الموظفون",
+  "peopleSubtitle": "نبراس الموارد البشرية والرواتب",
+  "peopleDescription": "إدارة الموظفين وقواعد الامتثال وتشغيلات الرواتب من مساحة عمل واحدة.",
+
   "healthyFactoryName": "مصنع الأغذية الصحية",
   "healthyOverview": "نظرة عامة على السلامة التشغيلية",
   "healthyDashboardError": "تعذّر تحميل لوحة معلومات Healthy.",

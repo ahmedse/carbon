@@ -3560,6 +3560,8 @@ class CarbonIntelligence:
             chat_response.follow_up_questions,
             actions=chat_response.actions,
             pending_actions=chat_response.pending_actions,
+            confidence_label=chat_response.confidence_label,
+            honest_uncertainty=chat_response.honest_uncertainty,
         )
 
     def _prepend_workspace_context(
@@ -3820,6 +3822,8 @@ class CarbonIntelligence:
         usage: dict[str, Any] | None = None,
         actions: list[dict] | None = None,
         pending_actions: list[dict] | None = None,
+        confidence_label: str = "",
+        honest_uncertainty: bool = False,
     ) -> dict[str, Any]:
         """Save AI response message and update conversation status."""
         if status == "provider_unavailable":
@@ -3839,6 +3843,12 @@ class CarbonIntelligence:
             metadata["actions"] = actions
         if pending_actions:
             metadata["pending_actions"] = pending_actions
+        # C2 — calibrated confidence (Faculty 7): outcome label + honest-
+        # uncertainty flag (RULE_23 — outcome copy only, never raw internals).
+        if confidence_label:
+            metadata["confidence_label"] = confidence_label
+        if honest_uncertainty:
+            metadata["honest_uncertainty"] = True
 
         return self._save_assistant_message(
             conversation,
@@ -3970,6 +3980,7 @@ def _serialize_checkpoint(checkpoint) -> dict[str, Any]:
 
 def _serialize_message(message) -> dict[str, Any]:
     """Serialize an AIMessage to dict."""
+    metadata = message.metadata_json or {}
     return {
         "id": str(message.id),
         "conversation_id": str(message.conversation_id),
@@ -3991,6 +4002,10 @@ def _serialize_message(message) -> dict[str, Any]:
         "provider_model": message.provider_model,
         "outcome": message.outcome,
         "correction_text": message.correction_text,
+        # C2 — calibrated confidence (Faculty 7): outcome-shaped signal from
+        # the turn (RULE_23 — outcome copy only, never raw critic internals).
+        "confidence_label": metadata.get("confidence_label") or "",
+        "honest_uncertainty": bool(metadata.get("honest_uncertainty")),
         "provenance": _build_message_provenance(message),
         "created_at": message.created_at.isoformat(),
     }

@@ -1009,6 +1009,22 @@ class TurnPipelineRunner:
                 "if the user asked to see everything."
             )
 
+        # [C1] Adaptive reasoning lane — route genuinely hard turns (deep
+        # salience) to the reasoning-grade model. An explicit user-selected
+        # model always wins; otherwise a deep turn uses the "reason" task
+        # lane (LLM_REASON_MODEL → legacy escalation → LLM_MODEL fallback).
+        from ai.engine.llm.router import get_model_for_task as _get_model_for_task
+        _draft_model = model
+        if not _draft_model and salience.route == "deep":
+            _draft_model = _get_model_for_task("reason")
+            ledger.reason_escalation = {
+                "trigger": "deep_salience",
+                "from_model": "",
+                "to_model": _draft_model,
+                "verdict_before": None,
+                "verdict_after": None,
+            }
+
         draft = await draft_witness.draft(
             instance_id=instance_id,
             conversation_id=conversation_id,
@@ -1018,7 +1034,7 @@ class TurnPipelineRunner:
             instance_config=instance_config,
             user_info=user_info,
             budget_tracker=budget,
-            model=model,
+            model=_draft_model,
             tools=draft_tools,
             temperature=temperature,
         )
@@ -1086,13 +1102,20 @@ class TurnPipelineRunner:
             salience=salience,
         )
 
-        # [knowledge_gap routing] Escalate or return honest uncertainty — never mask.
+        # [knowledge_gap routing] Escalate via the reason lane or return
+        # honest uncertainty — never mask. (C1: the reason lane resolves
+        # LLM_REASON_MODEL → legacy LLM_ESCALATION_MODEL → LLM_MODEL.)
         if critic.verdict == "knowledge_gap":
-            escalation_model = (settings.LLM_ESCALATION_MODEL or "").strip()
+            _reason_configured = bool(
+                (settings.LLM_REASON_MODEL or settings.LLM_ESCALATION_MODEL or "").strip()
+            )
+            escalation_model = (
+                _get_model_for_task("reason") if _reason_configured else ""
+            )
             current_model = draft.model_used or ""
             if escalation_model and escalation_model != current_model:
                 logger.info(
-                    "[%s] knowledge_gap detected — escalating to %s",
+                    "[%s] knowledge_gap detected — escalating to reason lane (%s)",
                     turn_id[:8], escalation_model,
                 )
                 draft = await draft_witness.draft(
@@ -1121,14 +1144,32 @@ class TurnPipelineRunner:
                     instance_id=instance_id, conversation_id=conversation_id,
                     user_message=_resolved_user_message, salience=salience,
                 )
+                # C1: record the escalation + quality signal (critic verdict
+                # before/after) so the delta is measurable (L7).
+                ledger.reason_escalation = {
+                    "trigger": "knowledge_gap",
+                    "from_model": current_model,
+                    "to_model": escalation_model,
+                    "verdict_before": "knowledge_gap",
+                    "verdict_after": critic.verdict,
+                }
+                await self._write_ledger_row(
+                    turn_id, instance_id, conversation_id, host_user_id,
+                    "escalation", 4,
+                    ledger.reason_escalation,
+                    (time.monotonic() - s4_start) * 1000,
+                    model_used=escalation_model,
+                    verdict=critic.verdict,
+                    flags=["knowledge_gap"],
+                )
             else:
-                # No escalation model configured — honest uncertainty, not fake clarification.
+                # No reason/escalation model configured — honest uncertainty, not fake clarification.
                 from ai.engine.cognition.dialogue.fallback import HonestUncertaintyHandler
                 honest_text = HonestUncertaintyHandler().handle(
                     _resolved_user_message, critic.partial_knowledge
                 )
                 logger.info(
-                    "[%s] knowledge_gap — no escalation model, returning honest uncertainty",
+                    "[%s] knowledge_gap — no reason model, returning honest uncertainty",
                     turn_id[:8],
                 )
                 import dataclasses as _dc

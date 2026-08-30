@@ -23,6 +23,14 @@ _TREND_PATTERNS = [
 
 _URGENCY_KEYWORDS = {"urgent", "asap", "critical", "broken", "down", "error", "failing", "emergency"}
 
+# Reasoning-heavy signals → route to the "deep" lane. A "why"/"explain"/
+# "root cause" question needs genuine reasoning, not a plain data lookup.
+_DEEP_PATTERNS = [
+    "why", "explain", "analyze", "analyse", "evaluate", "assess",
+    "trade-off", "tradeoff", "implication", "justify", "root cause",
+    "what if", "synthesize", "synthesise", "hypothesize", "reasoning",
+]
+
 
 class SalienceWitness:
     """Regex-based intent classifier. Zero LLM cost."""
@@ -57,11 +65,26 @@ class SalienceWitness:
             if any(kw in msg_lower for kw in _URGENCY_KEYWORDS):
                 weight = min(1.0, weight + 0.3)
                 features["urgency"] = True
+            # Deep reasoning bump — a data question that also asks "why" /
+            # "explain" / "root cause" needs the reasoning lane, not a lookup.
+            if any(p in msg_lower for p in _DEEP_PATTERNS):
+                route = "deep"
+                features["matched"] = "deep_patterns"
+                weight = min(1.0, weight + 0.1)
             return SalienceResult(
                 weight=weight,
                 domain="data",
                 route=route,
                 salience_features=features,
+            )
+
+        # ── Deep reasoning (non-data query: "why do we use X?", etc.) ──
+        if any(p in msg_lower for p in _DEEP_PATTERNS):
+            return SalienceResult(
+                weight=0.8,
+                domain="general",
+                route="deep",
+                salience_features={"matched": "deep_patterns"},
             )
 
         # ── Fallback ──

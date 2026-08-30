@@ -36,6 +36,10 @@ export const CARBON_VIEW_CALCULATIONS       = 'carbon:view_calculations';
 export const CARBON_VIEW_VERIFICATION       = 'carbon:view_verification';
 export const CARBON_VIEW_REPORTING_PERIODS  = 'carbon:view_reporting_periods';
 
+// ── People ────────────────────────────────────────────────────────
+export const PEOPLE_VIEW   = 'people:view';
+export const PEOPLE_MANAGE = 'people:manage';
+
 // ── Catalog ────────────────────────────────────────────────────────
 export const CATALOG_VIEW              = 'catalog:view';
 export const CATALOG_MANAGE_PRODUCTS   = 'catalog:manage_products';
@@ -189,6 +193,7 @@ export const CAPABILITY_INHERITANCE = {
   [DATASCHEMA_MANAGE]: [DATASCHEMA_VIEW],
   [EVIDENCE_MANAGE]: [EVIDENCE_VIEW],
   [AI_MANAGE_CONSOLE]: [AI_VIEW_CONSOLE],
+  [PEOPLE_MANAGE]: [PEOPLE_VIEW],
 };
 
 

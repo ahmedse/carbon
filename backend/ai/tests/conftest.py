@@ -136,6 +136,31 @@ def call(executor, name: str, *args, **kwargs):
     return async_to_sync(getattr(executor, name))(*args, **kwargs)
 
 
+# ── Test hygiene ────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _flush_pulse_memory():
+    """Flush Pulse engine ephemeral-memory keys before each test.
+
+    Working/short-term memory are Redis-backed (source of truth), so a stale
+    ``pulse:*`` key left by a previous test can leak focus across tests — e.g.
+    the anaphora resolver "resolving" a pronoun with no focus set at all. Flush
+    the namespace up front to keep memory tests deterministic.
+    """
+    from ai.engine.memory._redis import get_redis_client
+
+    client = get_redis_client()
+    if client is None:
+        return
+    try:
+        keys = client.keys("pulse:*")
+        if keys:
+            client.delete(*keys)
+    except Exception:  # noqa: BLE001 — Redis flush is best-effort test hygiene
+        pass
+
+
 # ── Public fixtures ─────────────────────────────────────────────────────────
 
 @pytest.fixture

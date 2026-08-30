@@ -37,6 +37,7 @@ const STUDIO_PATHS = {
   settings:'/settings',
   help:    '/help',
   apps:    '/apps/healthy',
+  people:  '/people',
 };
 
 // Infer active studio from current URL
@@ -50,6 +51,8 @@ function studioFromPath(pathname) {
   if (pathname.startsWith('/modules')) return 'catalog';
   // Scopes belong to Carbon app
   if (pathname.startsWith('/scopes')) return 'carbon';
+  // People app (Nibras HR & payroll)
+  if (pathname.startsWith('/people')) return 'people';
   // Apps namespace (Healthy Foods Factory + future domain apps)
   if (pathname.startsWith('/apps')) return 'apps';
   // AI admin (Pulse console) — checked before generic /admin

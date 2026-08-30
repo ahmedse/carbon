@@ -142,6 +142,20 @@ APP_REGISTRY = [
         "description": "Data table and field schema management",
         "roles": [],
     },
+    {
+        "id": "people",
+        "name": "People & Payroll",
+        "version": "0.1.0",
+        "description": "HRMS wedge: employee master, payroll, leave, EOSI, GOSI, WPS (Nibras)",
+        "roles": [],
+    },
+    {
+        "id": "healthy",
+        "name": "Healthy Foods Factory",
+        "version": "1.0.0",
+        "description": "Legacy ERP analytics: rep health, load-out demand, AR aging",
+        "roles": [],
+    },
 ]
 
 # Application definition
@@ -160,6 +174,7 @@ INSTALLED_APPS = [
     'importexport',
     'evidence',
     'healthy',
+    'people',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.admin',
     'django.contrib.auth',

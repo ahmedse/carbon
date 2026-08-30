@@ -172,6 +172,7 @@ function getSidebarItems(studioId) {
         { label: 'Feedback Review', path: '/admin/ai/feedback', icon: FeedbackIcon, role: 'admin' },
         { label: 'Learning Jobs', path: '/admin/ai/learning', icon: LoopIcon, role: 'admin' },
         { label: 'Learning Flywheel', path: '/admin/ai/learning-flywheel', icon: AutorenewIcon, role: 'admin' },
+        { label: 'Skill Learning', path: '/admin/ai/skill-learning', icon: SchoolIcon, role: 'admin' },
         { type: 'group', label: 'Observability' },
         { label: 'Monitoring', path: '/admin/ai/monitoring', icon: MonitorHeartIcon, role: 'admin' },
         { label: 'Output Quality', path: '/admin/ai/output-quality', icon: TrendingDownIcon, role: 'admin' },

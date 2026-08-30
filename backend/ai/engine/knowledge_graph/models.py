@@ -515,6 +515,12 @@ class KgProactiveInsight(Base):
 
     id: Mapped[str] = mapped_column(Text, primary_key=True, default=_kg_uuid)
     instance_id: Mapped[str] = mapped_column(Text, nullable=False)
+    # PR-2 tenancy: proactive insights are instance-level (no host user), so
+    # they persist as visibility="shared" to be visible to all authenticated
+    # carbon users; org-subtree narrowing happens at the read boundary. This
+    # mirrors the Django AppScopeMixin column 1:1 (the engine never imports
+    # Django; the Django store copies this attribute onto the persisted row).
+    visibility: Mapped[str] = mapped_column(Text, nullable=False, default="shared")
     trigger_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # NULL for scheduled insights
     insight_type: Mapped[str] = mapped_column(Text, nullable=False)          # threshold_alert, daily_briefing, etc.
     severity: Mapped[str] = mapped_column(Text, nullable=False, default="info")

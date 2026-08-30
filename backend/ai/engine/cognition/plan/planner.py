@@ -429,6 +429,35 @@ class SkillAwarePlanner:
                 if plan and plan.steps:
                     logger.info("SkillAwarePlanner: using skill plan '%s'", top_skill.name)
                     return plan
+            else:
+                # Non-plan promoted skill (procedure, prompt_template, sql_macro,
+                # api_call, code_snippet) — route it to invoke_skill so the matched
+                # skill is actually REUSED on the hot path (Pulse 0.2 #3). source
+                # must stay "skill" (not "single_step") or the runner would skip
+                # the ReAct loop and never execute invoke_skill.
+                logger.info(
+                    "SkillAwarePlanner: routing non-plan skill '%s' to invoke_skill",
+                    top_skill.name,
+                )
+                return Plan(
+                    pattern="custom",
+                    steps=[
+                        PlanStep(
+                            step_id=0,
+                            intent=utterance,
+                            tool_name="invoke_skill",
+                            tool_args={"skill_name": top_skill.name},
+                            skill_name=top_skill.name,
+                        )
+                    ],
+                    synthesis_instruction="Invoke the matched skill and present its result.",
+                    source="skill",
+                    skill_name=top_skill.name,
+                    phases=[PlanPhase(
+                        phase_id=0, name="All steps", goal="",
+                        strategy="sequential", step_ids=[0],
+                    )],
+                )
 
         # ── Step 3: LLM decomposition fallback ──────────────────────────────
         # force_decompose bypasses the utterance heuristic: an explicit

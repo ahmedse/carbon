@@ -1,7 +1,7 @@
 # dq/models.py — Data Trust Core: Data Quality & Profiling.
 # domain-agnostic. MUST NOT import from emissions.
 from django.db import models
-from django.core.exceptions import ValidationError
+from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.contrib.auth import get_user_model
 from dataschema.models import DataTable, DataField
 
@@ -157,6 +157,77 @@ class RuleFieldAssignment(models.Model):
     def __str__(self):
         target = self.data_field.name if self.data_field else f'Table:{self.data_table.name}'
         return f'{self.rule.name} → {target}'
+
+
+class ModelRuleAssignment(models.Model):
+    """Typed-model twin of ``RuleFieldAssignment`` (ADR 0025).
+
+    Binds a ``DQRule`` to a concrete field on a Django model, referenced by a
+    ``model_label`` string (e.g. ``people.Employee``) rather than a
+    ContentType/GenericForeignKey — this repo avoids generic FKs. The model is
+    resolved lazily via ``apps.get_model()`` in ``clean()`` so ``dq`` never
+    imports a hosted app (RULE_3).
+
+    ``field_name`` is blank for model/row-level rules.
+    """
+    rule = models.ForeignKey(DQRule, on_delete=models.CASCADE, related_name='model_assignments')
+    model_label = models.CharField(
+        max_length=255, help_text="Django app+model label, e.g. 'people.Employee'"
+    )
+    field_name = models.CharField(
+        max_length=255, blank=True,
+        help_text='Concrete field on the model; blank = model/row-level rule'
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ('rule', 'model_label', 'field_name')
+        ordering = ['model_label', 'field_name']
+
+    def clean(self):
+        from django.apps import apps
+
+        parts = self.model_label.split('.')
+        if len(parts) != 2:
+            raise ValidationError({
+                'model_label': (
+                    f"Invalid model_label {self.model_label!r} — "
+                    "expected 'app_label.ModelName'."
+                ),
+            })
+
+        try:
+            model = apps.get_model(*parts)
+        except LookupError:
+            model = None
+
+        if model is None:
+            raise ValidationError({
+                'model_label': f"Unknown model {self.model_label!r}.",
+            })
+
+        if self.field_name:
+            try:
+                field = model._meta.get_field(self.field_name)
+            except FieldDoesNotExist:
+                raise ValidationError({
+                    'field_name': (
+                        f"Unknown field {self.field_name!r} on {self.model_label}."
+                    ),
+                })
+            # `ManyToManyField.concrete` is True in Django, so the M2M flag is
+            # the reliable rejector here; a scalar column is required for
+            # engine.evaluate to project a single value per row.
+            if field.many_to_many or not field.concrete:
+                raise ValidationError({
+                    'field_name': (
+                        f"Field {self.field_name!r} is not a concrete scalar "
+                        f"field on {self.model_label}."
+                    ),
+                })
+
+    def __str__(self):
+        return f"{self.rule.name} → {self.model_label}.{self.field_name or '*'}"
 
 
 class TableProfile(models.Model):

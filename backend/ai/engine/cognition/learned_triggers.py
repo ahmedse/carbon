@@ -1,21 +1,24 @@
 """
-P4.4a — Learned triggers from SystemSnapshot statistics.
+P4.4a — Statistical analysis of SystemSnapshot history.
 
-Two public functions:
+Public function:
 - analyze_snapshots(): Pure statistical analysis of 30d snapshot history
-- seed_learned_triggers(): Create KgProactiveTrigger rows from candidates
 
 These are sleep-time jobs — no LLM calls, no hot-path impact.
+
+NOTE (Pulse 0.2 Phase A5): the ``seed_learned_triggers`` seeding branch and
+its ``trigger_learning`` job wiring were REMOVED — they produced
+``KgProactiveTrigger`` rows whose ``condition_json`` referenced the
+pseudo-table ``system_snapshots:<field>`` that the host-DB trigger evaluator
+cannot query (dead triggers).  Re-wiring requires a snapshot-metrics crawler
+that populates real, evaluable metrics (future phase).
 """
 import json
 import logging
 from datetime import datetime, timedelta
 
-from ai.store import first
-
 from ai.engine.core.clock import utcnow
 from ai.engine.core.models import SystemSnapshot
-from ai.engine.knowledge_graph.models import KgProactiveTrigger
 
 logger = logging.getLogger("pulse.cognition.learned_triggers")
 
@@ -25,7 +28,6 @@ _MIN_SNAPSHOTS = 8          # Minimum snapshots needed for a rolling window
 _ROLLING_WINDOW_DAYS = 7    # 7-day rolling average
 _SIGMA_THRESHOLD = 2.0      # 2σ deviation = anomaly
 _TREND_MIN_DAYS = 5         # 5+ consecutive days = trend
-_CONFIDENCE_ENABLE_MIN = 0.7  # Triggers below this confidence are created disabled
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -146,91 +148,3 @@ async def analyze_snapshots(
         len(snapshots), len(candidates), instance_id,
     )
     return candidates
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Trigger seeding
-# ═══════════════════════════════════════════════════════════════════════════════
-
-async def seed_learned_triggers(
-    db,
-    instance_id: str,
-    candidates: list[dict],
-) -> int:
-    """Create KgProactiveTrigger rows from analysis candidates.
-
-    Deduplicates: skips if a trigger with the same (instance_id, name)
-    already exists.
-
-    Args:
-        db: Open async session.
-        instance_id: The instance to create triggers for.
-        candidates: Output from ``analyze_snapshots()``.
-
-    Returns:
-        Number of new triggers created.
-    """
-    created = 0
-
-    for candidate in candidates:
-        name = f"Learned: {candidate['field']} {candidate['condition_type']}"
-
-        # ── Deduplication check ──
-        existing = await db.select(
-            KgProactiveTrigger,
-            ("instance_id", instance_id),
-            ("name", name),
-        )
-        if first(existing) is not None:
-            logger.debug("seed_learned_triggers: skipping duplicate '%s'", name)
-            continue
-
-        # ── Build condition_json ──
-        condition = {
-            "table": f"system_snapshots:{candidate['field']}",
-            "column": candidate["field"],
-        }
-        if candidate["condition_type"] == "threshold":
-            condition["value"] = candidate["threshold"]
-
-        # ── Build description ──
-        description = (
-            f"Auto-generated: {candidate['field']} shows "
-            f"{candidate['direction']} pattern "
-            f"({candidate['condition_type']}, confidence={candidate['confidence']})"
-        )
-
-        confidence = candidate["confidence"]
-        enabled = confidence >= _CONFIDENCE_ENABLE_MIN
-        severity = "warning" if confidence >= 0.8 else "info"
-
-        trigger = KgProactiveTrigger(
-            instance_id=instance_id,
-            name=name,
-            category=candidate["condition_type"],
-            description=description,
-            severity=severity,
-            enabled=enabled,
-            condition_json=json.dumps(condition),
-            data_sources_json="[]",
-            context_queries_json="[]",
-            recommended_actions_json="[]",
-            recipients_json="[]",
-            cooldown_seconds=3600,
-            source="learned",
-        )
-        db.add(trigger)
-        created += 1
-        logger.info(
-            "seed_learned_triggers: created '%s' (severity=%s, enabled=%s)",
-            name, severity, enabled,
-        )
-
-    if created:
-        await db.commit()
-        logger.info(
-            "seed_learned_triggers: %d new triggers for instance %s",
-            created, instance_id,
-        )
-
-    return created

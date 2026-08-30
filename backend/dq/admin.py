@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     TableProfile, FieldProfile, DQRule, DQResult, DQProfileConfig,
     FreshnessCheck, SchemaSnapshot, SchemaChange, RuleTag, RuleFieldAssignment,
+    ModelRuleAssignment,
 )
 from .services import profile_table
 
@@ -69,6 +70,13 @@ class RuleFieldAssignmentAdmin(admin.ModelAdmin):
     list_display = ('rule', 'data_field', 'data_table')
     list_filter = ('data_table',)
     search_fields = ['rule__name', 'data_field__name', 'data_table__name']
+
+
+@admin.register(ModelRuleAssignment)
+class ModelRuleAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('rule', 'model_label', 'field_name', 'is_active')
+    list_filter = ('is_active', 'model_label')
+    search_fields = ['rule__name', 'model_label', 'field_name']
 
 
 @admin.register(DQResult)

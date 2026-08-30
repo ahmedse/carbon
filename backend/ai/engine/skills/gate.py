@@ -513,6 +513,117 @@ async def rollback_skill(skill_id: str, db: AsyncSession, reason: str = "") -> S
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Sleep-time admission sweep (P4.3 / Pulse 0.2 Phase B1)
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def run_skill_admission(db, instance_id: str) -> dict:
+    """Run the admission gate on every pending draft Skill for one instance.
+
+    Closes the promotion arrow: ``consolidation.py`` drafts skills with
+    ``gate_status="pending"``, and this sleep-time job runs each one through
+    the four critics, promoting admitted skills to ``instance_promoted``.
+    Every evaluation writes a ``SkillAdmissionLog`` row via ``admit_skill``
+    (no duplicate logging here).
+
+    Returns
+    -------
+    dict
+        ``{"evaluated": N, "promoted": N, "rejected": N}``
+    """
+    settings = get_settings()
+    if not settings.SKILL_ADMISSION_ENABLED:
+        logger.info("Skill admission disabled — skipping instance=%s", instance_id)
+        return {"evaluated": 0, "promoted": 0, "rejected": 0}
+
+    result = await db.execute(
+        select(Skill).where(
+            Skill.instance_id == instance_id,
+            Skill.gate_status == "pending",
+        )
+    )
+    pending = list(result.scalars().all())
+
+    promoted = 0
+    rejected = 0
+
+    for skill in pending:
+        try:
+            admission = await admit_skill(
+                skill.id, db, admitted_by="system:gate"
+            )
+
+            if admission["verdict"] == "admitted":
+                # admit_skill's _write_log already committed, which clears the
+                # store's tracked-object registry — re-fetch the row so the
+                # status transition below is actually persisted.
+                skill_id = skill.id
+                fresh = await db.execute(
+                    select(Skill).where(Skill.id == skill_id)
+                )
+                skill = fresh.scalar_one_or_none()
+                if skill is None:
+                    logger.warning(
+                        "run_skill_admission: skill %s vanished after admission",
+                        skill_id,
+                    )
+                    continue
+
+                now = utcnow()
+                skill.status = "instance_promoted"
+                skill.promoted_at = now
+                skill.promoted_by = "system:gate"
+                skill.gate_status = "admitted"
+                await db.commit()
+                promoted += 1
+                logger.info(
+                    "run_skill_admission: promoted skill '%s' (%s) for %s",
+                    skill.name, skill.id, instance_id,
+                )
+            else:
+                rejected += 1
+                logger.info(
+                    "run_skill_admission: rejected skill '%s' (%s) by %s: %s",
+                    skill.name, skill.id,
+                    admission.get("rejected_by"), admission.get("flags"),
+                )
+        except Exception:
+            logger.exception(
+                "run_skill_admission: error evaluating a pending skill for %s",
+                instance_id,
+            )
+
+    summary = {"evaluated": len(pending), "promoted": promoted, "rejected": rejected}
+    logger.info("run_skill_admission: instance=%s result=%s", instance_id, summary)
+    return summary
+
+
+async def _run_skill_admission_for_all_instances():
+    """Nightly: run the skill admission gate for every active instance.
+
+    Called from the scheduler (``loop.py``) after the consolidation sweep has
+    drafted new pending skills.
+    """
+    from ai.store import get_store
+    from ai.engine.core.models import Instance
+
+    factory = get_store().get_session_factory()
+    async with factory() as db:
+        instances = await db.select(Instance, ("status", "active"))
+
+        for inst in instances:
+            try:
+                summary = await run_skill_admission(db, inst.id)
+                logger.info(
+                    "Skill admission: instance=%s result=%s",
+                    inst.name, summary,
+                )
+            except Exception:
+                logger.exception(
+                    "Skill admission failed for %s", inst.name,
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════
 

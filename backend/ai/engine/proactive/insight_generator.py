@@ -5,7 +5,8 @@ Insight types:
   - daily_briefing: 24h summary of notable events + look-ahead
   - anomaly_narrative: wraps anomaly detection flags in contextual explanations
   - forecast_deviation: mid-day divergence between actuals and forecast
-  - performance_drift: slow-moving degradation over weeks
+  - performance_drift: slow-moving degradation over weeks (DEPRECATED — requires
+    drift_metrics population; future phase; removed from the scheduled path)
   - optimization_opportunity: patterns suggesting operational improvements
 """
 import json
@@ -114,6 +115,14 @@ async def detect_performance_drift(
     metrics_config: list[dict] | None = None,
 ) -> list[dict]:
     """
+    DEPRECATED / EXPERIMENTAL (Pulse 0.2 Phase A5).
+
+    Kept importable but NO LONGER on the scheduled proactive path.  This
+    function requires a ``drift_metrics`` population source that does not
+    exist yet — a crawler must write ``cache_profile.drift_metrics`` before
+    any drift can be detected.  Re-enable only after that population is
+    implemented in a future phase.
+
     Detect slow-moving performance degradation.
 
     metrics_config is a list of:

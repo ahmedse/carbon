@@ -106,3 +106,15 @@ export function runLearningSweep(token) {
 export function listDomainManifests(token) {
   return apiFetch(`${BASE}apps/`, { token });
 }
+
+/**
+ * List skill lifecycle records (drafted → promoted → reused progression).
+ * Read-only, admin-only (ai:view_console), CBAC-scoped. Returns a top-level
+ * array (not a {results} envelope).
+ * @param {string} token - JWT access token
+ * @returns {Promise<Array<{name, kind, status, usage_count, success_rate,
+ *                    avg_latency_ms, last_executed_at, promoted_at}>>}
+ */
+export function getPulseSkills(token) {
+  return apiFetch(`${BASE}skills/`, { token });
+}

@@ -196,7 +196,17 @@
     "version": "v1.0",
     "platformTitle": "المنصة",
     "noAppsAvailable": "لا توجد تطبيقات متاحة",
-    "noAppsSubtext": "تواصل مع المسؤول للحصول على حق الوصول إلى تطبيقات المجال."
+    "noAppsSubtext": "تواصل مع المسؤول للحصول على حق الوصول إلى تطبيقات المجال.",
+    "insights": {
+      "title": "رؤى الذكاء الاصطناعي",
+      "empty": "لا توجد رؤى بعد…",
+      "error": "تعذّر تحميل الرؤى",
+      "retry": "إعادة المحاولة",
+      "severityCritical": "حرِج",
+      "severityWarning": "تحذير",
+      "severityInfo": "معلومة",
+      "markAllRead": "وضع الكل كمقروء"
+    }
   },
   "devBanner": {
     "label": "عرض مبكر",

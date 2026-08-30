@@ -144,6 +144,7 @@ RULE_23=NO IMPLEMENTATION LEAKAGE — user-facing text (UI labels, status/progre
 RULE_24=DEEPSEEK MODEL TIERING — ALL workers run V4-Flash for every task (edits, tests, classification, regex/rule synthesis, nl_check, JSON generation, CRUD, migrations, fixes). V4-Pro is reserved EXCLUSIVELY for the Master Architect role. Flash is ~3x cheaper than Pro.
 RULE_25=MAXIMIZE CACHE HITS (biggest lever) — keep a STABLE, long-lived system prompt + tool definitions at the FRONT of every LLM call; never rotate them between calls. DeepSeek prefix-cache: hit ≈ $0.007/M vs miss ≈ $0.22/M (~30x). Append new context AFTER the stable prefix, never reorder the prefix.
 RULE_26=OFF-PEAK + TOKEN DISCIPLINE — run batch/async generations outside DeepSeek peak. Egypt (UTC+3): peak = 04:00-07:00 and 09:00-13:00 Cairo; off-peak = 13:00-04:00 Cairo (half price). Cap output tokens; prefer concise structured JSON; retrieve-don't-stuff.
+RULE_27=STORAGE PATTERN (hosted apps) — owned/derived domain data = typed Django models in the app (people.Employee, emissions.Calculation); `dataschema.DataTable/DataRow` = governed measurements ONLY (inbound records whose shape another system owns). Governance audit (catalog.GovernanceEvent) is generic — fires on any entity. DQ rules+engine are decoupled; typed-field binding = `dq.ModelRuleAssignment` (model_label string, NOT ContentType/GenericForeignKey). NEVER add a generic per-row typed DQ result store — persist run-scoped summaries. See ADR 0025 + docs/STORAGE-PATTERN-HOSTED-APPS.md.
 
 ## KEY ARCHITECTURE FILES
 # Workers should read these files first when working in related areas.
@@ -168,6 +169,9 @@ EMISSIONS_SERVICES=backend/emissions/services.py
 CATALOG_MODELS=backend/catalog/models.py
 MDM_MODELS=backend/mdm/models.py
 DATASCHEMA_MODELS=backend/dataschema/models.py
+PEOPLE_MODELS=backend/people/models.py
+STORAGE_PATTERN_DOC=docs/STORAGE-PATTERN-HOSTED-APPS.md
+STORAGE_ADR=.ai-toolkit/decisions/0025-typed-vs-dataschema-storage.md
 DQ_SERVICES=backend/dq/services.py
 FRONTEND_APP=carbon-frontend/src/App.jsx
 FRONTEND_SHELL=carbon-frontend/src/shell/Shell.jsx

@@ -414,6 +414,7 @@ class CatalogService:
             "usage_count": skill.usage_count,
             "success_rate": skill.success_rate,
             "avg_latency_ms": skill.avg_latency_ms,
+            "last_executed_at": self._iso(skill.last_executed_at),
             "signature": self._parse_json(skill.signature, {}),
             "promoted_at": self._iso(skill.promoted_at),
             "promoted_by": skill.promoted_by,

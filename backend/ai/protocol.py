@@ -488,6 +488,11 @@ class ChatResponse:
     #    user, e.g. [{"execution_id": ..., "tool": "create_dq_rule", ...}]
     actions: list[dict] = field(default_factory=list)
     pending_actions: list[dict] = field(default_factory=list)
+    # C2 — calibrated confidence (Faculty 7): outcome label (high|medium|low|
+    # uncertain) derived from the turn's REAL draft confidence, plus a boolean
+    # honest-uncertainty flag from the runner's "I don't know" path.
+    confidence_label: str = ""
+    honest_uncertainty: bool = False
 
 
 # ── AIProvider ABC ──────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ Enterprise carbon emissions management platform. Django 5.2 + DRF 3.16 backend (
 - [Design — Agent Catalog](./DESIGN-AGENT-CATALOG.md)
 - [Design — Agent Execution Control & Scheduling](./DESIGN-AGENT-EXECUTION-CONTROL.md) — W6 findings F-26/F-28/F-29 (multi-agent, mid-execution edits, scheduling)
 - [Design — Domain Apps Expansion](./DESIGN-DOMAIN-APPS-EXPANSION.md)
+- [Storage Pattern — Hosted Apps](./STORAGE-PATTERN-HOSTED-APPS.md) — typed tables for owned data, `dataschema` for governed measurements (ADR 0025)
 - [Design — Export (Rich)](./DESIGN-EXPORT-RICH.md)
 - [Design — Adaptive Learning DQ Core](./DESIGN-ADAPTIVE-LEARNING-DQ-CORE.md) (proposal)
 

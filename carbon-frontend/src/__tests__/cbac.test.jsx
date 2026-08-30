@@ -283,6 +283,10 @@ describe('ROUTE_CAPABILITIES', () => {
         // The AI admin console is its own capability domain under /admin.
         if (route.startsWith('/admin/ai')) {
           expect(cap).toBe(caps.AI_VIEW_CONSOLE);
+        } else if (route === '/admin/catalog/field-policies') {
+          // Field policies live under the admin catalog but are governed by the
+          // dataschema capability (not a platform capability).
+          expect(cap).toBe(caps.DATASCHEMA_MANAGE);
         } else {
           expect(cap.startsWith('platform:')).toBe(true);
         }

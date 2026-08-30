@@ -476,10 +476,12 @@ describe('AITaskPanel — W5-D Results tab', () => {
     fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
     await screen.findByText('Task plan');
 
-    // Step outputs render on the Run view via StepOutputRenderer.
-    expect(await screen.findByText('Row')).toBeInTheDocument();
-    expect(screen.getByText('duplicate')).toBeInTheDocument();
-    expect(screen.getByText('Rule no_dupes created.')).toBeInTheDocument();
+    // Step outputs render on the Run view via StepOutputRenderer. Both the
+    // plan review card and the run's step list render completed step outputs,
+    // so assert on the set rather than a single node.
+    expect((await screen.findAllByText('Row')).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('duplicate').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Rule no_dupes created.').length).toBeGreaterThanOrEqual(1);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
 

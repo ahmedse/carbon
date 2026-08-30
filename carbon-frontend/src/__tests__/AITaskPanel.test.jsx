@@ -139,7 +139,7 @@ describe('AITaskPanel — two internal tabs (RULE_17)', () => {
     expect(screen.getByRole('tab', { name: 'Tasks' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Run' })).toBeInTheDocument();
 
-    expect(screen.getByText('Plan a task')).toBeInTheDocument();
+    expect(screen.getByLabelText('Message input')).toBeInTheDocument();
     expect(await screen.findByText('Audit the emissions dataset for duplicates.')).toBeInTheDocument();
   });
 

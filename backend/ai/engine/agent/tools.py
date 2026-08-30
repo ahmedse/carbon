@@ -4,6 +4,7 @@ Tool definitions and execution functions for the Pulse agent.
 import json
 import logging
 import re
+import time
 
 from ai.engine.agent.plugins import load_plugins
 from ai.engine.core.config import get_settings
@@ -1366,6 +1367,7 @@ async def execute_invoke_skill(
     author_user_id = _author_user_id_from_token(executor.user_token)
     args = args or {}
 
+    started = time.monotonic()
     registry = SkillRegistry(executor.db)
     matches = await registry.search(instance_id, author_user_id, skill_name)
     skill = next((s for s in matches if s.name == skill_name), None)
@@ -1402,17 +1404,27 @@ async def execute_invoke_skill(
     else:
         result = {"kind": skill.kind, "body": body, "args_passed": args}
 
-    # Usage tracking — increment on the persisted row after a successful invoke.
-    skill.usage_count = (skill.usage_count or 0) + 1
-    await executor.db.commit()
+    # Usage tracking — record FULL telemetry (usage_count, success_rate,
+    # avg_latency_ms, last_executed_at) after a successful invoke. SkillsStore
+    # commits internally, so snapshot the scalar fields before the commit and
+    # never mutate the (now-stale) skill object afterward.
+    from ai.engine.skills.crud import SkillsStore
 
-    logger.info("invoke_skill: %s (%s, %s) used by %s", skill.id, skill.name, skill.kind, author_user_id)
+    skill_id = skill.id
+    skill_name_out = skill.name
+    skill_kind = skill.kind
+    elapsed_ms = (time.monotonic() - started) * 1000
+    await SkillsStore(executor.db).update_stats(
+        skill_id, success=True, latency_ms=elapsed_ms
+    )
+
+    logger.info("invoke_skill: %s (%s, %s) used by %s", skill_id, skill_name_out, skill_kind, author_user_id)
     return {
-        "skill_id": skill.id,
-        "skill_name": skill.name,
-        "kind": skill.kind,
+        "skill_id": skill_id,
+        "skill_name": skill_name_out,
+        "kind": skill_kind,
         "result": result,
-        "message": f"Invoked skill '{skill.name}' — returned its recipe as data; nothing was executed.",
+        "message": f"Invoked skill '{skill_name_out}' — returned its recipe as data; nothing was executed.",
     }
 
 

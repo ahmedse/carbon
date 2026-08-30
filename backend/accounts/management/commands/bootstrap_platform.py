@@ -152,6 +152,16 @@ APP_DEFS = [
         "is_enabled": True,
         "display_order": 7,
     },
+    {
+        "app_id": "people",
+        "is_enabled": True,  # Nibras instance — People & Payroll active
+        "display_order": 20,
+    },
+    {
+        "app_id": "healthy",
+        "is_enabled": True,  # Nibras instance — Healthy active
+        "display_order": 30,
+    },
 ]
 
 

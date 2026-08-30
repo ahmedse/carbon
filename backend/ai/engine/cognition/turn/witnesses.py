@@ -104,3 +104,6 @@ class TurnLedger:
     # P3.4 — Budget tracking
     budget_snapshot: dict | None = None  # {budget, consumed, remaining, exceeded, justification}
     budget_exceeded: bool = False
+    # C1 — adaptive reasoning lane: records any escalation to the reason model.
+    # {trigger, from_model, to_model, verdict_before, verdict_after}
+    reason_escalation: dict | None = None

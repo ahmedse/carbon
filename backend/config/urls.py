@@ -85,6 +85,7 @@ urlpatterns = [
     path(f'{api_prefix}/apps/', include('appregistry.urls')),
     path(f'{api_prefix}/integrations/turnkey/', include('integrations.turnkey.urls')),
     path(f'{api_prefix}/healthy/', include('healthy.urls')),
+    path(f'{api_prefix}/people/', include('people.urls')),
     path(f'{api_prefix}/ai/workspace/', include('ai.workspace_urls')),
     path(f'{api_prefix}/ai/plans/', include('ai.plans_urls')),
     path(f'{api_prefix}/ai/catalog/', include('ai.catalog_urls')),
@@ -93,6 +94,7 @@ urlpatterns = [
     path(f'{api_prefix}/ai/profile/', ai_workspace_views.UserProfileView.as_view(), name='ai-user-profile'),
     path(f'{api_prefix}/ai/memory/', include('ai.memory_urls')),
     path(f'{api_prefix}/ai/pulse/', include('ai.ops_urls')),
+    path(f'{api_prefix}/ai/insights/', include('ai.insights_urls')),
     path(f'{api_prefix}/', include('evidence.urls')),
 ]
 

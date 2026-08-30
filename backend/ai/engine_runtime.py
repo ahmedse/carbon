@@ -151,6 +151,38 @@ async def _run_chat(
         # metric is measurable from the turn_ledger (observability surface).
         await _record_truthfulness_gate(db=db, ledger=ledger, anti_flags=anti_flags)
 
+        # C2 — surface calibrated confidence (Faculty 7): prefer the runner's
+        # OWN label (it already maps clarify/disambiguate short-circuits →
+        # "medium") and only fall back to the raw draft score on the normal
+        # answer path. Honest uncertainty fires on the critic "I don't know"
+        # path OR when the intent resolver short-circuited to a clarification
+        # (conf≈0) — both are "not a confident answer" states, never a bluff
+        # (RULE_23 — outcome words only, no raw floats or critic internals).
+        _draft = getattr(ledger, "draft", None)
+        _critic = getattr(ledger, "critic", None)
+        _critic_verdict = (getattr(_critic, "verdict", "") or "").strip()
+        _critic_flags = getattr(_critic, "flags", None) or []
+        # The critic is the quality gate. A VETO verdict means the answer was
+        # REJECTED as unsupported — it can NEVER surface as confident,
+        # regardless of the draft's self-reported confidence float. Note: the
+        # "ungrounded_claim" FLAG is advisory (the critic also attaches it to
+        # `pass` verdicts for general-knowledge answers it cannot ground
+        # against retrieval) — only the verdict is a rejection, so only `veto`
+        # forces uncertainty. `knowledge_gap` (honest "I don't know") and the
+        # clarify short-circuit are handled as their own honest states below.
+        if _critic_verdict == "veto":
+            confidence_label = "uncertain"
+            honest_uncertainty = True
+        else:
+            confidence_label = response.confidence_label or _confidence_label(
+                getattr(_draft, "confidence", None)
+            )
+            honest_uncertainty = bool(
+                getattr(_draft, "model_used", "") == "honest_uncertainty"
+                or "knowledge_gap" in _critic_flags
+                or response.response_type == "clarification"
+            )
+
         return {
             "status": "completed",
             "task_id": task_id,
@@ -164,6 +196,10 @@ async def _run_chat(
                 # the workspace layer can reflect it and QA can assert on it.
                 "truthfulness_flags": list(anti_flags),
                 "truthful": not anti_flags,
+                # C2 — calibrated confidence (Faculty 7): outcome-shaped signal
+                # for the frontend confidence indicator + honest-uncertainty state.
+                "confidence_label": confidence_label,
+                "honest_uncertainty": honest_uncertainty,
                 # Phase 21-A: surface per-turn usage so the workspace layer
                 # can persist it on the generation at completion (cost is
                 # computed from the ModelCatalog, never here).
@@ -204,6 +240,24 @@ async def _record_truthfulness_gate(db, ledger, anti_flags: list[str]) -> None:
         )
     except Exception as exc:  # pragma: no cover — best-effort observability
         logger.warning("Failed to record truthfulness gate flags: %s", exc)
+
+
+def _confidence_label(score: float | None) -> str:
+    """Map a 0.0-1.0 confidence score to an outcome label (RULE_23).
+
+    ``high | medium | low | uncertain`` — mirrors the agent's confidence
+    ladder so the frontend can render a calibrated indicator without ever
+    seeing a raw float or critic internals.
+    """
+    if score is None:
+        return ""
+    if score >= 0.8:
+        return "high"
+    if score >= 0.6:
+        return "medium"
+    if score >= 0.35:
+        return "low"
+    return "uncertain"
 
 
 # ── Chat tool-action surfacing (Sprint "fly to rule detail") ──────────────

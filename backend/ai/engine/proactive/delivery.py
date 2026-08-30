@@ -14,6 +14,7 @@ from datetime import timedelta
 from ai.engine.core.clock import utcnow
 
 from ai.engine.core.config import get_settings
+from ai.engine.core.event_bus import build_event_frame, events_channel, publish
 from ai.engine.cognition.notifier import create_notification, push_to_subscribers
 from ai.engine.core.models import Notification, generate_uuid
 from ai.engine.knowledge_graph.models import KgProactiveInsight
@@ -48,6 +49,10 @@ async def deliver_insight(
 
     insight = KgProactiveInsight(
         instance_id=instance_id,
+        # Instance-level insight (not user-private) → visible to authenticated
+        # carbon users. The Django store copies this onto the persisted row so
+        # the read boundary (scope_ai_queryset) admits it (Phase A3).
+        visibility="shared",
         trigger_id=trigger_id,
         insight_type=insight_data.get("insight_type", "threshold_alert"),
         severity=severity,
@@ -169,9 +174,64 @@ def _get_relevant_pages(insight_type: str) -> list[str]:
 
 # ── Push mechanisms ──────────────────────────────────────────────────────────
 
+def _parse_json_field(value, default):
+    """Parse a JSON-text column, tolerating already-decoded / None values."""
+    if value is None:
+        return default
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return default
+    return value
+
+
+def _build_insight_frame(instance_id: str, insight: KgProactiveInsight) -> dict:
+    """Build the OUTCOME-shaped ``insight.new`` bus frame (RULE_23).
+
+    Carries only OUTCOME fields plus the CBAC scoping fields the SSE endpoint
+    needs to filter — never engine internals (trigger_id, delivery_channel,
+    channel names, instance_id, etc.).
+    """
+    return build_event_frame(
+        "insight.new",
+        instance_id,
+        {
+            "id": insight.id,
+            "title": insight.title,
+            "narrative": insight.narrative,
+            "severity": insight.severity,
+            "insight_type": insight.insight_type,
+            "recommended_actions": _parse_json_field(
+                insight.recommended_actions_json, []
+            ),
+            "context": _parse_json_field(insight.context_json, {}),
+            "disposition": insight.disposition,
+            "created_at": (
+                insight.created_at.isoformat()
+                if insight.created_at
+                else utcnow().isoformat()
+            ),
+            # CBAC scoping fields — instance-level insight, visible to
+            # authenticated carbon users (org narrowing at the read boundary).
+            "visibility": getattr(insight, "visibility", None) or "shared",
+            "org_unit_id": getattr(insight, "org_unit_id", None),
+            "host_user_id": getattr(insight, "host_user_id", None),
+            "app_identifier": getattr(insight, "app_identifier", None) or "carbon",
+        },
+    )
+
+
 async def _push_websocket(db, instance_id: str, insight: KgProactiveInsight):
-    """Push insight to connected WebSocket clients."""
+    """Push insight to connected WebSocket clients and the Redis event bus.
+
+    The Redis publish (Phase A3) happens first so cross-process SSE
+    subscribers receive the insight even when there are no in-process WS
+    subscribers; the in-process fan-out below is preserved unchanged.
+    """
     from ai.engine.cognition.notifier import _subscribers
+
+    await publish(events_channel(), _build_insight_frame(instance_id, insight))
 
     subscribers = _subscribers.get(instance_id, set())
     if not subscribers:

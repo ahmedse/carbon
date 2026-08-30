@@ -556,6 +556,26 @@ HEALTHY_MANAGE = Capability(
     category="admin",
 )
 
+# ── People & Payroll capabilities (Phase NIR-1C) ───────────────────
+
+PEOPLE_VIEW = Capability(
+    key="people:view",
+    domain="people",
+    action="view",
+    label="View People",
+    description="Browse compliance rules, employees, payroll runs, and payslip lines",
+    category="data",
+)
+
+PEOPLE_MANAGE = Capability(
+    key="people:manage",
+    domain="people",
+    action="manage",
+    label="Manage People",
+    description="Create/update compliance rules, employees, and payroll runs",
+    category="admin",
+)
+
 
 # ═══════════════════════════════════════════════════════════════════
 # ALL CAPABILITIES — master registry
@@ -630,6 +650,9 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     # Healthy Foods Factory
     HEALTHY_VIEW.key: HEALTHY_VIEW,
     HEALTHY_MANAGE.key: HEALTHY_MANAGE,
+    # People & Payroll
+    PEOPLE_VIEW.key: PEOPLE_VIEW,
+    PEOPLE_MANAGE.key: PEOPLE_MANAGE,
 }
 
 
@@ -712,6 +735,9 @@ IMPLIES: Dict[str, Set[str]] = {
     # ── Healthy manage → view ──
     HEALTHY_MANAGE.key: {HEALTHY_VIEW.key},
 
+    # ── People manage → view ──
+    PEOPLE_MANAGE.key: {PEOPLE_VIEW.key},
+
     # ── AI admin → view ──
     AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key},
 }
@@ -793,6 +819,7 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         TURNKEY_VIEW.key,
         APPREGISTRY_VIEW.key,
         HEALTHY_VIEW.key,
+        PEOPLE_VIEW.key,
         # PII field visibility (EPH-4A)
         CATALOG_VIEW_PII.key,
     },
@@ -819,6 +846,7 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         TURNKEY_VIEW.key,
         APPREGISTRY_VIEW.key,
         HEALTHY_VIEW.key,
+        PEOPLE_VIEW.key,
     },
 
     # ── Viewers (org-scoped read-only) ──
@@ -839,6 +867,7 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         TURNKEY_VIEW.key,
         APPREGISTRY_VIEW.key,
         HEALTHY_VIEW.key,
+        PEOPLE_VIEW.key,
     },
 
     # ── Auditors (org-scoped read + audit) ──
@@ -861,6 +890,7 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         TURNKEY_VIEW.key,
         APPREGISTRY_VIEW.key,
         HEALTHY_VIEW.key,
+        PEOPLE_VIEW.key,
     },
 }
 

@@ -13,7 +13,18 @@ vi.mock('../api/notifications', () => ({
   markAllRead: vi.fn(),
 }));
 
+vi.mock('../api/insights', () => ({
+  listInsights: vi.fn(),
+  postDisposition: vi.fn(),
+}));
+
+vi.mock('../api/api', () => ({
+  apiFetchStream: vi.fn(),
+}));
+
 import { getNotifications, getUnreadCount, markRead, markAllRead } from '../api/notifications';
+import { listInsights } from '../api/insights';
+import { apiFetchStream } from '../api/api';
 import HeaderEnhanced from '../components/HeaderEnhanced';
 
 function renderHeaderEnhanced() {
@@ -54,6 +65,14 @@ beforeEach(() => {
   getUnreadCount.mockResolvedValue({ unread_count: 1 });
   markRead.mockResolvedValue({ detail: 'ok', id: 1 });
   markAllRead.mockResolvedValue({ detail: 'ok', count: 1 });
+  listInsights.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
+  apiFetchStream.mockResolvedValue({
+    body: new ReadableStream({
+      start(controller) {
+        controller.close();
+      },
+    }),
+  });
 });
 
 describe('NotificationCenter', () => {

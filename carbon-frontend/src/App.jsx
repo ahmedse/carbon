@@ -96,6 +96,7 @@ const AgentsPanel = React.lazy(() => import("./pages/admin/ai/AgentsPanel"));
 const McpServersPanel = React.lazy(() => import("./pages/admin/ai/McpServersPanel"));
 const ToolsPanel = React.lazy(() => import("./pages/admin/ai/ToolsPanel"));
 const SkillsPanel = React.lazy(() => import("./pages/admin/ai/SkillsPanel"));
+const SkillLearningPanel = React.lazy(() => import("./pages/admin/ai/SkillLearningPanel"));
 const PulseArchetypesPanel = React.lazy(() => import("./pages/admin/ai/PulseArchetypesPanel"));
 const BudgetUsagePanel = React.lazy(() => import("./pages/admin/ai/BudgetUsagePanel"));
 const EngineSettingsPanel = React.lazy(() => import("./pages/admin/ai/EngineSettingsPanel"));
@@ -114,6 +115,7 @@ const LoadoutSheetPage = React.lazy(() => import("./apps/healthy/LoadoutSheetPag
 const RepHealthPage = React.lazy(() => import("./apps/healthy/RepHealthPage"));
 const ARQueuePage = React.lazy(() => import("./apps/healthy/ARQueuePage"));
 const SlowMoversPage = React.lazy(() => import("./apps/healthy/SlowMoversPage"));
+const PeopleHome = React.lazy(() => import("./apps/people/PeopleHome"));
 
 import PlatformHome from "./pages/PlatformHome";
 
@@ -274,6 +276,8 @@ export default function App() {
                 <Route path="/apps/healthy/reps" element={<RepHealthPage />} />
                 <Route path="/apps/healthy/collections" element={<ARQueuePage />} />
                 <Route path="/apps/healthy/inventory" element={<SlowMoversPage />} />
+                {/* People app — Nibras HR & payroll. Bare namespace root resolves to PeopleHome. RULE_22. */}
+                <Route path="/people" element={<PeopleHome />} />
                 {/* Schema Manager decommissioned — schema authoring lives in Data Products (SchemaDetailPage). */}
                 {/* Namespace root redirect — bare /schema-admin root. RULE_22. */}
                 <Route path="/schema-admin" element={<Navigate to="/catalog/products" replace />} />
@@ -373,6 +377,7 @@ export default function App() {
                 <Route path="/admin/ai/feedback" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><FeedbackPanel /></AdminRoute>} />
                 <Route path="/admin/ai/learning" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LearningJobsPanel /></AdminRoute>} />
                 <Route path="/admin/ai/learning-flywheel" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><LearningFlywheelPanel /></AdminRoute>} />
+                <Route path="/admin/ai/skill-learning" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><SkillLearningPanel /></AdminRoute>} />
                 <Route path="/admin/ai/monitoring" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><MonitoringPanel /></AdminRoute>} />
                 <Route path="/admin/ai/output-quality" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><OutputQualityPanel /></AdminRoute>} />
                 <Route path="/admin/ai/audit" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AuditPanel /></AdminRoute>} />

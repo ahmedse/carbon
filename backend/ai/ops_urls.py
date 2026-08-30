@@ -35,12 +35,14 @@ from ai.ops_api import (
     PulseHealthView,
     PulseModulesView,
     PulseTaskStatusView,
+    SkillsTelemetryView,
 )
 from ai.sweeps_api import SweepsStatusView
 
 urlpatterns = [
     path("health/", PulseHealthView.as_view(), name="ai-pulse-health"),
     path("modules/", PulseModulesView.as_view(), name="ai-pulse-modules"),
+    path("skills/", SkillsTelemetryView.as_view(), name="ai-pulse-skills"),
     path("tasks/<str:task_id>/", PulseTaskStatusView.as_view(), name="ai-pulse-task-status"),
     path("inventory/", PulseInventoryView.as_view(), name="ai-pulse-inventory"),
     path("data/<str:key>/", PulseDataView.as_view(), name="ai-pulse-data"),

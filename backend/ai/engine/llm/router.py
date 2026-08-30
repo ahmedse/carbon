@@ -45,6 +45,10 @@ def _load_task_model_map() -> dict[str, str]:
     _TASK_MODEL_MAP = {
         "chat": settings.LLM_NORMAL_MODEL or settings.LLM_MODEL,
         "deep": settings.LLM_MODEL,
+        # Adaptive reasoning lane (C1): genuinely hard problems (deep salience
+        # or a knowledge_gap) escalate here. Falls back through the legacy
+        # escalation model to the deep/fallback model when unset.
+        "reason": settings.LLM_REASON_MODEL or settings.LLM_ESCALATION_MODEL or settings.LLM_MODEL,
         "cognition": settings.LLM_COGNITION_MODEL or settings.LLM_MODEL,
         "introspect": settings.LLM_INTROSPECT_MODEL or settings.LLM_NORMAL_MODEL or settings.LLM_MODEL,
         "eval": settings.EVAL_MODEL or settings.LLM_MODEL,
@@ -202,7 +206,7 @@ async def route_chat(
     """Route an LLM call by task type, logging cost and enforcing budget.
 
     Args:
-        task:         One of 'chat', 'deep', 'cognition', 'introspect', 'eval'.
+        task:         One of 'chat', 'deep', 'reason', 'cognition', 'introspect', 'eval'.
         instance_id:  Pulse instance ID.
         conversation_id: Conversation UUID.
         messages:     OpenAI-format message list.

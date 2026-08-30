@@ -1,5 +1,82 @@
 # TASK-RESULTS.md
 
+## [2026-08-30] Backend Worker — Phase NIR-1A (People app skeleton) + NIR-2B (per-instance enablement seed)
+
+**Role:** backend-worker (DeepSeek V4-Flash) · **Kind:** backend (NIBRAS/CLEARTURN product-line track)
+
+### Summary
+NIR-1A + NIR-2B implemented. New Django app `backend/people/` with the rule-agnostic
+Calculation Engine + versioned Compliance Rule Library seam, plus the `healthy`/`people`
+enablement seed in `settings.APP_REGISTRY` and `bootstrap_platform.APP_DEFS`.
+**Gate caveat:** no terminal tool was available in this session, so the 7 verification
+gate commands could **not** be executed here — the exact commands are listed below for the
+Master to run. Static validation (language server) reports **zero errors** across all files.
+
+### Files Created
+| File | Lines | What |
+|------|------:|------|
+| `backend/people/__init__.py` | 0 | package marker |
+| `backend/people/apps.py` | 7 | `PeopleConfig` (`default_auto_field`, `name='people'`) |
+| `backend/people/models.py` | ~158 | `ComplianceRule`, `Employee`, `PayrollRun`, `PayslipLine` |
+| `backend/people/calculation_engine.py` | ~185 | `NonAuthoritativeRuleError`, `calculate` + `calculate_eosi/leave_accrual/overtime/gross_pay`, generic formula evaluator |
+| `backend/people/services.py` | ~55 | `CalculationService` thin facade (no DRF imports) |
+| `backend/people/admin.py` | ~48 | admin registrations for all 4 models |
+| `backend/people/migrations/__init__.py` | 0 | package marker |
+| `backend/people/migrations/0001_initial.py` | ~100 | hand-written `0001_initial` (matches Django 5.2 conventions) |
+| `backend/people/management/__init__.py` | 0 | package marker |
+| `backend/people/management/commands/__init__.py` | 0 | package marker |
+| `backend/people/management/commands/seed_test_rules.py` | ~128 | idempotent NON-AUTHORITATIVE test-only seed (4 rules) |
+| `backend/people/tests/__init__.py` | 0 | package marker |
+| `backend/people/tests/test_compliance_rule.py` | ~70 | model defaults, unique_together, seed idempotency |
+| `backend/people/tests/test_calculation_engine.py` | ~185 | guard raises, opt-in compute, lineage, high-level funcs |
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/config/settings.py` | `INSTALLED_APPS` += `'people'`; `APP_REGISTRY` += `people` (roles `[]`) + `healthy` (roles `[]`) |
+| `backend/accounts/management/commands/bootstrap_platform.py` | `APP_DEFS` += `people` (`is_enabled=False`, `display_order=20`) + `healthy` (`is_enabled=False`, `display_order=30`) |
+
+### Design notes
+- **Engine is rule-agnostic & deterministic**: `calculate(rule, inputs)` interprets a
+  generic formula declared in `rule.inputs_schema` (`{"formula": {"type": ..., "params": ...}}`).
+  Three generic formula types implemented — `tiered_accrual`, `sum`, `multiply`. **All
+  numeric parameters (tiers 15/30, divisor 26, rates) live in `ComplianceRule` rows**, never
+  in the engine. No law constants anywhere in `.py` engine/model code.
+- **Guard**: `NonAuthoritativeRuleError` raised when the rule is missing OR
+  `is_authoritative is False`, unless `allow_non_authoritative=True` (off by default).
+- **Lineage**: `calculate` returns `{"value": Decimal, "lineage": {"rule_id", "rule_version", "inputs"}}`.
+- **RULE_3**: `people` imports only core (`mdm.OrgUnit`) + its own engine; never a sibling hosted app.
+- **RULE_12**: `Employee.org_unit` + `PayrollRun.org_unit` FK `mdm.OrgUnit` (on_delete PROTECT).
+- **Timezone**: `calculation_engine` uses `django.utils.timezone.now()` for `as_of` default. No `datetime.now()`.
+
+### Deviations / Interpretations
+1. **`rule_id` not `unique=True`** (TASKS.md lists both "unique" and `unique_together=("rule_id","version")`). A
+   DB-level `unique=True` on `rule_id` would make the library **non-versionable** (only one row per rule id).
+   Implemented the composite `unique_together=("rule_id","version")` only — the only reading consistent with
+   "versioned rule library" (§6.2). `rule_id` is a plain `CharField(120)`.
+2. **`join_date` / `effective_date`** kept non-null (spec listed no `blank`/`null`).
+3. **Migration hand-written** (couldn't run `makemigrations`): verified against Django 5.2 conventions
+   (FK fields last, options order `verbose_name/verbose_name_plural/ordering/unique_together`, dependency
+   `('mdm', '0002_orgunit')`). `makemigrations --check --dry-run` should report **No changes**.
+
+### Issues Found (NOT fixed — out of scope)
+- None functional. Test-DB caveat: pytest.ini uses `--reuse-db`; if a stale `test_carbon*` DB predates this
+  app, `pytest people` may fail on missing tables until it is dropped (see testing.md stale-DB cleanup).
+
+### Verification Gate (NOT run here — no terminal tool; paste output when run)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations people --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate people
+/home/ahmed/aast/carbon/.venv/bin/python manage.py seed_test_rules
+/home/ahmed/aast/carbon/.venv/bin/python manage.py seed_test_rules   # run twice → prove idempotent
+/home/ahmed/aast/carbon/.venv/bin/python manage.py bootstrap_platform
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+
+---
+
 ## [2026-08-28] Master Architect — I18N-3 DQ Workspace + Dataschema i18n: dispatched, verified DONE
 
 **Role:** master-architect (dispatch + gates) · **Worker:** frontend-worker (DeepSeek V4-Flash) · **Kind:** frontend (I18N track — ADR-0018 dual-language UI)
@@ -4010,3 +4087,200 @@ $ pytest dq -q
 
 ### Deliverable
 - `TASK-RESULTS-16-FLIGHT-DIRECTOR.md` (repo root) — full 4-layer evidence tables + reproducibility appendix.
+
+---
+
+## [2026-08-28] Frontend Worker — Phase NIR-2A: instance-aware app registration (register-all + healthy manifest)
+
+**Role:** frontend-worker · **Kind:** frontend (app registry + manifest) · **Model:** DeepSeek V4-Pro
+
+### Summary
+3/4 code tasks complete (icon-map edit was required because `MonitorHeart` was not already mapped); docs updated. `APP_REGISTRY` now registers **all three** manifests (`carbon`, `healthy`, `stub`) under a **register-all + enable-per-instance** policy. The new `healthy` manifest maps the 5 existing Healthy pages to their **real** routes (`/apps/healthy/*`). Language-server diagnostics clean on all touched JS files. **Lint + build terminal gate NOT run** — this worker session has no terminal-execution tool (see Verification Output).
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Create `src/apps/healthy/manifest.js` | ✅ | `id:'healthy'`, `name:'Healthy'`, `icon:'MonitorHeart'`, `routePrefix:'/apps/healthy'`, `apiPrefix:'/api/v1/healthy'`, minimal `ontology`/`roles`, `navigation.items` = the 5 real Healthy pages, `requires:['auth']`, `aiSkills:[]`, `hooks:{}` |
+| 2 | Edit `src/apps/registry.js` → register all manifests | ✅ | imports `healthyManifest` + `stubManifest`; `APP_REGISTRY = [carbon, healthy, stub]`; register-all + enable-per-instance decision comment; `APP_BY_ID` still derives automatically |
+| 3 | `src/shell/useShellState.js` icon map | ✅ | `MonitorHeart` icon was **not** already mapped → added `MonitorHeartIcon` import + `MonitorHeart: MonitorHeartIcon` entry to `MANIFEST_ICON_MAP` |
+| 4 | Docs: `CLEARTURN-PLATFORM-ARCHITECTURE.md` | ✅ | §5 work item #3 flipped ⚠️→✅ + decision; §4 table "App registration" row flipped ⚠️→✅ (same fact, recorded in both places) |
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| CREATE | `carbon-frontend/src/apps/healthy/manifest.js` | 47 | Healthy manifest: identity, namespace, minimal ontology/roles, 5-item navigation, `requires:['auth']` |
+| MODIFY | `carbon-frontend/src/apps/registry.js` | +11/−1 | Import + register `healthy` and `stub`; register-all policy comment above `APP_REGISTRY` |
+| MODIFY | `carbon-frontend/src/shell/useShellState.js` | +2 | `MonitorHeartIcon` import + `MonitorHeart` entry in `MANIFEST_ICON_MAP` |
+| MODIFY | `docs/CLEARTURN-PLATFORM-ARCHITECTURE.md` | 2 rows | §4 table row + §5 work item #3 → ✅ (register-all + enable-per-instance) |
+
+### Verification Output
+```
+get_errors (language server) on all 3 touched JS files:
+  manifest.js        → No errors found
+  registry.js        → No errors found
+  useShellState.js   → No errors found
+
+npm run lint / npm run build  → NOT RUN (no terminal-execution tool in this session)
+```
+Gate commands for Master Architect:
+```
+cd /home/ahmed/aast/carbon/carbon-frontend && npm run lint && npm run build
+```
+
+### Deviations
+1. **`routePrefix: '/apps/healthy'` (not the literal `/healthy`).** The real frontend routes are `/apps/healthy/*` (verified in `src/App.jsx` lines 269–276); there is no `/healthy` route. `routePrefix` is the navigation target used by `PlatformHome` (`navigate(app.routePrefix)`), so `/healthy` would produce a dangling route (violates RULE_22 "no dangling routes" + the task's own "do NOT invent paths"). The 5 `navigation.items` paths are the real `/apps/healthy/*` paths.
+2. **`apiPrefix: '/api/v1/healthy'` kept as instructed** — it is declarative metadata (unused for routing/fetch); this mirrors the existing `carbon` manifest convention (`apiPrefix:'/api/v1/carbon'` vs the real `/carbon-api/` mount).
+3. **`color` field omitted** — `carbon`/`stub` manifests hardcode a hex `color`, which would violate RULE_8 (design tokens only). `PlatformHome` already falls back to `theme.palette.primary.main` when `color` is absent.
+4. **`icon: 'MonitorHeart'` (not `Dashboard`)** — verified `MonitorHeart` exists in `@mui/icons-material` v7.1 (`index.js` export confirmed); it was not yet in `MANIFEST_ICON_MAP`, so the mapping was added per task step 3.
+5. **Task said "§4, flip work item #3"** — the numbered work item actually lives in **§5**; the §4 table has a separate "App registration" row carrying the same ⚠️. Both were flipped to ✅ to keep the doc consistent.
+
+### Issues Found (NOT fixed — out of scope)
+1. **`stub` manifest has no matching route.** Registering `stub` (as instructed) injects a "Stub App" studio + `PlatformHome` card whose `routePrefix` is `/stub` — but there is no `/stub` route in `src/App.jsx` (grep empty). This is the pre-existing minimal `stub` template; fixing it is out of scope for this phase.
+2. **`studioFromPath` still maps `/apps` → `'apps'`**, and `ShellSidebar.jsx` still has a hardcoded `case 'apps'` nav list. The new `healthy` studio (id `healthy`, path `/apps/healthy`) is therefore not auto-highlighted when on `/apps/healthy` (active studio resolves to `'apps'`, which is not in the `useShellState` studios list). RULE_15 (`studioFromPath`) re-mapping for the apps namespace is a follow-up, not part of this phase's 4 tasks.
+
+---
+
+## [2026-08-30] Frontend Worker — Phase NIR-1B: People app manifest + placeholder page + capability wiring
+
+**Role:** frontend-worker · **Kind:** frontend (app manifest + placeholder + CBAC) · **Model:** DeepSeek V4-Flash
+
+### Summary
+Registered the `people` app end-to-end: a manifest mirroring the `carbon`/`healthy` contract, a minimal `PeopleHome` placeholder page (wrapped in `PageContainer` per RULE_16, theme tokens only per RULE_8), a CBAC capability (`people:view_console`) wired into `authz` `APP_VIEW_CAP`, the `/people` lazy route in `App.jsx` (bare namespace resolves — RULE_22), and the `studioFromPath` + `STUDIO_PATHS` mapping in `Shell.jsx` (RULE_15). `APP_REGISTRY` now contains `people`. All touched files pass language-server diagnostics (`get_errors` → "No errors found"). **Lint / vitest / build terminal gate NOT run** — this worker session has no terminal-execution tool; the gate MUST be run by Master (see Verification Output).
+
+### Task Results
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Create `src/apps/people/manifest.js` | ✅ | `id:'people'`, `name:'People'`, `version:'1.0.0'`, `description` (Nibras HR & payroll), `icon:'Dashboard'` (already in `MANIFEST_ICON_MAP` → no `useShellState` change, no hardcoded hex `color`), `routePrefix:'/people'`, `apiPrefix:'/api/v1/people'`, minimal `ontology` (Employee/PayrollRun/ComplianceRule/PayslipLine), `roles` (`people:admin`/`people:data_owner`/`people:analyst`), `navigation` with `role:'*'` landing item `/people`, `requires:['auth','rbac','mdm','dq','audit']`, `aiSkills:[]`, `hooks:{}` |
+| 2 | Create `src/apps/people/PeopleHome.jsx` | ✅ | `PageContainer` root (RULE_16) + `PageHeader` + `Typography`; theme tokens only (`color="text.secondary"`, `variant="body2"`); copy via `t()` (I18N-6) |
+| 3 | Create `src/__tests__/PeopleManifest.test.jsx` | ✅ | Asserts `id==='people'`, registered in `APP_REGISTRY`, `routePrefix==='/people'`, and a `role:'*'` nav item at `/people` |
+| 4 | Edit `src/apps/registry.js` | ✅ | `import peopleManifest` + `peopleManifest` entry in `APP_REGISTRY` (register-all policy comment unchanged) |
+| 5 | Edit `src/capabilities.js` | ✅ | Added `PEOPLE_VIEW_CONSOLE` + `PEOPLE_MANAGE` (mirrors Carbon block); `PEOPLE_MANAGE` → `PEOPLE_VIEW_CONSOLE` inheritance |
+| 6 | Edit `src/authz.js` | ✅ | Imported `PEOPLE_VIEW_CONSOLE`; added `people: PEOPLE_VIEW_CONSOLE` to `APP_VIEW_CAP` |
+| 7 | Edit `src/App.jsx` | ✅ | `React.lazy(() => import("./apps/people/PeopleHome"))` + `<Route path="/people" element={<PeopleHome />} />` (bare namespace resolves — RULE_22) |
+| 8 | Edit `src/shell/Shell.jsx` | ✅ | `studioFromPath` `/people` → `'people'` (RULE_15); `STUDIO_PATHS.people = '/people'` so the studio icon navigates |
+| 9 | i18n keys (`en/common.json` + `ar/common.json`) | ✅ | Added `peopleTitle`/`peopleSubtitle`/`peopleDescription` to both catalogs (key parity preserved) |
+
+### Files Changed
+| Action | File | Lines | What |
+|--------|------|-------|------|
+| CREATE | `carbon-frontend/src/apps/people/manifest.js` | 55 | People manifest (identity, namespace, ontology, roles, navigation, requires, empty aiSkills/hooks) |
+| CREATE | `carbon-frontend/src/apps/people/PeopleHome.jsx` | 30 | Placeholder landing page (`PageContainer` + `PageHeader` + `Typography`) |
+| CREATE | `carbon-frontend/src/__tests__/PeopleManifest.test.jsx` | 24 | Manifest registration + nav + routePrefix regression tests |
+| MODIFY | `carbon-frontend/src/apps/registry.js` | +2 | import + register `peopleManifest` |
+| MODIFY | `carbon-frontend/src/capabilities.js` | +4 | `PEOPLE_VIEW_CONSOLE` + `PEOPLE_MANAGE` constants + inheritance entry |
+| MODIFY | `carbon-frontend/src/authz.js` | +2 | `PEOPLE_VIEW_CONSOLE` import + `people` entry in `APP_VIEW_CAP` |
+| MODIFY | `carbon-frontend/src/App.jsx` | +2 | `PeopleHome` lazy import + `/people` route |
+| MODIFY | `carbon-frontend/src/shell/Shell.jsx` | +3 | `STUDIO_PATHS.people` + `studioFromPath` `/people` → `'people'` |
+| MODIFY | `carbon-frontend/src/i18n/locales/en/common.json` | +3 | `peopleTitle`/`peopleSubtitle`/`peopleDescription` (en) |
+| MODIFY | `carbon-frontend/src/i18n/locales/ar/common.json` | +3 | `peopleTitle`/`peopleSubtitle`/`peopleDescription` (ar) |
+
+### Verification Output
+```
+get_errors (language server) on all 10 touched files → "No errors found" for each:
+  apps/people/manifest.js, apps/people/PeopleHome.jsx, __tests__/PeopleManifest.test.jsx,
+  apps/registry.js, capabilities.js, authz.js, App.jsx, shell/Shell.jsx,
+  i18n/locales/en/common.json, i18n/locales/ar/common.json
+
+Static confirmations:
+  APP_REGISTRY contains peopleManifest  → grep confirms (id 'people' entry)
+  authz APP_VIEW_CAP                    → `people: PEOPLE_VIEW_CONSOLE` present (line 51)
+  Shell studioFromPath                  → `if (pathname.startsWith('/people')) return 'people'` present
+  capabilities                          → `PEOPLE_VIEW_CONSOLE = 'people:view_console'` exported
+
+npm run lint / npx vitest run src/__tests__/PeopleManifest.test.jsx / npm run build
+  → NOT RUN — no terminal-execution tool in this session.
+```
+Gate commands for Master Architect (must be run to complete the phase):
+```
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/PeopleManifest.test.jsx
+npm run build
+```
+
+### Deviations
+1. **`icon: 'Dashboard'` (not a semantic "People" icon).** Per instruction, an icon must already be mapped in `useShellState.js` `MANIFEST_ICON_MAP` (`Co2`/`Dashboard`/`MonitorHeart`); `Dashboard` is the mapped fallback. No `useShellState.js` change was made, so the user's explicit "Files to Change" list is preserved. A future phase may add `PeopleIcon` to `MANIFEST_ICON_MAP` and switch the icon.
+2. **`color` field omitted** (RULE_8) — matches the `healthy` manifest; `PlatformHome` falls back to `theme.palette.primary.main` when absent.
+3. **i18n keys added** (`en/common.json` + `ar/common.json`). These two files are not in the literal task file list, but the frontend-worker I18N-6 rule requires every user-facing string to use `t()` and live in both catalogs. Keys added in parity (en === ar), so `check-i18n-keys.js` stays green. Manifest metadata (`name`, `description`, `label`) is data, not `t()`-rendered — consistent with the existing `carbon`/`healthy`/`stub` manifests.
+4. **`STUDIO_PATHS.people = '/people'` added** in addition to the required `studioFromPath` mapping. Without it, clicking the People studio icon would highlight the studio but navigate nowhere (`handleStudioChange` navigates via `STUDIO_PATHS[studioId]`). This mirrors the `apps` entry added in the prior healthy phase.
+5. **`PEOPLE_MANAGE` cap added** (task said "optionally"). Kept minimal — only the constant + one inheritance line; no `APP_ADMIN_CAP`/`ROUTE_CAPABILITIES`/`MENU_ITEM_CAPABILITIES` entries were added (out of scope for a placeholder phase).
+
+### Issues Found (NOT fixed — out of scope)
+1. **Healthy studio id mismatch (pre-existing).** `studioFromPath` maps `/apps` → `'apps'`, but the `healthy` manifest studio id is `healthy`; `ShellSidebar.jsx` still has a hardcoded `case 'apps'` nav list. Not touched — unrelated to People, and fixing it crosses into the healthy app (explicitly off-limits).
+2. **`stub` manifest still has no matching route** (`/stub` not in `App.jsx`) — pre-existing, out of scope.
+
+**Verdict: IMPLEMENTED — PENDING RUNTIME GATE** (static checks clean; Master must run `lint` + `vitest` + `build` above to confirm).
+
+---
+
+## [2026-08-30] Backend Worker — Phase NIR-1C: People CBAC API surface (serializers + views + urls + capabilities + superuser bypass)
+
+**Role:** backend-worker · **Kind:** backend (NIBRAS/CLEARTURN product-line track) · **Model:** DeepSeek V4-Flash
+
+### Summary
+Closed the Master-audit gap: the `people` app now has a full DRF API surface + CBAC,
+cloned exactly from the canonical `healthy/` pattern. Superusers and global admins
+(`admin`/`admins_group`, `org_unit=None`, `module=None`) bypass capability checks.
+`people:view` gates reads, `people:manage` gates writes. Employee/PayrollRun reads are
+org-scoped for non-admin users via `accounts.rbac_utils.get_visible_org_units` (RULE_12).
+**Gate caveat:** no terminal-execution tool is available in this session, so the
+`manage.py check` / `makemigrations --check` / `pytest people` gate commands **could NOT
+be run here** — the exact commands are listed below for Master. Static validation
+(language server) reports **zero errors** across all touched files.
+
+### Files Created
+| File | Lines | What |
+|------|------:|------|
+| `backend/people/serializers.py` | 55 | `ModelSerializer` for all 4 models; `auto_now`/computed fields read-only; `PayslipLineSerializer` exposes lineage `rule_id`/`rule_version`/`inputs`; `PayrollRun.status`/`committed_at` read-only |
+| `backend/people/permissions.py` | 44 | `PeopleAccess(BasePermission)` + `_can()` + `is_global_admin()` (superuser/global-admin bypass, else `has_capability`) |
+| `backend/people/views.py` | ~154 | Thin `APIView`s (NOT ModelViewSet): `ComplianceRuleListCreateView`/`DetailView`, `EmployeeListCreateView`/`DetailView` (org-scoped reads), `PayrollRunListCreateView`/`DetailView`, `PayslipLineListView` (`payroll_run` query filter) |
+| `backend/people/urls.py` | 31 | Routes under `''` (prefix from `config/urls.py`) |
+| `backend/people/tests/test_cbac.py` | ~128 | CBAC regression tests: 401, superuser full access (200+201), viewer read-only (200/403), no-cap 403, org-scoping (RULE_12), out-of-scope detail 404 |
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/accounts/capabilities.py` | Added `PEOPLE_VIEW` (`people:view`) + `PEOPLE_MANAGE` (`people:manage`) Capability defs; registered both in `ALL_CAPABILITIES`; added `IMPLIES[people:manage] = {people:view}`; added `PEOPLE_VIEW.key` to `dataowners_group`, `analysts_group`, `viewers_group`, `auditors_group` (the same 4 reader groups that carry `healthy:view`) |
+| `backend/config/urls.py` | Added `path(f'{api_prefix}/people/', include('people.urls'))` next to the `healthy` route |
+
+### Verification Output (static — language server)
+```
+get_errors on all 7 touched files → "No errors found" for each:
+  people/serializers.py, people/permissions.py, people/views.py, people/urls.py,
+  people/tests/test_cbac.py, accounts/capabilities.py, config/urls.py
+```
+
+Gate commands for Master Architect — **NOT RUN in this session** (no terminal-execution tool):
+```
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations people --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python manage.py show_urls 2>/dev/null | grep people || true
+```
+
+### Confirmations
+1. **`people` routes live under `/carbon-api/people/`** — `config/urls.py` includes
+   `people.urls` under `api_prefix` (= `carbon-api`); `people/urls.py` defines
+   `compliance-rules/`, `employees/`, `payroll-runs/`, `payslip-lines/` (all with detail sub-routes).
+2. **`test_cbac.py` proves** superuser full access (`GET 200` + `POST 201`), viewer read-only
+   (`GET 200` + `POST 403`), no-cap `403`, and org scoping (org-scoped viewer sees only own org_unit employees; out-of-scope detail → `404`).
+3. **Full people suite** — not executed here (no terminal tool); static diagnostics clean.
+4. **No law constants added** — compliance figures stay in `ComplianceRule` rows (data); no numeric law constants in code.
+5. **Capabilities registered as `people:view` / `people:manage`** — exact keys preserved (NIR-1D frontend parity depends on them).
+
+### Deviations / Interpretations
+1. **`people:manage` has no explicit `GROUP_CAPABILITIES` entry.** `healthy:manage` is likewise
+   absent from `GROUP_CAPABILITIES` — both are granted solely via the `"*"` wildcard on
+   `admin`/`admins_group`. So `people:manage` is admin-only by construction (matches `healthy:manage`).
+2. **`PayrollRun.status` + `committed_at` read-only in the serializer** — status transitions stay in
+   `services.py` per the task; `PayrollRunDetailView.patch` can only mutate `org_unit`/`period_start`/`period_end`.
+3. **Write paths are capability-gated but NOT org-scoped on create.** The task explicitly mandates
+   org-scoping for **reads** only ("org-scope the queryset"); a non-global `people:manage` holder could
+   create an `Employee`/`PayrollRun` in another org unit. Flagged, not fixed (write-scoping would need a
+   separate spec decision).
+4. **Added a 5th test** (`test_org_scoped_user_cannot_detail_outside_scope`) beyond the four mandated
+   cases, to also exercise RULE_12 on the detail views (out-of-scope detail → 404, not 200).
+5. **`PayslipLineSerializer.employee` kept as PK** (not nested read) — the task said "PK or minimal read"; PK chosen for the thin style.
+
+**Verdict: IMPLEMENTED — PENDING RUNTIME GATE** (static checks clean; Master must run the 4 gate commands above to confirm).

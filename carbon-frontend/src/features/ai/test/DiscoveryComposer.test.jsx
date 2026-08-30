@@ -65,12 +65,12 @@ beforeEach(() => {
 });
 
 describe('DiscoveryComposer — guided discovery (W6-B2)', () => {
-  it('renders the Pulse greeting and composer for an empty conversation', () => {
+  it('renders the composer for an empty conversation', () => {
     render(<DiscoveryComposer conversationId="conv-1" />);
 
-    expect(screen.getByText('Plan a task')).toBeInTheDocument();
-    expect(screen.getByText(/I'm Pulse/)).toBeInTheDocument();
+    // Empty state is input-only — the greeting expands once the dialogue starts.
     expect(screen.getByLabelText('Message input')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Ask a question/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument();
   });
 
@@ -112,8 +112,9 @@ describe('DiscoveryComposer — guided discovery (W6-B2)', () => {
 
     fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'Audit duplicates.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await screen.findByText('Which dataset should we audit?');
 
-    fireEvent.change(await screen.findByLabelText('Message input'), { target: { value: 'The emissions dataset' } });
+    fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'The emissions dataset' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     expect(await screen.findByText('Plan ready — review below')).toBeInTheDocument();
@@ -122,8 +123,8 @@ describe('DiscoveryComposer — guided discovery (W6-B2)', () => {
     expect(onPlanReady).toHaveBeenCalledTimes(1);
     expect(onPlanReady).toHaveBeenCalledWith(PLAN);
 
-    // The composer resets after review — greeting returns.
-    expect(await screen.findByText(/I'm Pulse/)).toBeInTheDocument();
+    // The composer resets after review — back to the input-only state.
+    expect(await screen.findByLabelText('Message input')).toBeInTheDocument();
   });
 
   it('resets the composer when New task is chosen', async () => {
@@ -131,13 +132,14 @@ describe('DiscoveryComposer — guided discovery (W6-B2)', () => {
 
     fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'Audit duplicates.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await screen.findByText('Which dataset should we audit?');
 
-    fireEvent.change(await screen.findByLabelText('Message input'), { target: { value: 'The emissions dataset' } });
+    fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'The emissions dataset' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'New task' }));
 
-    expect(await screen.findByText(/I'm Pulse/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Message input')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Message input')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument();
   });
 });

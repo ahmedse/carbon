@@ -9,6 +9,7 @@ import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
 import { 
   KeyboardArrowDown, 
   Notifications, 
+  Insights,
   Settings, 
   HelpOutline,
   Logout as LogoutIcon,
@@ -23,6 +24,8 @@ import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./LanguageSwitcher";
 import { useNotifications } from "../hooks/useNotifications";
 import { NotificationCenter } from "./notifications/NotificationCenter";
+import { useInsightStream } from "../hooks/useInsightStream";
+import { InsightNotificationPanel } from "./notifications/InsightNotificationPanel";
 
 // Perspective tab labels -> shell.nav.* keys (translated at render time).
 const PERSPECTIVE_LABEL_KEYS = {
@@ -80,11 +83,13 @@ export default function HeaderEnhanced() {
   const { t: tAuth } = useTranslation('auth');
   const { user, logout, availablePerspectives } = useAuth();
   const { unreadCount } = useNotifications();
+  const { unreadCount: insightUnreadCount } = useInsightStream();
   const { mode, toggle } = useThemeMode();
   const theme = useTheme();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
   const [notifAnchor, setNotifAnchor] = useState(null);
+  const [insightAnchor, setInsightAnchor] = useState(null);
 
   const initials = user?.username?.slice(0, 2).toUpperCase() || "U";
   const primaryRole = user?.roles?.[0]?.role;
@@ -176,6 +181,19 @@ export default function HeaderEnhanced() {
             >
               <Badge badgeContent={unreadCount} color="error" max={99} showZero={false}>
                 <Notifications sx={{ fontSize: '1.25rem' }} />
+              </Badge>
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title={t('ui.insights.title')}>
+            <IconButton
+              size="small"
+              aria-label={t('ui.insights.title')}
+              sx={{ color: "text.secondary" }}
+              onClick={(e) => setInsightAnchor(e.currentTarget)}
+            >
+              <Badge badgeContent={insightUnreadCount} color="error" max={99} showZero={false}>
+                <Insights sx={{ fontSize: '1.25rem' }} />
               </Badge>
             </IconButton>
           </Tooltip>
@@ -330,6 +348,7 @@ export default function HeaderEnhanced() {
           />
         </Popover>
         <NotificationCenter anchorEl={notifAnchor} onClose={() => setNotifAnchor(null)} />
+        <InsightNotificationPanel anchorEl={insightAnchor} onClose={() => setInsightAnchor(null)} />
       </Toolbar>
     </AppBar>
   );

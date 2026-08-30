@@ -53,6 +53,7 @@ import LongContent from './LongContent';
 import NLRuleTestCard from './NLRuleTestCard';
 import InvestigationCard from './InvestigationCard';
 import ReportDraftCard from './ReportDraftCard';
+import ConfidenceIndicator from './ConfidenceIndicator';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
 
@@ -402,6 +403,15 @@ function AIMessageBubble({
   }
 
   const metadata = normalizeMetadata(message);
+
+  // C2 — calibrated confidence (Faculty 7): read the REAL backend outcome
+  // signal off the top-level serialized fields, falling back to metadata_json
+  // for robustness (RULE_23 — outcome copy, never raw critic internals).
+  const confidenceLevel = message.confidence_label || metadata.confidence_label || '';
+  const honestUncertainty = !!(
+    message.honest_uncertainty ?? metadata.honest_uncertainty
+  );
+
   const followUps = metadata.follow_up_questions || [];
   const usageLabel = buildUsageLabel(message.token_usage_json);
   const usageBreakdown = buildUsageBreakdown(message.token_usage_json);
@@ -443,7 +453,18 @@ function AIMessageBubble({
   const hasScope = !!conversationType || !!appIdentifier || scopeJson?.org_unit_ids != null;
   const showProvenance = !isUser && (hasStructured || hasScope);
 
-  const bubbleSx = isUser ? USER_BUBBLE_SX : AI_BUBBLE_SX;
+  // Honest-uncertainty turns get a distinct calm left accent (PULSE-UX §2.7) —
+  // a quiet "here's my best read" marker, NOT an error treatment.
+  const bubbleSx = isUser
+    ? USER_BUBBLE_SX
+    : {
+        ...AI_BUBBLE_SX,
+        ...(honestUncertainty && {
+          borderLeft: '2px solid',
+          borderColor: 'warning.light',
+          pl: 1.5,
+        }),
+      };
 
   // When feedback is given, the clicked thumb gets a light color: green up
   // for accepted, red down for rejected. No text, no extra row.
@@ -1039,6 +1060,14 @@ function AIMessageBubble({
 
         {structuredContent}
 
+        {/* C2 — calibrated confidence (Faculty 7): subtle inline indicator.
+            Renders a bar (high/medium/low) or a calm honest-uncertainty caption. */}
+        {!isUser && (confidenceLevel || honestUncertainty) && (
+          <Box sx={{ mt: 0.5 }}>
+            <ConfidenceIndicator label={confidenceLevel} honest={honestUncertainty} />
+          </Box>
+        )}
+
         {actionButtons}
 
         {/* Correction note stays inline if the user submitted a correction. */}
@@ -1454,6 +1483,8 @@ AIMessageBubble.propTypes = {
     correction_text: PropTypes.string,
     is_deleted: PropTypes.bool,
     parent_id: PropTypes.string,
+    confidence_label: PropTypes.string,
+    honest_uncertainty: PropTypes.bool,
   }).isRequired,
   onAcceptSuggestion: PropTypes.func,
   onRejectSuggestion: PropTypes.func,

@@ -23,8 +23,8 @@ function navigateRedirects(src) {
 const redirects = navigateRedirects(appSrc);
 
 describe('namespace-root index redirects (RULE_22)', () => {
-  it('redirects bare /carbon to /carbon/console', () => {
-    expect(redirects.get('/carbon')).toBe('/carbon/console');
+  it('redirects bare /carbon to /carbon/chairman', () => {
+    expect(redirects.get('/carbon')).toBe('/carbon/chairman');
   });
 
   it('redirects bare /admin to /admin/users', () => {

@@ -68,7 +68,7 @@ async def trigger_task(task_name: str) -> dict:
         "self_reflect": _run_self_reflection,
         "prompt_refine": _run_prompt_refine,
         "consolidation": _run_consolidation,
-        "trigger_learning": _run_trigger_learning,
+        "skill_admission": _run_skill_admission,
         "kg_seeding": _run_kg_seeding,
     }
 
@@ -305,22 +305,10 @@ async def _run_consolidation() -> None:
     await _tracked("consolidation", _run_consolidation_for_all_instances)
 
 
-async def _run_trigger_learning() -> None:
-    """P4.4a: Nightly learned trigger analysis for all active instances."""
-    from ai.engine.cognition.learned_triggers import analyze_snapshots, seed_learned_triggers
-
-    async def _learn_one(db, instance):
-        candidates = await analyze_snapshots(db, instance.id)
-        if candidates:
-            created = await seed_learned_triggers(db, instance.id, candidates)
-            if created:
-                await db.commit()
-                logger.info(
-                    "trigger_learning: %d new triggers for %s",
-                    created, instance.name,
-                )
-
-    await _tracked("trigger_learning", lambda: _for_each_instance(_learn_one))
+async def _run_skill_admission() -> None:
+    """P4.3: Nightly skill admission gate for all active instances."""
+    from ai.engine.skills.gate import _run_skill_admission_for_all_instances
+    await _tracked("skill_admission", _run_skill_admission_for_all_instances)
 
 
 async def _run_kg_seeding() -> None:
@@ -722,14 +710,16 @@ def start_scheduler():
         replace_existing=True,
     )
 
-    # ── P4.4a: Learned triggers (nightly at 4:00 AM, after consolidation) ──
+    # ── P4.3: Skill admission gate (nightly at 3:30 AM) ──
+    # Runs after the 3:00 AM consolidation sweep so newly-drafted pending
+    # skills are admitted the same night.
     scheduler.add_job(
-        _run_trigger_learning, "cron",
-        hour=4, minute=0, id="trigger_learning",
+        _run_skill_admission, "cron",
+        hour=3, minute=30, id="skill_admission",
         replace_existing=True,
     )
 
-    # ── P4.4b: KG node seeding (nightly at 4:30 AM, after trigger learning) ──
+    # ── P4.4b: KG node seeding (nightly at 4:30 AM) ──
     scheduler.add_job(
         _run_kg_seeding, "cron",
         hour=4, minute=30, id="kg_seeding",

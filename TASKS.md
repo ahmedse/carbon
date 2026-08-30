@@ -44,6 +44,31 @@ evidence → not done.
 
 ---
 
+## PULSE 0.2 — WAVE A TRACK (connect the brain: G2/G3/G4)
+
+> **Canonical spec (source of truth):** `docs/pulse/PULSE-0.2-ROADMAP.md` — read it FIRST; it has
+> exact file paths, shallow-impl traps, acceptance gates, and the seven anti-drift laws L1–L7.
+> **Experience spec (every UI phase):** `docs/pulse/PULSE-UX.md` §10 rubric.
+> **North-star + invariants I1–I8:** `docs/pulse/PULSE-MASTER.md` §6/§7.
+> **Dependency order (do NOT reorder):** A1, A2, A5 independent → A3 (needs A2) → A4 (needs A3).
+> **Workers run DeepSeek V4-Flash (RULE_24).** One phase = one worker session, one domain.
+> **Redis prerequisite:** installed + active on 127.0.0.1:6379 (native apt, no Docker) — verified `PONG`.
+
+| Phase | Goal | Domain | Deps | Status |
+|-------|------|--------|------|--------|
+| A1 | Redis-backed ephemeral memory (G3) | backend | — | READY |
+| A2 | Redis pub/sub event bus (G3→G2) | backend | — | READY |
+| A5 | Resolve dead subsystems (G4) | backend | — | READY |
+| A3 | Proactive → Django SSE (G2) | backend | A2 | READY |
+| A4 | Notification panel wired (G2) | frontend | A3 | READY |
+
+**Note on engine Redis config:** `engine/core/config.py` has NO Redis key yet and `backend/.env` has no
+`REDIS_URL`. A1/A2 workers MUST add a Redis connection URL (default `redis://127.0.0.1:6379/0`) + the
+TTL key (`PULSE_MEMORY_REDIS_TTL_SECONDS`=86400) to `engine/core/config.py` (via `get_settings()`), and
+fail-visibly (log, never silent) when Redis is unreachable. Django `CACHES` uses `REDIS_URL` env separately.
+
+---
+
 ## AI WORKSPACE TRACK
 
 ---
@@ -6833,3 +6858,623 @@ SPRINT 6:
 **Master Architect runs all terminal verification gates before marking any phase DONE.**
 All P0 blockers closed at end of Sprint 4. All target P1 gaps closed at end of Sprint 6
 (freshness observability gap closed by EPH-6C).
+
+---
+
+# NIBRAS / CLEARTURN PRODUCT-LINE TRACK (NIR)
+
+**Umbrella docs (no forks):**
+| Doc | Role |
+|-----|------|
+| `docs/CLEARTURN-PLATFORM-ARCHITECTURE.md` | One codebase · many instances · many apps (the product line). |
+| `docs/NIBRAS-MASTER-STRATEGY.md` | Nibras product definition (§6.2 = Calculation vs Validation; §8 = People & Payroll wedge). |
+| `TASKS.md` (this file) | Active + planned Nibras work. |
+
+**Instance → app matrix (source of truth):** see `docs/CLEARTURN-PLATFORM-ARCHITECTURE.md` §2.
+**Three binding decisions:** ClearTurn owns IP · compliance-by-construction · prove = one signable payroll month (see Nibras §0).
+
+**Hard constraints for ALL Nibras work:**
+- `RULE_3` — core apps never import hosted apps; hosted apps (people, stores, …) may import core (mdm, accounts, catalog, dq, evidence, connections). Hosted apps NEVER import sibling hosted apps.
+- **No fabricated law values.** Every Kuwait compliance rule is `is_authoritative=False` + `provenance=None` until sourced from KLL / PIFSS / WPS. Test-only rules are marked `NON-AUTHORITATIVE — TEST ONLY`.
+- **Calculation Engine ≠ DQ Engine.** The engine *computes*; DQ *validates*. The engine is rule-agnostic (rules supplied as data).
+- **No new Django app for AI.** AI capabilities for `people` plug into `backend/ai/domain/{app}.py` (ADR-0008/0009/0019). The `people` Django app is transactional only.
+
+---
+
+## Phase NIR-1A — Backend: People app skeleton — Calculation Engine + Compliance Rule Library seam
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE — verified 2026-08-30 (`manage.py check` clean · migrate OK · seed idempotent 4 rules all `is_authoritative=False` · 15 tests pass)
+
+### Objective
+Create the `backend/people/` Django app skeleton for the Nibras HRMS wedge. Build the
+**rule-agnostic Calculation Engine** and the **versioned Compliance Rule Library model**
+(seam only — no authoritative Kuwait values). This is §6.2 of `NIBRAS-MASTER-STRATEGY.md`.
+
+### Files to Read First
+- `backend/emissions/models.py` + `backend/emissions/services.py` — the canonical hosted-app + service-layer pattern to mirror (people is a hosted app like emissions).
+- `backend/mdm/models.py` — locate the `OrgUnit` model (Employee must FK it for org-scoping; `RULE_12`).
+- `backend/accounts/models.py` — `ScopedRole` / RBAC conventions (app roles declared later in NIR-1B manifest; backend only needs org-scoped FKs).
+- `.ai-toolkit/shared/data-layer.md` + `.ai-toolkit/shared/api-contract.md` — model + API conventions.
+- `docs/NIBRAS-MASTER-STRATEGY.md` §6.2 / §6.3 / §8 — the Calculation-vs-Validation split and the lineage requirement.
+
+### Files to Create
+- `backend/people/__init__.py`, `backend/people/apps.py` (name `people`, default_auto_field), `backend/people/admin.py`
+- `backend/people/models.py` — models below
+- `backend/people/calculation_engine.py` — rule-agnostic deterministic engine
+- `backend/people/services.py` — thin facade over the engine (no DRF imports, mirrors `accounts/services.py`)
+- `backend/people/migrations/0001_initial.py` (generated)
+- `backend/people/tests/__init__.py`, `backend/people/tests/test_compliance_rule.py`, `backend/people/tests/test_calculation_engine.py`
+- `backend/people/management/__init__.py`, `backend/people/management/commands/__init__.py`, `backend/people/management/commands/seed_test_rules.py`
+
+### Models (rule-agnostic — do NOT hardcode any Kuwait figure)
+- **`ComplianceRule`** — the versioned rule library seam. Fields:
+  - `rule_id` (CharField, unique, slug) · `version` (CharField, e.g. `"2026.1"`) · `name` · `description`
+  - `jurisdiction` (CharField, default `"KW"`) · `category` (CharField choices: `leave`, `eosi`, `gosi`, `wps`, `overtime`, `payroll`, `other`)
+  - `effective_date` (DateField) · `formula_ref` (CharField, e.g. `"KLL Art. 51"`, blank) 
+  - `source_citation` (TextField, blank — the authoritative citation, EMPTY until sourced)
+  - `inputs_schema` (JSONField, default dict — names of inputs the formula consumes)
+  - `is_authoritative` (BooleanField, **default `False`**) · `provenance` (JSONField, **null=True, blank=True** — source doc/URL/reviewed-by, null until sourced)
+  - `test_cases` (JSONField, default list) · `created_at` / `updated_at`
+  - Meta: `unique_together = ("rule_id", "version")`; `ordering = ["category", "rule_id", "-effective_date"]`.
+- **`Employee`** (minimal master): `org_unit` (FK `mdm.OrgUnit`, on_delete PROTECT) · `employee_no` (unique) · `full_name` · `nationality` (CharField, blank) · `basic_salary` (DecimalField) · `join_date` (DateField) · `rotation` (CharField, blank — e.g. `"1/1"`, config NOT logic) · `is_active`.
+- **`PayrollRun`**: `org_unit` FK · `period_start` / `period_end` (DateField) · `status` (choices `draft/computed/validated/committed/failed`, default draft) · `created_at` / `committed_at` (null).
+- **`PayslipLine`** (lineage carrier): `payroll_run` FK · `employee` FK · `line_type` (CharField: `gross`, `basic`, `overtime`, `leave_pay`, `eosi_accrual`, `gosi`, `deduction`, …) · `amount` (DecimalField) · `rule_id` (CharField) · `rule_version` (CharField) · `inputs` (JSONField — the exact inputs that produced the amount) · `created_at`.
+
+### Calculation Engine (`calculation_engine.py`) — MUST be rule-agnostic
+Pure, deterministic functions that accept **rule data + inputs** and return a result **plus lineage**:
+- `calculate(rule: ComplianceRule, inputs: dict) -> dict` — generic executor. Returns `{"value": Decimal, "lineage": {"rule_id", "rule_version", "inputs"}}`.
+- `calculate_eosi(employee, rules)`, `calculate_leave_accrual(employee, rules)`, `calculate_overtime(employee, inputs, rules)`, `calculate_gross_pay(employee, inputs, rules)` — each looks up the active `ComplianceRule` for its `category` and delegates to `calculate`.
+- **Guard:** if the matching rule is missing OR `is_authoritative is False`, raise `NonAuthoritativeRuleError` (define it in `calculation_engine.py`). The engine NEVER emits a regulated figure from a non-authoritative rule in a production call path. (Tests exercise this with test-only rules by explicitly opting in via a `allow_non_authoritative=True` param that is **off by default**.)
+- No law constants anywhere in `.py` files — every figure comes from `ComplianceRule` rows.
+
+### Seed command (`seed_test_rules.py`)
+Idempotent management command that inserts 2–4 **NON-AUTHORITATIVE TEST-ONLY** rules
+(e.g. EOSI `15 days/yr (yrs 1–5)`, `30 days/yr (yr 6+)` as test formulas). Every seeded
+rule: `is_authoritative=False`, `provenance=None`, `source_citation=""`, and `name`
+prefixed with `[TEST ONLY — NON-AUTHORITATIVE]`. Purpose: exercise the engine + lineage,
+never produce a real payroll figure.
+
+### Register the app (per-instance enablement seed)
+- Add `people` (and, for NIR-2B completeness, `healthy`) to:
+  - `backend/config/settings.py` → `APP_REGISTRY` (mirror the carbon/catalog entries; `people` roles `[]` for now, `is_enabled` handled in DB).
+  - `backend/accounts/management/commands/bootstrap_platform.py` → `APP_DEFS` (`people`: `is_enabled=False`, `display_order=20`; `healthy`: `is_enabled=False`, `display_order=30`). Disabled by default so the AASTMT instance does not show them; Tectona/Nibras instances enable via admin.
+- Add `"people"` to `backend/config/settings.py` `INSTALLED_APPS`.
+
+### DO NOT TOUCH
+- `backend/ai/**` — AI for `people` is a LATER phase (`ai/domain/people.py`); do not create it here.
+- `backend/emissions/**`, `backend/catalog/**`, `backend/mdm/**`, `backend/dq/**` — read-only.
+- `backend/accounts/models.py` — read-only (RBAC is out of scope for NIR-1A).
+- Frontend — out of scope (NIR-1B).
+
+### Verification Gate (backend-worker MUST run — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations people --check --dry-run   # shows pending migrations
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate people
+/home/ahmed/aast/carbon/.venv/bin/python manage.py seed_test_rules
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: all tests pass; `manage.py check` clean; seed command idempotent (run twice → no dupes);
+`ComplianceRule` rows all show `is_authoritative=False`.
+
+---
+
+## Phase NIR-1B — Frontend: People app manifest + placeholder pages + capability wiring
+
+**Date:** 2026-08-30
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE — verified 2026-08-30 (lint 0 errors · 3 vitest pass · build clean)
+
+### Objective
+Register the `people` app in the frontend shell (manifest + placeholder pages + capabilities),
+so a Nibras instance shows "People / HRMS" in the sidebar, gated by backend enablement + RBAC.
+
+### Files to Read First
+- `carbon-frontend/src/apps/carbon/manifest.js` (the manifest contract) + `carbon-frontend/src/apps/stub/manifest.js` (minimal)
+- `carbon-frontend/src/apps/registry.js` (post-NIR-2A state) · `src/shell/useShellState.js` (studio injection + `MANIFEST_ICON_MAP`)
+- `carbon-frontend/src/capabilities.js` + `carbon-frontend/src/authz.js` (`APP_VIEW_CAP`, `hasAppAccess`)
+- `carbon-frontend/src/App.jsx` (route registration pattern) + `src/shell/Shell.jsx` (`studioFromPath` — `RULE_15`)
+- `.ai-toolkit/shared/design-system.md` + `src/theme/carbonTheme.js` (design tokens only — `RULE_8`)
+
+### Files to Create
+- `carbon-frontend/src/apps/people/manifest.js` — mirror `carbon/manifest.js`: `id:'people'`, `name:'People'`, `routePrefix:'/people'`, `apiPrefix:'/api/v1/people'`, minimal `ontology`, `roles` (e.g. `people:admin`, `people:data_owner`, `people:analyst`), `navigation` with a `role:'*'` landing item (`/people`), `requires:['auth','rbac','mdm','dq','audit']`, empty `aiSkills` (defer).
+- `carbon-frontend/src/apps/people/PeopleHome.jsx` — placeholder landing page (wrap in `PageContainer`, `RULE_16`; design tokens only).
+- `carbon-frontend/src/__tests__/PeopleManifest.test.jsx` — assert manifest registers + nav resolves.
+
+### Files to Change
+- `carbon-frontend/src/apps/registry.js` — import + register `peopleManifest`.
+- `carbon-frontend/src/capabilities.js` — add `PEOPLE_VIEW_CONSOLE` (and any `PEOPLE_*` manage caps) following the existing carbon block.
+- `carbon-frontend/src/authz.js` — add `people` to `APP_VIEW_CAP` (→ `PEOPLE_VIEW_CONSOLE`).
+- `carbon-frontend/src/shell/useShellState.js` — add the people icon to `MANIFEST_ICON_MAP` if the manifest uses a non-mapped MUI icon (or reuse `DashboardIcon` fallback).
+- `carbon-frontend/src/App.jsx` — register the `/people` route (lazy) + add the namespace to `studioFromPath` in `Shell.jsx` (`RULE_15` / `RULE_22` bare-namespace index route).
+
+### DO NOT TOUCH
+- `backend/**` · `carbon-frontend/src/theme/**` · any carbon/healthy app files · `src/api/api.js`.
+
+### Verification Gate (frontend-worker MUST run — paste output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/PeopleManifest.test.jsx
+npm run build
+```
+
+---
+
+## Phase NIR-2A — Frontend: instance-aware app registration (register-all + healthy manifest)
+
+**Date:** 2026-08-30
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE — verified 2026-08-30 (lint 0 errors · build clean · `APP_REGISTRY` = carbon+healthy+stub+people)
+
+### Objective
+Resolve `docs/CLEARTURN-PLATFORM-ARCHITECTURE.md` work item #3: make the frontend app
+registry **register-all + enable-per-instance** (the decision: register every manifest in
+`registry.js`; per-instance visibility is gated by backend `PlatformAppConfig.is_enabled`
+via `useEnabledApps()` + `hasAppAccess`). Add the missing `healthy` manifest so the
+existing Tectona app registers.
+
+### Files to Read First
+- `carbon-frontend/src/apps/registry.js` (current: imports only `carbonManifest`)
+- `carbon-frontend/src/apps/carbon/manifest.js` + `carbon-frontend/src/apps/stub/manifest.js` (contract)
+- `carbon-frontend/src/apps/healthy/*.jsx` (the existing pages to map into a manifest: `HealthyDashboard`, `RepHealthPage`, `SlowMoversPage`, `ARQueuePage`, `LoadoutSheetPage`)
+- `carbon-frontend/src/shell/useShellState.js` (`MANIFEST_ICON_MAP`, studio injection, `isAppEnabled` filter)
+- `carbon-frontend/src/hooks/useEnabledApps.js` (enablement gate)
+- `docs/CLEARTURN-PLATFORM-ARCHITECTURE.md` §4 work item #3
+
+### Files to Create
+- `carbon-frontend/src/apps/healthy/manifest.js` — `id:'healthy'`, `name:'Healthy'`, `routePrefix:'/healthy'`, `apiPrefix:'/api/v1/healthy'`, minimal ontology/roles, `navigation` mapping the 5 existing pages to their paths, `requires:['auth']`, empty `aiSkills`.
+
+### Files to Change
+- `carbon-frontend/src/apps/registry.js` — import + register **all** manifests (`carbon`, `healthy`, `stub`) with a comment documenting the **register-all + enable-per-instance** decision. `APP_BY_ID` derives automatically.
+- `carbon-frontend/src/shell/useShellState.js` — add `healthy` icon to `MANIFEST_ICON_MAP` if needed (else fallback is fine).
+- `docs/CLEARTURN-PLATFORM-ARCHITECTURE.md` — flip work item #3 from ⚠️ to ✅ and record the decision (register-all; enablement = backend `PlatformAppConfig.is_enabled`).
+
+### DO NOT TOUCH
+- `backend/**` (enablement seed for healthy is NIR-2B) · `carbon-frontend/src/theme/**` · `src/api/api.js` · any carbon app pages.
+
+### Verification Gate (frontend-worker MUST run — paste output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/useShellState.test.jsx 2>/dev/null || echo "(no such spec — run npm run build only)"
+npm run build
+```
+Report: `APP_REGISTRY` contains `carbon`, `healthy`, `stub`; `healthy` manifest resolves; clean build.
+
+---
+
+## Phase NIR-2B — Backend: per-instance app enablement seed (healthy + people in settings/bootstrap)
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE — verified 2026-08-30 (bootstrap registered `people`+`healthy` disabled-by-default, idempotent; 10 apps total)
+
+### Objective
+Ensure `healthy` (and, when it exists, `people`) surface in `/accounts/platform-apps/` so
+per-instance enable/disable is admin-configurable. Without this, `AppManifestService.load_manifests()`
+uses `settings.APP_REGISTRY` (which lacks `healthy`) and the app is invisible to the toggle.
+
+### Files to Read First
+- `backend/config/settings.py` (`APP_REGISTRY`, ~L82) · `backend/accounts/management/commands/bootstrap_platform.py` (`APP_DEFS`, ~L113)
+- `backend/accounts/services.py` (`AppManifestService.load_manifests`)
+
+### Files to Change
+- `backend/config/settings.py` — add `healthy` entry to `APP_REGISTRY` (roles `[]`).
+- `backend/accounts/management/commands/bootstrap_platform.py` — add `healthy` (`is_enabled=False`, `display_order=30`) to `APP_DEFS`.
+
+### DO NOT TOUCH
+- `backend/healthy/**` (app logic — read-only) · frontend.
+
+### Verification Gate (backend-worker MUST run — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py bootstrap_platform
+```
+Report: `bootstrap_platform` runs idempotently; `healthy` present in `PlatformAppConfig` with `is_enabled=False`.
+
+---
+
+## NIR dispatch order
+1. NIR-2A (frontend registry) + NIR-1A (people backend) — independent, parallel-safe (different repos of files).
+2. NIR-2B (backend seed) — may run with NIR-1A (same worker; different files than NIR-2A).
+3. NIR-1B (people frontend) — AFTER NIR-1A (depends on frozen model/API contract).
+4. NIR-1C (people CBAC API surface) — AFTER NIR-1A (needs frozen models). CLOSES THE CBAC + superuser gap flagged in Master audit.
+5. NIR-1D (frontend capability parity) — AFTER NIR-1C (aligns `people:view_console`→`people:view`).
+
+**Master Architect runs all terminal verification gates before marking any phase DONE.**
+
+---
+
+## Phase NIR-1C — Backend: People CBAC API surface (serializers + views + urls + capabilities + superuser bypass)
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE — verified 2026-08-30 (check clean · no pending migrations · 24 tests pass · CBAC + superuser bypass live)
+
+### Objective
+NIR-1A shipped only the `people` data layer (models + calculation engine + seed). It has **no
+API surface and no CBAC** — the app is invisible over HTTP and has no authorization. This phase
+adds the DRF API + CBAC permission classes, **mirroring `backend/healthy/` exactly** (the
+canonical hosted-app pattern from DESIGN-DOMAIN-APPS-EXPANSION.md). Superusers and global
+admins (`admins_group`) MUST bypass capability checks (full access).
+
+### Files to Read First (ground truth — clone these)
+- `backend/healthy/views.py` (the `_can()` helper + `HealthyAccess` permission class + `APIView` pattern)
+- `backend/healthy/serializers.py` + `backend/healthy/urls.py` (thin DRF style)
+- `backend/accounts/capabilities.py` — find `HEALTHY_VIEW`/`HEALTHY_MANAGE` (~L539) and how they register in `ALL_CAPABILITIES` (~L630), `IMPLIES` (~L712), and `GROUP_CAPABILITIES` (~L732)
+- `backend/config/urls.py` — where `healthy` is routed (`path(f'{api_prefix}/healthy/', ...)`); add the `people` sibling next to it
+- `backend/people/models.py` (frozen from NIR-1A)
+
+### Files to Create
+- `backend/people/serializers.py` — `ModelSerializer` for `ComplianceRule`, `Employee`, `PayrollRun`, `PayslipLine`. Read-only where the field is `auto_now`/computed. `PayslipLineSerializer` nests `employee` (PK or minimal read) + exposes `rule_id`/`rule_version`/`inputs` (lineage — NIBRAS §6.3).
+- `backend/people/permissions.py` — `PeopleAccess(BasePermission)`: GET/HEAD/OPTIONS → `people:view`; else → `people:manage`. Use a `_can(user, cap)` helper mirroring `healthy/views.py`: `is_superuser` → True; global admin (`ScopedRole` with `group__name__in=['admin','admins_group']` + `org_unit__isnull=True` + `module__isnull=True`) → True; else `has_capability(user, cap)`.
+- `backend/people/views.py` — thin `APIView`s (NOT ModelViewSet — match healthy):
+  - `ComplianceRuleListCreateView` (GET list / POST create, `people:manage`)
+  - `ComplianceRuleDetailView` (GET / PATCH)
+  - `EmployeeListCreateView` + `EmployeeDetailView` — org-scoped reads via `get_visible_org_units` (RULE_12) for non-admin; superuser/global admin see all
+  - `PayrollRunListCreateView` + `PayrollRunDetailView` (list/detail; status transitions in services)
+  - `PayslipLineListView` (GET, filtered by `payroll_run`)
+  Keep orchestration in `services.py` — views are thin (healthy style).
+- `backend/people/urls.py` — wire the above routes under `''` (the prefix comes from `config/urls.py`).
+
+### Files to Change
+- `backend/config/urls.py` — add `path(f'{api_prefix}/people/', include('people.urls'))` next to the `healthy` route.
+- `backend/accounts/capabilities.py` — add `PEOPLE_VIEW = Capability(key="people:view", domain="people", action="view", label="View People", ...)` and `PEOPLE_MANAGE = Capability(key="people:manage", ...)`; register both in `ALL_CAPABILITIES`; add `IMPLIES` (`people:manage` → `people:view`); add both to the appropriate `GROUP_CAPABILITIES` role(s) mirroring how `healthy:view`/`healthy:manage` are assigned (readers group gets `people:view`, admins group gets `people:manage`).
+- `backend/people/tests/test_cbac.py` (NEW) — assert: (1) superuser has full access (GET+POST 200/201), (2) `people:view`-only user can GET but POST → 403, (3) no-cap user → 403, (4) org-scoped user sees only own org_unit employees (RULE_12).
+
+### DO NOT TOUCH
+- `backend/healthy/**` · `backend/emissions/**` · `backend/ai/**` · `backend/mdm/**` · `backend/catalog/**` · `backend/dq/**` · `backend/accounts/models.py` · `backend/accounts/permissions.py` · `frontend/**`.
+
+### HARD RULES
+- RULE_3: `people` may import core (`accounts`, `mdm`) only; never emissions or sibling hosted apps.
+- RULE_12: employee/payroll reads org-scoped for non-admin users.
+- RULE_11: every authorization rule ships a regression test (`test_cbac.py`).
+- No `datetime.now()` — `django.utils.timezone.now()`.
+
+### Verification Gate (backend-worker MUST run — paste FULL output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations people --check --dry-run
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python manage.py show_urls 2>/dev/null | grep people || true
+```
+Report: `people` routes present under `/carbon-api/people/`; `test_cbac.py` proves superuser full access + viewer read-only + no-cap 403 + org scoping; full people suite green; no law constants added.
+
+### Frontend parity (NIR-1D — capability rename)
+**Status:** DONE — verified 2026-08-30 (`PEOPLE_VIEW = 'people:view'` in `capabilities.js` · `authz.js` `APP_VIEW_CAP.people` → `PEOPLE_VIEW` · lint 0 errors · build clean).
+
+Align `carbon-frontend/src/capabilities.js` `PEOPLE_VIEW_CONSOLE` (`people:view_console`) → `people:view`, and mirror the capability in `src/authz.js`. Master or frontend-worker will execute.
+
+---
+
+# NIBRAS PHASE-1 COMPLETION — PEOPLE & PAYROLL (the wedge)
+
+> **Goal:** finish the Phase 1 wedge (`docs/NIBRAS-MASTER-STRATEGY.md` §8) — the full
+> **structure** of a KLL/GOSI/WPS-compliant HR + payroll core, with rule **values** still
+> deferred per §6.2.1 (rules = data; no law constants; test-only rules non-authoritative).
+> Sequence is data-layer → engine → orchestration → validation → API/CBAC → Pulse → UI.
+
+| Phase | Goal | Domain | Status |
+|-------|------|--------|--------|
+| NIR-3A | People data-layer expansion (M1/M3/M5/M7 + loans/certs/rotation) | backend | DONE ✅ (43 pytest pass) |
+| NIR-3B | Calculation Engine expansion (GOSI · WPS · leave-split · loans · net-pay) | backend | DONE ✅ (30 engine tests · 62 people suite · E2E smoke) |
+| NIR-3C | Payroll-run orchestration service (draft→compute→validate→commit) | backend | DONE ✅ (6 payroll tests · 68 people suite · verify.sh all PASSED) |
+| DQ-CORE-TYPED-BIND | `dq` core: `ModelRuleAssignment` + `typed_gate` (bind DQRules to typed-model fields) | backend (dq) | DONE ✅ (17 tests · mig 0016 · E2E smoke) |
+| NIR-3D | DQ validation seam (defense-in-depth, validation ≠ calculation) | backend | DONE ✅ (6 validation tests · 74 people suite · mig 0004) |
+| NIR-3E | CBAC + API surface for the new models | backend | PLANNED |
+| NIR-3F | Pulse domain ops (`ai/domain/people.py`) | backend | PLANNED |
+| NIR-4A | People frontend pages (employee/leave/payroll/payslip/C&B/attendance) | frontend | PLANNED |
+
+**Invariants (all phases):** RULE_3 (`people` imports core only, never sibling hosted apps) ·
+RULE_12 (org-scoped reads) · RULE_11 (auth ships a regression test) · `django.utils.timezone.now()`
+(never `datetime.now()`) · **no law constants in `.py`** (every figure = `ComplianceRule` row) ·
+calculation ≠ validation (engine computes, DQ validates) · **storage pattern** (ADR 0025: owned/derived
+= typed; only governed measurements = `dataschema`; DQ binds to typed fields via `dq.ModelRuleAssignment`).
+
+**Dispatch order (Phase-1 completion):** NIR-3B (engine) and DQ-CORE-TYPED-BIND (`dq` core) are
+independent and parallel-safe — different apps (`people` vs `dq`). NIR-3C (orchestration) depends on
+NIR-3B. **DQ-CORE-TYPED-BIND MUST land before NIR-3D** (NIR-3D consumes `ModelRuleAssignment` +
+`typed_gate.check_instances`); NIR-3D also depends on NIR-3C (`validate(run)` stub). NIR-3E (CBAC/API)
+after 3C/3D; NIR-3F (Pulse) after 3E; NIR-4A (frontend) last.
+
+---
+
+## Phase NIR-3A — Backend: People data-layer expansion (Phase 1 core models)
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE ✅ — 43 pytest pass · migration `0002_*` applied · `check` clean (2026-08-30)
+
+### Objective
+NIR-1A froze only 4 models (`ComplianceRule`, `Employee`, `PayrollRun`, `PayslipLine`). The
+Phase-1 wedge needs the rest of the transactional data layer so the Calculation Engine (NIR-3B)
+and orchestration (NIR-3C) have governed inputs. Add the missing **org-scoped, rule-agnostic**
+models below to `backend/people/models.py` in ONE migration. No logic, no API, no engine changes
+here — models + admin + migration + tests only.
+
+### Files to Read First
+- `backend/people/models.py` (existing 4 models — match style, `__str__`, Meta, RULE_12 org-scoping)
+- `backend/mdm/models.py` (`OrgUnit` — the org-scoping FK target)
+- `backend/emissions/models.py` (canonical hosted-app model conventions: help_text, related_name)
+- `.ai-toolkit/shared/data-layer.md` (model conventions)
+
+### Models to ADD (all rule-agnostic; every org-scoped model FKs `mdm.OrgUnit` or `Employee`)
+1. **`Position`** (M1 Org & Positions): `org_unit` FK `mdm.OrgUnit` PROTECT related_name=`positions` ·
+   `code` (CharField) · `title` (CharField) · `grade` (CharField blank) · `reports_to` (FK self, null, blank, SET_NULL, related_name=`direct_reports`) · `is_management` (bool default False). Meta ordering `['org_unit', 'code']`.
+2. **`LeaveEntitlement`** (M3): `employee` FK `Employee` CASCADE related_name=`leave_entitlements` ·
+   `year` (PositiveSmallIntegerField) · `leave_type` (CharField) · `entitled_days` (Decimal 8,2) ·
+   `used_days` (Decimal 8,2 default 0) · `carried_forward` (Decimal 8,2 default 0) · `notes` (blank).
+   Meta `unique_together = ('employee', 'year', 'leave_type')`.
+3. **`LeaveRecord`** (M3): `employee` FK CASCADE related_name=`leave_records` · `leave_type` (CharField) ·
+   `start_date` / `end_date` (DateField) · `days` (Decimal 8,2) · `status` (choices `draft/submitted/approved/rejected/cancelled`, default draft) ·
+   `calendar_split` (JSONField null=True blank=True — leave-pay calendar-split lineage, populated by NIR-3B) · `created_at`/`updated_at`.
+4. **`BenefitType`** (M5 C&B): `code` (CharField unique) · `name` · `category` (choices `accommodation/vehicle/medical/school/tickets/other`) ·
+   `is_eosi_base` (bool default False) · `is_taxable` (bool default False). Meta ordering `['category', 'code']`.
+5. **`EmployeeBenefit`** (M5 C&B ledger): `employee` FK CASCADE related_name=`benefits` · `benefit_type` FK `BenefitType` PROTECT ·
+   `monthly_amount` (Decimal 14,3) · `effective_start` (DateField) · `effective_end` (DateField null blank). Meta ordering `['employee', 'benefit_type']`.
+6. **`Loan`** (deductions): `employee` FK CASCADE related_name=`loans` · `loan_type` (CharField) ·
+   `principal` (Decimal 14,3) · `interest_rate` (Decimal 6,3 default 0) · `term_months` (PositiveSmallIntegerField) ·
+   `start_date` (DateField) · `status` (choices `active/paid_off/cancelled`, default active) · `notes` (blank).
+7. **`LoanInstallment`** (deductions): `loan` FK `Loan` CASCADE related_name=`installments` · `installment_no` (PositiveIntegerField) ·
+   `due_date` (DateField) · `amount` (Decimal 14,3) · `principal_portion` (Decimal 14,3) · `interest_portion` (Decimal 14,3) ·
+   `status` (choices `scheduled/paid/skipped`, default scheduled). Meta `unique_together = ('loan', 'installment_no')`.
+8. **`AttendanceRecord`** (M7): `employee` FK CASCADE related_name=`attendance` · `date` (DateField) ·
+   `hours_worked` (Decimal 6,2 default 0) · `overtime_hours` (Decimal 6,2 default 0) · `status` (choices `present/absent/leave/permission`).
+   Meta `unique_together = ('employee', 'date')`.
+9. **`AttendancePermission`** (M7 — no-deduction categories): `employee` FK CASCADE related_name=`permissions` · `date` (DateField) ·
+   `permission_type` (CharField — config label, NOT logic) · `hours` (Decimal 6,2) · `approved` (bool default False) · `notes` (blank).
+   *(Named `AttendancePermission` — not `Permission` — to avoid colliding with `django.contrib.auth.models.Permission` in NIR-3E.)*
+10. **`Certification`** (GOFSCO KOC): `employee` FK CASCADE related_name=`certifications` · `cert_type` (CharField — e.g. H2S/Iqama/visa/medical) ·
+    `number` (CharField blank) · `issued_date` (DateField null) · `expiry_date` (DateField) · `notes` (blank). Meta ordering `['expiry_date']`.
+11. **`RotationSchedule`** (GOFSCO depth — config NOT logic): `employee` FK CASCADE related_name=`rotation_schedules` ·
+    `pattern` (CharField — e.g. `1/1`, `2/1`, `3/1`, `5/1`) · `start_date` (DateField) · `config` (JSONField default dict) ·
+    `is_active` (bool default True). Meta ordering `['-start_date']`.
+
+### Files to Change
+- `backend/people/models.py` — append the 11 models above.
+- `backend/people/admin.py` — register the new models (inline `LoanInstallment` under `Loan`).
+- `backend/people/migrations/0002_*.py` — generated by `makemigrations people`.
+- `backend/people/tests/test_models.py` (NEW) — assert: each model creates + `__str__`; the `unique_together`
+  constraints (`LeaveEntitlement`, `LoanInstallment`, `AttendanceRecord`) reject dupes; `Position.reports_to`
+  self-FK; `EmployeeBenefit`/`LeaveRecord`/`Loan` org/employee FKs resolve; `RotationSchedule.config` defaults to `{}`.
+
+### DO NOT TOUCH
+- `calculation_engine.py` · `services.py` · `serializers.py` · `views.py` · `urls.py` · `permissions.py` (engine + API = later phases)
+- `backend/emissions/**` · `backend/healthy/**` · `backend/ai/**` · `backend/mdm/**` · `backend/catalog/**` · `backend/dq/**`
+- Frontend (NIR-4A) · `backend/accounts/**`
+
+### Verification Gate (backend-worker runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations people
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate people
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: one clean migration; `check` clean; full `people` suite green (24 + new model tests); no law constants added.
+
+---
+
+## Phase NIR-3B — Backend: Calculation Engine expansion (rule-agnostic math only)
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE ✅ — 30 engine tests pass · 62 people suite green · `check` clean (2026-08-30)
+
+### Objective
+Extend `calculation_engine.py` with the deterministic, **rule-agnostic** math for the payroll
+pipeline (§8.2). The engine COMPUTES — it reads a `ComplianceRule` row for every figure and
+returns `value` + `lineage`. No law constants, no validation, no API, no new models.
+
+### Files to Read First
+- `backend/people/calculation_engine.py` (existing 3 formula types + `NonAuthoritativeRuleError` guard)
+- `backend/people/models.py` (`ComplianceRule`, `Employee`, `Loan`, `LoanInstallment`, `LeaveRecord`, `PayslipLine`)
+- `backend/people/tests/test_calculation_engine.py` (existing patterns)
+- `docs/NIBRAS-MASTER-STRATEGY.md` §8.2/8.3 (pipeline + Phase-1 rule set)
+
+### Functions to ADD (all return `{"value": Decimal, "lineage": {...}}`; raise `NonAuthoritativeRuleError` on non-authoritative rule)
+1. **`calculate_gosi(rule, gross_salary, employee_age=None, inputs=None)`** — GOSI/KIFSS/PIFSS
+   contribution (employee + employer shares). Age-banded tiers read from rule params, never hardcoded.
+2. **`format_wps_record(rule, payslip, inputs=None)`** — produce the WPS record payload dict from
+   rule params + payslip fields (fields as the rule defines; no file I/O here).
+3. **`calculate_leave_split(rule, leave_record, inputs=None)`** — calendar-split of a leave record
+   across KLL calendar years; returns `{year: days}` + carries `calendar_split` lineage back to the
+   `LeaveRecord` (NIR-3A field).
+4. **`calculate_loan_schedule(rule, loan, inputs=None)`** — amortization: per-installment
+   `principal_portion` / `interest_portion` / `amount` from `principal`/`interest_rate`/`term_months`
+   using the rule-defined method (flat vs reducing). Returns list of installment dicts + lineage.
+5. **`calculate_net_pay(rule, gross, deductions, inputs=None)`** — `net = gross − Σdeductions`.
+   Negative net pay is **flagged in output**, not raised (validation is NIR-3D's job).
+6. **`calculate_gross_pay`** — extend existing to compose base + allowances + overtime from
+   `ComplianceRule` inputs (verify current + cover with tests).
+
+### Files to Change
+- `backend/people/calculation_engine.py` — add the 6 functions; keep existing API + guard intact.
+- `backend/people/tests/test_calculation_engine.py` — add `CalculationEngineExpansionTests`:
+  each new function computes correct `Decimal` on a non-authoritative TEST rule; raises
+  `NonAuthoritativeRuleError` when `is_authoritative=False` + `allow_non_authoritative=False`;
+  `lineage` carries `rule_id` + `rule_version` + `inputs`; `calculate_loan_schedule` installments
+  sum back to `principal + interest`.
+
+### DO NOT TOUCH
+- `models.py` (no new models in 3B) · `services.py` · `serializers.py` · `views.py` · `urls.py` · `permissions.py`
+- `backend/emissions/**` · `backend/healthy/**` · `backend/ai/**` · `backend/mdm/**` · `backend/catalog/**` · `backend/dq/**`
+- Frontend (NIR-4A)
+
+### Verification Gate (backend-worker runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people/tests/test_calculation_engine.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: `check` clean; full engine suite green; no law constants added (grep for numeric constants); engine still rule-agnostic (every figure from a `ComplianceRule`).
+
+---
+
+## Phase NIR-3C — Backend: Payroll-run orchestration service
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+
+### Objective
+Build the orchestration service that drives `PayrollRun` through
+`draft → compute → validate → commit` (and `failed`), composing the NIR-3B engine functions and
+gating `commit` on validation. Establishes the **measurement provenance seam** (ADR 0025): every
+measurement-derived figure carries its source `dataschema.DataRow` id / `row_hash`.
+
+### Files to Read First
+- `backend/people/models.py` (`PayrollRun`, `PayslipLine`, `Employee`, `Loan`, `LoanInstallment`, `AttendanceRecord`, `LeaveRecord`)
+- `backend/people/calculation_engine.py` (NIR-3B outputs)
+- `backend/emissions/models.py` (`Calculation.create_from_data_row` — the source-row provenance pattern)
+- `docs/NIBRAS-MASTER-STRATEGY.md` §8.2 (pipeline)
+
+### Changes
+1. **`backend/people/payroll_service.py` (NEW)** — a `PayrollRunService` with:
+   - `compute(run)` — for each org-scoped employee (RULE_12): gross → GOSI → loan installment → net;
+     write `PayslipLine`s with `rule_id`/`rule_version`/`inputs` (lineage breadcrumb).
+   - `validate(run)` — calls the NIR-3D validation seam (stub interface now; wired in 3D).
+   - `commit(run)` — only from `validated` status, gated on zero `error`-severity findings; on failure → `failed`.
+   - Status transitions enforced (no `compute`→`commit` skip).
+2. **Measurement provenance seam:** add `source_row` FK `dataschema.DataRow` null=True blank=True
+   SET_NULL related_name=`people_attendance_records` to `AttendanceRecord`; any measurement-derived
+   line also carries `data_row_id`/`row_hash` inside `inputs` (mirrors `Calculation.data_row`).
+   New migration `0003_*`.
+3. **`backend/people/tests/test_payroll_service.py` (NEW)** — happy path draft→compute→validate→commit;
+   RULE_12 org-scoping (service never includes another org unit's employee); commit blocked when
+   validation returns an `error`; provenance: a line derived from a `DataRow` stores its id/hash.
+
+### DO NOT TOUCH
+- `calculation_engine.py` (done in 3B) · `backend/dq/**` (DQ-CORE-TYPED-BIND is separate) · API/views/serializers (3E)
+- `backend/emissions/**` · `backend/healthy/**` · `backend/ai/**` · `backend/accounts/**`
+- Frontend (NIR-4A)
+
+### Verification Gate (backend-worker runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations people
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate people
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people/tests/test_payroll_service.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: one clean migration; `check` clean; service tests green; RULE_12 + provenance asserted.
+
+---
+
+## Task DQ-CORE-TYPED-BIND — `dq` core: bind DQRules to typed-model fields
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE ✅ — 17 tests pass · migration `0016_modelruleassignment` applied · `check` clean (2026-08-30)
+
+### Objective
+`dq` can bind rules to `dataschema` targets (`RuleFieldAssignment` → `DataTable`/`DataField`) but
+has no way to bind a `DQRule` to a **typed model field**. Add the generic twin so every hosted app
+runs DQ on typed tables with the same rule catalog + engine (ADR 0025). This is a `dq` **core**
+primitive — `people` (and future apps) only register rows.
+
+### Files to Read First
+- `backend/dq/models.py` (`DQRule`, `RuleFieldAssignment` — the pattern to mirror)
+- `backend/dq/engine.py` (`evaluate(rule_def, rows)` — pure fn over `.id` + `.values`)
+- `backend/dq/gate.py` (`check_rows`, `_RowProxy` — the verdict shape to match)
+- `.ai-toolkit/decisions/0025-typed-vs-dataschema-storage.md` (the contract)
+
+### Changes
+1. **`backend/dq/models.py`** — add `ModelRuleAssignment`:
+   - `rule` FK `DQRule` CASCADE related_name=`model_assignments` ·
+     `model_label` CharField (e.g. `people.Employee`) · `field_name` CharField(blank — blank = model/row-level rule) ·
+     `is_active` Boolean default True.
+   - `clean()`: resolve `apps.get_model(*model_label.split('.'))` (raise `ValidationError` if unknown);
+     if `field_name`, assert it is a concrete field on the model.
+   - Meta `unique_together = ('rule', 'model_label', 'field_name')`; ordering `['model_label', 'field_name']`.
+   - `__str__`: `f"{rule.name} → {model_label}.{field_name or '*'}"`.
+   - Register in `backend/dq/admin.py`.
+2. **`backend/dq/typed_gate.py` (NEW)** — `check_instances(model_label, instances, *, mode='write')`:
+   load active `ModelRuleAssignment`s for `model_label`; project each instance → `{field: value}` dict;
+   batch `engine.evaluate(rule.definition, [rows])` per rule; return the **same verdict shape** as
+   `gate.check_rows` (`summary` + `row_verdicts`). Stateless — no DB writes.
+3. **Migration** `000N_*` for `ModelRuleAssignment`.
+4. **`backend/dq/tests/test_typed_gate.py` (NEW)** — RULE_11 regression tests:
+   - binds a `DQRule` (`not_null`, `range`, `allowed_values`) to a model_label+field and evaluates
+     pass/fail correctly against plain instances;
+   - `clean()` rejects an unknown `model_label` and an unknown `field_name`;
+   - verdict shape matches `gate.check_rows`; no per-row DB writes (no `DQResult` created).
+
+### DO NOT TOUCH
+- `RuleFieldAssignment` / `DQResult` / `TableProfile` / `FieldProfile` / freshness (dataschema-coupled — leave as-is)
+- `backend/people/**` · `backend/emissions/**` · `backend/healthy/**` · `backend/ai/**` · `backend/accounts/**`
+- Frontend
+
+### Verification Gate (backend-worker runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations dq
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate dq
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest dq/tests/test_typed_gate.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: one clean migration; `check` clean; new tests green; `dq` imports no hosted app (RULE_3).
+
+---
+
+## Phase NIR-3D — Backend: DQ validation seam (validation ≠ calculation)
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE ✅ — 6 validation tests · 74 people suite · migration `0004_payrollrunvalidation` applied · `check` clean (2026-08-30)
+
+### Objective
+Wire independent DQ into the payroll pipeline (defense-in-depth): the engine computes, DQ
+validates. Use the generic `dq.ModelRuleAssignment` primitive (DQ-CORE-TYPED-BIND) + run-scoped
+summaries — **never** a per-row persisted result store (ADR 0025).
+
+### Files to Read First
+- `backend/dq/models.py` (`ModelRuleAssignment`, `DQRule`), `backend/dq/typed_gate.py` (`check_instances`)
+- `backend/dq/engine.py` (`evaluate`) · `backend/dq/gate.py` (verdict shape)
+- `backend/people/payroll_service.py` (NIR-3C `validate(run)` stub)
+- `backend/people/models.py` (`PayrollRun`, `PayslipLine`, `ComplianceRule`)
+
+### Changes
+1. **`backend/people/validation.py` (NEW)** — two tiers:
+   - `validate_write(instance)` — Tier-1 field gate: load `ModelRuleAssignment`s for the model,
+     project to `{field: value}`, `check_instances()`, block save on `error` severity.
+   - `validate_run(run)` — Tier-2 batch: evaluate business rules over the run's computed lines
+     (`net >= 0`, `GOSI bounds`, `Σlines == gross − deductions`, WPS well-formed), batch-evaluated.
+2. **`backend/people/models.py`** — add `PayrollRunValidation`: `payroll_run` FK CASCADE
+   related_name=`validations` · `rule_key` CharField · `passed` Bool · `checked`/`failed` PositiveInt ·
+   `sample_failures` JSONField (engine's `sample_failures[:20]`) · `created_at`. Run-scoped summary only.
+   New migration.
+3. **`backend/people/tests/test_validation.py` (NEW)** — RULE_11: a bound `not_null`/`range` rule blocks
+   a bad `Employee` write; a run with a negative net pay records a failed `PayrollRunValidation` and
+   blocks `commit`; summary stores counts + samples, **not** per-row rows.
+
+### DO NOT TOUCH
+- `backend/dq/**` beyond consuming `ModelRuleAssignment`/`check_instances` (core lives in DQ-CORE-TYPED-BIND)
+- `calculation_engine.py` · API/views/serializers (3E) · `backend/emissions/**` · `backend/healthy/**` · `backend/ai/**`
+- Frontend (NIR-4A)
+
+### Verification Gate (backend-worker runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations people
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate people
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people/tests/test_validation.py dq/tests/test_typed_gate.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: one clean migration; `check` clean; validation + typed-gate tests green; calculation still independent of validation (no engine imports validation).

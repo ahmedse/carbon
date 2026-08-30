@@ -5,7 +5,7 @@ Called periodically by the cognition scheduler, it:
   1. Evaluates all triggers against live data
   2. Applies suppression (cooldown, deduplication)
   3. Assembles context for fired triggers
-  4. Generates scheduled insights (daily briefing, drift, etc.)
+  4. Generates scheduled insights (daily briefing, etc.)
   5. Delivers everything through the appropriate channels
   6. Expires stale insights
 """
@@ -122,54 +122,6 @@ async def run_daily_briefing(db, instance: Instance) -> dict:
 
     except Exception as e:
         logger.error(f"Daily briefing failed for {instance_id}: {e}")
-        summary["error"] = str(e)
-
-    return summary
-
-
-async def run_drift_detection(db, instance: Instance) -> dict:
-    """
-    Run performance drift detection for an instance.
-    Uses metrics configuration from the instance's domain pack.
-    """
-    settings = get_settings()
-    if not settings.KG_PROACTIVE_ENABLED:
-        return {"status": "disabled"}
-
-    instance_id = instance.id
-    summary = {"instance_id": instance_id, "drifts_found": 0}
-
-    try:
-        from bootstrap.domain_pack import get_active_pack
-        from ai.engine.proactive.insight_generator import detect_performance_drift
-        from ai.engine.proactive.delivery import deliver_batch
-
-        pack = await get_active_pack(instance_id, db)
-        # Look for drift metrics config in domain pack
-        cache_profile = pack.get("cache_profile", {}) if isinstance(pack, dict) else {}
-        metrics_config = cache_profile.get("drift_metrics", [])
-
-        if not metrics_config:
-            # No crawler writes cache_profile.drift_metrics — this is always
-            # empty today.  Log once at debug and skip explicitly; the writer
-            # for learned/statistical triggers lands in Wave 4.
-            logger.debug(
-                "Drift detection skipped for %s — cache_profile.drift_metrics "
-                "is absent (no crawler writes it yet)",
-                instance_id,
-            )
-            return summary
-
-        drift_insights = await detect_performance_drift(
-            db, instance_id, instance.host_db_url, metrics_config
-        )
-
-        if drift_insights:
-            await deliver_batch(db, instance_id, drift_insights)
-            summary["drifts_found"] = len(drift_insights)
-
-    except Exception as e:
-        logger.error(f"Drift detection failed for {instance_id}: {e}")
         summary["error"] = str(e)
 
     return summary
