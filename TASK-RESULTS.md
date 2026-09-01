@@ -1,5 +1,39 @@
 # TASK-RESULTS.md
 
+## [2026-09-01] Master Architect — Pulse 0.2 Close-Out (Waves A–D complete)
+
+**Role:** Master Architect (DeepSeek V4-Pro) · **Kind:** governance + commit (Pulse 0.2)
+
+### Summary
+Closed out Pulse 0.2 formally. Surgically committed Wave D1–D4 (40 files, +3437/−94) as `741514a`,
+excluding all Nibras/People work (separate workstream, left uncommitted). Authored
+`.ai-toolkit/decisions/0026-pulse-0.2-close-out.md` proving all 8 north-star items with their
+terminal/telemetry artifacts, and confirmed invariants I1–I8 + anti-drift laws L1–L7 held.
+
+### North-star proof (8/8, artifact-per-item)
+1. Proactive insights reach user → `ai/insights_api.py` SSE + `InsightNotificationPanel` + `test_insights_api.py`
+2. Continuity survives restart → Redis `short_term`/`working`/`event_bus` + `test_short_term`/`test_gap2_working_memory`/`test_event_bus`
+3. Learning real + observable → `skills/gate.py` promotion→reuse + `test_skill_admission`/`test_skill_reuse`
+4. No dead subsystems → `learned_triggers.py` rework (no pseudo-tables) + `test_learned_triggers`
+5. Adaptive reasoning → `reason` lane + `test_reason_lane`
+6. Calibrated awareness → `test_confidence_surface` + `AIMessageBubble.confidence.test.jsx`
+7. Boundary contract holds → `verify.sh boundary`/`all` green, zero upward imports
+8. Feels alive → Wave D SSE progress/optimistic/transparency/presence + frontend suite **993/993**
+
+### Commit record
+| Commit | Content |
+|--------|---------|
+| `69161db` | Waves A–C (Redis memory+event bus, insights SSE, skills gate, reason lane, confidence) |
+| `741514a` | Wave D1–D4 close-out (ops progress SSE, optimistic hooks, transparency, polish bundle) |
+
+### Verification
+- ✅ Full frontend suite **993/993** · `npm run lint` 0 errors · `npm run build` ✓
+- ✅ `bash .ai-toolkit/scripts/verify.sh all` → **GATE PASSED**
+- ✅ `audit-imports.sh` boundary green (I1)
+- ✅ Working tree verified post-commit: only Nibras/People files remain modified/untracked
+
+---
+
 ## [2026-08-30] Master Architect — Pulse 0.2 Phase D4 (polish bundle)
 
 **Role:** Master Architect (DeepSeek V4-Pro) · **Kind:** frontend (Pulse Wave D)

@@ -74,9 +74,13 @@ test_gap2_working_memory,test_event_bus,test_insights_api}.py`.
 ## PULSE 0.2 — WAVE D TRACK (Alive UX · governed by `docs/pulse/PULSE-UX.md`)
 
 > Wave D is last on purpose: polish on a disconnected brain is a lie. A–C are shipped, so D is now
-> in scope. **D1 (SSE progress for long ops) is DONE** (uncommitted: `ai/ops_progress.py`,
-> `ai/progress_urls.py`, `src/hooks/useOperationProgress.js`). **D2 (optimistic CRUD hooks) is DONE.**
+> in scope. **D1 (SSE progress for long ops) is DONE.** **D2 (optimistic CRUD hooks) is DONE.**
 > **D3 (AI output transparency) is DONE.** **D4 (polish bundle) is DONE.** Wave D is COMPLETE.
+> **PULSE 0.2 CLOSED 2026-09-01** — commit `741514a` (Wave D1–D4, surgical, 40 files +3437/−94) on
+> top of `69161db` (Waves A–C). All 8 north-star items proven by terminal/telemetry artifact; full
+> frontend suite 993/993; `verify.sh all` GATE PASSED. See
+> `.ai-toolkit/decisions/0026-pulse-0.2-close-out.md`. Nibras/People work intentionally NOT in this
+> commit (separate workstream, left uncommitted).
 > Every D-phase must ALSO pass the **UX Acceptance Rubric** (`PULSE-UX.md` §10) — not just green
 > lint/build.
 

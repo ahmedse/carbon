@@ -38,6 +38,8 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0016](0016-domain-app-ai-contract.md) | Domain App AI Contract — manifest-driven extension model (`DomainAIOperations` ABC) | Accepted |
 | [0019](0019-contextual-inspector-drawer.md) | Contextual Inspector Drawer — unify Notes drawer + per-page metrics panels into one registry-driven global drawer | Proposed |
 | [0024](0024-pulse-0.2-north-star.md) | Pulse 0.2 north star, invariants I1–I8 & anti-drift rails (import-boundary gate + UX acceptance rubric) | Accepted |
+| [0025](0025-typed-vs-dataschema-storage.md) | Typed-vs-dataschema storage — typed storage is authoritative for rule-level evaluation | Accepted |
+| [0026](0026-pulse-0.2-close-out.md) | Pulse 0.2 close-out — all 8 north-star items proven by terminal/telemetry artifact (Waves A–D, commits `69161db` + `741514a`); Nibras/People excluded | Accepted |
 | [0025](0025-typed-vs-dataschema-storage.md) | Storage pattern for hosted apps — typed tables for owned data, `dataschema` only for governed measurements; DQ binds to typed fields via `dq.ModelRuleAssignment` | Accepted |
 | [0025](0025-typed-vs-dataschema-storage.md) | Storage pattern for hosted apps — typed tables for owned data, `dataschema` for governed measurements (governance/DQ decoupled halves) | Accepted |
 
