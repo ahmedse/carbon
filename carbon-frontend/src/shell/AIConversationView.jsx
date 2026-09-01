@@ -41,6 +41,7 @@ import AIInputBar from './AIInputBar';
 import AIWorkingIndicator from './AIWorkingIndicator';
 import AIOfflineBanner from './AIOfflineBanner';
 import AIStatusBar from './AIStatusBar';
+import PulsePresence from './PulsePresence';
 import AIModelSelect from './AIModelSelect';
 import { KeyboardShortcutsHelp } from './KeyboardShortcutsHelp';
 import { useAITaskTransfer } from './useAITaskTransfer';
@@ -1473,6 +1474,7 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
         }}
       >
         <AIStatusBar variant={statusVariant} label={statusLabel} onRetry={handleRetry} />
+        <PulsePresence />
         {isOwner && <AIModelSelect onChange={handleModelChange} />}
         {isOwner && (
           <Tooltip title={conversation.visibility === 'shared' ? 'Unshare' : 'Share'}>

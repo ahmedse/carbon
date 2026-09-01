@@ -262,6 +262,37 @@ class PulseJobTests(JobsBaseTestCase):
         job.refresh_from_db()
         self.assertEqual(job.status, before)
 
+    def test_refresh_active_pulse_jobs_scoped_to_caller(self):
+        """Presence-driven refresher advances only the caller's active jobs."""
+        other = User.objects.create_user(username='job_other', password='pass')
+
+        mine = jobs_module.create_job(
+            'nl_check', rule=self.nl_rule,
+            payload={'prompt': 'x'}, user=self.admin)
+        mine.pulse_task_id = 't-mine'
+        mine.status = 'running'
+        mine.save()
+
+        theirs = jobs_module.create_job(
+            'nl_check', rule=self.nl_rule,
+            payload={'prompt': 'x'}, user=other)
+        theirs.pulse_task_id = 't-theirs'
+        theirs.status = 'running'
+        theirs.save()
+
+        with patch('ai.intelligence.get_task') as mock_get:
+            mock_get.return_value = {
+                'task_id': 't-mine', 'status': 'completed',
+                'result': {'passed': True, 'checked': 3},
+            }
+            jobs_module.refresh_active_pulse_jobs(self.admin)
+
+        mine.refresh_from_db()
+        theirs.refresh_from_db()
+        self.assertEqual(mine.status, 'done')
+        self.assertEqual(mine.progress, 100)
+        self.assertEqual(theirs.status, 'running')  # untouched — not the caller's
+
 
 # ── Cancel ───────────────────────────────────────────────────────────────
 

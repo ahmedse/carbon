@@ -1,5 +1,120 @@
 # TASK-RESULTS.md
 
+## [2026-08-30] Master Architect — Pulse 0.2 Phase D4 (polish bundle)
+
+**Role:** Master Architect (DeepSeek V4-Pro) · **Kind:** frontend (Pulse Wave D)
+
+### Summary
+Pulse Wave D4 shipped the "feel alive" polish bundle: **observability** (structured logger + hand-rolled
+Web Vitals), **presence** (passive SSE-heartbeat alive indicator), and **offline drafts** (localStorage
+composer persistence). Presence reuses the existing insight SSE (no second connection, no polling) and
+drafts persist/clear across send/stop. A test-isolation fix (clear localStorage/sessionStorage between
+tests) resolved 5 order-dependent `AIInputBar` regressions and the pre-existing `AITaskPanel.w3c` failure.
+
+### Files Created
+| File | What |
+|------|------|
+| `carbon-frontend/src/utils/logger.js` | `createLogger(module)` → leveled `{debug,info,warn,error}`, `VITE_LOG_LEVEL` gate (default warn), `[module]` prefix, 100-entry ring buffer, recursive secret redaction |
+| `carbon-frontend/src/utils/webVitals.js` | Dependency-free `initWebVitals` (LCP/CLS/INP/FCP via `PerformanceObserver`, buffered), `VITALS_THRESHOLDS`, no-op when API absent |
+| `carbon-frontend/src/hooks/usePresence.js` | Passive `{online,stale,lastBeatAt}` from `getLastBeatAt()`; online/offline events + 5s recompute timer (no network) |
+| `carbon-frontend/src/hooks/useDraftPersistence.js` | `{draft,restore,persist,clear}` localStorage draft, 300ms debounce + unmount flush, storage-guarded |
+| `carbon-frontend/src/shell/PulsePresence.jsx` | Theme-token dot + sr-only text + `aria-live="polite"` |
+| `carbon-frontend/src/__tests__/{logger,webVitals}.test.js` + `{usePresence,useDraftPersistence}.test.jsx` | Level gating/redaction/ring cap; observer no-op + forward; presence derivation + no-duplicate-SSE; round-trip/debounce/clear |
+
+### Files Changed
+| File | What |
+|------|------|
+| `carbon-frontend/src/hooks/useInsightStream.js` | Added `lastBeatAt` to shared store/subscriber/hook state; `parseSseFrames` records `Date.now()` per frame + notifies on heartbeat; exported passive `getLastBeatAt()` |
+| `carbon-frontend/src/shell/AIInputBar.jsx` | Consumes `useDraftPersistence` (restore/persist/clear), added `conversationId` prop, `handleStop` wrapper clears draft |
+| `carbon-frontend/src/shell/AIConversationView.jsx` | Added `<PulsePresence />` to footer (next to `AIStatusBar`) |
+| `carbon-frontend/src/main.jsx` | Wired `createLogger("web-vitals")` + `initWebVitals` |
+| `carbon-frontend/src/setupTests.js` | Added `beforeEach` clearing `localStorage`/`sessionStorage` (test isolation) |
+
+### Deviations (reviewed + accepted by Master)
+- `usePresence` reads the heartbeat via passive `getLastBeatAt()` (not `useInsightStream()`), avoiding `useAuth → listInsights → apiFetch` network in every consumer; the stream stays owned by the existing header/notification consumers.
+- `AIInputBar` had no `conversationId` source, so the draft key maps `undefined → 'default'`.
+- CLS is reported per `layout-shift` entry (simple hand-rolled collector), not the external `web-vitals` cumulative CLS — no new dependency added.
+
+### Verification (all run by Master — real output, no fabrication)
+- ✅ `npx vitest run` on 4 new files → **17/17 passed**
+- ✅ affected regression files (AIInputBar ×5, AIStatusBar, InsightNotificationPanel, AIConversationView) → **46/46 passed** (after the setupTests isolation fix)
+- ✅ `npm run lint` → **0 errors** (33 pre-existing warnings, none new after cleanup)
+- ✅ `npm run build` → **built in 22.04s**
+- ✅ `bash .ai-toolkit/scripts/verify.sh all` → **GATE PASSED** (pre-existing warnings only)
+- ✅ Full suite → **993/993 passed (100% green)** — the prior `AITaskPanel.w3c` failure is now fixed by the storage-isolation change.
+
+---
+
+## [2026-08-30] Master Architect — Pulse 0.2 Phase D3 (AI output transparency)
+
+**Role:** Master Architect (DeepSeek V4-Pro) · **Kind:** frontend (Pulse Wave D)
+
+### Summary
+Pulse Wave D3 shipped: three transparency surfaces for AI output — an AI-authored badge, an
+on-click "why this answer" provenance trace (replacing the fragile hover tooltip), and a legible
+"will be created" consent diff for DQ rule suggestions. All three render in OUTCOME language only
+(RULE_23), use theme tokens (RULE_8), and are wired into `AIMessageBubble` so every assistant
+message is labeled and traceable.
+
+### Files Created
+| File | What |
+|------|------|
+| `carbon-frontend/src/shell/AIGeneratedBadge.jsx` | Quiet outlined `Chip` token (`SmartToyOutlined` @ `text.secondary`, default "AI", optional `label`, `aria-label`) |
+| `carbon-frontend/src/shell/ReasoningTrace.jsx` | On-click ⓘ `IconButton` (`aria-label="Why this answer"` + `aria-expanded`) expanding Sources / Tools-used / Data-freshness panel; filters `engine_turn`/`Turn:`/`Guards:`/`tok`/`S2|S4`/latency leakage |
+| `carbon-frontend/src/shell/SuggestionDiff.jsx` | Structured consent summary (Name/Type/Level/Severity/Dimension/Fields/Params/Rationale) reusing `pages/dq/constants.js` label maps + `SEVERITY_COLORS`; defensive rationale-only fallback |
+| `carbon-frontend/src/__tests__/AIGeneratedBadge.test.jsx` | Default/custom copy + icon + aria-label |
+| `carbon-frontend/src/__tests__/ReasoningTrace.test.jsx` | Trigger label, click reveals sources/tools/freshness, leakage filtered, tools omitted when empty |
+| `carbon-frontend/src/__tests__/SuggestionDiff.test.jsx` | Full structured render, label-map fallback, `definition: undefined` defensive, empty-bindings em dash |
+
+### Files Changed
+| File | What |
+|------|------|
+| `carbon-frontend/src/shell/AIMessageBubble.jsx` | Imported + wired all three: replaced hover `Tooltip`/`InfoOutlinedIcon` with `<ReasoningTrace>` (kept `!isUser && showProvenance` gate); added assistant-only `<AIGeneratedBadge />`; swapped `dq_suggestions` rationale for `<SuggestionDiff suggestion={s} />`; removed unused `InfoOutlinedIcon`/`useLanguage`/`isRtl` |
+
+### Deviations (reviewed + accepted by Master)
+- **Leakage filtering lives in `ReasoningTrace`**, not the out-of-scope `provenanceLines` builder — it still emits `Turn:`/`Guards:`/token lines, dropped defensively at render.
+- **Date formatting** uses `new Date(...).toLocaleString(undefined, {dateStyle, timeStyle})` — no `fmtDate` helper exists in the repo.
+
+### Verification (all run by Master — real output, no fabrication)
+- ✅ `npx vitest run` on 5 files (3 new + protected `transparency`/`confidence`) → **31/31 passed**
+- ✅ `npm run lint` → **0 errors** (33 pre-existing warnings, none in touched files)
+- ✅ `npm run build` → **built in 23.90s**
+- ✅ `bash .ai-toolkit/scripts/verify.sh all` → **GATE PASSED** (pre-existing warnings only)
+- ⚠️ Full suite **975/976 passed** — the single `AITaskPanel.w3c` failure is pre-existing and unrelated (AITaskPanel imports no D3 component).
+
+---
+
+## [2026-08-30] Master Architect — Pulse 0.2 Phase D2 (Optimistic CRUD hooks)
+
+**Role:** Master Architect (DeepSeek V4-Pro) · **Kind:** frontend (Pulse Wave D)
+
+### Summary
+Pulse Wave D2 shipped: two generic optimistic CRUD hooks (`useOptimisticList`,
+`useOptimisticItem`) and one real consumer (`RulesTab.jsx`) proving the
+reconcile-or-rollback pattern. Same-tick (<100ms) optimistic apply, server reconcile on
+success, rollback + surfaced error on failure — never clearing user input on a failed save.
+
+### Files Created
+| File | What |
+|------|------|
+| `carbon-frontend/src/hooks/useOptimisticList.js` | `useOptimisticList({ fetchList, create, update, remove, getKey })` → `{ items, loading, error, addItem, updateItem, removeItem }` |
+| `carbon-frontend/src/hooks/useOptimisticItem.js` | `useOptimisticItem({ fetchItem, update, getKey })` → `{ item, loading, error, save, rollback }` |
+| `carbon-frontend/src/__tests__/useOptimisticList.test.jsx` | 7 regression tests (sync apply, reconcile, rollback, index-preserving re-insert) |
+| `carbon-frontend/src/__tests__/useOptimisticItem.test.jsx` | 4 regression tests (load, sync save, rollback-no-clear, rollback()) |
+
+### Files Changed
+| File | What |
+|------|------|
+| `carbon-frontend/src/pages/dq/tabs/RulesTab.jsx` | Consumed `useOptimisticList` for create/update/delete; removed manual `setRows`/`setLoading`/`load` + `actionBusyId` |
+
+### Verification (all run by Master — real output, no fabrication)
+- ✅ `npx vitest run` on the 2 new test files → **11/11 passed**
+- ✅ `npm run lint` → **0 errors** (33 pre-existing warnings, none in touched files)
+- ✅ `npm run build` → **built in 26.27s**
+- ✅ `bash .ai-toolkit/scripts/verify.sh all` → **GATE PASSED** (pre-existing warnings only)
+
+---
+
 ## [2026-08-30] Backend Worker — Phase NIR-1A (People app skeleton) + NIR-2B (per-instance enablement seed)
 
 **Role:** backend-worker (DeepSeek V4-Flash) · **Kind:** backend (NIBRAS/CLEARTURN product-line track)

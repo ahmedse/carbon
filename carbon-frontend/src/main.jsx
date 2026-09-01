@@ -12,6 +12,8 @@ import "@fontsource/cairo/600.css";
 import "@fontsource/cairo/700.css";
 import { ThemeModeProvider } from "./theme/ThemeContext";
 import ThemedApp from "./theme/ThemedApp";
+import { createLogger } from "./utils/logger";
+import { initWebVitals } from "./utils/webVitals";
 import "./i18n";
 
 console.debug("main.jsx: Rendering root app...");
@@ -22,3 +24,6 @@ createRoot(document.getElementById("root")).render(
     </ThemeModeProvider>
   </React.StrictMode>
 );
+
+const webVitalsLogger = createLogger("web-vitals");
+initWebVitals((metric) => webVitalsLogger.info("web-vital", metric));

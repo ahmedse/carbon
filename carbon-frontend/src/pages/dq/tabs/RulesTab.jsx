@@ -19,6 +19,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
+import { useOptimisticList } from '../../../hooks/useOptimisticList';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
 import RuleJsonEditor from '../../../components/dq/RuleJsonEditor';
 import {
@@ -64,8 +65,6 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
   const { notify, notifyFromError } = useNotification();
   const { t } = useTranslation('dq');
 
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [tags, setTags] = useState([]);
   const [filters, setFilters] = useState(() => ({ ...EMPTY_FILTERS, data_table: tableFilter || '' }));
   const [showFilters, setShowFilters] = useState(false);
@@ -74,37 +73,41 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
   const [serverErrors, setServerErrors] = useState([]);
   const [saving, setSaving] = useState(false);
   const [tables, setTables] = useState([]);
-  const [actionBusyId, setActionBusyId] = useState(null);
   const [filteredTableName, setFilteredTableName] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [selectedRowId, setSelectedRowId] = useState(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const params = useMemo(
+    () => ({
+      search: filters.search || undefined,
+      rule_level: filters.rule_level || undefined,
+      rule_type: filters.rule_type || undefined,
+      dimension: filters.dimension || undefined,
+      severity: filters.severity || undefined,
+      is_active: filters.active === 'all' ? undefined : filters.active === 'active',
+      tag: filters.tag || undefined,
+      data_table: filters.data_table || undefined,
+      ...(filters.include_archived ? { include_archived: 1 } : {}),
+    }),
+    [filters]
+  );
+
+  const fetchList = useCallback(async () => {
     try {
-      const params = {
-        search: filters.search || undefined,
-        rule_level: filters.rule_level || undefined,
-        rule_type: filters.rule_type || undefined,
-        dimension: filters.dimension || undefined,
-        severity: filters.severity || undefined,
-        is_active: filters.active === 'all' ? undefined : filters.active === 'active',
-        tag: filters.tag || undefined,
-        data_table: filters.data_table || undefined,
-        ...(filters.include_archived ? { include_archived: 1 } : {}),
-      };
-      const payload = await listDQRules(token, params);
-      setRows(Array.isArray(payload) ? payload : payload?.results || []);
+      return await listDQRules(token, params);
     } catch (err) {
       notifyFromError(err, t('rules.loadError'));
-    } finally {
-      setLoading(false);
+      throw err;
     }
-  }, [token, filters, notifyFromError, t]);
+  }, [token, params, notifyFromError, t]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { items: rows, loading, addItem, updateItem, removeItem } = useOptimisticList({
+    fetchList,
+    create: (data) => createDQRule(token, data),
+    update: (id, patch) => updateDQRule(token, id, patch),
+    remove: (id) => deleteDQRule(token, id),
+    getKey: (rule) => rule.id,
+  });
 
   useEffect(() => {
     let active = true;
@@ -185,10 +188,9 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
       }
       const body = { definition: parsed };
       if (assignments.length > 0) body.field_assignments_write = assignments;
-      await createDQRule(token, body);
+      await addItem(body);
       notify({ message: t('rules.created'), type: 'success' });
       setCreateOpen(false);
-      load();
     } catch (err) {
       setServerErrors(normalizeServerErrors(err?.data || err));
     } finally {
@@ -197,45 +199,38 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
   };
 
   const handleToggleActive = async (rule) => {
-    setActionBusyId(`toggle-${rule.id}`);
     try {
-      await updateDQRule(token, rule.id, { is_active: !rule.is_active });
+      await updateItem(rule.id, { is_active: !rule.is_active });
       notify({
         message: rule.is_active
           ? t('rules.deactivated', { name: rule.name })
           : t('rules.activated', { name: rule.name }),
         type: 'success',
       });
-      load();
     } catch (err) {
       notifyFromError(err, t('rules.updateError'));
-    } finally {
-      setActionBusyId(null);
     }
   };
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
-    setActionBusyId(`delete-${deleteTarget.id}`);
+    const target = deleteTarget;
     try {
-      const result = await deleteDQRule(token, deleteTarget.id);
+      const result = await removeItem(target.id);
       if (result && result.archived) {
         notify({
           message: t('rules.archivedWithResults', {
-            name: deleteTarget.name,
+            name: target.name,
             count: result.results_count || 0,
           }),
           type: 'info',
         });
       } else {
-        notify({ message: t('rules.deleted', { name: deleteTarget.name }), type: 'success' });
+        notify({ message: t('rules.deleted', { name: target.name }), type: 'success' });
       }
       setDeleteTarget(null);
-      load();
     } catch (err) {
       notifyFromError(err, t('rules.deleteError'));
-    } finally {
-      setActionBusyId(null);
     }
   };
 
@@ -355,7 +350,6 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
                 <IconButton
                   size="small"
                   aria-label={row.is_active ? t('operations.deactivate') : t('operations.activate')}
-                  disabled={actionBusyId === `toggle-${row.id}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleToggleActive(row);
@@ -370,7 +364,6 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
                 <IconButton
                   size="small"
                   aria-label={t('rules.deleteArchive')}
-                  disabled={actionBusyId === `delete-${row.id}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setDeleteTarget(row);
@@ -385,7 +378,7 @@ function RulesTab({ onJobCreated: _onJobCreated, tableFilter }) {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [navigate, actionBusyId, t]
+    [navigate, t]
   );
 
   return (

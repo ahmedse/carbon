@@ -56,16 +56,251 @@ evidence → not done.
 
 | Phase | Goal | Domain | Deps | Status |
 |-------|------|--------|------|--------|
-| A1 | Redis-backed ephemeral memory (G3) | backend | — | READY |
-| A2 | Redis pub/sub event bus (G3→G2) | backend | — | READY |
-| A5 | Resolve dead subsystems (G4) | backend | — | READY |
-| A3 | Proactive → Django SSE (G2) | backend | A2 | READY |
-| A4 | Notification panel wired (G2) | frontend | A3 | READY |
+| A1 | Redis-backed ephemeral memory (G3) | backend | — | DONE |
+| A2 | Redis pub/sub event bus (G3→G2) | backend | — | DONE |
+| A5 | Resolve dead subsystems (G4) | backend | — | DONE |
+| A3 | Proactive → Django SSE (G2) | backend | A2 | DONE |
+| A4 | Notification panel wired (G2) | frontend | A3 | DONE |
 
-**Note on engine Redis config:** `engine/core/config.py` has NO Redis key yet and `backend/.env` has no
-`REDIS_URL`. A1/A2 workers MUST add a Redis connection URL (default `redis://127.0.0.1:6379/0`) + the
-TTL key (`PULSE_MEMORY_REDIS_TTL_SECONDS`=86400) to `engine/core/config.py` (via `get_settings()`), and
-fail-visibly (log, never silent) when Redis is unreachable. Django `CACHES` uses `REDIS_URL` env separately.
+**Wave A shipped** (commit `updates`, 2026-08-30): `engine/memory/{_redis,short_term,working}.py`
+(Redis-backed, `PULSE_MEMORY_REDIS_URL` + `PULSE_MEMORY_REDIS_TTL_SECONDS` in `engine/core/config.py`),
+`engine/core/event_bus.py`, `ai/insights_api.py` (SSE `insights/stream/` + list + disposition),
+`src/hooks/useInsightStream.js` + `src/components/notifications/InsightNotificationPanel.jsx`.
+`verify.sh all` green. A1/A2/A5/A3/A4 acceptance artifacts live in `ai/tests/{test_short_term,
+test_gap2_working_memory,test_event_bus,test_insights_api}.py`.
+
+---
+
+## PULSE 0.2 — WAVE D TRACK (Alive UX · governed by `docs/pulse/PULSE-UX.md`)
+
+> Wave D is last on purpose: polish on a disconnected brain is a lie. A–C are shipped, so D is now
+> in scope. **D1 (SSE progress for long ops) is DONE** (uncommitted: `ai/ops_progress.py`,
+> `ai/progress_urls.py`, `src/hooks/useOperationProgress.js`). **D2 (optimistic CRUD hooks) is DONE.**
+> **D3 (AI output transparency) is DONE.** **D4 (polish bundle) is DONE.** Wave D is COMPLETE.
+> Every D-phase must ALSO pass the **UX Acceptance Rubric** (`PULSE-UX.md` §10) — not just green
+> lint/build.
+
+---
+
+## Phase D2 — Optimistic CRUD hooks (`useOptimisticList` / `useOptimisticItem`)
+**Date:** 2026-08-30
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Full spec (source of truth):** `docs/pulse/PULSE-0.2-ROADMAP.md` Wave D — D2; UX rubric `docs/pulse/PULSE-UX.md` §10.
+
+**Result (2026-08-30):** Shipped `useOptimisticList` + `useOptimisticItem` hooks and consumed
+`useOptimisticList` in `RulesTab.jsx` (create/update/delete now optimistic). Gate green: 11/11 vitest,
+0 lint errors, build ✓, `verify.sh all` GATE PASSED.
+
+### Files to Read First
+- `carbon-frontend/src/api/api.js` — `apiFetch(endpoint, { method, token, body })`; RULE_10 (never raw fetch).
+- `carbon-frontend/src/hooks/useApi.js` — GET-hook convention (`{ data, loading, error, refetch }`, useRef cancellation).
+- `carbon-frontend/src/api/dq.js` — CRUD helper shape (`listDQRules`/`createDQRule`/`updateDQRule`/`deleteDQRule`).
+- `carbon-frontend/src/pages/dq/tabs/RulesTab.jsx` — representative list consumer (manual `setRows`/`setLoading`/`notifyFromError`).
+- `docs/pulse/PULSE-UX.md` §10 (rubric) + §11 (Wave D headline: *"it feels as alive as it now is"*).
+- `carbon-frontend/src/__tests__/` (existing test style: `@testing-library/react` + `vi.fn()` mocks).
+
+### Context
+Every list/detail page hand-rolls the same pessimistic CRUD dance: `apiFetch` → `setRows` →
+`notifyFromError` on failure. The UI stalls for the full round-trip, and a failed save wipes user
+input. Wave D headline is *"it feels alive"*: optimistic CRUD is Beat 1 (<100ms acknowledge) made
+real. Ship **two generic hooks** and consume them in ONE representative page (DQ Rules) to prove the
+pattern — reconcile-or-rollback, and **never clear a form on error**.
+
+### Files to Change
+- `carbon-frontend/src/hooks/useOptimisticList.js` (NEW)
+- `carbon-frontend/src/hooks/useOptimisticItem.js` (NEW)
+- `carbon-frontend/src/__tests__/useOptimisticList.test.jsx` (NEW)
+- `carbon-frontend/src/__tests__/useOptimisticItem.test.jsx` (NEW)
+- `carbon-frontend/src/pages/dq/tabs/RulesTab.jsx` (consume `useOptimisticList` for create/update/delete)
+
+### Contract (exact API — do NOT deviate)
+- `useOptimisticList({ fetchList, create, update, remove, getKey = (i) => i.id })` →
+  `{ items, loading, error, addItem, updateItem, removeItem }`.
+  - `items` = server list + in-flight optimistic entries (each temp carries `__optimistic: true`).
+  - `addItem(input)` — apply optimistically **synchronously** (same tick, <100ms), call `create(input)`;
+    on success replace the temp with the server item (reconcile); on error roll back + set `error`
+    (human string) and **rethrow** so the caller keeps the form data intact.
+  - `updateItem(id, patch)` — snapshot the prior item, apply patch synchronously, call `update(id, patch)`;
+    on success reconcile with the server response; on error restore the snapshot + surface `error`.
+  - `removeItem(id)` — remember the original index, remove synchronously, call `remove(id)`; on error
+    re-insert at the original index + surface `error`.
+- `useOptimisticItem({ fetchItem, update, getKey })` → `{ item, loading, error, save, rollback }` — same
+  reconcile-or-rollback semantics for a single detail entity; `save(patch)` must not clear the form on error.
+- All status styling via theme tokens (RULE_8); mutations via the passed-in `apiFetch`-based helpers only
+  (RULE_10); no raw `fetch`, no polling, no hardcoded colors.
+
+### Shallow-implementation trap (reject if hit)
+❌ Optimistic state applied in a `setTimeout`/`useEffect` (must be same-tick); ❌ swallowing the error
+(no rollback + no surfaced message); ❌ clearing form state on failed save; ❌ a hook that only "could"
+be used but is never actually consumed by a real page.
+
+### DO NOT TOUCH
+- `carbon-frontend/src/api/api.js` (apiFetch core), any backend file, `RulesTab.jsx`'s unrelated filter logic.
+- No raw `fetch()`; no new dependency.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/useOptimisticList.test.jsx src/__tests__/useOptimisticItem.test.jsx
+npm run lint && npm run build
+cd /home/ahmed/aast/carbon && bash .ai-toolkit/scripts/verify.sh all
+```
+Plus the **UX Acceptance Rubric** (`PULSE-UX.md` §10): Beat 1 <100ms acknowledge, visible
+reconcile-or-rollback, form never cleared on error, honest empty/error states, theme tokens,
+accessible (keyboard + live-region + status not color-only), `prefers-reduced-motion` respected.
+
+---
+
+## Phase D3 — AI output transparency (AIGeneratedBadge · ReasoningTrace · SuggestionDiff)
+**Date:** 2026-08-30
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Full spec (source of truth):** `docs/pulse/PULSE-0.2-ROADMAP.md` Wave D — D3; `docs/pulse/PULSE-UX.md` §6 (transparency & trust) + §10 (UX rubric).
+
+**Result (Master Architect, 2026-08-30):** shipped the three transparency surfaces + wiring.
+- `AIGeneratedBadge` — quiet `Chip` token (small/outlined/default, `SmartToyOutlined` at `text.secondary`, default "AI", `aria-label`), rendered inline in assistant bubbles only.
+- `ReasoningTrace` — on-click ⓘ `IconButton` (`aria-label="Why this answer"`, `aria-expanded`) expanding a Sources/Tools-used/Data-freshness panel; filters RULE_23 leakage (`engine_turn`/`Turn:`/`Guards:`/`tok`/`S2|S4`/latency) defensively inside the component (the out-of-scope `provenanceLines` builder still emits those lines; they are dropped at render). Replaced the hover `Tooltip` in `AIMessageBubble`.
+- `SuggestionDiff` — structured "will be created" summary reusing `RULE_TYPE_LABELS`/`RULE_LEVEL_LABELS`/`SEVERITY_LABELS`/`SEVERITY_COLORS`/`DIMENSION_LABELS` from `pages/dq/constants.js`; defensive rationale-only fallback when `definition` missing.
+- `AIMessageBubble.jsx` consumes all three (imports wired; `ReasoningTrace` gated by `!isUser && showProvenance`; `AIGeneratedBadge` assistant-only; `SuggestionDiff` in the `dq_suggestions` branch). Removed now-unused `InfoOutlinedIcon` + `useLanguage`/`isRtl` (ReasoningTrace handles RTL itself).
+- Gate GREEN: 31/31 targeted vitest (incl. protected `transparency`/`confidence` tests), lint 0 errors (33 pre-existing warnings), build ✓, `verify.sh all` GATE PASSED. Full suite 975/976 — the single `AITaskPanel.w3c` failure is pre-existing and does not import any D3 component.
+
+**Note:** the ConfidenceBar part of D3 is ALREADY shipped as `src/shell/ConfidenceIndicator.jsx`
+(C2, rendered in `AIMessageBubble.jsx:1065`). D3 adds the three remaining transparency surfaces.
+
+### Context
+PULSE-UX §6 makes transparency *the* differentiator: AI-authored is labeled; provenance is on demand
+(not a hover tooltip the Analyst can't live in); consent before mutation is a legible diff. Today:
+- Assistant messages are NOT labeled as AI-authored.
+- "Why this answer" is a fragile hover `Tooltip` (`AIMessageBubble.jsx:992–995`) that only shows
+  model/turn/guards/context — no tools-in-outcome-language, no freshness, and it leaks internals
+  (`engine_turn_id`, `guard_results`) in violation of RULE_23.
+- DQ suggestion cards show only name + rationale + confidence before Accept — the user cannot see
+  exactly what rule will be created (RULE_21 "consent is legible" is not met).
+
+### Files to Change
+- `carbon-frontend/src/shell/AIGeneratedBadge.jsx` (NEW)
+- `carbon-frontend/src/shell/ReasoningTrace.jsx` (NEW)
+- `carbon-frontend/src/shell/SuggestionDiff.jsx` (NEW)
+- `carbon-frontend/src/__tests__/AIGeneratedBadge.test.jsx` (NEW)
+- `carbon-frontend/src/__tests__/ReasoningTrace.test.jsx` (NEW)
+- `carbon-frontend/src/__tests__/SuggestionDiff.test.jsx` (NEW)
+- `carbon-frontend/src/shell/AIMessageBubble.jsx` (consume all three; replace the ⓘ tooltip with ReasoningTrace; label assistant content; render SuggestionDiff in the `dq_suggestions` branch)
+
+### Contract (exact API — do NOT deviate)
+- `AIGeneratedBadge({ label })` — a quiet token (small outlined `Chip`, `SmartToyOutlined`/`AutoAwesome` icon, theme tokens, `color="default"`/`text.secondary`, never a shout). Default copy "AI" (or "AI-generated"). Accessible: icon+text, `aria-label` present. `label` optional override.
+- `ReasoningTrace({ lines, actions, pendingActions, createdAt })` — an on-click affordance (small ⓘ `IconButton`, `aria-label="Why this answer"`) that expands a compact panel. Renders in OUTCOME language only (RULE_23): Sources/records (`lines` — the existing `provenanceLines` from context_snapshot/scope, already outcome-shaped), Tools used (from `actions` → `summary`/`label`, and `pendingActions` → `confirmation_message`), Data freshness (`createdAt` via the repo `fmtDate`). NEVER render `engine_turn_id`, raw `guard_results`, `S2/S4`, token counts, or latency.
+- `SuggestionDiff({ suggestion })` — a legible "will be created" summary for a DQ suggestion. Renders structured rows from `suggestion.definition` (`name`, `type`, `level`, `bindings[].table/field`, `params` as `key: value`) + top-level `severity`, `dimension`, `rationale`. Reuse `RULE_TYPE_LABELS`/`RULE_LEVEL_LABELS` from `src/pages/dq/constants.js` (or equivalent label maps) — no new hardcoded label tables.
+- All three: theme tokens only (RULE_8), no raw `fetch`, no polling, no hardcoded hex; text+icon (status never color-only); keyboard-complete; respect `prefers-reduced-motion`.
+
+### Shallow-implementation trap (reject if hit)
+❌ AIGeneratedBadge that's a garish colored banner (must be a quiet token); ❌ ReasoningTrace that's still a hover `Tooltip` (must be on-click, expandable) or that leaks engine terms; ❌ SuggestionDiff that just re-prints `rationale` (must show the structured definition fields the user is consenting to); ❌ a component that is only "available" but never rendered by a real message/card.
+
+### DO NOT TOUCH
+- `backend/` (no backend change — all data already exists in `message.provenance`, `metadata.actions`/`pending_actions`, `metadata.suggestions`, `message.created_at`).
+- `src/shell/ConfidenceIndicator.jsx` and the existing C2 confidence render (already correct).
+- Existing tests `AIMessageBubble.confidence.test.jsx` and `AIMessageBubble.transparency.test.jsx` — they must stay green (ReasoningTrace trigger keeps `aria-label="Why this answer"`; user messages render no badge/trace).
+- No new dependency.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/AIGeneratedBadge.test.jsx src/__tests__/ReasoningTrace.test.jsx src/__tests__/SuggestionDiff.test.jsx src/__tests__/AIMessageBubble.transparency.test.jsx src/__tests__/AIMessageBubble.confidence.test.jsx
+npm run lint && npm run build
+cd /home/ahmed/aast/carbon && bash .ai-toolkit/scripts/verify.sh all
+```
+Plus the **UX Acceptance Rubric** (`PULSE-UX.md` §10): provenance on demand (not a tooltip), real
+confidence untouched, legible consent diff, AI-authored labeled, zero RULE_23 leakage, theme tokens,
+accessible, `prefers-reduced-motion` respected.
+
+---
+
+## Phase D4 — Polish bundle (logger + Web Vitals · presence · offline drafts)
+**Date:** 2026-08-30
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Full spec (source of truth):** `docs/pulse/PULSE-0.2-ROADMAP.md` Wave D — D4; `docs/pulse/PULSE-UX.md` §8 (delight) + §10 (UX rubric).
+
+**Result (Master Architect, 2026-08-30):** shipped the three-piece polish bundle, all frontend-only.
+- `src/utils/logger.js` — `createLogger(module)` gated by `VITE_LOG_LEVEL` (default `warn`), `[module]`
+  prefix, 100-entry ring buffer (`getBuffer()`), recursive secret redaction (secret keys + `Bearer`/`sk-`).
+- `src/utils/webVitals.js` — dependency-free `initWebVitals` via `PerformanceObserver` (LCP/CLS/INP/FCP,
+  buffered where supported), exported `VITALS_THRESHOLDS`, no-op when the API is absent.
+- `src/hooks/usePresence.js` + `useInsightStream.js` extension — passive `{online,stale,lastBeatAt}` from
+  the EXISTING SSE heartbeat; `parseSseFrames` records `Date.now()` on every frame and `notifySubscribers`
+  now emits `lastBeatAt`; exported `getLastBeatAt()` passive accessor (no second SSE, no polling).
+- `src/shell/PulsePresence.jsx` — theme-token dot (`success.main`/`warning.main`/`error.main`) + sr-only
+  text + `aria-live="polite"`, wired into `AIConversationView.jsx` footer (not inside `AIStatusBar`).
+- `src/hooks/useDraftPersistence.js` + `AIInputBar.jsx` — `localStorage` composer draft (300ms debounce,
+  unmount flush, storage-guarded), `clear()` on send/stop/action; `conversationId` prop (falls back to
+  `'default'`).
+- `src/main.jsx` — wired `createLogger` + `initWebVitals((m) => logger.info("web-vital", m))`.
+- **Test-hygiene fix:** added `beforeEach(() => { localStorage.clear(); sessionStorage.clear(); })` to
+  `src/setupTests.js`. This resolved 5 order-dependent `AIInputBar` regressions the draft flush exposed
+  AND the pre-existing `AITaskPanel.w3c` failure (AITaskPanel also persists its tab to `localStorage`).
+- Gate GREEN: 17/17 new unit tests, affected regression files 46/46, lint 0 errors (33 pre-existing
+  warnings), build ✓, `verify.sh all` GATE PASSED. **Full suite 993/993 (100% green).**
+
+**Scope decision (Master):** D4 is the "feel alive" polish bundle. Skeletons already exist
+(`components/Page/LoadingSkeleton.jsx` is used broadly; §5 Loading = skeleton, not spinner, is already
+satisfied at the page level). The full **service worker** (offline SPA caching of an authenticated app)
+is deferred — too large/risky for "keep them small"; offline **draft** persistence is shipped via
+`localStorage` instead, which delivers the real user win ("don't lose my half-typed prompt") without a
+cache-invalidation minefield. So D4 ships three cohesive, testable pieces: **observability** (logger +
+Web Vitals), **presence** (SSE-heartbeat alive indicator), and **offline drafts**.
+
+### Deliverables (all frontend — no backend change)
+1. `src/utils/logger.js` (NEW) — `createLogger(module)` → `{ debug, info, warn, error }`, leveled by
+   `import.meta.env.VITE_LOG_LEVEL` (`silent|error|warn|info|debug`), console backend, module tag prefix,
+   recent-entry ring buffer (e.g. 100), strips secrets/tokens (never log `access`/`refresh`/`pulse_key`).
+2. `src/utils/webVitals.js` (NEW) — `initWebVitals(onMetric)` using `PerformanceObserver` for LCP, CLS,
+   INP, FCP (buffered where supported); each metric routed through the logger at `info`; guarded when
+   `PerformanceObserver` is absent (jsdom/tests). Wired once in `src/main.jsx` (after render).
+3. `src/hooks/usePresence.js` (NEW) — presence via the EXISTING insight SSE heartbeat. Backend
+   `ai/insights/stream/` emits `: ping\n\n` every 15s (`_HEARTBEAT_SECONDS`). Do NOT open a second SSE:
+   extend the singleton in `src/hooks/useInsightStream.js` to also record `lastBeatAt` (update on every
+   heartbeat/comment frame + on any data frame) and expose it in the shared store; `usePresence` derives
+   `online` (browser `online` event AND `Date.now() - lastBeatAt < ~45s`). Exposes
+   `{ online, lastBeatAt, stale }`. Respect `prefers-reduced-motion` in any animation.
+4. `src/shell/PulsePresence.jsx` (NEW) — subtle alive indicator consuming `usePresence`: a small dot
+   (`success.main` when online, `warning.main` when stale, `error.main` when offline) + a
+   screen-reader-only label + `aria-live="polite"`; text+icon never color-only. Wired into the AI
+   workspace footer (replace/augment the static `offline` variant of `src/shell/AIStatusBar.jsx`).
+5. `src/hooks/useDraftPersistence.js` (NEW) — localStorage draft for the AI composer keyed by
+   conversation id; `restore()` on mount, `persist(value)` (debounced), `clear()` on send/stop. Consumed
+   in `src/shell/AIInputBar.jsx` so a reload restores the half-typed prompt. No raw `fetch`, theme tokens
+   only, no new dependency.
+
+### Tests (NEW — match existing `@testing-library/react` + `vi` style)
+- `src/__tests__/logger.test.js` — level gating, tag prefix, secret redaction, ring-buffer cap.
+- `src/__tests__/webVitals.test.js` — observer registers on available `PerformanceObserver`; no-throw
+  when absent; metrics forwarded to the callback.
+- `src/__tests__/usePresence.test.jsx` — online when fresh `lastBeatAt`; stale when old; offline on
+  `navigator.onLine === false`; no duplicate SSE.
+- `src/__tests__/useDraftPersistence.test.jsx` — persist/restore/clear round-trip via mocked localStorage.
+
+### DO NOT TOUCH
+- `backend/` (no backend change; heartbeat already exists in `ai/insights/stream/`).
+- `src/shell/ConfidenceIndicator.jsx`, `AIGeneratedBadge.jsx`, `ReasoningTrace.jsx`, `SuggestionDiff.jsx`
+  (D3, done) and their tests.
+- Protected tests: `AIMessageBubble.transparency.test.jsx`, `AIMessageBubble.confidence.test.jsx`.
+
+### Shallow-implementation trap (reject if hit)
+❌ presence that polls (`setInterval` fetch) instead of reusing the SSE heartbeat; ❌ logger that logs
+tokens/secrets; ❌ a Web Vitals collector that hard-crashes in jsdom; ❌ draft persistence that never
+clears on send; ❌ a presence dot that's color-only (no sr text); ❌ a second SSE connection opened in
+parallel with `useInsightStream`.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/logger.test.js src/__tests__/webVitals.test.js src/__tests__/usePresence.test.jsx src/__tests__/useDraftPersistence.test.jsx
+npm run lint && npm run build
+cd /home/ahmed/aast/carbon && bash .ai-toolkit/scripts/verify.sh all
+```
 
 ---
 
@@ -7172,9 +7407,9 @@ Align `carbon-frontend/src/capabilities.js` `PEOPLE_VIEW_CONSOLE` (`people:view_
 | NIR-3C | Payroll-run orchestration service (draft→compute→validate→commit) | backend | DONE ✅ (6 payroll tests · 68 people suite · verify.sh all PASSED) |
 | DQ-CORE-TYPED-BIND | `dq` core: `ModelRuleAssignment` + `typed_gate` (bind DQRules to typed-model fields) | backend (dq) | DONE ✅ (17 tests · mig 0016 · E2E smoke) |
 | NIR-3D | DQ validation seam (defense-in-depth, validation ≠ calculation) | backend | DONE ✅ (6 validation tests · 74 people suite · mig 0004) |
-| NIR-3E | CBAC + API surface for the new models | backend | PLANNED |
-| NIR-3F | Pulse domain ops (`ai/domain/people.py`) | backend | PLANNED |
-| NIR-4A | People frontend pages (employee/leave/payroll/payslip/C&B/attendance) | frontend | PLANNED |
+| NIR-3E | CBAC + API surface for the new models | backend | DONE ✅ (16 API+CBAC tests · 81 people suite · verify.sh all PASSED) |
+| NIR-3F | Pulse domain ops (`ai/domain/people.py`) | backend | DONE ✅ (10 people-domain tests · 141 domain suite · verify.sh all PASSED) |
+| NIR-4A | People frontend pages (employee/leave/payroll/payslip/C&B/attendance) | frontend | DONE ✅ (6 pages · 6 routes · 14 API helpers · 108 i18n keys · 6 vitest · lint/build/i18n-parity/verify.sh all PASSED) |
 
 **Invariants (all phases):** RULE_3 (`people` imports core only, never sibling hosted apps) ·
 RULE_12 (org-scoped reads) · RULE_11 (auth ships a regression test) · `django.utils.timezone.now()`
@@ -7478,3 +7713,296 @@ cd /home/ahmed/aast/carbon/backend
 /home/ahmed/aast/carbon/.venv/bin/python -m pytest people/tests/test_validation.py dq/tests/test_typed_gate.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
 ```
 Report: one clean migration; `check` clean; validation + typed-gate tests green; calculation still independent of validation (no engine imports validation).
+
+---
+
+## Phase NIR-3E — Backend: CBAC + API surface for the new models
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE ✅ — 16 API+CBAC tests · 81 people suite · verify.sh all PASSED (2026-08-30)
+
+### Objective
+Expose the full Phase-1 People & Payroll data layer over the API with CBAC +
+org-scoping (RULE_12), and wire NIR-3D's `validate_write()` in as the Tier-1
+write gate so every governed write is DQ-checked before it persists. This is a
+**thin API layer** — no business logic, no engine changes. Orchestration stays
+in `payroll_service.py`; calculation stays in `calculation_engine.py`.
+
+### Files to Read First
+- `backend/people/serializers.py`, `backend/people/views.py`, `backend/people/urls.py` (NIR-1C thin API pattern — match exactly)
+- `backend/people/permissions.py` (`PeopleAccess`, `is_global_admin`)
+- `backend/accounts/capabilities.py` (`PEOPLE_VIEW`/`PEOPLE_MANAGE` — **already exist** from NIR-1C, lines ~561/570; do NOT re-add)
+- `backend/accounts/rbac_utils.py` (`get_visible_org_units`)
+- `backend/people/models.py` (all 16 models — NIR-3A added 11)
+- `backend/people/validation.py` (`validate_write(instance)` — the Tier-1 gate)
+- `backend/people/payroll_service.py` (`PayrollRunService.compute/validate/commit`)
+
+### Changes
+
+1. **`backend/people/serializers.py`** — add `ModelSerializer`s for the 11 NIR-3A
+   models + `PayrollRunValidationSerializer` (read-only). Match the existing thin
+   pattern: expose all model fields, `read_only_fields=['id','created_at','updated_at']`
+   where present. New serializers: `PositionSerializer`, `LeaveEntitlementSerializer`,
+   `LeaveRecordSerializer`, `BenefitTypeSerializer`, `EmployeeBenefitSerializer`,
+   `LoanSerializer`, `LoanInstallmentSerializer`, `AttendanceRecordSerializer`,
+   `AttendancePermissionSerializer`, `CertificationSerializer`,
+   `RotationScheduleSerializer`, `PayrollRunValidationSerializer`.
+
+2. **`backend/people/views.py`** — add list-create + detail APIViews for each new
+   model, following the existing `EmployeeListCreateView`/`EmployeeDetailView`
+   pattern. **RULE_12 org-scoping for non-admins:**
+   - `Position` → filter `org_unit_id__in=_visible_org_unit_ids(user)`
+   - employee-linked models (`LeaveEntitlement`, `LeaveRecord`, `EmployeeBenefit`,
+     `Loan`, `AttendanceRecord`, `AttendancePermission`, `Certification`,
+     `RotationSchedule`) → filter `employee__org_unit_id__in=...`
+   - `LoanInstallment` → filter `loan__employee__org_unit_id__in=...`
+   - `PayrollRunValidation` (list only) → filter `payroll_run__org_unit_id__in=...`
+   - `BenefitType` → **global reference data** (like `ComplianceRule`): no org filter.
+   - `is_global_admin(user)` → no filter (full access), same as existing views.
+
+3. **Tier-1 write gate (`validate_write`)** — in every `post`/`patch` for the
+   governed models, run `validate_write(instance)` against the **would-be** instance
+   (apply `validated_data` to the instance BEFORE `.save()`), and if
+   `result["blocked"]` is True return **HTTP 422** with
+   `{"detail": "DQ validation blocked this write", "sample_failures": [...]}`.
+   The gate is pure and never raises — the API layer decides to reject. Reference
+   data models (`ComplianceRule`, `BenefitType`) may apply the gate too (harmless —
+   only bound rules fire). Do NOT apply the gate to `PayrollRunValidation`
+   (run-scoped summary, read-only).
+
+4. **Run lifecycle action endpoints** (`views.py` + `urls.py`) — expose the
+   `PayrollRunService` orchestration (thin delegation, no logic here):
+   - `POST /payroll-runs/<int:pk>/compute/` → `service.compute(run)`
+   - `POST /payroll-runs/<int:pk>/validate/` → `service.validate(run)` **then
+     `persist_findings(run, result["findings"])`** (persist run-scoped summaries)
+   - `POST /payroll-runs/<int:pk>/commit/` → `service.commit(run)` **then
+     `persist_findings(run, result["findings"])`**
+   - Catch `PayrollServiceError` → HTTP 409 with `{"detail": str(e)}`. Import
+     `validate_run` findings persist via `from .validation import persist_findings`.
+     Add a `payroll-runs/<int:pk>/validations/` list route returning
+     `PayrollRunValidationSerializer` for the run.
+
+5. **`backend/people/urls.py`** — register all new routes with the existing
+   `name='people-…'` convention. Namespace prefix `/carbon-api/people/` is already
+   applied by `config/urls.py`.
+
+6. **`backend/people/tests/test_api.py` (NEW)** — RULE_11 (auth ships a regression
+   test). Cover:
+   - unauthenticated → 401 on a people route;
+   - user without `people:view` → 403 (capability gate);
+   - org-scoping: non-admin sees only own org's employees/records (RULE_12);
+   - Tier-1 gate: a bound `not_null` rule blocks a bad `Employee` write → 422 with
+     sample failures, and the row is NOT persisted;
+   - run lifecycle: create run → `compute` → `validate` → `commit` happy path
+     (assert status transitions + `PayrollRunValidation` rows persisted);
+   - illegal transition (e.g. `commit` from `draft`) → 409.
+
+### DO NOT TOUCH
+- `backend/people/calculation_engine.py` · `backend/people/payroll_service.py` ·
+  `backend/people/validation.py` (engine/orchestration/validation are DONE)
+- `backend/accounts/capabilities.py` (capabilities already exist from NIR-1C)
+- `backend/dq/**` · `backend/emissions/**` · `backend/healthy/**` · `backend/ai/**`
+- Frontend (NIR-4A) · Pulse domain ops (NIR-3F)
+
+### Verification Gate (backend-worker runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest people/tests/test_api.py people/tests/test_cbac.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: `check` clean; API + CBAC tests green; write gate returns 422 on blocked
+write; run lifecycle endpoints transition status correctly; no new migrations
+(expected — models unchanged).
+
+---
+
+## Phase NIR-3F — Backend: Pulse domain ops (`ai/domain/people.py`)
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE ✅ (20 targeted domain tests · 141 domain suite · verify.sh all PASSED · get_errors clean)
+
+### Objective
+Expose People & Payroll to Pulse (the AI workspace) as a first-class domain
+adapter. `people` is a HOSTED app whose data lives in **typed Django models**
+(16 models from NIR-3A), NOT in `dataschema.DataTable` — so from the AI
+workspace's data-access perspective there are no `table_id`-addressable tables.
+The domain adapter is therefore a **manifest-only advisory vertical** (the
+Gap #5 pattern of `finance`/`hr`/`customer`): chat + report drafting, never
+mutating records, never fabricating payroll figures (RULE_16).
+
+### RULE_3 constraint (critical)
+`ai` is a hosted app and `people` is a hosted app — a SIBLING import. `ai`
+MUST NOT `from people.models import ...` (that would be a RULE_3 violation).
+The adapter is declarative + advisory only. Do NOT add `people` to
+`DataIsolationGuard.DOMAIN_TABLES` (that table maps dataschema-table prefixes;
+`people` has none and the manifest-only pattern needs no guard entry — same as
+`finance`/`hr`/`customer`).
+
+### Files to Read First
+- `backend/ai/domain/finance.py`, `backend/ai/domain/hr.py`, `backend/ai/domain/customer.py` (the exact Gap #5 manifest-only pattern to mirror)
+- `backend/ai/domain_protocol.py` (`DomainAIOperations`, `DomainContext`, `register_domain`)
+- `backend/ai/domain/__init__.py` (`register_builtin_domains()` — the registration hook)
+- `backend/ai/tests/test_domain_non_data.py` (the exact test shape to mirror)
+- `backend/people/models.py` (vocabulary source — line types `gross`/`gosi`/`loan_installment`/`net`, M1/M3/M5/M7 modules, GOSI, WPS, leave, loans)
+
+### Changes
+
+1. **`backend/ai/domain/people.py` (NEW)** — `PeopleDomainAI(DomainAIOperations)`:
+   - `app_identifier = "people"`, `app_display_name = "People & Payroll"`.
+   - `supported_task_types = ["chat", "report_draft"]` (advisory/drafting only —
+     NO `dq_validate`/`nl_query`/`anomaly`/`investigate`).
+   - `entry_points = []` (manifest-only vertical owns no entity pages in the AI
+     workspace yet; the NIR-4A frontend pages are not AI entity pages).
+   - `starter_prompts = {"default": [...]}` — 3 chips with People/Payroll
+     vocabulary: e.g. explain payroll reconciliation, draft a WPS/GOSI note,
+     "what can I ask here".
+   - `system_prompt_extension` — People & Payroll vocabulary (payroll line types
+     gross/gosi/loan_installment/net, GOSI employee/employer shares, WPS file
+     format, leave calendar-split, loan schedules, net-pay reconciliation) +
+     RULE_16: advisory/drafting only, never present an ungrounded payroll figure
+     as real, mark placeholders and ask for actual figures.
+   - `validate_task_payload(...)` — reject `table_id` ("People is a typed-model
+     vertical — 'table_id' is not valid here"); `report_draft` requires
+     `module_id` or `topic`.
+   - `get_domain_context()` → `DomainContext(app_identifier="people", ...)` with
+     `domain_knowledge` (concepts: payroll run, payslip line, gross/gosi/net,
+     leave entitlement, loan installment, attendance, certification, rotation)
+     and `domain_config` (payroll line types list, GOSI is rule-driven — no law
+     constants).
+
+2. **`backend/ai/domain/__init__.py`** — add a guarded registration in
+   `register_builtin_domains()`:
+   `if not has_domain("people"): from .people import PeopleDomainAI  # noqa: F401`
+   (match the existing `finance`/`hr`/`customer` blocks exactly).
+
+3. **`backend/ai/tests/test_domain_people.py` (NEW)** — RULE_11 regression,
+   mirroring `test_domain_non_data.py`:
+   - registration + `get_domain("people") is PeopleDomainAI` + in `list_domains()`
+   - identity (`app_identifier == "people"`, display name)
+   - `supported_task_types` = advisory-only (`chat` + `report_draft`, no
+     table-bound types)
+   - `entry_points == []` and `starter_prompts["default"]` non-empty
+   - `validate_task_payload`: rejects `table_id`; `report_draft` needs topic
+   - `get_domain_context()` non-empty (`domain_knowledge` + `domain_config`)
+
+### DO NOT TOUCH
+- `backend/people/**` (models/engine/service/validation/API are DONE)
+- `backend/ai/guards.py` (`DataIsolationGuard.DOMAIN_TABLES` — unchanged)
+- `backend/ai/domain_protocol.py` · `backend/ai/intelligence.py` (platform layer)
+- Any import of `people.models` into `ai/**` (RULE_3)
+
+### Verification Gate (backend-worker runs — paste output)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_domain_people.py ai/tests/test_domain_non_data.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: `check` clean; people + non-data domain tests green; `people` registered
+in `list_domains()`; no `people.models` import anywhere under `ai/**`; no new
+migrations.
+
+---
+
+## Phase NIR-4A — Frontend: People & Payroll pages (employee/leave/payroll/payslip/C&B/attendance)
+
+**Date:** 2026-08-30
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** DONE ✅ (verified by Master — lint 0 err, vitest 6 pass, i18n parity 2217 keys, build ok, verify.sh all PASSED)
+
+**Follow-up (menu groupings + App Config page):** DONE ✅
+- `manifest.js` `navigation.items` → 3 groups (Workforce / Payroll & Benefits / Configuration) with `divider` separators, mirroring the Carbon app grouped-nav pattern; new `App Config` item → `/people/config`.
+- `ShellSidebar.jsx` → `PEOPLE_ITEM_ICONS` map + `case 'people':` block (reads manifest, resolves icons by label, same as `case 'carbon'`).
+- `api/people.js` → `fetchComplianceRules(token)` → `apiFetch('people/compliance-rules/')`.
+- NEW `PeopleConfigPage.jsx` — App Identity (key/value grid), Roles table (`Chip` scoped), Compliance Rules table (live `compliance-rules/` fetch, loading/error/empty states).
+- `App.jsx` lazy import + `/people/config` route; `shellLabels.js` 8 NAV + 2 GROUP mappings; en/ar `people.json` + `shell.json` parity.
+- `PeoplePages.test.jsx` → `/people/config` path + group-header test + `fetchComplianceRules` helper.
+- Gate: lint 0 err · vitest 8 pass (2 files) · i18n parity 2246 · build ✓ · verify.sh all PASSED (incl. `no MUI v5 Grid syntax`).
+
+### Objective
+Replace the NIR-1B placeholder `PeopleHome` with six real, API-backed pages for
+the People & Payroll wedge, wired into the shell navigation + router. All data
+comes from the NIR-1C/NIR-3E API surface (`backend/people/urls.py`) via a new
+`apiFetch`-based helper module. Read-only list surfaces + the payroll-run
+lifecycle (compute→validate→commit + validation summary) are the Phase-1 scope;
+create/edit FORMS are **deferred to NIR-4B** (not in this phase).
+
+### Files to Read First
+- `carbon-frontend/src/api/healthy.js` (the exact `apiFetch`-helper module pattern to mirror)
+- `carbon-frontend/src/api/api.js` (`apiFetch` signature; `body` for POST)
+- `carbon-frontend/src/apps/healthy/RepHealthPage.jsx` + `HealthyDashboard.jsx` (list-page pattern: `useEffect` → loading → error → empty → table/cards, `useTranslation`, `useDocumentTitle`, `PageContainer`/`PageHeader`/`LoadingSkeleton`/`ErrorAlert`/`EmptyState`)
+- `carbon-frontend/src/apps/people/manifest.js` + `PeopleHome.jsx` (current state)
+- `carbon-frontend/src/App.jsx` (route registration block for healthy/people — match the lazy-import + `<Route>` style; the People block is near line 279)
+- `carbon-frontend/src/i18n/index.js` (namespace registration: resources + `ns` array)
+- `carbon-frontend/src/i18n/locales/en/dq.json` + `ar/dq.json` (namespace file shape: flat keys, 2-space indent, alphabetically sorted)
+- `backend/people/urls.py` (exact endpoint paths) + `backend/people/serializers.py` (exact field names) — READ ONLY, do not edit
+- `carbon-frontend/src/__tests__/PeopleManifest.test.jsx` (test shape)
+
+### API contract (READ ONLY — do not edit backend)
+- Base = `API_BASE_URL` (already `/carbon-api/`); helper module uses ROOT `people/`.
+- Every list endpoint returns `{ count, results: [...] }` (NOT DRF-paginated — no `next`/`previous`).
+- Endpoints: `employees/`, `payroll-runs/`, `payslip-lines/?payroll_run=<id>`, `leave-entitlements/`, `leave-records/`, `benefit-types/`, `benefits/`, `attendance/`, `attendance-permissions/`, `positions/`, `certifications/`, `rotation-schedules/`, `loans/`, `loan-installments/`.
+- Run lifecycle (POST, no body): `payroll-runs/<id>/compute/`, `payroll-runs/<id>/validate/`, `payroll-runs/<id>/commit/`. On illegal transition the backend returns **409** with `{ detail }`.
+- Validation summary (GET): `payroll-runs/<id>/validations/` → `{ count, results }` of `{ id, rule_key, passed, checked, failed, sample_failures, created_at }`.
+- Field names come straight from the serializers — e.g. `Employee`: `employee_no`, `full_name`, `nationality`, `basic_salary`, `join_date`, `rotation`, `is_active`; `PayrollRun`: `period_start`, `period_end`, `status` (`draft|computed|validated|committed|failed`), `committed_at`; `LeaveRecord`: `employee`, `leave_type`, `start_date`, `end_date`, `days`, `status`; `PayslipLine`: `payroll_run`, `employee`, `line_type`, `amount`, `rule_id`, `rule_version`; `BenefitType`: `code`, `name`, `category`, `is_eosi_base`, `is_taxable`; `EmployeeBenefit`: `employee`, `benefit_type`, `monthly_amount`, `effective_start`; `AttendanceRecord`: `employee`, `date`, `hours_worked`, `overtime_hours`, `status`; `AttendancePermission`: `employee`, `date`, `permission_type`, `hours`, `approved`.
+- FK fields are raw integer ids in the API (no nested objects). Pages that show employee-linked records MUST resolve `employee` id → `employee_no`/`full_name` by also fetching `employees/` once and building an id→label map.
+
+### Changes (all frontend — no backend edits)
+
+1. **`carbon-frontend/src/api/people.js` (NEW)** — mirror `api/healthy.js`. `import { apiFetch } from './api';` with `const ROOT = 'people/';`. Export:
+   - `fetchEmployees(token)` → `employees/`
+   - `fetchPayrollRuns(token)` → `payroll-runs/`
+   - `fetchPayrollRun(id, token)` → `payroll-runs/${id}/`
+   - `computePayrollRun(id, token)` / `validatePayrollRun(id, token)` / `commitPayrollRun(id, token)` → POST to the three action paths
+   - `fetchPayrollRunValidations(id, token)` → `payroll-runs/${id}/validations/`
+   - `fetchPayslipLines({ payrollRun } = {}, token)` → `payslip-lines/${payrollRun ? `?payroll_run=${encodeURIComponent(payrollRun)}` : ''}`
+   - `fetchLeaveEntitlements(token)` → `leave-entitlements/`
+   - `fetchLeaveRecords(token)` → `leave-records/`
+   - `fetchBenefitTypes(token)` → `benefit-types/`
+   - `fetchEmployeeBenefits(token)` → `benefits/`
+   - `fetchAttendanceRecords(token)` → `attendance/`
+   - `fetchAttendancePermissions(token)` → `attendance-permissions/`
+   Every call passes `{ token }` (and `{ method:'POST', token }` for actions). NEVER raw `fetch()`.
+
+2. **Six page components under `carbon-frontend/src/apps/people/`** (all `useTranslation('people')`, `useDocumentTitle`, `useAuth().token`, MUI `Table`+`Paper`+`Chip`, design tokens only — `RULE_8`; loading→error→empty→data):
+   - **`EmployeesPage.jsx`** (`/people/employees`) — table of employees (`employee_no`, `full_name`, `nationality`, `basic_salary`, `join_date`, `is_active` chip).
+   - **`LeavePage.jsx`** (`/people/leave`) — leave records table (`employee` resolved to label, `leave_type`, `start_date`→`end_date`, `days`, `status` chip) + a small entitlements summary (`year`, `leave_type`, `entitled_days`, `used_days`).
+   - **`PayrollRunsPage.jsx`** (`/people/payroll`) — payroll runs table (`period_start`→`period_end`, `status` chip) with per-row lifecycle buttons **Compute → Validate → Commit** (enabled only when the prior step is done: compute on `draft`, validate on `computed`, commit on `validated`; disable otherwise). Clicking an action POSTs, then refetches the run list; a 409 shows the backend `detail` via a `Snackbar`/`ErrorAlert`. Selecting a run also fetches `payroll-runs/<id>/validations/` and shows a validation summary (rule_key, passed/failed, checked/failed counts).
+   - **`PayslipPage.jsx`** (`/people/payslip`) — a `payroll-run` filter `Select` (populated from `fetchPayrollRuns`) + payslip-lines table (`employee` label, `line_type`, `amount`, `rule_id`, `rule_version`), with gross/net totals computed client-side (`sum` of `amount` for `line_type==='gross'` vs `'net'`).
+   - **`BenefitsPage.jsx`** (`/people/benefits`) — two sections: benefit types (`code`, `name`, `category`, `is_eosi_base`, `is_taxable` chips) and employee benefits (`employee` label, `benefit_type` label, `monthly_amount`, `effective_start`→`effective_end`).
+   - **`AttendancePage.jsx`** (`/people/attendance`) — two sections: attendance records (`employee` label, `date`, `hours_worked`, `overtime_hours`, `status` chip) and attendance permissions (`employee` label, `date`, `permission_type`, `hours`, `approved` chip).
+
+3. **`carbon-frontend/src/apps/people/manifest.js`** — replace the single navigation item with six items (keep the `role:'*'` landing at `/people` → PeopleHome, then add): `Employees` `/people/employees`, `Leave` `/people/leave`, `Payroll` `/people/payroll`, `Payslips` `/people/payslip`, `Benefits` `/people/benefits`, `Attendance` `/people/attendance` (all `role:'*'`).
+
+4. **`carbon-frontend/src/App.jsx`** — add six `React.lazy` imports (next to `PeopleHome`) and six `<Route>` entries under the existing `{/* People app … */}` block (keep `/people` → `PeopleHome` as the bare-namespace root, RULE_22).
+
+5. **i18n — new `people` namespace (dual-language, ADR-0018)**:
+   - Create `carbon-frontend/src/i18n/locales/en/people.json` and `ar/people.json` (flat semantic keys, 2-space indent, alphabetically sorted, trailing newline). Add all page titles, subtitles, table headers, status labels, action labels (Compute/Validate/Commit), and error/empty copy used by the six pages. Arabic must be native quality (NOT machine-garbled). FK labels and data stay Latin digits.
+   - Register the namespace in `carbon-frontend/src/i18n/index.js`: import `enPeople`/`arPeople`, add `people: enPeople`/`people: arPeople` to both `resources` blocks, and add `'people'` to the `ns` array.
+   - The key-parity script (`scripts/check-i18n-keys.js`) auto-discovers the new file — en and ar MUST have identical key sets.
+
+6. **`carbon-frontend/src/__tests__/PeoplePages.test.jsx` (NEW)** — RULE_11 regression. Assert:
+   - `peopleManifest.navigation.items` includes all six `/people/*` paths.
+   - Each page module default-exports a function component (no render needed).
+   - `api/people.js` helpers exist and `fetchPayslipLines({ payrollRun: 7 }, 'tk')` builds a `?payroll_run=7` URL (mock `apiFetch` via `vi.mock('../../src/api/api', ...)` if feasible; otherwise assert the helpers are functions and exported).
+
+### DO NOT TOUCH
+- `backend/**` (all People API is DONE)
+- `carbon-frontend/src/theme/**`, `src/api/api.js`, `src/authz.js`, `src/capabilities.js` (people caps already wired)
+- `src/apps/carbon/**`, `src/apps/healthy/**` (except none), `src/apps/stub/**`
+
+### Verification Gate (Master runs — frontend-worker does NOT run terminal)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/PeopleManifest.test.jsx src/__tests__/PeoplePages.test.jsx
+node scripts/check-i18n-keys.js
+npm run build
+cd /home/ahmed/aast/carbon && bash .ai-toolkit/scripts/verify.sh all
+```
+Report: lint 0 errors; People vitest green; key-parity OK (en===ar); build clean;
+verify.sh `all` GATE PASSED (no new raw-fetch / anti-pattern warnings).

@@ -6,7 +6,6 @@ import {
   Button,
   Chip,
   Drawer,
-  LinearProgress,
   MenuItem,
   Stack,
   TextField,
@@ -17,6 +16,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { useNotification } from '../../../components/NotificationProvider';
 import CarbonDataGrid from '../../../components/DataGrid/CarbonDataGrid';
+import OperationProgress from '../../../components/OperationProgress';
 import { cancelDQJob } from '../../../api/dq';
 import { jobTypeLabel, jobStatusLabel, JOB_STATUS_COLORS } from '../constants';
 
@@ -259,21 +259,14 @@ function JobsTab({ jobs, loading, reload }) {
       {
         field: 'progress',
         headerName: t('columns.progress'),
-        width: 140,
-        renderCell: ({ row }) => {
-          if (row.status === 'running') {
-            const value = Number(row.progress) || 0;
-            return <LinearProgress variant="determinate" value={value} sx={{ width: '100%' }} />;
-          }
-          if (row.status === 'queued') {
-            return <LinearProgress sx={{ width: '100%' }} />;
-          }
-          return (
-            <Typography sx={{ color: 'text.secondary' }}>
-              {row.status === 'done' ? '100%' : '–'}
-            </Typography>
-          );
-        },
+        width: 180,
+        renderCell: ({ row }) => (
+          <OperationProgress
+            status={row.status}
+            message={row.progressMessage}
+            percent={row.progress}
+          />
+        ),
       },
       {
         field: 'created_at',

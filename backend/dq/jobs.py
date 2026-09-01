@@ -37,6 +37,30 @@ logger = logging.getLogger(__name__)
 # Max consecutive pulse_unavailable polls before a Pulse job is failed.
 PULSE_UNAVAILABLE_LIMIT = 20
 
+# Wave D1 (Pulse 0.2): publish narrated progress to the A2 bus so the frontend
+# can stream it over SSE instead of polling. Best-effort fire-and-forget
+# (RULE_6) — a down Redis is logged and dropped, never raised, and never
+# affects the job's actual lifecycle. Imported lazily inside ``_publish`` to
+# keep the module import surface light.
+_DQ_OP_TYPE = "dq_run"
+
+
+def _publish(job: DQJob, status: str, message: str, percent=None) -> None:
+    """Publish an ``op.progress`` frame for a DQ job (outcome copy, RULE_23)."""
+    try:
+        from ai.ops_progress import publish_op_progress_sync
+
+        publish_op_progress_sync(
+            _DQ_OP_TYPE,
+            job.pk,
+            status,
+            message,
+            percent=percent,
+            host_user_id=job.created_by_id,
+        )
+    except Exception:  # noqa: BLE001 — progress is best-effort, never fatal
+        logger.debug("op.progress publish failed for DQJob %s", job.pk, exc_info=True)
+
 
 def create_job(job_type, *, rule=None, table=None, payload=None, user=None) -> DQJob:
     """Create (but do not run) a DQJob. Use execute() to start it.
@@ -94,6 +118,7 @@ def execute(job: DQJob) -> DQJob:
         job.status = 'failed'
         job.error = str(exc)[:2000]
         job.save(update_fields=['status', 'error', 'updated_at'])
+        _publish(job, 'failed', 'The check couldn\'t finish — something went wrong.')
         return job
 
 
@@ -137,6 +162,7 @@ def refresh(job: DQJob) -> DQJob:
             job.save(update_fields=[
                 'status', 'error', 'payload', 'progress', 'updated_at',
             ])
+            _publish(job, 'failed', 'The check couldn\'t finish — the AI service is unreachable.')
             if spec.get('on_failed'):
                 _resolve(spec, 'on_failed')(job, job.error)
         else:
@@ -148,6 +174,7 @@ def refresh(job: DQJob) -> DQJob:
         job.status = 'running'
         job.progress = response.get('progress', job.progress)
         job.save(update_fields=['status', 'progress', 'updated_at'])
+        _publish(job, 'running', 'Running your quality check…', percent=job.progress)
         return job
 
     if task_status == 'completed':
@@ -157,12 +184,14 @@ def refresh(job: DQJob) -> DQJob:
         if spec.get('on_completed'):
             _resolve(spec, 'on_completed')(job)
         job.save(update_fields=['status', 'progress', 'result', 'updated_at'])
+        _publish(job, 'done', 'Quality check complete.', percent=100)
         return job
 
     if task_status == 'failed':
         job.status = 'failed'
         job.error = str(response.get('error') or 'Pulse task failed')
         job.save(update_fields=['status', 'error', 'updated_at'])
+        _publish(job, 'failed', 'The check couldn\'t finish — something went wrong.')
         if spec.get('on_failed'):
             _resolve(spec, 'on_failed')(job, job.error)
         return job
@@ -177,7 +206,30 @@ def cancel(job: DQJob) -> DQJob:
     if job.status in ('queued', 'running'):
         job.status = 'canceled'
         job.save(update_fields=['status', 'updated_at'])
+        _publish(job, 'canceled', 'Check canceled.')
     return job
+
+
+def refresh_active_pulse_jobs(user) -> None:
+    """Advance the caller's in-flight jobs while they stream (Wave D1).
+
+    Registered as an ``op.progress`` refresher in ``ai/ops_progress.py`` and
+    invoked on a cadence while ``user`` is connected to the operations SSE
+    stream. Each active job is polled via ``refresh()`` (deterministic and
+    terminal jobs no-op inside it), which both advances the lifecycle and
+    publishes the narrated ``op.progress`` frame the stream then delivers.
+
+    Best-effort: any individual refresh failure is logged and skipped — a
+    misbehaving job must never break the stream loop that calls this.
+    """
+    active = DQJob.objects.filter(
+        created_by=user, status__in=('queued', 'running')
+    )
+    for job in active:
+        try:
+            refresh(job)
+        except Exception:  # noqa: BLE001 — per-job, never fatal
+            logger.debug('refresh_active_pulse_jobs skipped job %s', job.pk, exc_info=True)
 
 
 # ── deterministic handlers ─────────────────────────────────────────────────
@@ -186,6 +238,7 @@ def _run_rule_job(job: DQJob) -> DQJob:
     job.status = 'running'
     job.progress = 10
     job.save(update_fields=['status', 'progress', 'updated_at'])
+    _publish(job, 'running', 'Checking data-quality rules…', percent=10)
 
     if job.rule_id is None:
         raise ValueError('rule_run job requires a rule')
@@ -205,6 +258,7 @@ def _run_rule_job(job: DQJob) -> DQJob:
         'results': results,
     }
     job.save(update_fields=['status', 'progress', 'result', 'updated_at'])
+    _publish(job, 'done', 'Quality check complete.', percent=100)
     return job
 
 
@@ -212,6 +266,7 @@ def _run_profile_job(job: DQJob) -> DQJob:
     job.status = 'running'
     job.progress = 10
     job.save(update_fields=['status', 'progress', 'updated_at'])
+    _publish(job, 'running', 'Profiling table columns…', percent=10)
 
     if job.data_table_id is None:
         raise ValueError('profile job requires a data_table')
@@ -221,6 +276,7 @@ def _run_profile_job(job: DQJob) -> DQJob:
     job.progress = 100
     job.result = summary
     job.save(update_fields=['status', 'progress', 'result', 'updated_at'])
+    _publish(job, 'done', 'Profile complete.', percent=100)
     return job
 
 
@@ -228,6 +284,7 @@ def _run_freshness_job(job: DQJob) -> DQJob:
     job.status = 'running'
     job.progress = 10
     job.save(update_fields=['status', 'progress', 'updated_at'])
+    _publish(job, 'running', 'Checking data freshness…', percent=10)
 
     summary = services.check_freshness(
         table_id=job.data_table_id, notify=False,
@@ -236,6 +293,7 @@ def _run_freshness_job(job: DQJob) -> DQJob:
     job.progress = 100
     job.result = summary
     job.save(update_fields=['status', 'progress', 'result', 'updated_at'])
+    _publish(job, 'done', 'Freshness check complete.', percent=100)
     return job
 
 
@@ -243,6 +301,7 @@ def _run_schema_job(job: DQJob) -> DQJob:
     job.status = 'running'
     job.progress = 10
     job.save(update_fields=['status', 'progress', 'updated_at'])
+    _publish(job, 'running', 'Snapshotting table schema…', percent=10)
 
     summary = services.snapshot_schema(
         table_id=job.data_table_id, notify=False,
@@ -251,6 +310,7 @@ def _run_schema_job(job: DQJob) -> DQJob:
     job.progress = 100
     job.result = summary
     job.save(update_fields=['status', 'progress', 'result', 'updated_at'])
+    _publish(job, 'done', 'Schema snapshot complete.', percent=100)
     return job
 
 
@@ -369,6 +429,7 @@ def _record_pulse_submission(job: DQJob, response: dict, spec: dict) -> DQJob:
         job.status = 'failed'
         job.error = str(response.get('error', {}).get('message', 'Pulse unavailable'))
         job.save(update_fields=['status', 'error', 'updated_at'])
+        _publish(job, 'failed', 'The check couldn\'t finish — the AI service is unreachable.')
         # Fail-visible (design decision #1): a failed nl_check job leaves an
         # honest skipped result so scores show the gap.
         if spec.get('on_failed'):
@@ -394,6 +455,15 @@ def _record_pulse_submission(job: DQJob, response: dict, spec: dict) -> DQJob:
         job.progress = 5
 
     job.save(update_fields=['status', 'progress', 'pulse_task_id', 'result', 'error', 'updated_at'])
+    _publish(
+        job,
+        job.status,
+        'Quality check complete.' if job.status == 'done' else (
+            'The check couldn\'t finish — something went wrong.'
+            if job.status == 'failed' else 'Running your quality check…'
+        ),
+        percent=job.progress,
+    )
     return job
 
 

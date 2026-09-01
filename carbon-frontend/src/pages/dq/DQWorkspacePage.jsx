@@ -30,6 +30,7 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
+import { useOperationProgress } from '../../hooks/useOperationProgress';
 import { useAITaskTransfer } from '../../shell/useAITaskTransfer';
 import SystemDialog from '../../components/SystemDialog';
 import PageContainer from '../../components/layout/PageContainer';
@@ -1025,14 +1026,41 @@ export default function DQWorkspacePage() {
     [jobs]
   );
 
-  // Poll while any job is queued/running
+  // Wave D1: live narrated progress over SSE (no bare spinner, no 5s poll).
+  // Each `op.progress` frame for a dq_run updates its job in place; a terminal
+  // frame triggers a reload so the grid/drawer gets the authoritative result.
+  const { connected } = useOperationProgress((frame) => {
+    if (!frame || frame.op_type !== 'dq_run') return;
+    const opId = String(frame.op_id);
+    const terminal =
+      frame.status === 'done' || frame.status === 'failed' || frame.status === 'canceled';
+
+    setJobs((prev) => {
+      const idx = prev.findIndex((j) => String(j.id) === opId);
+      if (idx === -1) return prev;
+      const next = prev.slice();
+      next[idx] = {
+        ...next[idx],
+        status: frame.status,
+        progress: frame.percent != null ? frame.percent : next[idx].progress,
+        progressMessage: frame.message,
+      };
+      return next;
+    });
+
+    if (terminal) reloadJobs();
+  });
+
+  // Safety net only: if the stream is disconnected but jobs are still active,
+  // reconcile with a slow poll so a missed terminal frame (transient bus)
+  // can't leave a job stuck "running". No poll while SSE is connected.
   useEffect(() => {
-    if (activeJobCount === 0) return undefined;
+    if (activeJobCount === 0 || connected) return undefined;
     const id = setInterval(() => {
       reloadJobs();
-    }, 5000);
+    }, 10000);
     return () => clearInterval(id);
-  }, [activeJobCount, reloadJobs]);
+  }, [activeJobCount, connected, reloadJobs]);
 
   const [metrics, setMetrics] = useState(null);
   const [results, setResults] = useState([]);

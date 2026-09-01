@@ -25,7 +25,6 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ThumbDownAltIcon from '@mui/icons-material/ThumbDownAlt';
 import ThumbDownAltOutlinedIcon from '@mui/icons-material/ThumbDownAltOutlined';
@@ -35,7 +34,6 @@ import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
 import { formatContextLines } from '../utils/aiProvenance';
 import { isSafeInternalRoute } from '../utils/navigation';
-import { useLanguage } from '../i18n/useLanguage';
 import { resolveBackendUrl } from '../config';
 import {
   cleanPlainText,
@@ -54,6 +52,9 @@ import NLRuleTestCard from './NLRuleTestCard';
 import InvestigationCard from './InvestigationCard';
 import ReportDraftCard from './ReportDraftCard';
 import ConfidenceIndicator from './ConfidenceIndicator';
+import AIGeneratedBadge from './AIGeneratedBadge';
+import ReasoningTrace from './ReasoningTrace';
+import SuggestionDiff from './SuggestionDiff';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
 
@@ -243,7 +244,6 @@ function AIMessageBubble({
   onOpenPanel,
   onNotify,
 }) {
-  const { isRtl } = useLanguage();
   const [showActions, setShowActions] = useState(false);
   const [copied, setCopied] = useState(false);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState(null);
@@ -493,9 +493,7 @@ function AIMessageBubble({
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
                       {s.definition?.name || s.name || `Suggestion ${i + 1}`}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {s.rationale || s.explanation || 'AI-generated suggestion'}
-                    </Typography>
+                    <SuggestionDiff suggestion={s} />
                     {confidenceLabel(s.confidence) && (
                       <Box sx={{ mt: 0.75 }}>
                         <Chip size="small" variant="outlined" label={confidenceLabel(s.confidence)} />
@@ -989,20 +987,27 @@ function AIMessageBubble({
       onMouseLeave={() => setShowActions(false)}
       onCopy={handleContainerCopy}
     >
-      {/* ⓘ provenance — floats at top corner, zero layout impact */}
+      {/* D3 — "why this answer" provenance (on-click, not hover) */}
       {!isUser && showProvenance && (
-        <Tooltip title={<TooltipLines lines={provenanceLines} />} arrow>
-          <InfoOutlinedIcon
-            sx={{ position: 'absolute', top: 4, ...(isRtl ? { left: 2 } : { right: 2 }), fontSize: 11, color: 'text.disabled', cursor: 'help', opacity: 0.45, '&:hover': { opacity: 1 } }}
-            aria-label="Why this answer"
-          />
-        </Tooltip>
+        <ReasoningTrace
+          lines={provenanceLines}
+          actions={navigateActions}
+          pendingActions={pendingActions}
+          createdAt={message.created_at}
+        />
       )}
 
       <Box sx={bubbleSx}>
         {/* status chip only on error/interrupted — inline, no row */}
         {!isUser && statusLabel && (
           <Chip size="small" color={statusColor} label={statusLabel} sx={{ height: 14, mb: 0.5, '& .MuiChip-label': { px: 0.5, fontSize: '0.6rem' } }} />
+        )}
+
+        {/* D3 — AI-authored label (quiet token, never for user messages) */}
+        {!isUser && (
+          <Box sx={{ mb: 0.5 }}>
+            <AIGeneratedBadge />
+          </Box>
         )}
 
         {/* NEW: markdown for AI, pre-wrap plain text for user */}

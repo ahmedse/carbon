@@ -29,6 +29,7 @@ import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../api/api';
 import { API_ROUTES } from '../config';
 import { useExecuteMode } from './useExecuteMode';
+import { useDraftPersistence } from '../hooks/useDraftPersistence';
 
 const PLACEHOLDER_MAP = {
   working: 'AI is thinking… (Enter to queue)',
@@ -133,9 +134,11 @@ function AIInputBar({
   conversationStatus,
   onMentionsChange,
   onCommand,
+  conversationId,
 }) {
   const { token } = useAuth();
   const { executeMode } = useExecuteMode();
+  const { draft, persist, clear } = useDraftPersistence(conversationId);
   const inputRef = useRef(null);
   const rootRef = useRef(null);
   // VS Code Copilot-style growth: the composer expands up to ~55% of the
@@ -143,7 +146,7 @@ function AIInputBar({
   // clipping. Measured from the parent (fixed-height flex column), so there
   // is no feedback loop between growth and measurement.
   const [maxRows, setMaxRows] = useState(10);
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(draft);
   // Stage: null | 'kind' | 'entity' | 'slash'
   const [stage, setStage] = useState(null);
   const [kindQuery, setKindQuery] = useState('');
@@ -230,6 +233,7 @@ function AIInputBar({
   const handleChange = useCallback((event) => {
     const next = event.target.value;
     setValue(next);
+    persist(next);
 
     // Slash-command menu: a '/' at the start or after whitespace + optional letters.
     // Mutually exclusive with '#' — a '/' token can never also be a '#' token.
@@ -266,7 +270,7 @@ function AIInputBar({
     }
 
     closePicker();
-  }, [closePicker]);
+  }, [closePicker, persist]);
 
   const handleSelectKind = useCallback((kind) => {
     // Replace trailing #partial with #kind (keep the space so entity search starts).
@@ -302,19 +306,26 @@ function AIInputBar({
     // Action → dispatch to the parent (no-op when onCommand is absent).
     onCommand?.(command.name);
     setValue('');
+    clear();
     closePicker();
     inputRef.current?.focus();
-  }, [closePicker, onCommand]);
+  }, [closePicker, onCommand, clear]);
 
   const handleSubmit = useCallback(() => {
     const val = value.trim();
     if (!val) return;
     onSend(val, resolvedMentions);
     setValue('');
+    clear();
     // Context persists across turns (VS Code Copilot-style) — the composer
     // keeps attached mentions until the user clears them, so "restore
     // context" keeps working for follow-up questions.
-  }, [value, onSend, resolvedMentions]);
+  }, [value, onSend, resolvedMentions, clear]);
+
+  const handleStop = useCallback(() => {
+    clear();
+    onStop?.();
+  }, [clear, onStop]);
 
   const removeMention = useCallback((kind, id) => {
     setResolvedMentions((prev) => prev.filter((m) => !(m.kind === kind && m.id === id)));
@@ -543,7 +554,7 @@ function AIInputBar({
 
       {working && (
         <Tooltip title="Stop generation">
-          <IconButton size="small" color="warning" onClick={onStop} aria-label="Stop generation">
+          <IconButton size="small" color="warning" onClick={handleStop} aria-label="Stop generation">
             <StopCircleIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -572,6 +583,7 @@ AIInputBar.propTypes = {
   conversationStatus: PropTypes.string,
   onMentionsChange: PropTypes.func,
   onCommand: PropTypes.func,
+  conversationId: PropTypes.string,
 };
 
 export default AIInputBar;

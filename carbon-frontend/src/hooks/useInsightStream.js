@@ -14,6 +14,7 @@ const sharedStore = {
   loading: true,
   error: null,
   token: null,
+  lastBeatAt: null,
 };
 
 const subscribers = new Set();
@@ -32,8 +33,17 @@ function notifySubscribers() {
       total: sharedStore.total,
       loading: sharedStore.loading,
       error: sharedStore.error,
+      lastBeatAt: sharedStore.lastBeatAt,
     })
   );
+}
+
+/**
+ * Passive presence accessor — reads the shared heartbeat timestamp without
+ * subscribing or starting a stream (no network side-effects).
+ */
+export function getLastBeatAt() {
+  return sharedStore.lastBeatAt;
 }
 
 function updateStore(partial) {
@@ -65,14 +75,20 @@ function prependInsight(insight) {
 function parseSseFrames(buffer, onFrame) {
   let rest = buffer;
   let idx;
+  let sawHeartbeat = false;
   while ((idx = rest.indexOf('\n\n')) !== -1) {
     const frame = rest.slice(0, idx);
     rest = rest.slice(idx + 2);
+    // Every complete frame (heartbeat or data) proves the stream is alive.
+    sharedStore.lastBeatAt = Date.now();
     const dataLines = frame
       .split('\n')
       .filter((line) => line.startsWith('data:'))
       .map((line) => line.slice(5).replace(/^ /, ''));
-    if (!dataLines.length) continue; // heartbeat / comment frame
+    if (!dataLines.length) {
+      sawHeartbeat = true;
+      continue; // heartbeat / comment frame
+    }
     const payload = dataLines.join('\n');
     try {
       onFrame(JSON.parse(payload));
@@ -80,6 +96,9 @@ function parseSseFrames(buffer, onFrame) {
       // Ignore malformed frames — never crash the stream reader.
     }
   }
+  // Heartbeats carry no data, so notify subscribers explicitly (data frames
+  // already notify via prependInsight/updateStore).
+  if (sawHeartbeat) notifySubscribers();
   return rest;
 }
 
@@ -141,6 +160,7 @@ export function useInsightStream() {
     total: sharedStore.total,
     loading: sharedStore.loading,
     error: sharedStore.error,
+    lastBeatAt: sharedStore.lastBeatAt,
   });
 
   useEffect(() => {
@@ -151,6 +171,7 @@ export function useInsightStream() {
       total: sharedStore.total,
       loading: sharedStore.loading,
       error: sharedStore.error,
+      lastBeatAt: sharedStore.lastBeatAt,
     });
 
     if (token && token !== sharedStore.token && !initInFlight) {
@@ -200,6 +221,7 @@ export function useInsightStream() {
         sharedStore.loading = true;
         sharedStore.error = null;
         sharedStore.token = null;
+        sharedStore.lastBeatAt = null;
       }
     };
   }, [token]);
