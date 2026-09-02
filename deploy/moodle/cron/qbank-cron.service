@@ -1,0 +1,12 @@
+[Unit]
+Description=QBank Moodle cron
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=@STACK_DIR@
+ExecStart=/usr/bin/docker compose exec -T moodle php admin/cli/cron.php
+User=root
+StandardOutput=journal
+StandardError=journal

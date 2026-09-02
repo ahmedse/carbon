@@ -576,6 +576,15 @@ PEOPLE_MANAGE = Capability(
     category="admin",
 )
 
+PEOPLE_VIEW_COMPENSATION = Capability(
+    key="people:view_compensation",
+    domain="people",
+    action="view_compensation",
+    label="View Compensation",
+    description="View employee salary and compensation amounts (restricted; every reveal is audited)",
+    category="data",
+)
+
 
 # ═══════════════════════════════════════════════════════════════════
 # ALL CAPABILITIES — master registry
@@ -653,6 +662,7 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     # People & Payroll
     PEOPLE_VIEW.key: PEOPLE_VIEW,
     PEOPLE_MANAGE.key: PEOPLE_MANAGE,
+    PEOPLE_VIEW_COMPENSATION.key: PEOPLE_VIEW_COMPENSATION,
 }
 
 
@@ -735,8 +745,8 @@ IMPLIES: Dict[str, Set[str]] = {
     # ── Healthy manage → view ──
     HEALTHY_MANAGE.key: {HEALTHY_VIEW.key},
 
-    # ── People manage → view ──
-    PEOPLE_MANAGE.key: {PEOPLE_VIEW.key},
+    # ── People manage → view (+ compensation) ──
+    PEOPLE_MANAGE.key: {PEOPLE_VIEW.key, PEOPLE_VIEW_COMPENSATION.key},
 
     # ── AI admin → view ──
     AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key},

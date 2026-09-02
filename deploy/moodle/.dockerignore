@@ -1,0 +1,9 @@
+.env
+config/
+tls/
+data/
+build/*.tgz
+build/*.sha256
+release/
+.git
+# NOTE: build/moodle-code/ is intentionally INCLUDED — the Dockerfile COPYs it.

@@ -65,3 +65,4 @@ apscheduler==3.10.4                 # Proactive/cognition background loops
 mcp>=1.0                            # MCP tool client (agent/mcp_client.py)
 RestrictedPython>=8.0               # Code-snippet skill sandbox (skills/sandbox.py)
 PyJWT>=2.9.0                        # JWT auth (agent/tools.py)
+Pillow

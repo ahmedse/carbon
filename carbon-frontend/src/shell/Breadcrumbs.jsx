@@ -26,6 +26,13 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
 import RuleIcon from '@mui/icons-material/Rule';
+import Diversity3Icon from '@mui/icons-material/Diversity3';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
+import BadgeIcon from '@mui/icons-material/Badge';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import GroupsIcon from '@mui/icons-material/Groups';
 
 // Breadcrumb configuration based on routes
 const ROUTE_CONFIG = {
@@ -389,6 +396,72 @@ const ROUTE_CONFIG = {
     label: 'Reference Set',
     icon: AccountTreeIcon,
     parent: '/catalog/mdm',
+  },
+
+  '/people': {
+    label: 'People',
+    icon: Diversity3Icon,
+    parent: null,
+  },
+  '/people/employees': {
+    label: 'Employees',
+    icon: GroupsIcon,
+    parent: '/people',
+  },
+  '/people/employees/:employeeId': {
+    label: 'Employee Profile',
+    icon: Diversity3Icon,
+    parent: '/people/employees',
+  },
+  '/people/positions': {
+    label: 'Positions',
+    icon: AccountTreeIcon,
+    parent: '/people',
+  },
+  '/people/attendance': {
+    label: 'Attendance',
+    icon: AssignmentIcon,
+    parent: '/people',
+  },
+  '/people/leave': {
+    label: 'Leave',
+    icon: EventAvailableIcon,
+    parent: '/people',
+  },
+  '/people/payroll': {
+    label: 'Payroll Runs',
+    icon: AccountBalanceWalletIcon,
+    parent: '/people',
+  },
+  '/people/payslip': {
+    label: 'Payslips',
+    icon: ReceiptLongIcon,
+    parent: '/people',
+  },
+  '/people/benefits': {
+    label: 'Benefits',
+    icon: VerifiedUserIcon,
+    parent: '/people',
+  },
+  '/people/loans': {
+    label: 'Loans',
+    icon: AccountBalanceWalletIcon,
+    parent: '/people',
+  },
+  '/people/certifications': {
+    label: 'Certifications',
+    icon: BadgeIcon,
+    parent: '/people',
+  },
+  '/people/rotation': {
+    label: 'Rotation Schedules',
+    icon: AutorenewIcon,
+    parent: '/people',
+  },
+  '/people/config': {
+    label: 'App Config',
+    icon: SettingsIcon,
+    parent: '/people',
   },
 };
 

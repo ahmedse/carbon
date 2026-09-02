@@ -138,6 +138,11 @@ class Employee(models.Model):
         max_length=32, blank=True,
         help_text="Config label only (e.g. '1/1'), NOT calculation logic",
     )
+    photo = models.ImageField(
+        upload_to='people/photos/',
+        null=True, blank=True,
+        help_text="Profile photo (JPEG/PNG ≤2 MB)",
+    )
     is_active = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

@@ -232,6 +232,21 @@ export function deleteEmployee(id, token) {
   return apiFetch(`${ROOT}employees/${encodeURIComponent(id)}/`, { method: 'DELETE', token });
 }
 
+/** Governed deactivation: reason + effective date, audited chronicle entry. */
+export function deactivateEmployee(id, data, token) {
+  return apiFetch(`${ROOT}employees/${encodeURIComponent(id)}/deactivate/`, { method: 'POST', body: data, token });
+}
+
+/** Re-onboard an inactive employee (records a reactivated chronicle entry). */
+export function reactivateEmployee(id, data, token) {
+  return apiFetch(`${ROOT}employees/${encodeURIComponent(id)}/reactivate/`, { method: 'POST', body: data, token });
+}
+
+/** Reveal compensation for one employee (Tier-2, audited on the server). */
+export function revealEmployeeCompensation(id, token) {
+  return apiFetch(`${ROOT}employees/${encodeURIComponent(id)}/compensation/`, { method: 'POST', token });
+}
+
 /** Single employee. */
 export function fetchEmployee(id, token) {
   return apiFetch(`${ROOT}employees/${encodeURIComponent(id)}/`, { token });

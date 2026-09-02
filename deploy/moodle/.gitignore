@@ -1,0 +1,6 @@
+.env
+config/
+tls/
+data/
+build/
+release/

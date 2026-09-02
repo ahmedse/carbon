@@ -46,6 +46,12 @@ from .models import (
     RotationSchedule,
 )
 from .permissions import PeopleAccess, is_global_admin
+from .sensitivity import (
+    COMPENSATION_FIELDS,
+    can_view_compensation,
+    mask_employee,
+    mask_employee_list,
+)
 from .serializers import (
     AttendancePermissionSerializer,
     AttendanceRecordSerializer,
@@ -152,7 +158,9 @@ class EmployeeListCreateView(APIView):
             )
         return Response({
             'count': qs.count(),
-            'results': EmployeeSerializer(qs, many=True).data,
+            'results': mask_employee_list(
+                EmployeeSerializer(qs, many=True).data, request.user,
+            ),
         })
 
     def post(self, request):
@@ -183,7 +191,7 @@ class EmployeeDetailView(APIView):
 
     def get(self, request, pk):
         employee = get_object_or_404(self._get_queryset(request.user), pk=pk)
-        return Response(EmployeeSerializer(employee).data)
+        return Response(mask_employee(EmployeeSerializer(employee).data, request.user))
 
     def patch(self, request, pk):
         employee = get_object_or_404(self._get_queryset(request.user), pk=pk)
@@ -231,6 +239,114 @@ class EmployeeDetailView(APIView):
             notes='Soft delete (is_active=False)',
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class EmployeeCompensationView(APIView):
+    """Reveal compensation for one employee (Tier-2 progressive disclosure).
+
+    Requires ``people:view_compensation``. Every successful reveal is audited via
+    ``emit_governance_event`` so salary access is traceable.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def post(self, request, pk):
+        if not can_view_compensation(request.user):
+            return Response(
+                {'detail': 'You do not have permission to view compensation.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        employee = get_object_or_404(Employee, pk=pk)
+        emit_governance_event(
+            entity_type='Employee',
+            entity_id=employee.pk,
+            action='view_compensation',
+            before=None,
+            after={'fields': list(COMPENSATION_FIELDS)},
+            user=request.user,
+        )
+        return Response({
+            'employee_id': employee.pk,
+            'basic_salary': str(employee.basic_salary),
+            'revealed_at': timezone.now().isoformat(),
+            'revealed_by': request.user.get_username(),
+        })
+
+
+class EmployeeDeactivateView(APIView):
+    """Governed off-boarding: reason + effective date, soft delete, full audit trail.
+
+    Replaces a bare DELETE. Deactivation is a lifecycle transition, so we require a
+    reason and record it in both the chronicle and the governance audit trail.
+    """
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def post(self, request, pk):
+        employee = get_object_or_404(
+            Employee.objects.all() if is_global_admin(request.user)
+            else Employee.objects.filter(org_unit_id__in=_visible_org_unit_ids(request.user)),
+            pk=pk,
+        )
+        reason = (request.data or {}).get('reason', '').strip()
+        if not reason:
+            raise AppFeedback(
+                code='reason_required',
+                title='Reason required',
+                detail='A deactivation reason is required.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        effective_date = (request.data or {}).get('effective_date') or timezone.localdate().isoformat()
+        was_active = employee.is_active
+        before = snapshot_employee(employee)
+        employee.is_active = False
+        employee.save(update_fields=['is_active', 'updated_at'])
+        emit_governance_event(
+            entity_type='Employee',
+            entity_id=employee.pk,
+            action='deactivate',
+            before={'is_active': was_active},
+            after={'is_active': False, 'reason': reason, 'effective_date': str(effective_date)},
+            user=request.user,
+        )
+        record_event(
+            entity_type='Employee', entity_id=employee.pk, event_kind='deactivated',
+            effective_date=timezone.localdate(), user=request.user,
+            before=before, after=None,
+            notes=reason,
+        )
+        return Response(mask_employee(EmployeeSerializer(employee).data, request.user))
+
+
+class EmployeeReactivateView(APIView):
+    """Re-onboard an inactive employee (records a ``reactivated`` chronicle entry)."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def post(self, request, pk):
+        employee = get_object_or_404(
+            Employee.objects.all() if is_global_admin(request.user)
+            else Employee.objects.filter(org_unit_id__in=_visible_org_unit_ids(request.user)),
+            pk=pk,
+        )
+        before = snapshot_employee(employee)
+        employee.is_active = True
+        employee.save(update_fields=['is_active', 'updated_at'])
+        emit_governance_event(
+            entity_type='Employee',
+            entity_id=employee.pk,
+            action='reactivate',
+            before={'is_active': False},
+            after={'is_active': True},
+            user=request.user,
+        )
+        record_event(
+            entity_type='Employee', entity_id=employee.pk, event_kind='reactivated',
+            effective_date=timezone.localdate(), user=request.user,
+            before=before, after=snapshot_employee(employee),
+            notes=(request.data or {}).get('notes', '') or 'Reactivated',
+        )
+        return Response(mask_employee(EmployeeSerializer(employee).data, request.user))
 
 
 class PayrollRunListCreateView(APIView):

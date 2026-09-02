@@ -82,7 +82,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         model = Employee
         fields = [
             'id', 'org_unit', 'employee_no', 'full_name', 'nationality',
-            'basic_salary', 'join_date', 'rotation', 'is_active',
+            'basic_salary', 'join_date', 'rotation', 'is_active', 'photo',
             'name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family',
             'civil_id', 'date_of_birth', 'gender', 'nationality_code',
             'employment_type_code', 'contract_type_code', 'kuwaitization',

@@ -39,6 +39,7 @@ export const CARBON_VIEW_REPORTING_PERIODS  = 'carbon:view_reporting_periods';
 // ── People ────────────────────────────────────────────────────────
 export const PEOPLE_VIEW   = 'people:view';
 export const PEOPLE_MANAGE = 'people:manage';
+export const PEOPLE_VIEW_COMPENSATION = 'people:view_compensation';
 
 // ── Catalog ────────────────────────────────────────────────────────
 export const CATALOG_VIEW              = 'catalog:view';

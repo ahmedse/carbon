@@ -24,6 +24,7 @@ local_settings.py
 
 # Secrets and configuration
 .env
+.env.bak*
 
 # Node.js-related files
 node_modules/

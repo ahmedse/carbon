@@ -39,11 +39,11 @@
 
 ```php
 $CFG->wwwroot   = 'https://qbank.local';
-$CFG->sslproxy  = true;                 // TLS terminated by host nginx
+$CFG->sslproxy  = false;                // TLS terminated by Apache in-container (see MOODLE-DOCKER.md)
 $CFG->dataroot  = '/var/www/moodledata';
 $CFG->dbtype    = 'pgsql';
 $CFG->prefix    = 'mdl_';
-$CFG->dboptions = ['dbpersist' => 0, 'dbport' => 5432, 'dbcollation' => 'utf8mb4_unicode_ci'];
+$CFG->dboptions = ['dbpersist' => 0, 'dbport' => 5432];
 
 // Air-gap
 $CFG->noemailever                 = true;   // never try to send mail
