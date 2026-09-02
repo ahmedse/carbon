@@ -181,6 +181,9 @@ _MULTI_SIGNALS: list[str] = [
     "root cause", "what if",
     " both ", " each ", "multi-step", "multiple steps",
     ", and ",
+    "last quarter", "last month", "last year", "year to date", "ytd",
+    "by supplier", "by module", "by category", "across modules", "across suppliers",
+    "top 5", "top 10", "show me", "give me",
 ]
 
 # Explicit requests to plan / convert a conversation into a task. These are the
@@ -198,6 +201,8 @@ _PLAN_SIGNALS: list[str] = [
 _TASK_VERB_STEMS: list[str] = [
     "compar", "study", "audit", "investigate", "research", "analyz", "analy",
     "assess", "evaluate", "reconcile", "benchmark", "orchestrat", "workflow",
+    "summar", "aggregat", "calculat", "forecast", "trend",
+    "breakdown", "distribut", "correlat",
 ]
 
 # ── Deterministic mutation classification ─────────────────────────────────

@@ -1128,6 +1128,438 @@ npx vitest run src/__tests__/EntityChip.test.jsx src/__tests__/AIMessageBubble.t
 
 ---
 
+## PULSE 0.3 — WAVE T TRACK (Intelligence Thickness · backend)
+
+> **What:** Three targeted backend fixes that make the existing intelligence pipeline actually fire
+> and surface correctly. Architecture is complete (flags ON, agents seeded, db wired) — the gaps are
+> behavioral: conservative thresholds, a surfacing bypass on the ReAct path, and a bloated prohibition
+> prompt. All three are backend-only, surgical, and independently dispatchable.
+>
+> **Canonical audit (source of truth):** `/memories/repo/carbon-pulse-intelligence-audit.md`
+> (live-verified 2026-09-02). Read it FIRST.
+>
+> **Dependency order:** T2 and T3 are independent. T1b depends on neither.
+> **Workers run DeepSeek V4-Flash (RULE_24).** One phase = one worker session.
+
+| Phase | Goal | Domain | Deps | Status |
+|-------|------|--------|------|--------|
+| T2 | Slim S3 grounding prompt (15 NEVERs → 5 positive role statements) | backend | — | DONE |
+| T3 | Wire `completed_tools` surfacing on ReAct path | backend | — | DONE |
+| T1b | Loosen multi-step / fan-out classification thresholds | backend | — | DONE |
+
+---
+
+## Phase T2 — Slim S3 grounding prompt
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Result (2026-09-02):** `playbook.py` `_fallback_prompt` body rewritten — removed 8 NEVER/DO NOT bullets, replaced with 5 positive `## Expertise & Style` statements. Gate: 3/3 new + `pytest ai` = 1303 passed.
+
+### Goal
+The `_fallback_prompt` in `ai/engine/llm/playbook.py` (and any seeded `PlaybookBlock` of
+`block_type="communication_rules"` for the `carbon` instance) currently lists 15+ NEVER/DO NOT
+prohibitions before the user's question. This wastes ~600 prompt tokens per turn, degrades response
+quality (defensive framing, over-hedging), and teaches the model to be timid rather than expert.
+
+Replace the prohibition list with **5 confident positive role statements** that imply the same
+constraints without being defensive.
+
+### Files to Read First
+- `backend/ai/engine/llm/playbook.py` — `_fallback_prompt()` (lines ~299-320), `BLOCK_TYPE_ORDER`
+- `backend/ai/engine/llm/prompts.py` — `_build_access_section()`, `RENDERING_CAPABILITIES` (these are appended AFTER the playbook — do not duplicate them inside the fallback)
+- `backend/ai/engine/core/database.py` — `get_session_factory` (to inspect live PlaybookBlocks)
+
+### Task (exact)
+1. **MODIFY `_fallback_prompt`** in `playbook.py`:
+   - Remove the `## Communication Rules` and `## Operational Rules` sections that list NEVER/DO NOT bullets.
+   - Replace with a single `## Expertise & Style` section containing **5 positive statements**:
+     ```
+     - Lead with the answer. Use domain language, never internal table names, SQL, or tech stack details.
+     - Ground every claim in tool results — if a tool returns nothing, say so directly.
+     - All data access is time-aware: flag when data may be stale or out of range.
+     - Changes require explicit user confirmation before execution — ask, never assume.
+     - Stay within the user's access scope; the inventory above is the complete boundary.
+     ```
+   - Keep the existing `## Identity & Role` paragraph (one sentence, no change).
+   - Keep `[header, body, RENDERING_CAPABILITIES]` structure — no structural change.
+
+2. **CHECK (read-only):** query the `PlaybookBlock` table for the `carbon` instance for any
+   `block_type="communication_rules"` or `block_type="domain_rules"` block that duplicates
+   prohibition lists. **Report** their content in TASK-RESULTS.md under "Live PlaybookBlocks".
+   **Do NOT modify live DB rows** — that is a DBA/ops action, not a code action.
+
+3. **ADD `backend/ai/tests/test_fallback_prompt.py`** — 3 tests:
+   - `_fallback_prompt` output does NOT contain "NEVER" or "DO NOT" (case-insensitive).
+   - `_fallback_prompt` output DOES contain each of the 5 positive statement openings (assert
+     "Lead with the answer", "Ground every claim", "time-aware", "confirmation", "access scope").
+   - `RENDERING_CAPABILITIES` constant is present in the fallback output.
+
+### Shallow-implementation trap
+❌ Moving prohibitions into the PlaybookBlock / `_build_access_section` — the prohibition problem
+is the fallback prompt body, fix it there only; ❌ removing `RENDERING_CAPABILITIES` (must stay);
+❌ removing the `## Identity & Role` sentence (keep it); ❌ modifying live DB rows.
+
+### DO NOT TOUCH
+`build_chat_prompt()`, `_build_access_section()`, `RENDERING_CAPABILITIES`, `_build_runtime_header()`,
+`PlaybookAssembler`, any live DB rows.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+python -m pytest ai/tests/test_fallback_prompt.py -v --disable-warnings -p no:cacheprovider
+python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider | tail -5
+```
+
+---
+
+## Phase T3 — Wire `completed_tools` surfacing on ReAct path
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Result (2026-09-02):** `runner.py` ReAct path now builds `_react_completed_tools` from `step_results` and assigns to `ledger.execution.completed_tools` (or stubs via `SimpleNamespace`). Entity chips, tool_trace pill, anti-hallucination gate now fire on multi-step turns. Gate: 2/2 new.
+
+### Goal
+The deterministic surfacing layer in `_run_chat` (engine_runtime.py lines 136–157: entity chips,
+tool trace, anti-hallucination gate, grounded note, access table) reads
+`ledger.execution.completed_tools`. On the **single-pass S3→S5 path** this is populated correctly.
+On the **ReAct path** (runner.py line 806), the runner returns `AgentResponse(tools_used=[])` and
+never populates `ledger.execution.completed_tools` — so the entire surfacing layer is silently
+bypassed on the richest turns (exactly when the model ran multiple tools). This is the "richest
+turn → least surfacing" bug.
+
+### Files to Read First
+- `backend/ai/engine_runtime.py` lines 120–170 (`_run_chat` post-processing block)
+- `backend/ai/engine/cognition/turn/runner.py` lines 753–825 (ReAct return path)
+  specifically lines 806–820 (the `AgentResponse` constructed on the ReAct path)
+- `backend/ai/engine/cognition/plan/loop.py` — `ReActResult` dataclass + `StepResult` shape
+  (fields: `step_id`, `intent`, `critic_verdict`, `executed`, `error`, `tool_name`, `tool_result`,
+  `tool_args`, `latency_ms`)
+- `backend/ai/engine/cognition/turn/runner.py` lines 95–135 (`_build_completed_tools_from_ledger`
+  and `_build_completed_tools_from_execution` helpers — verify their exact names and signatures)
+
+### Task (exact)
+The fix is in `ai/engine/cognition/turn/runner.py` only — do NOT touch `engine_runtime.py`.
+
+1. After the ReAct loop's ledger rows are written (runner.py line ~796 `await self.db.commit()`),
+   build a `completed_tools` list from `react_result.step_results` in the same shape that
+   `ledger.execution.completed_tools` uses on the single-pass path:
+   ```python
+   completed_tools = [
+       {
+           "tool_name": sr.tool_name or f"react_step_{i}",
+           "result":    sr.tool_result or {},
+           "error":     sr.error,
+           "latency_ms": sr.latency_ms or 0.0,
+           "guardrail_flags": sr.critic_flags if hasattr(sr, "critic_flags") else [],
+       }
+       for i, sr in enumerate(react_result.step_results)
+       if sr.executed
+   ]
+   ```
+   **Verify the actual field names** on `StepResult` from `loop.py` before writing — the list
+   above is the *target shape* not copy-paste code. Adjust field names to match what `StepResult`
+   actually has.
+
+2. Attach to the ledger execution so `_run_chat`'s `ledger.execution.completed_tools` read works:
+   ```python
+   if ledger.execution is not None:
+       ledger.execution.completed_tools = completed_tools
+   ```
+   If `ledger.execution` is `None` on the ReAct path, create a minimal object or set a stub
+   attribute — check how `ledger.execution` is used before deciding.
+
+3. **ADD `backend/ai/tests/test_react_surfacing.py`** — 2 tests using mocks/stubs:
+   - After a ReAct turn, `ledger.execution.completed_tools` is a non-empty list with the correct shape.
+   - A single-pass turn's `ledger.execution.completed_tools` is unchanged (regression guard).
+
+### Shallow-implementation trap
+❌ Modifying `engine_runtime.py` instead of the runner (the fix must be upstream, not a workaround
+downstream); ❌ copying the full `DraftExecution` model when a simple attribute assignment works;
+❌ skipping the `hasattr` guard for optional `StepResult` fields.
+
+### DO NOT TOUCH
+`engine_runtime.py`, `loop.py`'s `ReActResult`/`StepResult` definitions, `DraftWitness`, S3→S5 path.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+python -m pytest ai/tests/test_react_surfacing.py -v --disable-warnings -p no:cacheprovider
+python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider | tail -5
+```
+
+---
+
+## Phase T1b — Loosen multi-step / fan-out classification
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Result (2026-09-02):** added 8 stems to `_TASK_VERB_STEMS` + 14 signals to `_MULTI_SIGNALS` in `planner.py`; appended fan-out preference directive to orchestrator system prompt in `runner.py`. Gate: 5/5 new (`pytest ai` = 1303 passed).
+
+### Goal
+Most real analytical questions ("show me emissions by supplier last quarter", "what are the top DQ
+issues in the emissions module", "compare rule violation rates across modules") fall through to
+single-pass because `_looks_agent_multi_step()` in `planner.py` is a keyword heuristic with a
+conservative threshold. Broaden the signal set so analytical data questions — not just explicit
+"plan"/"audit" requests — trigger multi-step decomposition. Also make the orchestrator's
+fan-out decision more decisive by adding a grounding directive to its system prompt.
+
+### Files to Read First
+- `backend/ai/engine/cognition/plan/planner.py` — `_looks_agent_multi_step()` (lines ~229-250),
+  `_MULTI_SIGNALS`, `_PLAN_SIGNALS`, `_TASK_VERB_STEMS`, `_ACTION_VERBS` (lines ~186-225)
+- `backend/ai/engine/cognition/turn/runner.py` lines 1565–1625 (orchestrator system prompt +
+  "chose not to fan out" decision path)
+
+### Task (exact)
+1. **MODIFY `_TASK_VERB_STEMS`** in `planner.py` — add analytical data query stems:
+   ```python
+   "summar", "aggregat", "calculat", "forecast", "trend", "breakdown",
+   "distribut", "correlat", "rank", "top ", "bottom ", "highest", "lowest",
+   ```
+   Preserve all existing stems. Add to the list; do not replace.
+
+2. **MODIFY `_MULTI_SIGNALS`** in `planner.py` — add time-window + cross-entity signals:
+   ```python
+   "last quarter", "last month", "last year", "year to date", "ytd",
+   "by supplier", "by module", "by category", "across modules", "across suppliers",
+   "top 5", "top 10", "show me", "give me",
+   ```
+   Preserve all existing signals. Add; do not replace.
+
+3. **MODIFY the orchestrator system prompt** in `runner.py` (the string around line 1594 that says
+   "You are the orchestrator agent..."). Append after the existing instructions:
+   ```
+   When the user asks to retrieve, analyse, or compare data across the platform —
+   even without the word "plan" — fan out to the appropriate specialist workers.
+   Prefer fan-out over a single-pass answer for any question involving aggregation,
+   trend, comparison, ranking, or cross-domain data. Only decline fan-out for
+   greetings, simple factual lookups, or clarification requests.
+   ```
+
+4. **ADD `backend/ai/tests/test_planner_signals.py`** — 5 tests:
+   - `_looks_agent_multi_step("show me emissions by supplier last quarter")` → `True`
+   - `_looks_agent_multi_step("what are the top 5 DQ issues in the emissions module")` → `True`
+   - `_looks_agent_multi_step("compare rule violation rates across modules")` → `True`
+   - `_looks_agent_multi_step("what is the platform name")` → `False` (regression — simple lookup stays single-step)
+   - `_looks_agent_multi_step("hello")` → `False` (regression — greeting stays single-step)
+
+### Shallow-implementation trap
+❌ Replacing existing signal lists (add only; never remove working signals);
+❌ making EVERY query multi-step (the two regression tests must still pass `False`);
+❌ changing the planner's `decompose()` logic or `LLM_decompose` path.
+
+### DO NOT TOUCH
+`_looks_agent_multi_step` function signature, `decompose()`, `_llm_decompose()`, `ReActLoop`,
+`AgentRegistry`, `WorkerPool`, any test files other than the new one.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+python -m pytest ai/tests/test_planner_signals.py -v --disable-warnings -p no:cacheprovider
+python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider | tail -5
+```
+
+---
+
+## PULSE 0.3 — WAVE G TRACK (Memory & Auto-Learning · backend + frontend)
+
+> **Canonical spec:** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave G — but read the CORRECTIONS in each
+> phase first; some paths are stale (verified 2026-09-02).
+>
+> **CORRECTIONS to the Wave G roadmap spec (verified against code 2026-09-02):**
+> - `MemoryLongTerm` model (`ai/models/core.py` line 64) has NO `memory_type` field — uses `category`
+>   (TextField) instead. G1 MUST add `memory_type` as a **new `CharField(max_length=20)`** with
+>   migration `0023_memorylongterm_memory_type.py`. Category already stores "learned"/"correction"/
+>   "preference"/"observation" — `memory_type` is a *classification axis* (`preference | feedback |
+>   context | none`), separate from category.
+> - `LongTermMemory.store_fact()` signature (`engine/memory/long_term.py` line 37) does NOT have a
+>   `memory_type` param — G1 adds it as an optional kwarg `memory_type: str | None = None` that
+>   writes `MemoryLongTerm.memory_type` when truthy.
+> - Post-turn hook insertion point: `ai/engine/cognition/turn/runner.py` line ~796 (after
+>   `await self.db.commit()` on the ReAct path) AND line ~1331 (after the single-pass S6 `AgentResponse`
+>   construction). Use `asyncio.ensure_future` (fire-and-forget) matching the existing
+>   `_write_trajectory_own_session` pattern (line ~800) — never block the response.
+> - `eval` lane (`ai/engine/llm/router.py` line 54): `EVAL_MODEL or LLM_MODEL` — falls back
+>   correctly even with `EVAL_MODEL=None`. Use `route_chat(task="eval", ...)` via the router.
+> - `ai/memory_api.py` DOES have read + forget endpoints. G2 adds PATCH + restore + org-list.
+>   Check the exact URL prefix before adding routes — it's `ai/memory/` (not `api/ai/memory/`).
+>
+> **Dependency order:** G1 (backend) → G2 (frontend, needs G1's `memory_type` + PATCH/restore
+> endpoints) → G3 (frontend, independent — backend checkpoint/restore/fork already built Sprint 20 W1-B).
+
+| Phase | Goal | Domain | Deps | Status |
+|-------|------|--------|------|--------|
+| G1 | Auto-memory: post-turn classifier → `LongTermMemory` | backend | — | DONE |
+| G2 | Memory console UI (Learned/Episodes/Session/Org tabs) | frontend | G1 | DONE |
+| G3 | Checkpoint UI (button + restore/fork picker) | frontend | — | DONE |
+
+---
+
+## Phase G1 — Auto-memory: self-learning from corrections
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Result (2026-09-02):** `memory_type CharField` added to `MemoryLongTerm` + migration `0023`. `AutoMemoryExtractor.try_extract()` added in `ai/engine/cognition/auto_memory.py` — `eval`-lane post-turn classifier, fire-and-forget at both ReAct + single-pass hook points in `runner.py`. PATCH/restore/org endpoints added to `memory_api.py`. Gate: 5/5 new + `pytest ai` = 1308 passed.
+
+### Goal
+After each completed turn, if the user's message contains a correction ("actually that's wrong, it
+should be X") or an explicit preference ("I always want 30-day windows"), Pulse automatically
+extracts a `MemoryEntry` and writes it to `LongTermMemory` — without the user saying "remember this."
+This closes the cross-session learning loop. The infrastructure exists; the classifier + wiring is
+what's missing. `eval` lane + fire-and-forget so it never delays the response.
+
+### Files to Read First
+- `backend/ai/engine/memory/long_term.py` — `LongTermMemory.store_fact()` (lines 37–160), dedup logic
+- `backend/ai/models/core.py` lines 64–80 — `MemoryLongTerm` fields (confirm: has `category`, NO
+  `memory_type` yet)
+- `backend/ai/engine/cognition/turn/runner.py` lines 795–825 (ReAct fire-and-forget pattern at line
+  ~800: `asyncio.ensure_future(_write_trajectory_own_session(turn_id))`) AND lines 1326–1340
+  (single-pass post-response block after S6)
+- `backend/ai/engine/llm/router.py` lines 44–60 — `route_chat` + lane map
+- `backend/ai/memory_api.py` — existing read/forget endpoints (understand structure before adding)
+- `backend/ai/engine/learning/preferences.py` — existing `PreferenceClassifier` (session-only
+  regex; G1's classifier is separate and persistent — do NOT modify this file)
+- `backend/ai/migrations/` — check latest number (currently `0022`); next = `0023`
+
+### Tasks (exact)
+
+#### Task 1: Add `memory_type` to `MemoryLongTerm` model
+- **MODIFY `backend/ai/models/core.py`**: add `memory_type = models.CharField(max_length=20, null=True, blank=True, db_index=True)` to `MemoryLongTerm`.
+- **ADD `backend/ai/migrations/0023_memorylongterm_memory_type.py`**: standard Django migration adding the field. Run `python manage.py makemigrations ai --name memorylongterm_memory_type` to generate it (or write it by hand following `0022`'s pattern).
+- **MODIFY `LongTermMemory.store_fact()`** in `engine/memory/long_term.py`: add optional param `memory_type: str | None = None`; when truthy, set `fact.memory_type = memory_type` before saving.
+
+#### Task 2: `AutoMemoryExtractor`
+- **ADD `backend/ai/engine/cognition/auto_memory.py`**:
+  ```python
+  class AutoMemoryExtractor:
+      """Post-turn classifier: writes corrections/preferences to LongTermMemory."""
+
+      # Classification prompt for the eval lane
+      _CLASSIFY_PROMPT = (
+          "Classify the following user message into exactly one of these types:\n"
+          "  preference — user states a persistent preference (e.g. 'I always want …')\n"
+          "  feedback   — user corrects the assistant (e.g. 'no, that's wrong …', 'actually …')\n"
+          "  context    — user declares ongoing work context (e.g. 'I'm working on …')\n"
+          "  none       — routine query, greeting, or anything not worth remembering\n\n"
+          "Rules:\n"
+          "- Return ONLY the single word: preference, feedback, context, or none.\n"
+          "- A bare question is always 'none'.\n"
+          "- Only classify as preference/feedback/context if there is a clear, extractable fact.\n\n"
+          "Message: {message}"
+      )
+      _TTL: dict[str, int] = {"preference": 90, "feedback": 90, "context": 7}
+
+      @classmethod
+      async def try_extract(
+          cls,
+          user_message: str,
+          instance_id: str,
+          host_user_id: str | None,
+          db_session,
+      ) -> None:
+          """Classify user_message; if worth remembering, write to LongTermMemory.
+
+          Fire-and-forget: never raises, never blocks the response.
+          """
+          ...
+  ```
+  Implementation notes:
+  - Use the `eval` lane via `route_chat(task="eval", messages=[...])` from `ai.engine.llm.router`.
+  - Parse the single-word response; if `"none"` or any parse error → return immediately (no write).
+  - For `preference`/`feedback`/`context`: write via `LongTermMemory(db_session).store_fact(...)` with:
+    - `category = memory_type_value` (reuse the existing category field for the human-readable label)
+    - `memory_type = memory_type_value` (new field for filterable classification)
+    - `content = user_message[:500]` (truncate — never store raw PII verbatim beyond the message)
+    - `source = "auto_extract"`
+    - `confidence = 0.85`
+    - `host_user_id = host_user_id`
+    - `visibility = "private"`
+    - `valid_to = utcnow() + timedelta(days=cls._TTL[memory_type_value])`
+  - Wrap everything in `try/except Exception` — a classifier failure must never affect the response.
+
+#### Task 3: Wire into runner (post-S6, fire-and-forget)
+- **MODIFY `backend/ai/engine/cognition/turn/runner.py`**:
+  - Import `AutoMemoryExtractor` at the top of the function (lazy import to avoid circular).
+  - After the ReAct path's `asyncio.ensure_future(_write_trajectory_own_session(turn_id))` (line ~800):
+    ```python
+    asyncio.ensure_future(AutoMemoryExtractor.try_extract(
+        user_message=user_message,
+        instance_id=instance_id,
+        host_user_id=host_user_id,
+        db_session=self.db,
+    ))
+    ```
+  - After the single-pass S6 `AgentResponse` construction (line ~1331, right before `return response, ledger`):
+    add the same `asyncio.ensure_future(...)` call.
+  - **Both call sites** must be fire-and-forget (`ensure_future`), never `await`.
+
+#### Task 4: Tests
+- **ADD `backend/ai/tests/test_auto_memory.py`** — 5 tests (all unit-level, mock `route_chat`):
+  1. A correction message (`"no, that's wrong, it should be metric tons not kg"`) → classified as
+     `feedback`, `store_fact` called with `memory_type="feedback"`, `valid_to` ~90 days out.
+  2. A preference message (`"I always want 30-day windows, not 7-day"`) → classified as `preference`,
+     `store_fact` called with `memory_type="preference"`.
+  3. A context message (`"I'm working on the Q3 emissions reconciliation"`) → classified as
+     `context`, `store_fact` called with `memory_type="context"`, `valid_to` ~7 days out.
+  4. A neutral message (`"what is the platform name"`) → classified as `none`, `store_fact` NOT
+     called (assert 0 calls).
+  5. `route_chat` raising an exception → `try_extract` returns silently, no exception propagated.
+
+### Shallow-implementation trap
+❌ Classifying every message as a memory entry (test 4 + 5 enforce the `none` path);
+❌ `await`-ing `try_extract` in the runner (must be fire-and-forget — never delay response);
+❌ writing without TTL (missing `valid_to` is worse than no memory);
+❌ writing PII verbatim beyond 500 chars;
+❌ modifying `PreferenceClassifier` (separate concern, session-only).
+
+### DO NOT TOUCH
+`ai/engine/learning/preferences.py`, `ai/memory_api.py` read/forget paths, `LongTermMemory`'s
+existing methods other than adding the optional `memory_type` param to `store_fact`.
+No `git add -A`. No Nibras/People files.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+python manage.py makemigrations --check --dry-run    # after writing migration: 0 pending
+python -m pytest ai/tests/test_auto_memory.py -v --disable-warnings -p no:cacheprovider
+python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider | tail -5
+```
+
+---
+
+## Phase G2 — Memory console UI
+**Date:** 2026-09-02
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Result (2026-09-02):** `AIMemoryConsole.jsx` (4-tab: Learned/Episodes/Session/Org — inline edit PATCH + 30s undo delete + restore); `AIWorkspace.jsx` wired. Gate: 10/10 new. (needs `memory_type` field + PATCH/restore/org endpoints from G1 backend worker)
+
+> Spec: `docs/pulse/PULSE-0.3-ROADMAP.md` Wave G §G2. Read the CORRECTIONS in the Wave G header above.
+> Backend endpoints needed: PATCH `/carbon-api/ai/memory/facts/{pk}/`, POST `.../restore/`,
+> GET `/carbon-api/ai/memory/org/` — these must be added by G1's backend worker (if not present,
+> add them in G1 before dispatching G2).
+
+---
+
+## Phase G3 — Checkpoint UI
+**Date:** 2026-09-02
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Result (2026-09-02):** `CheckpointPicker.jsx` (Drawer — restore w/ confirm dialog + fork); `AIWorkspaceHeader.jsx` (⊕ save + ↩ open picker); `AIConversationView.jsx` fork nav via `<Navigate>` pattern. Gate: 7/7 new + 18/18 (G2+G3) all passing, build clean, eslint clean. (backend checkpoint/restore/fork built Sprint 20 W1-B — `ai/workspace_api.py`)
+
+> Spec: `docs/pulse/PULSE-0.3-ROADMAP.md` Wave G §G3.
+> Files to read first: `carbon-frontend/src/shell/AIWorkspaceHeader.jsx`,
+> `carbon-frontend/src/shell/AIConversationView.jsx`, `carbon-frontend/src/api/aiWorkspace.js`,
+> `ai/workspace_api.py` (checkpoint/restore/fork).
+> CRITICAL pattern (from prior work): NEVER `useNavigate()` at top level in `AIConversationView`
+> components — use `const [pendingRoute, setPendingRoute] = useState(null)` + `<Navigate to={} replace />`.
+
+---
+
 ## AI WORKSPACE TRACK
 
 ---
@@ -8830,3 +9262,278 @@ cd /home/ahmed/aast/carbon && bash .ai-toolkit/scripts/verify.sh all
 ```
 Report: lint 0 errors; People vitest green; key-parity OK (en===ar); build clean;
 verify.sh `all` GATE PASSED (no new raw-fetch / anti-pattern warnings).
+
+---
+
+## Phase NIR-5A — Backend: People governed-lookup migration (FK to ReferenceValue, drop code strings)
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Canonical spec:** `docs/DESIGN-PEOPLE-REFERENCE-GOVERNANCE.md` (§3 Bucket 1, §4, §6) + ADR-0027
+
+### Objective
+Replace every Bucket-1 metadata field in `people` with a real `ForeignKey` to
+`mdm.ReferenceValue`, removing the free-text/soft-code duplicates and the string
+mirrors. This is the **models + migration** phase only (serializers/views in
+NIR-5B).
+
+### Files
+- `backend/people/models.py` — the only model file edited.
+- New migration `backend/people/migrations/XXXX_governed_lookup_fks.py`.
+
+### Exact field changes (Bucket 1, all `on_delete=PROTECT, null=True, blank=True`)
+
+| Model | Remove | Add |
+|---|---|---|
+| `Employee` | `nationality` (CharField), `nationality_code`, `employment_type_code`, `contract_type_code`, `gender` (CharField), `rotation` (CharField) | `nationality`, `employment_type`, `contract_type`, `gender`, `rotation` — each `FK(mdm.ReferenceValue)` |
+| `Position` | `job_family_code`, `grade` (CharField) | `job_family`, `grade` — `FK` |
+| `LeaveEntitlement` | `leave_type` (CharField) | `leave_type` — `FK` |
+| `LeaveRecord` | `leave_type` (CharField) | `leave_type` — `FK` |
+| `Loan` | `loan_type` (CharField) | `loan_type` — `FK` |
+| `AttendancePermission` | `permission_type` (CharField) | `permission_type` — `FK` |
+| `Certification` | `cert_type` (CharField) | `cert_type` — `FK` |
+| `RotationSchedule` | `pattern` (CharField) | `pattern` — `FK` |
+| `PayslipLine` | `line_type` (CharField) | `line_type` — `FK` |
+| `BenefitType` | `category` (CharField, drop `CATEGORY_CHOICES`) | `category` — `FK` |
+| `ComplianceRule` | `category` (drop `CATEGORY_CHOICES`), `jurisdiction` (CharField) | `category`, `jurisdiction` — `FK` |
+
+**Do NOT touch** Bucket-2 `*_CHOICES` (all `status`, `PersonnelEvent.*_CHOICES`)
+and Bucket-3 `ComplianceRule` rule fields.
+
+### Migration notes
+- Each FK gets `related_name='+'` (no reverse clutter) and a
+  `limit_choices_to` is NOT needed at model level (the set is enforced in the
+  serializer/NIR-5B).
+- `LeaveEntitlement.Meta.unique_together = ('employee','year','leave_type')` and
+  `LeaveRecord` / `RotationSchedule` ordering that referenced the old string field
+  must be updated to the FK column name (no semantic change).
+- **Data migration** (forward): for each old string, resolve to the current
+  `ReferenceValue` in the matching set **by code, case-insensitive**; leave null
+  if unmatched (do NOT fabricate — RULE_16). `reverse` is a no-op (data loss is
+  accepted and intentional per ADR-0027).
+- `makemigrations` will first drop old columns and add FKs. Split into
+  `AddField` → `RunPython(data migrate)` → `RemoveField` so the string codes exist
+  while backfilling.
+
+### DO NOT TOUCH
+- `backend/people/serializers.py`, `views.py`, `urls.py` (NIR-5B)
+- `backend/mdm/**` (core is already correct)
+- Any other app.
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/backend
+python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+python -m pytest mdm -q --maxfail=5 --disable-warnings -p no:cacheprovider
+python manage.py makemigrations --check --dry-run
+```
+Report: `people` + `mdm` tests green; no pending model drift.
+
+---
+
+## Phase NIR-5B — Backend: Governed value resolution (serializers/views/seeds/DQ)
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Depends on:** NIR-5A
+**Canonical spec:** `docs/DESIGN-PEOPLE-REFERENCE-GOVERNANCE.md` §4 + ADR-0027
+
+### Objective
+Build the single shared value-resolution seam and wire every Bucket-1 field
+through it; update seed commands to the new FK shape.
+
+### Files
+- `backend/mdm/serializers.py` — add `GovernedValueField` (or `GovernedValueSerializer`): read → `{ id, code, label, set }`; write accepts `id` **or** `code`, resolves to `ReferenceValue` within the declared `set_name`, validates current-ness, emits `ValidationError` otherwise.
+- `backend/people/serializers.py` — replace `_validate_reference_code` usage: each Bucket-1 field uses the `GovernedValueField` with its `set_name`. Update `EmployeeSerializer`/`PositionSerializer`/`BenefitTypeSerializer`/`ComplianceRuleSerializer` and any serializer for the other 8 models that expose a Bucket-1 field.
+- `backend/people/management/commands/seed_gofsco.py` — update seeded employees/positions/benefits to write the FK (by code, resolved through the same helper), not string codes.
+- `backend/people/views.py` — add `select_related('*_value__reference_set')` (or a `prefetch`) on list/detail querysets so read joins are cheap.
+- Optional: a DQ check (see `backend/dq/`) asserting no `ReferenceValue` referenced by `people` is in `archived` lifecycle while still in use — flag, not block.
+
+### API shape (the contract the frontend will read in NIR-5D)
+```json
+{ "nationality": { "id": 12, "code": "EGY", "label": "Egyptian", "set": "nationality" } }
+```
+`null` when unset. Write accepts `{ "nationality": 12 }` or `{ "nationality": "EGY" }`.
+
+### DO NOT TOUCH
+- `backend/people/models.py` (done in NIR-5A)
+- Frontend (NIR-5D)
+- `backend/mdm/models.py` (core is correct)
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/backend
+python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+python -m pytest mdm -q --maxfail=5 --disable-warnings -p no:cacheprovider
+python manage.py shell -c "from people.serializers import EmployeeSerializer; print('ok')"
+```
+Report: people tests green; read shape matches §4; write-by-code and write-by-id both resolve.
+
+---
+
+## Phase NIR-5C — Backend: Seed the 7 new reference sets (admin data)
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Depends on:** NIR-5A (sets can be seeded in parallel with 5B)
+**Canonical spec:** `docs/DESIGN-PEOPLE-REFERENCE-GOVERNANCE.md` §3 Bucket 1
+
+### Objective
+Seed the seven ReferenceSets that do **not** yet exist, so the NIR-5A FKs can be
+satisfied. RULE_16: this is **admin data**, entered via a management command
+(the sanctioned admin-entry path), never created by serializer code.
+
+### New sets + initial values (canonical codes)
+| Set `name` | `slug` | Initial codes |
+|---|---|---|
+| `grade` | `grade` | `G1`…`G10` (job grades) |
+| `loan_type` | `loan-type` | `personal`, `vehicle`, `housing`, `education`, `emergency` |
+| `permission_type` | `permission-type` | `personal`, `medical`, `official`, `emergency` |
+| `cert_type` | `cert-type` | `hse`, `first_aid`, `fire`, `rigging`, `welding`, `driving`, `trade`, `degree` |
+| `payslip_line_type` | `payslip-line-type` | `gross`, `basic`, `overtime`, `leave_pay`, `eosi_accrual`, `gosi`, `wps`, `deduction`, `net` |
+| `compliance_category` | `compliance-category` | `leave`, `eosi`, `gosi`, `wps`, `overtime`, `payroll`, `other` |
+| `jurisdiction` | `jurisdiction` | `KW`, `EG`, `QA`, `AE`, `SA`, `OM`, `BH` |
+
+Each set: `is_active=True`, `lifecycle_state='active'`, a `description`, and a
+`domain` (FK `catalog.DataDomain`, leave null if none fits), steward left unset
+(admin assigns later). Extend `seed_gofsco.py` (or add a new
+`seed_people_reference_sets.py`) — idempotent via `get_or_create(name=…)` +
+`get_or_create(reference_set, code=…)`.
+
+### DO NOT TOUCH
+- `backend/people/models.py`, `serializers.py`, `views.py` (5A/5B)
+- Frontend
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/backend
+python manage.py seed_people_reference_sets   # (or the chosen command) — idempotent, run twice
+python -m pytest people -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: command idempotent; 7 sets present with the listed codes; people tests green.
+
+---
+
+## Phase NIR-5D — Frontend: People pages render nested governed values + dropdowns source reference sets
+
+**Date:** 2026-08-30
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Depends on:** NIR-5B
+**Canonical spec:** `docs/DESIGN-PEOPLE-REFERENCE-GOVERNANCE.md` §4 + TASKS.md NIR-4A patterns
+
+### Objective
+Adapt the People pages to the FK-only read shape and source create/edit dropdowns
+from the governed reference sets (via the MDM reference-value API), not hardcoded
+option lists.
+
+### Scope (pointer — expand at dispatch)
+- `carbon-frontend/src/api/people.js` + new `api/referenceData.js` (fetch values
+  for a set: `mdm/reference-values/?reference_set=<name>` or the existing
+  `mdm/reference-sets/` surface).
+- `EmployeesPage.jsx`, `PositionsPage.jsx`, `BenefitsPage.jsx`, `LeavePage.jsx`,
+  `LoansPage.jsx`, `AttendancePage.jsx`, `CertificationsPage.jsx`,
+  `RotationSchedulesPage.jsx`, `PayslipPage.jsx`, `EmployeeProfileTab.jsx` — read
+  `{ code, label }` from nested values; render labels, keep `code` for chips.
+- Replace any hardcoded option arrays (e.g. benefit category, status display) with
+  values fetched from the governed sets where the field is Bucket-1.
+- i18n: labels come from the reference set's `label` (data), NOT hardcoded
+  translations — page chrome stays in `people.json`.
+
+### DO NOT TOUCH
+- `backend/**`
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/PeoplePages.test.jsx
+node scripts/check-i18n-keys.js
+npm run build
+```
+Report: lint 0 errors; vitest green; key-parity OK; build clean.
+
+---
+
+## Phase NIR-6A — Backend: Single-root OrgUnit invariant + instance-gated seeds
+
+**Date:** 2026-08-30
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Canonical spec:** `docs/DESIGN-PEOPLE-REFERENCE-GOVERNANCE.md` §2 (ADR-0028) + §6
+
+### Objective
+Enforce "one deployment = one root `OrgUnit`" and stop the AASTMT↔GOFSCO tree
+mingling at the seed layer.
+
+### Files
+- `backend/mdm/models.py` — add `clean()` to `OrgUnit`: a unit with `parent=None`
+  is only allowed when no other active `parent=None` root exists for the
+  deployment (block creating a second root; allow re-parent of a stale root).
+  Emit a `ValidationError` on violation. (Keep idempotent seed re-runs working.)
+- `backend/mdm/views.py` — `OrgUnitViewSet.get_queryset()` defaults to the
+  deployment root's `get_descendant_ids(include_self=True)` when no explicit
+  `?root=`/`?parent=` filter is given (global admins still see only their own
+  deployment tree — there is only one).
+- `backend/mdm/management/commands/seed_gofsco_org.py` — gate on
+  `settings.INSTANCE_NAME`/`DJANGO_BRAND == 'gofsco'`, else skip with a message.
+- `backend/core/management/commands/seed_aastmt_org.py` — gate on the AASTMT
+  instance identity, else skip.
+- A helper (e.g. `mdm/services.py::get_deployment_root()`) returning the single
+  active root `OrgUnit` (or `None`), used by the viewset + seeds.
+
+### DO NOT TOUCH
+- Frontend (NIR-6B)
+- `people/**`
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/backend
+python -m pytest mdm -q --maxfail=5 --disable-warnings -p no:cacheprovider
+python -m pytest core -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+Report: mdm/core tests green; creating a second root raises `ValidationError`;
+gated seed skips on the non-matching instance.
+
+---
+
+## Phase NIR-6B — Frontend: Org-unit dropdown scoped to deployment root
+
+**Date:** 2026-08-30
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** PLANNED
+**Depends on:** NIR-6A
+**Canonical spec:** `docs/DESIGN-PEOPLE-REFERENCE-GOVERNANCE.md` §2 (ADR-0028)
+
+### Objective
+`fetchOrgUnits` (and every org-unit dropdown/tree in People + Carbon) renders only
+the deployment's own root subtree, shown as a tree (not a flat global list).
+
+### Scope (pointer — expand at dispatch)
+- `carbon-frontend/src/api/orgUnits.js` — default to the root-subtree endpoint
+  (e.g. `mdm/org-units/?root=1` or `/tree/`) and return a nested structure.
+- `PositionsPage.jsx`, `PayrollRunsPage.jsx` — replace the flat `orgUnits.map(...)`
+  `MenuItem` list with a nested/indented tree (group by `full_path` or
+  `parent`), scoped to the deployment root.
+- `EmployeeProfileTab.jsx` — `org_unit` label resolves via the scoped tree.
+
+### DO NOT TOUCH
+- `backend/**`
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm run lint
+npx vitest run src/__tests__/PeoplePages.test.jsx
+npm run build
+```
+Report: lint 0 errors; vitest green; build clean.

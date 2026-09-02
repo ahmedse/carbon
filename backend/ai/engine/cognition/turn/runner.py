@@ -362,6 +362,7 @@ class TurnPipelineRunner:
     ) -> tuple:
         """Execute one turn. Returns (AgentResponse, TurnLedger)."""
         from ai.engine.agent.reasoning import AgentResponse
+        from ai.engine.cognition.auto_memory import AutoMemoryExtractor
 
         settings = get_settings()
         turn_id = str(uuid.uuid4())
@@ -797,6 +798,30 @@ class TurnPipelineRunner:
 
             # P4.1: Write trajectory (fire-and-forget, own session)
             _ = asyncio.ensure_future(_write_trajectory_own_session(turn_id))
+            asyncio.ensure_future(AutoMemoryExtractor.try_extract(
+                user_message=user_message,
+                instance_id=instance_id,
+                host_user_id=host_user_id,
+                db_session=self.db,
+            ))
+
+            # Populate completed_tools so _run_chat's surfacing layer fires on ReAct turns
+            _react_completed_tools = [
+                {
+                    "tool_name": getattr(sr, "tool_name", None) or f"react_step_{i}",
+                    "result":    sr.tool_result if hasattr(sr, "tool_result") else (sr.tool_output if hasattr(sr, "tool_output") else {}),
+                    "error":     sr.error if hasattr(sr, "error") else None,
+                    "latency_ms": sr.latency_ms if hasattr(sr, "latency_ms") else 0.0,
+                    "guardrail_flags": sr.critic_flags if hasattr(sr, "critic_flags") else [],
+                }
+                for i, sr in enumerate(react_result.step_results)
+                if getattr(sr, "executed", True)
+            ]
+            if ledger.execution is not None:
+                ledger.execution.completed_tools = _react_completed_tools
+            else:
+                from types import SimpleNamespace
+                ledger.execution = SimpleNamespace(completed_tools=_react_completed_tools)
 
             ledger.final_response = final_text[:500]
             ledger.total_latency_ms = total_latency
@@ -1337,6 +1362,12 @@ class TurnPipelineRunner:
             llm_calls=total_llm_calls,
             model=draft.model_used,
         )
+        asyncio.ensure_future(AutoMemoryExtractor.try_extract(
+            user_message=user_message,
+            instance_id=instance_id,
+            host_user_id=host_user_id,
+            db_session=self.db,
+        ))
 
         await _broadcast_run(instance_id, "run.step.completed", {
             "run_id": turn_id,
@@ -1597,6 +1628,7 @@ class TurnPipelineRunner:
                 "requires diverse expertise, call delegate_to_workers. If it's a simple "
                 "single-focus question, respond with a brief text reply (no tool call) "
                 "and the pipeline will fall through to single-pass processing."
+                " When the user asks to retrieve, analyse, or compare data — even without the word \"plan\" — fan out to the appropriate specialist workers. Prefer fan-out for aggregation, trend, comparison, ranking, or cross-domain questions. Only decline for greetings, simple factual lookups, or clarification requests."
             )},
         ]
         if conversation_history:

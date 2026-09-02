@@ -29,9 +29,7 @@ vi.mock('../shell/AIOfflineBanner', () => ({ default: () => null }));
 vi.mock('../shell/InvestigateTab', () => ({ default: () => <div data-testid="investigate-tab" /> }));
 vi.mock('../shell/AIUsageTab', () => ({ default: () => <div data-testid="usage-tab" /> }));
 vi.mock('../shell/AISettingsTab', () => ({ default: () => <div data-testid="settings-tab" /> }));
-vi.mock('../shell/AIMemoryTab', () => ({ default: () => <div data-testid="memory-episodes-tab" /> }));
-vi.mock('../shell/AILearntTab', () => ({ default: () => <div data-testid="memory-facts-tab" /> }));
-vi.mock('../shell/AIRelationshipTab', () => ({ default: () => <div data-testid="memory-relationship-tab" /> }));
+vi.mock('../shell/AIMemoryConsole', () => ({ default: () => <div data-testid="memory-console" /> }));
 vi.mock('../shell/AIAgentPanel', () => ({ default: () => <div data-testid="agent-tab" /> }));
 vi.mock('../shell/AITaskPanel', () => ({
   default: ({ externalTab }) => <div data-testid="task-panel" data-tab={externalTab ?? 'tasks'} />,
@@ -57,6 +55,13 @@ vi.mock('../api/aiWorkspace', () => ({
   listEpisodes: vi.fn(),
   getRelationship: vi.fn(),
   forgetFact: vi.fn(),
+  updateMemoryFact: vi.fn(),
+  restoreMemoryFact: vi.fn(),
+  listOrgMemory: vi.fn(),
+  createCheckpoint: vi.fn(),
+  listCheckpoints: vi.fn(),
+  restoreConversation: vi.fn(),
+  forkConversation: vi.fn(),
 }));
 
 import { AIWorkspace } from '../shell/AIWorkspace';
@@ -148,34 +153,15 @@ describe('AIWorkspace sessions drawer starts collapsed (Phase 23-C)', () => {
   });
 });
 
-describe('AIWorkspace grouped Memory panel (Phase 23-C)', () => {
-  it('groups Episodes/Facts/Relationship under one Memory icon with internal tabs', async () => {
+describe('AIWorkspace Memory console (G2)', () => {
+  it('renders AIMemoryConsole when Memory icon is clicked', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);
 
     const memoryButton = await screen.findByRole('button', { name: 'Memory' });
     fireEvent.click(memoryButton);
 
-    // Default tab is Episodes (memory).
-    expect(await screen.findByTestId('memory-episodes-tab')).toBeInTheDocument();
+    expect(await screen.findByTestId('memory-console')).toBeInTheDocument();
     expect(memoryButton).toHaveAttribute('aria-pressed', 'true');
-
-    // Internal MUI Tabs switch between the three surfaces (RULE_17).
-    fireEvent.click(screen.getByRole('tab', { name: 'Facts' }));
-    expect(await screen.findByTestId('memory-facts-tab')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Relationship' }));
-    expect(await screen.findByTestId('memory-relationship-tab')).toBeInTheDocument();
-  });
-
-  it('persists the selected memory tab to localStorage (RULE_17)', async () => {
-    render(<AIWorkspace onClose={vi.fn()} />);
-
-    const memoryButton = await screen.findByRole('button', { name: 'Memory' });
-    fireEvent.click(memoryButton);
-    fireEvent.click(screen.getByRole('tab', { name: 'Facts' }));
-    expect(await screen.findByTestId('memory-facts-tab')).toBeInTheDocument();
-
-    expect(localStorage.getItem('carbon-ai-memory-tab')).toBe('facts');
   });
 });
 

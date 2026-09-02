@@ -45,6 +45,7 @@ class LongTermMemory:
         visibility: str = "private",
         valid_from: datetime | None = None,
         valid_to: datetime | None = None,
+        memory_type: str | None = None,
     ) -> str:
         """
         Store a new fact with write-path dedup and contradiction detection.
@@ -129,6 +130,8 @@ class LongTermMemory:
             valid_from=valid_from,
             valid_to=valid_to,
         )
+        if memory_type:
+            fact.memory_type = memory_type
         self.db.add(fact)
         await self.db.commit()
 

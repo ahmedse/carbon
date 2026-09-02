@@ -17,8 +17,6 @@ import {
   DialogContentText,
   DialogTitle,
   IconButton,
-  Tab,
-  Tabs,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -57,9 +55,7 @@ import AIArtifactBrowser from './AIArtifactBrowser';
 import AISuggestionRail from './AISuggestionRail';
 import AIUsageTab from './AIUsageTab';
 import AISettingsTab from './AISettingsTab';
-import AIMemoryTab from './AIMemoryTab';
-import AILearntTab from './AILearntTab';
-import AIRelationshipTab from './AIRelationshipTab';
+import AIMemoryConsole from './AIMemoryConsole';
 import AITaskPanel from './AITaskPanel';
 import InvestigateTab from './InvestigateTab';
 import { useAITaskTransfer } from './useAITaskTransfer';
@@ -70,8 +66,7 @@ const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
 // W5-A (ADR-0014) — Chat/Agent is a workspace-level mode, persisted.
 const MODE_STORAGE_KEY = 'carbon-ai-mode';
 
-// RULE_17: grouped Memory surface persists its internal tab selection.
-const MEMORY_TAB_KEY = 'carbon-ai-memory-tab';
+// RULE_17: Memory console persists its own tab internally (AIMemoryConsole).
 
 export function AIWorkspace({ onClose }) {
   const { t } = useTranslation('ai');
@@ -116,15 +111,7 @@ export function AIWorkspace({ onClose }) {
   // the workspace switches to the Agent mode and the panel auto-opens the
   // created plan (consumed by AITaskPanel via onFocusPlanConsumed).
   const [tasksFocusPlanId, setTasksFocusPlanId] = useState(null);
-  // Grouped Memory surface: episodes (memory) / facts (learnt) / relationship
-  // are one domain — one activity icon, internal MUI Tabs (RULE_17).
-  const [memoryTab, setMemoryTab] = useState(() => {
-    try {
-      return localStorage.getItem(MEMORY_TAB_KEY) || 'episodes';
-    } catch {
-      return 'episodes';
-    }
-  });
+
   const [drawerWidth, setDrawerWidth] = useState(200);
   const dragRef = useRef(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -224,14 +211,7 @@ export function AIWorkspace({ onClose }) {
     }
   }, [mode]);
 
-  // Persist the grouped Memory tab (RULE_17).
-  useEffect(() => {
-    try {
-      localStorage.setItem(MEMORY_TAB_KEY, memoryTab);
-    } catch {
-      /* ignore */
-    }
-  }, [memoryTab]);
+
 
   // Visible ids after archived-filter + client-side title search.
   const visibleIds = useMemo(() => {
@@ -606,39 +586,7 @@ export function AIWorkspace({ onClose }) {
               ) : activePanel === 'settings' ? (
                 <AISettingsTab />
               ) : activePanel === 'memory' ? (
-                /* Grouped Memory surface: episodes / facts / relationship are one
-                   domain — internal MUI Tabs (RULE_17), like Copilot's grouped views. */
-                <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-                  <Box sx={{ px: 1, pt: 0.5, borderBottom: 1, borderColor: 'divider' }}>
-                    <Tabs
-                      value={memoryTab}
-                      onChange={(e, v) => setMemoryTab(v)}
-                      variant="fullWidth"
-                      aria-label={t('memoryViews')}
-                      sx={{
-                        minHeight: 34,
-                        '& .MuiTab-root': { minHeight: 34, fontSize: '0.6875rem', py: 0.5 },
-                      }}
-                    >
-                      <Tab value="episodes" label={t('memory.episodes')} />
-                      <Tab value="facts" label={t('memory.facts')} />
-                      <Tab value="relationship" label={t('memory.relationship')} />
-                    </Tabs>
-                  </Box>
-                  <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                    {memoryTab === 'episodes' ? (
-                      <AIMemoryTab />
-                    ) : memoryTab === 'facts' ? (
-                      <AILearntTab />
-                    ) : (
-                      <AIRelationshipTab
-                        onShowFacts={() => setMemoryTab('facts')}
-                        onShowEpisodes={() => setMemoryTab('episodes')}
-                        onShowUsage={() => setActivePanel('usage')}
-                      />
-                    )}
-                  </Box>
-                </Box>
+                <AIMemoryConsole conversationId={effectiveActiveId} />
               ) : activePanel === 'investigate' ? (
                 <InvestigateTab conversations={investigateConversations} onSelect={handleOpenInvestigation} onNew={handleNewInvestigation} />
               ) : activePanel === 'artifacts' ? (

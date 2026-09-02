@@ -831,6 +831,32 @@ export function forgetFact(token, id) {
   });
 }
 
+// ── G2 — Memory Console: long-term fact mutations + org-scoped read ──────────
+
+export function updateMemoryFact(token, pk, content) {
+  return apiFetch(`ai/memory/facts/${encodeURIComponent(pk)}/`, {
+    token,
+    method: 'PATCH',
+    body: { content },
+  });
+}
+
+export function restoreMemoryFact(token, pk) {
+  return apiFetch(`ai/memory/facts/${encodeURIComponent(pk)}/restore/`, {
+    token,
+    method: 'POST',
+  });
+}
+
+export function listOrgMemory(token) {
+  return apiFetch('ai/memory/org/', { token });
+}
+
+// G3 — Convenience alias: shorter name for the checkpoint save endpoint.
+export function createCheckpoint(token, conversationId, name) {
+  return checkpointConversation(token, conversationId, { name });
+}
+
 // ── Sprint 23 W3-A — Agentic task orchestration (plans) ─────────────────
 // Endpoints live under /carbon-api/ai/plans/ — reviewable plan lifecycle:
 // create (planning only) → approve → SSE streamed run → per-step consent

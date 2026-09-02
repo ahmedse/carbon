@@ -38,6 +38,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.ai_scoping import scope_ai_queryset
+from accounts.capabilities import has_capability
 from accounts.rbac_utils import user_is_global_admin
 from ai.models import AIUserProfile, AuditLog, MemoryEpisodic, MemoryLongTerm
 from ai.usage_service import AIUsage
@@ -313,3 +314,76 @@ class MemoryFactDeleteView(_MemoryBaseView):
             )
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MemoryFactUpdateView(_MemoryBaseView):
+    """PATCH /facts/{pk}/ — update the content of a learnt fact (owner only)."""
+
+    def patch(self, request, pk):
+        qs = self._scoped(MemoryLongTerm.objects.filter(archived=False), request)
+        fact = qs.filter(pk=pk).first()
+        if fact is None:
+            return Response({"detail": "Fact not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_forget(request.user, fact):
+            return Response(
+                {"detail": "You can only edit facts you own."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        content = request.data.get("content")
+        if not content or not str(content).strip():
+            return Response({"detail": "content is required."}, status=status.HTTP_400_BAD_REQUEST)
+        fact.content = str(content).strip()
+        fact.save(update_fields=["content"])
+        return Response({"id": fact.pk, "content": fact.content})
+
+
+class MemoryFactRestoreView(_MemoryBaseView):
+    """POST /facts/{pk}/restore/ — un-archive a previously archived fact (owner only)."""
+
+    def post(self, request, pk):
+        qs = self._scoped(MemoryLongTerm.objects.filter(archived=True), request)
+        fact = qs.filter(pk=pk).first()
+        if fact is None:
+            return Response({"detail": "Archived fact not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_forget(request.user, fact):
+            return Response(
+                {"detail": "You can only restore facts you own."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        fact.archived = False
+        fact.save(update_fields=["archived"])
+        return Response({"id": fact.pk, "archived": False})
+
+
+class MemoryOrgFactsView(_MemoryBaseView):
+    """GET /org/ — org-scoped shared facts; requires ai:manage_console."""
+
+    def get(self, request):
+        if not has_capability(request.user, "ai:manage_console"):
+            return Response(
+                {"detail": "ai:manage_console capability required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        qs = self._scoped(
+            MemoryLongTerm.objects.filter(
+                archived=False,
+                visibility="shared",
+                superseded_by__isnull=True,
+            ),
+            request,
+        )
+        qs = qs.order_by("-created_at")[:_limit(request)]
+        results = [
+            {
+                "id": fact.pk,
+                "category": fact.category,
+                "content": fact.content,
+                "confidence": fact.confidence,
+                "source": fact.source,
+                "created_at": fact.created_at.isoformat(),
+                "valid_to": fact.valid_to.isoformat() if fact.valid_to else None,
+                "memory_type": fact.memory_type,
+            }
+            for fact in qs
+        ]
+        return Response({"count": len(results), "results": results})

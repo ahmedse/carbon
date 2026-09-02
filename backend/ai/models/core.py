@@ -76,6 +76,7 @@ class MemoryLongTerm(AppScopeMixin):
     created_at = models.DateTimeField(auto_now_add=True)
     last_used = models.DateTimeField(auto_now_add=True)
     use_count = models.IntegerField(default=0)
+    memory_type = models.CharField(max_length=20, null=True, blank=True, db_index=True)
 
     class Meta:
         app_label = "ai"
