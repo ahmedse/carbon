@@ -46,6 +46,7 @@ import {
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { isSafeInternalRoute } from '../utils/navigation';
+import EntityChip from './EntityChip';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -299,6 +300,91 @@ function splitBullets(line) {
   return line.split(re).map((s) => s.trim()).filter(Boolean);
 }
 
+// ── Entity reference chips (Phase F1-F) ─────────────────────────────────────
+//
+// The assistant emits `[[kind:id:label]]` tokens for entities it can link to
+// the Contextual Inspector (kind ∈ table | rule | module | org-unit). This
+// remark plugin runs AFTER the reflow helpers (which operate on raw text) and
+// BEFORE remark-rehype, splitting each matching text node into:
+//
+//   { type: 'entityRef', kind, id, label,
+//     data: { hName: 'entityRef', hProperties: { kind, id, label } } }
+//
+// `data.hName` makes mdast-util-to-hast turn the unknown node into a hast
+// element `<entityRef kind=… id=… label=…>` that the `components.entityRef`
+// override renders as an <EntityChip/>. Fenced (```) and inline (`) code are
+// never chipped: their payloads live in `node.value`, not as `text` children,
+// so this walk only ever sees real prose `text` nodes.
+
+const ENTITY_REF_RE = /\[\[(table|rule|module|org-unit):([^:\]]+):([^\]]+)\]\]/g;
+
+/** Build the custom mdast node the remark-rehype `hName` mechanism carries over. */
+function entityRefNode(kind, id, label) {
+  return {
+    type: 'entityRef',
+    kind,
+    id,
+    label,
+    data: {
+      hName: 'entityRef',
+      hProperties: { kind, id, label },
+    },
+  };
+}
+
+/** Split a text value into text/entityRef nodes (identity when no known refs). */
+function splitEntityRefs(value) {
+  if (typeof value !== 'string' || !value.includes('[[')) {
+    return [{ type: 'text', value }];
+  }
+
+  const matches = [...value.matchAll(ENTITY_REF_RE)];
+  if (matches.length === 0) {
+    return [{ type: 'text', value }];
+  }
+
+  const parts = [];
+  let cursor = 0;
+  for (const match of matches) {
+    const [full, kind, id, label] = match;
+    if (match.index > cursor) {
+      parts.push({ type: 'text', value: value.slice(cursor, match.index) });
+    }
+    parts.push(entityRefNode(kind, id, label));
+    cursor = match.index + full.length;
+  }
+  if (cursor < value.length) {
+    parts.push({ type: 'text', value: value.slice(cursor) });
+  }
+  return parts;
+}
+
+/** Recursively rewrite prose `text` nodes (code/inlineCode carry `.value`, skipped). */
+function walkTextNodes(node) {
+  if (!node || typeof node !== 'object') return;
+  if (!Array.isArray(node.children)) return;
+
+  for (let i = 0; i < node.children.length; i += 1) {
+    const child = node.children[i];
+    if (child && child.type === 'text') {
+      const parts = splitEntityRefs(child.value);
+      if (parts.length > 1) {
+        node.children.splice(i, 1, ...parts);
+        i += parts.length - 1; // advance past the nodes we just inserted
+      }
+    } else {
+      walkTextNodes(child);
+    }
+  }
+}
+
+/** Remark plugin (attacher) — see module comment above. */
+function remarkEntityChips() {
+  return (tree) => {
+    walkTextNodes(tree);
+  };
+}
+
 // ── Mermaid diagram (```mermaid) — lazily imports the heavy lib ──────────
 
 const mermaidIdRef = { current: 0 };
@@ -469,6 +555,9 @@ const components = {
   // strip the default <pre> wrapper — CodeBlock renders its own container
   pre: ({ children }) => <>{children}</>,
 
+  // entity reference chip — [[kind:id:label]] → inline <EntityChip/>
+  entityRef: ({ kind, id, label }) => <EntityChip kind={kind} id={id} label={label} />,
+
   // paragraphs
   p: ({ children }) => (
     <Typography variant="body2" sx={{ mb: 1, '&:last-child': { mb: 0 }, lineHeight: 1.65 }}>
@@ -592,7 +681,7 @@ export default function MarkdownMessage({ content }) {
   return (
     <Box sx={{ '& > *:first-of-type': { mt: 0 }, '& > *:last-of-type': { mb: 0 } }}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
+        remarkPlugins={[remarkGfm, remarkMath, remarkEntityChips]}
         rehypePlugins={[rehypeHighlight, rehypeKatex]}
         components={components}
       >

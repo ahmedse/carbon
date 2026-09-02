@@ -608,6 +608,526 @@ from different domains.
 
 ---
 
+## PULSE 0.3 — WAVE F TRACK (Rich Conversation Surface · frontend)
+
+> **Canonical spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave F — but read the
+> **CORRECTIONS** in each phase first; the roadmap's F1 entity taxonomy + "KG lookup" + "Inspector
+> panel" wording is stale (verified 2026-09-02). Wave F consumes E1/E2/E3.
+> **Dependency order (do NOT reorder):** F1-B (backend annotation) → F1-F (chips) → F2-B (`org-unit` resolve) → F2-F (@-mention) → F3-B (backend `tool_trace`) → F3-F (planning pill).
+> **Workers run DeepSeek V4-Flash (RULE_24).** Backend phases = backend-worker; frontend = frontend-worker.
+> **MASTER DIRECTIVE:** backend tests one app at a time `pytest ai -q`; frontend `npx vitest run <file>`.
+
+| Phase | Goal | Domain | Deps | Status |
+|-------|------|--------|------|--------|
+| F1-B | Annotate answer entity mentions → `[[kind:id:label]]` | backend | E1,E2 | DONE |
+| F1-F | `EntityChip` + remark plugin + Inspector wiring | frontend | F1-B | DONE |
+| F2-B | `org-unit` in `resolve_mentions` (mention→context backend) | backend | F1-B | DONE |
+| F2-F | `@`-mention trigger + `org-unit` kind + `ContextChipRow` | frontend | F2-B | DONE |
+| F3-B | `tool_trace` in chat payload (outcome-language step list) | backend | F2-F | DONE |
+| F3-F | `PlanningHeader` pill + `AIMessageBubble` wiring | frontend | F3-B | DONE |
+
+---
+
+## Phase F1-B — Entity mention annotation (backend)
+
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave F — F1 (task #3).
+
+**Result (2026-09-02):** shipped `_annotate_entity_mentions(answer, scope)` in `ai/engine_runtime.py`,
+wired into `_run_chat` right after `_grounded_access_table`. Real ORM name→`{kind,id,name}` resolution
+(kinds `table`/`rule`/`module`/`org-unit`), scoped via `accounts.rbac_utils.get_visible_module_ids`
++ `get_visible_org_units` (no cross-tenant leak). Case-insensitive word-boundary match, longest-name-
+first, each name once; protected spans (code fence / URL / existing `[[...]]`) occupancy-masked; label
+sanitized; bounded (`_ANNOTATION_MAX_PER_KIND=200`) and never-raising. **Gate:** 12/12 new tests
+passed; `pytest ai` = **1283 passed, 0 failed**.
+
+### Goal
+When Pulse's answer references a Carbon entity by name (a table, rule, module, or org unit), the
+final answer text carries that reference in a **serialized ref** `[[kind:id:label]]` so the frontend
+(F1-F) can render it as a clickable `EntityChip`. This phase produces the **contract producer**; F1-F
+is the consumer.
+
+**CORRECTIONS to the roadmap (verified against current code — do NOT chase stale paths):**
+- **Entity taxonomy is NOT `OrgUnit`/`Employee`/`DQRule`/`DataTable`.** The real kinds are the ones
+  `ai/adapter/carbon.py::resolve_mentions` already knows: `table` (DataTable), `rule` (DQRule),
+  `field` (DataField), `module` (Module). Plus `org-unit` (OrgUnit) for the Inspector. Scope F1-B to
+  **`table`, `rule`, `module`, `org-unit`** (each has a frontend Inspector tab; `field` has none and
+  is too granular — annotate too aggressively — so exclude it; `employee`/`EmissionRecord` are later
+  extensions, employee lives in the uncommitted People/Nibras app).
+- **"KG lookup" is stale.** Resolution is the **Django ORM by name** (the same models
+  `resolve_mentions` uses), NOT `WorldModel.entities` (that list has only `on_entity` names — no
+  ids) and NOT the engine KG (its ENTITY nodes are schema tables, not typed host entities).
+- **The serialized ref format** is `[[kind:id:label]]` (roadmap wrote `[[EntityType:id:label]]` —
+  use `kind`, not the roadmap's type words). `kind` ∈ `{table, rule, module, org-unit}`.
+- **Hook the answer post-processor, NOT `intelligence.py`.** The deterministic answer post-processing
+  lives in `ai/engine_runtime.py` (`_grounded_outcome_note`, `_grounded_access_table`,
+  `_extract_tool_actions`). Add the annotator alongside them (same correction as E2/E3).
+
+### Files to read first
+- `ai/adapter/carbon.py` — `resolve_mentions()` (the `{kind,id,name}` shape + `model_map` to copy).
+- `ai/engine_runtime.py` — find `_run_chat` and the existing `_grounded_*` post-processors; the
+  annotator runs on the final answer string there (also the stream-done path if present).
+- `ai/context_assembler.py` + `ai/store.py` `scope_q` — reuse the EXISTING data-scoping helper so
+  the annotator never resolves a name the user cannot access.
+- `accounts/ai_scoping.py` (if present) — the canonical per-user entity scope.
+
+### Files to Change
+- `ai/engine_runtime.py` — add `_annotate_entity_mentions(answer: str, scope) -> str` and call it on
+  the finalized answer (next to `_grounded_*`).
+- `ai/tests/test_entity_annotation.py` (NEW).
+
+### Contract (exact API — do NOT deviate)
+- `_annotate_entity_mentions(answer: str, scope) -> str`:
+  - Resolve the user-accessible `DataTable`/`DQRule`/`Module`/`OrgUnit` names (scoped via the same
+    helper `context_assembler` uses) into `{kind, id, name}`.
+  - Match names in `answer` **case-insensitively on word boundaries**, **longest-name-first** (so
+    "South Valley Campus" wins over "South Valley"), each name replaced at most once (dedupe).
+  - Replace a matched span with `[[{kind}:{id}:{label}]]` where `label` = the entity's display name
+    with `]`, `:`, `[[`, `]]` stripped (sanitized). If sanitization empties the label, skip.
+  - **Deterministic, budgeted**: cap the entity lookup set (e.g. top N by recency) and never raise —
+    on any failure return the answer unchanged.
+  - Never annotate inside a fenced code block, a `[[`-already-wrapped span, or a URL.
+- Serialized ref emitted: `[[table:42:emissions_fuel]]`, `[[rule:17:email_not_null]]`,
+  `[[module:3:Carbon Ledger]]`, `[[org-unit:9:South Valley]]`.
+
+### Shallow-implementation trap (reject if hit)
+❌ a pure regex over a hardcoded entity-name list (names come from the scoped ORM, never hardcoded);
+❌ annotating without the user's data scope (cross-tenant leakage); ❌ using the engine KG for
+resolution; ❌ rewriting `[[...]]` inside code fences/URLs; ❌ returning a changed answer that drops
+the rest of the text; ❌ `return answer` when there IS a match to make (thin).
+
+### DO NOT TOUCH
+- `ai/domain/**`, `ai/adapter/**` (REUSE `resolve_mentions`'s model_map, don't edit), `ai/intelligence.py`.
+- Nibras/People uncommitted files (`backend/people/**`, `backend/ai/domain/people.py`) — no edit, no `git add -A`.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_entity_annotation.py -v --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider | tail -5
+```
+Report both results.
+
+---
+
+## Phase F1-F — EntityChip + remark plugin + Inspector wiring (frontend)
+
+**Date:** 2026-09-02
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave F — F1 (task #3).
+**Dependency:** F1-B DONE (the backend now emits `[[kind:id:label]]` in answers).
+
+**Result (2026-09-02):** shipped `src/shell/EntityChip.jsx` (`EntityChip({kind,id,label})` → MUI
+`Chip` with per-kind icon: table→TableChart, rule→FactCheck, module→Description,
+org-unit→AccountTree; click → `setContexts([{entityType:kind, entityId:id, label}])` + `setOpen(true)`).
+Wired a `remarkEntityChips` plugin into `MarkdownMessage.jsx` (`remarkPlugins=[remarkGfm, remarkMath,
+remarkEntityChips]`) that splits `[[(table|rule|module|org-unit):<id>:<label>]]` in text nodes into a
+custom `entityRef` node (`data.hName` mechanism), rendered via a `components.entityRef` entry;
+code/inline-code refs untouched. **Gate:** 6/6 Vitest passed (after my `component="span"` fix to
+eliminate a `<p>`→`<div>` invalid-nesting warning).
+
+### Goal
+Consume the serialized ref `[[kind:id:label]]` that the F1-B annotator now emits in assistant
+answers, and render it as a clickable **`EntityChip`**. Clicking a chip opens the **global
+Contextual Inspector drawer** with that entity's context — exactly how the 18 detail pages open it
+via `useNotes().setContexts([...])`. This is the first user-visible payoff of Wave F.
+
+**CORRECTIONS to the roadmap (verified 2026-09-02 — do NOT chase stale paths):**
+- **NOT `AIContextPanel`.** The roadmap's "Inspector panel" wording is stale. `AIContextPanel.jsx`
+  is the *context/budget/summary* panel — unrelated. The entity Inspector is the **global
+  Contextual Inspector drawer** = `NotesPanel` (Notes tab + `InspectorTabRegistry` tabs), opened via
+  `useNotes().setContexts([{entityType, entityId, label}])` + `setOpen(true)`.
+- **Serialized ref format** = `[[kind:id:label]]`, `kind` ∈ `{table, rule, module, org-unit}` (F1-B
+  is the producer — the frontend must ONLY consume; do NOT re-implement name resolution).
+- **Chip opens Inspector, not a route.** No `<Link>`/navigate — click calls `setContexts` + `setOpen`.
+
+### Files to read first
+- `src/shell/MarkdownMessage.jsx` — the generic react-markdown renderer. A new **remark plugin**
+  must rewrite the `[[kind:id:label]]` text into a custom node (or the `components` text visitor
+  must split it); add a `components` entry that renders `EntityChip`. Do NOT break
+  `normalizeMermaidFences` / `reflowMarkdownStructure` (they run BEFORE markdown parse).
+- `src/notes/NotesContext.jsx` — `useNotes()` → `setContexts([{entityType, entityId, label}])` and
+  `setOpen(true)`. The context shape is `{entityType, entityId, label, payload?}`.
+- `src/inspector/InspectorTabRegistry.js` — `registerInspectorTab` / `tabsFor(context)`; a chip must
+  set a context that the EXISTING tabs `matches()` can consume (table/rule/module/org-unit tabs
+  already exist and match on those `entityType`s).
+- `src/apps/people/EmployeeDetailPage.jsx` — canonical `setContexts([...])` invocation to copy.
+
+### Files to Change
+- `src/shell/EntityChip.jsx` (NEW) — presentational + click handler. MUI `Chip`, a per-`kind` icon,
+  `label` as the chip text, `onClick` → `useNotes().setContexts([{entityType: kind, entityId: id,
+  label}])` + `setOpen(true)`.
+  - kind→icon (adjust to the real taxonomy): `table`→`TableChart`, `rule`→`FactCheck`,
+    `module`→`Description`, `org-unit`→`AccountTree`; unknown kind → `Category` fallback icon.
+- `src/shell/MarkdownMessage.jsx` — add a remark plugin (or a `text` component splitter) that
+  recognizes `[[kind:id:label]]` (with `kind` in the 4 known kinds) and renders `<EntityChip/>`
+  instead of the literal text. MUST NOT alter refs inside fenced code blocks or existing links.
+- `src/__tests__/EntityChip.test.jsx` (NEW) — Vitest + jsdom.
+
+### Contract (exact — do NOT deviate)
+- `EntityChip({ kind, id, label })` renders a MUI `Chip` with `label`, a per-kind icon, and an
+  accessible `onClick`. Clicking opens the Inspector: `setContexts([{entityType: kind, entityId: id,
+  label}])` then `setOpen(true)`.
+- The remark plugin recognizes only `[[(table|rule|module|org-unit):<id>:<label>]]` and emits an
+  `EntityChip` node; any other `[[…]]` stays literal text.
+- `MarkdownMessage` must render the chip inline within a paragraph (not break the flow).
+- Refs inside fenced code blocks are never turned into chips (remark already isolates code; confirm).
+- No new backend calls, no route navigation, no changes to `AIContextPanel`, `ai/engine/**`,
+  `AIInputBar`, `AITaskPanel`.
+
+### Tests (Vitest — `src/__tests__/EntityChip.test.jsx`)
+- `EntityChip` renders the label + the right icon per kind (snapshot or per-kind icon assert).
+- Clicking a `table` chip calls `setContexts` with `{entityType:'table', entityId:id, label}` and
+  `setOpen(true)` (mock `useNotes`).
+- `MarkdownMessage` turns `[[table:42:emissions_fuel]]` into an `EntityChip` (render and assert the
+  chip exists with the right props); unknown/empty kind stays literal text.
+- A ref inside a ``` code fence is NOT chipped.
+
+### Shallow-implementation trap (reject if hit)
+❌ `EntityChip` that renders but never wires `setContexts`/`setOpen`; ❌ navigating via `<Link>`
+instead of opening the Inspector; ❌ editing `AIContextPanel` or the backend; ❌ a chip that
+re-implements entity lookup (frontend consumes the ref only); ❌ breaking code-fence/mermaid
+normalization; ❌ chips that don't render inline in a paragraph.
+
+### DO NOT TOUCH
+- `src/shell/AIContextPanel.jsx`, `src/shell/AIInputBar.jsx`, `src/shell/AITaskPanel.jsx`,
+  `ai/engine/**` (backend), `src/notes/NotesPanel.jsx` (drawer already composes registry tabs).
+- Nibras/People uncommitted files — no edit, no `git add -A`.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/EntityChip.test.jsx --reporter=verbose
+```
+Report the result (and run the file standalone, no full suite).
+
+---
+
+## Phase F2-B — `org-unit` in `resolve_mentions` (backend)
+
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Dependency:** F1-B DONE.
+
+**Result (2026-09-02):** added `"org-unit"`/`"orgunit"` → `OrgUnit` to `resolve_mentions` `model_map`
+plus the `elif kind in ("org-unit", "orgunit")` branch returning `{kind:"org-unit", id, name, org_type}`
+in `ai/adapter/carbon.py`; deterministic `test_resolve_mentions_org_unit` (canonical + alias + unknown-id/kind
+→ `[]`). **Gate:** `pytest ai/tests/test_adapter.py ai/tests/test_context_assembler.py` = **26 passed**.
+
+### Goal
+The mention→context seam `ai/adapter/carbon.py::resolve_mentions()` resolves `workspace_context.mentions`
+into entity descriptors that get injected into the LLM's SessionContext. It currently maps
+`table/rule/field/module` but **NOT `org-unit`**, so an `org-unit` mention is silently dropped
+(no context reaches the model). Add `org-unit` so the F2-F frontend can pin OrgUnits as session context.
+
+**CORRECTIONS to the roadmap (verified 2026-09-02):** the roadmap's F2 "resolve" endpoint + "queries
+KG + ORM" + "workspace_api.py" is STALE. Mention resolution is the ORM-only `resolve_mentions` (NOT KG).
+No new endpoint is needed — the existing `workspace_context.mentions` → `context_assembler` →
+`resolve_mentions` chain already works; it just lacks the `org-unit` kind.
+
+### Files to Change
+- `ai/adapter/carbon.py` — `resolve_mentions()`: add `"org-unit"` (and alias `"orgunit"`) to the
+  `model_map` (→ `OrgUnit`, already imported at module top), plus an `elif kind in ("org-unit",
+  "orgunit")` branch returning `{"kind": "org-unit", "id": str(obj.id), "name": obj.name,
+  "org_type": obj.org_type}`. Mirror the existing `module` branch's shape.
+- `ai/tests/test_adapter.py` (or `test_context_assembler.py`) — add a deterministic test: create an
+  `OrgUnit`, call `resolve_mentions([{"kind":"org-unit","id":ou.id}])`, assert the descriptor
+  `{kind:"org-unit", id, name, org_type}`; and that an unknown/missing id returns `[]`.
+
+### Shallow-implementation trap (reject if hit)
+❌ adding a new endpoint; ❌ touching the engine KG; ❌ changing the `{kind,id,name}` contract for the
+other kinds; ❌ leaving `org-unit` out of the `model_map` but claiming support.
+
+### DO NOT TOUCH
+`ai/domain/**`, `ai/engine/**`, migrations, Nibras/People (`backend/people/**`). No `git add -A`.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_adapter.py ai/tests/test_context_assembler.py -q --disable-warnings -p no:cacheprovider
+```
+
+---
+
+## Phase F2-F — `@`-mention trigger + `org-unit` kind + `ContextChipRow` (frontend)
+
+**Date:** 2026-09-02
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Dependency:** F2-B DONE (backend resolves `org-unit`).
+
+**Result (2026-09-02):** added `org-unit` to the `#` kind machinery (`MENTION_KINDS`/`KIND_ICONS`
+`AccountTreeIcon`/`KIND_CONFIG`→`API_ROUTES.orgUnits`/labels) and both `#` regexes; added an `@`
+single-stage cross-kind typeahead (`AT_TRIGGER_RE=/@([^\s@#]*)$/`, stage `'at'`, parallel `apiFetch`
+over table/rule/module/org-unit, per-kind badge); extracted `src/shell/ContextChipRow.jsx`
+(`{mentions, onRemove, onClear}`) replacing the inline chip row. `@` is end-anchored so resolved inline
+`@displayName ` (trailing space) never re-triggers. **Gate:** 8/8 new Vitest + 13/13 regression in
+`AIInputBar.*`/`EntityChip` (no regressions).
+
+### Goal
+Users can type `@` in the input bar to open a typeahead over Carbon entities, pin one as a session
+`ContextChip`, and include it in the request as `workspace_context.mentions`. Also add `org-unit` to
+the existing `#` mention kind set.
+
+**CORRECTIONS to the roadmap (verified 2026-09-02 — the existing `#` system already delivers most of F2):**
+- `AIInputBar.jsx` (Sprint 17) ALREADY has: a two-stage `#` typeahead (`MENTION_KINDS=['table','rule','field','module']`),
+  entity search via list routes, pinned context chips below the composer (in `resolvedMentions` state —
+  session-scoped, NOT localStorage), remove-✕ + clear-all. Do NOT rebuild this.
+- The roadmap's F2 entity kinds ("OrgUnits, Employees, DQRules, DataTables") are stale. Real kinds are
+  `table/rule/field/module` + the NEW `org-unit`. `employee` lives in uncommitted People — out of scope.
+- The request payload field is `workspace_context.mentions` (NOT the roadmap's `entity_context`), flowing
+  `AIInputBar.onSend(val, resolvedMentions)` → `AIConversationView` → `workspace_context: { mentions }`.
+- Backend resolution is ORM `resolve_mentions` (F2-B adds `org-unit`), NOT a new resolve endpoint.
+- **`@` conflict caveat:** the existing `#` flow renders resolved mentions INLINE as `@displayName `
+  (see `replaceEntityTrigger` → `$1@${displayName} `), so `@` is already the *display* token. An `@`
+  TRIGGER must only fire on a FRESH trailing `@query` token (e.g. `/@([^\s@#]*)$/` — end-anchored, and
+  resolved `@displayName` always ends with a trailing space so it won't re-trigger). Verify this in a test.
+
+### Files to Change
+- `src/shell/AIInputBar.jsx`:
+  - Add `org-unit` to `MENTION_KINDS`, `KIND_ICONS` (`org-unit`→`AccountTreeIcon`), `KIND_CONFIG`
+    (`org-unit: { route: API_ROUTES.orgUnits /* "mdm/org-units/" */, labelKey:'name', idKey:'id', extra:[] }`),
+    `MENTION_KIND_LABELS` / `MENTION_KIND_DESCRIPTIONS`.
+  - Add an `@` trigger (single-stage cross-kind typeahead): typing a trailing `@query` searches across
+    `table/rule/module/org-unit` (parallel `apiFetch` to each `KIND_CONFIG[kind].route?q=`), merges
+    results with a per-kind badge, and shows them in the existing `PickerMenu`/`PickerOption`. Selecting
+    pins a chip via the SAME `resolvedMentions` state + `buildMention(kind, item)`.
+  - Do NOT break the existing `#` two-stage flow or the `@displayName` inline token.
+- `src/shell/ContextChipRow.jsx` (NEW) — extract the existing "Context" chips row (currently inline in
+  `AIInputBar`) into a component: renders `resolvedMentions` as chips (`#kind name`), each with
+  remove-✕, plus a "Clear" button. `AIInputBar` renders `<ContextChipRow mentions onRemove onClear />`.
+  (Freshness indicator "data as of …" is OPTIONAL — only if a `fetched_at`/`updated_at` is already on
+  the mention object; do NOT fabricate timestamps or add new API calls for it.)
+- `src/__tests__/AIInputBar.atMention.test.jsx` (NEW) + extend `AIInputBar.mentions.test.jsx` for `org-unit`.
+
+### Contract (exact — do NOT deviate)
+- `@query` (fresh trailing `@` + non-space query) opens a cross-kind typeahead; results show kind badge;
+  selecting pins `{kind, id, name}` and inserts the `@displayName ` token (consistent with `#`).
+- `org-unit` works in BOTH `#` (two-stage) and `@` (cross-kind).
+- Chips remain session-scoped component state (NO localStorage) and ride as `workspace_context.mentions`.
+- Escape closes the picker and returns focus to the textarea; the textarea is never blocked while open.
+- Theme tokens only, AA contrast, no raw hex (RULE_8).
+
+### Tests (Vitest)
+- typing `@sou` opens the cross-kind picker and (with mocked `apiFetch`) shows org-unit + table matches.
+- selecting an org-unit pins a `{kind:'org-unit', id, name}` chip and calls `onMentionsChange`.
+- `#org-unit ` two-stage still works (kind list includes `org-unit`).
+- a resolved inline `@South Valley ` (trailing space) does NOT re-trigger the `@` picker.
+- `ContextChipRow` renders chips + remove + clear; remove calls back with `(kind, id)`.
+
+### Shallow-implementation trap (reject if hit)
+❌ rebuilding the `#` system from scratch; ❌ storing chips in localStorage; ❌ sending raw entity
+objects (send `{kind,id,name}` only); ❌ `@` trigger firing on already-resolved `@displayName`;
+❌ blocking the textarea while typeahead is open; ❌ hardcoding entity lists (names come from the API).
+
+### DO NOT TOUCH
+`AIContextPanel.jsx`, `AITaskPanel.jsx`, `AIConversationView.jsx` (mention→payload wiring already correct),
+backend, Nibras/People. No `git add -A`.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/AIInputBar.atMention.test.jsx src/__tests__/AIInputBar.mentions.test.jsx --reporter=verbose
+```
+
+---
+
+## Phase F3-B — `tool_trace` in chat payload (backend)
+
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Dependency:** F2-F DONE.
+
+**Result (2026-09-02):** added `_TOOL_STEP_LABELS` + `_build_tool_trace(completed_tools)` in
+`engine_runtime.py` (outcome-language `step_label`, `tool_id`=`tool_name`, `duration_ms`=`latency_ms`;
+filters `error`/`requires_confirmation`; returns `[]` unless ≥2 steps; never raises) wired into `_run_chat`
+result. Added `tool_trace` to `ChatResponse` (`protocol.py`), `pulse.py` `chat()`, both `intelligence.py`
+stream paths (`send_message_stream` + `retry_message_stream`) + non-streaming `send_message`,
+`_build_ai_message` (`metadata["tool_trace"]`), and `_serialize_message` (top-level `tool_trace`). **Architect
+fix:** added the parity pass in `retry_message_stream` (worker had missed it) and corrected the test helper
+(`latency_ms=None` now omits the key). **Gate:** 9 new `test_tool_trace.py` + `pytest ai` = **1293 passed** (0 fail).
+
+### Goal
+Every multi-step assistant turn (≥2 real tool calls) carries a `tool_trace` array on the message so the
+frontend (F3-F) can render the "Considered: …" planning pill. Outcome language only (RULE_23) — never raw
+tool JSON or engine terms. This phase is the **contract producer**; F3-F consumes it.
+
+**CORRECTIONS to the roadmap F3 (verified 2026-09-02 — the roadmap's backend wording is stale):**
+- The roadmap says "modify `ai/intelligence.py` / `ai/workspace_api.py`" and "derive from TurnLedger step
+  rows". Real seam: `_run_chat` in `backend/ai/engine_runtime.py` ALREADY has the executed-tools list as
+  `completed_tools` (each item = `{tool_name, result, error, latency_ms, guardrail_flags}` from
+  `ai/engine/cognition/turn/execute.py`) and ALREADY derives `actions`/`pending_actions` from it. Derive
+  `tool_trace` from `completed_tools` the same way — do NOT query `TurnLedgerRow`/`turn_ledger` (those are
+  observability stage rows, not per-tool steps, and are NOT in the in-process chat result path).
+- The roadmap's field names `{step_label, tool_id, duration_ms}` are close but the real tool id is the
+  `tool_name` string (e.g. `search_knowledge`, `call_host_api:list_emission_factors`) and the real duration
+  key is `latency_ms`. Keep the roadmap's OUTPUT field names (`tool_id`, `duration_ms`) so the frontend
+  contract is stable, but source them from `tool_name` / `latency_ms`.
+- `ChatResponse` lives in `backend/ai/protocol.py` (has `actions`, `pending_actions`, `confidence_label`,
+  `honest_uncertainty`). Add `tool_trace: list[dict] = field(default_factory=list)` there, populate it in
+  `backend/ai/providers/pulse.py` `chat()` from `result.get("tool_trace")`.
+
+### Files to Change
+- `backend/ai/engine_runtime.py`:
+  - ADD `_build_tool_trace(completed_tools)` → `list[dict]`. Each step = `{"step_label": str, "tool_id": str, "duration_ms": int}`.
+    * Include only non-error tools (`item.get("error")` falsy) and skip `requires_confirmation` results.
+    * Return `[]` unless the final step list has **≥2** entries (multi-step responses only — a single
+      lookup does not get a "Considered…" pill).
+    * `tool_id` = `item.get("tool_name")`; `duration_ms` = `int(item.get("latency_ms") or 0)`.
+    * `step_label` (outcome language, RULE_23): if the parsed result JSON has a non-empty `summary` or
+      `label` string, use it; else a static map keyed by `tool_name`; `call_host_api:*` → `"Queried live
+      platform data"`; unknown → `"Completed a background step"`. NEVER emit raw tool JSON/args/result.
+  - Wire it: in `_run_chat`, after `actions, pending_actions = _extract_tool_actions(completed_tools)`,
+    add `tool_trace = _build_tool_trace(completed_tools)` and include `"tool_trace": tool_trace` in the
+    returned `result` dict.
+- `backend/ai/protocol.py`: add `tool_trace: list[dict] = field(default_factory=list)` to `ChatResponse`.
+- `backend/ai/providers/pulse.py`: in `chat()`, `tool_trace=result.get("tool_trace") or []`.
+- `backend/ai/intelligence.py`:
+  - Non-streaming `send_message`: pass `tool_trace=chat_response.tool_trace` to `_build_ai_message(...)`.
+  - Streaming path (the `if kind == "done":` branch that reads `res.get("actions")`): pass
+    `tool_trace=res.get("tool_trace")` too.
+  - `_build_ai_message(...)`: add `tool_trace: list[dict] | None = None` param; when non-empty,
+    `metadata["tool_trace"] = tool_trace`.
+  - `_serialize_message(...)`: add `"tool_trace": metadata.get("tool_trace") or [],` to the returned dict
+    (top-level, for parity with `confidence_label`/`honest_uncertainty`).
+- `backend/ai/tests/test_tool_trace.py` (NEW): unit-test `_build_tool_trace` (outcome label mapping,
+  `latency_ms`→`duration_ms`, filters `error`/`requires_confirmation`, returns `[]` for <2 steps, `call_host_api:*`
+  label) — self-contained, no DB.
+
+### Contract (exact — do NOT deviate)
+- `tool_trace` is a list of `{step_label, tool_id, duration_ms}`; present only when ≥2 real steps.
+- Outcome language only in `step_label` (no raw args/result/JSON, no engine stage names).
+- Backend engine core imports nothing from catalog/mdm/dq/emissions/accounts/core (RULE_20). No
+  auto-mutation (RULE_21). No thin implementation (RULE_28).
+
+### Tests (pytest, backend)
+- `_build_tool_trace` maps `search_knowledge` → outcome label; `call_host_api:list_emission_factors` →
+  `"Queried live platform data"`; uses result `summary` when present; drops errored/confirmation tools;
+  returns `[]` for a single tool; preserves `duration_ms` from `latency_ms`.
+- A serialized message surfaces `tool_trace` from metadata (assert `_serialize_message` / `_build_ai_message`
+  puts it in `metadata_json`).
+
+### Shallow-implementation trap (reject if hit)
+❌ querying `TurnLedgerRow`/`turn_ledger` for steps; ❌ emitting `tool_trace` for a single tool call;
+❌ raw tool args/result JSON in `step_label`; ❌ hardcoding a fake `tool_id`; ❌ mutating tool results to
+derive the trace.
+
+### DO NOT TOUCH
+`backend/ai/engine/cognition/**` (the runner/execute/witnesses are correct — the trace is derived in
+`engine_runtime.py` only), Nibras/People, frontend. No `git add -A`.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_tool_trace.py ai/tests/test_chat_wiring.py -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider
+```
+
+---
+
+## Phase F3-F — `PlanningHeader` pill + `AIMessageBubble` wiring (frontend)
+
+**Date:** 2026-09-02
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Dependency:** F3-B DONE (backend now emits `tool_trace` on multi-step assistant messages).
+
+**Result (2026-09-02):** added `src/shell/PlanningHeader.jsx` (`PlanningHeader({trace})` → `null` on empty;
+collapsed MUI `Button` pill `Considered: {first step_label}` + ` · +N more`; expand → `Paper` step list
+(`step_label` + `formatDuration(ms)` only, never `tool_id`); `aria-expanded` on a real `<button>`, Enter/Space
+toggle; theme tokens only; `prefers-reduced-motion` guard; `localStorage` `pulse.planningHeader.expanded`).
+Wired `toolTrace = message.tool_trace || metadata.tool_trace || []` + `<PlanningHeader/>` as first child of
+`bubbleSx` (above status chip / `AIGeneratedBadge`) + `tool_trace: PropTypes.array`. **Gate:** 7/7 new
+`PlanningHeader.test.jsx` + 19/19 regression (`EntityChip` + `AIMessageBubble.transparency`); eslint clean.
+
+### Goal
+A multi-step assistant answer opens with a compact, collapsible **"Considered: …"** pill (one-line
+summary, click to expand the full step list in outcome language). This is the *pre-answer* planning
+surface that makes the model's thinking visible — distinct from `ReasoningTrace` (D3), which is the
+on-click "why this answer" provenance panel.
+
+**CORRECTIONS to the roadmap F3 (verified 2026-09-02):**
+- The roadmap says "expanded by default in the Analyst view". **There is NO Analyst/Operator view
+  surface plumbed into `AIMessageBubble`** (the only `isAnalyst` is `src/utils/rbac.js`, a perspective
+  check not wired into the message bubble). Do NOT invent a view prop or plumb user/perspective through
+  the conversation view. Behavior = **collapsed by default everywhere**, preference persisted in
+  `localStorage` (roadmap's own "store preference" requirement).
+- `tool_trace` arrives BOTH top-level (`message.tool_trace` from `_serialize_message`) AND inside
+  `metadata_json` (`metadata.tool_trace`). Read from both for robustness (mirror how `confidence_label`
+  is read at `AIMessageBubble.jsx` ~line 408).
+- The roadmap's "emit the header as a separate SSE frame" trap is already avoided — `tool_trace` rides
+  the SAME message payload as the answer (F3-B), no separate frame to reconcile.
+
+### Files to Change
+- `src/shell/PlanningHeader.jsx` (NEW):
+  - `PlanningHeader({ trace })` → `null` when `trace` is not a non-empty array.
+  - Collapsed: a compact pill (MUI `Chip` or `Button` `size="small"`, `variant="outlined"`) with an
+    expand affordance (e.g. `UnfoldMore`/`ExpandMore` icon) and text `Considered: {summary}`. Summary =
+    the first step's `step_label` (truncate to ~48 chars with ellipsis), plus ` · +N more` when
+    `trace.length > 1`.
+  - Expanded: a small `Paper`/`Stack` list of steps, each row = `step_label` + right-aligned formatted
+    duration. `formatDuration(ms)` inline helper: `<1000` → `"{ms} ms"`, else `"{(ms/1000).toFixed(1)} s"`.
+    Render ONLY `step_label` and duration — never `tool_id`, never raw JSON (RULE_23).
+  - A11y: a real `<button>` (or `Chip` with `onClick` + keyboard) toggling `aria-expanded`; Enter/Space
+    toggle. `aria-label` on the trigger.
+  - Theme tokens only (RULE_8): `primary.main` / `action.selected` / `text.secondary` / `background.paper`
+    / spacing tokens — no raw hex, no inline hardcoded colors.
+  - `prefers-reduced-motion`: no transition/animation when `matchMedia('(prefers-reduced-motion: reduce)')`
+    matches (a simple conditional on the collapse transition, or omit transitions entirely).
+  - Persist expanded state in `localStorage` key `pulse.planningHeader.expanded` (`"1"`/`"0"`); read it
+    once on mount (default collapsed). Wrap `localStorage` access in try/except (SSR/test safety).
+- `src/shell/AIMessageBubble.jsx`:
+  - Import `PlanningHeader`.
+  - After `const metadata = normalizeMetadata(message);` derive
+    `const toolTrace = message.tool_trace || metadata.tool_trace || [];`.
+  - Render `{!isUser && <PlanningHeader trace={toolTrace} />}` at the TOP of the `bubbleSx` Box (before
+    the status chip / `AIGeneratedBadge`), so the pill appears above the answer body.
+  - Add `tool_trace: PropTypes.array` to the `message` PropTypes shape.
+- `src/__tests__/PlanningHeader.test.jsx` (NEW):
+  - collapsed renders `Considered: {first step_label}` and `+N more` for 3 steps.
+  - click expands to the full step list (assert `step_label` text + a formatted duration present).
+  - keyboard Enter/Space toggles; `aria-expanded` flips `true`/`false`.
+  - returns `null` for empty/`[]`/`null` trace.
+  - expanded preference persists to `localStorage` (mock it) and is restored on a fresh mount.
+  - reduced-motion: renders without a transition (no crash) when `prefers-reduced-motion` matches.
+
+### Contract (exact — do NOT deviate)
+- Collapsed by default; click/keyboard expands; preference in `localStorage`.
+- One-line summary = outcome-language first step + `+N more`; expanded list shows `step_label` + duration
+  only (no `tool_id`, no raw tool JSON, no engine stage names).
+- `tool_trace` read from `message.tool_trace` OR `metadata.tool_trace`.
+- Theme tokens only, AA contrast, keyboard-accessible, reduced-motion-safe.
+
+### Shallow-implementation trap (reject if hit)
+❌ always-expanded; ❌ showing `tool_id` or raw tool JSON; ❌ emitting a separate SSE frame; ❌ inventing
+an Analyst/Operator view prop; ❌ hardcoded colors/hex; ❌ ignoring `prefers-reduced-motion`; ❌ failing
+to return `null` on empty trace.
+
+### DO NOT TOUCH
+`ReasoningTrace.jsx` (D3 — deeper provenance panel), `AITaskPanel.jsx` / `AITaskPlanCard.jsx` (agentic
+plan cards), `AIConversationView.jsx`, `MarkdownMessage.jsx`, `EntityChip.jsx`, backend, Nibras/People.
+No `git add -A`.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/PlanningHeader.test.jsx --reporter=verbose
+npx vitest run src/__tests__/EntityChip.test.jsx src/__tests__/AIMessageBubble.transparency.test.jsx --reporter=verbose
+```
+
+---
+
 ## AI WORKSPACE TRACK
 
 ---

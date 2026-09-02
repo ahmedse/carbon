@@ -19,6 +19,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from mdm.models import OrgUnit
+
 from ai.adapter import HostAdapterContract, ToolCatalog, WorldModel
 from ai.adapter.carbon import CarbonHostAdapter
 from ai.context_assembler import assemble_context
@@ -75,6 +77,29 @@ def test_get_world_model_is_registry_driven():
     assert isinstance(wm.entities, list)
     # "emissions" is registered by ai.apps.ready() -> register_builtin_domains.
     assert "emissions" in wm.domains
+
+
+@pytest.mark.django_db
+def test_resolve_mentions_org_unit():
+    adapter = CarbonHostAdapter()
+    ou = OrgUnit.objects.create(name="Engineering", org_type="department")
+
+    resolved = adapter.resolve_mentions([{"kind": "org-unit", "id": ou.id}])
+    assert resolved == [
+        {
+            "kind": "org-unit",
+            "id": str(ou.id),
+            "name": ou.name,
+            "org_type": ou.org_type,
+        }
+    ]
+
+    # alias kind resolves identically
+    assert adapter.resolve_mentions([{"kind": "orgunit", "id": ou.id}]) == resolved
+
+    # unknown id / unknown kind resolve to nothing
+    assert adapter.resolve_mentions([{"kind": "org-unit", "id": 999999}]) == []
+    assert adapter.resolve_mentions([{"kind": "bogus", "id": ou.id}]) == []
 
 
 @pytest.mark.django_db

@@ -3,8 +3,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types';
 import {
   Box,
-  Button,
-  Chip,
   CircularProgress,
   IconButton,
   TextField,
@@ -25,11 +23,13 @@ import TableChartIcon from '@mui/icons-material/TableChart';
 import RuleIcon from '@mui/icons-material/Rule';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
 import ExtensionIcon from '@mui/icons-material/Extension';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../api/api';
 import { API_ROUTES } from '../config';
 import { useExecuteMode } from './useExecuteMode';
 import { useDraftPersistence } from '../hooks/useDraftPersistence';
+import ContextChipRow from './ContextChipRow';
 
 const PLACEHOLDER_MAP = {
   working: 'AI is thinking… (Enter to queue)',
@@ -39,18 +39,27 @@ const PLACEHOLDER_MAP = {
 
 
 
-const MENTION_KINDS = ['table', 'rule', 'field', 'module'];
+const MENTION_KINDS = ['table', 'rule', 'field', 'module', 'org-unit'];
 
 // Two-stage mention: first '#' shows kinds; after kind + space typed, search entities.
-// Stage 1: /(^|\s)#([a-zA-Z]*)$/ — kind picker
-// Stage 2: /(^|\s)#(table|rule|field|module) ([^#]*)$/ — entity search within a kind
-const KIND_TRIGGER_RE = /(^|[\s\n])#([a-zA-Z]*)$/;
-const ENTITY_TRIGGER_RE = /(^|[\s\n])#(table|rule|field|module) ([^#\n]*)$/;
+// Stage 1: /(^|\s)#([a-zA-Z-]*)$/ — kind picker (hyphen allows 'org-unit')
+// Stage 2: /(^|\s)#(table|rule|field|module|org-unit) ([^#]*)$/ — entity search within a kind
+const KIND_TRIGGER_RE = /(^|[\s\n])#([a-zA-Z-]*)$/;
+const ENTITY_TRIGGER_RE = /(^|[\s\n])#(table|rule|field|module|org-unit) ([^#\n]*)$/;
 
 // Slash-command menu: a '/' at the start of the input or after whitespace,
 // followed by optional letters. Directives insert prompt text the user completes;
 // actions trigger an existing workspace action via the optional onCommand callback.
 const SLASH_TRIGGER_RE = /(^|[\s\n])\/([a-zA-Z]*)$/;
+
+// '@'-mention trigger: a FRESH trailing '@query' token (end-anchored). Resolved
+// mentions render inline as '@displayName ' (always with a trailing space), so a
+// resolved token never re-triggers this regex.
+const AT_TRIGGER_RE = /@([^\s@#]*)$/;
+
+// Cross-kind set searched by '@' (single-stage). `field` is intentionally
+// excluded (kept in the two-stage '#' flow only).
+const AT_KINDS = ['table', 'rule', 'module', 'org-unit'];
 
 // Source of truth for the '/' command menu (W8-A). `kind` separates directives
 // (insert text) from actions (call onCommand). Labels/descriptions are outcome
@@ -82,6 +91,7 @@ const KIND_ICONS = {
   rule: <RuleIcon />,
   field: <TextFieldsIcon />,
   module: <ExtensionIcon />,
+  'org-unit': <AccountTreeIcon />,
 };
 
 // Map kind → API route + label/value keys
@@ -90,6 +100,7 @@ const KIND_CONFIG = {
   field:  { route: API_ROUTES.fields,  labelKey: 'label',    idKey: 'id',  extra: ['name'] },
   rule:   { route: API_ROUTES.dqRules, labelKey: 'name',     idKey: 'id',  extra: [] },
   module: { route: API_ROUTES.modules, labelKey: 'name',     idKey: 'id',  extra: [] },
+  'org-unit': { route: API_ROUTES.orgUnits, labelKey: 'name', idKey: 'id',  extra: [] },
 };
 
 function entityLabel(kind, item) {
@@ -118,6 +129,7 @@ const MENTION_KIND_LABELS = {
   rule: 'DQ rule',
   field: 'Field',
   module: 'Module',
+  'org-unit': 'Org unit',
 };
 
 const MENTION_KIND_DESCRIPTIONS = {
@@ -125,6 +137,7 @@ const MENTION_KIND_DESCRIPTIONS = {
   rule: 'Reference a DQ rule',
   field: 'Reference a field',
   module: 'Reference a module',
+  'org-unit': 'Reference an org unit',
 };
 
 function AIInputBar({
@@ -147,12 +160,15 @@ function AIInputBar({
   // is no feedback loop between growth and measurement.
   const [maxRows, setMaxRows] = useState(10);
   const [value, setValue] = useState(draft);
-  // Stage: null | 'kind' | 'entity' | 'slash'
+  // Stage: null | 'kind' | 'entity' | 'slash' | 'at'
   const [stage, setStage] = useState(null);
   const [kindQuery, setKindQuery] = useState('');
   const [activeKind, setActiveKind] = useState(null);
   const [entityQuery, setEntityQuery] = useState('');
   const [slashQuery, setSlashQuery] = useState('');
+  const [atQuery, setAtQuery] = useState('');
+  const [atResults, setAtResults] = useState([]);
+  const [atLoading, setAtLoading] = useState(false);
   // Keyboard highlight within the open picker (ArrowUp/Down + Enter).
   const [activeIndex, setActiveIndex] = useState(0);
   const [entities, setEntities] = useState([]);
@@ -216,10 +232,37 @@ function AIInputBar({
     return () => { cancelled = true; };
   }, [stage, activeKind, entityQuery, token]);
 
+  // Cross-kind '@' search: parallel apiFetch across table/rule/module/org-unit,
+  // merged into one list of {kind, item} with a per-kind badge in the picker.
+  useEffect(() => {
+    if (stage !== 'at') return;
+    let cancelled = false;
+    setAtLoading(true);
+    const q = atQuery.trim();
+    const urlFor = (cfg) => q
+      ? `${cfg.route}?q=${encodeURIComponent(q)}&limit=8`
+      : `${cfg.route}?limit=8`;
+    Promise.all(
+      AT_KINDS.map((kind) => {
+        const cfg = KIND_CONFIG[kind];
+        if (!cfg) return Promise.resolve([]);
+        return apiFetch(urlFor(cfg), { token })
+          .then((data) => {
+            const list = Array.isArray(data) ? data : (data?.results ?? []);
+            return list.slice(0, 8).map((item) => ({ kind, item }));
+          })
+          .catch(() => []);
+      }),
+    )
+      .then((groups) => { if (!cancelled) setAtResults(groups.flat()); })
+      .finally(() => { if (!cancelled) setAtLoading(false); });
+    return () => { cancelled = true; };
+  }, [stage, atQuery, token]);
+
   // Reset the keyboard highlight whenever the menu contents change.
   useEffect(() => {
     setActiveIndex(0);
-  }, [stage, slashQuery, kindQuery, entityQuery]);
+  }, [stage, slashQuery, kindQuery, entityQuery, atQuery]);
 
   const closePicker = useCallback(() => {
     setStage(null);
@@ -228,6 +271,9 @@ function AIInputBar({
     setEntityQuery('');
     setEntities([]);
     setSlashQuery('');
+    setAtQuery('');
+    setAtResults([]);
+    setAtLoading(false);
   }, []);
 
   const handleChange = useCallback((event) => {
@@ -241,6 +287,18 @@ function AIInputBar({
     if (slashMatch) {
       setStage('slash');
       setSlashQuery(slashMatch[2]);
+      setKindQuery('');
+      setActiveKind(null);
+      setEntityQuery('');
+      setEntities([]);
+      return;
+    }
+
+    // '@'-mention: a fresh trailing '@query' opens the cross-kind picker.
+    const atMatch = AT_TRIGGER_RE.exec(next);
+    if (atMatch) {
+      setStage('at');
+      setAtQuery(atMatch[1]);
       setKindQuery('');
       setActiveKind(null);
       setEntityQuery('');
@@ -286,6 +344,18 @@ function AIInputBar({
   const handleSelectEntity = useCallback((kind, item) => {
     const mention = buildMention(kind, item);
     setValue((prev) => replaceEntityTrigger(prev, kind, mention.name));
+    setResolvedMentions((prev) => {
+      const already = prev.some((m) => m.kind === kind && m.id === mention.id);
+      return already ? prev : [...prev, mention];
+    });
+    closePicker();
+    inputRef.current?.focus();
+  }, [closePicker]);
+
+  const handleSelectAtMention = useCallback((kind, item) => {
+    const mention = buildMention(kind, item);
+    // Replace the trailing '@query' with the display token (consistent with '#').
+    setValue((prev) => prev.replace(AT_TRIGGER_RE, () => `@${mention.name} `));
     setResolvedMentions((prev) => {
       const already = prev.some((m) => m.kind === kind && m.id === mention.id);
       return already ? prev : [...prev, mention];
@@ -345,11 +415,13 @@ function AIInputBar({
       const items = stage === 'slash' ? visibleCommands
         : stage === 'kind' ? visibleKinds
         : stage === 'entity' ? entities
+        : stage === 'at' ? atResults
         : [];
 
       if (event.key === 'Escape') {
         event.preventDefault();
         closePicker();
+        inputRef.current?.focus();
         return;
       }
       if (event.key === 'ArrowDown' && items.length > 0) {
@@ -369,6 +441,7 @@ function AIInputBar({
         if (stage === 'slash') handleSelectCommand(item);
         else if (stage === 'kind') handleSelectKind(item);
         else if (stage === 'entity') handleSelectEntity(activeKind, item);
+        else if (stage === 'at') handleSelectAtMention(item.kind, item.item);
       }
       // Shift+Enter falls through → newline in the multiline textarea.
     },
@@ -377,6 +450,7 @@ function AIInputBar({
       visibleCommands,
       visibleKinds,
       entities,
+      atResults,
       activeKind,
       activeIndex,
       handleSubmit,
@@ -384,6 +458,7 @@ function AIInputBar({
       handleSelectCommand,
       handleSelectKind,
       handleSelectEntity,
+      handleSelectAtMention,
     ],
   );
 
@@ -418,40 +493,11 @@ function AIInputBar({
 
       {/* Persistent context chips — attached mentions survive across turns
           until explicitly removed (restore context). */}
-      {resolvedMentions.length > 0 && (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 0.5,
-            flexWrap: 'wrap',
-            px: 1.5,
-            pt: 0.75,
-          }}
-        >
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.625rem' }}>
-            Context
-          </Typography>
-          {resolvedMentions.map((m) => (
-            <Chip
-              key={`${m.kind}-${m.id}`}
-              size="small"
-              variant="outlined"
-              label={`#${m.kind} ${m.name}`}
-              onDelete={() => removeMention(m.kind, m.id)}
-              aria-label={`Remove context ${m.kind} ${m.name}`}
-            />
-          ))}
-          <Button
-            size="small"
-            onClick={() => setResolvedMentions([])}
-            aria-label="Clear all context"
-            sx={{ fontSize: '0.625rem', minHeight: 20, p: 0.5 }}
-          >
-            Clear
-          </Button>
-        </Box>
-      )}
+      <ContextChipRow
+        mentions={resolvedMentions}
+        onRemove={removeMention}
+        onClear={() => setResolvedMentions([])}
+      />
 
       <Box
         sx={{
@@ -544,6 +590,33 @@ function AIInputBar({
                   title={entityLabel(activeKind, item)}
                   description={`#${activeKind}`}
                   onClick={() => handleSelectEntity(activeKind, item)}
+                  onHover={() => setActiveIndex(i)}
+                />
+              ))
+            )}
+          </PickerMenu>
+        )}
+
+        {/* '@'-mention: single-stage cross-kind typeahead (table/rule/module/org-unit) */}
+        {stage === 'at' && (
+          <PickerMenu label="Mentions" minWidth={280} maxHeight={220}>
+            {atLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                <CircularProgress size={14} />
+              </Box>
+            ) : atResults.length === 0 ? (
+              <Typography variant="caption" color="text.disabled" sx={{ display: 'block', px: 1.25, py: 1 }}>
+                No matches
+              </Typography>
+            ) : (
+              atResults.map(({ kind, item }, i) => (
+                <PickerOption
+                  key={`${kind}-${item.id}`}
+                  active={i === activeIndex}
+                  ariaLabel={`#${kind} ${entityLabel(kind, item)}`}
+                  badge={`#${kind}`}
+                  title={entityLabel(kind, item)}
+                  onClick={() => handleSelectAtMention(kind, item)}
                   onHover={() => setActiveIndex(i)}
                 />
               ))

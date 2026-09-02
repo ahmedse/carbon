@@ -493,6 +493,9 @@ class ChatResponse:
     # honest-uncertainty flag from the runner's "I don't know" path.
     confidence_label: str = ""
     honest_uncertainty: bool = False
+    # F3-B — read-only, outcome-language tool trace ({"step_label", "tool_id",
+    # "duration_ms"}) for the frontend "Considered…" planning pill.
+    tool_trace: list[dict] = field(default_factory=list)
 
 
 # ── AIProvider ABC ──────────────────────────────────────────────────────

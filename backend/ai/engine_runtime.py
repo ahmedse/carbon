@@ -135,6 +135,7 @@ async def _run_chat(
         # is LLM prose, so success/failure claims ride here, not in prose.
         completed_tools = getattr(getattr(ledger, "execution", None), "completed_tools", None) or []
         actions, pending_actions = _extract_tool_actions(completed_tools)
+        tool_trace = _build_tool_trace(completed_tools)
         grounded_note = _grounded_outcome_note(completed_tools)
         # Anti-hallucination gate: strip false success claims from the LLM
         # prose BEFORE the truthful grounded note is appended, so a staged
@@ -147,6 +148,11 @@ async def _run_chat(
         access_table = _grounded_access_table(completed_tools)
         if access_table:
             content = f"{content}\n\n{access_table}" if content else access_table
+        # F1-B — annotate scoped entity mentions in the final answer as
+        # serialized refs ([[kind:id:label]]) for the frontend EntityChip.
+        # Runs on the finalized answer text, scoped to the requesting user so
+        # no cross-tenant name ever resolves (deterministic, never-raising).
+        content = _annotate_entity_mentions(content, host_user_id)
         # G-E: persist the F1–F3 gate flags so the §4.3 "truthfulness hit-rate"
         # metric is measurable from the turn_ledger (observability surface).
         await _record_truthfulness_gate(db=db, ledger=ledger, anti_flags=anti_flags)
@@ -192,6 +198,9 @@ async def _run_chat(
                 "execution_ms": int(ledger.total_latency_ms or 0),
                 "actions": actions,
                 "pending_actions": pending_actions,
+                # F3-B — read-only, outcome-language tool trace for the
+                # frontend "Considered…" planning pill (multi-step only).
+                "tool_trace": tool_trace,
                 # G-E: truthfulness gate signal (F1–F3), surfaced verbatim so
                 # the workspace layer can reflect it and QA can assert on it.
                 "truthfulness_flags": list(anti_flags),
@@ -614,6 +623,73 @@ def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list
     return actions, pending_actions
 
 
+#: Outcome-language step labels for common tools (RULE_23 — human-readable,
+#: no raw tool args / result JSON, no engine stage names).  F3-B "Considered…"
+#: planning pill.
+_TOOL_STEP_LABELS: dict[str, str] = {
+    "search_knowledge": "Searched the knowledge base",
+    "get_entity_details": "Looked up entity details",
+    "learn_fact": "Saved a fact to memory",
+    "forget_fact": "Removed a fact from memory",
+}
+
+
+def _build_tool_trace(completed_tools: list[dict]) -> list[dict]:
+    """Read-only, outcome-language ``tool_trace`` for the "Considered…" pill.
+
+    Each step is ``{"step_label", "tool_id", "duration_ms"}``.  Only successful
+    (no ``error``) and non-staged (no ``requires_confirmation``) tools are
+    included, and the trace is only emitted for multi-step (>=2) responses so
+    single-tool turns don't clutter the UI (F3-B contract).
+
+    ``step_label`` uses outcome language only (RULE_23): a non-empty
+    ``summary`` / ``label`` already in the result, else a static
+    ``_TOOL_STEP_LABELS`` entry, else "Queried live platform data" for
+    ``call_host_api*``, else a generic step label.  Never raises — malformed
+    results are skipped rather than surfaced.
+    """
+    steps: list[dict] = []
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        try:
+            raw = item.get("result")
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            data = None
+        if isinstance(data, dict) and data.get("requires_confirmation"):
+            continue
+
+        step_label = None
+        if isinstance(data, dict):
+            for key in ("summary", "label"):
+                value = data.get(key)
+                if isinstance(value, str) and value.strip():
+                    step_label = value.strip()
+                    break
+        if step_label is None:
+            tool_name = str(item.get("tool_name") or "")
+            step_label = (
+                _TOOL_STEP_LABELS.get(tool_name)
+                or ("Queried live platform data" if tool_name.startswith("call_host_api") else None)
+                or "Completed a background step"
+            )
+
+        try:
+            duration_ms = int(item.get("latency_ms") or 0)
+        except (TypeError, ValueError):
+            duration_ms = 0
+        steps.append({
+            "step_label": step_label,
+            "tool_id": str(item.get("tool_name") or ""),
+            "duration_ms": duration_ms,
+        })
+
+    if len(steps) < 2:
+        return []
+    return steps
+
+
 #: Outcome-oriented copy for a failed tool action (RULE_23 — never leak raw
 #: internal exception text into user-facing chat; QA F2).
 _FAILED_ACTION_COPY = (
@@ -855,6 +931,208 @@ def _grounded_outcome_note(completed_tools: list[dict]) -> str:
                 names = ", ".join(str(f.get("filename") or "") for f in files)
                 lines.append(f"✅ Generated: {names} — download below.")
     return "\n\n".join(lines)
+
+
+# ── F1-B entity mention annotation (deterministic answer post-processor) ──
+
+# Cap the scoped entity lookup set per kind so a large tenant can never make
+# this post-processor unbounded. Names are resolved from the ORM (never
+# hardcoded) and matched longest-first, each name replaced at most once.
+_ANNOTATION_MAX_PER_KIND = 200
+
+
+def _sanitize_annotation_label(name: str) -> str:
+    """Strip serialized-ref metacharacters from a display label.
+
+    ``]``, ``:``, ``[[`` and ``]]`` are reserved by the ``[[kind:id:label]]``
+    format; removing them keeps a hostile/odd entity name from breaking the
+    chip syntax. An emptied label is skipped by the caller.
+    """
+    label = str(name or "")
+    label = label.replace("[[", "").replace("]]", "")
+    label = label.replace(":", "").replace("]", "")
+    return label
+
+
+def _annotation_protected_spans(text: str) -> list[tuple[int, int]]:
+    """Return ``(start, end)`` spans the annotator must never rewrite.
+
+    Protected: fenced code blocks (triple backticks), already-serialized
+    ``[[...]]`` spans, and URLs (``scheme://`` or ``www.``).
+    """
+    spans: list[tuple[int, int]] = []
+    pattern = re.compile(
+        r"```.*?```"                              # fenced code block
+        r"|\[\[.*?\]\]"                           # already-serialized ref
+        r"|[A-Za-z][A-Za-z0-9+.-]*://\S+"         # scheme:// URL
+        r"|www\.[A-Za-z0-9.-]+(?:/\S*)?",         # www. URL
+        re.DOTALL,
+    )
+    for match in pattern.finditer(text):
+        spans.append((match.start(), match.end()))
+    return spans
+
+
+def _resolve_annotation_user(scope) -> Any:
+    """Resolve the ``scope`` user handle to a Django ``User`` (or ``None``).
+
+    Accepts either a ``Scope``-like object (``ai.protocol.Scope`` exposes
+    ``user_identifier``) or a raw user id (str/int) — the latter is what
+    ``_run_chat`` passes via ``host_user_id``. ``None`` on any failure.
+    """
+    if scope is None:
+        return None
+    if hasattr(scope, "user_identifier"):
+        uid = scope.user_identifier
+    else:
+        uid = scope
+    if uid is None or (isinstance(uid, str) and not uid.strip()):
+        return None
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    try:
+        return User.objects.get(pk=uid)
+    except (User.DoesNotExist, ValueError, TypeError):
+        return None
+
+
+def _collect_annotatable_entities(user) -> list[dict[str, str]]:
+    """Resolve user-accessible entity names into ``{kind, id, name}`` descriptors.
+
+    Scoping reuses ``accounts.rbac_utils``' canonical visibility helpers — the
+    same helpers the emissions/DQ read views use — so a name the user cannot
+    access never resolves (no cross-tenant leakage):
+
+      * ``get_visible_module_ids`` → ``None`` (unrestricted) or a set of module
+        ids; Modules, DataTables (via ``module_id``) and DQRules (via
+        ``field_assignments → data_table → module``) are filtered by it.
+      * ``get_visible_org_units`` → the user's visible org subtree (already
+        ``is_active``-filtered).
+
+    ``field``/``employee``/``EmissionRecord`` are intentionally out of scope.
+    Lookups are bounded (``_ANNOTATION_MAX_PER_KIND``) and never raise — the
+    caller degrades to the unchanged answer on any failure.
+    """
+    from accounts.rbac_utils import get_visible_module_ids, get_visible_org_units
+    from core.models import Module
+    from dataschema.models import DataTable
+    from dq.models import DQRule
+    from mdm.models import OrgUnit
+
+    entities: list[dict[str, str]] = []
+
+    module_ids = get_visible_module_ids(user)
+    unrestricted = module_ids is None
+
+    module_qs = Module.objects.all()
+    if not unrestricted:
+        module_qs = module_qs.filter(id__in=module_ids)
+    for module in module_qs.order_by("name", "pk")[:_ANNOTATION_MAX_PER_KIND]:
+        entities.append(
+            {"kind": "module", "id": str(module.id), "name": module.name}
+        )
+
+    for org_unit in get_visible_org_units(user)[:_ANNOTATION_MAX_PER_KIND]:
+        entities.append(
+            {"kind": "org-unit", "id": str(org_unit.id), "name": org_unit.name}
+        )
+
+    table_qs = DataTable.objects.filter(is_archived=False)
+    if not unrestricted:
+        table_qs = table_qs.filter(module_id__in=module_ids)
+    for table in table_qs.order_by("name", "pk")[:_ANNOTATION_MAX_PER_KIND]:
+        entities.append({"kind": "table", "id": str(table.id), "name": table.name})
+
+    rule_qs = DQRule.objects.filter(archived=False, is_active=True)
+    if not unrestricted:
+        rule_qs = rule_qs.filter(
+            field_assignments__data_table__module_id__in=module_ids
+        ).distinct()
+    for rule in rule_qs.order_by("name", "pk")[:_ANNOTATION_MAX_PER_KIND]:
+        entities.append({"kind": "rule", "id": str(rule.id), "name": rule.name})
+
+    return entities
+
+
+def _annotate_entity_mentions(answer: str, scope) -> str:
+    """Annotate scoped entity mentions in the final answer as ``[[kind:id:label]]``.
+
+    Deterministic, budgeted and never-raising: on any failure the answer is
+    returned unchanged. Resolves the user-accessible DataTable/DQRule/Module/
+    OrgUnit names via the ORM (scoped with ``accounts.rbac_utils`` visibility
+    helpers), then matches them case-insensitively on word boundaries,
+    longest-name-first, each name replaced at most once. Fenced code blocks,
+    URLs and pre-existing ``[[...]]`` spans are left untouched.
+    """
+    try:
+        if not answer:
+            return answer
+        user = _resolve_annotation_user(scope)
+        if user is None:
+            return answer
+        descriptors = _collect_annotatable_entities(user)
+        if not descriptors:
+            return answer
+
+        # Dedupe by casefolded name (first occurrence wins → deterministic id).
+        unique: dict[str, dict[str, str]] = {}
+        for descriptor in descriptors:
+            name = str(descriptor.get("name") or "").strip()
+            if not name:
+                continue
+            key = name.casefold()
+            if key not in unique:
+                unique[key] = {
+                    "kind": str(descriptor.get("kind") or ""),
+                    "id": str(descriptor.get("id") or ""),
+                    "name": name,
+                }
+        candidates = sorted(
+            unique.values(), key=lambda d: len(d["name"]), reverse=True
+        )
+
+        # Occupancy mask: protected spans + spans already consumed by an
+        # earlier (longer) match. A later, shorter name can never overlap one.
+        occupied = [False] * len(answer)
+        for start, end in _annotation_protected_spans(answer):
+            for index in range(start, end):
+                occupied[index] = True
+
+        replacements: list[tuple[int, int, str]] = []
+        for candidate in candidates:
+            label = _sanitize_annotation_label(candidate["name"])
+            if not label:
+                continue
+            token = f"[[{candidate['kind']}:{candidate['id']}:{label}]]"
+            pattern = re.compile(
+                r"(?<![\w])" + re.escape(candidate["name"]) + r"(?![\w])",
+                re.IGNORECASE,
+            )
+            for match in pattern.finditer(answer):
+                start, end = match.start(), match.end()
+                if any(occupied[start:end]):
+                    continue
+                for index in range(start, end):
+                    occupied[index] = True
+                replacements.append((start, end, token))
+                break  # each entity name is replaced at most once
+
+        if not replacements:
+            return answer
+
+        replacements.sort(key=lambda item: item[0])
+        parts: list[str] = []
+        cursor = 0
+        for start, end, token in replacements:
+            parts.append(answer[cursor:start])
+            parts.append(token)
+            cursor = end
+        parts.append(answer[cursor:])
+        return "".join(parts)
+    except Exception:  # noqa: BLE001 - never raise from an answer post-processor
+        logger.exception("Entity mention annotation failed; returning answer unchanged")
+        return answer
 
 
 # ── Anti-hallucination gate (post-S5, deterministic) ──────────────────────

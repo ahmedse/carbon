@@ -20,6 +20,7 @@ describe('AIInputBar #-mentions', () => {
     expect(screen.getByRole('option', { name: '#rule' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: '#field' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: '#module' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '#org-unit' })).toBeInTheDocument();
   });
 
   it('inserts the selected kind into the text and closes the list', () => {

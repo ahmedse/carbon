@@ -54,6 +54,7 @@ import ReportDraftCard from './ReportDraftCard';
 import ConfidenceIndicator from './ConfidenceIndicator';
 import AIGeneratedBadge from './AIGeneratedBadge';
 import ReasoningTrace from './ReasoningTrace';
+import PlanningHeader from './PlanningHeader';
 import SuggestionDiff from './SuggestionDiff';
 
 const CarbonDataGrid = lazy(() => import('../components/DataGrid/CarbonDataGrid'));
@@ -403,6 +404,11 @@ function AIMessageBubble({
   }
 
   const metadata = normalizeMetadata(message);
+
+  // Wave F3-F — planning trace for multi-step assistant turns, surfaced in
+  // outcome language (step_label + duration). Read top-level first, then
+  // fall back to metadata_json (mirrors confidence/honest-uncertainty reads).
+  const toolTrace = message.tool_trace || metadata.tool_trace || [];
 
   // C2 — calibrated confidence (Faculty 7): read the REAL backend outcome
   // signal off the top-level serialized fields, falling back to metadata_json
@@ -998,6 +1004,9 @@ function AIMessageBubble({
       )}
 
       <Box sx={bubbleSx}>
+        {/* Wave F3-F — collapsible "Considered: …" planning pill above the answer body */}
+        {!isUser && <PlanningHeader trace={toolTrace} />}
+
         {/* status chip only on error/interrupted — inline, no row */}
         {!isUser && statusLabel && (
           <Chip size="small" color={statusColor} label={statusLabel} sx={{ height: 14, mb: 0.5, '& .MuiChip-label': { px: 0.5, fontSize: '0.6rem' } }} />
@@ -1490,6 +1499,7 @@ AIMessageBubble.propTypes = {
     parent_id: PropTypes.string,
     confidence_label: PropTypes.string,
     honest_uncertainty: PropTypes.bool,
+    tool_trace: PropTypes.array,
   }).isRequired,
   onAcceptSuggestion: PropTypes.func,
   onRejectSuggestion: PropTypes.func,

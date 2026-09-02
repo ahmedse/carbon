@@ -234,6 +234,8 @@ class CarbonHostAdapter(HostAdapterContract):
             "field": DataField,
             "datafield": DataField,
             "module": Module,
+            "org-unit": OrgUnit,
+            "orgunit": OrgUnit,
         }
 
         for mention in mentions:
@@ -284,6 +286,15 @@ class CarbonHostAdapter(HostAdapterContract):
                         "id": str(obj.id),
                         "name": obj.name,
                         "org_unit_id": str(obj.org_unit_id) if obj.org_unit_id else None,
+                    }
+                )
+            elif kind in ("org-unit", "orgunit"):
+                resolved.append(
+                    {
+                        "kind": "org-unit",
+                        "id": str(obj.id),
+                        "name": obj.name,
+                        "org_type": obj.org_type,
                     }
                 )
 
