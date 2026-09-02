@@ -22,7 +22,7 @@ flowchart LR
     M[images/*.tar.gz<br/>qbank-stack.tar.gz<br/>moodle/*.tgz<br/>MANIFEST.sha256 + .sig]
   end
   subgraph WS[edOS workstation — air-gapped]
-    D[deploy.sh<br/>verify → load → render config → up → install]
+    D[deploy.sh<br/>verify → load → TLS → install.php → harden config → up]
     E[Apache TLS 443 → Moodle 5.2]
     F[Postgres 16  ·  named volume pgdata]
     G[host systemd timer → cron.php]
@@ -76,7 +76,7 @@ qbank-release/
 ├── images/
 │   ├── moodle.tar.gz       # docker save | gzip  (~0.8–1.2 GB)
 │   └── postgres.tar.gz     # docker save | gzip  (~150–250 MB)
-├── qbank-stack.tar.gz      # deploy/moodle/ source (compose, scripts, Dockerfile, apache, cron, config template)
+├── qbank-stack.tar.gz      # deploy/moodle/ source (compose, scripts, Dockerfile, apache, cron, harden)
 ├── moodle/                 # moodle-5.2.x.tgz + .sha256 (source of truth, for image rebuilds)
 ├── MANIFEST.sha256
 └── MANIFEST.sha256.sig     # minisign/GPG — public key baked into edOS
@@ -120,7 +120,9 @@ cd /srv/qbank/moodle
 ./scripts/deploy.sh --cron
 ```
 
-`deploy.sh` does, in order: verify manifest (if present) → `docker load` → ensure TLS cert → render `config.php` (secrets from `.env`) → `docker compose up -d` → first-run `install.php` (idempotent — skipped if `mdl_config` already exists) → purge caches.
+`deploy.sh` does, in order: verify manifest (if present) → `docker load` → ensure TLS cert → generate/persist secrets → start `db` → **first-run `install.php` in a one-off container** (skipped if `config/config.php` already exists) → capture the generated `config.php` → inject the air-gap hardening block (and a `passwordsaltmain` if the installer omitted one) → `docker compose up -d` → verify schema → purge caches → re-hash the admin password if a salt was added after install.
+
+> **Why not pre-render `config.php`?** Moodle 5.x's `admin/cli/install.php` **writes `config.php` itself** and refuses to run if one already exists. So the canonical flow is: install first (no config), then harden the generated file. This is the opposite of the earlier pre-render approach, which is now removed.
 
 Install the offline-CA cert (EDOS §7) as `tls/tls.crt` + `tls/tls.key` **before** first deploy; otherwise a self-signed dev cert is generated as a bootstrap and must be replaced.
 
@@ -163,15 +165,17 @@ deploy/moodle/
 ├── docker-compose.yml
 ├── .env.example
 ├── Dockerfile
-├── config.php.template
+├── harden/config-extra.php      # air-gap hardening block, injected into config.php
 ├── .dockerignore / .gitignore
 ├── apache/{000-default.conf, moodle-ssl.conf}
 ├── cron/{qbank-cron.service, qbank-cron.timer}
-└── scripts/{lib.sh, build-image.sh, bundle.sh, render-config.sh, deploy.sh, dev-up.sh, qbank}
+└── scripts/{lib.sh, build-image.sh, bundle.sh, deploy.sh, dev-up.sh, qbank}
 ```
 
 ## 12. Notes & deliberate changes from earlier docs
 
+- **`config.php` is installer-generated, then hardened** (not pre-rendered from a template). `admin/cli/install.php` writes `config.php` itself and refuses to run when one already exists, so the pre-render approach was dropped. `deploy.sh` captures the generated file, injects `harden/config-extra.php` (air-gap + security settings) before the `lib/setup.php` require, and adds a `passwordsaltmain` if the installer omitted one — re-hashing the admin password afterwards via `reset_password.php`.
+- **Admin password must be policy-compliant.** Moodle's default policy (≥8 chars, 1 upper, 1 lower, 1 digit, 1 special) is enforced by `reset_password.php`; `rand_pass()` generates `Qb1!` + 16 hex chars to satisfy it.
 - **`sslproxy` `true`→`false`** in `MOODLE.md §2`: TLS now terminates in Apache inside the container (self-contained; no host nginx to maintain on the hardened host).
 - **`dbcollation` removed** from `$CFG->dboptions`: `utf8mb4_unicode_ci` is MySQL-only; PostgreSQL needs no collation key.
 - **Docker-in-dev exception:** this is a deliberate, scoped use of Docker as a *packaging/transport format* for an air-gapped deliverable. It does **not** change the "never Docker in dev" rule for Carbon/Gigacast workflows.

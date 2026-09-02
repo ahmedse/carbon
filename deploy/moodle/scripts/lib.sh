@@ -25,6 +25,7 @@ load_env() {
 # Pipefail-safe random hex (od reads exactly N bytes, no SIGPIPE race).
 rand_hex() { od -An -tx1 -N "$1" /dev/urandom | tr -d ' \n'; }
 rand_salt() { rand_hex 32; }   # 64 hex chars
-rand_pass() { rand_hex 16; }   # 32 hex chars
+# Moodle default password policy: >=8 chars, 1 upper, 1 lower, 1 digit, 1 special.
+rand_pass() { printf 'Qb1!%s' "$(rand_hex 8)"; }
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "missing command: $1"; }

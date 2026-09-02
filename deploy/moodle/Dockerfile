@@ -7,7 +7,6 @@ ARG MOODLE_VERSION=5.2
 
 RUN set -eux; \
     a2enmod ssl rewrite headers; \
-    echo 'Listen 443' >> /etc/apache2/ports.conf; \
     apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*

@@ -9,6 +9,27 @@ cd "$STACK_DIR"
 cmd="${1:-status}"
 shift || true
 
+# Resolve data root to an absolute host path (QBANK_ROOT may be relative).
+case "$QBANK_ROOT" in
+    /*) DATA_ROOT="$QBANK_ROOT" ;;
+    *)  DATA_ROOT="$STACK_DIR/$QBANK_ROOT" ;;
+esac
+
+# Tar moodledata via a throwaway container (moodledata is www-data-owned on the
+# host, so the host user may not read it directly). Runs as root in-container.
+# Args: rel-path-inside-/backup (e.g. nightly/$ts/moodledata.tar.gz), extra excludes.
+_tar_moodledata() {
+    local rel="$1"; shift
+    docker run --rm \
+        -v "$DATA_ROOT/moodledata:/data:ro" \
+        -v "$DATA_ROOT/backups:/backup:rw" \
+        --entrypoint tar \
+        "$MOODLE_IMAGE" \
+        -czf "/backup/$rel" -C /data \
+        --exclude='cache' --exclude='localcache' --exclude='sessions' \
+        --exclude='temp' --exclude='trashdir' "$@"
+}
+
 case "$cmd" in
   status)
     docker compose ps
@@ -21,21 +42,18 @@ case "$cmd" in
     ;;
   backup)
     ts="$(date +%Y%m%d-%H%M%S)"
-    out="$QBANK_ROOT/backups/nightly/$ts"
+    out="$DATA_ROOT/backups/nightly/$ts"
     mkdir -p "$out"
     docker compose exec -T db pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB" > "$out/moodle.dump"
-    tar -czf "$out/moodledata.tar.gz" \
-        -C "$QBANK_ROOT/moodledata" \
-        --exclude='cache' --exclude='localcache' --exclude='sessions' \
-        --exclude='temp' --exclude='trashdir' .
+    _tar_moodledata "nightly/$ts/moodledata.tar.gz" .
     echo "backup -> $out"
     ;;
   snapshot)
     tag="${1:?usage: qbank snapshot <tag>}"
-    out="$QBANK_ROOT/backups/snapshots/$tag"
+    out="$DATA_ROOT/backups/snapshots/$tag"
     mkdir -p "$out"
     docker compose exec -T db pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB" > "$out/moodle.dump"
-    tar -czf "$out/moodledata.tar.gz" -C "$QBANK_ROOT/moodledata" .
+    _tar_moodledata "snapshots/$tag/moodledata.tar.gz" .
     echo "snapshot '$tag' -> $out"
     ;;
   *)
