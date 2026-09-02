@@ -9,6 +9,7 @@ with ``monthly_chilled_water`` (ton-hours TR) for district cooling.
 
 from __future__ import annotations
 
+from ai.adapter.types import ToolDef
 from ai.domain_protocol import (
     DomainAIOperations,
     DomainContext,
@@ -41,6 +42,12 @@ class WaterDomainAI(DomainAIOperations):
                 "measurement_methods": ["metered", "estimated", "vendor-invoice"],
             },
         )
+
+    # ── Tool catalog (Pulse E2) ───────────────────────────────────────────
+
+    def get_tools(self) -> list[ToolDef]:
+        """No ``call_host_api``-backed data tools — advisory/manifest-only."""
+        return []
 
 
 register_domain("water", WaterDomainAI)

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai.adapter.types import ToolDef
 from ai.domain_protocol import (
     DomainAIOperations,
     DomainContext,
@@ -109,6 +110,12 @@ class FinanceDomainAI(DomainAIOperations):
                 "reporting": ["monthly", "quarterly", "annual"],
             },
         )
+
+    # ── Tool catalog (Pulse E2) ───────────────────────────────────────────
+
+    def get_tools(self) -> list[ToolDef]:
+        """Non-data advisory vertical — no ``call_host_api``-backed data tools."""
+        return []
 
 
 register_domain("finance", FinanceDomainAI)

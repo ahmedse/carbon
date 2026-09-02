@@ -16,6 +16,7 @@ Called by entrypoint.sh after migrate (before gunicorn).
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.conf import settings
 from accounts.constants import (
     ADMIN_GROUP, ADMINS_GROUP, DATAOWNERS_GROUP, ANALYSTS_GROUP,
     VIEWERS_GROUP, AUDITORS_GROUP, CARBON_DATA_OWNERS_GROUP,
@@ -111,57 +112,21 @@ GROUP_DEFS = {
 }
 
 # ── App registry (mirrors frontend manifests) ─────────────────────────────────
+# "domain" apps (carbon/stub/people/healthy) are gated by BRAND_APP_PRESETS in
+# settings.py — their is_enabled is derived at bootstrap from DJANGO_BRAND.
+# "platform" apps (catalog/mdm/dq/connections/importexport/dataschema) are core
+# capabilities gated separately by RBAC — always enabled.
 APP_DEFS = [
-    {
-        "app_id": "carbon",
-        "is_enabled": True,
-        "display_order": 1,
-    },
-    {
-        "app_id": "stub",
-        "is_enabled": False,  # isolation proof — disabled by default
-        "display_order": 99,
-    },
-    {
-        "app_id": "catalog",
-        "is_enabled": True,
-        "display_order": 2,
-    },
-    {
-        "app_id": "mdm",
-        "is_enabled": True,
-        "display_order": 3,
-    },
-    {
-        "app_id": "dq",
-        "is_enabled": True,
-        "display_order": 4,
-    },
-    {
-        "app_id": "connections",
-        "is_enabled": True,
-        "display_order": 5,
-    },
-    {
-        "app_id": "importexport",
-        "is_enabled": True,
-        "display_order": 6,
-    },
-    {
-        "app_id": "dataschema",
-        "is_enabled": True,
-        "display_order": 7,
-    },
-    {
-        "app_id": "people",
-        "is_enabled": True,  # Nibras instance — People & Payroll active
-        "display_order": 20,
-    },
-    {
-        "app_id": "healthy",
-        "is_enabled": True,  # Nibras instance — Healthy active
-        "display_order": 30,
-    },
+    {"app_id": "carbon", "domain": True, "display_order": 1},
+    {"app_id": "stub", "domain": True, "display_order": 99},
+    {"app_id": "catalog", "domain": False, "display_order": 2},
+    {"app_id": "mdm", "domain": False, "display_order": 3},
+    {"app_id": "dq", "domain": False, "display_order": 4},
+    {"app_id": "connections", "domain": False, "display_order": 5},
+    {"app_id": "importexport", "domain": False, "display_order": 6},
+    {"app_id": "dataschema", "domain": False, "display_order": 7},
+    {"app_id": "people", "domain": True, "display_order": 20},
+    {"app_id": "healthy", "domain": True, "display_order": 30},
 ]
 
 
@@ -226,11 +191,19 @@ class Command(BaseCommand):
         created = 0
         updated = 0
 
+        brand = getattr(settings, "DJANGO_BRAND", "aastmt")
+        preset = getattr(settings, "BRAND_APP_PRESETS", {}).get(brand, {})
+
         for app_def in APP_DEFS:
+            if app_def.get("domain"):
+                is_enabled = preset.get(app_def["app_id"], False)
+            else:
+                is_enabled = True
+
             _, was_created = PlatformAppConfig.objects.update_or_create(
                 app_id=app_def["app_id"],
                 defaults={
-                    "is_enabled": app_def["is_enabled"],
+                    "is_enabled": is_enabled,
                     "display_order": app_def["display_order"],
                 },
             )
@@ -241,7 +214,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             f"  Apps:   {created} created, {updated} up-to-date "
-            f"({len(APP_DEFS)} total)"
+            f"({len(APP_DEFS)} total, brand={brand})"
         )
 
     # ── Superuser → admins_group ─────────────────────────────────────────────

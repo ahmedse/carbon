@@ -105,6 +105,13 @@ export default function MDMPage() {
     { value: 'team', label: t('team') },
     { value: 'facility', label: t('facility') },
     { value: 'other', label: t('other') },
+    { value: 'company', label: t('company') },
+    { value: 'section', label: t('section') },
+    { value: 'crew', label: t('crew') },
+    { value: 'base', label: t('base') },
+    { value: 'yard', label: t('yard') },
+    { value: 'store', label: t('store') },
+    { value: 'cost_center', label: t('cost_center') },
   ];
 
   const [tabValue, setTabValue] = useState(0);

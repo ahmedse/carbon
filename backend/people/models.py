@@ -74,7 +74,13 @@ class ComplianceRule(models.Model):
 
 
 class Employee(models.Model):
-    """Minimal employee master (org-scoped)."""
+    """Minimal employee master (org-scoped).
+
+    P3 profile enrichment: bilingual identity + Kuwait HR profile fields
+    (civil ID, DOB, gender, governed-enum codes, kuwaitization flag,
+    reporting manager). The ``*_code`` fields are validated against
+    ``mdm.ReferenceSet`` in the API layer (see people/serializers.py).
+    """
 
     org_unit = models.ForeignKey(
         'mdm.OrgUnit',
@@ -84,6 +90,47 @@ class Employee(models.Model):
     )
     employee_no = models.CharField(max_length=64, unique=True)
     full_name = models.CharField(max_length=200)
+    # ── P3 profile enrichment (bilingual identity + Kuwait HR profile) ──
+    # New fields are blank/null-safe so existing rows survive the migration.
+    name_en_given = models.CharField(max_length=120, blank=True, default='')
+    name_en_family = models.CharField(max_length=120, blank=True, default='')
+    name_ar_given = models.CharField(max_length=120, blank=True, default='')
+    name_ar_family = models.CharField(max_length=120, blank=True, default='')
+    civil_id = models.CharField(
+        max_length=32, blank=True, default='', db_index=True,
+        help_text="Civil ID (Kuwait) — plain text, no validation of checksum",
+    )
+    date_of_birth = models.DateField(null=True, blank=True)
+    gender = models.CharField(
+        max_length=16, blank=True, default='',
+        help_text="Free text (e.g. 'male'/'female'); NOT a governed enum",
+    )
+    nationality_code = models.CharField(
+        max_length=40, blank=True, default='',
+        help_text="Code from ReferenceSet 'nationality' (governed enum)",
+    )
+    employment_type_code = models.CharField(
+        max_length=40, blank=True, default='',
+        help_text="Code from ReferenceSet 'employment_type' (governed enum)",
+    )
+    contract_type_code = models.CharField(
+        max_length=40, blank=True, default='',
+        help_text="Code from ReferenceSet 'contract_type' (governed enum)",
+    )
+    kuwaitization = models.BooleanField(
+        default=False,
+        help_text="Kuwaiti national (nationalization target flag)",
+    )
+    manager = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='direct_reports',
+        help_text="Reporting manager (self FK; RULE_3 soft ref to Employee)",
+    )
+    position = models.ForeignKey(
+        'Position', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='incumbents',
+        help_text='Current single position (same-app FK; incumbent resolution)',
+    )
     nationality = models.CharField(max_length=100, blank=True)
     basic_salary = models.DecimalField(max_digits=14, decimal_places=3)
     join_date = models.DateField(help_text="Service start date")
@@ -211,6 +258,15 @@ class Position(models.Model):
         related_name='direct_reports',
     )
     is_management = models.BooleanField(default=False)
+
+    # ── P4 position lifecycle + governed job classification (additive) ──
+    STATUS_CHOICES = [('proposed', 'Proposed'), ('open', 'Open'), ('filled', 'Filled'), ('frozen', 'Frozen'), ('closed', 'Closed')]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='filled')
+    fte = models.DecimalField(max_digits=4, decimal_places=2, default=1)
+    job_family_code = models.CharField(
+        max_length=40, blank=True, default='',
+        help_text="Code from ReferenceSet 'job_family' (governed enum)",
+    )
 
     class Meta:
         ordering = ['org_unit', 'code']
@@ -467,3 +523,44 @@ class RotationSchedule(models.Model):
 
     def __str__(self):
         return f"{self.employee} {self.pattern} ({self.start_date})"
+
+
+class PersonnelEvent(models.Model):
+    """Append-only domain chronicle (HR semantics): replay, timelines, KPIs.
+    Bitemporal: effective_date (real-world) vs recorded_at (entry). No update/delete API."""
+
+    ENTITY_CHOICES = [('Employee', 'Employee'), ('Position', 'Position')]
+    KIND_CHOICES = [
+        ('hired', 'Hired'), ('transferred', 'Transferred'), ('promoted', 'Promoted'),
+        ('salary_change', 'Salary Change'), ('grade_change', 'Grade Change'),
+        ('contract_renewed', 'Contract Renewed'), ('rotation_changed', 'Rotation Changed'),
+        ('deactivated', 'Deactivated'), ('reactivated', 'Reactivated'),
+        ('profile_updated', 'Profile Updated'),
+        ('position_opened', 'Position Opened'), ('position_filled', 'Position Filled'),
+        ('position_frozen', 'Position Frozen'), ('position_closed', 'Position Closed'),
+    ]
+
+    entity_type = models.CharField(max_length=20, choices=ENTITY_CHOICES, db_index=True)
+    entity_id = models.PositiveIntegerField(db_index=True)
+    event_kind = models.CharField(max_length=32, choices=KIND_CHOICES, db_index=True)
+    effective_date = models.DateField(
+        db_index=True,
+        help_text='Real-world date the change took effect (drives EOSI/KPIs)',
+    )
+    recorded_at = models.DateTimeField(
+        auto_now_add=True, help_text='When the change was entered into the system',
+    )
+    recorded_by = models.ForeignKey(
+        'accounts.User', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='personnel_events',
+    )
+    before = models.JSONField(null=True, blank=True)
+    after = models.JSONField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-effective_date', '-recorded_at']
+        indexes = [
+            models.Index(fields=['entity_type', 'entity_id', 'effective_date']),
+            models.Index(fields=['event_kind', 'effective_date']),
+        ]

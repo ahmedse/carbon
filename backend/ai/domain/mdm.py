@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai.adapter.types import ToolDef
 from ai.domain_protocol import (
     DomainAIOperations,
     DomainContext,
@@ -182,6 +183,12 @@ class MdmDomainAI(DomainAIOperations):
                 "confirmation_required": True,
             },
         )
+
+    # ── Tool catalog (Pulse E2) ───────────────────────────────────────────
+
+    def get_tools(self) -> list[ToolDef]:
+        """Advisory surfaces only — no ``call_host_api``-backed data tools."""
+        return []
 
 
 register_domain("mdm", MdmDomainAI)

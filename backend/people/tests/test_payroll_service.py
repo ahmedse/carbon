@@ -98,6 +98,31 @@ def _net_rule():
     )
 
 
+def _wps_rule(authoritative=True):
+    return ComplianceRule.objects.create(
+        rule_id="kw-wps-test",
+        version="2026.1",
+        name="[TEST ONLY] WPS",
+        category="wps",
+        effective_date=date(2026, 1, 1),
+        inputs_schema={
+            "inputs": ["net"],
+            "formula": {
+                "type": "wps",
+                "params": {
+                    "field_map": {
+                        "employee_number": "employee_no",
+                        "employee_name": "employee_name",
+                        "salary": "basic_salary",
+                    },
+                    "amount_components": ["net"],
+                },
+            },
+        },
+        is_authoritative=authoritative,
+    )
+
+
 class StubValidationSeam:
     """Injectable seam so tests can flip validation between passes and failures."""
 
@@ -255,3 +280,40 @@ class PayrollRunServiceTests(TestCase):
         self.assertEqual(gross.inputs["data_row_id"], data_row.pk)
         self.assertEqual(gross.inputs["row_hash"], "hash-abc")
         self.assertIn("measurements", gross.inputs)
+
+    # --- WPS export (NIR-5H) ----------------------------------------------
+
+    def _commit(self, run):
+        self.service.compute(run)
+        self.service.validate(run)
+        self.service.commit(run)
+        run.refresh_from_db()
+        return run
+
+    def test_wps_export_requires_committed_status(self):
+        run = self._run()
+        with self.assertRaises(PayrollServiceError):
+            self.service.wps_export(run)  # draft → illegal
+
+    def test_wps_export_requires_authoritative_rule(self):
+        _wps_rule(authoritative=False)
+        run = self._commit(self._run())
+        with self.assertRaises(PayrollServiceError):
+            self.service.wps_export(run)
+
+    def test_wps_export_success(self):
+        _wps_rule(authoritative=True)
+        run = self._commit(self._run())
+        result = self.service.wps_export(run)
+        records = result["records"]
+
+        # in_scope + sub_scope (both under HQ); out_scope excluded (RULE_12).
+        self.assertEqual(len(records), 2)
+        first = records[0]["record"]
+        self.assertEqual(first["employee_number"], "E-1")
+        self.assertEqual(first["employee_name"], "In Scope")
+        self.assertEqual(first["salary"], "1000.000")
+
+        net_amount = PayslipLine.objects.get(employee=self.in_scope, line_type="net").amount
+        self.assertEqual(first["amount"], net_amount)
+        self.assertEqual(records[0]["value"], net_amount)

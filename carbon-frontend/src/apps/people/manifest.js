@@ -10,7 +10,7 @@ export default {
   name:        'People',
   version:     '1.0.0',
   description: 'Nibras HR & payroll — employees, compliance, and payroll runs',
-  icon:        'Dashboard',   // mapped in useShellState.js MANIFEST_ICON_MAP
+  icon:        'Diversity3',   // mapped in useShellState.js MANIFEST_ICON_MAP + PlatformHome APP_ICONS
 
   // ── NAMESPACE ─────────────────────────────────────────────────
   routePrefix: '/people',          // frontend People landing page
@@ -41,6 +41,25 @@ export default {
     section: 'People',
     items: [
       { label: 'People', path: '/people', role: '*' },
+      { type: 'divider' },
+      { type: 'group', label: 'Organization' },
+      { label: 'Positions', path: '/people/positions', role: '*' },
+      { type: 'divider' },
+      { type: 'group', label: 'Workforce' },
+      { label: 'Employees', path: '/people/employees', role: '*' },
+      { label: 'Attendance', path: '/people/attendance', role: '*' },
+      { label: 'Leave', path: '/people/leave', role: '*' },
+      { label: 'Certifications', path: '/people/certifications', role: '*' },
+      { label: 'Rotation', path: '/people/rotation', role: '*' },
+      { type: 'divider' },
+      { type: 'group', label: 'Payroll & Benefits' },
+      { label: 'Payroll', path: '/people/payroll', role: '*' },
+      { label: 'Payslips', path: '/people/payslip', role: '*' },
+      { label: 'Benefits', path: '/people/benefits', role: '*' },
+      { label: 'Loans', path: '/people/loans', role: '*' },
+      { type: 'divider' },
+      { type: 'group', label: 'Configuration' },
+      { label: 'App Config', path: '/people/config', role: '*' },
     ],
   },
 

@@ -30,6 +30,8 @@ import enDq from './locales/en/dq.json';
 import arDq from './locales/ar/dq.json';
 import enDataschema from './locales/en/dataschema.json';
 import arDataschema from './locales/ar/dataschema.json';
+import enPeople from './locales/en/people.json';
+import arPeople from './locales/ar/people.json';
 
 const STORAGE_KEY = 'carbon.lang';
 const SUPPORTED_LANGS = ['en', 'ar'];
@@ -46,13 +48,13 @@ function getInitialLanguage() {
 
 i18n.use(initReactI18next).init({
   resources: {
-    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog, notes: enNotes, emissions: enEmissions, evidence: enEvidence, importexport: enImportExport, connections: enConnections, dq: enDq, dataschema: enDataschema },
-    ar: { common: arCommon, shell: arShell, auth: arAuth, errors: arErrors, ai: arAi, catalog: arCatalog, notes: arNotes, emissions: arEmissions, evidence: arEvidence, importexport: arImportExport, connections: arConnections, dq: arDq, dataschema: arDataschema },
+    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog, notes: enNotes, emissions: enEmissions, evidence: enEvidence, importexport: enImportExport, connections: enConnections, dq: enDq, dataschema: enDataschema, people: enPeople },
+    ar: { common: arCommon, shell: arShell, auth: arAuth, errors: arErrors, ai: arAi, catalog: arCatalog, notes: arNotes, emissions: arEmissions, evidence: arEvidence, importexport: arImportExport, connections: arConnections, dq: arDq, dataschema: arDataschema, people: arPeople },
   },
   lng: getInitialLanguage(),
   fallbackLng: 'en',
   supportedLngs: SUPPORTED_LANGS,
-  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog', 'notes', 'emissions', 'evidence', 'importexport', 'connections', 'dq', 'dataschema'],
+  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog', 'notes', 'emissions', 'evidence', 'importexport', 'connections', 'dq', 'dataschema', 'people'],
   defaultNS: 'common',
   interpolation: {
     // React already escapes — no double escaping.

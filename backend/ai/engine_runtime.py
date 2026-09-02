@@ -303,7 +303,73 @@ def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
     config["host_user_id"] = host_user_id
     config["user_access"] = user_access
 
+    # E2: CBAC-filter the api_catalog so the LLM-facing "Available Host API
+    # Endpoints" list (and the executor's catalog) only expose domain endpoints
+    # the user may actually call. Anonymous users keep the full catalog — host
+    # RBAC still rejects execution.
+    config["api_catalog"] = _cbac_filter_api_catalog(
+        config.get("api_catalog") or [], host_user_id
+    )
+
     return config
+
+
+def _cbac_filter_api_catalog(api_catalog: list, host_user_id: str | None) -> list:
+    """CBAC-filter the ``api_catalog`` to endpoints the user may call (E2).
+
+    Only domain-owned endpoints (those declared by a registered domain's
+    ``get_tools()``) are filtered; platform-level endpoints (e.g. DQ) stay.
+    The "may call" set is derived from the *same* registry-driven catalog used
+    by ``CarbonHostAdapter.get_tool_catalog``, so the system-prompt tool list
+    and the executor catalog never diverge.
+
+    Fails open (returns ``api_catalog`` unchanged) when the user cannot be
+    resolved or the registry is unavailable — host RBAC remains the backstop.
+    """
+    if not api_catalog or not host_user_id:
+        return api_catalog
+
+    from asgiref.sync import sync_to_async
+
+    def _filter() -> list:
+        from django.contrib.auth import get_user_model
+
+        from ai.adapter.carbon import CarbonHostAdapter
+        from ai.domain_protocol import get_domain, list_domains
+
+        user_model = get_user_model()
+        try:
+            user = user_model.objects.get(pk=host_user_id)
+        except (user_model.DoesNotExist, ValueError, TypeError):
+            return api_catalog
+
+        adapter = CarbonHostAdapter()
+        catalog = adapter.get_tool_catalog(user, None)
+        accessible = {
+            tool.id.rsplit(".", 1)[-1]
+            for tool in catalog.tools
+            if tool.domain and tool.domain != "core"
+        }
+
+        # All domain-owned endpoint names (unfiltered) — used to decide which
+        # catalog entries are domain-gated (vs. platform-level).
+        domain_names: set[str] = set()
+        for app_id in list_domains():
+            for tool in get_domain(app_id)().get_tools():
+                domain_names.add(tool.id.rsplit(".", 1)[-1])
+
+        return [
+            entry
+            for entry in api_catalog
+            if entry.get("name") not in domain_names
+            or entry.get("name") in accessible
+        ]
+
+    try:
+        return _run_async(sync_to_async(_filter, thread_sensitive=True)())
+    except Exception:  # noqa: BLE001 - never let filtering break the chat path
+        logger.exception("CBAC api_catalog filter failed; leaving catalog unchanged")
+        return api_catalog
 
 
 def _platform_display_name() -> str:

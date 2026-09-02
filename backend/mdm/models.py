@@ -140,12 +140,21 @@ ORG_TYPE_CHOICES = [
     ('team', 'Team'),
     ('facility', 'Facility'),
     ('other', 'Other'),
+    ('company', 'Company'),
+    ('section', 'Section'),
+    ('crew', 'Crew'),
+    ('base', 'Base'),
+    ('yard', 'Yard'),
+    ('store', 'Store'),
+    ('cost_center', 'Cost Center'),
 ]
 
 
 class OrgUnit(models.Model):
     """
-    Organisational unit (university, college, department, division, team, facility).
+    Organisational unit — academic (university, campus, college, department,
+    division, team, facility) and industrial (company, section, crew, base,
+    yard, store, cost_center) types.
     Self-referencing tree: any depth, any shape.
     Replaces the old Project concept as the organisational anchor for RBAC,
     governance, lineage, and access-control policies.
@@ -158,6 +167,10 @@ class OrgUnit(models.Model):
         'self', null=True, blank=True, on_delete=models.SET_NULL, related_name='children'
     )
     description = models.TextField(blank=True)
+    manager_employee_id = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text='Soft ref to people.Employee (RULE_3: no cross-app FK from core). Who runs this unit.',
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

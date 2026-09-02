@@ -8,6 +8,7 @@ import {
   MenuItem, Chip, CircularProgress, Alert,
 } from "@mui/material";
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { ORG_TYPE_KEYS as ORG_TYPES } from '../../constants/orgTypes';
 
 import AddRounded from "@mui/icons-material/AddRounded";
 import EditRounded from "@mui/icons-material/EditRounded";
@@ -17,10 +18,6 @@ import { useAuth } from "../../auth/AuthContext";
 import {
   fetchOrgUnits, createOrgUnit, updateOrgUnit, deleteOrgUnit,
 } from "../../api/orgUnits";
-
-const ORG_TYPES = [
-  "university", "campus", "college", "department", "division", "team", "facility", "other",
-];
 
 const EMPTY_FORM = { name: "", org_type: "department", parent: "", code: "", description: "" };
 

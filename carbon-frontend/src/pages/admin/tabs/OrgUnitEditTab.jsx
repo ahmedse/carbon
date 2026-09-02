@@ -5,10 +5,7 @@ import { DetailTabContent } from '../../../components/detail/DetailMainPanel';
 import { useAuth } from '../../../auth/AuthContext';
 import { useNotification } from '../../../components/NotificationProvider';
 import { updateOrgUnit } from '../../../api/orgUnits';
-
-const ORG_TYPES = [
-  'university', 'campus', 'college', 'department', 'division', 'team', 'facility', 'other',
-];
+import { ORG_TYPE_KEYS as ORG_TYPES } from '../../../constants/orgTypes';
 
 export default function OrgUnitEditTab({ entityData }) {
   const { user } = useAuth();

@@ -120,6 +120,18 @@ export const NAV_LABEL_KEYS = {
   'Emission Sources': 'nav.emissionSources',
   'Organizational Boundaries': 'nav.organizationalBoundaries',
   'Base Years': 'nav.baseYears',
+  People: 'nav.people',
+  Positions: 'nav.positions',
+  Employees: 'nav.employees',
+  Leave: 'nav.leave',
+  Payroll: 'nav.payroll',
+  Payslips: 'nav.payslips',
+  Benefits: 'nav.benefits',
+  Loans: 'nav.loans',
+  Certifications: 'nav.certifications',
+  Rotation: 'nav.rotation',
+  Attendance: 'nav.attendance',
+  'App Config': 'nav.appConfig',
 };
 
 // Group headers -> shell.group.*
@@ -139,6 +151,9 @@ export const GROUP_LABEL_KEYS = {
   'My Data': 'group.myData',
   Reporting: 'group.reporting',
   Configuration: 'group.configuration',
+  Organization: 'group.organization',
+  Workforce: 'group.workforce',
+  'Payroll & Benefits': 'group.payrollBenefits',
 };
 
 // ActivityBar studio labels -> shell.studio.* (keyed by studio id)

@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import Co2Icon from '@mui/icons-material/Co2';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import Diversity3Icon from '@mui/icons-material/Diversity3';
 import CatalogIcon from '@mui/icons-material/LibraryBooks';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import PsychologyIcon from '@mui/icons-material/Psychology';
@@ -36,6 +37,7 @@ const MANIFEST_ICON_MAP = {
   Co2:          Co2Icon,
   Dashboard:    DashboardIcon,
   MonitorHeart: MonitorHeartIcon,
+  Diversity3:   Diversity3Icon,
 };
 
 function getStoredBoolean(key, defaultValue) {

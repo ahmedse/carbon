@@ -85,6 +85,22 @@ const CARBON_ITEM_ICONS = {
   'Inventory Coverage':       TrackChangesIcon,
 };
 
+// UI-driven icon mapping for People sidebar items (mirrors CARBON_ITEM_ICONS)
+const PEOPLE_ITEM_ICONS = {
+  'People':      PeopleIcon,
+  'Positions':   AccountTreeIcon,
+  'Employees':   PeopleIcon,
+  'Attendance':  HistoryIcon,
+  'Leave':       AssignmentIcon,
+  'Payroll':     AccountBalanceWalletIcon,
+  'Payslips':    ArticleIcon,
+  'Benefits':    VerifiedUserIcon,
+  'Loans':       AccountBalanceWalletIcon,
+  'Certifications': SchoolIcon,
+  'Rotation':    AutorenewIcon,
+  'App Config':  SettingsIcon,
+};
+
 // Define sidebar content per studio
 function getSidebarItems(studioId) {
   switch (studioId) {
@@ -204,6 +220,18 @@ function getSidebarItems(studioId) {
         { label: 'Slow Movers', path: '/apps/healthy/inventory', icon: StorageIcon },
       ];
     
+    case 'people': {
+      // People app — read from manifest, resolve icons by label (mirrors case 'carbon')
+      const peopleApp = APP_REGISTRY.find(m => m.id === 'people');
+      if (peopleApp && peopleApp.navigation && peopleApp.navigation.items) {
+        return peopleApp.navigation.items.map(item => ({
+          ...item,
+          icon: PEOPLE_ITEM_ICONS[item.label] || PeopleIcon,
+        }));
+      }
+      return [];
+    }
+
     default: {
       // Dynamic lookup: if this studioId is a manifest app, return its nav items.
       // This makes ALL future apps work with zero additional changes here.

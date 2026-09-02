@@ -12,6 +12,13 @@ const ORG_TYPES = {
   'team': 'Team',
   'facility': 'Facility',
   'other': 'Other',
+  'company': 'Company',
+  'section': 'Section',
+  'crew': 'Crew',
+  'base': 'Base',
+  'yard': 'Yard',
+  'store': 'Store',
+  'cost_center': 'Cost Center',
 };
 
 export default function OrgUnitOverviewTab({ entityData }) {

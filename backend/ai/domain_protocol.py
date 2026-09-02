@@ -40,6 +40,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+from ai.adapter.types import ToolDef
+
 
 # ── Domain AI Operation Base ─────────────────────────────────────────────
 
@@ -165,6 +167,27 @@ class DomainAIOperations(ABC):
             "starter_prompts": self.starter_prompts,
             "system_prompt_extension": bool(self.system_prompt_extension),  # never leak the full text
         }
+
+    # ── Tool catalog (Pulse 0.3 — Phase E2) ──────────────────────────────
+
+    def get_tools(self) -> list[ToolDef]:
+        """Return the domain's typed tool catalog (``list[ToolDef]``).
+
+        Each tool declares:
+
+          * ``id``             — ``"{app_identifier}.{action}"`` where ``action``
+                                is the matching ``call_host_api`` endpoint name.
+          * ``description``    — non-empty, human-readable.
+          * ``required_capability`` — a real key in ``ALL_CAPABILITIES``
+                                (``accounts.capabilities``) or ``None`` for an
+                                always-available tool.
+          * ``is_mutation``    — ``True`` only for POST/PUT/DELETE tools.
+          * ``input_schema``   — ``{"type": "object", "properties": {...}}``.
+
+        Advisory/manifest-only domains (finance/hr/customer/people, and any
+        domain with no ``call_host_api``-backed data tools) return ``[]``.
+        """
+        return []
 
     # ── Abstract required fields (unchanged from original contract) ────────
 

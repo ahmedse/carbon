@@ -116,6 +116,18 @@ const RepHealthPage = React.lazy(() => import("./apps/healthy/RepHealthPage"));
 const ARQueuePage = React.lazy(() => import("./apps/healthy/ARQueuePage"));
 const SlowMoversPage = React.lazy(() => import("./apps/healthy/SlowMoversPage"));
 const PeopleHome = React.lazy(() => import("./apps/people/PeopleHome"));
+const EmployeesPage = React.lazy(() => import("./apps/people/EmployeesPage"));
+const EmployeeDetailPage = React.lazy(() => import("./apps/people/EmployeeDetailPage"));
+const LeavePage = React.lazy(() => import("./apps/people/LeavePage"));
+const PayrollRunsPage = React.lazy(() => import("./apps/people/PayrollRunsPage"));
+const PayslipPage = React.lazy(() => import("./apps/people/PayslipPage"));
+const BenefitsPage = React.lazy(() => import("./apps/people/BenefitsPage"));
+const AttendancePage = React.lazy(() => import("./apps/people/AttendancePage"));
+const PeopleConfigPage = React.lazy(() => import("./apps/people/PeopleConfigPage"));
+const PositionsPage = React.lazy(() => import("./apps/people/PositionsPage"));
+const LoansPage = React.lazy(() => import("./apps/people/LoansPage"));
+const CertificationsPage = React.lazy(() => import("./apps/people/CertificationsPage"));
+const RotationSchedulesPage = React.lazy(() => import("./apps/people/RotationSchedulesPage"));
 
 import PlatformHome from "./pages/PlatformHome";
 
@@ -278,6 +290,18 @@ export default function App() {
                 <Route path="/apps/healthy/inventory" element={<SlowMoversPage />} />
                 {/* People app — Nibras HR & payroll. Bare namespace root resolves to PeopleHome. RULE_22. */}
                 <Route path="/people" element={<PeopleHome />} />
+                <Route path="/people/positions" element={<PositionsPage />} />
+                <Route path="/people/employees" element={<EmployeesPage />} />
+                <Route path="/people/employees/:employeeId" element={<EmployeeDetailPage />} />
+                <Route path="/people/leave" element={<LeavePage />} />
+                <Route path="/people/payroll" element={<PayrollRunsPage />} />
+                <Route path="/people/payslip" element={<PayslipPage />} />
+                <Route path="/people/benefits" element={<BenefitsPage />} />
+                <Route path="/people/attendance" element={<AttendancePage />} />
+                <Route path="/people/config" element={<PeopleConfigPage />} />
+                <Route path="/people/loans" element={<LoansPage />} />
+                <Route path="/people/certifications" element={<CertificationsPage />} />
+                <Route path="/people/rotation" element={<RotationSchedulesPage />} />
                 {/* Schema Manager decommissioned — schema authoring lives in Data Products (SchemaDetailPage). */}
                 {/* Namespace root redirect — bare /schema-admin root. RULE_22. */}
                 <Route path="/schema-admin" element={<Navigate to="/catalog/products" replace />} />

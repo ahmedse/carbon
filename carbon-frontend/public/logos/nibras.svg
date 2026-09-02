@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-label="Nibras">
+  <defs>
+    <linearGradient id="nb-bg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0a1120"/>
+      <stop offset="0.55" stop-color="#12233d"/>
+      <stop offset="1" stop-color="#1b3353"/>
+    </linearGradient>
+    <radialGradient id="nb-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f59e0b" stop-opacity="0.34"/>
+      <stop offset="0.6" stop-color="#f59e0b" stop-opacity="0.09"/>
+      <stop offset="1" stop-color="#f59e0b" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="nb-flame" x1="64" y1="36" x2="64" y2="86" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fef3c7"/>
+      <stop offset="0.45" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="nb-gold" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="28" fill="url(#nb-bg)"/>
+
+  <!-- ambient beacon glow -->
+  <circle cx="64" cy="60" r="52" fill="url(#nb-glow)"/>
+
+  <!-- light rays radiating to neural nodes (AI-native beacon constellation) -->
+  <g stroke="url(#nb-gold)" stroke-width="2.4" stroke-linecap="round">
+    <line x1="82" y1="64" x2="108" y2="64"/>
+    <line x1="76.7" y1="76.7" x2="95" y2="95"/>
+    <line x1="64" y1="82" x2="64" y2="108"/>
+    <line x1="51.3" y1="76.7" x2="33" y2="95"/>
+    <line x1="46" y1="64" x2="20" y2="64"/>
+    <line x1="51.3" y1="51.3" x2="33" y2="33"/>
+    <line x1="64" y1="46" x2="64" y2="20"/>
+    <line x1="76.7" y1="51.3" x2="95" y2="33"/>
+  </g>
+  <g fill="#fcd34d">
+    <circle cx="108" cy="64" r="3.2"/>
+    <circle cx="95" cy="95" r="3.2"/>
+    <circle cx="64" cy="108" r="3.2"/>
+    <circle cx="33" cy="95" r="3.2"/>
+    <circle cx="20" cy="64" r="3.2"/>
+    <circle cx="33" cy="33" r="3.2"/>
+    <circle cx="64" cy="20" r="3.2"/>
+    <circle cx="95" cy="33" r="3.2"/>
+  </g>
+
+  <!-- beacon flame / lantern -->
+  <path d="M64 38 C72 50 79 58 79 68 C79 78 72 85 64 85 C56 85 49 78 49 68 C49 58 56 50 64 38 Z" fill="url(#nb-flame)"/>
+
+  <!-- inner core (the guiding light) -->
+  <path d="M64 54 C68 60 71 64 71 69 C71 75 67 78 64 78 C61 78 57 75 57 69 C57 64 60 60 64 54 Z" fill="#fff7ed" opacity="0.95"/>
+
+  <!-- lantern base -->
+  <path d="M54 93 H74" stroke="url(#nb-gold)" stroke-width="3.5" stroke-linecap="round"/>
+</svg>

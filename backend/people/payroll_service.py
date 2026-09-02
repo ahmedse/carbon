@@ -328,3 +328,50 @@ class PayrollRunService:
     def _run_validation(self, run):
         findings = self.validation_seam.validate_run(run)
         return summarize(findings)
+
+    # --- WPS export ---------------------------------------------------------
+
+    def wps_export(self, run):
+        """Build WPS records for a committed run from the active WPS rule.
+
+        Refuses (``PayrollServiceError``) unless an *authoritative* WPS rule is
+        configured — no regulated figure is ever fabricated. Returns
+        ``{"rule": rule, "records": [format_wps_record(...), ...]}``; each
+        record is the engine's ``{value, lineage, record}`` payload.
+        """
+        self._require_status(run, ("committed",))
+        rule = self._resolve_rule(ComplianceRule.objects, "wps")
+        if rule is None:
+            raise PayrollServiceError("No WPS compliance rule is configured.")
+        if not rule.is_authoritative:
+            raise PayrollServiceError(
+                f"WPS rule '{rule.rule_id} v{rule.version}' is non-authoritative; "
+                "refusing to generate a WPS file."
+            )
+
+        lines = list(run.lines.select_related("employee"))
+        records = []
+        for employee in self._scoped_employees(run):
+            employee_lines = [ln for ln in lines if ln.employee_id == employee.id]
+            payslip = self._payslip_summary(employee, run, employee_lines)
+            records.append(calculation_engine.format_wps_record(rule, payslip))
+        return {"rule": rule, "records": records}
+
+    @staticmethod
+    def _payslip_summary(employee, run, lines):
+        """Duck-typed payslip mapping consumed by ``format_wps_record``.
+
+        Exposes employee identifiers plus every payslip line type (gross /
+        gosi / loan_installment / net) as its string amount, so a WPS rule's
+        ``field_map`` / ``amount_components`` can reference them by name.
+        """
+        summary = {
+            "employee_no": employee.employee_no,
+            "employee_name": employee.full_name,
+            "basic_salary": str(employee.basic_salary),
+            "period_start": str(run.period_start),
+            "period_end": str(run.period_end),
+        }
+        for line in lines:
+            summary[line.line_type] = str(line.amount)
+        return summary

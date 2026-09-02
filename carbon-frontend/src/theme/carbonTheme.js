@@ -83,9 +83,31 @@ const darkColors = {
   },
 };
 
+// Convert #RRGGBB hex to rgba() so selection/hover tints track the per-brand
+// primary color (previously hardcoded to the default blue).
+function hexToRgba(hex, alpha) {
+  const h = (hex || '').replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  if (Number.isNaN(n) || full.length !== 6) return `rgba(0, 0, 0, ${alpha})`;
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
 // Create Theme Function
-const createCarbonTheme = (mode = 'light', direction = 'ltr') => {
-  const colors = mode === 'light' ? lightColors : darkColors;
+// brandPalette overrides only primary/secondary (status colors stay platform-wide).
+const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {}) => {
+  const baseColors = mode === 'light' ? lightColors : darkColors;
+  const primary = { ...brandColors.primary, ...(brandPalette.primary || {}) };
+  const secondary = { ...brandColors.secondary, ...(brandPalette.secondary || {}) };
+  const colors = {
+    ...baseColors,
+    primary,
+    secondary,
+    action: {
+      ...baseColors.action,
+      selected: hexToRgba(primary.main, mode === 'light' ? 0.08 : 0.15),
+    },
+  };
   const isRtl = direction === 'rtl';
 
   // RTL (Arabic): Cairo leads the font stack with a taller line height for

@@ -308,6 +308,306 @@ cd /home/ahmed/aast/carbon && bash .ai-toolkit/scripts/verify.sh all
 
 ---
 
+## PULSE 0.3 — WAVE E TRACK (Expert Foundation · backend · architectural)
+
+> **Canonical spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` — read it FIRST; it has
+> exact file paths, shallow-impl traps, acceptance gates, and the multi-app guarantee (Nibras/GOFSCO
+> `people` + all 9 registered domains are first-class, never Carbon-only). Wave E is backend-only;
+> no user-visible UX until Wave F consumes it.
+> **North-star (0.3):** Expert (#1) · Observable (#2) · Rich conversation (#3).
+> **Dependency order (do NOT reorder):** E1 → E2 (needs E1's `ToolDef`) → E3 (needs E2's catalog).
+> **Workers run DeepSeek V4-Flash (RULE_24).** One phase = one worker session, one domain.
+> **MASTER DIRECTIVE:** test partitioning is NON-NEGOTIABLE — `pytest ai -q` (one app), never full
+> suite, never `-n auto`/xdist.
+
+| Phase | Goal | Domain | Deps | Status |
+|-------|------|--------|------|--------|
+| E1 | `ai/adapter/` HostAdapterContract + WorldModel + ToolCatalog seam | backend | — | DONE |
+| E2 | Domain tool catalog (`get_tools()`) + CBAC-filtered `get_tool_catalog` | backend | E1 | DONE |
+| E3 | Cross-domain synthesis (`cross_synthesize` via KG join) | backend | E2 | DONE |
+
+---
+
+## Phase E1 — WorldModel + ToolCatalog seam
+
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave E — E1.
+
+**Result (2026-09-02):** shipped `ai/adapter/` (contract + types + carbon). `types.py` is
+Django-free (imports only `__future__`/`dataclass`/`typing`); `carbon.py` holds all ORM imports
+(`core`/`dataschema`/`dq`/`mdm`/`accounts`/`ai.models`) moved out of `context_assembler.py`, which is
+now a thin delegating layer. `CarbonIntelligence.__init__(adapter=None)` defaults to
+`CarbonHostAdapter()` and threads it through all 5 `assemble_context` sites; the lazy
+`_retrieve_knowledge_graph` import in `intelligence.py` is replaced by `self.adapter`.
+Gate GREEN: `import ai.adapter.types` → types-OK · `pytest ai/tests -k adapter` → 5 passed ·
+`pytest ai` → **1262 passed** (0 failures, ~5:52). No `ai/engine/**`, migration, URL, or model edits.
+
+### Context
+`ai/context_assembler.py` reaches into Django ORM models via **lazy (function-level) imports** —
+not top-level imports (its only top-level imports are `__future__`, `typing`, `ai.protocol`). The
+ORM coupling lives in: `_resolve_mention_descriptors` (`core.models`, `dataschema.models`,
+`dq.models`), `_retrieve_long_term_memory` (`ai.models.MemoryLongTerm`, `ai.store`),
+`_resolve_entity_attributes` + `_retrieve_knowledge_graph` (`ai.models.KnowledgeNode/KnowledgeEdge`),
+and `_user_profile_message` (`accounts.models`, `core.models`, `mdm.models`). `ai/intelligence.py`
+also lazy-imports `_retrieve_knowledge_graph` at line ~3184. E1 introduces the typed `ai/adapter/`
+seam and moves ALL of this ORM access behind `HostAdapterContract` so the engine/assembler becomes
+injectable and testable without a live Django DB. **This is additive only** — no public API,
+endpoint, model, or migration changes.
+
+### Files to Change
+- `ai/adapter/__init__.py` (NEW)
+- `ai/adapter/contract.py` (NEW) — `HostAdapterContract` ABC (4 abstract methods)
+- `ai/adapter/types.py` (NEW) — pure dataclasses, **zero Django imports**
+- `ai/adapter/carbon.py` (NEW) — `CarbonHostAdapter(HostAdapterContract)`
+- `ai/context_assembler.py` (delegate T3/T4 + mention resolution + profile to the adapter)
+- `ai/intelligence.py` (accept optional `adapter=` on init, default `CarbonHostAdapter()`, thread through)
+- `ai/tests/test_adapter.py` (NEW)
+
+### Contract (exact API — do NOT deviate)
+- `HostAdapterContract` ABC methods: `get_world_model() → WorldModel`,
+  `get_tool_catalog(user, scope) → ToolCatalog`,
+  `assemble_context(query, user, scope, page_context) → SessionContext`,
+  `get_org_memory_seeds(instance_id) → list[MemorySeed]`.
+- `ai/adapter/types.py` dataclasses: `EntityDef`, `VocabularyTerm`, `BusinessRule`, `WorldModel`,
+  `ToolDef`, `ToolCatalog`, `SessionContext`, `MemorySeed`. **Zero Django imports** — importable with
+  `python -c "import ai.adapter.types"`.
+- `CarbonHostAdapter` moves the ORM queries out of `context_assembler.py`; `context_assembler.py`
+  delegates to it (keeps the pure token-budgeting + formatting logic).
+- `ai/intelligence.py.__init__(self, adapter: HostAdapterContract | None = None)` defaults to
+  `CarbonHostAdapter()`; no endpoint/URL/model signature changes.
+
+### Shallow-implementation trap (reject if hit)
+❌ adapter behind a feature flag with the old ORM imports left as the live path (both paths exist →
+coupling not removed); ❌ `ToolCatalog` as a thin wrapper still hardcoding tool names instead of
+reading domain registrations; ❌ importing Django models inside `ai/adapter/types.py`;
+❌ changing any public API/endpoint/model/migration.
+
+### DO NOT TOUCH
+- `ai/engine/**` (must stay import-clean, RULE_20) — no new imports, no edits.
+- Any migration, URL route, serializer, or model.
+- Nibras/People uncommitted files (`backend/people/**`, `backend/ai/domain/people.py`,
+  `apps/people/**`) — do not commit, do not `git add -A`.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+python -c "import ai.adapter.types; print('OK')"            # types.py has zero Django imports
+python -m pytest ai/tests/ -k "adapter" -q --disable-warnings -p no:cacheprovider
+python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider | tail -5
+```
+Report the tail of the `pytest ai` run and the `import ai.adapter.types` result as evidence.
+
+---
+
+## Phase E2 — Domain tool catalog (`get_tools()`) + CBAC-filtered `get_tool_catalog`
+
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave E — E2.
+
+**Result (2026-09-02):** shipped. `get_tools()` is a **concrete default `return []`** (NOT abstract)
+on `DomainAIOperations` — a 10th registered domain `healthy` (in `healthy/domain_ai.py`) has no
+`get_tools()` override, so an abstract method would break import. Domain catalog: `emissions` = 5
+tools, `data_product` = 3 tools; the other 8 domains (`admin`,`mdm`,`water`,`finance`,`hr`,`customer`,
+`people`,`healthy`) return `[]` (advisory/manifest-only — no `call_host_api` endpoints, verified against
+`host_executor.py` + `instance.yaml` api_catalog). `CarbonHostAdapter.get_tool_catalog` assembles spine
+tools (`_CHAT_STATIC_TOOLS` + `STATIC_TOOL_DEFINITIONS`, `required_capability=None`) + CBAC-filtered domain
+tools via `has_capability(user, tool.required_capability)`. `check_tool_catalog` validates all 8.
+**Deviations (correct, not thin):** (a) the LLM-facing "Available Host API Endpoints" list is injected in
+`ai/engine_runtime.py` `_carbon_instance_config` (NOT `intelligence.py` as the roadmap claimed), so the CBAC
+filter `_cbac_filter_api_catalog()` was added THERE; (b) `get_tools()` is concrete-not-abstract (see above).
+Gate GREEN: `check_tool_catalog` exit 0 ("8 tools valid across 10 domains"; docstring `SyntaxWarning` fixed) ·
+`pytest ai/tests -k tool_catalog` → 6 passed · `pytest ai` → **1266 passed, 1 failed** (the 1 failure is
+`test_intelligence_live.py::test_live_knowledge_gap_is_honest_not_fabricated` — a LIVE external-LLM test
+hitting api.poe.com, flaky, unrelated to E2). No `ai/engine/**`, migration, URL, or model edits.
+
+### Context
+E1 shipped `ai/adapter/` with `ToolDef` already declared in `ai/adapter/types.py` (fields:
+`id`, `description`, `required_capability`, `is_mutation`, `domain`, `input_schema`,
+`output_description`) and `CarbonHostAdapter.get_tool_catalog(user, scope)` returning an empty
+`ToolCatalog` (a functional stub built from `_CHAT_STATIC_TOOLS`). E2 makes every `DomainAIOperations`
+subclass a first-class tool provider: each domain declares its tools as typed `ToolDef`s with CBAC
+metadata, and the adapter assembles a **per-user, CBAC-filtered** catalog from the domain registry —
+so the LLM never sees a tool the user cannot use.
+
+**CORRECTIONS to the roadmap (verified against current code — do NOT chase stale symbols):**
+- The CBAC check is `accounts.capabilities.has_capability(user, capability_key)` — **2 args**, not
+  `has_capability(user, cap, scope)`. It returns True when `"*"` is in the user's expanded caps.
+- The capability registry dict is `ALL_CAPABILITIES: Dict[str, Capability]` (line 584), **not**
+  `CAPABILITY_REGISTRY`. Validate a key with `cap_key in ALL_CAPABILITIES`.
+- There are **10** registered domains: `emissions`, `water`, `admin`, `mdm`, `data_product`,
+  `finance`, `hr`, `customer`, `people` (in `ai/domain/*.py`) **plus `healthy`** (in
+  `healthy/domain_ai.py`, `HealthyDomainAI`, app_identifier="healthy"). `healthy` forces `get_tools()`
+  to be a concrete default (not abstract).
+- `ToolDef` already exists (E1) — reuse it, do not redeclare.
+
+### Files to Change
+- `ai/domain_protocol.py` — add `get_tools() -> list[ToolDef]` to `DomainAIOperations` (concrete default `return []`).
+- `ai/domain/{emissions,water,admin,mdm,data_product,finance,hr,customer,people}.py` — implement `get_tools()`.
+- `ai/adapter/carbon.py` — enrich `CarbonHostAdapter.get_tool_catalog(user, scope)` to iterate the
+  registry, call each domain's `get_tools()`, and CBAC-filter via `has_capability`.
+- `ai/management/commands/check_tool_catalog.py` (NEW) — integrity validator.
+- `ai/engine_runtime.py` — inject only user-accessible tools into the "Available Host API Endpoints" system-prompt section (the REAL injection point; the roadmap's `intelligence.py` claim was stale).
+- `ai/tests/test_tool_catalog.py` (NEW) — CBAC filtering + integrity tests.
+- `.ai-toolkit/scripts/verify.sh` — add a `tools` target that runs `check_tool_catalog` (if `verify.sh` exists and has a target list; if not, skip and note it).
+
+### Contract (exact API — do NOT deviate)
+- `DomainAIOperations.get_tools(self) -> list[ToolDef]` (abstract). Each `ToolDef`:
+  `id` = `"{app_identifier}.{action}"` (e.g. `"emissions.query"`), `description` non-empty,
+  `required_capability` = a real key in `ALL_CAPABILITIES` (e.g. `"carbon:view_data"` — verify the
+  actual key exists in `accounts/capabilities.py` before using it), `is_mutation` True only for
+  POST/PUT/DELETE tools, `domain` = `app_identifier`, `input_schema` = JSON Schema dict,
+  `output_description` = one plain-English sentence.
+- A domain with no data tools may return `[]` (valid — e.g. `finance`/`hr`/`customer`/`people` are
+  advisory/drafting verticals; still implement the method, returning their `call_host_api`-backed
+  endpoints if any exist, else `[]`).
+- `CarbonHostAdapter.get_tool_catalog(user, scope)` — iterate `domain_protocol` registry
+  (`list_domains()`/`all_manifests()`), collect `get_tools()` from each registered instance, then
+  `include = has_capability(user, tool.required_capability)` (treat `required_capability is None` as
+  always-include). Return the filtered `ToolCatalog`. **Never** include a tool the user lacks the
+  capability for.
+- `check_tool_catalog` — for every registered tool assert: non-empty `description`, `required_capability`
+  in `ALL_CAPABILITIES` (or None), `input_schema` is a dict with `"type": "object"`, `id` matches
+  `^{domain}\..+`. Exit non-zero on any violation (print each violation to stderr).
+
+### Shallow-implementation trap (reject if hit)
+❌ returning ALL tools for ALL users (no `has_capability` filter → the LLM offers forbidden tools);
+❌ hardcoding a tool list in `get_tool_catalog` instead of reading the registry; ❌ leaving
+`_CHAT_STATIC_TOOLS` / the system-prompt "Available Host API Endpoints" list as a parallel
+hardcoded definition that diverges from the catalog; ❌ inventing capability keys that don't exist
+in `ALL_CAPABILITIES`; ❌ redeclaring `ToolDef` instead of importing from `ai.adapter.types`.
+
+### DO NOT TOUCH
+- `ai/engine/**` (RULE_20) — no edits; you may only *read* `ai/engine/agent/tools.py` for reference.
+- Any migration, URL route, serializer, or model.
+- Nibras/People uncommitted files — `backend/people/**`, `backend/ai/domain/people.py` may be
+  **read** and **its `get_tools()` may be implemented** (it is in-scope per the multi-app guarantee),
+  but do NOT edit `backend/people/**` models/views/serializers, do NOT `git add -A`, do NOT commit.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python manage.py check_tool_catalog   # exits 0
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/ -k "tool_catalog" -q --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider | tail -5
+```
+Report `check_tool_catalog` exit code + output, the `tool_catalog` test count, and the `pytest ai`
+tail. If `manage.py check_tool_catalog` needs `DJANGO_SETTINGS_MODULE`, use the same settings env
+the repo already uses for `manage.py` (check `manage.py` / `conftest.py`).
+
+---
+
+## Phase E3 — Cross-domain synthesis (`cross_synthesize` via KG join)
+
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave E — E3.
+
+**Result (2026-09-02):** shipped `CrossDomainSynthesisTool` (real KG-join, not thin).
+`cross_synthesize.py` imports only `ai.engine.*` + stdlib/typing (RULE_20), is read-only
+(`requires_confirmation=False`, RULE_21), and builds its own KG session via
+`get_session_factory(instance_id)` → `KnowledgeGraphStore(db)` (since `ToolContext.db` is NOT wired
+at runtime). Shared-node detection resolves ENTITY nodes by id OR name; temporal alignment surfaces
+`TRIGGERS`/`FEEDS_INTO`/`DEPENDS_ON`/`RELATED_TO` edges; fail-visible on KG failure (provenance still
+returned, `shared_nodes=[]`, never raises). **Gate:** 4/4 new tests passed; `pytest ai` = **1271
+passed, 0 failed**; plugin registration confirmed (`cross_synthesize` present in `load_plugins()`, 9
+plugin tools total).
+
+### Context
+E2 shipped the typed domain tool catalog + CBAC-filtered `get_tool_catalog`. E3 adds the **Platform
+Core** `cross_synthesize` tool: it takes the *already-fetched* results of two or more domain tool
+calls and performs a **KG-based join** to produce one answer with per-source provenance ("Why did
+South Valley's emissions spike the same week DQ failures peaked?" = data from two domains, joined via
+the KG). It is NOT an LLM "combine the text" step — the KG is what makes provenance verifiable.
+
+**CORRECTIONS to the roadmap (verified against current code — do NOT chase stale paths):**
+- Plugin classes live in **`ai/plugins/*.py`** (e.g. `ai/plugins/list_capabilities.py`), NOT
+  `ai/engine/agent/synthesis.py`. Register them in **`ai/plugins/__init__.py`**
+  `register_builtin_plugins()` (called once at startup by `ai.apps.AIConfig.ready`). The existing
+  plugins are `create_dq_rule`, `list_my_capabilities`, `plan_task`, `edit_plan`, `approve_plan`,
+  `web_research`, `export_document`, `unit_converter`.
+- A plugin surfaces in the chat tool list automatically via `ai/engine/agent/tools.py`
+  `get_tool_definitions()` = static + plugin + MCP. **Do NOT edit `ai/intelligence.py`** (roadmap
+  task #4 "modify the system prompt" is stale — same correction as E2).
+- `ToolContext.db` is **NOT populated** at runtime (`execute.py:295` / `engine_runtime.py:3285` set
+  only `instance_id`/`conversation_id`/`host_user_id`/`instance_config`/`host_api`). To reach the KG
+  a plugin builds its own session: `get_session_factory(instance_id)` (from
+  `ai/engine/core/database`) → `KnowledgeGraphStore(db)`. See the working pattern at
+  `ai/engine_runtime.py:1605-1625`.
+- KG nodes that represent host entities are `KnowledgeNode` with `node_type="ENTITY"` (id/name/
+  `properties` JSON); edges are `KnowledgeEdge` with `relationship` ∈ {`TRIGGERS`, `FEEDS_INTO`,
+  `DEPENDS_ON`, `RELATED_TO`, `CONTAINS`, `HAS_ATTRIBUTE`, …} and `valid_from`/`valid_to` on nodes
+  carry temporal validity.
+
+### Files to read first
+- `ai/plugins/__init__.py` + `ai/plugins/list_capabilities.py` (the plugin pattern to copy)
+- `ai/engine/agent/plugins.py` (`ToolPlugin` ABC, `ToolContext`, `register_plugin`, `load_plugins`)
+- `ai/engine/agent/tools.py` (`get_tool_definitions()` merge site — read only)
+- `ai/engine/knowledge_graph/path_finder.py` (`JoinPathFinder` + `_entity_id_by_name`/
+  `_entity_node_ids` — REUSE for shared-node traversal)
+- `ai/engine/knowledge_graph/models.py` (`KnowledgeNode`, `KnowledgeEdge`, NODE_TYPES/RELATIONSHIP_TYPES)
+- `ai/engine/knowledge_graph/store.py` (`KnowledgeGraphStore`)
+- `ai/engine/core/database.py` (`get_session_factory`)
+- `ai/engine_runtime.py:1605-1625` (session + `KnowledgeGraphStore(db)` pattern)
+
+### Files to Change
+- `ai/plugins/cross_synthesize.py` (NEW) — `CrossDomainSynthesisTool(ToolPlugin)`.
+- `ai/plugins/__init__.py` — import + `register_plugin(CrossDomainSynthesisTool())` in
+  `register_builtin_plugins()`.
+- `ai/tests/test_cross_domain_synthesis.py` (NEW).
+
+### Contract (exact API — do NOT deviate)
+- `CrossDomainSynthesisTool(ToolPlugin)`: `name="cross_synthesize"`; `requires_confirmation=False`
+  (read-only synthesis, RULE_21); `capability=None`; `app_identifier=None` (Platform Core — always
+  active; per-domain CBAC was already enforced when each domain tool produced its result).
+- `input_schema` (JSON Schema): `results` = array of `{domain: string, data: object, entity_ids:
+  string[]}` (required `domain`, `data`), plus `question: string` (required).
+- `execute(args, *, ctx)` — return a **structured** dict:
+  `{synthesis: str, sources: [{domain, entity_ids, evidence}], shared_nodes: [{id, name, node_type}],
+  temporal_alignment: [...], requires_confirmation: False}`.
+  Algorithm: (1) for every `entity_id` across the result sets, resolve the KG `KnowledgeNode`
+  (`node_type="ENTITY"`); (2) compute the **shared** nodes (referenced by ≥2 distinct domains);
+  (3) build the temporal/causal alignment from `KnowledgeEdge` relationships + node
+  `valid_from`/`valid_to`; (4) emit `sources` with per-domain provenance. **The synthesis works ONLY
+  on the passed `results` + KG lookups** — it never queries a domain database.
+- **RULE_20 (zero upward imports):** `cross_synthesize.py` imports NOTHING from
+  `catalog`/`mdm`/`dq`/`emissions`/`accounts`/`core`/`ai.adapter.carbon` and no Django ORM. KG access
+  goes through `get_session_factory(ctx.instance_id)` + `KnowledgeGraphStore(db)` + `JoinPathFinder`.
+
+### Shallow-implementation trap (reject if hit)
+❌ prompting the LLM to "combine" the results as text (must go through the KG traversal — provenance
+must be verifiable); ❌ querying domain databases inside the tool (works only on already-fetched
+results + KG); ❌ returning a synthesis with no per-source provenance or no shared-node detection;
+❌ importing Django ORM / domain apps (RULE_20); ❌ writing a new KG BFS instead of reusing
+`JoinPathFinder`/`path_finder` helpers; ❌ forgetting `register_plugin()` (tool never appears);
+❌ `return {}` / empty synthesis when `results` is non-empty (thin implementation).
+
+### DO NOT TOUCH
+- `ai/domain/**`, `ai/adapter/**`, any migration, URL route, serializer, or model.
+- Existing KG query paths (`ai/engine/knowledge_graph/path_finder.py`, `store.py`) — REUSE only.
+- `ai/intelligence.py` (not needed — tool list is assembled in `ai/engine/agent/tools.py`).
+- Nibras/People uncommitted files (`backend/people/**`, `backend/ai/domain/people.py`) — do NOT
+  edit, do NOT `git add -A`, do NOT commit.
+
+### Verification Gate
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_cross_domain_synthesis.py -v --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider | tail -5
+```
+Report the `test_cross_domain_synthesis.py` result and the `pytest ai` tail. Live proof (optional,
+needs `LLM_API_KEY`): ask a cross-domain question and confirm the reply cites two provenance sources
+from different domains.
+
+---
+
 ## AI WORKSPACE TRACK
 
 ---

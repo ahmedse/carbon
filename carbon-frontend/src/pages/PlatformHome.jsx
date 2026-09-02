@@ -20,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 import Co2Icon from '@mui/icons-material/Co2';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import LayersIcon from '@mui/icons-material/Layers';
+import Diversity3Icon from '@mui/icons-material/Diversity3';
 import { APP_REGISTRY } from '../apps/registry';
 import { useAuth } from '../auth/AuthContext';
 import { hasAppAccess } from '../authz';
@@ -35,6 +36,7 @@ const APP_ICONS = {
   Co2: Co2Icon,
   Dashboard: DashboardIcon,
   Layers: LayersIcon,
+  Diversity3: Diversity3Icon,
 };
 
 function AppCard({ app }) {

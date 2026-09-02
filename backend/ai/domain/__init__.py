@@ -14,6 +14,7 @@ Current domains:
   - finance (non-data operations vertical — advisory/drafting only)
   - hr (non-data operations vertical — advisory/drafting only)
   - customer (non-data operations vertical — advisory/drafting only)
+  - people (non-data operations vertical — advisory/drafting only)
   - (future) waste
 
 ``register_builtin_domains()`` is invoked once at app startup
@@ -52,3 +53,5 @@ def register_builtin_domains() -> None:
         from .hr import HRDomainAI  # noqa: F401
     if not has_domain("customer"):
         from .customer import CustomerOpsDomainAI  # noqa: F401
+    if not has_domain("people"):
+        from .people import PeopleDomainAI  # noqa: F401

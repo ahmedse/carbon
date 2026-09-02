@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai.adapter.types import ToolDef
 from ai.domain_protocol import (
     DomainAIOperations,
     DomainContext,
@@ -153,6 +154,74 @@ class EmissionsDomainAI(DomainAIOperations):
         if task_type in needs_module and not payload.get("module_id") and not payload.get("period_id"):
             return False, "'report_draft' requires 'module_id' or 'period_id' in task_payload."
         return True, ""
+
+    # ── Tool catalog (Pulse E2) ───────────────────────────────────────────
+
+    def get_tools(self) -> list[ToolDef]:
+        """Carbon read tools backed by ``call_host_api`` (all GET, read-only)."""
+        return [
+            ToolDef(
+                id="emissions.list_emission_factors",
+                description="List active emission factors (GLOBAL reference data, kg CO2e per activity unit).",
+                required_capability="carbon:view_console",
+                is_mutation=False,
+                domain="emissions",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "category": {"type": "string", "description": "Optional factor category filter."},
+                        "scope": {"type": "string", "description": "Optional GHG scope filter."},
+                    },
+                },
+                output_description="Emission factors with name, code, category, scope, factor_value, and unit.",
+            ),
+            ToolDef(
+                id="emissions.list_gwp_gases",
+                description="List global warming potentials (AR5/AR6) for the 20- and 100-year horizons.",
+                required_capability="carbon:view_console",
+                is_mutation=False,
+                domain="emissions",
+                input_schema={"type": "object", "properties": {}},
+                output_description="GWP values per gas for AR5/AR6, 20- and 100-year horizons.",
+            ),
+            ToolDef(
+                id="emissions.list_reporting_periods",
+                description="List reporting periods with name, start/end dates, status, and baseline flag.",
+                required_capability="carbon:view_reporting_periods",
+                is_mutation=False,
+                domain="emissions",
+                input_schema={"type": "object", "properties": {}},
+                output_description="Reporting periods with dates, status, and baseline flag.",
+            ),
+            ToolDef(
+                id="emissions.get_calculation_summary",
+                description="Aggregated calculation summary (kg CO2e) broken down by scope, status, and module/branch.",
+                required_capability="carbon:view_calculations",
+                is_mutation=False,
+                domain="emissions",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "reporting_period_id": {"type": "string", "description": "Optional reporting period id."},
+                    },
+                },
+                output_description="Totals by scope, status, and module, plus latest run and last audit.",
+            ),
+            ToolDef(
+                id="emissions.get_chairman_overview",
+                description="Single-call org-scoped chairman overview: footprint (tonnes CO2e), coverage, SBTi targets, actions, trajectory.",
+                required_capability="carbon:view_dashboard",
+                is_mutation=False,
+                domain="emissions",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "reporting_period_id": {"type": "string", "description": "Optional reporting period id."},
+                    },
+                },
+                output_description="Footprint in tonnes CO2e, coverage, SBTi targets, actions, and trajectory.",
+            ),
+        ]
 
     # ── Domain knowledge (original contract) ──────────────────────────────
 

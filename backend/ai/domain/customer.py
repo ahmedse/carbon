@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai.adapter.types import ToolDef
 from ai.domain_protocol import (
     DomainAIOperations,
     DomainContext,
@@ -95,6 +96,12 @@ class CustomerOpsDomainAI(DomainAIOperations):
                 "sla_targets": {"first_response": "4 business hours", "resolution": "3 business days"},
             },
         )
+
+    # ── Tool catalog (Pulse E2) ───────────────────────────────────────────
+
+    def get_tools(self) -> list[ToolDef]:
+        """Non-data advisory vertical — no ``call_host_api``-backed data tools."""
+        return []
 
 
 register_domain("customer", CustomerOpsDomainAI)

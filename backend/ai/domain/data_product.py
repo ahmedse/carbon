@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai.adapter.types import ToolDef
 from ai.domain_protocol import (
     DomainAIOperations,
     DomainContext,
@@ -126,6 +127,58 @@ class DataProductDomainAI(DomainAIOperations):
         if task_type in needs_dataset and not payload.get("dataset_id"):
             return False, f"'{task_type}' requires 'dataset_id' in task_payload."
         return True, ""
+
+    # ── Tool catalog (Pulse E2) ───────────────────────────────────────────
+
+    def get_tools(self) -> list[ToolDef]:
+        """Data-product tools backed by ``call_host_api`` (read + one mutation)."""
+        return [
+            ToolDef(
+                id="data_product.get_data_product_details",
+                description="Get the data tables belonging to a data product (module).",
+                required_capability="catalog:view",
+                is_mutation=False,
+                domain="data_product",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string", "description": "Module/data-product id."},
+                    },
+                },
+                output_description="Data tables in the data product (module).",
+            ),
+            ToolDef(
+                id="data_product.list_data_tables",
+                description="List data tables visible to the user, optionally filtered by module_id.",
+                required_capability="dataschema:view",
+                is_mutation=False,
+                domain="data_product",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "module_id": {"type": "string", "description": "Optional module id filter."},
+                    },
+                },
+                output_description="Data tables with name, module, and schema.",
+            ),
+            ToolDef(
+                id="data_product.create_table",
+                description="Create a new data table (schema change) — requires explicit confirmation.",
+                required_capability="dataschema:manage",
+                is_mutation=True,
+                domain="data_product",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "description": {"type": "string"},
+                        "module": {"type": "string", "description": "Module id."},
+                        "fields": {"type": "array", "items": {"type": "object"}},
+                    },
+                },
+                output_description="The created data table.",
+            ),
+        ]
 
     # ── Domain knowledge (original contract) ──────────────────────────────
 

@@ -47,6 +47,7 @@ from ai.domain_protocol import DomainContext, get_domain, has_domain
 from ai.domain import emissions  # noqa: F401  (registers the emissions domain)
 from ai.domain import water  # noqa: F401  (registers the water domain)
 from ai.context_assembler import assemble_context
+from ai.adapter.contract import HostAdapterContract
 from ai.engine.llm.provider import classify_llm_error
 from ai.generation_registry import GENERATIONS
 from ai.usage_service import QuotaExceededError
@@ -160,8 +161,13 @@ class CarbonIntelligence:
     The provider is the in-process PulseProvider (the vendored engine).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, adapter: HostAdapterContract | None = None) -> None:
         self._provider: AIProvider | None = None
+        if adapter is None:
+            from ai.adapter.carbon import CarbonHostAdapter
+
+            adapter = CarbonHostAdapter()
+        self.adapter = adapter
 
     # ── Provider access ────────────────────────────────────────────────
 
@@ -396,7 +402,7 @@ class CarbonIntelligence:
             )
         )
         assembled = assemble_context(
-            conversation, history, scope, model=resolved_model,
+            conversation, history, scope, model=resolved_model, adapter=self.adapter,
         )
         conversation._turn_context_signature = assembled["context_signature"]
         conv_ctx = ConversationContext(
@@ -539,7 +545,7 @@ class CarbonIntelligence:
                 )
             )
             assembled = assemble_context(
-                conversation, history, scope, model=resolved_model,
+                conversation, history, scope, model=resolved_model, adapter=self.adapter,
             )
             conversation._turn_context_signature = assembled["context_signature"]
             conv_ctx = ConversationContext(
@@ -1815,7 +1821,7 @@ class CarbonIntelligence:
         scope = build_scope(user)
         if conversation.app_identifier:
             scope.app_identifier = conversation.app_identifier
-        assembled = assemble_context(conversation, history, scope)
+        assembled = assemble_context(conversation, history, scope, adapter=self.adapter)
         last_msg = conversation.messages.order_by("-created_at").first()
         return {
             **assembled,
@@ -2167,7 +2173,7 @@ class CarbonIntelligence:
             .values("id", "role", "content", "created_at", "is_deleted")
         )
         assembled = assemble_context(
-            conversation, history, scope, model=resolved_model,
+            conversation, history, scope, model=resolved_model, adapter=self.adapter,
         )
         conversation._turn_context_signature = assembled["context_signature"]
         conv_ctx = ConversationContext(
@@ -2269,7 +2275,7 @@ class CarbonIntelligence:
             .values("id", "role", "content", "created_at", "is_deleted")
         )
         assembled = assemble_context(
-            conversation, history, scope, model=resolved_model,
+            conversation, history, scope, model=resolved_model, adapter=self.adapter,
         )
         conversation._turn_context_signature = assembled["context_signature"]
         conv_ctx = ConversationContext(
@@ -3181,7 +3187,6 @@ class CarbonIntelligence:
         from dataschema.models import DataRow, DataTable
         from dq.models import DQRule, TableProfile
         from dq.services import build_anomaly_payload
-        from ai.context_assembler import _retrieve_knowledge_graph
 
         try:
             table = DataTable.objects.get(id=table_id)
@@ -3291,7 +3296,7 @@ class CarbonIntelligence:
             }
 
         # KG retrieval needs scope, so it happens here (not in the engine).
-        kg_entries, kg_tokens = _retrieve_knowledge_graph(scope, 800)
+        kg_entries, kg_tokens = self.adapter.retrieve_knowledge_graph(scope, 800)
 
         task_payload = {
             "table_id": table.id,

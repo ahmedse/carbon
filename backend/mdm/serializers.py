@@ -125,6 +125,7 @@ class OrgUnitSerializer(serializers.ModelSerializer):
         model = OrgUnit
         fields = [
             'id', 'name', 'slug', 'code', 'org_type', 'description',
+            'manager_employee_id',
             'parent', 'parent_name', 'is_active',
             'full_path', 'children_count', 'descendants_count',
             'created_at', 'updated_at',

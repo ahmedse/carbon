@@ -143,6 +143,13 @@ APP_REGISTRY = [
         "roles": [],
     },
     {
+        "id": "stub",
+        "name": "Isolation Stub",
+        "version": "0.0.1",
+        "description": "Placeholder app proving per-instance app isolation (disabled by default)",
+        "roles": [],
+    },
+    {
         "id": "people",
         "name": "People & Payroll",
         "version": "0.1.0",
@@ -463,6 +470,43 @@ PLATFORM_NAME = get_env("DJANGO_PLATFORM_NAME", "Data Trust Platform")
 PLATFORM_SHORT = get_env("DJANGO_PLATFORM_SHORT", "Data Trust")
 INSTANCE_NAME = get_env("DJANGO_INSTANCE_NAME", "AASTMT")
 PLATFORM_TITLE = f"{INSTANCE_NAME} · {PLATFORM_NAME}" if INSTANCE_NAME else PLATFORM_NAME
+
+# ── Brand switch (one var drives app-enablement preset + identity) ──────────
+# Frontend counterpart: VITE_BRAND → src/brands/*.js. Keep ids in sync.
+DJANGO_BRAND = get_env("DJANGO_BRAND", "aastmt")
+
+# Per-brand domain-app enablement preset. Applied by
+# accounts/management/commands/bootstrap_platform.py when seeding
+# PlatformAppConfig. Core apps (catalog/mdm/dq/connections/importexport/
+# dataschema) stay enabled in every instance — they are platform capabilities
+# gated separately by RBAC. The enabled set is intentionally OPEN: add future
+# app ids per brand as they land (e.g. tectona grows beyond 'healthy').
+BRAND_APP_PRESETS = {
+    "aastmt": {
+        "carbon": True,
+        "people": False,
+        "healthy": False,
+        "stub": False,
+    },
+    "nibras": {
+        "carbon": False,
+        "people": True,
+        "healthy": False,
+        "stub": False,
+    },
+    "medos": {
+        "carbon": False,
+        "people": False,
+        "healthy": False,
+        "stub": False,
+    },
+    "tectona": {
+        "carbon": False,
+        "people": False,
+        "healthy": True,   # + future first-party AI apps (open set)
+        "stub": False,
+    },
+}
 
 # ── Phase 1.1: Email defaults (overridden at runtime by EmailConfig model) ─
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

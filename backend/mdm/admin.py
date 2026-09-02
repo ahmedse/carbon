@@ -7,6 +7,6 @@ admin.site.register(ReferenceValue)
 
 @admin.register(OrgUnit)
 class OrgUnitAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'code', 'org_type', 'parent', 'is_active']
+    list_display = ['id', 'name', 'code', 'org_type', 'parent', 'manager_employee_id', 'is_active']
     list_filter = ['org_type', 'is_active']
     search_fields = ['name', 'code']

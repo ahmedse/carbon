@@ -134,7 +134,19 @@
     "overview": "Overview",
     "emissionSources": "Emission Sources",
     "organizationalBoundaries": "Organizational Boundaries",
-    "baseYears": "Base Years"
+    "baseYears": "Base Years",
+    "appConfig": "App Config",
+    "attendance": "Attendance",
+    "benefits": "Benefits",
+    "certifications": "Certifications",
+    "employees": "Employees",
+    "leave": "Leave",
+    "loans": "Loans",
+    "payroll": "Payroll",
+    "payslips": "Payslips",
+    "people": "People",
+    "positions": "Positions",
+    "rotation": "Rotation"
   },
   "group": {
     "dataProducts": "Data Products",
@@ -151,7 +163,10 @@
     "healthyFoodsFactory": "Healthy Foods Factory",
     "myData": "My Data",
     "reporting": "Reporting",
-    "configuration": "Configuration"
+    "configuration": "Configuration",
+    "organization": "Organization",
+    "payrollBenefits": "Payroll & Benefits",
+    "workforce": "Workforce"
   },
   "ui": {
     "darkMode": "Dark mode",

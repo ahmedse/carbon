@@ -134,7 +134,19 @@
     "overview": "نظرة عامة",
     "emissionSources": "مصادر الانبعاث",
     "organizationalBoundaries": "الحدود التنظيمية",
-    "baseYears": "سنوات الأساس"
+    "baseYears": "سنوات الأساس",
+    "appConfig": "إعدادات التطبيق",
+    "attendance": "الحضور",
+    "benefits": "المزايا",
+    "certifications": "الشهادات",
+    "employees": "الموظفون",
+    "leave": "الإجازات",
+    "loans": "القروض",
+    "payroll": "الرواتب",
+    "payslips": "قسائم الراتب",
+    "people": "الموظفون",
+    "positions": "الوظائف",
+    "rotation": "المناوبات"
   },
   "group": {
     "dataProducts": "منتجات البيانات",
@@ -151,7 +163,10 @@
     "healthyFoodsFactory": "مصنع الأغذية الصحية",
     "myData": "بياناتي",
     "reporting": "التقارير",
-    "configuration": "الإعداد"
+    "configuration": "الإعداد",
+    "organization": "التنظيم",
+    "payrollBenefits": "الرواتب والمزايا",
+    "workforce": "القوى العاملة"
   },
   "ui": {
     "darkMode": "الوضع الداكن",
