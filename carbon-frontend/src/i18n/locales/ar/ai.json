@@ -91,5 +91,9 @@
     "windowNumber": "يجب أن تكون نافذة المقارنة رقمًا.",
     "editAction": "تعديل {{name}}",
     "deleteAction": "حذف {{name}}"
-  }
+  },
+  "codeUsed": "الكود المستخدم",
+  "generatedChart": "مخطط مُنشأ",
+  "noOutput": "لا يوجد مخرجات",
+  "analysisFailed": "فشل التحليل"
 }

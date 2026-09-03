@@ -128,7 +128,7 @@ function normalizeSeries(value) {
 /** Human-readable key→value rows for flat JSON objects (RULE_23 outcome copy).
  *  `{ rule_details: "…" }` renders as a labelled row instead of a raw blob;
  *  complex (nested/array) shapes fall back to the collapsible raw block. */
-function KeyValueOutput({ value }) {
+export function KeyValueOutput({ value }) {
   const isPlainObject = value !== null && typeof value === 'object' && !Array.isArray(value);
   if (!isPlainObject) return <RawJson value={value} />;
   const entries = Object.entries(value);

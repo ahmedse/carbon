@@ -2,6 +2,7 @@
 import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -24,12 +25,15 @@ import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ThumbDownAltIcon from '@mui/icons-material/ThumbDownAlt';
 import ThumbDownAltOutlinedIcon from '@mui/icons-material/ThumbDownAltOutlined';
 import ThumbUpAltIcon from '@mui/icons-material/ThumbUpAlt';
 import ThumbUpAltOutlinedIcon from '@mui/icons-material/ThumbUpAltOutlined';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from '../utils/dateUtils';
 import { formatContextLines } from '../utils/aiProvenance';
@@ -46,6 +50,7 @@ import {
   slugify,
 } from '../utils/exportUtils';
 import { buildMessageDocx, buildMessageHtml } from '../utils/exportDocuments';
+import { KeyValueOutput } from '../components/ai/StepOutputRenderer';
 import MarkdownMessage from './MarkdownMessage';
 import LongContent from './LongContent';
 import NLRuleTestCard from './NLRuleTestCard';
@@ -215,6 +220,53 @@ function TooltipLines({ lines }) {
   );
 }
 
+// Phase I2-F (RULE_29) — collapsed-by-default "Code used" disclosure for
+// code-sandbox results. Mirrors the PlanningHeader pattern: a real MUI Button
+// (Enter/Space toggle) with aria-expanded, and an LTR <pre> for code + stdout.
+// Always defaults collapsed (no localStorage persistence).
+function CodeUsedDisclosure({ code, stdout, label }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <Box sx={{ mt: 0.5 }}>
+      <Button
+        size="small"
+        variant="outlined"
+        color="inherit"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        startIcon={expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        sx={{ textTransform: 'none', py: 0.25, px: 1, fontSize: '0.75rem' }}
+      >
+        {label}
+      </Button>
+      {expanded && (
+        <Paper variant="outlined" sx={{ mt: 0.5, p: 1 }}>
+          <Box
+            component="pre"
+            dir="ltr"
+            sx={{
+              m: 0,
+              fontSize: '0.6875rem',
+              lineHeight: 1.45,
+              whiteSpace: 'pre-wrap',
+              overflow: 'auto',
+              maxHeight: 200,
+            }}
+          >
+            {stdout ? `${code}\n\n${stdout}` : code}
+          </Box>
+        </Paper>
+      )}
+    </Box>
+  );
+}
+
+CodeUsedDisclosure.propTypes = {
+  code: PropTypes.string,
+  stdout: PropTypes.string,
+  label: PropTypes.string,
+};
+
 function AIMessageBubble({
   message,
   onAcceptSuggestion,
@@ -263,6 +315,8 @@ function AIMessageBubble({
   const [editAction, setEditAction] = useState(null);       // pending action being edited
   const [editJson, setEditJson] = useState('');
   const [editJsonError, setEditJsonError] = useState('');
+
+  const { t } = useTranslation('ai');
 
   const contentRef = useRef(null);
   const isUser = message.role === 'user';
@@ -482,7 +536,12 @@ function AIMessageBubble({
     !isUser && (message.outcome || onAccept || onReject || onCorrect || onPromote || onRetry || onDelete);
 
   const renderStructuredContent = () => {
-    if (isUser || !metadata?.type) return null;
+    // Phase I2-F (RULE_29): code_result messages carry no ``type`` (the
+    // backend stores the sandbox result directly, not under a structured
+    // type), so only the user guard short-circuits here. Type-less messages
+    // with no code_result still fall through to the end ``return null``
+    // (zero regression).
+    if (isUser) return null;
 
     if (metadata.type === 'dq_suggestions') {
       const suggestions = metadata.suggestions || metadata.items || [];
@@ -686,6 +745,81 @@ function AIMessageBubble({
               );
             })}
           </Stack>
+        </Box>
+      );
+    }
+
+    // Phase I2-F (RULE_29) — code-sandbox result rendering. Read the executed
+    // code_result defensively from the top-level field or metadata_json; the
+    // backend has already run the sandbox (nothing is re-fetched here).
+    const codeResult = message.code_result || message.metadata_json?.code_result;
+    if (codeResult) {
+      const errorText = typeof codeResult.error === 'string' ? codeResult.error.trim() : '';
+      if (errorText) {
+        return (
+          <Box sx={{ mt: 1 }}>
+            <Alert severity="warning" role="alert">
+              {errorText}
+            </Alert>
+          </Box>
+        );
+      }
+
+      const hasTable = Array.isArray(codeResult.table_rows) && codeResult.table_rows.length > 0;
+      const hasResult = codeResult.result != null && codeResult.result !== '';
+
+      return (
+        <Box sx={{ mt: 1 }}>
+          {codeResult.image_b64 ? (
+            <Box dir="ltr">
+              <img
+                src={`data:image/png;base64,${codeResult.image_b64}`}
+                alt={t('generatedChart')}
+                loading="lazy"
+                style={{ maxWidth: '100%', borderRadius: 8 }}
+              />
+            </Box>
+          ) : hasTable ? (
+            <Box dir="ltr">
+              <Box sx={{ height: 220 }}>
+                <Suspense
+                  fallback={(
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Loading results…
+                      </Typography>
+                    </Box>
+                  )}
+                >
+                  <CarbonDataGrid
+                    rows={toGridRows(codeResult.table_rows)}
+                    columns={toGridColumns(codeResult.table_rows, null)}
+                    density="compact"
+                    hideFooter={codeResult.table_rows.length <= 25}
+                    getRowId={(row) => row.id}
+                    emptyMessage="No rows returned"
+                  />
+                </Suspense>
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                {codeResult.table_rows.length} rows
+              </Typography>
+            </Box>
+          ) : hasResult ? (
+            <KeyValueOutput value={{ result: codeResult.result }} />
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              {t('noOutput')}
+            </Typography>
+          )}
+
+          {codeResult.code ? (
+            <CodeUsedDisclosure
+              code={codeResult.code}
+              stdout={codeResult.stdout || ''}
+              label={t('codeUsed')}
+            />
+          ) : null}
         </Box>
       );
     }

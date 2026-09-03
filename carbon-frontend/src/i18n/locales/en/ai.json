@@ -91,5 +91,9 @@
     "windowNumber": "Comparison window must be a number.",
     "editAction": "Edit {{name}}",
     "deleteAction": "Delete {{name}}"
-  }
+  },
+  "codeUsed": "Code used",
+  "generatedChart": "Generated chart",
+  "noOutput": "No output",
+  "analysisFailed": "Analysis failed"
 }
