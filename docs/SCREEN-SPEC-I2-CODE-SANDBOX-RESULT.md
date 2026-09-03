@@ -110,9 +110,11 @@ apply; "no data" = `code_result` absent (render as today); "loading empty" = not
 No new fetch. The message payload (already returned by the workspace message serializer) gains one
 field, threaded by the I2-F **backend seam** (mirror of I3-B's `external_sources`):
 
-`message.code_result` (object | absent) — shape produced by `CodeSandbox.execute`:
+`message.code_result` (object | absent) — shape produced by `CodeSandbox.execute`
+plus the threaded `code` string (added by `CodeExecuteTool.execute`):
 ```jsonc
 {
+  "code": str,             // the executed Python source (threaded by the tool)
   "stdout": str,           // captured subprocess stdout (may be "")
   "error": str | null,     // subprocess error string (null on success)
   "image_b64": str | null, // base64 PNG (matplotlib)

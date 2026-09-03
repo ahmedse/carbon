@@ -5,6 +5,7 @@ directly and exercise the subprocess sandbox security + result contract.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 
@@ -12,6 +13,17 @@ import pytest
 
 from ai.code_sandbox import CodeSandbox
 from ai.engine_runtime import _build_code_result
+from ai.plugins.code_execute import CodeExecuteTool
+
+
+def test_code_execute_threads_code_into_result():
+    """I2-F — the tool returns the executed source as ``code`` alongside the
+    sandbox result so the frontend "Code used" disclosure can show what ran."""
+    code = "result = 1 + 1"
+    result = asyncio.run(CodeExecuteTool().execute({"code": code, "data": {}}, ctx=None))
+    assert result["code"] == code
+    assert result["error"] is None
+    assert result["result"] == 2
 
 
 def test_pandas_result_becomes_table():

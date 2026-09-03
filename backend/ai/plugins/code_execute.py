@@ -61,7 +61,11 @@ class CodeExecuteTool(ToolPlugin):
         code = args.get("code") or ""
         data = args.get("data") or {}
         try:
-            return CodeSandbox.execute(code, data)
+            result = CodeSandbox.execute(code, data)
         except Exception as exc:  # fail-visible, never raise into the turn
             logger.warning("code.execute failed: %s", exc)
-            return {"error": str(exc)}
+            return {"error": str(exc), "code": code}
+        # I2-F — thread the executed source back so the frontend "Code used"
+        # disclosure can show WHAT ran (not just its stdout). Additive to the
+        # sandbox shape; the code_result consumer ignores unknown keys.
+        return {**result, "code": code}
