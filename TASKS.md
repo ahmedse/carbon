@@ -1885,7 +1885,7 @@ The roadmap's Wave I was written before E2 (tool catalog) and Wave H (audit) lan
 |-------|------|--------|------|--------|
 | I1-B | Platform as MCP server — HTTP discovery + tools + call endpoints | backend | — | DONE ✅ |
 | I2-B | Code execution sandbox (`ai/code_sandbox.py` + `CodeExecuteTool`) | backend | — | DONE ✅ |
-| I2-F | Code-sandbox result rendering (AIMessageBubble image/table) | frontend | I2-B | SPEC READY ✅ (RULE_29) |
+| I2-F | Code-sandbox result rendering (AIMessageBubble image/table) | frontend | I2-B | DONE ✅ |
 | I3-B | Web search tool (`ai:web_search` capability) | backend | — | DONE ✅ |
 | I3-F | External source badge in Inspector | frontend | I3-B | SPEC READY ✅ (RULE_29) |
 | I4-B | Subagent dispatch service (`ai/subagent_service.py`) | backend | — | DONE ✅ |
@@ -2484,8 +2484,8 @@ cd /home/ahmed/aast/carbon/backend
 **Date:** 2026-09-03
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash (RULE_24)
-**Status:** SPEC READY ✅ — awaiting dispatch (RULE_29 gate complete)
-**Depends on:** I2-B (backend sandbox, DONE) + **I2-F backend seam** (thread `code_result` — see Artifact 6 below; do this BEFORE the frontend component).
+**Status:** DONE ✅ (backend seam `423896d` + frontend `9cdae1c`)
+**Depends on:** I2-B (backend sandbox, DONE) + **I2-F backend seam** (thread `code_result` — see Artifact 6 below).
 **Full spec (source of truth):** `docs/SCREEN-SPEC-I2-CODE-SANDBOX-RESULT.md` — all 9 RULE_29 artifacts. Build exactly to it.
 
 ### Screen Spec — Artifacts 1–9 (RULE_29 gate — COMPLETE)
