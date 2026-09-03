@@ -652,6 +652,7 @@ class CarbonIntelligence:
                             pending_actions=res.get("pending_actions"),
                             tool_trace=res.get("tool_trace"),
                             external_sources=res.get("external_sources"),
+                            code_result=res.get("code_result"),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -2424,6 +2425,7 @@ class CarbonIntelligence:
                             pending_actions=res.get("pending_actions"),
                             tool_trace=res.get("tool_trace"),
                             external_sources=res.get("external_sources"),
+                            code_result=res.get("code_result"),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -3606,6 +3608,7 @@ class CarbonIntelligence:
             honest_uncertainty=chat_response.honest_uncertainty,
             tool_trace=chat_response.tool_trace,
             external_sources=chat_response.external_sources,
+            code_result=chat_response.code_result,
         )
 
     def _prepend_workspace_context(
@@ -3870,6 +3873,7 @@ class CarbonIntelligence:
         honest_uncertainty: bool = False,
         tool_trace: list[dict] | None = None,
         external_sources: list[dict] | None = None,
+        code_result: dict | None = None,
     ) -> dict[str, Any]:
         """Save AI response message and update conversation status."""
         if status == "provider_unavailable":
@@ -3894,6 +3898,8 @@ class CarbonIntelligence:
             metadata["tool_trace"] = tool_trace
         if external_sources:
             metadata["external_sources"] = external_sources
+        if code_result:
+            metadata["code_result"] = code_result
         # C2 — calibrated confidence (Faculty 7): outcome label + honest-
         # uncertainty flag (RULE_23 — outcome copy only, never raw internals).
         if confidence_label:
@@ -4060,6 +4066,7 @@ def _serialize_message(message) -> dict[str, Any]:
         # F3-B — read-only tool trace for the frontend "Considered…" pill.
         "tool_trace": metadata.get("tool_trace") or [],
         "external_sources": metadata.get("external_sources") or [],
+        "code_result": metadata.get("code_result"),
         "provenance": _build_message_provenance(message),
         "created_at": message.created_at.isoformat(),
     }

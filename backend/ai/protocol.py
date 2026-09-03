@@ -498,6 +498,8 @@ class ChatResponse:
     tool_trace: list[dict] = field(default_factory=list)
     # Wave I3-B — external web sources the answer cited ({"title","url","source","retrieved_at"}).
     external_sources: list[dict] = field(default_factory=list)
+    # Wave I2-F — code-sandbox result ({"stdout","error","image_b64","table_rows","result"}).
+    code_result: dict | None = None
 
 
 # ── AIProvider ABC ──────────────────────────────────────────────────────

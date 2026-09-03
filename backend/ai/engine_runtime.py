@@ -137,6 +137,7 @@ async def _run_chat(
         actions, pending_actions = _extract_tool_actions(completed_tools)
         tool_trace = _build_tool_trace(completed_tools)
         external_sources = _build_external_sources(completed_tools)
+        code_result = _build_code_result(completed_tools)
         grounded_note = _grounded_outcome_note(completed_tools)
         # Anti-hallucination gate: strip false success claims from the LLM
         # prose BEFORE the truthful grounded note is appended, so a staged
@@ -206,6 +207,10 @@ async def _run_chat(
                 # ({"title","url","source","retrieved_at"}), independent of
                 # the multi-step tool_trace filter.
                 "external_sources": external_sources,
+                # Wave I2-F — code-sandbox result ({"stdout","error","image_b64",
+                # "table_rows","result"}) threaded to the frontend for chart/table/
+                # scalar rendering, independent of the multi-step tool_trace filter.
+                "code_result": code_result,
                 # G-E: truthfulness gate signal (F1–F3), surfaced verbatim so
                 # the workspace layer can reflect it and QA can assert on it.
                 "truthfulness_flags": list(anti_flags),
@@ -718,6 +723,35 @@ def _build_external_sources(completed_tools: list[dict]) -> list[dict]:
                     "retrieved_at": r.get("retrieved_at") or retrieved_at,
                 })
     return sources
+
+
+def _build_code_result(completed_tools: list[dict]) -> dict | None:
+    """Code-sandbox result (I2-F) for answers that ran ``code.execute``.
+
+    Returns the sandbox dict verbatim ({"stdout","error","image_b64",
+    "table_rows","result"}), or ``None`` when no ``code.execute`` tool ran.
+    Never raises — malformed results are skipped.
+    """
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        if str(item.get("tool_name") or "") != "code.execute":
+            continue
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        # Must look like the sandbox shape (not a bare {"error": ...} from a
+        # tool-level failure — although a sandbox code-error dict still has
+        # "stdout"/"error"/"image_b64"/"table_rows"/"result" keys and IS
+        # surfaced so the frontend can show the friendly error state).
+        if not any(k in data for k in ("stdout", "error", "image_b64", "table_rows", "result")):
+            continue
+        return data
+    return None
 
 
 #: Outcome-oriented copy for a failed tool action (RULE_23 — never leak raw

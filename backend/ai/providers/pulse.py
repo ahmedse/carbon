@@ -508,6 +508,7 @@ class PulseProvider(AIProvider):
                 pending_actions=result.get("pending_actions") or [],
                 tool_trace=result.get("tool_trace") or [],
                 external_sources=result.get("external_sources") or [],
+                code_result=result.get("code_result"),
                 confidence_label=result.get("confidence_label", ""),
                 honest_uncertainty=bool(result.get("honest_uncertainty", False)),
             )

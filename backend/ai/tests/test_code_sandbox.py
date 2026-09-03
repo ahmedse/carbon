@@ -6,10 +6,12 @@ directly and exercise the subprocess sandbox security + result contract.
 from __future__ import annotations
 
 import base64
+import json
 
 import pytest
 
 from ai.code_sandbox import CodeSandbox
+from ai.engine_runtime import _build_code_result
 
 
 def test_pandas_result_becomes_table():
@@ -65,3 +67,46 @@ def test_matplotlib_image():
     assert result["image_b64"]
     png_bytes = base64.b64decode(result["image_b64"])
     assert png_bytes[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+# ── _build_code_result extraction (Wave I2-F) ───────────────────────────
+
+def test_build_code_result_extracts_code_execute():
+    payload = {
+        "stdout": "",
+        "error": None,
+        "image_b64": "abc",
+        "table_rows": None,
+        "result": None,
+    }
+    completed = [{"tool_name": "code.execute", "result": json.dumps(payload)}]
+    assert _build_code_result(completed) == payload
+
+
+def test_build_code_result_ignores_non_code_tools():
+    completed = [
+        {"tool_name": "call_host_api", "result": json.dumps({"ok": True})},
+    ]
+    assert _build_code_result(completed) is None
+
+
+def test_build_code_result_skips_tool_level_error():
+    completed = [
+        {
+            "tool_name": "code.execute",
+            "error": "boom",
+            "result": json.dumps({"stdout": "", "error": None}),
+        },
+    ]
+    assert _build_code_result(completed) is None
+
+
+def test_build_code_result_skips_non_sandbox_shape():
+    completed = [
+        {"tool_name": "code.execute", "result": json.dumps({"requires_confirmation": True})},
+    ]
+    assert _build_code_result(completed) is None
+
+
+def test_build_code_result_returns_none_when_absent():
+    assert _build_code_result([]) is None
