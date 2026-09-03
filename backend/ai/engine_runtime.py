@@ -733,8 +733,14 @@ def _build_code_result(completed_tools: list[dict]) -> dict | None:
     Never raises — malformed results are skipped.
     """
     for item in completed_tools or []:
-        if not isinstance(item, dict) or item.get("error"):
+        if not isinstance(item, dict):
             continue
+        # Match the tool FIRST, before any error-skip. A user-code failure in
+        # ``code.execute`` is "nested-error promoted" by ExecuteWitness: the
+        # inner sandbox ``error`` string is lifted to ``item["error"]`` while
+        # the FULL sandbox dict (still carrying its own ``error`` key) is
+        # preserved in ``item["result"]``. Skipping on ``item["error"]`` here
+        # would drop that dict and hide the friendly error state from the UI.
         if str(item.get("tool_name") or "") != "code.execute":
             continue
         raw = item.get("result")
@@ -744,10 +750,10 @@ def _build_code_result(completed_tools: list[dict]) -> dict | None:
             continue
         if not isinstance(data, dict):
             continue
-        # Must look like the sandbox shape (not a bare {"error": ...} from a
-        # tool-level failure — although a sandbox code-error dict still has
-        # "stdout"/"error"/"image_b64"/"table_rows"/"result" keys and IS
-        # surfaced so the frontend can show the friendly error state).
+        # Must look like the sandbox shape (not a guardrail-cancel / unknown-tool
+        # payload whose ``result`` is None). The sandbox dict itself carries
+        # ``error`` (None on success, traceback on user-code failure) so the
+        # frontend can render the friendly error state when it is non-empty.
         if not any(k in data for k in ("stdout", "error", "image_b64", "table_rows", "result")):
             continue
         return data

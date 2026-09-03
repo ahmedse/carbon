@@ -90,12 +90,36 @@ def test_build_code_result_ignores_non_code_tools():
     assert _build_code_result(completed) is None
 
 
-def test_build_code_result_skips_tool_level_error():
+def test_build_code_result_surfaces_promoted_error():
+    # ExecuteWitness "nested-error promotion": the inner sandbox error is
+    # lifted to ``item["error"]`` while the FULL sandbox dict (with its own
+    # ``error`` key) is preserved in ``item["result"]``. The frontend needs
+    # this dict to render the friendly error state.
+    payload = {
+        "stdout": "",
+        "error": "NameError: name 'x' is not defined",
+        "image_b64": None,
+        "table_rows": None,
+        "result": None,
+    }
     completed = [
         {
             "tool_name": "code.execute",
-            "error": "boom",
-            "result": json.dumps({"stdout": "", "error": None}),
+            "error": payload["error"],
+            "result": json.dumps(payload),
+        },
+    ]
+    assert _build_code_result(completed) == payload
+
+
+def test_build_code_result_skips_guardrail_cancel():
+    # Guardrail-cancelled code.execute has ``result: None`` — no sandbox dict,
+    # so no code_result (nothing to render).
+    completed = [
+        {
+            "tool_name": "code.execute",
+            "error": "Tool cancelled by guardrail: policy",
+            "result": None,
         },
     ]
     assert _build_code_result(completed) is None
