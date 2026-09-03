@@ -136,6 +136,7 @@ async def _run_chat(
         completed_tools = getattr(getattr(ledger, "execution", None), "completed_tools", None) or []
         actions, pending_actions = _extract_tool_actions(completed_tools)
         tool_trace = _build_tool_trace(completed_tools)
+        external_sources = _build_external_sources(completed_tools)
         grounded_note = _grounded_outcome_note(completed_tools)
         # Anti-hallucination gate: strip false success claims from the LLM
         # prose BEFORE the truthful grounded note is appended, so a staged
@@ -201,6 +202,10 @@ async def _run_chat(
                 # F3-B — read-only, outcome-language tool trace for the
                 # frontend "Considered…" planning pill (multi-step only).
                 "tool_trace": tool_trace,
+                # Wave I3-B — external web sources the answer drew on
+                # ({"title","url","source","retrieved_at"}), independent of
+                # the multi-step tool_trace filter.
+                "external_sources": external_sources,
                 # G-E: truthfulness gate signal (F1–F3), surfaced verbatim so
                 # the workspace layer can reflect it and QA can assert on it.
                 "truthfulness_flags": list(anti_flags),
@@ -688,6 +693,31 @@ def _build_tool_trace(completed_tools: list[dict]) -> list[dict]:
     if len(steps) < 2:
         return []
     return steps
+
+
+def _build_external_sources(completed_tools: list[dict]) -> list[dict]:
+    """External-source provenance for answers that drew on the open web."""
+    sources: list[dict] = []
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict) or data.get("source") != "external_web":
+            continue
+        retrieved_at = data.get("retrieved_at")
+        for r in data.get("results") or []:
+            if isinstance(r, dict) and r.get("url"):
+                sources.append({
+                    "title": r.get("title") or "",
+                    "url": r.get("url"),
+                    "source": r.get("source") or "external_web",
+                    "retrieved_at": r.get("retrieved_at") or retrieved_at,
+                })
+    return sources
 
 
 #: Outcome-oriented copy for a failed tool action (RULE_23 — never leak raw

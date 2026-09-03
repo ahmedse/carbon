@@ -496,6 +496,8 @@ class ChatResponse:
     # F3-B — read-only, outcome-language tool trace ({"step_label", "tool_id",
     # "duration_ms"}) for the frontend "Considered…" planning pill.
     tool_trace: list[dict] = field(default_factory=list)
+    # Wave I3-B — external web sources the answer cited ({"title","url","source","retrieved_at"}).
+    external_sources: list[dict] = field(default_factory=list)
 
 
 # ── AIProvider ABC ──────────────────────────────────────────────────────

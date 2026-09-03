@@ -1886,7 +1886,7 @@ The roadmap's Wave I was written before E2 (tool catalog) and Wave H (audit) lan
 | I1-B | Platform as MCP server — HTTP discovery + tools + call endpoints | backend | — | DONE ✅ |
 | I2-B | Code execution sandbox (`ai/code_sandbox.py` + `CodeExecuteTool`) | backend | — | DONE ✅ |
 | I2-F | Code-sandbox result rendering (AIMessageBubble image/table) | frontend | I2-B | — |
-| I3-B | Web search tool (`ai:web_search` capability) | backend | — | — |
+| I3-B | Web search tool (`ai:web_search` capability) | backend | — | DONE ✅ |
 | I3-F | External source badge in Inspector | frontend | I3-B | — |
 | I4-B | Subagent dispatch service (`ai/subagent_service.py`) | backend | — | — |
 | I4-F | Subagent result card | frontend | I4-B | — |
@@ -2068,6 +2068,136 @@ python -m pytest ai/tests/test_code_sandbox.py -v --disable-warnings -p no:cache
 python manage.py check
 # capability registration sanity (optional):
 #   python -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); django.setup(); from accounts.capabilities import ALL_CAPABILITIES, has_capability; print('ai:code_execute' in ALL_CAPABILITIES)"
+```
+
+---
+
+## Phase I3-B — Web search tool (`ai:web_search` + external-source provenance)
+**Date:** 2026-09-03
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE ✅ (2026-09-03 — 7/7 I3-B tests + 9 tool_trace tests pass; `manage.py check` clean; `ai:web_search` registered + implied by `ai:manage_console`)
+**Depends on:** — (plugin registry + capability system + `engine_runtime` outcome-surfacing seam are the consumed seams)
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave I §I3 — read the CORRECTIONS below first.
+
+### CORRECTIONS to the I3 roadmap spec (verified against code 2026-09-03)
+1. **`web_research` ALREADY EXISTS — do NOT create a new `web_search` tool.** `WebResearch` (`ai/plugins/web_research.py`, `name="web_research"`) already does keyless search (Wikipedia + DuckDuckGo Instant Answer) and single-page fetch. The roadmap's "no built-in web_search tool" is stale. I3-B **extends** `web_research`, it does not duplicate it. Do NOT rename `web_research`→`web_search` (that would break `aiTaskStatus.js:TOOL_LABELS` and vendored `runner.py` references). The capability **key** `ai:web_search` is a separate namespace from the tool **name** and does not require a rename.
+2. **`ToolPlugin.capability` is DECLARATIVE-ONLY at runtime.** It is serialized (`activation_api.py:295`, `catalog_service.py:453`) but NEVER checked against a user in the chat tool-dispatch path (`chat_tool_names()` filters only `chat_visible`; `runner.py` allowlist has no user; `execute.py:_execute_single_tool` has no capability check). The only CBAC-enforced field today is `ToolDef.required_capability` (domain tools). **Runtime invocation gating for plugins requires editing the vendored `ai/engine/` seam** (`execute.py`/`runner.py`), which is OUT of scope for I3-B (same limitation as I2-B's `ai:code_execute`). I3-B therefore: (a) declares `capability="ai:web_search"` on the plugin, (b) registers `ai:web_search` so it is grantable/checkable via `has_capability`, and (c) makes web results **provenance-visible** as external. It does NOT yet block invocation at runtime — that is a tracked follow-up.
+3. **Tool results are DROPPED from persisted provenance today.** `_build_tool_trace` (`engine_runtime.py:637-686`) keeps only `{step_label, tool_id, duration_ms}` AND only emits for multi-step (≥2 tools) turns; `context_snapshot_json` holds only budget tokens + `kg_entities`. So `web_research`'s per-result `source`/`url` never reach provenance. I3-B adds a NEW `external_sources` path **independent of the multi-step filter**: `_build_external_sources(completed_tools)` in `engine_runtime.py`, surfaced as `metadata["external_sources"]` and in `_build_message_provenance`. This is the field I3-F's ExternalSourceBadge reads.
+4. **The result must be self-describing as external.** `web_research` returns `{query, results:[{title,url,snippet,source}], count}` (search) and `{url,title,text,length}` (fetch). I3-B adds a top-level `source="external_web"` + `retrieved_at` (timezone-aware ISO) to BOTH, and stamps each search result item with `retrieved_at`. `_build_external_sources` keys off the top-level `source == "external_web"` marker (not the per-item `wikipedia`/`duckduckgo` tag, which stays as-is).
+5. **The "gates access" test is reframed (no vendored engine edit allowed).** Assert: `WebResearch.capability == "ai:web_search"`, the capability is in `ALL_CAPABILITIES`, `ai:web_search` is implied by `ai:manage_console`, and `has_capability(admin_user, "ai:web_search")` resolves True. Do NOT write a test asserting invocation is blocked (that requires the deferred engine-seam edit).
+
+### Files to Read First
+- `ai/plugins/web_research.py` (the plugin to extend — result shapes at `_search`/`_fetch`)
+- `ai/plugins/create_dq_rule.py` (a `ToolPlugin` with `capability=` field — for reference only)
+- `accounts/capabilities.py` (`AI_CODE_EXECUTE` at ~461, `ALL_CAPABILITIES` at ~602, `IMPLIES` at ~693/762 — the exact registration pattern)
+- `ai/engine_runtime.py` (`_build_tool_trace` at ~637, the `result` dict at ~120-215 — where `external_sources` is added)
+- `ai/protocol.py` (`ChatResponse` at ~478 — add the `external_sources` field)
+- `ai/providers/pulse.py` (`chat()` at ~500-512 — populate `external_sources` from the result dict)
+- `ai/intelligence.py` (`_build_ai_message` at ~3857, the two streaming call sites at ~645/~2416, the non-streaming call site at ~3596, `_serialize_message` at ~4025, `_build_message_provenance` at ~4061)
+- `ai/tests/test_tool_trace.py` (the existing `_build_tool_trace` isolation-test pattern to mirror)
+
+### Files to Change
+- `backend/accounts/capabilities.py` — add `AI_WEB_SEARCH` + register + IMPLIES
+- `backend/ai/plugins/web_research.py` — `capability="ai:web_search"` + `source="external_web"` + `retrieved_at`
+- `backend/ai/engine_runtime.py` — `_build_external_sources()` helper + `external_sources` in the result dict
+- `backend/ai/protocol.py` — add `external_sources: list[dict] = field(default_factory=list)` to `ChatResponse`
+- `backend/ai/providers/pulse.py` — populate `external_sources` in `chat()`
+- `backend/ai/intelligence.py` — thread `external_sources` through `_build_ai_message` → `metadata` → `_serialize_message` → `_build_message_provenance` (3 call sites)
+- `backend/ai/tests/test_web_search_tool.py` (NEW)
+
+### Contract (exact — do NOT deviate)
+
+**`accounts/capabilities.py`:**
+```
+AI_WEB_SEARCH = Capability(key="ai:web_search", domain="ai", action="web_search",
+    label="Search the open web",
+    description="Use the AI's keyless web search to research topics outside the internal knowledge base",
+    category="admin")
+```
+- `ALL_CAPABILITIES`: add `AI_WEB_SEARCH.key: AI_WEB_SEARCH` (next to `AI_CODE_EXECUTE`).
+- `IMPLIES`: extend the existing `AI_MANAGE_CONSOLE.key` set to `{AI_VIEW_CONSOLE.key, AI_CODE_EXECUTE.key, AI_WEB_SEARCH.key}`.
+
+**`ai/plugins/web_research.py` — `WebResearch(ToolPlugin)`:**
+- `capability: str | None = "ai:web_search"` (replace the current `None`).
+- Add a module-level helper `def _now_iso() -> str: return datetime.now(timezone.utc).isoformat()` (stdlib `from datetime import datetime, timezone` — timezone-aware per CB-04, NO Django import).
+- **Search success** → add `"source": "external_web"` and `"retrieved_at": _now_iso()` to the returned dict; stamp each item in `results` with `"retrieved_at": <same timestamp>`.
+- **Search empty** (`{query, results: [], message}`) → also add `"source": "external_web"` + `"retrieved_at"`.
+- **Fetch** (`{url, title, text, length}` and the non-HTML `{url, title, text, note}` branch) → add `"source": "external_web"` + `"retrieved_at"`.
+- `execute` continues to never raise (network errors → `{"error": ...}`) and remains `requires_confirmation=False` (RULE_21 read-only).
+
+**`ai/engine_runtime.py`:**
+- Add (next to `_build_tool_trace`):
+```python
+def _build_external_sources(completed_tools: list[dict]) -> list[dict]:
+    """External-source provenance for answers that drew on the open web."""
+    sources: list[dict] = []
+    for item in completed_tools or []:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+        raw = item.get("result")
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict) or data.get("source") != "external_web":
+            continue
+        retrieved_at = data.get("retrieved_at")
+        for r in data.get("results") or []:
+            if isinstance(r, dict) and r.get("url"):
+                sources.append({
+                    "title": r.get("title") or "",
+                    "url": r.get("url"),
+                    "source": r.get("source") or "external_web",
+                    "retrieved_at": r.get("retrieved_at") or retrieved_at,
+                })
+    return sources
+```
+- Near `tool_trace = _build_tool_trace(completed_tools)` (~line 138), add `external_sources = _build_external_sources(completed_tools)`.
+- In the returned `result` dict (~line 203, next to `"tool_trace": tool_trace`), add `"external_sources": external_sources,`.
+
+**`ai/protocol.py` — `ChatResponse`:**
+- Add after `tool_trace`: `external_sources: list[dict] = field(default_factory=list)` (with a one-line comment "Wave I3-B — external web sources the answer cited").
+
+**`ai/providers/pulse.py` — `chat()` (completed branch):**
+- Add `external_sources=result.get("external_sources") or [],` to the `ChatResponse(...)` construction.
+
+**`ai/intelligence.py`:**
+- `_build_ai_message(..., external_sources: list[dict] | None = None)` — add the kwarg; inside, after the `tool_trace` block, add `if external_sources: metadata["external_sources"] = external_sources`.
+- Streaming call site 1 (~line 653): after `tool_trace=res.get("tool_trace"),` add `external_sources=res.get("external_sources"),`.
+- Streaming call site 2 (~line 2424): after `tool_trace=res.get("tool_trace"),` add `external_sources=res.get("external_sources"),`.
+- Non-streaming call site (~line 3605): after `tool_trace=chat_response.tool_trace,` add `external_sources=chat_response.external_sources,`.
+- `_serialize_message`: after `"tool_trace": metadata.get("tool_trace") or [],` add `"external_sources": metadata.get("external_sources") or [],`.
+- `_build_message_provenance`: in the computed (non-`metadata["provenance"]`) return dict, add `"external_sources": metadata.get("external_sources") or [],`.
+
+**Non-negotiables:**
+- No edit to `ai/engine/` (vendored engine) — enforcement stays declarative, documented in CORRECTIONS #2.
+- No new tool name; `web_research` is extended, not duplicated.
+- `external_sources` is always a list (never None, never missing) in serialization + provenance, so I3-F can render unconditionally.
+- Timezone-aware `retrieved_at` (CB-04); no hardcoded secrets; no raw `print()`.
+
+### Tests (exact — `ai/tests/test_web_search_tool.py`)
+1. **capability declared + registered** (no DB) — `from ai.plugins.web_research import WebResearch`; `assert WebResearch.capability == "ai:web_search"`. `from accounts.capabilities import ALL_CAPABILITIES, AI_WEB_SEARCH, AI_MANAGE_CONSOLE, AI_VIEW_CONSOLE`; assert `AI_WEB_SEARCH.key in ALL_CAPABILITIES`.
+2. **IMPLIES expansion** (no DB) — assert `AI_WEB_SEARCH.key` is in the transitive closure of `AI_MANAGE_CONSOLE.key` (import `_expand_capabilities` and assert it appears in `_expand_capabilities({AI_MANAGE_CONSOLE.key})`).
+3. **`has_capability` resolves for admin** (`django_db`) — create a user in the `admin` group (mirror the existing capability-test fixture pattern); assert `has_capability(user, "ai:web_search") is True`.
+4. **search result is external-labelled** (mock `httpx.AsyncClient`) — patch `httpx.AsyncClient` to return canned Wikipedia + DuckDuckGo JSON; `await WebResearch().execute({"query": "GHG Protocol"}, ctx=<stub ToolContext>)`; assert `result["source"] == "external_web"`, `result["retrieved_at"]` is a non-empty ISO string, `result["results"]` non-empty, every item has `url` + `source` + `retrieved_at`.
+5. **fetch result is external-labelled** (mock `httpx.AsyncClient`) — patch a canned HTML page; `await WebResearch().execute({"url": "https://example.com/x"}, ctx=...)`; assert `result["source"] == "external_web"` and `result["retrieved_at"]` present.
+6. **`_build_external_sources` extracts only external web results** (no DB) — `from ai.engine_runtime import _build_external_sources`; feed a fake `completed_tools` with (a) one `web_research` result with `source="external_web"` and 2 `results` items, (b) one non-external tool (`search_knowledge`) result, (c) one error item. Assert the output has exactly the 2 external items, each carrying `{title, url, source, retrieved_at}`.
+7. **empty-result external search still yields a provenance-safe empty list** — `_build_external_sources([{... source="external_web", results: []}]) == []` (no KeyError, no crash).
+
+### DO NOT TOUCH
+- `ai/engine/` (vendored engine) — no `execute.py`/`runner.py`/`plugins.py` edits
+- `ai/adapter/*`, `ai/domain/*`, `ai/mcp/*` (done in I1-B), `ai/plugins/code_execute.py` + `ai/code_sandbox.py` (done in I2-B)
+- Existing ai API views/urls; `TASK-RESULTS.md` (append only your own entry)
+- Frontend (`carbon-frontend/*`) — external badge is I3-F, out of scope here
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/backend
+../.venv/bin/python -m pytest ai/tests/test_web_search_tool.py ai/tests/test_tool_trace.py -v --disable-warnings -p no:cacheprovider
+../.venv/bin/python manage.py check
+# capability registration sanity:
+#   ../.venv/bin/python -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); django.setup(); from accounts.capabilities import ALL_CAPABILITIES, _expand_capabilities, AI_MANAGE_CONSOLE; print('ai:web_search' in ALL_CAPABILITIES, 'ai:web_search' in _expand_capabilities({AI_MANAGE_CONSOLE.key}))"
 ```
 
 ---

@@ -651,6 +651,7 @@ class CarbonIntelligence:
                             actions=res.get("actions"),
                             pending_actions=res.get("pending_actions"),
                             tool_trace=res.get("tool_trace"),
+                            external_sources=res.get("external_sources"),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -2422,6 +2423,7 @@ class CarbonIntelligence:
                             actions=res.get("actions"),
                             pending_actions=res.get("pending_actions"),
                             tool_trace=res.get("tool_trace"),
+                            external_sources=res.get("external_sources"),
                         )
                         _finalize_generation("completed", usage)
                         done_frame = {
@@ -3603,6 +3605,7 @@ class CarbonIntelligence:
             confidence_label=chat_response.confidence_label,
             honest_uncertainty=chat_response.honest_uncertainty,
             tool_trace=chat_response.tool_trace,
+            external_sources=chat_response.external_sources,
         )
 
     def _prepend_workspace_context(
@@ -3866,6 +3869,7 @@ class CarbonIntelligence:
         confidence_label: str = "",
         honest_uncertainty: bool = False,
         tool_trace: list[dict] | None = None,
+        external_sources: list[dict] | None = None,
     ) -> dict[str, Any]:
         """Save AI response message and update conversation status."""
         if status == "provider_unavailable":
@@ -3888,6 +3892,8 @@ class CarbonIntelligence:
         # F3-B — read-only tool trace for the frontend "Considered…" pill.
         if tool_trace:
             metadata["tool_trace"] = tool_trace
+        if external_sources:
+            metadata["external_sources"] = external_sources
         # C2 — calibrated confidence (Faculty 7): outcome label + honest-
         # uncertainty flag (RULE_23 — outcome copy only, never raw internals).
         if confidence_label:
@@ -4053,6 +4059,7 @@ def _serialize_message(message) -> dict[str, Any]:
         "honest_uncertainty": bool(metadata.get("honest_uncertainty")),
         # F3-B — read-only tool trace for the frontend "Considered…" pill.
         "tool_trace": metadata.get("tool_trace") or [],
+        "external_sources": metadata.get("external_sources") or [],
         "provenance": _build_message_provenance(message),
         "created_at": message.created_at.isoformat(),
     }
@@ -4070,6 +4077,7 @@ def _build_message_provenance(message) -> dict[str, Any]:
         "scope_snapshot": metadata.get("scope_snapshot") or getattr(conversation, "scope_json", {}) or {},
         "context_snapshot": metadata.get("context_snapshot") or getattr(conversation, "context_snapshot_json", {}) or {},
         "guard_results": metadata.get("guard_results") or [],
+        "external_sources": metadata.get("external_sources") or [],
         "engine_turn_id": metadata.get("engine_turn_id") or str(message.id),
     }
 

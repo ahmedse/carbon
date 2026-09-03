@@ -467,6 +467,15 @@ AI_CODE_EXECUTE = Capability(
     category="admin",
 )
 
+AI_WEB_SEARCH = Capability(
+    key="ai:web_search",
+    domain="ai",
+    action="web_search",
+    label="Search the open web",
+    description="Use the AI's keyless web search to research topics outside the internal knowledge base",
+    category="admin",
+)
+
 # ── Dataset Hub capabilities (Phase P1 — trust core) ──────────────
 
 DATAHUB_VIEW = Capability(
@@ -655,6 +664,7 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     AI_VIEW_CONSOLE.key: AI_VIEW_CONSOLE,
     AI_MANAGE_CONSOLE.key: AI_MANAGE_CONSOLE,
     AI_CODE_EXECUTE.key: AI_CODE_EXECUTE,
+    AI_WEB_SEARCH.key: AI_WEB_SEARCH,
     # Dataset Hub
     DATAHUB_VIEW.key: DATAHUB_VIEW,
     DATAHUB_INGEST.key: DATAHUB_INGEST,
@@ -759,7 +769,7 @@ IMPLIES: Dict[str, Set[str]] = {
     PEOPLE_MANAGE.key: {PEOPLE_VIEW.key, PEOPLE_VIEW_COMPENSATION.key},
 
     # ── AI admin → view ──
-    AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key, AI_CODE_EXECUTE.key},
+    AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key, AI_CODE_EXECUTE.key, AI_WEB_SEARCH.key},
 }
 
 

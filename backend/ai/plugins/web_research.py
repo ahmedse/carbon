@@ -26,6 +26,7 @@ from __future__ import annotations
 import html
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -48,6 +49,11 @@ def _strip_html(fragment: str) -> str:
     text = html.unescape(text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
+
+
+def _now_iso() -> str:
+    """UTC timestamp for external-source provenance (stdlib only, RULE_20)."""
+    return datetime.now(timezone.utc).isoformat()
 
 
 class WebResearch(ToolPlugin):
@@ -84,7 +90,7 @@ class WebResearch(ToolPlugin):
         },
     }
     requires_confirmation = False
-    capability: str | None = None
+    capability: str | None = "ai:web_search"
     app_identifier: str | None = None
 
     async def execute(self, args: dict, *, ctx) -> dict:
@@ -121,6 +127,8 @@ class WebResearch(ToolPlugin):
                 "title": "",
                 "text": resp.text[:4000],
                 "note": f"Content type {ctype}; raw text returned.",
+                "source": "external_web",
+                "retrieved_at": _now_iso(),
             }
         body = resp.text
         title_match = re.search(r"<title[^>]*>(.*?)</title>", body, flags=re.S | re.I)
@@ -131,6 +139,8 @@ class WebResearch(ToolPlugin):
             "title": title[:300],
             "text": text[:6000],
             "length": len(text),
+            "source": "external_web",
+            "retrieved_at": _now_iso(),
         }
 
     async def _search(self, client: httpx.AsyncClient, query: str, max_results: int) -> dict:
@@ -231,12 +241,19 @@ class WebResearch(ToolPlugin):
                     "No results were returned from the keyless web sources. "
                     "Consider fetching a specific URL instead."
                 ),
+                "source": "external_web",
+                "retrieved_at": _now_iso(),
             }
 
+        retrieved_at = _now_iso()
+        for item in results:
+            item["retrieved_at"] = retrieved_at
         return {
             "query": query,
             "results": results[:max_results],
             "count": len(results[:max_results]),
+            "source": "external_web",
+            "retrieved_at": retrieved_at,
         }
 
 
