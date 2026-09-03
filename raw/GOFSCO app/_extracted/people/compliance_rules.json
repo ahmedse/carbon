@@ -1,0 +1,140 @@
+[
+  {
+    "id": 1,
+    "rule_id": "kw-eosi-accrual-test",
+    "version": "2026.1",
+    "name": "[TEST ONLY — NON-AUTHORITATIVE] EOSI accrual (15 days/yr yrs 1-5, 30 days/yr yr 6+)",
+    "description": "TEST-ONLY rule to exercise the Calculation Engine. No authoritative Kuwait source — not for production use.",
+    "jurisdiction": "KW",
+    "category": "eosi",
+    "effective_date": "2026-01-01",
+    "formula_ref": "TEST ONLY — no authoritative source",
+    "source_citation": "",
+    "inputs_schema": {
+      "inputs": [
+        "basic_salary",
+        "service_years"
+      ],
+      "formula": {
+        "type": "tiered_accrual",
+        "params": {
+          "tiers": [
+            {
+              "up_to": 5,
+              "days_per_year": 15
+            },
+            {
+              "up_to": null,
+              "days_per_year": 30
+            }
+          ],
+          "divisor": 26,
+          "base_inputs": [
+            "basic_salary"
+          ],
+          "years_input": "service_years"
+        }
+      }
+    },
+    "is_authoritative": false,
+    "provenance": null,
+    "test_cases": []
+  },
+  {
+    "id": 2,
+    "rule_id": "kw-leave-accrual-test",
+    "version": "2026.1",
+    "name": "[TEST ONLY — NON-AUTHORITATIVE] Annual leave accrual (30 days/yr flat)",
+    "description": "TEST-ONLY rule to exercise the Calculation Engine. No authoritative Kuwait source — not for production use.",
+    "jurisdiction": "KW",
+    "category": "leave",
+    "effective_date": "2026-01-01",
+    "formula_ref": "TEST ONLY — no authoritative source",
+    "source_citation": "",
+    "inputs_schema": {
+      "inputs": [
+        "basic_salary",
+        "service_years"
+      ],
+      "formula": {
+        "type": "tiered_accrual",
+        "params": {
+          "tiers": [
+            {
+              "up_to": null,
+              "days_per_year": 30
+            }
+          ],
+          "divisor": 26,
+          "base_inputs": [
+            "basic_salary"
+          ],
+          "years_input": "service_years"
+        }
+      }
+    },
+    "is_authoritative": false,
+    "provenance": null,
+    "test_cases": []
+  },
+  {
+    "id": 3,
+    "rule_id": "kw-overtime-test",
+    "version": "2026.1",
+    "name": "[TEST ONLY — NON-AUTHORITATIVE] Overtime pay (hours x overtime rate)",
+    "description": "TEST-ONLY rule to exercise the Calculation Engine. No authoritative Kuwait source — not for production use.",
+    "jurisdiction": "KW",
+    "category": "overtime",
+    "effective_date": "2026-01-01",
+    "formula_ref": "TEST ONLY — no authoritative source",
+    "source_citation": "",
+    "inputs_schema": {
+      "inputs": [
+        "hours",
+        "overtime_rate"
+      ],
+      "formula": {
+        "type": "multiply",
+        "params": {
+          "a": "hours",
+          "b": "overtime_rate"
+        }
+      }
+    },
+    "is_authoritative": false,
+    "provenance": null,
+    "test_cases": []
+  },
+  {
+    "id": 4,
+    "rule_id": "kw-gross-pay-test",
+    "version": "2026.1",
+    "name": "[TEST ONLY — NON-AUTHORITATIVE] Gross pay (sum of components)",
+    "description": "TEST-ONLY rule to exercise the Calculation Engine. No authoritative Kuwait source — not for production use.",
+    "jurisdiction": "KW",
+    "category": "payroll",
+    "effective_date": "2026-01-01",
+    "formula_ref": "TEST ONLY — no authoritative source",
+    "source_citation": "",
+    "inputs_schema": {
+      "inputs": [
+        "basic",
+        "overtime",
+        "leave_pay"
+      ],
+      "formula": {
+        "type": "sum",
+        "params": {
+          "components": [
+            "basic",
+            "overtime",
+            "leave_pay"
+          ]
+        }
+      }
+    },
+    "is_authoritative": false,
+    "provenance": null,
+    "test_cases": []
+  }
+]

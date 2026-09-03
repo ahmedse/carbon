@@ -1,0 +1,19 @@
+Vehicle Name/Type__________________Vehicle Registration ________________ Mileage ________________
+Driver: ______________________ Department: ___________ Date of Check: ___________ Time In/Out: ______________
+Mark each item as:			Satisfactory		X	Defective/Missing		N/A            Not Applicable
+Comments:
+d     
+The following vehicle checks are to be undertaken each trip for use.
+Driver Signature           Approved By 
+____________       _____________
+Fluids | Fluids | Lights/Electric | Lights/Electric | External Condition | External Condition | Internal Condition | Internal Condition
+Engine Oil |  | Indicators |  | Door/Wing Mirrors |  | Seat Belts | 
+Brake |  | Side Lights |  | Wiper Blades |  | First Aid Kit | 
+Clutch |  | Headlights (Dipped) |  | Screen Washers |  | Fire Extinguisher | 
+Power Steering |  | Headlights (Main) |  | Tyre Pressure |  | Dashboards Warning Lights | 
+Auto Transmission |  | Warning Lights |  | Tyre Wear |  | Torch | 
+Screen Wash |  | Reversing Lights |  | Tyre Damage |  | Warning Triangle | 
+Fuel (Min ¼ full) |  | Horn |  | Spare Wheel |  | General Bodywork | 
+Coolant |  | Windscreen |  | Cleanliness of number plate |  | Safety Certificate | 
+Overall Cleanliness |  | Battery |  | Security of roof-rack |  | Registration book (Daftar) | 
+ |  |  |  | Door Locking |  | Gate passes | 

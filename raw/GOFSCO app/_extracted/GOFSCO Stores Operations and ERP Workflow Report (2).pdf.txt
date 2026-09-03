@@ -1,0 +1,2239 @@
+
+=== Page 1 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+GAS & OIL FIELD SERVICES COMPANY
+Stores Operations,
+Stock Control and ERP Workflow Report
+Integrated Operating Model for Ahmadi, Coiled Tubing, Drilling and PCP Stores
+Prepared for GOFSCO Management
+Document purpose Stores governance, ERP design and implementation
+Locations Ahmadi | Coiled Tubing | Drilling | PCP
+Issue date 27 July 2026
+Core principle: One item master, one controlled transaction process and one source of truth across all
+four stores. No physical movement is considered complete until it is posted in the ERP.
+Controlled Document | Internal Use | Page 1
+ |  |  | GOFSCO Management
+ | Prepared for |  | 
+ |  |  | Stores governance, ERP design and implementation
+ | Document purpose |  | 
+ |  |  | Ahmadi | Coiled Tubing | Drilling | PCP
+ | Locations |  | 
+ |  |  | 27 July 2026
+ | Issue date |  | 
+ | Core principle: One item master, one controlled transaction process and one source of truth across all | 
+ | four stores. No physical movement is considered complete until it is posted in the ERP. | 
+
+=== Page 2 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+Document Control
+Field Requirement
+Document owner Stores Supervisor / Company Assets Supervisor
+Process owners Stores, Supply Chain, Finance, Operations and HSE
+Approver Executive Management / authorized delegated authority
+Review cycle At least annually and whenever the ERP, organization, facility or legal requirements change
+Controlled copies ERP document repository; obsolete versions must be archived and marked superseded
+PO, delivery note, GRN, MIV, MRV, transfer order, count sheet, adjustment approval, SDS,
+Related records
+credit note and disposal approval
+Table of Contents
+1. Executive Summary 10. Daily, Weekly, Monthly and Annual Tasks
+2. Scope, Objectives and Boundaries 11. ERP Functional Requirements
+3. Governance and Organization 12. Reporting and KPIs
+4. Four-Store Network and Location Design 13. Internal Controls, Audit and Retention
+5. Item Master and Data Governance 14. Roles and RACI Summary
+6. Inventory Classification and Planning 15. Implementation Roadmap
+7. End-to-End ERP Workflows 16. Risk Register and Mitigation
+8. Chemical Storage and Control 17. Recommended Management Decisions
+9. Stock Control and Inventory Accuracy 18. Conclusion and Appendices
+Controlled Document | Internal Use | Page 2
+ | Field |  |  | Requirement | 
+Document owner |  |  | Stores Supervisor / Company Assets Supervisor |  | 
+Process owners |  |  | Stores, Supply Chain, Finance, Operations and HSE |  | 
+Approver |  |  | Executive Management / authorized delegated authority |  | 
+Review cycle |  |  | At least annually and whenever the ERP, organization, facility or legal requirements change |  | 
+Controlled copies |  |  | ERP document repository; obsolete versions must be archived and marked superseded |  | 
+Related records |  |  | PO, delivery note, GRN, MIV, MRV, transfer order, count sheet, adjustment approval, SDS,
+credit note and disposal approval |  | 
+ | 1. Executive Summary |  |  | 10. Daily, Weekly, Monthly and Annual Tasks | 
+ | 3. Governance and Organization |  |  | 12. Reporting and KPIs | 
+ | 5. Item Master and Data Governance |  |  | 14. Roles and RACI Summary | 
+ | 7. End-to-End ERP Workflows |  |  | 16. Risk Register and Mitigation | 
+ | 9. Stock Control and Inventory Accuracy |  |  | 18. Conclusion and Appendices | 
+
+=== Page 3 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+1. Executive Summary
+GOFSCO should operate its four stores as one integrated inventory network rather than four independent
+warehouses. Ahmadi, Coiled Tubing, Drilling and PCP will retain their physical responsibility for custody and
+service to operations, while item definitions, transaction rules, approval limits, valuation, document control and
+performance reporting remain standardized.
+The recommended ERP model uses a single item master and separates stock by site, warehouse, zone, rack, shelf
+and bin. Each quantity also carries a stock status such as available, reserved, inspection, quarantine, damaged,
+expired, customer-owned, vendor-owned or scrap. This structure allows management to see exactly what GOFSCO
+owns, where it is, whether it can be used, which job or department needs it and what action is pending.
+Management outcome: The system should reduce stockouts, emergency purchases, duplicate buying,
+undocumented issues, expired chemicals, unexplained variances and slow-moving inventory while
+improving job readiness, cost allocation, auditability and cash control.
+1.1 Current-state problems requiring correction
+The current Sage 300 process depends heavily on users navigating separate screens, manually entering
+information from hardcopy forms, printing reports and then exporting or reorganizing the results in Excel. The
+screenshots and process notes supplied for item creation, purchase orders, receiving, internal usage/MIV, physical
+inventory, MIV reporting, MRV reporting and aged inventory confirm that the present process is functional but
+fragmented and outdated for a four-store operation.
+Observed problem Operational impact Required ERP response
+Typing handwritten MIV/MRV, delivery and count Digital request/approval at source; barcode
+Hardcopy-to-soft-copy
+transcription
+i
+l
+n
+oc
+fo
+a
+r
+t
+m
+io
+a
+n
+t
+,
+i
+U
+on
+O
+c
+M
+re
+,
+a
+c
+t
+o
+e
+s
+s
+t -
+i
+c
+t
+e
+e
+n
+m
+t
+-
+e
+c
+r
+o
+a
+d
+n
+e
+d
+, q
+jo
+u
+b
+a
+-
+n
+re
+ti
+f
+t
+e
+y
+r
+,
+e
+d
+n
+a
+c
+t
+e
+e ,
+e rrors.
+s
+a
+c
+c
+a
+k
+n
+n
+n
+o
+i
+w
+ng
+le
+;
+d
+m
+ge
+a
+m
+nd
+e
+a
+n
+t
+t
+o
+.
+r y fields; validation and electronic
+Physical stock moves before the system is updated,
+Delayed system entry s
+in
+o
+c
+t
+o
+h
+r
+e
+re
+b
+c
+a
+t.
+l ance shown is temporarily or permanently
+P
+ag
+o
+e
+in
+in
+t-
+g
+o
+a
+f-
+l
+a
+e
+c
+rt
+t
+s
+iv
+f
+i
+o
+ty
+r
+m
+un
+o
+p
+b
+o
+il
+s
+e
+t e
+p
+d
+o s
+o
+t
+r
+i n
+p
+g
+e
+;
+n
+s
+d
+a
+i
+m
+ng
+e -
+t
+s
+r
+h
+a
+i
+n
+ft
+s a
+c
+c
+o
+t
+n
+io
+tr
+n
+o
+s
+l
+.
+;
+The same PO, item, quantity and reference
+Repeated manual entry i
+r
+n
+e
+f
+c
+o
+e
+r
+i
+m
+pt
+a
+,
+t
+M
+io
+I
+n
+V /
+m
+M
+a
+R
+y
+V
+b e
+a n
+r
+d
+e-
+r
+e
+e
+n
+p
+t
+o
+e
+r
+r
+t
+e
+i
+d
+n g
+a c
+st
+r
+e
+o
+p
+ss
+s .
+p urchase,
+D
+au
+o
+t
+c
+o
+u
+m
+m
+a
+e
+t
+n
+ic
+t
+a
+f
+l
+l
+l
+o
+y
+w
+an
+t
+d
+h a
+p
+t
+r
+c
+e
+a
+v
+r
+e
+r
+n
+ie
+ts
+s
+u
+ap
+n
+p
+n
+r
+e
+o
+c
+v
+e
+e
+s
+d
+sa
+d
+ry
+a t
+r
+a
+e -
+f
+k
+o
+e
+rw
+yi
+a
+n
+r
+g
+d
+.
+Users must know exact Sage menu paths and
+Outdated, multi-screen navigation c
+ti
+o
+m
+m
+e
+p
+a
+le
+n
+t
+d
+e
+d
+s
+e
+e
+p
+v
+e
+e
+n
+ra
+d
+l
+e
+le
+n
+g
+c
+a
+e
+c
+o
+y
+n
+s c
+in
+re
+d
+e
+iv
+n
+id
+s,
+u
+i
+a
+n
+l
+c
+k
+r
+n
+ea
+o
+s
+w
+in
+le
+g
+d
+t
+g
+r
+e
+a
+.
+in ing
+R
+se
+o
+a
+le
+rc
+-b
+h
+a
+,
+s
+fa
+e
+v
+d
+o
+m
+rit
+o
+e
+d
+s
+e
+a
+r
+n
+n
+d
+w
+m
+or
+o
+k
+b
+s
+i
+p
+le
+a c
+w
+e
+o
+,
+r
+g
+k
+u
+f
+i
+l
+d
+o
+e
+w
+d
+s .
+t asks,
+Inventory worksheets, MIV/MRV and aged-inventory Live dashboards and scheduled reports using
+Excel used to complete reporting reports are exported and manually organized, governed ERP data; export remains optional, not a
+creating version-control and formula/filter risks. processing requirement.
+The user cannot easily see whether a request is
+Limited workflow visibility w
+re
+a
+tu
+it
+r
+in
+n
+g
+, c
+f
+r
+o
+e
+r
+d
+a
+it
+p p
+n
+r
+o
+o
+t
+v
+e
+a
+o
+l,
+r
+p
+p
+i
+o
+ck
+s
+i
+t
+n
+in
+g
+g
+,
+.
+r eceipt, inspection,
+E
+se
+n
+r
+d
+v
+-
+i
+t
+c
+o
+e
+- e
+d
+n
+e
+d
+ad
+s
+l
+t
+i
+a
+n
+t
+e
+u
+a
+s
+n
+t
+d
+ra
+e
+c
+s
+k
+c
+in
+a
+g
+la
+,
+t
+o
+io
+w
+n
+n
+.
+er, timestamp,
+A location code alone may not distinguish rack/bin or
+Weak bin/status detail w
+da
+h
+m
+et
+a
+h
+g
+e
+e
+r
+d
+s
+,
+t
+e
+o
+x
+c
+p
+k
+i r
+is
+e d
+a v
+o
+a
+r
+i l
+i
+a
+n
+b
+t
+l
+r
+e
+a
+,
+n
+re
+si
+s
+t
+e
+.
+rved, quarantined,
+W
+sep
+ar
+a
+e
+r
+h
+at
+o
+e
+u
+c
+se
+o
+-
+n
+z
+t
+o
+r
+n
+o
+e
+lle
+-r
+d
+a c
+s
+k
+to
+-s
+c
+h
+k
+e
+-s
+lf
+t
+-
+a
+b
+t
+i
+u
+n
+s
+h
+d
+ie
+im
+ra
+e
+r
+n
+ch
+si
+y
+o n
+p
+.
+l us a
+Item screens allow many fields, but completion and Central item request, duplicate search, mandatory
+Inconsistent master-data
+completion
+n
+co
+a
+d
+m
+e
+i
+s
+n g
+ca
+d
+n
+e
+b
+p
+e
+e n
+c
+d
+re
+o
+a
+n
+te
+t
+d
+h
+.
+e user; duplicate or incomplete a
+a
+t
+p
+t
+p
+ri
+r
+b
+o
+u
+v
+t
+a
+e
+l.
+s , naming convention and maker-checker
+Controlled Document | Internal Use | Page 3
+ | Management outcome: The system should reduce stockouts, emergency purchases, duplicate buying, | 
+ | undocumented issues, expired chemicals, unexplained variances and slow-moving inventory while | 
+ | improving job readiness, cost allocation, auditability and cash control. | 
+ | Observed problem |  |  | Operational impact |  |  | Required ERP response | 
+Hardcopy-to-soft-copy
+transcription |  |  | Typing handwritten MIV/MRV, delivery and count
+information creates item-code, quantity, date,
+location, UOM, cost-center and job-reference errors. |  |  | Digital request/approval at source; barcode
+scanning; mandatory fields; validation and electronic
+acknowledgement. |  | 
+Delayed system entry |  |  | Physical stock moves before the system is updated,
+so the balance shown is temporarily or permanently
+incorrect. |  |  | Point-of-activity mobile posting; same-shift control;
+ageing alerts for unposted or pending transactions. |  | 
+Repeated manual entry |  |  | The same PO, item, quantity and reference
+information may be re-entered across purchase,
+receipt, MIV/MRV and reporting steps. |  |  | Document flow that carries approved data forward
+automatically and prevents unnecessary re-keying. |  | 
+Outdated, multi-screen navigation |  |  | Users must know exact Sage menu paths and
+complete several legacy screens, increasing training
+time and dependence on individual knowledge. |  |  | Role-based modern workspace, guided tasks,
+search, favorites and mobile workflows. |  | 
+Excel used to complete reporting |  |  | Inventory worksheets, MIV/MRV and aged-inventory
+reports are exported and manually organized,
+creating version-control and formula/filter risks. |  |  | Live dashboards and scheduled reports using
+governed ERP data; export remains optional, not a
+processing requirement. |  | 
+Limited workflow visibility |  |  | The user cannot easily see whether a request is
+waiting for approval, picking, receipt, inspection,
+return, credit note or posting. |  |  | End-to-end status tracking, owner, timestamp,
+service deadline and escalation. |  | 
+Weak bin/status detail |  |  | A location code alone may not distinguish rack/bin or
+whether stock is available, reserved, quarantined,
+damaged, expired or in transit. |  |  | Warehouse-zone-rack-shelf-bin hierarchy plus a
+separate controlled stock-status dimension. |  | 
+Inconsistent master-data
+completion |  |  | Item screens allow many fields, but completion and
+naming depend on the user; duplicate or incomplete
+codes can be created. |  |  | Central item request, duplicate search, mandatory
+attributes, naming convention and maker-checker
+approval. |  | 
+
+=== Page 4 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+Observed problem Operational impact Required ERP response
+Limited lot/expiry use
+C
+sy
+h
+s
+e
+t
+m
+em
+ic
+a
+a
+t
+l
+i c
+b
+a
+a
+l
+t
+ly
+ch
+e
+,
+n
+e
+f
+x
+o
+p
+rc
+ir
+e
+y
+d
+a
+a
+n
+t
+d
+r
+S
+e
+D
+ce
+S
+i p
+d
+t
+a
+a
+ta
+n d
+m
+i
+a
+s
+y
+su
+n
+e
+o
+.
+t be M
+all
+a
+o
+n
+c
+d
+at
+a
+i
+t
+o
+o
+n
+r
+,
+y
+w
+lo
+a
+t
+r
+/
+n
+e
+i
+x
+n
+p
+g
+i
+s
+r y
+a
+/
+n
+S
+d
+D
+h
+S
+a
+f
+r
+ie
+d
+l d
+is
+s
+s u
+b
+e
+y c
+b
+a
+lo
+te
+ck
+g
+s
+o
+.
+r y, FEFO
+Worksheets may show default on-hand quantities Mobile blind counts, controlled freeze/cut-off,
+Physical inventory is paper/Excel-
+oriented
+a
+w
+n
+e
+d
+a k
+a
+e
+re
+n i
+p
+n
+r
+g
+in
+b
+t
+l
+e
+in
+d
+d
+/
+-
+e
+c
+x
+o
+p
+u
+o
+n
+r
+t
+t e
+d
+d
+is
+f
+c
+o
+ip
+r
+l
+m
+in
+o
+e
+d
+a
+i
+n
+fi
+d
+ca
+a
+t
+u
+io
+d
+n
+it
+,
+control.
+a
+a
+u
+p
+t
+p
+o
+r
+m
+ov
+a
+a
+t
+l
+e
+.
+d recount and electronic variance
+Management learns about shortages, aged stock and Real-time exception alerts for low stock, excess,
+Reports are retrospective errors after reports are generated and manually ageing, expiry, pending inspection, in-transit and
+reviewed. variance.
+Knowledge concentrated in Step-by-step knowledge is stored in screenshots or Standard workflow, contextual guidance, training
+individuals personal experience instead of embedded controls. records, SOP links and role-based permissions.
+Primary control weakness: The present process separates the physical event, paper evidence, Sage
+posting and Excel reporting into different activities. Every handoff creates a chance for delay, omission,
+duplicate entry or mismatch. The future workflow must capture the transaction once at source and reuse
+the same approved data throughout.
+1.2 Current Sage 300 process assessment
+Current activity shown Current handling Future-state requirement
+Guided item request with duplicate detection,
+Navigate to I/C Items and Price Lists, open Items,
+Create item code category-specific mandatory fields and approval
+manually complete fields and save.
+before activation.
+Open P/O Transactions and Purchase Order Entry, Approved requisition automatically converts to PO
+Create purchase order then fill order, vendor, locations and line with inherited item, quantity, cost center, job and
+information. delivery data.
+Open Receipt Entry, enter PO and quantities/costs, Scan PO/delivery, record accepted quantity and
+Receive material match against invoice, post and print MRV/receipt condition, attach evidence, route inspection, post
+form. GRN and trigger three-way match.
+Open I/C Transactions and Internal Usage,
+Approved electronic request creates pick task;
+manually enter description/reference/user, line
+Issue material scan item/bin; system posts issue and captures
+item, location, quantity and UOM, post and print
+receiver acknowledgement.
+MIV.
+System-generated blind mobile count by zone with
+Generate worksheet, select ranges/options, print
+Inventory worksheet controlled recount, investigation and adjustment
+or export to Excel and modify/organize.
+approval.
+Searchable transaction dashboard with drill-down
+Run specific stock-control reports, export to Excel
+MIV/MRV reports to digital MIV/MRV, attachments, department, job
+and organize as needed.
+and approval history.
+Automated ageing/FSN dashboard with last
+Generate department-wise output, export to Excel
+Aged inventory movement, months of cover, value, owner and
+and organize.
+disposition workflow.
+1.3 Business consequences of retaining the current method
+• Physical and system quantities can differ because paperwork and posting do not occur at the same
+moment.
+Controlled Document | Internal Use | Page 4
+ | Observed problem |  |  | Operational impact |  |  | Required ERP response | 
+Limited lot/expiry use |  |  | Chemical batch, expiry and SDS data may not be
+systematically enforced at receipt and issue. |  |  | Mandatory lot/expiry/SDS fields by category, FEFO
+allocation, warnings and hard issue blocks. |  | 
+Physical inventory is paper/Excel-
+oriented |  |  | Worksheets may show default on-hand quantities
+and are printed/exported for modification,
+weakening blind-count discipline and audit control. |  |  | Mobile blind counts, controlled freeze/cut-off,
+automated recount and electronic variance
+approval. |  | 
+Reports are retrospective |  |  | Management learns about shortages, aged stock and
+errors after reports are generated and manually
+reviewed. |  |  | Real-time exception alerts for low stock, excess,
+ageing, expiry, pending inspection, in-transit and
+variance. |  | 
+Knowledge concentrated in
+individuals |  |  | Step-by-step knowledge is stored in screenshots or
+personal experience instead of embedded controls. |  |  | Standard workflow, contextual guidance, training
+records, SOP links and role-based permissions. |  | 
+ | Primary control weakness: The present process separates the physical event, paper evidence, Sage | 
+ | posting and Excel reporting into different activities. Every handoff creates a chance for delay, omission, | 
+ | duplicate entry or mismatch. The future workflow must capture the transaction once at source and reuse | 
+ | the same approved data throughout. | 
+ | Current activity shown |  |  | Current handling |  |  | Future-state requirement | 
+Create item code |  |  | Navigate to I/C Items and Price Lists, open Items,
+manually complete fields and save. |  |  | Guided item request with duplicate detection,
+category-specific mandatory fields and approval
+before activation. |  | 
+Create purchase order |  |  | Open P/O Transactions and Purchase Order Entry,
+then fill order, vendor, locations and line
+information. |  |  | Approved requisition automatically converts to PO
+with inherited item, quantity, cost center, job and
+delivery data. |  | 
+Receive material |  |  | Open Receipt Entry, enter PO and quantities/costs,
+match against invoice, post and print MRV/receipt
+form. |  |  | Scan PO/delivery, record accepted quantity and
+condition, attach evidence, route inspection, post
+GRN and trigger three-way match. |  | 
+Issue material |  |  | Open I/C Transactions and Internal Usage,
+manually enter description/reference/user, line
+item, location, quantity and UOM, post and print
+MIV. |  |  | Approved electronic request creates pick task;
+scan item/bin; system posts issue and captures
+receiver acknowledgement. |  | 
+Inventory worksheet |  |  | Generate worksheet, select ranges/options, print
+or export to Excel and modify/organize. |  |  | System-generated blind mobile count by zone with
+controlled recount, investigation and adjustment
+approval. |  | 
+MIV/MRV reports |  |  | Run specific stock-control reports, export to Excel
+and organize as needed. |  |  | Searchable transaction dashboard with drill-down
+to digital MIV/MRV, attachments, department, job
+and approval history. |  | 
+Aged inventory |  |  | Generate department-wise output, export to Excel
+and organize. |  |  | Automated ageing/FSN dashboard with last
+movement, months of cover, value, owner and
+disposition workflow. |  | 
+
+=== Page 5 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+• Errors can pass from hardcopy into Sage and then into Excel without automated validation.
+• Stores spends time preparing and cleaning reports instead of controlling stock and supporting operations.
+• Management cannot depend on a single live view of available, reserved, quarantined, expired and in-transit
+stock across all four stores.
+• Urgent requirements may cause verbal issues or late paperwork, increasing the backlog and weakening job-
+cost accuracy.
+• The company may repurchase material already held at another store because network availability is difficult
+to see.
+• Chemical expiry, returns, vendor credit notes and obsolete stock can remain open without clear ownership
+or escalation.
+• Audit evidence is spread across paper, Sage and separate Excel files, making transaction reconstruction
+slower and less reliable.
+1.4 Target operating principles
+• ERP first: every approved stock movement is recorded at the point of activity using barcode or QR scanning
+wherever practical.
+• No document, no movement: goods may not be received, issued, returned, transferred, adjusted or
+disposed without the required reference and approval.
+• One item, one code: duplicate item records are prevented through centralized item-master governance.
+• Location accuracy: every item is assigned to a controlled location down to bin level, with clear labels and no
+informal storage areas.
+• Stock status is separate from physical location: quarantined or damaged material remains visible but cannot
+be issued.
+• Safety overrides convenience: chemical compatibility, SDS requirements, ventilation, containment and
+emergency arrangements govern storage.
+• Segregation of duties: requesting, approving, receiving, recording, counting and adjusting are separated to
+the extent practical.
+• Exception-driven management: dashboards highlight shortages, overdue approvals, expiry, excess stock,
+negative stock attempts and count variances.
+2. Scope, Objectives and Boundaries
+2.1 Scope
+This report covers all inventory and store-related activities at the following GOFSCO locations:
+Store Primary role Typical inventory
+Central/common store and Common consumables, PPE, tools, filters, oils, spares, general
+Ahmadi Store
+network control point materials, selected chemicals and shared stock
+Dedicated operational support for CT consumables, pressure-control and equipment spares, hoses,
+Coiled Tubing Store
+CT activities seals, lubricants, chemicals and job-specific material
+Dedicated operational support for Rig and drilling spares, mechanical/electrical consumables, PPE,
+Drilling Store
+drilling/workover activities filters, oils, tools and slow-moving strategic spares
+Dedicated support for artificial- PCP equipment and spares, elastomers, drive-related items,
+PCP Store
+lift/PCP operations accessories, tools, consumables and job-specific stock
+Controlled Document | Internal Use | Page 5
+ | Store |  |  | Primary role |  |  | Typical inventory | 
+Ahmadi Store |  |  | Central/common store and
+network control point |  |  | Common consumables, PPE, tools, filters, oils, spares, general
+materials, selected chemicals and shared stock |  | 
+Coiled Tubing Store |  |  | Dedicated operational support for
+CT activities |  |  | CT consumables, pressure-control and equipment spares, hoses,
+seals, lubricants, chemicals and job-specific material |  | 
+Drilling Store |  |  | Dedicated operational support for
+drilling/workover activities |  |  | Rig and drilling spares, mechanical/electrical consumables, PPE,
+filters, oils, tools and slow-moving strategic spares |  | 
+PCP Store |  |  | Dedicated support for artificial-
+lift/PCP operations |  |  | PCP equipment and spares, elastomers, drive-related items,
+accessories, tools, consumables and job-specific stock |  | 
+
+=== Page 6 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+2.2 Objectives
+• Provide reliable stock availability for operations without carrying uncontrolled excess.
+• Create seamless, auditable workflows from demand planning through purchase, receipt, storage, issue,
+return and disposal.
+• Establish clear ownership and accountability at each store.
+• Provide management with real-time visibility of stock quantity, value, condition, expiry, demand and
+movement.
+• Integrate Stores with Operations, Procurement, Finance, HSE, Maintenance and Asset Management.
+• Create a scalable foundation for ERP implementation, barcode scanning and future automation.
+2.3 Boundaries
+Inventory consists of consumables, spare parts, chemicals and controlled operational material intended for issue
+or use. Capital assets and serialized equipment remain linked to the Asset Register, although their receipt, custody
+transfer and storage location may pass through the Stores process. Customer-owned, rental, consignment and
+vendor-owned material must be clearly identified and must never be valued as GOFSCO-owned inventory.
+3. Governance and Organization
+3.1 Governance structure
+Role Core accountability
+Executive Management Approve policy, disposal, material write-offs, major stock provisions and authority limits.
+VP Operations / Operations Set operational priorities, approve critical demand and resolve cross-department stock
+Management conflicts.
+Own policy, network stock control, master data coordination, reporting, cycle counts and
+Stores Supervisor
+continuous improvement across all four stores.
+Control access, receive, inspect, label, put away, issue, return, count and maintain
+Storekeeper / Location Custodian
+housekeeping at the assigned store.
+Department / Operations Own demand forecast, technical specification, min/max recommendation, reservation priority
+Manager and confirmation of obsolete stock.
+Source approved requirements, maintain PO accuracy, coordinate delivery and vendor
+Supply Chain / Procurement
+performance.
+Control valuation, three-way matching, credit notes, provisions, reconciliation and approved
+Finance
+write-offs.
+Approve chemical storage controls, emergency arrangements, inspections, training and
+HSE
+incident response.
+Quality / Technical Inspector Perform or coordinate technical inspection where required and release or reject material.
+Maintain roles, workflows, interfaces, backups, audit logs, reports, devices and system
+ERP Administrator / IT
+availability.
+Controlled Document | Internal Use | Page 6
+ | Role |  |  | Core accountability | 
+Executive Management |  |  | Approve policy, disposal, material write-offs, major stock provisions and authority limits. |  | 
+VP Operations / Operations
+Management |  |  | Set operational priorities, approve critical demand and resolve cross-department stock
+conflicts. |  | 
+Stores Supervisor |  |  | Own policy, network stock control, master data coordination, reporting, cycle counts and
+continuous improvement across all four stores. |  | 
+Storekeeper / Location Custodian |  |  | Control access, receive, inspect, label, put away, issue, return, count and maintain
+housekeeping at the assigned store. |  | 
+Department / Operations
+Manager |  |  | Own demand forecast, technical specification, min/max recommendation, reservation priority
+and confirmation of obsolete stock. |  | 
+Supply Chain / Procurement |  |  | Source approved requirements, maintain PO accuracy, coordinate delivery and vendor
+performance. |  | 
+Finance |  |  | Control valuation, three-way matching, credit notes, provisions, reconciliation and approved
+write-offs. |  | 
+HSE |  |  | Approve chemical storage controls, emergency arrangements, inspections, training and
+incident response. |  | 
+Quality / Technical Inspector |  |  | Perform or coordinate technical inspection where required and release or reject material. |  | 
+ERP Administrator / IT |  |  | Maintain roles, workflows, interfaces, backups, audit logs, reports, devices and system
+availability. |  | 
+
+=== Page 7 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+3.2 Segregation of duties
+Activity Initiator Approver / verifier System posting
+Purchase request Authorized requester Department manager / budget authority Supply Chain / ERP workflow
+PO and delivery verification; technical
+Receipt Storekeeper Authorized receiving role
+inspector when applicable
+Issue Requester Department/job approver Storekeeper
+Returning
+Return Storekeeper condition verification Storekeeper
+employee/department
+Sending and receiving
+Transfer Requesting or sending store Stores Supervisor / authorized manager
+custodians
+Independent reviewer and authority based Restricted inventory-control
+Adjustment Storekeeper / count team
+on value role
+Restricted role after physical
+Disposal Stores + department owner HSE/Finance/Management as applicable
+disposal evidence
+Access rule: Store access shall be limited to authorized personnel. Visitors, technicians and drivers must
+be escorted. Keys and system access must not be shared.
+4. Four-Store Network and Location Design
+4.1 Network operating model
+The four stores should be configured as separate ERP warehouses under the same company and inventory
+organization. Stock is visible across the network, but physical custody and transactions remain location-specific.
+Ahmadi should act as the central control and common-material hub; operational stores should hold activity-
+specific and job-critical stock.
+ERP code Warehouse Recommended responsibility Replenishment model
+Common stock, central oversight, shared buffer and Forecast + min/max + network
+AHM Ahmadi
+selected reserve stock consolidation
+Job plan + equipment PM + critical
+CTU Coiled Tubing CT-dedicated consumables, spares and chemicals
+min/max
+DRL Drilling Drilling/workover consumables and strategic rig spares Rig plan + usage history + criticality
+PCP operational material and job-specific
+PCP PCP Job schedule + BOM/kit + min/max
+equipment/spares
+4.2 Location hierarchy and coding
+Every storage position must have a unique hierarchical code:
+Location hierarchy
+Site Warehouse Zone Rack Shelf Bin
+Controlled Document | Internal Use | Page 7
+ | Activity |  |  | Initiator |  |  | Approver / verifier |  |  | System posting
+Purchase request |  |  | Authorized requester |  |  | Department manager / budget authority |  |  | Supply Chain / ERP workflow | 
+Receipt |  |  | Storekeeper |  |  | PO and delivery verification; technical
+inspector when applicable |  |  | Authorized receiving role | 
+Issue |  |  | Requester |  |  | Department/job approver |  |  | Storekeeper | 
+Return |  |  | Returning
+employee/department |  |  | Storekeeper condition verification |  |  | Storekeeper | 
+Transfer |  |  | Requesting or sending store |  |  | Stores Supervisor / authorized manager |  |  | Sending and receiving
+custodians | 
+Adjustment |  |  | Storekeeper / count team |  |  | Independent reviewer and authority based
+on value |  |  | Restricted inventory-control
+role | 
+Disposal |  |  | Stores + department owner |  |  | HSE/Finance/Management as applicable |  |  | Restricted role after physical
+disposal evidence | 
+ | Access rule: Store access shall be limited to authorized personnel. Visitors, technicians and drivers must | 
+ | be escorted. Keys and system access must not be shared. | 
+ | ERP code |  |  | Warehouse |  |  | Recommended responsibility |  |  | Replenishment model
+AHM |  |  | Ahmadi |  |  | Common stock, central oversight, shared buffer and
+selected reserve stock |  |  | Forecast + min/max + network
+consolidation | 
+CTU |  |  | Coiled Tubing |  |  | CT-dedicated consumables, spares and chemicals |  |  | Job plan + equipment PM + critical
+min/max | 
+DRL |  |  | Drilling |  |  | Drilling/workover consumables and strategic rig spares |  |  | Rig plan + usage history + criticality | 
+PCP |  |  | PCP |  |  | PCP operational material and job-specific
+equipment/spares |  |  | Job schedule + BOM/kit + min/max | 
+ | Site |  |  | Warehouse |  |  | Zone |  |  | Rack |  |  | Shelf |  |  | Bin
+
+=== Page 8 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+Example: AHM-GEN-R03-S02-B04. Chemical areas use a dedicated prefix, such as CTU-CHM-COR-R01-S01-B02.
+Outdoor laydown areas, cages, containers, cold storage, quarantine and scrap zones are coded in the same
+manner.
+Zone code Purpose Issue status
+REC Receiving and document verification Blocked
+INS Technical/quality inspection Blocked pending release
+AVL Approved available stock Issuable
+RES Reserved or job-kitted stock Restricted to reservation
+RET Returned material awaiting assessment Blocked
+QUA Quarantine/nonconforming/unknown material Blocked
+DMG Damaged material Blocked
+EXP Expired chemical/material Blocked
+SCR Approved scrap awaiting disposal Blocked
+CON Consignment/vendor-owned stock Controlled by ownership terms
+4.3 Physical layout standards
+• Clearly marked receiving, inspection, quarantine, returns, approved stock, job staging, chemicals, cylinders,
+hazardous waste and scrap zones.
+• Racks and shelves rated for the intended load; heavy items stored at low level; aisles and emergency routes
+kept clear.
+• Weather-sensitive materials stored indoors or in suitable sealed/conditioned containers.
+• High-value, attractive or controlled items stored in locked cages with restricted access and transaction
+review.
+• Floor locations marked for large items with maximum stacking height and load limits.
+• Each bin displays location code, item code, description, unit of measure and barcode/QR code; quantity is
+displayed only if operationally useful.
+• No unidentified items. Unknown material is tagged and moved to quarantine until identified and
+dispositioned.
+• A permanent staging zone is not used as overflow storage; aged staging items appear on an exception
+report.
+5. Item Master and Data Governance
+5.1 Item creation standard
+The item master is the foundation of ERP accuracy. A controlled Item Creation/Change Request must be approved
+before a new code is created. The master-data team checks for duplicates using description, manufacturer, part
+number, specification and alternate numbers.
+Controlled Document | Internal Use | Page 8
+ | Zone code |  |  | Purpose |  |  | Issue status | 
+REC |  |  | Receiving and document verification |  |  | Blocked |  | 
+INS |  |  | Technical/quality inspection |  |  | Blocked pending release |  | 
+AVL |  |  | Approved available stock |  |  | Issuable |  | 
+RES |  |  | Reserved or job-kitted stock |  |  | Restricted to reservation |  | 
+RET |  |  | Returned material awaiting assessment |  |  | Blocked |  | 
+QUA |  |  | Quarantine/nonconforming/unknown material |  |  | Blocked |  | 
+DMG |  |  | Damaged material |  |  | Blocked |  | 
+EXP |  |  | Expired chemical/material |  |  | Blocked |  | 
+SCR |  |  | Approved scrap awaiting disposal |  |  | Blocked |  | 
+CON |  |  | Consignment/vendor-owned stock |  |  | Controlled by ownership terms |  | 
+
+=== Page 9 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+Mandatory field Requirement
+Item code Unique, non-intelligent sequential code or governed category code; never reused.
+Short/long description Standard noun-modifier format with size, rating, material and key technical attributes.
+Category/subcategory Consistent reporting and approval routing.
+Manufacturer / part number Captured separately; alternate part numbers maintained where technically approved.
+Base unit of measure Single inventory UOM such as EA, PAIR, L, KG, DRUM or M; purchasing conversions defined.
+Ownership GOFSCO, customer, vendor/consignment, rental or temporary custody.
+Consumable, spare, chemical, tool, repairable, serialized item, capital asset or non-stock
+Stock class
+service.
+Criticality Critical, essential or routine, with technical justification.
+Lead time, safety stock, reorder point, minimum, maximum, order multiple and preferred
+Planning parameters
+warehouse.
+Control attributes Lot/batch, serial, expiry, shelf life, SDS, inspection, calibration or warranty as applicable.
+Finance attributes Inventory account, cost center rules, valuation method and tax/category data.
+Temperature, humidity, indoor/outdoor, compatibility group, hazardous classification and
+Storage requirements
+special handling.
+Status Draft, active, blocked, phase-out or obsolete.
+5.2 Description convention
+Recommended format: NOUN, TYPE, KEY SPECIFICATION, SIZE/CAPACITY, MATERIAL/RATING,
+MANUFACTURER, PART NUMBER. Example: FILTER, ENGINE OIL, HINO 500, OEM/APPROVED
+EQUIVALENT, P/N XXXXX.
+5.3 Units of measure
+Purchasing and stock units must not be confused. If gloves are purchased by carton but issued by pair, the ERP
+must contain a controlled conversion (for example, 1 carton = 120 pairs). Conversions are approved and locked;
+free-text UOMs are prohibited.
+6. Inventory Classification and Planning
+6.1 Classification
+Method Purpose Recommended use
+A: tight control/frequent counts; B: normal control; C:
+ABC Classifies annual consumption value
+simplified control.
+Measures operational consequence of
+Criticality Critical items may require stock despite low consumption.
+unavailability
+Controlled Document | Internal Use | Page 9
+ | Mandatory field |  |  | Requirement | 
+Item code |  |  | Unique, non-intelligent sequential code or governed category code; never reused. |  | 
+Short/long description |  |  | Standard noun-modifier format with size, rating, material and key technical attributes. |  | 
+Category/subcategory |  |  | Consistent reporting and approval routing. |  | 
+Manufacturer / part number |  |  | Captured separately; alternate part numbers maintained where technically approved. |  | 
+Base unit of measure |  |  | Single inventory UOM such as EA, PAIR, L, KG, DRUM or M; purchasing conversions defined. |  | 
+Ownership |  |  | GOFSCO, customer, vendor/consignment, rental or temporary custody. |  | 
+Stock class |  |  | Consumable, spare, chemical, tool, repairable, serialized item, capital asset or non-stock
+service. |  | 
+Criticality |  |  | Critical, essential or routine, with technical justification. |  | 
+Planning parameters |  |  | Lead time, safety stock, reorder point, minimum, maximum, order multiple and preferred
+warehouse. |  | 
+Control attributes |  |  | Lot/batch, serial, expiry, shelf life, SDS, inspection, calibration or warranty as applicable. |  | 
+Finance attributes |  |  | Inventory account, cost center rules, valuation method and tax/category data. |  | 
+Storage requirements |  |  | Temperature, humidity, indoor/outdoor, compatibility group, hazardous classification and
+special handling. |  | 
+Status |  |  | Draft, active, blocked, phase-out or obsolete. |  | 
+ | Recommended format: NOUN, TYPE, KEY SPECIFICATION, SIZE/CAPACITY, MATERIAL/RATING, | 
+ | MANUFACTURER, PART NUMBER. Example: FILTER, ENGINE OIL, HINO 500, OEM/APPROVED | 
+ | EQUIVALENT, P/N XXXXX. | 
+ | Method |  |  | Purpose |  |  | Recommended use | 
+ABC |  |  | Classifies annual consumption value |  |  | A: tight control/frequent counts; B: normal control; C:
+simplified control. |  | 
+Criticality |  |  | Measures operational consequence of
+unavailability |  |  | Critical items may require stock despite low consumption. |  | 
+
+=== Page 10 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+Method Purpose Recommended use
+Fast, slow and non-moving based on issue
+FSN Identifies excess and obsolete stock.
+frequency
+VED Vital, essential and desirable Supports operational prioritization.
+Shelf-life Separates expiry-controlled items FEFO, alerts and restricted receipt rules.
+Repairability Separates repairable/rotatable items Tracks condition, repair order and custody.
+6.2 Minimum, maximum and reorder rules
+Planning parameters must be set per item and warehouse. A critical CT seal may need minimum stock at CTU,
+while common gloves may be centrally held at Ahmadi. Parameters are reviewed quarterly and whenever activity,
+supplier lead time, consumption or equipment population changes.
+Parameter Recommended calculation / rule
+Average demand Validated average consumption over a representative period, adjusted for confirmed work plans.
+Safety stock Demand variability and supply uncertainty during lead time, increased for critical items.
+Reorder point Expected demand during lead time + safety stock.
+Maximum stock Reorder point + planned order cycle quantity, constrained by shelf life, space and budget.
+Order quantity Maximum minus available projected stock, rounded to supplier pack/order multiple.
+Available projected stock On hand + open PO + approved inbound transfer - reservations - expected demand.
+Emergency level A management alert when available stock falls below the defined operational survival quantity.
+6.3 Demand planning
+• Operations submits a rolling 12-month demand forecast, with a firm near-term window and indicative later
+months.
+• Job-specific material is linked to job number, customer, well/rig/equipment and planned date.
+• Maintenance spares are linked to equipment BOM and preventive-maintenance schedules.
+• Stores compares demand against on-hand, reserved, open purchase orders, transfers and historical usage.
+• Supply Chain receives a consolidated replenishment proposal to prevent duplicated orders across
+departments.
+• Forecast accuracy and emergency purchase frequency are reviewed monthly with Operations.
+6.4 Excess, slow-moving and obsolete stock
+The ERP should calculate months since last issue and months of cover. A quarterly review board determines
+whether material will be retained, transferred, returned to vendor, used as an approved substitute, sold, repaired,
+donated where permitted or scrapped. No item is written off only because it has not moved; technical criticality
+and equipment life must be considered.
+Controlled Document | Internal Use | Page 10
+ | Method |  |  | Purpose |  |  | Recommended use | 
+FSN |  |  | Fast, slow and non-moving based on issue
+frequency |  |  | Identifies excess and obsolete stock. |  | 
+VED |  |  | Vital, essential and desirable |  |  | Supports operational prioritization. |  | 
+Shelf-life |  |  | Separates expiry-controlled items |  |  | FEFO, alerts and restricted receipt rules. |  | 
+Repairability |  |  | Separates repairable/rotatable items |  |  | Tracks condition, repair order and custody. |  | 
+ | Parameter |  |  | Recommended calculation / rule | 
+Average demand |  |  | Validated average consumption over a representative period, adjusted for confirmed work plans. |  | 
+Safety stock |  |  | Demand variability and supply uncertainty during lead time, increased for critical items. |  | 
+Reorder point |  |  | Expected demand during lead time + safety stock. |  | 
+Maximum stock |  |  | Reorder point + planned order cycle quantity, constrained by shelf life, space and budget. |  | 
+Order quantity |  |  | Maximum minus available projected stock, rounded to supplier pack/order multiple. |  | 
+Available projected stock |  |  | On hand + open PO + approved inbound transfer - reservations - expected demand. |  | 
+Emergency level |  |  | A management alert when available stock falls below the defined operational survival quantity. |  | 
+
+=== Page 11 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+7. End-to-End ERP Workflows
+7.1 Demand to replenishment
+Standard replenishment
+Demand/Min-Max
+Stock Check Transfer Check PR Approval PO Expected Receipt
+Alert
+• The requester selects an existing item code, required quantity, need-by date, warehouse, department, cost
+center and job/equipment reference.
+• The ERP displays network availability, reservations, open purchase orders and approved substitutes before a
+PR is submitted.
+• Internal transfer is considered before external purchase where stock is genuinely excess at another store.
+• Budget and technical approval routes depend on category, value, urgency and criticality.
+• Emergency requests require justification and are reported separately for root-cause review.
+7.2 Receiving
+Receipt workflow
+Arrival Booking PO/Delivery Check Unload & Count Inspection GRN Label & Put-Away
+Step Control
+Vendor/Procurement confirms PO, delivery location, date, vehicle and special handling. Unapproved
+Delivery scheduling
+chemical deliveries are not accepted.
+Delivery note and PO are verified; material is directed to receiving, not directly to shelves or user
+Gate/arrival
+departments.
+Physical check Count, packaging, visible damage, manufacturer, part number, batch/serial and expiry are checked.
+PO, delivery note, certificates, SDS, test/calibration documents and warranty are attached to the ERP
+Documentation
+receipt.
+Inspection status Material requiring technical or quality inspection is received into inspection status and cannot be issued.
+Posted only for the quantity actually accepted. Partial receipts and rejected quantities are recorded
+GRN
+accurately.
+Put-away ERP proposes a suitable bin; storekeeper scans item and bin, then confirms quantity.
+Over/short/damaged/wrong material is recorded and Procurement is notified; it remains segregated
+Discrepancy
+pending resolution.
+Invoice control: Finance processes supplier invoices only against the approved PO, posted GRN and
+supplier invoice. Exceptions are routed for resolution rather than forced through the system.
+7.3 Issue to department, job or employee
+Issue workflow
+Controlled Document | Internal Use | Page 11
+ | Demand/Min-Max |  | Stock Check | Transfer Check | PR Approval | PO | Expected Receipt
+ | Alert |  |  |  |  |  | 
+ | Arrival Booking |  |  | PO/Delivery Check |  |  | Unload & Count |  |  | Inspection |  |  | GRN |  |  | Label & Put-Away
+ | Step |  |  | Control
+Delivery scheduling |  |  | Vendor/Procurement confirms PO, delivery location, date, vehicle and special handling. Unapproved
+chemical deliveries are not accepted. | 
+Gate/arrival |  |  | Delivery note and PO are verified; material is directed to receiving, not directly to shelves or user
+departments. | 
+Physical check |  |  | Count, packaging, visible damage, manufacturer, part number, batch/serial and expiry are checked. | 
+Documentation |  |  | PO, delivery note, certificates, SDS, test/calibration documents and warranty are attached to the ERP
+receipt. | 
+Inspection status |  |  | Material requiring technical or quality inspection is received into inspection status and cannot be issued. | 
+GRN |  |  | Posted only for the quantity actually accepted. Partial receipts and rejected quantities are recorded
+accurately. | 
+Put-away |  |  | ERP proposes a suitable bin; storekeeper scans item and bin, then confirms quantity. | 
+Discrepancy |  |  | Over/short/damaged/wrong material is recorded and Procurement is notified; it remains segregated
+pending resolution. | 
+ | Invoice control: Finance processes supplier invoices only against the approved PO, posted GRN and | 
+ | supplier invoice. Exceptions are routed for resolution rather than forced through the system. | 
+
+=== Page 12 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+Reservation/Pick
+Material Request Approval Pick & Verify MIV Posting Handover
+List
+• The request must identify warehouse, item, quantity, cost center, department, job/work order and
+requested date.
+• ERP reserves available stock only after approval. Critical shortages are allocated by Operations
+Management.
+• Storekeeper follows the system pick list using FIFO or FEFO and scans the item, lot/batch/serial and bin.
+• The receiver confirms quantity and custody electronically or by signed MIV attached to the ERP.
+• Negative stock, backdated issues and verbal undocumented withdrawals are prohibited.
+• Unused job kits are returned promptly using the return workflow; they are not kept indefinitely in vehicles
+or work areas.
+7.4 Returns from operations
+Internal return
+Put-
+Return Request Physical Handover Condition Check MRV Disposition
+Away/Repair/Scrap
+Condition ERP disposition
+Unused, sealed and serviceable Return to available stock after verification.
+Opened but usable Return only when identity, condition and shelf life can be assured; otherwise quarantine.
+Repairable Move to repairable status/location and create repair/work order.
+Damaged/nonconforming Move to quarantine or damaged status and raise nonconformance/disposition request.
+Expired or contaminated Move to blocked hazardous-waste/expired zone for HSE-approved disposal.
+Unknown identity Quarantine until positively identified; never merge with known stock.
+7.5 Return to vendor and credit note
+Vendor return
+Vendor Finance
+Return Approval Dispatch Note ERP Vendor Return Credit Note
+RMA/Acceptance Reconciliation
+No vendor return is closed until Finance confirms the credit note or approved replacement. Returned quantities
+leave usable stock immediately and remain traceable through the vendor-return reference.
+7.6 Inter-store transfer
+Inter-store transfer
+Transfer Request Approval Pick & Dispatch In-Transit Stock Receive & Verify Put-Away
+Controlled Document | Internal Use | Page 12
+Material Request | Approval |  | Reservation/Pick |  | Pick & Verify | MIV Posting | Handover
+ |  |  | List |  |  |  | 
+Return Request | Physical Handover | Condition Check | MRV | Disposition |  | Put- | 
+ |  |  |  |  |  | Away/Repair/Scrap | 
+ | Condition |  |  | ERP disposition | 
+Unused, sealed and serviceable |  |  | Return to available stock after verification. |  | 
+Opened but usable |  |  | Return only when identity, condition and shelf life can be assured; otherwise quarantine. |  | 
+Repairable |  |  | Move to repairable status/location and create repair/work order. |  | 
+Damaged/nonconforming |  |  | Move to quarantine or damaged status and raise nonconformance/disposition request. |  | 
+Expired or contaminated |  |  | Move to blocked hazardous-waste/expired zone for HSE-approved disposal. |  | 
+Unknown identity |  |  | Quarantine until positively identified; never merge with known stock. |  | 
+Return Approval |  | Vendor |  | Dispatch Note | ERP Vendor Return | Credit Note |  | Finance | 
+ |  | RMA/Acceptance |  |  |  |  |  | Reconciliation | 
+ | Transfer Request |  |  | Approval |  |  | Pick & Dispatch |  |  | In-Transit Stock |  |  | Receive & Verify |  |  | Put-Away | 
+
+=== Page 13 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+• A transfer order identifies sending store, receiving store, item, quantity, reason and required date.
+• The sending store posts shipment to an in-transit virtual location; stock does not appear as available at both
+stores.
+• A dispatch note and custody acknowledgement travel with the shipment.
+• The receiving store independently counts and scans the material. Differences create a transfer discrepancy
+case.
+• Urgent transfers may use an expedited route but still require ERP posting and post-approval within the
+defined limit.
+7.7 Stock adjustment
+Adjustments are exception transactions, not normal corrections. The ERP requires item, location, quantity, value,
+reason code, supporting evidence, count reference and approval. Users who count or hold custody should not
+approve their own material adjustment.
+Reason code Example evidence
+COUNT_GAIN / COUNT_LOSS Approved count sheet and recount result
+UOM_ERROR Master-data review and corrected conversion
+DAMAGE Photograph, incident/nonconformance record and disposition
+EXPIRY Batch/expiry report and HSE disposition
+DATA_MIGRATION Approved migration reconciliation
+SCRAP_WRITE_OFF CEO/management approval and disposal certificate/evidence
+7.8 Scrap and disposal
+Disposal workflow
+Identify & Management
+Technical Review Value/HSE Review Physical Disposal ERP Write-Off
+Segregate Approval
+Scrap reports should list item code, description, quantity, condition, location, ownership, book/stock value where
+applicable, reason, photographs and recommended method. Disposal must preserve environmental, data-security
+and customer/property obligations. ERP write-off occurs only after approval and evidence of physical disposal.
+8. Chemical Storage and Control
+Mandatory rule: Chemicals may be delivered only against an approved PO and agreed delivery schedule.
+The receiving store must verify the current SDS, label, container condition, batch and expiry before
+acceptance. Vendor delivery directly into storage without Stores approval is prohibited.
+8.1 Chemical master data
+• Product and chemical name, manufacturer, product code and approved use.
+Controlled Document | Internal Use | Page 13
+ | Reason code |  |  | Example evidence
+COUNT_GAIN / COUNT_LOSS |  |  | Approved count sheet and recount result | 
+UOM_ERROR |  |  | Master-data review and corrected conversion | 
+DAMAGE |  |  | Photograph, incident/nonconformance record and disposition | 
+EXPIRY |  |  | Batch/expiry report and HSE disposition | 
+DATA_MIGRATION |  |  | Approved migration reconciliation | 
+SCRAP_WRITE_OFF |  |  | CEO/management approval and disposal certificate/evidence | 
+ | Identify & |  | Technical Review | Value/HSE Review |  | Management |  | Physical Disposal | ERP Write-Off
+ | Segregate |  |  |  |  | Approval |  |  | 
+ | Mandatory rule: Chemicals may be delivered only against an approved PO and agreed delivery schedule. | 
+ | The receiving store must verify the current SDS, label, container condition, batch and expiry before | 
+ | acceptance. Vendor delivery directly into storage without Stores approval is prohibited. | 
+
+=== Page 14 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+• Hazard classification and pictograms as stated in the current SDS.
+• SDS revision/date and attached electronic copy accessible to workers.
+• Compatibility/storage group, temperature range, ventilation and light/moisture restrictions.
+• Container size, base UOM, batch/lot, manufacture date, expiry/retest date and shelf life.
+• Required PPE, spill response, firefighting information and disposal route.
+• Ownership, customer/job restriction and regulatory/transport information where applicable.
+8.2 Storage design
+Control area Minimum requirement
+Segregate strictly by SDS and approved compatibility assessment; do not rely only on product name or
+Compatibility
+color.
+Secondary containment Bunded/contained storage sized for credible spills and suitable for the chemical; keep drains protected.
+Ventilation Provide natural or mechanical ventilation appropriate to the hazard assessment.
+Temperature Monitor where specified; alerts and documented action for excursions.
+Ignition control Control heat, sparks, smoking and electrical suitability for flammable areas.
+Chemical-resistant, stable and load-rated; liquids below powders where leakage could cause
+Shelving
+reaction/contamination.
+Labels Original label preserved; decanted containers require compliant identity and hazard labeling.
+Spill kits selected for the chemical, eyewash/shower where required, fire equipment, emergency
+Emergency equipment
+contacts and clear access.
+Security Restricted access; high-hazard chemicals locked and issued only to authorized/trained users.
+Housekeeping No damaged containers, residues or mixed waste; routine leak and corrosion inspection.
+8.3 Chemical receiving and release
+Chemical receipt
+Container & Batch Release & FEFO Put-
+Approved PO SDS/Label Check Expiry Acceptance GRN in Inspection
+Check Away
+• Define minimum remaining shelf life at receipt by product category; short-dated material requires written
+operational acceptance.
+• Damaged, leaking, unlabelled or incompatible deliveries are isolated safely and rejected or quarantined.
+• Samples and unknown chemicals are treated as controlled chemicals, not placed with normal stock.
+• Batch certificates or certificates of analysis are captured when required by Operations/customer
+specification.
+8.4 Chemical issue, return and expiry
+• Use FEFO based on actual expiry/retest date; the ERP blocks expired batches.
+• Issue by batch to job/cost center and record the receiving authorized person.
+• Part-used returns are accepted only if the original container, seal/closure, label, content integrity and
+storage history are acceptable.
+Controlled Document | Internal Use | Page 14
+ | Control area |  |  | Minimum requirement | 
+Compatibility |  |  | Segregate strictly by SDS and approved compatibility assessment; do not rely only on product name or
+color. |  | 
+Secondary containment |  |  | Bunded/contained storage sized for credible spills and suitable for the chemical; keep drains protected. |  | 
+Ventilation |  |  | Provide natural or mechanical ventilation appropriate to the hazard assessment. |  | 
+Temperature |  |  | Monitor where specified; alerts and documented action for excursions. |  | 
+Ignition control |  |  | Control heat, sparks, smoking and electrical suitability for flammable areas. |  | 
+Shelving |  |  | Chemical-resistant, stable and load-rated; liquids below powders where leakage could cause
+reaction/contamination. |  | 
+Labels |  |  | Original label preserved; decanted containers require compliant identity and hazard labeling. |  | 
+Emergency equipment |  |  | Spill kits selected for the chemical, eyewash/shower where required, fire equipment, emergency
+contacts and clear access. |  | 
+Security |  |  | Restricted access; high-hazard chemicals locked and issued only to authorized/trained users. |  | 
+Housekeeping |  |  | No damaged containers, residues or mixed waste; routine leak and corrosion inspection. |  | 
+Approved PO | SDS/Label Check |  | Container & Batch |  | Expiry Acceptance | GRN in Inspection |  | Release & FEFO Put- | 
+ |  |  | Check |  |  |  |  | Away | 
+
+=== Page 15 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+• The ERP triggers alerts at agreed intervals, for example 180, 90, 60 and 30 days before expiry.
+• Expired, contaminated or leaking chemicals are moved to a labelled hazardous-waste/blocked area pending
+HSE-approved disposal.
+• Vendor returns require return authorization and Finance credit-note closure.
+8.5 HSE inspections and emergency readiness
+HSE and Stores should jointly inspect chemical areas using a standard checklist covering SDS availability, labels,
+segregation, containment, ventilation, temperature records, spill kits, emergency equipment, housekeeping,
+container condition, expiry and training. Incidents and near misses are recorded, investigated and linked to
+corrective actions.
+9. Stock Control and Inventory Accuracy
+9.1 Transaction discipline
+• Transactions are posted in real time at the correct warehouse, bin, status, lot/serial, cost center and job.
+• Backdating is restricted to authorized Finance/Inventory Control users and requires a reason.
+• ERP must prevent negative stock and issuing blocked, expired or reserved material.
+• Manual spreadsheets may support analysis but must not become an alternative stock ledger.
+• System downtime transactions use pre-numbered controlled forms and are entered immediately after
+restoration with supervisor review.
+9.2 Cycle counting
+Stock class Minimum frequency Method
+Blind count by independent counter; immediate recount
+A-value / high-risk / controlled Monthly or more frequently
+of variance.
+B-value Quarterly Rotating cycle count.
+C-value Semiannual Rotating or zone count.
+Critical operational items Monthly / before major job Quantity and condition verification.
+Quantity, batch, expiry, container condition and SDS
+Chemicals Monthly
+check.
+Planned count with movement freeze or controlled cut-
+Full inventory Annually
+off.
+9.3 Count workflow
+Cycle count
+Freeze/Control Approve Close Corrective
+Blind Count Recount Variance Investigate
+Movements Adjustment Action
+Controlled Document | Internal Use | Page 15
+ | Stock class |  |  | Minimum frequency |  |  | Method | 
+A-value / high-risk / controlled |  |  | Monthly or more frequently |  |  | Blind count by independent counter; immediate recount
+of variance. |  | 
+B-value |  |  | Quarterly |  |  | Rotating cycle count. |  | 
+C-value |  |  | Semiannual |  |  | Rotating or zone count. |  | 
+Critical operational items |  |  | Monthly / before major job |  |  | Quantity and condition verification. |  | 
+Chemicals |  |  | Monthly |  |  | Quantity, batch, expiry, container condition and SDS
+check. |  | 
+Full inventory |  |  | Annually |  |  | Planned count with movement freeze or controlled cut-
+off. |  | 
+ | Freeze/Control |  | Blind Count | Recount Variance | Investigate |  | Approve |  |  | Close Corrective | 
+ | Movements |  |  |  |  |  | Adjustment |  |  | Action | 
+
+=== Page 16 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+Count sheets must not show expected quantities to the first counter. Variances are investigated for timing, UOM,
+wrong bin, unposted issue/return, duplicate item, transfer, damage or theft. Repeated causes result in corrective
+action, not repeated adjustment.
+9.4 Annual stocktake
+• Approved count plan, teams, areas, cut-off date, tagging rules and system freeze/controlled movement
+process.
+• All receipts, issues, returns and transfers posted or clearly isolated before cut-off.
+• Independent count teams and signed count sheets or controlled mobile count tasks.
+• Reconciliation by item, warehouse, status, quantity and value with management approval.
+• Finance sign-off and audit trail retained according to document-retention rules.
+10. Daily, Weekly, Monthly and Annual Tasks
+Frequency Storekeeper / location tasks Stores Supervisor / network tasks
+Open/close security check; receive and issue; scan put- Review critical shortages, blocked receipts, overdue
+Every shift /
+away; review staging; housekeeping; chemical visual requests, negative-stock attempts, transfer discrepancies
+daily
+check; resolve pending transactions; handover log. and urgent operational requirements.
+Location/bin audit; check unidentified items; review open Review open PO/receipts, slow approvals, stockouts,
+Weekly returns and job kits; inspect racks, spill kits and emergency issues, inter-store opportunities and data-
+quarantine; verify documentation completeness. quality exceptions.
+Cycle counts; chemical expiry/condition check; Inventory accuracy report; min/max exceptions;
+Monthly damaged/obsolete identification; equipment and safety ageing/FSN; KPI meeting; Finance reconciliation; HSE
+checklist. chemical review.
+Reclassify ABC/FSN; review min/max and lead times;
+Deep housekeeping and zone review; verify labels and
+Quarterly obsolete board; access review; vendor/department
+location maps.
+performance review.
+Policy review; full stocktake; master-data cleanse;
+Full stocktake support; training refresh; emergency drill
+Annually authority/access recertification; insurance/valuation
+participation.
+support; ERP continuity test.
+11. ERP Functional Requirements
+11.1 Core modules
+Module Required capability
+Master data Governed item, vendor, location, UOM, category, lot/serial, chemical and approval data.
+Multi-warehouse/bin, stock status, lot/serial, reservations, transfers, counts, adjustments and
+Inventory
+valuation.
+Procurement PR, approval, RFQ, PO, expected delivery, partial receipt, vendor return and performance.
+Warehouse mobile Barcode/QR receiving, put-away, picking, issue, return, transfer and counting.
+Maintenance/Assets Equipment BOM, spare linkage, work-order demand, serialized asset receipt and custody.
+Inventory accounts, cost centers, job costing, GRNI/accrual, three-way match, credit notes and
+Finance
+write-offs.
+Controlled Document | Internal Use | Page 16
+ | Frequency |  |  | Storekeeper / location tasks |  |  | Stores Supervisor / network tasks | 
+Every shift /
+daily |  |  | Open/close security check; receive and issue; scan put-
+away; review staging; housekeeping; chemical visual
+check; resolve pending transactions; handover log. |  |  | Review critical shortages, blocked receipts, overdue
+requests, negative-stock attempts, transfer discrepancies
+and urgent operational requirements. |  | 
+Weekly |  |  | Location/bin audit; check unidentified items; review open
+returns and job kits; inspect racks, spill kits and
+quarantine; verify documentation completeness. |  |  | Review open PO/receipts, slow approvals, stockouts,
+emergency issues, inter-store opportunities and data-
+quality exceptions. |  | 
+Monthly |  |  | Cycle counts; chemical expiry/condition check;
+damaged/obsolete identification; equipment and safety
+checklist. |  |  | Inventory accuracy report; min/max exceptions;
+ageing/FSN; KPI meeting; Finance reconciliation; HSE
+chemical review. |  | 
+Quarterly |  |  | Deep housekeeping and zone review; verify labels and
+location maps. |  |  | Reclassify ABC/FSN; review min/max and lead times;
+obsolete board; access review; vendor/department
+performance review. |  | 
+Annually |  |  | Full stocktake support; training refresh; emergency drill
+participation. |  |  | Policy review; full stocktake; master-data cleanse;
+authority/access recertification; insurance/valuation
+support; ERP continuity test. |  | 
+ | Module |  |  | Required capability | 
+Master data |  |  | Governed item, vendor, location, UOM, category, lot/serial, chemical and approval data. |  | 
+Inventory |  |  | Multi-warehouse/bin, stock status, lot/serial, reservations, transfers, counts, adjustments and
+valuation. |  | 
+Procurement |  |  | PR, approval, RFQ, PO, expected delivery, partial receipt, vendor return and performance. |  | 
+Warehouse mobile |  |  | Barcode/QR receiving, put-away, picking, issue, return, transfer and counting. |  | 
+Maintenance/Assets |  |  | Equipment BOM, spare linkage, work-order demand, serialized asset receipt and custody. |  | 
+Finance |  |  | Inventory accounts, cost centers, job costing, GRNI/accrual, three-way match, credit notes and
+write-offs. |  | 
+
+=== Page 17 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+Module Required capability
+SDS, inspection status, nonconformance, expiry, certificates, hazardous storage and disposal
+HSE/Quality
+records.
+Document management Attach approvals, delivery notes, certificates, photos, SDS, signed MIV/MRV and disposal evidence.
+Analytics Dashboards, alerts, scheduled reports, ageing, accuracy, service level, value and exception trends.
+11.2 Required system controls
+• Role-based access by store, transaction and approval limit; maker-checker controls for sensitive activity.
+• Audit log showing who created, approved, changed or posted each record and when.
+• No deletion of posted transactions; corrections occur through controlled reversal and reposting.
+• Duplicate item detection and mandatory master-data fields.
+• Prevention of negative stock, expired issue, blocked-stock issue and invalid UOM conversion.
+• Configurable approvals by value, category, urgency, department and exception type.
+• Electronic signatures or authenticated approvals with delegated authority and absence cover.
+• Automated alerts for low stock, overdue PO, pending inspection, expiry, excessive stock, aged staging and
+count variance.
+• Interface controls and reconciliation between inventory, procurement, finance, maintenance and assets.
+• Backup, disaster recovery, cybersecurity, device management and tested offline/downtime procedure.
+11.3 ERP status model
+Status Available to promise? Permitted action
+Available Yes Reserve, transfer or issue
+Reserved Only for linked demand Pick/issue to reservation or authorized release
+Inspection No Inspect and release/reject
+Quarantine No Investigate and disposition
+Damaged No Repair, vendor return or scrap
+Expired No Return/dispose through HSE process
+In transit No Receive or investigate transfer discrepancy
+Consignment According to contract Issue and trigger ownership/settlement rules
+11.4 Dashboards
+• Stock by location, category, ownership, status and value.
+• Critical items below minimum and days until projected stockout.
+• Open requests, reservations, purchase orders, overdue deliveries and pending receipts.
+• Pending inspection, quarantine, returns, vendor credit notes and transfers in transit.
+• Chemicals by batch, expiry horizon and storage location.
+• Slow/non-moving and excess stock with last issue date and months of cover.
+• Inventory accuracy, count completion and adjustment value by store.
+Controlled Document | Internal Use | Page 17
+ | Module |  |  | Required capability | 
+HSE/Quality |  |  | SDS, inspection status, nonconformance, expiry, certificates, hazardous storage and disposal
+records. |  | 
+Document management |  |  | Attach approvals, delivery notes, certificates, photos, SDS, signed MIV/MRV and disposal evidence. |  | 
+Analytics |  |  | Dashboards, alerts, scheduled reports, ageing, accuracy, service level, value and exception trends. |  | 
+ | Status |  |  | Available to promise? |  |  | Permitted action | 
+Available |  |  | Yes |  |  | Reserve, transfer or issue |  | 
+Reserved |  |  | Only for linked demand |  |  | Pick/issue to reservation or authorized release |  | 
+Inspection |  |  | No |  |  | Inspect and release/reject |  | 
+Quarantine |  |  | No |  |  | Investigate and disposition |  | 
+Damaged |  |  | No |  |  | Repair, vendor return or scrap |  | 
+Expired |  |  | No |  |  | Return/dispose through HSE process |  | 
+In transit |  |  | No |  |  | Receive or investigate transfer discrepancy |  | 
+Consignment |  |  | According to contract |  |  | Issue and trigger ownership/settlement rules |  | 
+
+=== Page 18 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+• Emergency issues/purchases, service level and department forecast accuracy.
+12. Reporting and KPIs
+KPI Definition / target direction
+Correct count lines ÷ total counted lines; increase toward an agreed target, with stricter target for
+Inventory record accuracy
+A/critical items.
+Stock availability/service level Approved demand fulfilled in full by required date ÷ total approved demand; increase.
+Stockout rate Demand lines unavailable when required ÷ total demand lines; decrease.
+Emergency purchase rate Emergency PR/PO lines ÷ total PR/PO lines; decrease.
+Inventory turnover Annualized consumption/cost of issues ÷ average inventory value; optimize by category.
+Slow/non-moving value Value exceeding defined no-movement thresholds; decrease after technical review.
+Expiry loss Value of material expired/write-off; decrease.
+Receiving turnaround Time from accepted delivery to available put-away; decrease without bypassing inspection.
+Issue turnaround Time from approved request to handover; decrease.
+Cycle-count completion Completed planned counts ÷ scheduled counts; target 100%.
+Adjustment value Absolute value of adjustments as percentage of inventory value; decrease.
+Document completeness Transactions with all mandatory evidence ÷ sampled transactions; target 100%.
+Transfer discrepancy rate Transfer lines with quantity/condition discrepancy ÷ transfer lines; decrease.
+Chemical compliance Passed chemical control checks ÷ checks performed; target 100% for critical controls.
+Targets should be baselined during the first three months of reliable ERP operation. Management should avoid
+setting artificial targets before transaction and master-data accuracy are stabilized.
+13. Internal Controls, Audit and Document Retention
+• Sequential ERP transaction numbers and controlled forms for downtime.
+• Approval matrix maintained by Finance/Management and reflected in ERP workflow.
+• Quarterly access review; immediate removal or change upon transfer/termination.
+• Monthly reconciliation of inventory subledger to the general ledger.
+• Sample audits of PO-GRN-invoice, MIV, MRV, transfer, adjustment, chemical receipt and disposal
+transactions.
+• Retention periods aligned with company policy, customer contracts, financial requirements and applicable
+Kuwait requirements.
+• Photos and scanned forms must be readable, linked to the transaction and protected from unauthorized
+alteration.
+• Exception logs show overdue approvals, reversed/backdated transactions, manual overrides, repeated
+variances and blocked-stock activity.
+Controlled Document | Internal Use | Page 18
+ | KPI |  |  | Definition / target direction | 
+Inventory record accuracy |  |  | Correct count lines ÷ total counted lines; increase toward an agreed target, with stricter target for
+A/critical items. |  | 
+Stock availability/service level |  |  | Approved demand fulfilled in full by required date ÷ total approved demand; increase. |  | 
+Stockout rate |  |  | Demand lines unavailable when required ÷ total demand lines; decrease. |  | 
+Emergency purchase rate |  |  | Emergency PR/PO lines ÷ total PR/PO lines; decrease. |  | 
+Inventory turnover |  |  | Annualized consumption/cost of issues ÷ average inventory value; optimize by category. |  | 
+Slow/non-moving value |  |  | Value exceeding defined no-movement thresholds; decrease after technical review. |  | 
+Expiry loss |  |  | Value of material expired/write-off; decrease. |  | 
+Receiving turnaround |  |  | Time from accepted delivery to available put-away; decrease without bypassing inspection. |  | 
+Issue turnaround |  |  | Time from approved request to handover; decrease. |  | 
+Cycle-count completion |  |  | Completed planned counts ÷ scheduled counts; target 100%. |  | 
+Adjustment value |  |  | Absolute value of adjustments as percentage of inventory value; decrease. |  | 
+Document completeness |  |  | Transactions with all mandatory evidence ÷ sampled transactions; target 100%. |  | 
+Transfer discrepancy rate |  |  | Transfer lines with quantity/condition discrepancy ÷ transfer lines; decrease. |  | 
+Chemical compliance |  |  | Passed chemical control checks ÷ checks performed; target 100% for critical controls. |  | 
+
+=== Page 19 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+Audit expectation: The ERP should show the complete story of an item: why it was bought, when it
+arrived, who accepted it, where it was stored, who received it, which job used it, whether it returned and
+how any remaining quantity was disposed.
+14. Roles and RACI Summary
+Process Stores Operations Supply Chain Finance HSE/Quality Management
+Demand forecast C R/A C C I I
+Item master request R R/C C C C
+A
+go
+b
+v
+y
+e rnance
+Min/max review R R/C C C C
+A
+po
+f
+l
+o
+ic
+r
+y
+m ajor
+Purchase C R request R/A C C I/A by limit
+Receipt/put-away R/A custody C inspect C I C/R inspect I
+Issue/return R R request/receive I I C A by authority
+Transfer R C I I I A by authority
+Count/adjustment R C I C/A control C A by value
+Chemical control R C C I A I
+Obsolete/disposal R R technical C C C/A HSE A
+R = Responsible, A = Accountable, C = Consulted, I = Informed.
+15. Implementation Roadmap
+Phase Indicative duration Key deliverables
+Sponsor, process owners, project team, scope, authority matrix, issue log
+1. Mobilize and govern 2-3 weeks
+and implementation calendar.
+Full count, location mapping, ownership/status segregation, chemical
+2. Physical and data baseline 4-6 weeks
+inventory, item duplicate review and opening reconciliation.
+Warehouse/location structure, master data, workflows, roles, approvals,
+3. Design and configure 6-10 weeks
+forms, reports, integrations and barcode standards.
+Approved item master, UOM conversions, lot/serial/expiry, opening
+4. Cleanse and migrate 4-8 weeks
+balances, open PO and reservation data.
+End-to-end pilot, devices, training, transaction testing, count reconciliation
+5. Pilot Ahmadi 4-6 weeks
+and issue resolution.
+6. Roll out CTU, Drilling and
+6-10 weeks Staged go-live by store, cutover count, on-site support and daily controls.
+PCP
+KPI baseline, parameter tuning, dashboard adoption, obsolete review and
+7. Stabilize and optimize 12 weeks
+continuous improvement backlog.
+Controlled Document | Internal Use | Page 19
+ | Audit expectation: The ERP should show the complete story of an item: why it was bought, when it | 
+ | arrived, who accepted it, where it was stored, who received it, which job used it, whether it returned and | 
+ | how any remaining quantity was disposed. | 
+ | Process |  |  | Stores |  |  | Operations |  |  | Supply Chain |  |  | Finance |  |  | HSE/Quality |  |  | Management | 
+Demand forecast |  |  | C |  |  | R/A |  |  | C |  |  | C |  |  | I |  |  | I |  | 
+Item master request |  |  | R |  |  | R/C |  |  | C |  |  | C |  |  | C |  |  | A by
+governance |  | 
+Min/max review |  |  | R |  |  | R/C |  |  | C |  |  | C |  |  | C |  |  | A for major
+policy |  | 
+Purchase |  |  | C |  |  | R request |  |  | R/A |  |  | C |  |  | C |  |  | I/A by limit |  | 
+Receipt/put-away |  |  | R/A custody |  |  | C inspect |  |  | C |  |  | I |  |  | C/R inspect |  |  | I |  | 
+Issue/return |  |  | R |  |  | R request/receive |  |  | I |  |  | I |  |  | C |  |  | A by authority |  | 
+Transfer |  |  | R |  |  | C |  |  | I |  |  | I |  |  | I |  |  | A by authority |  | 
+Count/adjustment |  |  | R |  |  | C |  |  | I |  |  | C/A control |  |  | C |  |  | A by value |  | 
+Chemical control |  |  | R |  |  | C |  |  | C |  |  | I |  |  | A |  |  | I |  | 
+Obsolete/disposal |  |  | R |  |  | R technical |  |  | C |  |  | C |  |  | C/A HSE |  |  | A |  | 
+ | Phase |  |  | Indicative duration |  |  | Key deliverables | 
+1. Mobilize and govern |  |  | 2-3 weeks |  |  | Sponsor, process owners, project team, scope, authority matrix, issue log
+and implementation calendar. |  | 
+2. Physical and data baseline |  |  | 4-6 weeks |  |  | Full count, location mapping, ownership/status segregation, chemical
+inventory, item duplicate review and opening reconciliation. |  | 
+3. Design and configure |  |  | 6-10 weeks |  |  | Warehouse/location structure, master data, workflows, roles, approvals,
+forms, reports, integrations and barcode standards. |  | 
+4. Cleanse and migrate |  |  | 4-8 weeks |  |  | Approved item master, UOM conversions, lot/serial/expiry, opening
+balances, open PO and reservation data. |  | 
+5. Pilot Ahmadi |  |  | 4-6 weeks |  |  | End-to-end pilot, devices, training, transaction testing, count reconciliation
+and issue resolution. |  | 
+6. Roll out CTU, Drilling and
+PCP |  |  | 6-10 weeks |  |  | Staged go-live by store, cutover count, on-site support and daily controls. |  | 
+7. Stabilize and optimize |  |  | 12 weeks |  |  | KPI baseline, parameter tuning, dashboard adoption, obsolete review and
+continuous improvement backlog. |  | 
+
+=== Page 20 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+15.1 Critical cutover requirements
+• No migration of unidentified or duplicate stock into available inventory.
+• Opening quantity and value reconciled and approved by Stores and Finance.
+• All locations labelled and physically ready before loading stock.
+• Users trained and access tested before go-live.
+• Open POs, reservations, returns, transfers and inspection items agreed at cutover.
+• Daily command-center review during stabilization, with ownership and due date for every issue.
+• Legacy spreadsheets changed to read-only archive after acceptance; ERP becomes the official ledger.
+15.2 Training
+Training must be role-based and practical. Storekeepers complete receiving, put-away, picking, issue, return,
+transfer, counting and chemical scenarios. Requesters and approvers practice correct item selection, job/cost-
+center coding and mobile approvals. Finance, HSE and administrators receive dedicated control and reporting
+training. Competence is confirmed by supervised transactions, not attendance alone.
+16. Risk Register and Mitigation
+Risk Likely effect Primary mitigation
+False stockouts, duplicate buying and
+Poor item data / duplicates Governed item creation, cleanse and duplicate check.
+unreliable reports
+Mobile scanning, same-shift posting and exception
+Transactions posted late ERP differs from physical stock
+dashboard.
+Unauthorized access Loss, safety exposure or manipulation Physical and role-based access with periodic review.
+Incorrect UOM conversion Large quantity/value errors Central approval and locked conversions.
+Fire, reaction, exposure or environmental
+Chemical incompatibility SDS-based segregation and HSE approval/inspection.
+harm
+Min/max review, network visibility and excess-stock
+Overstocking Cash tied up, expiry and space shortage
+board.
+Criticality, demand forecast, safety stock and lead-time
+Understocking Job delay and emergency buying
+review.
+Unclosed returns/transfers Stock disappears into staging or transit Ageing alerts, custody confirmation and escalation.
+Tested continuity forms, recovery entry and
+ERP downtime Unrecorded movements
+reconciliation.
+Users maintain parallel spreadsheets and Sponsor enforcement, training, support and KPI
+Weak change management
+bypass controls ownership.
+17. Recommended Management Decisions
+1. Approve the four-store integrated operating model and designate the ERP as the sole official inventory
+ledger.
+2. Appoint process owners for Stores, Operations, Supply Chain, Finance, HSE and ERP administration.
+3. Approve the warehouse/location coding standard and physically label all areas before migration.
+Controlled Document | Internal Use | Page 20
+ | Risk |  |  | Likely effect |  |  | Primary mitigation | 
+Poor item data / duplicates |  |  | False stockouts, duplicate buying and
+unreliable reports |  |  | Governed item creation, cleanse and duplicate check. |  | 
+Transactions posted late |  |  | ERP differs from physical stock |  |  | Mobile scanning, same-shift posting and exception
+dashboard. |  | 
+Unauthorized access |  |  | Loss, safety exposure or manipulation |  |  | Physical and role-based access with periodic review. |  | 
+Incorrect UOM conversion |  |  | Large quantity/value errors |  |  | Central approval and locked conversions. |  | 
+Chemical incompatibility |  |  | Fire, reaction, exposure or environmental
+harm |  |  | SDS-based segregation and HSE approval/inspection. |  | 
+Overstocking |  |  | Cash tied up, expiry and space shortage |  |  | Min/max review, network visibility and excess-stock
+board. |  | 
+Understocking |  |  | Job delay and emergency buying |  |  | Criticality, demand forecast, safety stock and lead-time
+review. |  | 
+Unclosed returns/transfers |  |  | Stock disappears into staging or transit |  |  | Ageing alerts, custody confirmation and escalation. |  | 
+ERP downtime |  |  | Unrecorded movements |  |  | Tested continuity forms, recovery entry and
+reconciliation. |  | 
+Weak change management |  |  | Users maintain parallel spreadsheets and
+bypass controls |  |  | Sponsor enforcement, training, support and KPI
+ownership. |  | 
+
+=== Page 21 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+4. Authorize a full physical inventory and master-data cleansing exercise across Ahmadi, CTU, Drilling and PCP.
+5. Approve mandatory PO/Stores authorization for all deliveries, particularly chemicals.
+6. Approve the transaction and approval matrix, including adjustment, emergency issue, transfer and disposal
+limits.
+7. Approve barcode/QR devices, printers, labels and connectivity required for point-of-activity posting.
+8. Require monthly Stores performance review and quarterly excess/obsolete stock review.
+18. Conclusion
+A seamless GOFSCO stores operation depends less on the ERP brand than on disciplined data, clear ownership and
+mandatory workflows. The four stores should operate as one network with standardized rules while preserving
+local custody and operational responsiveness. When every item has one identity, every quantity has one known
+location and status, and every movement has an approved transaction, the ERP can provide reliable stock
+availability, cost visibility and audit control.
+The recommended approach should be implemented in controlled phases, beginning with physical and data
+accuracy. This prevents the company from transferring existing inconsistencies into a new system and creates a
+practical foundation for automation, performance management and future growth.
+Controlled Document | Internal Use | Page 21
+
+=== Page 22 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+Appendix A - Required ERP Transaction Types
+Transaction Minimum references / data
+PO, delivery note, supplier, item, quantity, UOM, warehouse/bin, lot/serial/expiry, inspection status
+Purchase receipt / GRN
+and attachments
+Approved request, receiver, department, cost center, job/work order, item, quantity, lot/serial and
+Material issue / MIV
+handover confirmation
+Original issue where available, returning party, condition, quantity, disposition and receiving
+Material return / MRV
+confirmation
+Sending/receiving warehouses, dispatch/receipt custodians, in-transit status, item, quantity and
+Inter-store transfer
+discrepancy
+Vendor return Original PO/GRN, vendor authorization, reason, dispatch proof, replacement/credit-note reference
+Stock adjustment Count/reference, reason, quantity/value, investigation, evidence and approvals
+Status change From/to status, reason, inspection/disposition and approver
+Scrap/write-off Approved scrap report, photos, quantity/value, disposal method/date and evidence
+Appendix B - Mandatory Forms and Records
+• Item Creation/Change Request
+• Material Requirement / Purchase Requisition
+• Delivery Booking and Receiving Checklist
+• Goods Receipt Note (GRN)
+• Inspection/Release or Rejection Record
+• Material Issue Voucher (MIV)
+• Material Return Voucher (MRV)
+• Inter-Store Transfer Order and Dispatch/Receipt Note
+• Vendor Return and Credit Note Follow-Up
+• Cycle Count / Annual Count Sheet and Variance Investigation
+• Stock Adjustment Request
+• Chemical Receiving and Monthly Inspection Checklist
+• Nonconformance / Quarantine Disposition
+• Scrap Findings and Disposal Approval Report with photographs
+• System Downtime Transaction Form and Recovery Reconciliation
+Appendix C - Minimum Location Readiness Checklist
+Control Ahmadi CTU Drilling PCP
+Warehouse, zone, rack, shelf and bin labels installed □ □ □ □
+Receiving and inspection zones marked □ □ □ □
+Quarantine, damaged, return and scrap zones marked □ □ □ □
+Chemical areas assessed and compatibility segregation approved □ □ □ □
+Controlled Document | Internal Use | Page 22
+ | Transaction |  |  | Minimum references / data | 
+Purchase receipt / GRN |  |  | PO, delivery note, supplier, item, quantity, UOM, warehouse/bin, lot/serial/expiry, inspection status
+and attachments |  | 
+Material issue / MIV |  |  | Approved request, receiver, department, cost center, job/work order, item, quantity, lot/serial and
+handover confirmation |  | 
+Material return / MRV |  |  | Original issue where available, returning party, condition, quantity, disposition and receiving
+confirmation |  | 
+Inter-store transfer |  |  | Sending/receiving warehouses, dispatch/receipt custodians, in-transit status, item, quantity and
+discrepancy |  | 
+Vendor return |  |  | Original PO/GRN, vendor authorization, reason, dispatch proof, replacement/credit-note reference |  | 
+Stock adjustment |  |  | Count/reference, reason, quantity/value, investigation, evidence and approvals |  | 
+Status change |  |  | From/to status, reason, inspection/disposition and approver |  | 
+Scrap/write-off |  |  | Approved scrap report, photos, quantity/value, disposal method/date and evidence |  | 
+ | Control |  |  | Ahmadi |  |  | CTU |  |  | Drilling |  |  | PCP | 
+Warehouse, zone, rack, shelf and bin labels installed |  |  | □ |  |  | □ |  |  | □ |  |  | □ |  | 
+Receiving and inspection zones marked |  |  | □ |  |  | □ |  |  | □ |  |  | □ |  | 
+Quarantine, damaged, return and scrap zones marked |  |  | □ |  |  | □ |  |  | □ |  |  | □ |  | 
+Chemical areas assessed and compatibility segregation approved |  |  | □ |  |  | □ |  |  | □ |  |  | □ |  | 
+
+=== Page 23 ===
+GOFSCO | STORES OPERATIONS & ERP WORKFLOW
+Control Ahmadi CTU Drilling PCP
+Racks/load limits and emergency aisles verified □ □ □ □
+Barcode/QR devices, printer and connectivity tested □ □ □ □
+Full count and ownership/status verification completed □ □ □ □
+Store users trained and access tested □ □ □ □
+Opening balance reconciled with Finance □ □ □ □
+Go-live approval signed □ □ □ □
+Controlled Document | Internal Use | Page 23
+ | Control |  |  | Ahmadi |  |  | CTU |  |  | Drilling |  |  | PCP | 
+Racks/load limits and emergency aisles verified |  |  | □ |  |  | □ |  |  | □ |  |  | □ |  | 
+Barcode/QR devices, printer and connectivity tested |  |  | □ |  |  | □ |  |  | □ |  |  | □ |  | 
+Full count and ownership/status verification completed |  |  | □ |  |  | □ |  |  | □ |  |  | □ |  | 
+Store users trained and access tested |  |  | □ |  |  | □ |  |  | □ |  |  | □ |  | 
+Opening balance reconciled with Finance |  |  | □ |  |  | □ |  |  | □ |  |  | □ |  | 
+Go-live approval signed |  |  | □ |  |  | □ |  |  | □ |  |  | □ |  | 

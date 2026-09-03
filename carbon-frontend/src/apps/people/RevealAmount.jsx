@@ -12,7 +12,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompensationAccess } from './useCompensationAccess';
-import { revealEmployeeCompensation } from '../../api/people';
+import { fetchCompensationLedger } from '../../api/people';
 import { formatAmount } from './utils';
 
 const MASKED = '\u2022\u2022\u2022\u2022\u2022\u2022';
@@ -61,7 +61,7 @@ export default function RevealAmount({ employeeId, size = 'small' }) {
     setRevealing(true);
     setFailed(false);
     try {
-      const data = await revealEmployeeCompensation(employeeId, token);
+      const data = await fetchCompensationLedger(employeeId, token);
       setValue(data?.basic_salary ?? null);
     } catch {
       setFailed(true);

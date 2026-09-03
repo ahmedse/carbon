@@ -55,7 +55,6 @@ export default {
       { type: 'group', label: 'Payroll & Benefits' },
       { label: 'Payroll', path: '/people/payroll', role: '*' },
       { label: 'Payslips', path: '/people/payslip', role: '*' },
-      { label: 'Benefits', path: '/people/benefits', role: '*' },
       { label: 'Loans', path: '/people/loans', role: '*' },
       { type: 'divider' },
       { type: 'group', label: 'Configuration' },

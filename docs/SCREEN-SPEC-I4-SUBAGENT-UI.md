@@ -61,9 +61,9 @@ separate backend follow-up, out of I4-F scope).
 - **Progress sub-list:** the "Subagents" section in `AITaskPanel.jsx` (below the run-steps /
   plan detail), not a new route. Each item is a full `SubagentResultCard` (name + status +
   result_summary + expandable detail), nested under the section heading.
-- **Dispatch trigger:** a small "Dispatch subagent" affordance in `AITaskPanel` (ONE button/action
-  in the selected-plan header actions row), opening a `SystemDialog` form (name + brief + optional
-  scope). **Not** a new sidebar item.
+- **Dispatch trigger:** a small "Dispatch subagent" affordance in the "Subagents" section header in
+  `AITaskPanel` (ONE button/action), opening a `SystemDialog` form (name + brief + optional
+  scope). **Not** a new sidebar item and **not** a change to `AITaskPlanCard`.
 
 ---
 

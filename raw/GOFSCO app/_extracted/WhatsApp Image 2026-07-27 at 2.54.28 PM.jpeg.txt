@@ -1,0 +1,88 @@
+AFTER GENERATE GO TO INVENTORY WORKSHEET THEN FILL AS MENTIONED AND PRINT.
+WILL GET WORKSHEET THEN EXPORT EXCEL AND MODIFY IT AS REQUIRED.
+
+(EF Seeson Date: 27/07/2026
+
+Devout 6
+‏لها‎ 1
+
+Reconciliation
+
+Notes Website sage Data
+eAnaytics
+Miscelaneous
+
+1/C Physical Inventory (Inventory Worksheet)
+
+options
+
+Macro:
+
+tas
+
+pone view
+Teel
+
+Desktop View
+
+(Gas & Oil Fields Services Co., Gas & Oil Fields Services Co.
+
+لعأ
+
+Inventory
+Reconciition
+
+:
+Physical Inventory
+‘Quantities
+
+Pexsolution Co.
+
+Inventory Worksheet
+
+ats.
+
+mea 025
+
+Gas and Ol Field Services Compa
+Accounts Payable
+‏ال‎ Tansaction Reports
+
+Common Services Dester
+Currency 5
+Multiple Contacts
+
+General Ledger ane
+
+4
+
+Financial Reporter
+GIL Reports
+
+© Inventory Control
+VC hems and Price Lists
+
+Generate Inventory
+‘Worksheet
+
+VC Periodic Processing
+VC Physical Inventory
+UC Price/Saes Analysis Re
+VC Setup
+VC Setup Reports
+VC Statist and Inuires
+VC Stock Control Reports
+VC Tansactions
+Purchase Orders
+P/O Analytical Reports
+P/O Create Purchase Orde
+P/O Forms
+P/O Periodic Processing
+P/O Setup
+P/O Setup Reports
+P/O Statistics and Inquiie
+P/O Wansactions
+
+Sogo For Hep, press
+
+BPM > syoehere to search

@@ -1,0 +1,34 @@
+Dear Mohammed,
+Please find below the Finance department's current process requirements, challenges, and areas where we require system automation and improvement.
+Current Process & Requirements
+At present, the Finance department maintains several critical records manually in separate Excel files. These include:
+Loan Details
+We maintain a separate Excel file containing all loan information.
+The file records the department, vendor, loan amount, bank, maturity details, and other relevant information for each loan.
+Book2A (Loan Accruals)
+This Excel file is used to calculate and maintain monthly loan accruals for all banks.
+All calculations are updated manually every month.
+Bank Guarantee List 2026
+We maintain a separate Excel file containing all Bank Guarantee (BG) details, including issuing bank, beneficiary, expiry date, amount, and status.
+LC Project Details
+A separate Excel file is maintained for all Letter of Credit (LC) information, including project details, suppliers, values, expiry dates, and current status.
+Bank Reconciliation Statement (BRS)
+Bank reconciliations are maintained manually in separate Excel files for each bank account.
+Current Challenges & System Requirements
+Bank Facility Documents
+Every month, banks provide facility letters and other PDF documents.
+We require a centralized system where these PDF documents can be uploaded, stored, and easily retrieved whenever required.
+Manual Journal Entries
+All bank-related journal entries are currently passed manually on a daily basis in Sage 300.
+We require automation to reduce manual effort, minimize errors, and improve efficiency.
+Centralized Document Management
+All supporting documents (loan documents, LC documents, bank guarantees, bank advice, payment confirmations, etc.) should be uploaded and linked to the respective transactions in a single system.
+This will improve document tracking, audit readiness, and retrieval.
+Loan Rollover Reminder
+We require an automated reminder system for loan rollover dates.
+The system should notify the Finance team in advance before the rollover or maturity date to avoid delays and penalties.
+These improvements will significantly reduce manual work, improve data accuracy, strengthen document management, and enhance overall operational efficiency within the Finance department.
+Please let us know if any additional information or supporting documents are required.
+ 
+ 
+Best Regards,

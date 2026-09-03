@@ -146,6 +146,7 @@
     "payslips": "Payslips",
     "people": "People",
     "positions": "Positions",
+    "referenceData": "Reference Data",
     "rotation": "Rotation"
   },
   "group": {
@@ -225,7 +226,7 @@
   },
   "devBanner": {
     "label": "Early preview",
-    "message": "Data Trust Platform, Pulse AI, and Carbon Footprint are under active development. Share feedback to help shape what we build next.",
+    "message": "Data Trust Platform, Pulse AI, and Nibras are under active development. Share feedback to help shape what we build next.",
     "cta": "Share feedback"
   }
 }

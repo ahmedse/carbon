@@ -1,5 +1,7 @@
 // src/apps/people/PeopleConfigPage.jsx
-// People & Payroll — app configuration (read-only): identity, roles & compliance rules.
+// People & Payroll — App Config hub. Tabs split the formerly-flat page into
+// Overview (identity + roles), Reference Data (generic editable lists), and
+// Compliance Rules. Reference Data is config-managed here, NOT under MDM.
 
 import React, { useEffect, useState } from 'react';
 import {
@@ -7,12 +9,14 @@ import {
   Chip,
   Paper,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Tabs,
   Typography,
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -27,6 +31,7 @@ import { useAuth } from '../../auth/AuthContext';
 import peopleManifest from './manifest';
 import { fetchComplianceRules } from '../../api/people';
 import { formatDate } from './utils';
+import ReferenceDataManager from './ReferenceDataManager';
 
 // App identity fields shown in the two-column key/value layout.
 const IDENTITY_FIELDS = [
@@ -38,10 +43,13 @@ const IDENTITY_FIELDS = [
   { key: 'apiPrefix', labelKey: 'colApiPrefix' },
 ];
 
+const TAB_KEYS = ['Overview', 'Reference', 'Compliance'];
+
 export default function PeopleConfigPage() {
   const { t } = useTranslation('people');
   useDocumentTitle(t('configTitle'));
   const { token } = useAuth();
+  const [tabIndex, setTabIndex] = useState(0);
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -55,108 +63,125 @@ export default function PeopleConfigPage() {
       .finally(() => setLoading(false));
   }, [token, t]);
 
+  const overviewTab = (
+    <Stack spacing={2}>
+      {/* App Identity */}
+      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+        <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 1 }}>{t('configAppIdentity')}</Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+          {IDENTITY_FIELDS.map((field) => (
+            <Box key={field.key}>
+              <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', textTransform: 'uppercase' }}>
+                {t(field.labelKey)}
+              </Typography>
+              <Typography sx={{ fontSize: '0.875rem' }}>{peopleManifest[field.key] ?? '—'}</Typography>
+            </Box>
+          ))}
+        </Box>
+      </Paper>
+
+      {/* Roles */}
+      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+        <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 1 }}>{t('configRoles')}</Typography>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRoleKey')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRoleLabel')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRoleScoped')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colDescription')}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(peopleManifest.roles || []).map((role) => (
+                <TableRow key={role.key} hover>
+                  <TableCell>{role.key ?? '—'}</TableCell>
+                  <TableCell>{role.label ?? '—'}</TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color={role.scoped ? 'info' : 'default'}
+                      label={role.scoped ? t('yes') : t('no')}
+                    />
+                  </TableCell>
+                  <TableCell>{role.description ?? '—'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
+    </Stack>
+  );
+
+  const complianceTab = (
+    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 1 }}>{t('configComplianceRules')}</Typography>
+      {loading ? (
+        <LoadingSkeleton variant="table" />
+      ) : error ? (
+        <ErrorAlert message={error} onRetry={() => window.location.reload()} />
+      ) : rules.length === 0 ? (
+        <EmptyState icon={<SettingsIcon />} title={t('configEmpty')} description={t('configEmptyDesc')} />
+      ) : (
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRuleId')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colVersion')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colName')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colJurisdiction')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colCategory')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEffectiveDate')}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colAuthoritative')}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rules.map((rule) => (
+                <TableRow key={rule.id} hover>
+                  <TableCell>{rule.rule_id ?? '—'}</TableCell>
+                  <TableCell>{rule.version ?? '—'}</TableCell>
+                  <TableCell>{rule.name ?? '—'}</TableCell>
+                  <TableCell>{rule.jurisdiction ?? '—'}</TableCell>
+                  <TableCell>{rule.category ?? '—'}</TableCell>
+                  <TableCell>{formatDate(rule.effective_date)}</TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color={rule.is_authoritative ? 'success' : 'default'}
+                      label={rule.is_authoritative ? t('yes') : t('no')}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </Paper>
+  );
+
   return (
     <PageContainer>
       <PageHeader icon={SettingsIcon} title={t('configTitle')} subtitle={t('configSubtitle')} />
 
-      <Stack spacing={2}>
-        {/* App Identity */}
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 1 }}>{t('configAppIdentity')}</Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-            {IDENTITY_FIELDS.map((field) => (
-              <Box key={field.key}>
-                <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', textTransform: 'uppercase' }}>
-                  {t(field.labelKey)}
-                </Typography>
-                <Typography sx={{ fontSize: '0.875rem' }}>{peopleManifest[field.key] ?? '—'}</Typography>
-              </Box>
-            ))}
-          </Box>
-        </Paper>
+      <Tabs value={tabIndex} onChange={(_, v) => setTabIndex(v)} sx={{ mb: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+        {TAB_KEYS.map((k) => (
+          <Tab
+            key={k}
+            label={t(`configTab${k}`)}
+            sx={{ minHeight: 36, fontSize: '0.8125rem', textTransform: 'none', py: 0.75 }}
+          />
+        ))}
+      </Tabs>
 
-        {/* Roles */}
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 1 }}>{t('configRoles')}</Typography>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRoleKey')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRoleLabel')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRoleScoped')}</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colDescription')}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(peopleManifest.roles || []).map((role) => (
-                  <TableRow key={role.key} hover>
-                    <TableCell>{role.key ?? '—'}</TableCell>
-                    <TableCell>{role.label ?? '—'}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color={role.scoped ? 'info' : 'default'}
-                        label={role.scoped ? t('yes') : t('no')}
-                      />
-                    </TableCell>
-                    <TableCell>{role.description ?? '—'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-
-        {/* Compliance Rules */}
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-          <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, mb: 1 }}>{t('configComplianceRules')}</Typography>
-          {loading ? (
-            <LoadingSkeleton variant="table" />
-          ) : error ? (
-            <ErrorAlert message={error} onRetry={() => window.location.reload()} />
-          ) : rules.length === 0 ? (
-            <EmptyState icon={<SettingsIcon />} title={t('configEmpty')} description={t('configEmptyDesc')} />
-          ) : (
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colRuleId')}</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colVersion')}</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colName')}</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colJurisdiction')}</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colCategory')}</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colEffectiveDate')}</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>{t('colAuthoritative')}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rules.map((rule) => (
-                    <TableRow key={rule.id} hover>
-                      <TableCell>{rule.rule_id ?? '—'}</TableCell>
-                      <TableCell>{rule.version ?? '—'}</TableCell>
-                      <TableCell>{rule.name ?? '—'}</TableCell>
-                      <TableCell>{rule.jurisdiction ?? '—'}</TableCell>
-                      <TableCell>{rule.category ?? '—'}</TableCell>
-                      <TableCell>{formatDate(rule.effective_date)}</TableCell>
-                      <TableCell>
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          color={rule.is_authoritative ? 'success' : 'default'}
-                          label={rule.is_authoritative ? t('yes') : t('no')}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </Paper>
-      </Stack>
+      {tabIndex === 0 && overviewTab}
+      {tabIndex === 1 && <ReferenceDataManager />}
+      {tabIndex === 2 && complianceTab}
     </PageContainer>
   );
 }

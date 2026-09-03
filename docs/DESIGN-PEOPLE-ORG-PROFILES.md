@@ -264,7 +264,7 @@ Nothing bespoke. Everything hangs off the existing detail framework.
 | Concern | Reused component | New work |
 |---------|------------------|----------|
 | Employee profile page | `BaseDetailPage` + `DetailHeader` | `EmployeeDetailPage` (compose only) |
-| Profile / overview tab | `mainTabs` prop pattern | `EmployeeOverviewTab`, `EmployeeEditTab` |
+| Profile / overview tab | `mainTabs` prop pattern | `EmployeeProfileTab` (accordion sections with per-section + one-shot edit-all CRUD) |
 | **Timeline tab** | `mainTabs` + existing MUI `Timeline`/list | `EmployeeTimelineTab` (reads `/timeline/`) |
 | Inspector (metrics) tabs | `inspector/tabs/*` registration | `employeeTabs.jsx` (mirror `orgUnitTabs.jsx`) |
 | Notes / comments | `useNotes().setContexts` | wire `entity_type='Employee'` context |

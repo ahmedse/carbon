@@ -91,7 +91,7 @@ def test_build_code_result_extracts_code_execute():
         "table_rows": None,
         "result": None,
     }
-    completed = [{"tool_name": "code.execute", "result": json.dumps(payload)}]
+    completed = [{"tool_name": "code_execute", "result": json.dumps(payload)}]
     assert _build_code_result(completed) == payload
 
 
@@ -116,7 +116,7 @@ def test_build_code_result_surfaces_promoted_error():
     }
     completed = [
         {
-            "tool_name": "code.execute",
+            "tool_name": "code_execute",
             "error": payload["error"],
             "result": json.dumps(payload),
         },
@@ -125,11 +125,11 @@ def test_build_code_result_surfaces_promoted_error():
 
 
 def test_build_code_result_skips_guardrail_cancel():
-    # Guardrail-cancelled code.execute has ``result: None`` — no sandbox dict,
+    # Guardrail-cancelled code_execute has ``result: None`` — no sandbox dict,
     # so no code_result (nothing to render).
     completed = [
         {
-            "tool_name": "code.execute",
+            "tool_name": "code_execute",
             "error": "Tool cancelled by guardrail: policy",
             "result": None,
         },
@@ -139,7 +139,7 @@ def test_build_code_result_skips_guardrail_cancel():
 
 def test_build_code_result_skips_non_sandbox_shape():
     completed = [
-        {"tool_name": "code.execute", "result": json.dumps({"requires_confirmation": True})},
+        {"tool_name": "code_execute", "result": json.dumps({"requires_confirmation": True})},
     ]
     assert _build_code_result(completed) is None
 

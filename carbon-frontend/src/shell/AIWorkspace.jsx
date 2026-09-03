@@ -250,11 +250,16 @@ export function AIWorkspace({ onClose }) {
 
   // Persist the effective id into state so localStorage and the activeRef
   // (Ctrl+W archive target) stay in sync with what's actually rendered.
+  // Guarded on `!loading`: while the list is still loading `visibleIds` is
+  // empty, so `effectiveActiveId` is null — persisting that would wipe the
+  // stored "last active" conversation before the list arrives and force a
+  // fallback to the newest thread on every open.
   useEffect(() => {
+    if (loading) return;
     if (activeId !== effectiveActiveId) {
       setActiveId(effectiveActiveId);
     }
-  }, [activeId, effectiveActiveId]);
+  }, [loading, activeId, effectiveActiveId]);
 
   // Handle new chat.
   // ALWAYS create a fresh conversation. Reusing any existing thread (even an

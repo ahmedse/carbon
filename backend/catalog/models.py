@@ -102,11 +102,16 @@ class AssetProfile(models.Model):
 
 
 class GovernanceEvent(models.Model):
-    ACTIONS = [('create', 'Create'), ('update', 'Update'), ('delete', 'Delete')]
+    # The audit ``action`` is an OPEN per-domain vocabulary, NOT a closed enum.
+    # Known verbs actually in use across the platform:
+    #   create, update, delete, deactivate, reactivate,
+    #   view_compensation, compensation_change, compensation_verified.
+    # The field is 40 chars so domain-specific verbs (e.g. the compensation
+    # ledger) persist without PostgreSQL "value too long" DataErrors.
     asset = models.ForeignKey(AssetProfile, null=True, blank=True, on_delete=models.SET_NULL, related_name='events')
     entity_type = models.CharField(max_length=40)
     entity_id = models.PositiveIntegerField(null=True, blank=True)
-    action = models.CharField(max_length=10, choices=ACTIONS)
+    action = models.CharField(max_length=40)
     before = models.JSONField(null=True, blank=True)
     after = models.JSONField(null=True, blank=True)
     user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='governance_events')

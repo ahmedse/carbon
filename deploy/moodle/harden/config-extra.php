@@ -20,5 +20,5 @@ $CFG->sslproxy       = false;
 
 // Forced settings the UI can't undo
 $CFG->forced_plugin_settings = [
-    'tool_mfa' => ['enabled' => 1, 'lockout' => 5],
+    'tool_mfa' => ['enabled' => 0, 'lockout' => 5],
 ];

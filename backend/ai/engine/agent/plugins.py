@@ -29,12 +29,18 @@ Import style: this module lives under ``ai/engine/agent/`` and uses the
 from __future__ import annotations
 
 import logging
+import re
 from abc import ABC, abstractmethod
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger("pulse.agent.plugins")
+
+# OpenAI function-call tool names MUST match this pattern (dots/other chars
+# cause a 400 on every chat turn that ships the full tool catalog). Enforced
+# here so a bad name fails fast at registration instead of at the LLM call.
+TOOL_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 
 # ── ToolContext ────────────────────────────────────────────────────────────
@@ -186,6 +192,11 @@ def register_plugin(plugin: ToolPlugin) -> None:
         raise TypeError(f"register_plugin() expects a ToolPlugin, got {type(plugin)!r}")
     if not plugin.name:
         raise ValueError("ToolPlugin must define a non-empty 'name'")
+    if not TOOL_NAME_PATTERN.fullmatch(plugin.name):
+        raise ValueError(
+            f"ToolPlugin name {plugin.name!r} must match "
+            f"^[a-zA-Z0-9_-]{{1,64}}$ (no dots/spaces); OpenAI rejects otherwise"
+        )
     if any(p.name == plugin.name for p in _PLUGINS):
         logger.warning("Plugin %r already registered; ignoring duplicate", plugin.name)
         return

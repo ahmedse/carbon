@@ -1,0 +1,591 @@
+[
+  {
+    "id": 3,
+    "employee_no": "GF-001",
+    "full_name": "Mohammed Al-Rashidi",
+    "name_en_given": "Mohammed",
+    "name_en_family": "Al-Rashidi",
+    "name_ar_given": "محمد",
+    "name_ar_family": "الراشدي",
+    "civil_id": "281041200123",
+    "date_of_birth": "1981-04-13",
+    "gender": "male",
+    "nationality": "Kuwaiti",
+    "nationality_code": "KWT",
+    "employment_type_code": "full-time",
+    "contract_type_code": "indeterminate",
+    "kuwaitization": true,
+    "manager_id": null,
+    "position_id": 4,
+    "org_unit_id": 107,
+    "basic_salary": "1800.000",
+    "join_date": "2019-03-15",
+    "rotation": "1/1",
+    "is_active": true,
+    "created_at": "2026-09-02T09:48:50.878175+00:00",
+    "updated_at": "2026-09-03T09:25:41.681364+00:00",
+    "certifications": [
+      {
+        "cert_type": "H2S Safety",
+        "number": "H2S-2021-441",
+        "issued_date": "2021-07-20",
+        "expiry_date": "2026-07-19",
+        "notes": ""
+      },
+      {
+        "cert_type": "BOSIET",
+        "number": "BST-2024-001",
+        "issued_date": "2024-03-10",
+        "expiry_date": "2026-09-25",
+        "notes": ""
+      },
+      {
+        "cert_type": "Fire Warden",
+        "number": "FW-2023-321",
+        "issued_date": "2023-06-01",
+        "expiry_date": "2026-12-01",
+        "notes": ""
+      },
+      {
+        "cert_type": "KOC Gate Pass (Green)",
+        "number": "KGP-7821",
+        "issued_date": "2024-01-05",
+        "expiry_date": "2027-01-05",
+        "notes": ""
+      },
+      {
+        "cert_type": "First Aid & CPR",
+        "number": "FA-2025-088",
+        "issued_date": "2025-01-15",
+        "expiry_date": "2027-01-15",
+        "notes": ""
+      }
+    ],
+    "benefits": [
+      {
+        "benefit_type_code": "ACCOM",
+        "benefit_type_name": "Accommodation Allowance",
+        "monthly_amount": "250.000",
+        "effective_start": "2019-04-01",
+        "effective_end": null
+      },
+      {
+        "benefit_type_code": "MEDICAL",
+        "benefit_type_name": "Medical Insurance",
+        "monthly_amount": "0.000",
+        "effective_start": "2019-04-01",
+        "effective_end": null
+      },
+      {
+        "benefit_type_code": "TICKETS",
+        "benefit_type_name": "Annual Air Tickets",
+        "monthly_amount": "200.000",
+        "effective_start": "2019-04-01",
+        "effective_end": null
+      },
+      {
+        "benefit_type_code": "VEHICLE",
+        "benefit_type_name": "Company Vehicle Allowance",
+        "monthly_amount": "150.000",
+        "effective_start": "2019-04-01",
+        "effective_end": null
+      }
+    ],
+    "leave_entitlements": [
+      {
+        "year": 2025,
+        "leave_type": "annual",
+        "entitled_days": "42.00",
+        "used_days": "42.00",
+        "carried_forward": "0.00",
+        "notes": ""
+      },
+      {
+        "year": 2026,
+        "leave_type": "annual",
+        "entitled_days": "42.00",
+        "used_days": "8.00",
+        "carried_forward": "0.00",
+        "notes": ""
+      },
+      {
+        "year": 2026,
+        "leave_type": "sick",
+        "entitled_days": "30.00",
+        "used_days": "2.00",
+        "carried_forward": "0.00",
+        "notes": ""
+      }
+    ],
+    "loans": [
+      {
+        "loan_type": "Personal Loan",
+        "principal": "3000.000",
+        "interest_rate": "0.000",
+        "term_months": 12,
+        "start_date": "2025-06-01",
+        "status": "active",
+        "notes": ""
+      }
+    ],
+    "compensation_lines": [],
+    "rotation_schedules": [],
+    "attendance": [],
+    "permissions": [],
+    "leave_records": [],
+    "payslip_lines": []
+  },
+  {
+    "id": 4,
+    "employee_no": "GF-002",
+    "full_name": "Ahmed Ibrahim Hassan",
+    "name_en_given": "Ahmed",
+    "name_en_family": "Hassan",
+    "name_ar_given": "أحمد",
+    "name_ar_family": "حسن",
+    "civil_id": "299010101234",
+    "date_of_birth": "1990-01-01",
+    "gender": "male",
+    "nationality": "Egyptian",
+    "nationality_code": "EGY",
+    "employment_type_code": "full-time",
+    "contract_type_code": "fixed-term",
+    "kuwaitization": false,
+    "manager_id": null,
+    "position_id": 5,
+    "org_unit_id": 107,
+    "basic_salary": "1400.000",
+    "join_date": "2021-06-01",
+    "rotation": "2/1",
+    "is_active": true,
+    "created_at": "2026-09-02T09:48:50.892902+00:00",
+    "updated_at": "2026-09-02T18:05:39.193307+00:00",
+    "certifications": [
+      {
+        "cert_type": "First Aid & CPR",
+        "number": "FA-2024-205",
+        "issued_date": "2024-03-20",
+        "expiry_date": "2026-03-20",
+        "notes": ""
+      },
+      {
+        "cert_type": "H2S Safety",
+        "number": "H2S-2024-222",
+        "issued_date": "2024-09-01",
+        "expiry_date": "2026-09-01",
+        "notes": ""
+      },
+      {
+        "cert_type": "Fire Warden",
+        "number": "FW-2024-088",
+        "issued_date": "2024-11-01",
+        "expiry_date": "2026-11-01",
+        "notes": ""
+      },
+      {
+        "cert_type": "KOC Gate Pass (Blue)",
+        "number": "KGP-9012",
+        "issued_date": "2024-06-10",
+        "expiry_date": "2027-06-10",
+        "notes": ""
+      }
+    ],
+    "benefits": [
+      {
+        "benefit_type_code": "ACCOM",
+        "benefit_type_name": "Accommodation Allowance",
+        "monthly_amount": "180.000",
+        "effective_start": "2021-07-01",
+        "effective_end": null
+      },
+      {
+        "benefit_type_code": "MEDICAL",
+        "benefit_type_name": "Medical Insurance",
+        "monthly_amount": "0.000",
+        "effective_start": "2021-07-01",
+        "effective_end": null
+      },
+      {
+        "benefit_type_code": "TICKETS",
+        "benefit_type_name": "Annual Air Tickets",
+        "monthly_amount": "180.000",
+        "effective_start": "2021-07-01",
+        "effective_end": null
+      }
+    ],
+    "leave_entitlements": [
+      {
+        "year": 2025,
+        "leave_type": "annual",
+        "entitled_days": "30.00",
+        "used_days": "25.00",
+        "carried_forward": "5.00",
+        "notes": ""
+      },
+      {
+        "year": 2026,
+        "leave_type": "annual",
+        "entitled_days": "30.00",
+        "used_days": "15.00",
+        "carried_forward": "5.00",
+        "notes": ""
+      },
+      {
+        "year": 2026,
+        "leave_type": "sick",
+        "entitled_days": "30.00",
+        "used_days": "0.00",
+        "carried_forward": "0.00",
+        "notes": ""
+      }
+    ],
+    "loans": [
+      {
+        "loan_type": "Emergency Loan",
+        "principal": "1500.000",
+        "interest_rate": "0.000",
+        "term_months": 6,
+        "start_date": "2026-01-01",
+        "status": "active",
+        "notes": ""
+      }
+    ],
+    "compensation_lines": [],
+    "rotation_schedules": [],
+    "attendance": [],
+    "permissions": [],
+    "leave_records": [],
+    "payslip_lines": []
+  },
+  {
+    "id": 5,
+    "employee_no": "GF-003",
+    "full_name": "Fatima Al-Shalabi",
+    "name_en_given": "Fatima",
+    "name_en_family": "Al-Shalabi",
+    "name_ar_given": "فاطمة",
+    "name_ar_family": "الشلبي",
+    "civil_id": "298061510045",
+    "date_of_birth": "1993-06-15",
+    "gender": "female",
+    "nationality": "Kuwaiti",
+    "nationality_code": "KWT",
+    "employment_type_code": "full-time",
+    "contract_type_code": "indeterminate",
+    "kuwaitization": true,
+    "manager_id": null,
+    "position_id": 6,
+    "org_unit_id": 102,
+    "basic_salary": "1200.000",
+    "join_date": "2020-09-10",
+    "rotation": "",
+    "is_active": true,
+    "created_at": "2026-09-02T09:48:50.899316+00:00",
+    "updated_at": "2026-09-02T18:05:39.197606+00:00",
+    "certifications": [
+      {
+        "cert_type": "KOC Visitor Pass",
+        "number": "KVP-3411",
+        "issued_date": "2025-02-01",
+        "expiry_date": "2026-12-01",
+        "notes": ""
+      },
+      {
+        "cert_type": "First Aid & CPR",
+        "number": "FA-2025-099",
+        "issued_date": "2025-08-01",
+        "expiry_date": "2027-08-01",
+        "notes": ""
+      }
+    ],
+    "benefits": [
+      {
+        "benefit_type_code": "ACCOM",
+        "benefit_type_name": "Accommodation Allowance",
+        "monthly_amount": "200.000",
+        "effective_start": "2020-10-01",
+        "effective_end": null
+      },
+      {
+        "benefit_type_code": "MEDICAL",
+        "benefit_type_name": "Medical Insurance",
+        "monthly_amount": "0.000",
+        "effective_start": "2020-10-01",
+        "effective_end": null
+      },
+      {
+        "benefit_type_code": "TICKETS",
+        "benefit_type_name": "Annual Air Tickets",
+        "monthly_amount": "160.000",
+        "effective_start": "2020-10-01",
+        "effective_end": null
+      }
+    ],
+    "leave_entitlements": [
+      {
+        "year": 2026,
+        "leave_type": "annual",
+        "entitled_days": "42.00",
+        "used_days": "12.00",
+        "carried_forward": "0.00",
+        "notes": ""
+      },
+      {
+        "year": 2026,
+        "leave_type": "emergency",
+        "entitled_days": "5.00",
+        "used_days": "2.00",
+        "carried_forward": "0.00",
+        "notes": ""
+      },
+      {
+        "year": 2026,
+        "leave_type": "sick",
+        "entitled_days": "30.00",
+        "used_days": "5.00",
+        "carried_forward": "0.00",
+        "notes": ""
+      }
+    ],
+    "loans": [],
+    "compensation_lines": [],
+    "rotation_schedules": [],
+    "attendance": [],
+    "permissions": [],
+    "leave_records": [],
+    "payslip_lines": []
+  },
+  {
+    "id": 6,
+    "employee_no": "GF-004",
+    "full_name": "Rajesh Kumar",
+    "name_en_given": "Rajesh",
+    "name_en_family": "Kumar",
+    "name_ar_given": "",
+    "name_ar_family": "",
+    "civil_id": "300021800456",
+    "date_of_birth": "1988-02-18",
+    "gender": "male",
+    "nationality": "Indian",
+    "nationality_code": "IND",
+    "employment_type_code": "full-time",
+    "contract_type_code": "fixed-term",
+    "kuwaitization": false,
+    "manager_id": null,
+    "position_id": 7,
+    "org_unit_id": 108,
+    "basic_salary": "850.000",
+    "join_date": "2022-11-20",
+    "rotation": "3/1",
+    "is_active": true,
+    "created_at": "2026-09-02T09:48:50.905525+00:00",
+    "updated_at": "2026-09-02T18:05:39.201813+00:00",
+    "certifications": [
+      {
+        "cert_type": "BOSIET",
+        "number": "BST-2023-774",
+        "issued_date": "2023-11-05",
+        "expiry_date": "2025-11-05",
+        "notes": ""
+      },
+      {
+        "cert_type": "Confined Space Entry",
+        "number": "CSE-2024-012",
+        "issued_date": "2024-07-20",
+        "expiry_date": "2026-10-01",
+        "notes": ""
+      },
+      {
+        "cert_type": "H2S Safety",
+        "number": "H2S-2025-891",
+        "issued_date": "2025-05-10",
+        "expiry_date": "2027-05-10",
+        "notes": ""
+      },
+      {
+        "cert_type": "KOC Gate Pass (Blue)",
+        "number": "KGP-5544",
+        "issued_date": "2025-03-01",
+        "expiry_date": "2028-03-01",
+        "notes": ""
+      }
+    ],
+    "benefits": [
+      {
+        "benefit_type_code": "ACCOM",
+        "benefit_type_name": "Accommodation Allowance",
+        "monthly_amount": "120.000",
+        "effective_start": "2022-12-01",
+        "effective_end": null
+      },
+      {
+        "benefit_type_code": "MEDICAL",
+        "benefit_type_name": "Medical Insurance",
+        "monthly_amount": "0.000",
+        "effective_start": "2022-12-01",
+        "effective_end": null
+      }
+    ],
+    "leave_entitlements": [
+      {
+        "year": 2026,
+        "leave_type": "annual",
+        "entitled_days": "30.00",
+        "used_days": "18.00",
+        "carried_forward": "0.00",
+        "notes": ""
+      },
+      {
+        "year": 2026,
+        "leave_type": "sick",
+        "entitled_days": "15.00",
+        "used_days": "3.00",
+        "carried_forward": "0.00",
+        "notes": ""
+      }
+    ],
+    "loans": [
+      {
+        "loan_type": "Personal Loan",
+        "principal": "1000.000",
+        "interest_rate": "0.000",
+        "term_months": 10,
+        "start_date": "2024-03-01",
+        "status": "paid_off",
+        "notes": ""
+      }
+    ],
+    "compensation_lines": [],
+    "rotation_schedules": [],
+    "attendance": [],
+    "permissions": [],
+    "leave_records": [],
+    "payslip_lines": []
+  },
+  {
+    "id": 7,
+    "employee_no": "GF-005",
+    "full_name": "Carlos Santos",
+    "name_en_given": "Carlos",
+    "name_en_family": "Santos",
+    "name_ar_given": "",
+    "name_ar_family": "",
+    "civil_id": "303041500789",
+    "date_of_birth": "1995-04-15",
+    "gender": "male",
+    "nationality": "Filipino",
+    "nationality_code": "PHL",
+    "employment_type_code": "full-time",
+    "contract_type_code": "fixed-term",
+    "kuwaitization": false,
+    "manager_id": null,
+    "position_id": 8,
+    "org_unit_id": 107,
+    "basic_salary": "650.000",
+    "join_date": "2023-04-01",
+    "rotation": "5/1",
+    "is_active": true,
+    "created_at": "2026-09-02T09:48:50.911588+00:00",
+    "updated_at": "2026-09-02T18:05:39.207768+00:00",
+    "certifications": [
+      {
+        "cert_type": "BOSIET",
+        "number": "BST-2024-902",
+        "issued_date": "2024-04-01",
+        "expiry_date": "2026-04-01",
+        "notes": ""
+      },
+      {
+        "cert_type": "KOC Gate Pass (Blue)",
+        "number": "KGP-6677",
+        "issued_date": "2025-04-01",
+        "expiry_date": "2027-04-01",
+        "notes": ""
+      },
+      {
+        "cert_type": "H2S Safety",
+        "number": "H2S-2025-333",
+        "issued_date": "2025-09-01",
+        "expiry_date": "2027-09-01",
+        "notes": ""
+      }
+    ],
+    "benefits": [
+      {
+        "benefit_type_code": "ACCOM",
+        "benefit_type_name": "Accommodation Allowance",
+        "monthly_amount": "100.000",
+        "effective_start": "2023-05-01",
+        "effective_end": null
+      },
+      {
+        "benefit_type_code": "MEDICAL",
+        "benefit_type_name": "Medical Insurance",
+        "monthly_amount": "0.000",
+        "effective_start": "2023-05-01",
+        "effective_end": null
+      }
+    ],
+    "leave_entitlements": [
+      {
+        "year": 2026,
+        "leave_type": "annual",
+        "entitled_days": "30.00",
+        "used_days": "8.00",
+        "carried_forward": "0.00",
+        "notes": ""
+      },
+      {
+        "year": 2026,
+        "leave_type": "sick",
+        "entitled_days": "15.00",
+        "used_days": "0.00",
+        "carried_forward": "0.00",
+        "notes": ""
+      }
+    ],
+    "loans": [],
+    "compensation_lines": [],
+    "rotation_schedules": [],
+    "attendance": [],
+    "permissions": [],
+    "leave_records": [],
+    "payslip_lines": []
+  },
+  {
+    "id": 2,
+    "employee_no": "SMK-9",
+    "full_name": "Smoke Person",
+    "name_en_given": "",
+    "name_en_family": "",
+    "name_ar_given": "",
+    "name_ar_family": "",
+    "civil_id": "299010101234",
+    "date_of_birth": null,
+    "gender": "M",
+    "nationality": "",
+    "nationality_code": "KWT",
+    "employment_type_code": "",
+    "contract_type_code": "",
+    "kuwaitization": true,
+    "manager_id": null,
+    "position_id": 2,
+    "org_unit_id": 89,
+    "basic_salary": "1250.500",
+    "join_date": "2025-06-01",
+    "rotation": "",
+    "is_active": true,
+    "created_at": "2026-09-01T08:41:16.160172+00:00",
+    "updated_at": "2026-09-01T17:04:04.409272+00:00",
+    "certifications": [],
+    "benefits": [],
+    "leave_entitlements": [],
+    "loans": [],
+    "compensation_lines": [],
+    "rotation_schedules": [],
+    "attendance": [],
+    "permissions": [],
+    "leave_records": [],
+    "payslip_lines": []
+  }
+]

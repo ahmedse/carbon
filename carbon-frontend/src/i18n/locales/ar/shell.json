@@ -146,6 +146,7 @@
     "payslips": "قسائم الراتب",
     "people": "الموظفون",
     "positions": "الوظائف",
+    "referenceData": "البيانات المرجعية",
     "rotation": "المناوبات"
   },
   "group": {
@@ -225,7 +226,7 @@
   },
   "devBanner": {
     "label": "عرض مبكر",
-    "message": "Data Trust Platform وPulse AI والبصمة الكربونية قيد التطوير النشط. شارك ملاحظاتك للمساهمة في تشكيل ما نبنيه بعد ذلك.",
+    "message": "Data Trust Platform وPulse AI وNibras قيد التطوير النشط. شارك ملاحظاتك للمساهمة في تشكيل ما نبنيه بعد ذلك.",
     "cta": "شارك ملاحظاتك"
   }
 }

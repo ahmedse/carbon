@@ -16,9 +16,12 @@ from .models import (
     AttendanceRecord,
     BenefitType,
     Certification,
+    CompensationComponent,
+    CompensationPlan,
     ComplianceRule,
     Employee,
     EmployeeBenefit,
+    EmployeeCompensation,
     LeaveEntitlement,
     LeaveRecord,
     Loan,
@@ -110,6 +113,64 @@ class PayrollRunSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'status', 'created_at', 'committed_at']
 
 
+class CompensationComponentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompensationComponent
+        fields = [
+            'id', 'code', 'name', 'name_ar', 'direction', 'category',
+            'is_eosi_base', 'is_gosi_base', 'is_wps_relevant', 'is_taxable',
+            'is_variable', 'governing_rule', 'sort_order',
+            'valid_from', 'valid_to', 'is_active',
+        ]
+        read_only_fields = ['id']
+
+
+class CompensationPlanSerializer(serializers.ModelSerializer):
+    component_code = serializers.CharField(source='component.code', read_only=True)
+    component_name = serializers.CharField(source='component.name', read_only=True)
+    component_direction = serializers.CharField(source='component.direction', read_only=True)
+
+    class Meta:
+        model = CompensationPlan
+        fields = [
+            'id', 'org_unit', 'pay_grade_code', 'job_family_code',
+            'component', 'component_code', 'component_name', 'component_direction',
+            'amount', 'currency', 'frequency',
+            'effective_start', 'effective_end', 'is_active', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'component_code', 'component_name', 'component_direction']
+
+
+class EmployeeCompensationSerializer(serializers.ModelSerializer):
+    component_code = serializers.CharField(source='component.code', read_only=True)
+    component_name = serializers.CharField(source='component.name', read_only=True)
+    component_direction = serializers.CharField(source='component.direction', read_only=True)
+    component_is_eosi_base = serializers.BooleanField(source='component.is_eosi_base', read_only=True)
+    component_is_gosi_base = serializers.BooleanField(source='component.is_gosi_base', read_only=True)
+    component_sort_order = serializers.IntegerField(source='component.sort_order', read_only=True)
+    verified_by_name = serializers.CharField(source='verified_by.get_username', read_only=True, default=None)
+    created_by_name = serializers.CharField(source='created_by.get_username', read_only=True, default=None)
+
+    class Meta:
+        model = EmployeeCompensation
+        fields = [
+            'id', 'employee', 'component', 'component_code', 'component_name',
+            'component_direction', 'component_is_eosi_base', 'component_is_gosi_base',
+            'component_sort_order',
+            'amount', 'currency', 'frequency',
+            'effective_start', 'effective_end',
+            'source_rule', 'source_plan', 'reason_event', 'reason_note',
+            'is_verified', 'verified_by', 'verified_by_name', 'verified_at',
+            'created_at', 'created_by', 'created_by_name',
+        ]
+        read_only_fields = [
+            'id', 'created_at', 'created_by', 'created_by_name',
+            'component_code', 'component_name', 'component_direction',
+            'component_is_eosi_base', 'component_is_gosi_base', 'component_sort_order',
+            'verified_by_name',
+        ]
+
+
 class PayslipLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = PayslipLine
@@ -158,6 +219,7 @@ class BenefitTypeSerializer(serializers.ModelSerializer):
         model = BenefitType
         fields = [
             'id', 'code', 'name', 'category', 'is_eosi_base', 'is_taxable',
+            'is_active',
         ]
         read_only_fields = ['id']
 

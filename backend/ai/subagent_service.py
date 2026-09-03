@@ -18,7 +18,7 @@ SUBAGENT_READONLY_TOOLS = frozenset({
 
 MUTATION_TOOLS_DENIED = frozenset({
     "create_dq_rule", "call_host_api", "learn_fact", "forget_fact",
-    "run_ops_workflow", "invoke_skill", "code.execute", "export_document",
+    "run_ops_workflow", "invoke_skill", "code_execute", "export_document",
     "delegate_to_workers", "synthesize_worker_results",
     "plan_task", "edit_plan", "approve_plan",
 })

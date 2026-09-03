@@ -4,3 +4,4 @@ tls/
 data/
 build/
 release/
+.sign/

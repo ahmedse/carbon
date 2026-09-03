@@ -1,19 +1,18 @@
 // src/inspector/tabs/employeeTabs.jsx
 // Contextual Inspector tabs for an Employee (entityType: 'employee').
-// Page supplies payload { entityData: { ...employee, orgUnitName, managerLabel,
-// allOrgUnits, allEmployees } } — the read-only overview tab renders from it.
+// Right-panel tab: audit trail timeline (not a duplicate of the main Profile tab).
 
-import PeopleIcon from '@mui/icons-material/People';
+import HistoryIcon from '@mui/icons-material/History';
 import { registerEntityInspectorTab } from './helpers';
-import EmployeeOverviewTab from '../../apps/people/tabs/EmployeeOverviewTab';
+import EmployeeTimelineTab from '../../apps/people/tabs/EmployeeTimelineTab';
 
 export function registerEmployeeInspectorTabs() {
   return registerEntityInspectorTab({
-    id: 'employee-summary',
+    id: 'employee-history',
     entityType: 'employee',
-    label: 'Summary',
-    icon: PeopleIcon,
+    label: 'History',
+    icon: HistoryIcon,
     order: 10,
-    Component: EmployeeOverviewTab,
+    Component: EmployeeTimelineTab,
   });
 }

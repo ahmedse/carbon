@@ -47,6 +47,7 @@ const createSchedule = vi.fn();
 const editSchedule = vi.fn();
 const deleteSchedule = vi.fn();
 const pauseSchedule = vi.fn();
+const listSubagents = vi.fn();
 
 vi.mock('../api/aiWorkspace', () => ({
   listPlans: (...args) => listPlans(...args),
@@ -76,6 +77,7 @@ vi.mock('../api/aiWorkspace', () => ({
   editSchedule: (...args) => editSchedule(...args),
   deleteSchedule: (...args) => deleteSchedule(...args),
   pauseSchedule: (...args) => pauseSchedule(...args),
+  listSubagents: (...args) => listSubagents(...args),
 }));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -120,6 +122,7 @@ beforeEach(() => {
   editSchedule.mockResolvedValue({ id: 1, name: 'S', preview: 'Every day at 9:00 AM' });
   deleteSchedule.mockResolvedValue({ deleted: true, schedule_id: 1 });
   pauseSchedule.mockResolvedValue({ id: 1, enabled: false });
+  listSubagents.mockResolvedValue([]);
   runPlanStream.mockImplementation(async (token, planId, handlers) => {
     streamHandlers.run = handlers;
   });

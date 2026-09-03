@@ -242,9 +242,38 @@ export function reactivateEmployee(id, data, token) {
   return apiFetch(`${ROOT}employees/${encodeURIComponent(id)}/reactivate/`, { method: 'POST', body: data, token });
 }
 
-/** Reveal compensation for one employee (Tier-2, audited on the server). */
-export function revealEmployeeCompensation(id, token) {
-  return apiFetch(`${ROOT}employees/${encodeURIComponent(id)}/compensation/`, { method: 'POST', token });
+/** Full compensation ledger for one employee (GET — audited, requires permission). */
+export function fetchCompensationLedger(id, token) {
+  return apiFetch(`${ROOT}employees/${encodeURIComponent(id)}/compensation/`, { token });
+}
+
+/** Append a new effective-dated compensation line (POST — emits salary_change event). */
+export function createCompensationLine(employeeId, data, token) {
+  return apiFetch(`${ROOT}employees/${encodeURIComponent(employeeId)}/compensation/`, {
+    method: 'POST', body: data, token,
+  });
+}
+
+/** Verify a compensation line (marks it is_verified=true). */
+export function verifyCompensationLine(employeeId, lineId, token) {
+  return apiFetch(
+    `${ROOT}employees/${encodeURIComponent(employeeId)}/compensation/${encodeURIComponent(lineId)}/verify/`,
+    { method: 'POST', token },
+  );
+}
+
+/** Governed component catalog (the types — basic, housing, transport, gosi, …). */
+export function fetchCompensationComponents(token) {
+  return apiFetch(`${ROOT}compensation-components/`, { token });
+}
+
+/** Compensation plan matrix (config layer above the per-employee ledger). */
+export function fetchCompensationPlan(token, { payGrade, jobFamily } = {}) {
+  const params = new URLSearchParams();
+  if (payGrade) params.set('pay_grade', payGrade);
+  if (jobFamily) params.set('job_family', jobFamily);
+  const qs = params.toString() ? `?${params}` : '';
+  return apiFetch(`${ROOT}compensation-plan/${qs}`, { token });
 }
 
 /** Single employee. */

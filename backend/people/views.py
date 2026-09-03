@@ -14,7 +14,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.db.models import ProtectedError
+from django.db.models import ProtectedError, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -25,15 +25,19 @@ from core.feedback import AppFeedback
 
 from .calculation_engine import NonAuthoritativeRuleError
 from .chronicle import record_event, snapshot_employee, snapshot_position
+from .compensation_service import CompensationService
 from .services import CalculationService
 from .models import (
     AttendancePermission,
     AttendanceRecord,
     BenefitType,
     Certification,
+    CompensationComponent,
+    CompensationPlan,
     ComplianceRule,
     Employee,
     EmployeeBenefit,
+    EmployeeCompensation,
     LeaveEntitlement,
     LeaveRecord,
     Loan,
@@ -57,8 +61,11 @@ from .serializers import (
     AttendanceRecordSerializer,
     BenefitTypeSerializer,
     CertificationSerializer,
+    CompensationComponentSerializer,
+    CompensationPlanSerializer,
     ComplianceRuleSerializer,
     EmployeeBenefitSerializer,
+    EmployeeCompensationSerializer,
     EmployeeSerializer,
     LeaveEntitlementSerializer,
     LeaveRecordSerializer,
@@ -242,35 +249,140 @@ class EmployeeDetailView(APIView):
 
 
 class EmployeeCompensationView(APIView):
-    """Reveal compensation for one employee (Tier-2 progressive disclosure).
+    """Full compensation ledger for one employee.
 
-    Requires ``people:view_compensation``. Every successful reveal is audited via
-    ``emit_governance_event`` so salary access is traceable.
+    GET  /employees/<pk>/compensation/
+         Returns: current ledger (active today) with totals + full history.
+         Requires ``people:view_compensation``. Every reveal is audited.
+
+    POST /employees/<pk>/compensation/
+         Append a new effective-dated line to the ledger.
+         Requires ``people:manage`` (PeopleAccess non-GET gate).
+         Always emits a ``salary_change`` PersonnelEvent.
     """
 
     permission_classes = [IsAuthenticated, PeopleAccess]
 
-    def post(self, request, pk):
+    def _get_employee(self, request, pk):
+        qs = (
+            Employee.objects.all()
+            if is_global_admin(request.user)
+            else Employee.objects.filter(org_unit_id__in=_visible_org_unit_ids(request.user))
+        )
+        return get_object_or_404(qs, pk=pk)
+
+    def get(self, request, pk):
         if not can_view_compensation(request.user):
             return Response(
                 {'detail': 'You do not have permission to view compensation.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        employee = get_object_or_404(Employee, pk=pk)
+        employee = self._get_employee(request, pk)
+        today = timezone.localdate()
+
+        current_qs = CompensationService.current_lines(employee, as_of=today)
+        history_qs = CompensationService.history_lines(employee)
+        current_data = EmployeeCompensationSerializer(current_qs, many=True).data
+        history_data = EmployeeCompensationSerializer(history_qs, many=True).data
+        totals = CompensationService.ledger_totals(employee, as_of=today)
+
         emit_governance_event(
             entity_type='Employee',
             entity_id=employee.pk,
             action='view_compensation',
             before=None,
-            after={'fields': list(COMPENSATION_FIELDS)},
+            after={'as_of': str(today), 'lines_count': len(current_data)},
             user=request.user,
         )
         return Response({
             'employee_id': employee.pk,
-            'basic_salary': str(employee.basic_salary),
-            'revealed_at': timezone.now().isoformat(),
+            'as_of': str(today),
             'revealed_by': request.user.get_username(),
+            'totals': totals,
+            'current': current_data,
+            'history': history_data,
+            # legacy scalar kept for backwards compatibility during transition
+            'basic_salary': str(employee.basic_salary),
         })
+
+    def post(self, request, pk):
+        """Append a new ledger line — the additive compensation update."""
+        employee = self._get_employee(request, pk)
+        ser = EmployeeCompensationSerializer(data={
+            **request.data,
+            'employee': employee.pk,
+        })
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+
+        line = CompensationService.append_line(
+            employee,
+            component=data['component'],
+            amount=data['amount'],
+            currency=data.get('currency', 'KWD'),
+            frequency=data.get('frequency', 'monthly'),
+            effective_start=data['effective_start'],
+            effective_end=data.get('effective_end'),
+            source_rule=data.get('source_rule'),
+            source_plan=data.get('source_plan'),
+            reason_event=data.get('reason_event'),
+            reason_note=data.get('reason_note', ''),
+            user=request.user,
+        )
+        return Response(EmployeeCompensationSerializer(line).data, status=status.HTTP_201_CREATED)
+
+
+class CompensationComponentListView(APIView):
+    """List all active compensation components (the governed catalog)."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request):
+        qs = CompensationComponent.objects.filter(is_active=True)
+        if request.query_params.get('direction'):
+            qs = qs.filter(direction=request.query_params['direction'])
+        return Response(CompensationComponentSerializer(qs, many=True).data)
+
+    def post(self, request):
+        if not is_global_admin(request.user):
+            return Response({'detail': 'Admin only.'}, status=status.HTTP_403_FORBIDDEN)
+        ser = CompensationComponentSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data, status=status.HTTP_201_CREATED)
+
+
+class CompensationPlanListView(APIView):
+    """The compensation matrix (config layer above the per-employee ledger)."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request):
+        qs = CompensationPlan.objects.filter(is_active=True).select_related('component', 'org_unit')
+        if request.query_params.get('pay_grade'):
+            qs = qs.filter(pay_grade_code=request.query_params['pay_grade'])
+        if request.query_params.get('job_family'):
+            qs = qs.filter(job_family_code=request.query_params['job_family'])
+        return Response(CompensationPlanSerializer(qs, many=True).data)
+
+    def post(self, request):
+        if not is_global_admin(request.user):
+            return Response({'detail': 'Admin only.'}, status=status.HTTP_403_FORBIDDEN)
+        ser = CompensationPlanSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data, status=status.HTTP_201_CREATED)
+
+
+class EmployeeCompensationVerifyView(APIView):
+    """Mark a compensation line as verified (Tier-2 verification gate)."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def post(self, request, employee_pk, line_pk):
+        line = get_object_or_404(EmployeeCompensation, pk=line_pk, employee_id=employee_pk)
+        CompensationService.verify_line(line, verified_by=request.user)
+        return Response(EmployeeCompensationSerializer(line).data)
 
 
 class EmployeeDeactivateView(APIView):
@@ -645,6 +757,15 @@ class BenefitTypeListCreateView(_GatedListCreateView):
     model = BenefitType
     serializer_class = BenefitTypeSerializer
     org_lookup = None
+
+    def get(self, request):
+        qs = self.model.objects.all()
+        if 'active' in request.query_params:
+            qs = qs.filter(is_active=request.query_params['active'].lower() in ('1', 'true', 'yes'))
+        return Response({
+            'count': qs.count(),
+            'results': self.serializer_class(qs, many=True).data,
+        })
 
 
 class BenefitTypeDetailView(_GatedDetailView):

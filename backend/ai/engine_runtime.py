@@ -726,22 +726,22 @@ def _build_external_sources(completed_tools: list[dict]) -> list[dict]:
 
 
 def _build_code_result(completed_tools: list[dict]) -> dict | None:
-    """Code-sandbox result (I2-F) for answers that ran ``code.execute``.
+    """Code-sandbox result (I2-F) for answers that ran ``code_execute``.
 
     Returns the sandbox dict verbatim ({"stdout","error","image_b64",
-    "table_rows","result"}), or ``None`` when no ``code.execute`` tool ran.
+    "table_rows","result"}), or ``None`` when no ``code_execute`` tool ran.
     Never raises — malformed results are skipped.
     """
     for item in completed_tools or []:
         if not isinstance(item, dict):
             continue
         # Match the tool FIRST, before any error-skip. A user-code failure in
-        # ``code.execute`` is "nested-error promoted" by ExecuteWitness: the
+        # ``code_execute`` is "nested-error promoted" by ExecuteWitness: the
         # inner sandbox ``error`` string is lifted to ``item["error"]`` while
         # the FULL sandbox dict (still carrying its own ``error`` key) is
         # preserved in ``item["result"]``. Skipping on ``item["error"]`` here
         # would drop that dict and hide the friendly error state from the UI.
-        if str(item.get("tool_name") or "") != "code.execute":
+        if str(item.get("tool_name") or "") != "code_execute":
             continue
         raw = item.get("result")
         try:

@@ -13,13 +13,18 @@ import {
   Chip,
   CircularProgress,
   IconButton,
+  Stack,
   Tab,
   Tabs,
+  TextField,
   Tooltip,
   Typography,
   useTheme,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import EditIcon from '@mui/icons-material/Edit';
+import BlockIcon from '@mui/icons-material/Block';
+import RestoreIcon from '@mui/icons-material/Restore';
 import WorkHistoryIcon from '@mui/icons-material/WorkHistory';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
@@ -33,21 +38,24 @@ import {
   fetchEmployee, fetchEmployees,
   fetchLeaveEntitlements, fetchLeaveRecords,
   fetchEmployeeBenefits, fetchLoans, fetchCertifications,
-  fetchEmployeeTimeline,
+  fetchEmployeeTimeline, fetchPositions,
+  deactivateEmployee, reactivateEmployee,
 } from '../../api/people';
 import { fetchOrgUnits } from '../../api/orgUnits';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import PageContainer from '../../components/layout/PageContainer';
-import EmployeeOverviewTab from './tabs/EmployeeOverviewTab';
+import SystemDialog from '../../components/SystemDialog';
+import EmployeeProfileTab from './tabs/EmployeeProfileTab';
 import EmployeeTimelineTab from './tabs/EmployeeTimelineTab';
 import EmployeeLeaveTab from './tabs/EmployeeLeaveTab';
 import EmployeePayTab from './tabs/EmployeePayTab';
+import EmployeeBenefitsTab from './tabs/EmployeeBenefitsTab';
 import EmployeeCertsTab from './tabs/EmployeeCertsTab';
 import { tenureLabel, totalLeaveBalance, expiryUrgency } from './utils';
 
 const STORAGE_KEY = 'carbonEmployee360';
-const TAB_KEYS = ['Profile', 'Timeline', 'Leave', 'Pay', 'Certs'];
-const TAB_COMPONENTS = [EmployeeOverviewTab, EmployeeTimelineTab, EmployeeLeaveTab, EmployeePayTab, EmployeeCertsTab];
+const TAB_KEYS = ['Profile', 'Timeline', 'Leave', 'Pay', 'Benefits', 'Certs'];
+const TAB_COMPONENTS = [EmployeeProfileTab, EmployeeTimelineTab, EmployeeLeaveTab, EmployeePayTab, EmployeeBenefitsTab, EmployeeCertsTab];
 
 function getInitials(emp) {
   if (emp.name_en_given && emp.name_en_family) {
@@ -103,7 +111,7 @@ export default function EmployeeDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const [emp, orgUnits, allEmps, leaveEnts, leaveRecs, bens, loans, certs, timeline] = await Promise.all([
+      const [emp, orgUnits, allEmps, leaveEnts, leaveRecs, bens, loans, certs, positions, timeline] = await Promise.all([
         fetchEmployee(employeeId, token),
         fetchOrgUnits(token),
         fetchEmployees(token),
@@ -112,6 +120,7 @@ export default function EmployeeDetailPage() {
         fetchEmployeeBenefits(token),
         fetchLoans(token),
         fetchCertifications(token),
+        fetchPositions(token).catch(() => []),
         fetchEmployeeTimeline(employeeId, token).catch(() => []),
       ]);
 
@@ -136,6 +145,7 @@ export default function EmployeeDetailPage() {
         benefits: toArr(bens),
         loans: toArr(loans),
         certifications: toArr(certs),
+        positions: toArr(positions),
         timelineEvents: Array.isArray(timeline) ? timeline : [],
         empId: emp.id,
       });
@@ -165,6 +175,56 @@ export default function EmployeeDetailPage() {
   const handleTabChange = (_, v) => {
     setTabIndex(v);
     localStorage.setItem(`${STORAGE_KEY}:tab`, v);
+  };
+
+  // --- One-shot "edit all sections" mode (drives the Profile tab) ---
+  const [editAll, setEditAll] = useState(false);
+  const enterEditAll = () => {
+    setTabIndex(0);
+    localStorage.setItem(`${STORAGE_KEY}:tab`, '0');
+    setEditAll(true);
+  };
+
+  // --- Governed lifecycle ops (deactivate / reactivate), moved off the grid ---
+  const [opMode, setOpMode] = useState(null); // 'deactivate' | 'reactivate'
+  const [opForm, setOpForm] = useState({ reason: '', effective_date: '', notes: '' });
+  const [opSaving, setOpSaving] = useState(false);
+
+  const openDeactivate = () => {
+    setOpForm({ reason: '', effective_date: new Date().toISOString().slice(0, 10), notes: '' });
+    setOpMode('deactivate');
+  };
+  const openReactivate = () => {
+    setOpForm({ reason: '', effective_date: '', notes: '' });
+    setOpMode('reactivate');
+  };
+  const closeOp = () => setOpMode(null);
+  const handleOpChange = (e) => setOpForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+  const handleOpConfirm = async () => {
+    if (!opMode || !data) return;
+    if (opMode === 'deactivate' && !opForm.reason.trim()) {
+      notify({ message: t('reasonRequired'), type: 'error' });
+      return;
+    }
+    setOpSaving(true);
+    try {
+      if (opMode === 'deactivate') {
+        await deactivateEmployee(data.id, {
+          reason: opForm.reason.trim(),
+          effective_date: opForm.effective_date || new Date().toISOString().slice(0, 10),
+        }, token);
+        notify({ message: t('employeeDeactivated'), type: 'success' });
+      } else {
+        await reactivateEmployee(data.id, { notes: opForm.notes.trim() || '' }, token);
+        notify({ message: t('employeeReactivated'), type: 'success' });
+      }
+      setOpMode(null);
+      await loadData();
+    } catch (err) {
+      notify({ message: err?.message || err?.feedback?.title || err?.detail || t('actionError'), type: 'error' });
+    } finally {
+      setOpSaving(false);
+    }
   };
 
   // --- Live KPIs computed from loaded data ---
@@ -277,6 +337,22 @@ export default function EmployeeDetailPage() {
               {[data.employee_no, data.employment_type_code || null, data.orgUnitName].filter(Boolean).join(' · ')}
             </Typography>
           </Box>
+
+          {/* Header actions — lifecycle & edit (governed, moved off the grid) */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5, flexShrink: 0 }}>
+            <Button size="small" startIcon={<EditIcon sx={{ fontSize: '0.9375rem' }} />} onClick={enterEditAll}>
+              {t('editProfile')}
+            </Button>
+            {data.is_active ? (
+              <Button size="small" color="error" startIcon={<BlockIcon sx={{ fontSize: '0.9375rem' }} />} onClick={openDeactivate}>
+                {t('deactivate')}
+              </Button>
+            ) : (
+              <Button size="small" color="success" startIcon={<RestoreIcon sx={{ fontSize: '0.9375rem' }} />} onClick={openReactivate}>
+                {t('reactivate')}
+              </Button>
+            )}
+          </Box>
         </Box>
 
         {/* ── Stats ribbon ── */}
@@ -318,9 +394,41 @@ export default function EmployeeDetailPage() {
       {/* ── Tab content ── */}
       <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'background.paper' }}>
         {TabComponent && (
-          <TabComponent entityData={data} additionalProps={{ onSaved: loadData, token }} />
+          <TabComponent entityData={data} additionalProps={{ onSaved: loadData, token, editAll, onEditAllChange: setEditAll }} />
         )}
       </Box>
+
+      <SystemDialog
+        open={Boolean(opMode)}
+        title={opMode === 'deactivate' ? t('deactivateConfirmTitle') : t('reactivateConfirmTitle')}
+        onClose={closeOp}
+        onCancel={closeOp}
+        cancelLabel={tCommon('cancel')}
+        actions={
+          <Button
+            variant="contained"
+            color={opMode === 'deactivate' ? 'error' : 'success'}
+            onClick={handleOpConfirm}
+            disabled={opSaving}
+          >
+            {opMode === 'deactivate' ? t('deactivate') : t('reactivate')}
+          </Button>
+        }
+      >
+        <Stack spacing={2}>
+          <Typography variant="body2" color="text.secondary">
+            {opMode === 'deactivate' ? t('deactivateConfirmBody') : t('reactivateConfirmBody')}
+          </Typography>
+          {opMode === 'deactivate' ? (
+            <>
+              <TextField label={t('deactivateReasonLabel')} name="reason" value={opForm.reason} onChange={handleOpChange} multiline minRows={3} fullWidth required />
+              <TextField label={t('deactivateEffectiveDateLabel')} name="effective_date" value={opForm.effective_date} onChange={handleOpChange} type="date" slotProps={{ inputLabel: { shrink: true } }} fullWidth />
+            </>
+          ) : (
+            <TextField label={t('reactivateNotesLabel')} name="notes" value={opForm.notes} onChange={handleOpChange} multiline minRows={2} fullWidth />
+          )}
+        </Stack>
+      </SystemDialog>
     </Box>
   );
 }

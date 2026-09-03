@@ -1,4 +1,4 @@
-"""``code_execute`` — ``code.execute`` tool: run code over a result set.
+"""``code_execute`` — the ``code_execute`` tool: run code over a result set.
 
 Phase I2-B.  Exposes the subprocess :class:`~ai.code_sandbox.CodeSandbox` to the
 agent as a read-only named tool.
@@ -26,7 +26,7 @@ logger = logging.getLogger("carbon.ai.plugins.code_execute")
 
 
 class CodeExecuteTool(ToolPlugin):
-    name = "code.execute"
+    name = "code_execute"
     description = (
         "Run Python/pandas/matplotlib code over a provided result set and "
         "return a chart image, a table, or a scalar. Read-only. Assign the "
@@ -63,7 +63,7 @@ class CodeExecuteTool(ToolPlugin):
         try:
             result = CodeSandbox.execute(code, data)
         except Exception as exc:  # fail-visible, never raise into the turn
-            logger.warning("code.execute failed: %s", exc)
+            logger.warning("code_execute failed: %s", exc)
             return {"error": str(exc), "code": code}
         # I2-F — thread the executed source back so the frontend "Code used"
         # disclosure can show WHAT ran (not just its stdout). Additive to the

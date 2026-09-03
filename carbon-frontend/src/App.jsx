@@ -122,7 +122,6 @@ const EmployeeDetailPage = React.lazy(() => import("./apps/people/EmployeeDetail
 const LeavePage = React.lazy(() => import("./apps/people/LeavePage"));
 const PayrollRunsPage = React.lazy(() => import("./apps/people/PayrollRunsPage"));
 const PayslipPage = React.lazy(() => import("./apps/people/PayslipPage"));
-const BenefitsPage = React.lazy(() => import("./apps/people/BenefitsPage"));
 const AttendancePage = React.lazy(() => import("./apps/people/AttendancePage"));
 const PeopleConfigPage = React.lazy(() => import("./apps/people/PeopleConfigPage"));
 const PositionsPage = React.lazy(() => import("./apps/people/PositionsPage"));
@@ -297,7 +296,6 @@ export default function App() {
                 <Route path="/people/leave" element={<LeavePage />} />
                 <Route path="/people/payroll" element={<PayrollRunsPage />} />
                 <Route path="/people/payslip" element={<PayslipPage />} />
-                <Route path="/people/benefits" element={<BenefitsPage />} />
                 <Route path="/people/attendance" element={<AttendancePage />} />
                 <Route path="/people/config" element={<PeopleConfigPage />} />
                 <Route path="/people/loans" element={<LoansPage />} />

@@ -1,5 +1,119 @@
 # TASK-RESULTS.md
 
+## [2026-09-03] Frontend Worker — Phase NIR-7B
+
+**Role:** Frontend Worker · **Kind:** React/MUI refactor + i18n + dead-code removal (People compensation pay tab)
+
+### Scope (verbatim from TASKS.md)
+SystemDialog (not Drawer) · theme tokens/variants (no raw fontSize/height/width/bgcolor) ·
+i18n parity (en/ar) · full page + form state matrix · remove dead code.
+
+### Files Changed
+| File | What |
+|------|------|
+| `carbon-frontend/src/apps/people/tabs/EmployeePayTab.jsx` | `AddCompLineDrawer` (raw `Drawer` + `FormControl`/`InputLabel`) → `AddCompLineDialog` (`SystemDialog`, `TextField select`). Deleted hand-rolled `EARNING_TYPES`/`DEDUCTION_TYPES`/`isEarning`; added `payslipLineDirection()` for payslip `line_type` (ledger still uses API `component_direction`). Deleted `COL_HDR_SX`/`CELL_SX` raw-token consts. Rewrote `CompensationLedger` with full state matrix (`idle/loading/loaded/forbidden/error` + `partial`/`stale`), `LedgerSkeleton` for loading, `EmptyState` + "Add First Component" (manage-only), `Alert`+Retry for error, protected-data notice (no amounts) for 403. Root export computes `canManage = isGlobalAdminFlag || userCapabilities.includes(PEOPLE_MANAGE)`. Removed `if (!ledger) return null`. All `sx` raw `fontSize`/`height`/`width`/`bgcolor` literals replaced with `variant`/`color`/theme spacing. |
+| `carbon-frontend/src/i18n/locales/en/people.json` | +38 keys (`compLedger`, `compVerified`, `compPending`, `compOpen`, `compClosed`, `compEarning`, `compDeduction`, `colComponent`, `colDirection`, `colPeriod`, `compAddTitle`, `compCancel`, `compAdd`, `compCurrency`, `compFrequency`, `compMonthly`, `compAnnual`, `compReasonNote`, `compRequiredFields`, `compAdded`, `compAddFailed`, `compLoadError`, `compProtected`, `compRetry`, `compPartialWarning`, `compAsOf`, `compAddComponent`, `compEmpty`, `compEmptyDesc`, `compAddFirstComponent`, `compGrossMonthly`, `compTotalDeductions`, `compNetMonthly`, `compHistory`, `compNoHistory`, …). |
+| `carbon-frontend/src/i18n/locales/ar/people.json` | Same +38 keys with Arabic translations (identical key set → parity). |
+| `carbon-frontend/src/api/people.js` | Removed `revealEmployeeCompensation` (legacy **POST** reveal — NIR-7A changed `POST /compensation/` to "append", so it was semantically stale) in favor of `fetchCompensationLedger` (GET). Added `createCompensationLine`, `verifyCompensationLine`, `fetchCompensationComponents`, `fetchCompensationPlan`. |
+| `carbon-frontend/src/apps/people/RevealAmount.jsx` | Import + call repointed `revealEmployeeCompensation` → `fetchCompensationLedger`. |
+| `carbon-frontend/src/apps/people/tabs/EmployeeProfileTab.jsx` | Import + call repointed `revealEmployeeCompensation` → `fetchCompensationLedger`. |
+
+### State Matrix (Screen Spec Artifact 5)
+- **Page — `loading`** → `LedgerSkeleton` (MUI `Skeleton`, not spinner).
+- **Page — `empty`** → `EmptyState` + "Add First Component" (manage only).
+- **Page — `error`** → `Alert` with Retry action (`loadLedger`).
+- **Page — `loaded`** → earnings/deductions ledger + net bar + history accordion.
+- **Page — `forbidden` (403)** → protected-data notice, no amounts.
+- **Page — `partial`** → loaded lines + non-blocking warning banner.
+- **Page — `stale`** → keeps data + subtle `LinearProgress` during post-add refresh.
+- **Form — `submitting`** → button disabled + inline `CircularProgress`.
+- **Form — `error`** → inline field `Alert`, form preserved (not cleared on validation error).
+- **Form — `success`** → toast (`notify({ message, type: 'success' })`) → close.
+
+### Dead Code Removed
+- `revealEmployeeCompensation` (legacy POST reveal — superseded by NIR-7A's GET ledger; importers repointed).
+- `EARNING_TYPES` / `DEDUCTION_TYPES` / `isEarning` client-side classifiers (ledger now uses API `component_direction`; a scoped `payslipLineDirection()` remains for the separate payslip `line_type` vocabulary, behavior-preserving).
+
+### Verification (Master Architect — terminal, GREEN)
+- `node scripts/check-i18n-keys.js` → **OK — 2609 keys in parity (en === ar)**.
+- `npm run build` → **✓ built in 26.22s** (chunk-size warnings are pre-existing, non-blocking).
+- `npm run lint` → **0 errors** (36 pre-existing warnings). Two small fixes were required by the
+  Master Architect to reach 0 errors (worker's session had no terminal):
+  1. `eslint.config.js` — `argsIgnorePattern` `'^_'` → `'^_|^[A-Z]'` (both blocks). Root cause of
+     four false-positive `'Icon' is defined but never used` errors: the config has no
+     `eslint-plugin-react`, so JSX `<Icon />` isn't counted as a use of the destructured
+     `{ icon: Icon }` arg. PascalCase props are the idiomatic React component pattern, so
+     extending the ignore pattern to uppercase arg names is the correct root fix (not a per-file
+     disable).
+  2. `EmployeeProfileTab.jsx` — removed dead `const today = …` in `buildInterventions`;
+     `catch (err)` → `catch` (optional catch binding) in `reveal()`.
+
+### Decisions / Judgement Calls
+- `revealEmployeeCompensation` was a **POST** (legacy Tier-2 audited reveal), NOT a duplicate GET.
+  After NIR-7A, `POST /employees/<pk>/compensation/` means **append a line**, so the old POST
+  reveal would have failed validation. Repointing both importers (`RevealAmount.jsx`,
+  `EmployeeProfileTab.jsx`) to `fetchCompensationLedger` (GET) is the correct adaptation; the GET
+  response still carries the legacy `basic_salary` scalar for backwards compatibility.
+
+---
+
+## [2026-09-03] Debugger-Fixer — compensation governance-event regression
+
+**Role:** Debugger/Fixer · **Kind:** backend bugfix + migration + regression tests
+
+### Root Cause (confirmed — two coupled defects)
+1. `catalog.GovernanceEvent.action` was `CharField(max_length=10, choices=ACTIONS)`
+   where `ACTIONS` was a closed `create/update/delete` enum. The compensation domain
+   emits `view_compensation` (18), `compensation_change` (19), `compensation_verified` (21)
+   — all exceed 10 chars → PostgreSQL `DataError: value too long for type character varying(10)`.
+2. `catalog.audit_utils.emit_governance_event` caught that `DataError` in a bare
+   `try/except` but did NOT isolate the DB transaction. The error set
+   `connection.needs_rollback=True`, so the enclosing `transaction.atomic()` in
+   `CompensationService.append_line` (and `ATOMIC_REQUESTS=True` for the verify POST)
+   rolled back the WHOLE block — silently discarding the new compensation line /
+   the `is_verified` write (hence `DoesNotExist` / `0 lines` / `is_verified False`).
+
+### Fix Applied
+- `backend/catalog/models.py` — `GovernanceEvent.action` widened to `max_length=40`;
+  dropped the too-narrow `choices=ACTIONS` in favor of a documented open per-domain
+  verb vocabulary (create, update, delete, deactivate, reactivate,
+  view_compensation, compensation_change, compensation_verified).
+- `backend/catalog/audit_utils.py` — wrapped the event `create` in its own
+  `transaction.atomic()` savepoint so a governance-event failure rolls back ONLY the
+  event insert, never the caller's business write. Kept the defensive `except Exception` log.
+- `backend/catalog/migrations/0013_alter_governanceevent_action.py` — new migration.
+
+### Regression tests added
+- `backend/people/tests/test_compensation.py` — `test_append_line_closes_previous`
+  now asserts 2 `compensation_change` governance events persist; `test_verify_succeeds_with_manage`
+  now asserts a `compensation_verified` governance event persists.
+- `backend/catalog/tests/test_audit_utils.py` (new) —
+  `test_governance_event_failure_does_not_roll_back_caller_write`: forces a `DataError`
+  (50-char `entity_type`) inside a `transaction.atomic()` that also performs a business
+  write, then asserts the business write survived and the event insert was isolated.
+
+### Verification (Master Architect — terminal, GREEN)
+- `pytest people/tests/test_compensation.py catalog/tests/test_audit_utils.py --create-db` → **12 passed**
+  (NOTE: `--create-db` required — `pytest.ini` uses `--reuse-db`, so the widened `action`
+  column was absent from the stale test DB; forcing recreation applied the new schema.)
+- `pytest people -q` → **131 passed**
+- `pytest catalog -q` → **157 passed**
+- `python manage.py makemigrations --check` → **No changes detected**
+- `./.ai-toolkit/scripts/verify.sh backend` → **GATE PASSED** (`django check` ✓)
+- `./.ai-toolkit/scripts/verify.sh antipatterns` → pre-existing repo-wide debt only
+  (MUI Grid `item xs` syntax, raw `fetch()`, `datetime.now()` in
+  `backend/ai/plugins/export_document.py`, 57 `print()` calls) — none introduced by this fix.
+
+> Cross-app flake noted (pre-existing, out of scope): running `pytest people catalog` together
+> makes `catalog/tests/test_datasets_composition.py::test_api_version_create_multi_table`
+> fail (primary-table alias assertion), but it passes in isolation and in its own file
+> (`157 passed` for `catalog` alone). Tracked as a test-isolation debt, not a regression.
+
+### Follow-up Needed
+- NONE (proper fix — no hotfix). Adjacent issues found: NONE.
+
+---
+
 ## [2026-09-01] Master Architect — Pulse 0.2 Close-Out (Waves A–D complete)
 
 **Role:** Master Architect (DeepSeek V4-Pro) · **Kind:** governance + commit (Pulse 0.2)
@@ -4433,3 +4547,81 @@ cd /home/ahmed/aast/carbon/backend
 5. **`PayslipLineSerializer.employee` kept as PK** (not nested read) — the task said "PK or minimal read"; PK chosen for the thin style.
 
 **Verdict: IMPLEMENTED — PENDING RUNTIME GATE** (static checks clean; Master must run the 4 gate commands above to confirm).
+
+## [2026-09-03] Backend Worker — Phase NIR-7A (compensation-ledger remediation)
+
+**Role:** backend-worker (DeepSeek V4-Pro) · **Kind:** backend (NIBRAS/CLEARTURN product-line track)
+
+### Summary
+Implemented the compensation-ledger remediation per ADR-0029. The `EmployeeCompensation`
+ledger is now the single source of truth for compensation, backed by a new
+`CompensationService` (append-only, effective-dated, Decimal-exact money math in the DB).
+The two compensation views (`EmployeeCompensationView` / `EmployeeCompensationVerifyView`)
+were thinned to validate → call service → serialize → return. A data migration backfills
+each employee's `basic_salary` into an open-ended `basic` ledger row, and Django admin
+registrations were added for the three compensation models. 12 regression tests cover
+model ordering/`__str__`, effective-dated resolution, append-closes-prior, Decimal-exact
+totals, and the full GET/POST/verify authorization + RULE_12 org-scoping surface.
+**Gate caveat:** no terminal-execution tool is available in this session, so the
+`verify.sh backend` / `verify.sh antipatterns` / `pytest people` gate commands **could NOT
+be run here** — the exact commands are listed below for the Master. Static validation
+(language server) reports **zero errors** across all touched files.
+
+### Files Created
+| File | Lines | What |
+|------|------:|------|
+| `backend/people/compensation_service.py` | ~163 | `CompensationService` static facade: `current_lines` (effective-dated resolution), `history_lines`, `ledger_totals` (DB `Sum` split by `component__direction`, monthly-only, Decimal-exact), `append_line` (atomic: close prior open row → create → `record_event('salary_change')` + `emit_governance_event('compensation_change')`), `verify_line` (Tier-2 gate + `compensation_verified` event) |
+| `backend/people/migrations/0010_backfill_compensation_basic.py` | ~58 | Data migration: `get_or_create` the `basic` earning component, then one open-ended monthly ledger row per `Employee.basic_salary > 0` (`reason_note='Migrated from Employee.basic_salary'`); reversible `reverse_backfill`; depends on `0009_compensation_ledger` |
+| `backend/people/tests/test_compensation.py` | ~300 | 12 regression tests (model `__str__`/ordering, effective-dated `current_lines`, append-closes-prior, Decimal totals, 403 GET/POST/verify without caps, superuser 201/200, RULE_12 org scoping) |
+
+### Files Changed
+| File | What |
+|------|------|
+| `backend/people/views.py` | `EmployeeCompensationView.get()` now delegates to `CompensationService.current_lines`/`history_lines`/`ledger_totals` (exact envelope preserved incl. legacy `basic_salary` scalar as `str`); `post()` validates via serializer then calls `CompensationService.append_line(...)` (returns 201); `EmployeeCompensationVerifyView.post()` calls `CompensationService.verify_line(...)`; moved `from django.db.models import Q` to module top (`ProtectedError, Q`) |
+| `backend/people/admin.py` | Registered `CompensationComponentAdmin`, `CompensationPlanAdmin`, `EmployeeCompensationAdmin` with `list_display`/`list_filter`/`search_fields` and `readonly_fields` (`created_at`/`verified_at`) |
+
+### Verification Output (static — language server)
+```
+get_errors on all 5 touched files → "No errors found" for each:
+  people/compensation_service.py, people/views.py, people/admin.py,
+  people/migrations/0010_backfill_compensation_basic.py, people/tests/test_compensation.py
+```
+
+Gate commands for Master Architect — **NOT RUN in this session** (no terminal-execution tool):
+```bash
+cd /home/ahmed/aast/carbon
+source .venv/bin/activate
+./.ai-toolkit/scripts/verify.sh backend
+./.ai-toolkit/scripts/verify.sh antipatterns
+cd backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q
+```
+
+### Confirmations
+1. **Thin views** — compensation views now only validate/authorize, delegate to
+   `CompensationService`, and serialize; no money math or ledger mutation logic in the view layer (RULE_28).
+2. **`CompensationService` is a plain static facade** with no DRF imports; it imports only
+   `catalog.audit_utils` (core) + `people` modules (RULE_3).
+3. **Decimal-exact totals** — `ledger_totals` uses `Sum('amount')` split by `component__direction`,
+   monthly-only, returns `Decimal` (no `float`); service tests assert exact `Decimal('1700.000')` net.
+4. **Append-only** — `append_line` unconditionally closes the prior open row
+   (`effective_end = new.effective_start`) and emits both chronicle + governance events.
+5. **Authorization preserved** — `GET` still gates `can_view_compensation` (audited reveal);
+   `POST`/`verify` rely on `PeopleAccess` non-GET → `people:manage` (no inner checks left in the view).
+6. **Migration idempotent + reversible** — `get_or_create` on the component, `RunPython` with a
+   `reverse_backfill` that deletes only the rows it created.
+
+### Deviations / Interpretations
+1. **Dropped the legacy `keep_previous` flag.** The pre-existing `post()` had
+   `if not request.data.get('keep_previous')` gating the close; ADR-0029 mandates an append-only
+   ledger where a change *always* closes the prior row, so `append_line` closes unconditionally.
+2. **`totals` returns `Decimal` (JSON → string).** DRF serializes `Decimal` to string in JSON; the
+   frontend `formatAmount` already handles both forms, so this is safe. Service-level tests assert
+   the exact `Decimal` values directly.
+3. **`Q` moved to module top** per the task, though it is now only used by the pre-existing
+   `PersonnelEventListView.get()` (which still has its own local `from django.db.models import Q`).
+   The local import is redundant but harmless and out of scope; left untouched.
+4. **`frequency`/`currency` defaults (`monthly`/`KWD`) live on the model**, so the view passes
+   `data.get('currency', 'KWD')` / `data.get('frequency', 'monthly')` into `append_line`; the
+   serializer omits them from `validated_data` when absent (model `default` → `required=False`).
+
+**Verdict: IMPLEMENTED — PENDING RUNTIME GATE** (static checks clean; Master must run the 3 gate commands above to confirm).

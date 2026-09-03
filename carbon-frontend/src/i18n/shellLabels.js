@@ -132,6 +132,7 @@ export const NAV_LABEL_KEYS = {
   Rotation: 'nav.rotation',
   Attendance: 'nav.attendance',
   'App Config': 'nav.appConfig',
+  'Reference Data': 'nav.referenceData',
 };
 
 // Group headers -> shell.group.*

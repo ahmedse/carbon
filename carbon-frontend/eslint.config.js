@@ -46,7 +46,7 @@ export default [
       ...js.configs.recommended.rules,
       'no-unused-vars': ['warn', {
         varsIgnorePattern: '^[A-Z_]|^_',
-        argsIgnorePattern: '^_',
+        argsIgnorePattern: '^_|^[A-Z]',
         caughtErrorsIgnorePattern: '^_',
       }],
     },
@@ -72,7 +72,7 @@ export default [
       ...reactHooks.configs.recommended.rules,
       'no-unused-vars': ['error', { 
         varsIgnorePattern: '^[A-Z_]',
-        argsIgnorePattern: '^_',
+        argsIgnorePattern: '^_|^[A-Z]',
         caughtErrorsIgnorePattern: '^_',
       }],
       'react-refresh/only-export-components': [

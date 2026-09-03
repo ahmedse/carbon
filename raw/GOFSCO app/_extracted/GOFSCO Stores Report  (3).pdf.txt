@@ -1,0 +1,133 @@
+
+=== Page 1 ===
+GOFSCO STORES OPTIMIZATION &
+INVENTORY CONTROL
+Phase 1 – Operational Improvement Framework
+Prepared by:
+Ali Jafarian
+Asset & Inventory Supervisor
+1. EXECUTIVE SUMMARY
+This report outlines a structured operational improvement plan for GOFSCO stores with the
+objective of enhancing inventory control, improving operational efficiency, strengthening
+asset tracking, and standardizing store procedures across all departments.
+The initial implementation phase will focus on the Ahmadi Main Store, followed by gradual
+standardization across Drilling, Coiled Tubing (CT), and PCP stores.
+The proposed framework introduces inventory classification systems, movement tracking,
+KPI monitoring, reconciliation procedures, asset verification controls, and centralized
+consumable management to establish a controlled and efficient inventory environment.
+2. OBJECTIVES
+• Improve inventory accuracy and traceability
+• Establish standardized inventory control procedures
+• Reduce discrepancies and undocumented stock movements
+• Ensure operational readiness through controlled stock levels
+• Improve consumable and spare parts management
+• Strengthen asset verification and tracking procedures
+• Enhance reporting visibility for management decision-making
+3. GENERAL STORE IMPLEMENTATION
+A centralized General Store is proposed to manage all common consumables and locally
+sourced operational items shared between departments.
+The General Store will primarily manage:
+
+=== Page 2 ===
+• Oils and lubricants
+• Tires
+• Truck spare parts
+• Common consumables
+• Frequently used operational materials
+The purpose of the General Store is to:
+• Reduce duplicate stocking across departments
+• Improve stock visibility and control
+• Standardize consumable management
+• Optimize procurement and inventory utilization
+4. INVENTORY CLASSIFICATION SYSTEM
+A. Criticality Classification
+• Critical (A-Class): Items directly affecting operations where stock-out may halt
+activities
+• Operational (B-Class): Important items with manageable short-term replacement
+options
+• Non-Critical (C-Class): Items with low operational impact
+B. Movement Classification
+• Fast Moving Items
+• Slow Moving Items
+• Dead Stock
+Movement classification will be based on frequency of issuance, last issue date, and
+historical consumption trends.
+5. MINIMUM & MAXIMUM STOCK CONTROL
+Minimum and maximum stock levels will be established for consumables, spare parts, and
+operational materials to ensure operational continuity and improved procurement
+planning.
+6. SCRAP MANAGEMENT SYSTEM
+A dedicated Scrap Disposal Zone will be implemented within each yard/store location with
+physical segregation, tagging, and monthly review procedures.
+
+=== Page 3 ===
+7. NON-SAGE MATERIAL CONTROL
+Each yard/store will establish a segregated holding area for items currently not listed
+within the Sage system to improve safeguarding, tracking, and accountability.
+8. INVENTORY TRACKING & CONTROL
+A. Real-Time Updating
+All inventory transactions (MIV/MRV) shall be recorded on the same day of movement.
+B. Weekly Reconciliation
+Weekly reconciliation will compare physical inventory against system records.
+C. Monthly Audit
+Monthly audits will verify quantities, documentation compliance, stock condition, and
+slow/dead stock identification.
+9. MONTHLY STORE REPORTING
+Each storekeeper will prepare a monthly operational report including issued items,
+received items, monthly consumption, slow-moving items, dead stock observations, and
+discrepancies.
+10. DATA STRUCTURE ENHANCEMENT
+The inventory database structure will be enhanced to include:
+• Last Issue Date
+• Last Received Date
+• Item Status (Active / Slow Moving / Dead Stock)
+11. ASSET VERIFICATION CONTROL
+Storekeepers will support physical asset verification, location confirmation, and
+identification of missing or unregistered assets to improve accountability.
+12. KPI MONITORING SYSTEM
+• Operational KPIs:
+Inventory Accuracy (%)
+• Material Issue Processing Time
+Inventory Health KPIs:
+• Dead Stock Value
+
+=== Page 4 ===
+• Slow Moving Stock Percentage
+• Inventory Turnover Rate
+Compliance KPIs:
+• Transactions without MIV/MRV
+• Reconciliation Variances
+• Number of Monthly Audit Findings
+Material Physical
+System Entry Classification
+Recipt (MRV) Verification
+Material
+Storage Real-Time Weekly
+Issuance
+Allocation Update Reconciliation
+(MIV)
+Monthly Audit Managment
+& KPI Review Reporting
+13. IMPLEMENTATION APPROACH
+Phase 1:
+• Ahmadi Main Store implementation
+• Inventory classification setup
+• Scrap area segregation
+• Reporting structure establishment
+Phase 2:
+• General Store activation
+• Min/Max stock level setup
+• KPI tracking implementation
+• Weekly reconciliation process activation
+Phase 3:
+• Rollout standardization to Drilling Store, Coiled Tubing Store, and PCP Store
+14. EXPECTED BENEFITS
+• Improved inventory visibility and control
+• Reduced discrepancies and stock losses
+
+=== Page 5 ===
+• Faster material handling and issuance
+• Improved operational readiness
+• Better utilization of inventory and consumables
+• Enhanced reporting and management visibility
+• Improved accountability for assets and materials

@@ -350,6 +350,7 @@ class BenefitType(models.Model):
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     is_eosi_base = models.BooleanField(default=False)
     is_taxable = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         ordering = ['category', 'code']
@@ -358,6 +359,173 @@ class BenefitType(models.Model):
 
     def __str__(self):
         return f"{self.code} — {self.name}"
+
+
+class CompensationComponent(models.Model):
+    """Governed catalog of earning/deduction component types.
+
+    Replaces the free-text ``PayslipLine.line_type``. Every component has a
+    direction (earning vs. deduction) and policy flags consumed by the
+    calculation engine (EOSI base, GOSI base, WPS file inclusion).
+
+    ``governing_rule`` links to the ComplianceRule that sets limits/rates
+    for this component — e.g. GOSI employee share is governed by GOSI-KW.
+    """
+
+    DIRECTION_CHOICES = [('earning', 'Earning'), ('deduction', 'Deduction')]
+
+    code = models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=200)
+    name_ar = models.CharField(max_length=200, blank=True)
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES)
+    category = models.CharField(
+        max_length=64, blank=True,
+        help_text="Code from ReferenceSet 'compensation_category'",
+    )
+    # Policy flags for the calculation engine
+    is_eosi_base = models.BooleanField(default=False, help_text="Included in EOSI/gratuity base")
+    is_gosi_base = models.BooleanField(default=False, help_text="Included in GOSI contribution base")
+    is_wps_relevant = models.BooleanField(default=True, help_text="Appears in WPS file")
+    is_taxable = models.BooleanField(default=False)
+    is_variable = models.BooleanField(default=False, help_text="Variable each month (overtime, commission)")
+    governing_rule = models.ForeignKey(
+        'ComplianceRule', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='governed_components',
+        help_text="ComplianceRule that sets limits/rates for this component",
+    )
+    sort_order = models.PositiveSmallIntegerField(default=100)
+    valid_from = models.DateField(null=True, blank=True)
+    valid_to = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['direction', 'sort_order', 'code']
+        verbose_name = "Compensation Component"
+        verbose_name_plural = "Compensation Components"
+
+    def __str__(self):
+        return f"{self.code} ({self.direction})"
+
+
+class CompensationPlan(models.Model):
+    """Compensation matrix row: what a given grade/family/org receives per component.
+
+    This is the 'template' layer. When an employee is placed in a position,
+    the plan rows matching (org_unit subtree, pay_grade, job_family) are
+    materialised as EmployeeCompensation ledger rows. Config-driven, not
+    hardcoded — GOFSCO specifics live here as data, not code.
+    """
+
+    org_unit = models.ForeignKey(
+        'mdm.OrgUnit', null=True, blank=True, on_delete=models.PROTECT,
+        related_name='compensation_plan_rows',
+        help_text="Null = global plan row (applies to all org units)",
+    )
+    pay_grade_code = models.CharField(
+        max_length=40, blank=True,
+        help_text="Code from ReferenceSet 'pay_grade' (blank = all grades)",
+    )
+    job_family_code = models.CharField(
+        max_length=40, blank=True,
+        help_text="Code from ReferenceSet 'job_family' (blank = all families)",
+    )
+    component = models.ForeignKey(
+        CompensationComponent, on_delete=models.PROTECT, related_name='plan_rows',
+    )
+    amount = models.DecimalField(max_digits=14, decimal_places=3)
+    currency = models.CharField(max_length=3, default='KWD')
+    frequency = models.CharField(
+        max_length=10,
+        choices=[('monthly', 'Monthly'), ('annual', 'Annual')],
+        default='monthly',
+    )
+    effective_start = models.DateField()
+    effective_end = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['pay_grade_code', 'component', '-effective_start']
+        verbose_name = "Compensation Plan Row"
+        verbose_name_plural = "Compensation Plan"
+
+    def __str__(self):
+        scope = f"{self.org_unit or 'global'} | {self.pay_grade_code or 'any'}"
+        return f"{scope} | {self.component.code} = {self.amount}"
+
+
+class EmployeeCompensation(models.Model):
+    """Additive, effective-dated compensation ledger — the single source of truth
+    for every earning and deduction an employee receives.
+
+    Design rules:
+    - Never UPDATE existing rows; append new effective-dated rows.
+    - 'Current salary' = sum of rows where effective_start <= today and
+      (effective_end is NULL or effective_end >= today).
+    - Employee.basic_salary is migrated as an initial 'basic' component row.
+    - Every insert emits a PersonnelEvent('salary_change') via the view layer.
+
+    ``source_rule`` / ``source_plan`` / ``reason_event`` form the provenance
+    chain: WHY does this employee get this amount (traceability to NIBRAS §6.3).
+    """
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name='compensation_lines',
+    )
+    component = models.ForeignKey(
+        CompensationComponent, on_delete=models.PROTECT, related_name='employee_lines',
+    )
+    amount = models.DecimalField(max_digits=14, decimal_places=3)
+    currency = models.CharField(max_length=3, default='KWD')
+    frequency = models.CharField(
+        max_length=10,
+        choices=[('monthly', 'Monthly'), ('annual', 'Annual')],
+        default='monthly',
+    )
+    effective_start = models.DateField()
+    effective_end = models.DateField(null=True, blank=True, help_text="Null = open-ended (current)")
+    # Provenance
+    source_rule = models.ForeignKey(
+        'ComplianceRule', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='compensation_lines',
+        help_text="ComplianceRule that produced this amount",
+    )
+    source_plan = models.ForeignKey(
+        CompensationPlan, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='employee_lines',
+        help_text="CompensationPlan row this was inherited from",
+    )
+    reason_event = models.ForeignKey(
+        'PersonnelEvent', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='compensation_changes',
+        help_text="PersonnelEvent that triggered this change",
+    )
+    reason_note = models.TextField(blank=True)
+    # Verification seam
+    is_verified = models.BooleanField(default=False)
+    verified_by = models.ForeignKey(
+        'accounts.User', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='verified_compensation_lines',
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        'accounts.User', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_compensation_lines',
+    )
+
+    class Meta:
+        ordering = ['employee', 'component', '-effective_start']
+        verbose_name = "Employee Compensation Line"
+        verbose_name_plural = "Employee Compensation Ledger"
+        indexes = [
+            models.Index(fields=['employee', 'effective_start']),
+            models.Index(fields=['component', 'effective_start']),
+        ]
+
+    def __str__(self):
+        end = self.effective_end or '∞'
+        return f"{self.employee} | {self.component.code} | {self.amount} {self.currency} | {self.effective_start}→{end}"
 
 
 class EmployeeBenefit(models.Model):

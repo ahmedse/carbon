@@ -1,0 +1,98 @@
+[
+  {
+    "id": 1,
+    "org_unit_id": 89,
+    "code": "SMK-1",
+    "title": "Smoke Engineer",
+    "grade": "G1",
+    "reports_to_id": null,
+    "is_management": false,
+    "status": "filled",
+    "fte": "1.00",
+    "job_family_code": ""
+  },
+  {
+    "id": 2,
+    "org_unit_id": 89,
+    "code": "P4-E2E",
+    "title": "Senior Driller",
+    "grade": "",
+    "reports_to_id": null,
+    "is_management": false,
+    "status": "filled",
+    "fte": "1.50",
+    "job_family_code": "JF"
+  },
+  {
+    "id": 3,
+    "org_unit_id": 107,
+    "code": "POS-001",
+    "title": "Operations Manager",
+    "grade": "M1",
+    "reports_to_id": null,
+    "is_management": true,
+    "status": "filled",
+    "fte": "1.00",
+    "job_family_code": "operations"
+  },
+  {
+    "id": 4,
+    "org_unit_id": 107,
+    "code": "POS-002",
+    "title": "Senior Field Engineer",
+    "grade": "E3",
+    "reports_to_id": 3,
+    "is_management": false,
+    "status": "filled",
+    "fte": "1.00",
+    "job_family_code": "engineering"
+  },
+  {
+    "id": 5,
+    "org_unit_id": 107,
+    "code": "POS-003",
+    "title": "Operations Supervisor",
+    "grade": "E2",
+    "reports_to_id": 4,
+    "is_management": false,
+    "status": "filled",
+    "fte": "1.00",
+    "job_family_code": "operations"
+  },
+  {
+    "id": 6,
+    "org_unit_id": 102,
+    "code": "POS-004",
+    "title": "HR Officer",
+    "grade": "A2",
+    "reports_to_id": null,
+    "is_management": false,
+    "status": "filled",
+    "fte": "1.00",
+    "job_family_code": "hr"
+  },
+  {
+    "id": 7,
+    "org_unit_id": 108,
+    "code": "POS-005",
+    "title": "Field Technician",
+    "grade": "T2",
+    "reports_to_id": 5,
+    "is_management": false,
+    "status": "filled",
+    "fte": "1.00",
+    "job_family_code": "maintenance"
+  },
+  {
+    "id": 8,
+    "org_unit_id": 107,
+    "code": "POS-006",
+    "title": "Field Operator",
+    "grade": "T1",
+    "reports_to_id": 7,
+    "is_management": false,
+    "status": "filled",
+    "fte": "1.00",
+    "job_family_code": "operations"
+  }
+]

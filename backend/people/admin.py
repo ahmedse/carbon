@@ -8,9 +8,12 @@ from .models import (
     AttendanceRecord,
     BenefitType,
     Certification,
+    CompensationComponent,
+    CompensationPlan,
     ComplianceRule,
     Employee,
     EmployeeBenefit,
+    EmployeeCompensation,
     LeaveEntitlement,
     LeaveRecord,
     Loan,
@@ -159,3 +162,39 @@ class RotationScheduleAdmin(admin.ModelAdmin):
     list_filter = ['is_active', 'pattern']
     search_fields = ['employee__employee_no', 'employee__full_name']
     ordering = ['-start_date']
+
+
+@admin.register(CompensationComponent)
+class CompensationComponentAdmin(admin.ModelAdmin):
+    list_display = ['code', 'name', 'direction', 'category', 'sort_order', 'is_active']
+    list_filter = ['direction', 'category', 'is_active', 'is_eosi_base', 'is_gosi_base']
+    search_fields = ['code', 'name', 'name_ar']
+    ordering = ['direction', 'sort_order', 'code']
+
+
+@admin.register(CompensationPlan)
+class CompensationPlanAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'org_unit', 'pay_grade_code', 'job_family_code',
+        'component', 'amount', 'currency', 'frequency',
+        'effective_start', 'effective_end', 'is_active',
+    ]
+    list_filter = ['frequency', 'is_active', 'pay_grade_code', 'job_family_code']
+    search_fields = ['component__code', 'component__name', 'pay_grade_code', 'job_family_code']
+    ordering = ['pay_grade_code', 'component', '-effective_start']
+    readonly_fields = ['created_at']
+
+
+@admin.register(EmployeeCompensation)
+class EmployeeCompensationAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'employee', 'component', 'amount', 'currency', 'frequency',
+        'effective_start', 'effective_end', 'is_verified', 'created_at',
+    ]
+    list_filter = ['frequency', 'is_verified', 'component']
+    search_fields = [
+        'employee__employee_no', 'employee__full_name',
+        'component__code', 'component__name',
+    ]
+    ordering = ['employee', 'component', '-effective_start']
+    readonly_fields = ['created_at', 'verified_at']

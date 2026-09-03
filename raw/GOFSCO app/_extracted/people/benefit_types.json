@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "code": "ACCOM",
+    "name": "Accommodation Allowance",
+    "category": "accommodation",
+    "is_eosi_base": true,
+    "is_taxable": false
+  },
+  {
+    "id": 3,
+    "code": "MEDICAL",
+    "name": "Medical Insurance",
+    "category": "medical",
+    "is_eosi_base": false,
+    "is_taxable": false
+  },
+  {
+    "id": 6,
+    "code": "OT_BASE",
+    "name": "Overtime Base",
+    "category": "other",
+    "is_eosi_base": true,
+    "is_taxable": false
+  },
+  {
+    "id": 4,
+    "code": "SCHOOL",
+    "name": "School Fees",
+    "category": "school",
+    "is_eosi_base": false,
+    "is_taxable": false
+  },
+  {
+    "id": 5,
+    "code": "TICKETS",
+    "name": "Annual Air Tickets",
+    "category": "tickets",
+    "is_eosi_base": true,
+    "is_taxable": false
+  },
+  {
+    "id": 2,
+    "code": "VEHICLE",
+    "name": "Company Vehicle Allowance",
+    "category": "vehicle",
+    "is_eosi_base": true,
+    "is_taxable": false
+  }
+]

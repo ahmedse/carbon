@@ -117,6 +117,32 @@ def test_register_plugin_rejects_empty_name():
         register_plugin(Nameless())
 
 
+def test_register_plugin_rejects_dotted_name():
+    """OpenAI rejects dotted function names; registration must fail fast."""
+    class Dotted(ToolPlugin):
+        name = "code.execute"
+
+        async def execute(self, args, *, ctx):
+            return {}
+
+    with pytest.raises(ValueError):
+        register_plugin(Dotted())
+
+
+def test_all_tool_names_match_openai_pattern():
+    """Every shipped tool name must satisfy OpenAI's ^[a-zA-Z0-9_-]+$ pattern."""
+    import re
+
+    from ai.engine.agent.tools import get_tool_definitions
+
+    pattern = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+    for tool in get_tool_definitions():
+        name = tool["function"]["name"]
+        assert pattern.fullmatch(name), (
+            f"tool {name!r} violates OpenAI function-name pattern"
+        )
+
+
 def test_executor_wrapper_passes_args_and_context():
     register_plugin(EchoPlugin())
     _, executors = load_plugins()

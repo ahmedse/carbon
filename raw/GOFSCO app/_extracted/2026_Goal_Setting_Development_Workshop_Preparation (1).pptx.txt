@@ -1,0 +1,56 @@
+
+=== Slide 1 ===
+2026 Goal Setting & Development Workshop
+Aligning Individual Excellence with Corporate Strategy • Proposing an Optimized Full-Day Workshop Plan running from 08:30 AM to 15:00 PM
+
+=== Slide 2 ===
+Cascading goals 
+ a Strategic management process that translates high-level organizational objectives into specific, actionable goals for departments, teams, and individual employees. It ensures every person's daily work directly contributes to the company's overarching vision/strategy
+
+=== Slide 3 ===
+The SMART Goal-Setting Framework
+Quality Benchmarks
+GOFSCO PERFORMANCE MANAGEMENT • 2026
+SLIDE 9
+Specific
+Establish plain, highly explicit statements. Avoid ambiguous phrasing. Detail the target metrics clearly.
+Measurable
+Establish solid criteria such as percentages, currency, or counts to evaluate objective completion progress.
+Achievable
+Ensure targets stretch professional competence while remaining fully realistic and mathematically viable.
+Relevant
+Align the targets with your role ,Dep & standard Balanced Scorecard pillars and broader organizational strategy.
+Time-Bound
+Ensure every objective ends with a specific target completion date to maintain corporate drive.
+
+=== Slide 4 ===
+Objectives and KPI template
+Sr | Goal Name | Measurement (KPI) | Description | Target Unit | Target Value | Type | Weight | Group(BSC) | Target Date
+1 | Enhance Sales | $ Total Sales | Units Sold * Sale Price Per Unit | $ Currency | 10,000 | MIN | 35% | Finance | 31-Dec
+2 | Enhance Customer Satisfaction | %Customer Satisfaction | Survey | % Percentage | 85 | MIN | 25% | Customer | 17-Jun
+3 | Enhance Inventory Management | #Damaged Products | Damaged Products By employee mistakes | #Number | 3 | MAX | 25% | Internal Process | 10-Oct
+4 | Enhance Team Technical Knowledge | # Number of courses | Learning Via LinkedIn | # Number | 10 | MIN | 15% | Learning & Development | 31-Dec
+5 | Enhance Lost Time Incident Rate | Lost Time Incident Rate | Zero LTI | # Number | Zero | MIN | 20% | HSE | 31-Dec
+
+=== Slide 5 ===
+Develop Your Goals
+Develop Goals using the templates
+
+=== Slide 6 ===
+Portal Walkthrough & Interactive Session
+Technical Walkthrough
+GOFSCO PERFORMANCE MANAGEMENT • 2026
+SLIDE 12
+GOFSCO
+Present your goals
+Presentation of target entries, assigning specific metrics and BSC dimensions, and selecting critical evaluation dates.
+Q&A Alignment
+Open floor discussion for immediate employee feedback. Resolving functional questions regarding weighting divisions, system portals, and deadlines.
+
+=== Slide 7 ===
+Present Your Goals
+Navigating the new system, verifying templates, reviewing test targets, and initializing your active 2026 profile.
+
+=== Slide 8 ===
+Thank You!
+Let's work together to drive strategic execution and deliver unprecedented success for GOFSCO in 2026.

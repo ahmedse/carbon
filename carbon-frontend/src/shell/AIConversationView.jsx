@@ -116,6 +116,9 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
   const generationRef = useRef(0);
   // True while an SSE stream is in flight (safety net for missing terminal frame).
   const streamingActiveRef = useRef(false);
+  // AbortController for the in-flight SSE fetch — Stop aborts it locally so the
+  // "thinking" indicator releases immediately (server cancel follows).
+  const abortRef = useRef(null);
   const conversationRef = useRef(null);
   conversationRef.current = conversation;
 
@@ -286,9 +289,13 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
       const workspaceContext =
         Array.isArray(mentions) && mentions.length > 0 ? { mentions } : undefined;
 
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       await sendMessageStream(token, conversationId, content, {
         workspaceContext,
         model: selectedModel || undefined,
+        signal: controller.signal,
         onChunk: (delta) => {
           if (genId !== generationRef.current) return;
           setStreamingText((prev) => (prev ?? '') + delta);
@@ -338,6 +345,16 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
 
   const handleStop = useCallback(async () => {
     if (!conversationId) return;
+    // Release the UI immediately: invalidate in-flight callbacks, abort the
+    // local SSE fetch, then cancel the durable generation server-side.
+    generationRef.current += 1;
+    streamingActiveRef.current = false;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setSending(false);
+    setStreamingText(null);
+    setWorkingStage(null);
+    setStopped(true);
     try {
       await stopGeneration(token, conversationId);
     } catch (err) {
@@ -663,9 +680,13 @@ function AIConversationView({ conversationId, onOpenPanel, onForked, onConversat
         setWorkingStage('Regenerating…');
       }
 
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       await retryMessageStream(token, conversationId, userMessageId, {
         content,
         model: selectedModel || undefined,
+        signal: controller.signal,
         onChunk: (delta) => {
           if (genId !== generationRef.current) return;
           setStreamingText((prev) => (prev ?? '') + delta);

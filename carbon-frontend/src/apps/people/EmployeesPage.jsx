@@ -23,9 +23,6 @@ import {
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import BlockIcon from '@mui/icons-material/Block';
-import EditIcon from '@mui/icons-material/Edit';
-import RestoreIcon from '@mui/icons-material/Restore';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -41,9 +38,6 @@ import {
   fetchEmployees,
   fetchPositions,
   createEmployee,
-  updateEmployee,
-  deactivateEmployee,
-  reactivateEmployee,
 } from '../../api/people';
 import { fetchOrgUnits } from '../../api/orgUnits';
 
@@ -76,13 +70,6 @@ function getInitials(employee) {
   return (employee.full_name || 'EE').slice(0, 2).toUpperCase();
 }
 
-const todayStr = () => {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-};
-
 export default function EmployeesPage() {
   const { t } = useTranslation('people');
   const { t: tCommon } = useTranslation('common');
@@ -106,13 +93,8 @@ export default function EmployeesPage() {
   });
 
   const [openDialog, setOpenDialog] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
-
-  const [opEmployee, setOpEmployee] = useState(null);
-  const [opForm, setOpForm] = useState({ reason: '', effective_date: todayStr(), notes: '' });
-  const [opSaving, setOpSaving] = useState(false);
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
@@ -209,60 +191,17 @@ export default function EmployeesPage() {
   const handleView = useCallback((id) => navigate(`/people/employees/${id}`), [navigate]);
 
   const openCreate = useCallback(() => {
-    setEditingEmployee(null);
     setForm({ ...EMPTY_FORM });
-    setOpenDialog(true);
-  }, []);
-
-  const openEdit = useCallback((employee) => {
-    setEditingEmployee(employee);
-    setForm({
-      org_unit: employee.org_unit ?? '',
-      employee_no: employee.employee_no ?? '',
-      full_name: employee.full_name ?? '',
-      nationality: employee.nationality ?? '',
-      nationality_code: employee.nationality_code ?? '',
-      gender: employee.gender ?? '',
-      civil_id: employee.civil_id ?? '',
-      date_of_birth: employee.date_of_birth ? String(employee.date_of_birth).slice(0, 10) : '',
-      employment_type_code: employee.employment_type_code ?? '',
-      contract_type_code: employee.contract_type_code ?? '',
-      kuwaitization: Boolean(employee.kuwaitization),
-      basic_salary: employee.basic_salary != null ? String(employee.basic_salary) : '',
-      join_date: employee.join_date ? String(employee.join_date).slice(0, 10) : '',
-      rotation: employee.rotation ?? '',
-      position: employee.position ?? '',
-      manager: employee.manager ?? '',
-      is_active: Boolean(employee.is_active),
-    });
     setOpenDialog(true);
   }, []);
 
   const closeDialog = useCallback(() => {
     setOpenDialog(false);
-    setEditingEmployee(null);
   }, []);
-
-  const openDeactivate = useCallback((employee) => {
-    setOpForm({ reason: '', effective_date: todayStr(), notes: '' });
-    setOpEmployee({ employee, mode: 'deactivate' });
-  }, []);
-
-  const openReactivate = useCallback((employee) => {
-    setOpForm({ reason: '', effective_date: todayStr(), notes: '' });
-    setOpEmployee({ employee, mode: 'reactivate' });
-  }, []);
-
-  const closeOpDialog = useCallback(() => setOpEmployee(null), []);
 
   const handleChange = (event) => {
     const { name, value, checked, type } = event.target;
     setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
-  };
-
-  const handleOpChange = (event) => {
-    const { name, value } = event.target;
-    setOpForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSave = async () => {
@@ -307,11 +246,7 @@ export default function EmployeesPage() {
 
     setSaving(true);
     try {
-      if (editingEmployee) {
-        await updateEmployee(editingEmployee.id, payload, token);
-      } else {
-        await createEmployee(payload, token);
-      }
+      await createEmployee(payload, token);
       closeDialog();
       setSnackbar({ open: true, message: t('employeeSaved'), severity: 'success' });
       await loadData();
@@ -323,38 +258,6 @@ export default function EmployeesPage() {
       });
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleOpConfirm = async () => {
-    if (!opEmployee) return;
-    if (opEmployee.mode === 'deactivate' && !opForm.reason.trim()) {
-      setSnackbar({ open: true, message: t('reasonRequired'), severity: 'error' });
-      return;
-    }
-    setOpSaving(true);
-    try {
-      if (opEmployee.mode === 'deactivate') {
-        await deactivateEmployee(
-          opEmployee.employee.id,
-          { reason: opForm.reason.trim(), effective_date: opForm.effective_date || todayStr() },
-          token,
-        );
-        setSnackbar({ open: true, message: t('employeeDeactivated'), severity: 'success' });
-      } else {
-        await reactivateEmployee(opEmployee.employee.id, { notes: opForm.notes.trim() || '' }, token);
-        setSnackbar({ open: true, message: t('employeeReactivated'), severity: 'success' });
-      }
-      closeOpDialog();
-      await loadData();
-    } catch (err) {
-      setSnackbar({
-        open: true,
-        message: err?.message || err?.feedback?.title || err?.detail || t('actionError'),
-        severity: 'error',
-      });
-    } finally {
-      setOpSaving(false);
     }
   };
 
@@ -424,7 +327,7 @@ export default function EmployeesPage() {
       {
         field: 'actions',
         headerName: t('colActions'),
-        width: 150,
+        width: 70,
         sortable: false,
         filterable: false,
         renderCell: (p) => {
@@ -436,30 +339,12 @@ export default function EmployeesPage() {
                   <VisibilityIcon sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
-              <Tooltip title={t('actionEditEmployee')}>
-                <IconButton size="small" onClick={() => openEdit(emp)} sx={{ color: 'primary.main' }}>
-                  <EditIcon sx={{ fontSize: 16 }} />
-                </IconButton>
-              </Tooltip>
-              {emp.is_active ? (
-                <Tooltip title={t('actionDeactivateEmployee')}>
-                  <IconButton size="small" onClick={() => openDeactivate(emp)} sx={{ color: 'error.main' }}>
-                    <BlockIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-              ) : (
-                <Tooltip title={t('actionReactivateEmployee')}>
-                  <IconButton size="small" onClick={() => openReactivate(emp)} sx={{ color: 'success.main' }}>
-                    <RestoreIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-              )}
             </Box>
           );
         },
       },
     ];
-  }, [t, orgUnitMap, positionMap, handleView, openEdit, openDeactivate, openReactivate]);
+  }, [t, orgUnitMap, positionMap, handleView]);
 
   if (error) {
     return (
@@ -499,7 +384,7 @@ export default function EmployeesPage() {
 
       <SystemDialog
         open={openDialog}
-        title={editingEmployee ? t('employeeEditTitle') : t('employeeCreateTitle')}
+        title={t('employeeCreateTitle')}
         onClose={closeDialog}
         onCancel={closeDialog}
         cancelLabel={tCommon('cancel')}
@@ -658,11 +543,9 @@ export default function EmployeesPage() {
             fullWidth
           >
             <MenuItem value="">{t('managerUnassigned')}</MenuItem>
-            {employees
-              .filter((e) => e.id !== editingEmployee?.id)
-              .map((e) => (
-                <MenuItem key={e.id} value={e.id}>{e.employee_no} — {e.full_name}</MenuItem>
-              ))}
+            {employees.map((e) => (
+              <MenuItem key={e.id} value={e.id}>{e.employee_no} — {e.full_name}</MenuItem>
+            ))}
           </TextField>
           <FormControlLabel
             control={
@@ -675,63 +558,6 @@ export default function EmployeesPage() {
             }
             label={t('formIsActive')}
           />
-        </Stack>
-      </SystemDialog>
-
-      <SystemDialog
-        open={Boolean(opEmployee)}
-        title={opEmployee?.mode === 'deactivate' ? t('deactivateConfirmTitle') : t('reactivateConfirmTitle')}
-        onClose={closeOpDialog}
-        onCancel={closeOpDialog}
-        cancelLabel={tCommon('cancel')}
-        actions={
-          <Button
-            variant="contained"
-            color={opEmployee?.mode === 'deactivate' ? 'error' : 'success'}
-            onClick={handleOpConfirm}
-            disabled={opSaving}
-          >
-            {opEmployee?.mode === 'deactivate' ? t('deactivate') : t('reactivate')}
-          </Button>
-        }
-      >
-        <Stack spacing={2}>
-          <Typography variant="body2" color="text.secondary">
-            {opEmployee?.mode === 'deactivate' ? t('deactivateConfirmBody') : t('reactivateConfirmBody')}
-          </Typography>
-          {opEmployee?.mode === 'deactivate' ? (
-            <>
-              <TextField
-                label={t('deactivateReasonLabel')}
-                name="reason"
-                value={opForm.reason}
-                onChange={handleOpChange}
-                multiline
-                minRows={3}
-                fullWidth
-                required
-              />
-              <TextField
-                label={t('deactivateEffectiveDateLabel')}
-                name="effective_date"
-                value={opForm.effective_date}
-                onChange={handleOpChange}
-                type="date"
-                slotProps={{ inputLabel: { shrink: true } }}
-                fullWidth
-              />
-            </>
-          ) : (
-            <TextField
-              label={t('reactivateNotesLabel')}
-              name="notes"
-              value={opForm.notes}
-              onChange={handleOpChange}
-              multiline
-              minRows={2}
-              fullWidth
-            />
-          )}
         </Stack>
       </SystemDialog>
 

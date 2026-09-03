@@ -47,6 +47,7 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { useAuth } from '../auth/AuthContext';
 import { useNotification } from '../components/NotificationProvider';
+import { useTranslation } from 'react-i18next';
 import {
   approvePlan,
   confirmPlanStep,
@@ -55,6 +56,7 @@ import {
   declinePlanStep,
   deletePlan,
   deleteSchedule,
+  dispatchSubagent,
   downloadArtifact,
   editPlan,
   editPlanStep,
@@ -66,6 +68,7 @@ import {
   listPlans,
   listPlanTemplates,
   listSchedules,
+  listSubagents,
   instantiatePlanTemplate,
   pausePlan,
   pauseSchedule,
@@ -76,10 +79,12 @@ import {
 } from '../api/aiWorkspace';
 import ScheduleDialog from '../components/ai/ScheduleDialog';
 import ScheduleList from '../components/ai/ScheduleList';
+import SystemDialog from '../components/SystemDialog';
 import { buildPlanPhases, summarizePlanDiff } from '../utils/planGraph';
 import { agentRoleLabel, toolLabel } from './aiTaskStatus';
 import AITaskPlanCard from './AITaskPlanCard';
 import AITaskAuditCard from './AITaskAuditCard';
+import SubagentResultCard from './SubagentResultCard';
 import PlanDiffReviewDialog from './PlanDiffReviewDialog';
 import StepEditDialog from './StepEditDialog';
 import DiscoveryComposer from './DiscoveryComposer';
@@ -511,6 +516,7 @@ ResultArtifactCard.propTypes = {
 function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, onLifecycleStateChange, onSwitchToChat, externalTab = 'tasks' }) {
   const { token } = useAuth();
   const { notify, notifyFromError } = useNotification();
+  const { t } = useTranslation('ai');
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
   const notifyFromErrorRef = useRef(notifyFromError);
@@ -564,6 +570,13 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletingPlanId, setDeletingPlanId] = useState(null); // plan pending inline delete confirm
 
+  // I4-F — subagents (conversation-scoped worker tasks, polled per card).
+  const [subagents, setSubagents] = useState([]);
+  const [subagentsLoading, setSubagentsLoading] = useState(false);
+  const [subagentDialogOpen, setSubagentDialogOpen] = useState(false);
+  const [subagentSubmitting, setSubagentSubmitting] = useState(false);
+  const [subagentForm, setSubagentForm] = useState({ name: '', brief: '', scope: '' });
+
   const runPhaseRef = useRef(phase);
   runPhaseRef.current = phase;
 
@@ -613,6 +626,60 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
   useEffect(() => {
     loadPlans();
   }, [loadPlans]);
+
+  // I4-F — hydrate the conversation's dispatched subagents quietly (no toast).
+  useEffect(() => {
+    let active = true;
+    if (!conversationId) {
+      setSubagents([]);
+      return undefined;
+    }
+    setSubagentsLoading(true);
+    listSubagents(token, conversationId)
+      .then((list) => {
+        if (!active) return;
+        setSubagents(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setSubagents([]);
+      })
+      .finally(() => {
+        if (active) setSubagentsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [conversationId, token]);
+
+  const handleDispatchSubagent = async () => {
+    if (!conversationId) return;
+    let scope_restriction;
+    if (subagentForm.scope.trim()) {
+      try {
+        scope_restriction = JSON.parse(subagentForm.scope.trim());
+      } catch {
+        notify({ message: t('scopeInvalidJson'), type: 'error' });
+        return;
+      }
+    }
+    setSubagentSubmitting(true);
+    try {
+      const created = await dispatchSubagent(token, conversationId, {
+        name: subagentForm.name.trim(),
+        brief: subagentForm.brief.trim(),
+        ...(scope_restriction ? { scope_restriction } : {}),
+      });
+      setSubagents((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
+      setSubagentDialogOpen(false);
+      setSubagentForm({ name: '', brief: '', scope: '' });
+      notify({ message: t('subagentDispatched'), type: 'success' });
+    } catch (err) {
+      notifyFromError(err);
+    } finally {
+      setSubagentSubmitting(false);
+    }
+  };
 
   const refreshPlan = useCallback(async (planId) => {
     try {
@@ -1357,6 +1424,48 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             )}
           </>
         )}
+
+        {/* I4-F — conversation-scoped subagents, nested under this section. */}
+        {conversationId && (
+          <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden' }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.25, py: 0.875, borderBottom: 1, borderColor: 'divider' }}>
+              <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, fontSize: '0.75rem' }}>
+                {t('subagents')}
+              </Typography>
+              <Button
+                size="small"
+                onClick={() => setSubagentDialogOpen(true)}
+                disabled={subagentSubmitting}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+              >
+                {t('dispatchSubagent')}
+              </Button>
+            </Stack>
+            {subagentsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                <CircularProgress size={18} />
+              </Box>
+            ) : subagents.length === 0 ? (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 1.25, py: 1, fontSize: '0.6875rem' }}>
+                {t('noSubagents')}
+              </Typography>
+            ) : (
+              <Stack spacing={1} sx={{ p: 1 }}>
+                {subagents.map((sub) => (
+                  <SubagentResultCard
+                    key={sub.id}
+                    subagent={sub}
+                    token={token}
+                    conversationId={conversationId}
+                    onResolved={(updated) =>
+                      setSubagents((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+                    }
+                  />
+                ))}
+              </Stack>
+            )}
+          </Paper>
+        )}
       </Stack>
     );
   };
@@ -1763,6 +1872,64 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
         onSave={handleScheduleSave}
         onClose={closeScheduleDialog}
       />
+
+      {/* I4-F — dispatch a named subagent (name + brief + optional scope). */}
+      <SystemDialog
+        open={subagentDialogOpen}
+        title={t('dispatchSubagent')}
+        onClose={() => {
+          if (!subagentSubmitting) setSubagentDialogOpen(false);
+        }}
+        onCancel={() => {
+          if (!subagentSubmitting) setSubagentDialogOpen(false);
+        }}
+        showCancel
+        width={480}
+        actions={
+          <Button
+            size="small"
+            variant="contained"
+            disabled={subagentSubmitting || !subagentForm.name.trim() || !subagentForm.brief.trim()}
+            onClick={handleDispatchSubagent}
+            sx={{ fontSize: '0.6875rem', textTransform: 'none' }}
+          >
+            {subagentSubmitting ? t('dispatching') : t('dispatchSubagent')}
+          </Button>
+        }
+      >
+        <Stack spacing={1.5}>
+          <TextField
+            size="small"
+            fullWidth
+            required
+            id="subagent-name"
+            label={t('subagentName')}
+            value={subagentForm.name}
+            onChange={(e) => setSubagentForm((prev) => ({ ...prev, name: e.target.value }))}
+          />
+          <TextField
+            size="small"
+            fullWidth
+            required
+            multiline
+            minRows={3}
+            id="subagent-brief"
+            label={t('subagentBrief')}
+            value={subagentForm.brief}
+            onChange={(e) => setSubagentForm((prev) => ({ ...prev, brief: e.target.value }))}
+          />
+          <TextField
+            size="small"
+            fullWidth
+            id="subagent-scope"
+            label={t('subagentScope')}
+            placeholder={'{"tables": ["emissions"]}'}
+            helperText={t('scopeInvalidJson')}
+            value={subagentForm.scope}
+            onChange={(e) => setSubagentForm((prev) => ({ ...prev, scope: e.target.value }))}
+          />
+        </Stack>
+      </SystemDialog>
 
       {/* F-29 — delete confirm names the consequence before removing (RULE_21) */}
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>

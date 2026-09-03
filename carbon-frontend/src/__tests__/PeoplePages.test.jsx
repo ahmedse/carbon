@@ -15,7 +15,6 @@ import EmployeesPage from '../apps/people/EmployeesPage';
 import LeavePage from '../apps/people/LeavePage';
 import PayrollRunsPage from '../apps/people/PayrollRunsPage';
 import PayslipPage from '../apps/people/PayslipPage';
-import BenefitsPage from '../apps/people/BenefitsPage';
 import AttendancePage from '../apps/people/AttendancePage';
 import PeopleConfigPage from '../apps/people/PeopleConfigPage';
 import PositionsPage from '../apps/people/PositionsPage';
@@ -31,7 +30,6 @@ const PEOPLE_PATHS = [
   '/people/leave',
   '/people/payroll',
   '/people/payslip',
-  '/people/benefits',
   '/people/attendance',
   '/people/config',
   '/people/loans',
@@ -55,7 +53,7 @@ describe('People & Payroll pages (NIR-4A)', () => {
   });
 
   it('each page module default-exports a function', () => {
-    const pages = [EmployeesPage, LeavePage, PayrollRunsPage, PayslipPage, BenefitsPage, AttendancePage, PeopleConfigPage, PositionsPage, LoansPage, CertificationsPage, RotationSchedulesPage];
+    const pages = [EmployeesPage, LeavePage, PayrollRunsPage, PayslipPage, AttendancePage, PeopleConfigPage, PositionsPage, LoansPage, CertificationsPage, RotationSchedulesPage];
     for (const Page of pages) {
       expect(typeof Page).toBe('function');
     }

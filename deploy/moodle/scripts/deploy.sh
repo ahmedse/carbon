@@ -48,8 +48,16 @@ esac
 if [[ -f release/MANIFEST.sha256 ]]; then
     log "verifying release manifest…"
     ( cd release && sha256sum -c MANIFEST.sha256 ) || die "manifest verification FAILED — aborting"
-    if [[ -f release/MANIFEST.sha256.sig ]] && command -v minisign >/dev/null 2>&1; then
-        minisign -V -m release/MANIFEST.sha256 -x release/MANIFEST.sha256.sig -q \
+    # Ed25519 signature (produced by scripts/sign.sh on the dev machine).
+    if [[ -f release/MANIFEST.sha256.sig && -f release/qbank.pub ]]; then
+        log "verifying Ed25519 signature…"
+        ( cd release && openssl pkeyutl -verify -pubin -inkey qbank.pub -rawin \
+            -in MANIFEST.sha256 -sigfile MANIFEST.sha256.sig ) \
+            || die "signature verification FAILED — aborting"
+    fi
+    # Optional minisign path (if the bundle was signed with minisign instead).
+    if [[ -f release/MANIFEST.sha256.minisig ]] && command -v minisign >/dev/null 2>&1; then
+        minisign -V -m release/MANIFEST.sha256 -x release/MANIFEST.sha256.minisig -q \
             || die "signature verification FAILED"
     fi
 fi

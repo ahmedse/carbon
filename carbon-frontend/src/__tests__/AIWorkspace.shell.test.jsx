@@ -153,6 +153,26 @@ describe('AIWorkspace sessions drawer starts collapsed (Phase 23-C)', () => {
   });
 });
 
+describe('AIWorkspace reopens the last active session', () => {
+  it('opens the stored active conversation instead of the newest', async () => {
+    // The user was last in Beta (conv-2); a fresh open must restore it, not
+    // fall back to the newest-first Alpha (conv-1).
+    localStorage.setItem('carbon-ai-active-conversation', 'conv-2');
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const sessionsButton = await screen.findByRole('button', { name: 'Sessions' });
+    fireEvent.click(sessionsButton);
+
+    const options = await screen.findAllByRole('option');
+    const alpha = options.find((o) => o.textContent.includes('Alpha'));
+    const beta = options.find((o) => o.textContent.includes('Beta'));
+    expect(alpha).toHaveAttribute('aria-selected', 'false');
+    expect(beta).toHaveAttribute('aria-selected', 'true');
+    // The stored pointer must survive the load (not be wiped to the newest).
+    expect(localStorage.getItem('carbon-ai-active-conversation')).toBe('conv-2');
+  });
+});
+
 describe('AIWorkspace Memory console (G2)', () => {
   it('renders AIMemoryConsole when Memory icon is clicked', async () => {
     render(<AIWorkspace onClose={vi.fn()} />);

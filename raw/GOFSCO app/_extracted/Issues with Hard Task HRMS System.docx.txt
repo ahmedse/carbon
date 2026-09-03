@@ -1,0 +1,39 @@
+Issues with Hard Task HRMS System
+Hard Task system is not in line with Company Policies & Procedures, which negatively impacts our payroll calculations
+Automatic Annual Leave advance payment as per Kuwait Labor Law 
+Hard Task is automatically giving employees with advance leave payment as per Kuwait Labor Law, which is not in line with our current leave procedure.
+Example: If an employee’s leave is 15/10/2025–15/11/2025, the October payroll should include only the leave amount up to 31/10/2025, and the November payroll should include the leave amount for 01/11/2025–15/11/2025. No full advance leave payment in October. 
+This has to be adjusted manually during every payroll cycle through excel.
+Non-inclusive of rotation status
+Hard Task is treating all employees as 11/1 leave status (30 days as per Kuwait Labor Law), but we have employees who work on rotation status (1/1, 2/1, 3/1, 5/1, etc.) and Kuwaitization employees who have 42 days leave a year.
+This forces our payroll employee to manually adjust monthly salary additions and deletions, along with leave encashments if the employee commenced their leave before 6 months of employment as per Kuwait Labor Law.
+Non-inclusive of Kuwaitization status
+Kuwaitization employees’ salaries are calculated differently (21 days salary rather than 26 days).
+Kuwaitization employees have their own guidelines in line with KOC standards, and thus have a different attendance & benefits procedure.
+Manual adjustment of End of Service provisions since Hard Task is lacking compensation & benefits elements, such as Job Bonus, Overtime, Incentive Bonuses, etc.
+Unable to add or deduct indemnity after closing payroll month.
+No option for attendance permissions in payroll function, resulting in automatic deductions for late arrival or early departure (even in the cases of permissions due to business meetings). This has to be adjusted manually during every payroll cycle through excel.
+Lack of Compensation & Benefits elements:
+Company Accommodation Entitlement
+Company Vehicle Entitlement
+Medical Insurance Entitlement
+School Fees Entitlement
+Ticket tracking
+Overtime tracking
+Any type of Bonus tracking
+Other benefits
+Lack of HR Reporting 
+No option for overall summary or report showing promotions, increments, etc. Payroll employee has to track changes manually to create a report through excel.
+No option for budget report showing budgeted amount against expended amount.
+No option for reporting monthly, quarterly, yearly salaries by department.
+Since payroll is calculated manually due to system issues, all HR reports are prepared manually through excel.
+Lack of the following HR Functions/Modules
+Employee Relations, including:
+Penalties Mapping
+Disciplinary Actions
+Investigations
+Recruitment
+Organization Structure
+Performance Management Cycle
+KPIs Monitoring
+Training 

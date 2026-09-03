@@ -1,0 +1,762 @@
+[
+  {
+    "id": 41,
+    "name": "campuses",
+    "slug": "campuses",
+    "description": "Seeded reference set: campuses",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "abqir",
+        "label": "Abu Qir",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "dokki",
+        "label": "Giza Dokki",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "smart-village",
+        "label": "Smart Village",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "heliopolis",
+        "label": "Cairo Heliopolis",
+        "is_active": true,
+        "sort_order": 3
+      },
+      {
+        "code": "alamein",
+        "label": "New Alamein",
+        "is_active": true,
+        "sort_order": 4
+      },
+      {
+        "code": "miami",
+        "label": "Alexandria Miami",
+        "is_active": true,
+        "sort_order": 5
+      },
+      {
+        "code": "latakia",
+        "label": "Syria Latakia",
+        "is_active": true,
+        "sort_order": 6
+      },
+      {
+        "code": "port-said",
+        "label": "Port Said",
+        "is_active": true,
+        "sort_order": 7
+      },
+      {
+        "code": "south-valley",
+        "label": "Aswan South Valley",
+        "is_active": true,
+        "sort_order": 8
+      }
+    ]
+  },
+  {
+    "id": 42,
+    "name": "buildings",
+    "slug": "buildings",
+    "description": "Seeded reference set: buildings",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "401",
+        "label": "Building 401",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "2401",
+        "label": "Building 2401",
+        "is_active": true,
+        "sort_order": 1
+      }
+    ]
+  },
+  {
+    "id": 43,
+    "name": "fuel_types",
+    "slug": "fuel_types",
+    "description": "Seeded reference set: fuel_types",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "natural_gas",
+        "label": "natural_gas",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "diesel",
+        "label": "diesel",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "gasoline",
+        "label": "gasoline",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "lpg",
+        "label": "lpg",
+        "is_active": true,
+        "sort_order": 3
+      },
+      {
+        "code": "r22",
+        "label": "r22",
+        "is_active": true,
+        "sort_order": 4
+      },
+      {
+        "code": "r134a",
+        "label": "r134a",
+        "is_active": true,
+        "sort_order": 5
+      },
+      {
+        "code": "r404a",
+        "label": "r404a",
+        "is_active": true,
+        "sort_order": 6
+      },
+      {
+        "code": "r410a",
+        "label": "r410a",
+        "is_active": true,
+        "sort_order": 7
+      }
+    ]
+  },
+  {
+    "id": 44,
+    "name": "refrigerants",
+    "slug": "refrigerants",
+    "description": "Seeded reference set: refrigerants",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "R-134a",
+        "label": "R-134a",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "R-410A",
+        "label": "R-410A",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "R-407C",
+        "label": "R-407C",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "R-404A",
+        "label": "R-404A",
+        "is_active": true,
+        "sort_order": 3
+      },
+      {
+        "code": "R-22",
+        "label": "R-22",
+        "is_active": true,
+        "sort_order": 4
+      },
+      {
+        "code": "other",
+        "label": "other",
+        "is_active": true,
+        "sort_order": 5
+      }
+    ]
+  },
+  {
+    "id": 45,
+    "name": "fire_suppressants",
+    "slug": "fire_suppressants",
+    "description": "Seeded reference set: fire_suppressants",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "dry_powder",
+        "label": "طفاية بودرة",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "co2",
+        "label": "طفاية CO2",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "dry_chemical",
+        "label": "مسحوق كيماوي جاف",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "fm200",
+        "label": "FM200",
+        "is_active": true,
+        "sort_order": 3
+      }
+    ]
+  },
+  {
+    "id": 46,
+    "name": "ghg_categories",
+    "slug": "ghg_categories",
+    "description": "Seeded reference set: ghg_categories",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "stationary_combustion",
+        "label": "stationary_combustion",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "mobile_combustion",
+        "label": "mobile_combustion",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "fugitive",
+        "label": "fugitive",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "purchased_energy",
+        "label": "purchased_energy",
+        "is_active": true,
+        "sort_order": 3
+      },
+      {
+        "code": "consumables",
+        "label": "consumables",
+        "is_active": true,
+        "sort_order": 4
+      },
+      {
+        "code": "capital_goods",
+        "label": "capital_goods",
+        "is_active": true,
+        "sort_order": 5
+      },
+      {
+        "code": "fertilizers",
+        "label": "fertilizers",
+        "is_active": true,
+        "sort_order": 6
+      },
+      {
+        "code": "fuel_energy",
+        "label": "fuel_energy",
+        "is_active": true,
+        "sort_order": 7
+      },
+      {
+        "code": "water_waste",
+        "label": "water_waste",
+        "is_active": true,
+        "sort_order": 8
+      },
+      {
+        "code": "commuting",
+        "label": "commuting",
+        "is_active": true,
+        "sort_order": 9
+      },
+      {
+        "code": "waste",
+        "label": "waste",
+        "is_active": true,
+        "sort_order": 10
+      },
+      {
+        "code": "business_travel",
+        "label": "business_travel",
+        "is_active": true,
+        "sort_order": 11
+      },
+      {
+        "code": "leased_assets",
+        "label": "leased_assets",
+        "is_active": true,
+        "sort_order": 12
+      }
+    ]
+  },
+  {
+    "id": 47,
+    "name": "units",
+    "slug": "units",
+    "description": "Seeded reference set: units",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "kwh",
+        "label": "kwh",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "m3",
+        "label": "m3",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "tr",
+        "label": "tr",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "l",
+        "label": "l",
+        "is_active": true,
+        "sort_order": 3
+      },
+      {
+        "code": "kg",
+        "label": "kg",
+        "is_active": true,
+        "sort_order": 4
+      },
+      {
+        "code": "m2",
+        "label": "m2",
+        "is_active": true,
+        "sort_order": 5
+      },
+      {
+        "code": "km",
+        "label": "km",
+        "is_active": true,
+        "sort_order": 6
+      },
+      {
+        "code": "ton",
+        "label": "ton",
+        "is_active": true,
+        "sort_order": 7
+      },
+      {
+        "code": "unit",
+        "label": "unit",
+        "is_active": true,
+        "sort_order": 8
+      },
+      {
+        "code": "tissue",
+        "label": "tissue",
+        "is_active": true,
+        "sort_order": 9
+      },
+      {
+        "code": "paper",
+        "label": "paper",
+        "is_active": true,
+        "sort_order": 10
+      }
+    ]
+  },
+  {
+    "id": 48,
+    "name": "existence",
+    "slug": "existence",
+    "description": "Seeded reference set: existence",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "present",
+        "label": "present",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "not_applicable",
+        "label": "not_applicable",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "pending",
+        "label": "pending",
+        "is_active": true,
+        "sort_order": 2
+      }
+    ]
+  },
+  {
+    "id": 49,
+    "name": "nationality",
+    "slug": "nationality",
+    "description": "Employee nationalities",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "KWT",
+        "label": "Kuwaiti",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "EGY",
+        "label": "Egyptian",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "IND",
+        "label": "Indian",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "PHL",
+        "label": "Filipino",
+        "is_active": true,
+        "sort_order": 3
+      },
+      {
+        "code": "PAK",
+        "label": "Pakistani",
+        "is_active": true,
+        "sort_order": 4
+      },
+      {
+        "code": "BGD",
+        "label": "Bangladeshi",
+        "is_active": true,
+        "sort_order": 5
+      },
+      {
+        "code": "NPL",
+        "label": "Nepali",
+        "is_active": true,
+        "sort_order": 6
+      },
+      {
+        "code": "LKA",
+        "label": "Sri Lankan",
+        "is_active": true,
+        "sort_order": 7
+      },
+      {
+        "code": "JOR",
+        "label": "Jordanian",
+        "is_active": true,
+        "sort_order": 8
+      },
+      {
+        "code": "SYR",
+        "label": "Syrian",
+        "is_active": true,
+        "sort_order": 9
+      },
+      {
+        "code": "USA",
+        "label": "American",
+        "is_active": true,
+        "sort_order": 10
+      },
+      {
+        "code": "GBR",
+        "label": "British",
+        "is_active": true,
+        "sort_order": 11
+      }
+    ]
+  },
+  {
+    "id": 50,
+    "name": "employment_type",
+    "slug": "employment-type",
+    "description": "Employment types",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "full-time",
+        "label": "Full-Time",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "part-time",
+        "label": "Part-Time",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "contract",
+        "label": "Contract",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "secondment",
+        "label": "Secondment",
+        "is_active": true,
+        "sort_order": 3
+      }
+    ]
+  },
+  {
+    "id": 51,
+    "name": "contract_type",
+    "slug": "contract-type",
+    "description": "Contract types",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "indeterminate",
+        "label": "Indeterminate (Open-ended)",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "fixed-term",
+        "label": "Fixed-Term",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "project",
+        "label": "Project-Based",
+        "is_active": true,
+        "sort_order": 2
+      }
+    ]
+  },
+  {
+    "id": 52,
+    "name": "job_family",
+    "slug": "job-family",
+    "description": "Job families",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "operations",
+        "label": "Operations",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "maintenance",
+        "label": "Maintenance",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "engineering",
+        "label": "Engineering",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "hse",
+        "label": "HSE",
+        "is_active": true,
+        "sort_order": 3
+      },
+      {
+        "code": "hr",
+        "label": "Human Resources",
+        "is_active": true,
+        "sort_order": 4
+      },
+      {
+        "code": "finance",
+        "label": "Finance",
+        "is_active": true,
+        "sort_order": 5
+      },
+      {
+        "code": "admin",
+        "label": "Administration",
+        "is_active": true,
+        "sort_order": 6
+      }
+    ]
+  },
+  {
+    "id": 53,
+    "name": "gender",
+    "slug": "gender",
+    "description": "Genders",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "male",
+        "label": "Male",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "female",
+        "label": "Female",
+        "is_active": true,
+        "sort_order": 1
+      }
+    ]
+  },
+  {
+    "id": 54,
+    "name": "rotation_pattern",
+    "slug": "rotation-pattern",
+    "description": "Rotation schedules",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "1/1",
+        "label": "1 week on / 1 week off",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "2/1",
+        "label": "2 weeks on / 1 week off",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "3/1",
+        "label": "3 weeks on / 1 week off",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "5/1",
+        "label": "5 weeks on / 1 week off",
+        "is_active": true,
+        "sort_order": 3
+      },
+      {
+        "code": "office",
+        "label": "Office (non-rotational)",
+        "is_active": true,
+        "sort_order": 4
+      }
+    ]
+  },
+  {
+    "id": 55,
+    "name": "benefit_category",
+    "slug": "benefit-category",
+    "description": "Benefit categories",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "accommodation",
+        "label": "Accommodation",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "vehicle",
+        "label": "Vehicle",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "medical",
+        "label": "Medical",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "school",
+        "label": "School",
+        "is_active": true,
+        "sort_order": 3
+      },
+      {
+        "code": "tickets",
+        "label": "Tickets",
+        "is_active": true,
+        "sort_order": 4
+      },
+      {
+        "code": "overtime",
+        "label": "Overtime",
+        "is_active": true,
+        "sort_order": 5
+      }
+    ]
+  },
+  {
+    "id": 56,
+    "name": "leave_type",
+    "slug": "leave-type",
+    "description": "Leave types",
+    "is_active": true,
+    "lifecycle_state": "active",
+    "values": [
+      {
+        "code": "annual",
+        "label": "Annual",
+        "is_active": true,
+        "sort_order": 0
+      },
+      {
+        "code": "sick",
+        "label": "Sick",
+        "is_active": true,
+        "sort_order": 1
+      },
+      {
+        "code": "emergency",
+        "label": "Emergency",
+        "is_active": true,
+        "sort_order": 2
+      },
+      {
+        "code": "maternity",
+        "label": "Maternity",
+        "is_active": true,
+        "sort_order": 3
+      },
+      {
+        "code": "unpaid",
+        "label": "Unpaid",
+        "is_active": true,
+        "sort_order": 4
+      }
+    ]
+  }
+]

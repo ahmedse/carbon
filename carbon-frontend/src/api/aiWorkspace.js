@@ -438,7 +438,7 @@ export function sendMessage(token, conversationId, content, model) {
  *   callbacks dispatch — the escape hatch used by the clustered action-run
  *   stream (turn-* / tool-* frames) without forking this reader.
  */
-async function streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError, onFrame }) {
+async function streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError, onFrame, signal }) {
   // Replicate apiFetch's auth: supplied token (or stored access token),
   // refreshing it first if expired.
   let accessToken = token || localStorage.getItem('access');
@@ -464,9 +464,14 @@ async function streamJsonPost(token, path, body, { onChunk, onProgress, onDone, 
       method: 'POST',
       headers,
       body: JSON.stringify(body),
+      signal,
     });
   } catch (err) {
-    onError?.(err?.message || 'Network error');
+    if (signal?.aborted) {
+      onStopped?.();
+    } else {
+      onError?.(err?.message || 'Network error');
+    }
     return;
   }
 
@@ -538,7 +543,11 @@ async function streamJsonPost(token, path, body, { onChunk, onProgress, onDone, 
     buffer += decoder.decode().replace(/\r\n/g, '\n');
     if (buffer.trim()) processFrame(buffer);
   } catch (err) {
-    onError?.(err?.message || 'Stream interrupted');
+    if (signal?.aborted) {
+      onStopped?.();
+    } else {
+      onError?.(err?.message || 'Stream interrupted');
+    }
   }
 }
 
@@ -546,13 +555,13 @@ export async function sendMessageStream(
   token,
   conversationId,
   content,
-  { onChunk, onProgress, onDone, onStopped, onError, workspaceContext, model },
+  { onChunk, onProgress, onDone, onStopped, onError, workspaceContext, model, signal },
 ) {
   const path = `${BASE}conversations/${conversationId}/messages/stream/`;
   const body = { content };
   if (workspaceContext) body.workspace_context = workspaceContext;
   if (model) body.model = model;
-  await streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError });
+  await streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError, signal });
 }
 
 /**
@@ -569,13 +578,13 @@ export async function retryMessageStream(
   token,
   conversationId,
   userMessageId,
-  { onChunk, onProgress, onDone, onStopped, onError, content, model },
+  { onChunk, onProgress, onDone, onStopped, onError, content, model, signal },
 ) {
   const path = `${BASE}conversations/${conversationId}/messages/${userMessageId}/retry/`;
   const body = {};
   if (content) body.content = content;
   if (model) body.model = model;
-  await streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError });
+  await streamJsonPost(token, path, body, { onChunk, onProgress, onDone, onStopped, onError, signal });
 }
 
 /**
@@ -1320,4 +1329,47 @@ export async function downloadArtifactUrl(token, path) {
   }
   const blob = await response.blob();
   return URL.createObjectURL(blob);
+}
+
+/**
+ * Dispatch a named read-only subagent under a conversation. Returns the
+ * freshly created subagent (`status="pending"`, `is_worker=true`) which the UI
+ * then polls via `getSubagent` until it reaches a terminal status.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID of the parent conversation
+ * @param {object} params - { name, brief, scope_restriction?, tool_budget? }
+ * @returns {Promise<object>} Serialized AISubagent
+ */
+export function dispatchSubagent(token, conversationId, { name, brief, scope_restriction, tool_budget }) {
+  return apiFetch(`${BASE}conversations/${conversationId}/subagents/`, {
+    token,
+    method: 'POST',
+    body: {
+      name,
+      brief,
+      ...(scope_restriction ? { scope_restriction } : {}),
+      ...(tool_budget != null ? { tool_budget } : {}),
+    },
+  });
+}
+
+/**
+ * Fetch a single subagent's current status (for polling progress).
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID of the parent conversation
+ * @param {string} subId - UUID of the subagent
+ * @returns {Promise<object>} Serialized AISubagent
+ */
+export function getSubagent(token, conversationId, subId) {
+  return apiFetch(`${BASE}conversations/${conversationId}/subagents/${subId}/`, { token });
+}
+
+/**
+ * List a conversation's dispatched subagents, newest first.
+ * @param {string} token - JWT access token
+ * @param {string} conversationId - UUID of the parent conversation
+ * @returns {Promise<Array>} List of serialized AISubagents
+ */
+export function listSubagents(token, conversationId) {
+  return apiFetch(`${BASE}conversations/${conversationId}/subagents/`, { token });
 }

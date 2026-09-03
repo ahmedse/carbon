@@ -1,0 +1,335 @@
+[
+  {
+    "id": 1,
+    "code": "AAST",
+    "name": "AAST",
+    "slug": "",
+    "parent_id": null,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 2,
+    "code": "ALAMEIN",
+    "name": "فرع العلمين — Alamein Campus",
+    "slug": "-alamein-campus",
+    "parent_id": 1,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 5,
+    "code": "TRANS",
+    "name": "النقل — Transportation",
+    "slug": "-transportation",
+    "parent_id": 2,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 73,
+    "code": "AASTMT",
+    "name": "AASTMT",
+    "slug": "aastmt",
+    "parent_id": null,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 74,
+    "code": "abqir",
+    "name": "Abu Qir",
+    "slug": "aastmt-abu-qir",
+    "parent_id": 73,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 75,
+    "code": "dokki",
+    "name": "Giza Dokki",
+    "slug": "aastmt-giza-dokki",
+    "parent_id": 73,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 76,
+    "code": "smart-village",
+    "name": "Smart Village",
+    "slug": "aastmt-smart-village",
+    "parent_id": 73,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 77,
+    "code": "heliopolis",
+    "name": "Cairo Heliopolis",
+    "slug": "aastmt-cairo-heliopolis",
+    "parent_id": 73,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 78,
+    "code": "alamein",
+    "name": "New Alamein",
+    "slug": "aastmt-new-alamein",
+    "parent_id": 73,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 79,
+    "code": "miami",
+    "name": "Alexandria Miami",
+    "slug": "aastmt-alexandria-miami",
+    "parent_id": 73,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 80,
+    "code": "latakia",
+    "name": "Syria Latakia",
+    "slug": "aastmt-syria-latakia",
+    "parent_id": 73,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 81,
+    "code": "port-said",
+    "name": "Port Said",
+    "slug": "aastmt-port-said",
+    "parent_id": 73,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 82,
+    "code": "south-valley",
+    "name": "Aswan South Valley",
+    "slug": "aastmt-aswan-south-valley",
+    "parent_id": 73,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 83,
+    "code": "Facilities & Utilities",
+    "name": "Facilities & Utilities",
+    "slug": "aastmt-smart-village-facilities-utilities",
+    "parent_id": 76,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 84,
+    "code": "Energy / Utilities",
+    "name": "Energy / Utilities",
+    "slug": "aastmt-smart-village-energy-utilities",
+    "parent_id": 76,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 85,
+    "code": "Transportation / Fleet",
+    "name": "Transportation / Fleet",
+    "slug": "aastmt-smart-village-transportation-fleet",
+    "parent_id": 76,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 86,
+    "code": "Procurement",
+    "name": "Procurement",
+    "slug": "aastmt-smart-village-procurement",
+    "parent_id": 76,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 87,
+    "code": "Campus Services",
+    "name": "Campus Services",
+    "slug": "aastmt-smart-village-campus-services",
+    "parent_id": 76,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 89,
+    "code": "",
+    "name": "Smoke Org",
+    "slug": "smoke-org",
+    "parent_id": null,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 90,
+    "code": "GOFSCO",
+    "name": "GOFSCO",
+    "slug": "gofsco",
+    "parent_id": null,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 91,
+    "code": "AHM",
+    "name": "Ahmadi Base",
+    "slug": "gofsco-ahmadi-base",
+    "parent_id": 90,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 92,
+    "code": "DRL",
+    "name": "Drilling Division",
+    "slug": "gofsco-ahmadi-base-drilling-division",
+    "parent_id": 91,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 93,
+    "code": "DRL-YD",
+    "name": "Drilling Yard",
+    "slug": "gofsco-ahmadi-base-drilling-division-drilling-yard",
+    "parent_id": 92,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 94,
+    "code": "DRL-ST",
+    "name": "Drilling Store",
+    "slug": "gofsco-ahmadi-base-drilling-division-drilling-yard-drilling-store",
+    "parent_id": 93,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 95,
+    "code": "CT",
+    "name": "CT Division",
+    "slug": "gofsco-ahmadi-base-ct-division",
+    "parent_id": 91,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 96,
+    "code": "CT-YD",
+    "name": "CT Yard",
+    "slug": "gofsco-ahmadi-base-ct-division-ct-yard",
+    "parent_id": 95,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 97,
+    "code": "CT-ST",
+    "name": "CT Store",
+    "slug": "gofsco-ahmadi-base-ct-division-ct-yard-ct-store",
+    "parent_id": 96,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 98,
+    "code": "PCP",
+    "name": "PCP Division",
+    "slug": "gofsco-ahmadi-base-pcp-division",
+    "parent_id": 91,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 99,
+    "code": "PCP-YD",
+    "name": "PCP Yard",
+    "slug": "gofsco-ahmadi-base-pcp-division-pcp-yard",
+    "parent_id": 98,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 100,
+    "code": "PCP-ST",
+    "name": "PCP Store",
+    "slug": "gofsco-ahmadi-base-pcp-division-pcp-yard-pcp-store",
+    "parent_id": 99,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 101,
+    "code": "FIN",
+    "name": "Finance & Admin",
+    "slug": "gofsco-ahmadi-base-finance-admin",
+    "parent_id": 91,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 102,
+    "code": "HR",
+    "name": "HR & Training",
+    "slug": "gofsco-ahmadi-base-hr-training",
+    "parent_id": 91,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 103,
+    "code": "WHS",
+    "name": "Warehouse / Main Store",
+    "slug": "gofsco-ahmadi-base-warehouse-main-store",
+    "parent_id": 91,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 104,
+    "code": "CREW-1",
+    "name": "Operations Crew 1",
+    "slug": "gofsco-operations-crew-1",
+    "parent_id": 90,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 105,
+    "code": "CREW-2",
+    "name": "Operations Crew 2",
+    "slug": "gofsco-operations-crew-2",
+    "parent_id": 90,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 107,
+    "code": "OPS",
+    "name": "Operations Division",
+    "slug": "ops",
+    "parent_id": 90,
+    "is_active": true,
+    "lifecycle_state": ""
+  },
+  {
+    "id": 108,
+    "code": "MAINT",
+    "name": "Maintenance & Technical",
+    "slug": "maint",
+    "parent_id": 107,
+    "is_active": true,
+    "lifecycle_state": ""
+  }
+]

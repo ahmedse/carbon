@@ -5,7 +5,7 @@
 // step_end), per-step Approve/Decline with resume, Stop, and the durable
 // audit ledger.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import AITaskPanel from '../shell/AITaskPanel';
 
 // ── Mock hooks + API ──────────────────────────────────────────────────────
@@ -38,6 +38,8 @@ const stopPlan = vi.fn();
 const getPlanLedger = vi.fn();
 const listPlanArtifacts = vi.fn();
 const downloadArtifact = vi.fn();
+const dispatchSubagent = vi.fn();
+const listSubagents = vi.fn();
 
 vi.mock('../api/aiWorkspace', () => ({
   listPlans: (...args) => listPlans(...args),
@@ -54,6 +56,8 @@ vi.mock('../api/aiWorkspace', () => ({
   getPlanLedger: (...args) => getPlanLedger(...args),
   listPlanArtifacts: (...args) => listPlanArtifacts(...args),
   downloadArtifact: (...args) => downloadArtifact(...args),
+  dispatchSubagent: (...args) => dispatchSubagent(...args),
+  listSubagents: (...args) => listSubagents(...args),
 }));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -128,6 +132,16 @@ beforeEach(() => {
   getPlanLedger.mockResolvedValue(LEDGER);
   runPlanStream.mockImplementation(async (token, planId, handlers) => {
     streamHandlers = handlers;
+  });
+  listSubagents.mockResolvedValue([]);
+  dispatchSubagent.mockResolvedValue({
+    id: 'sub-1',
+    name: 'Dedupe auditor',
+    status: 'pending',
+    scope_restriction: {},
+    result_summary: null,
+    result_detail: null,
+    error: null,
   });
 });
 
@@ -436,5 +450,40 @@ describe('AITaskPanel — emits workspace lifecycle state (W5-A / ADR-0014)', ()
     await waitFor(() => {
       expect(onLifecycleStateChange).toHaveBeenLastCalledWith('error');
     });
+  });
+});
+
+// ── I4-F — conversation-scoped subagents ─────────────────────────────────
+describe('AITaskPanel — subagents (I4-F)', () => {
+  it('lists empty subagents and dispatches one via the dialog', async () => {
+    render(<AITaskPanel conversationId="conv-1" />);
+
+    // Hydration loads the conversation's subagents (empty here).
+    await waitFor(() => expect(listSubagents).toHaveBeenCalledWith('test-token', 'conv-1'));
+
+    // Open a plan so the Run tab (and its Subagents section) renders.
+    fireEvent.click(await screen.findByText('Audit the emissions dataset for duplicates.'));
+
+    // Empty state caption before any dispatch.
+    expect(await screen.findByText('No subagents dispatched yet.')).toBeInTheDocument();
+
+    // Open the dispatch dialog and submit a named subagent.
+    fireEvent.click(screen.getByRole('button', { name: 'Dispatch subagent' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Dedupe auditor' } });
+    fireEvent.change(within(dialog).getByLabelText('Brief / instructions'), {
+      target: { value: 'Find duplicate rows in the emissions table.' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Dispatch subagent' }));
+
+    await waitFor(() => {
+      expect(dispatchSubagent).toHaveBeenCalledWith('test-token', 'conv-1', {
+        name: 'Dedupe auditor',
+        brief: 'Find duplicate rows in the emissions table.',
+      });
+    });
+
+    // The new SubagentResultCard renders with the subagent's name.
+    expect(await screen.findByText('Dedupe auditor')).toBeInTheDocument();
   });
 });

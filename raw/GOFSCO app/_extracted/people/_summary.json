@@ -1,0 +1,12 @@
+{
+  "employees": 6,
+  "org_units": 37,
+  "positions": 8,
+  "compensation_components": 15,
+  "benefit_types": 6,
+  "compliance_rules": 4,
+  "reference_sets": 16,
+  "personnel_events": 35,
+  "compensation_plans": 0,
+  "payroll_runs": 0
+}
