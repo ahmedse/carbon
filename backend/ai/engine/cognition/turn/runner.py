@@ -543,6 +543,7 @@ class TurnPipelineRunner:
                 turn_id, instance_id, conversation_id, host_user_id,
                 "intent", 0, {
                     "action": _intent_resolution.action,
+                    "zone": _intent_resolution.zone,
                     "intent": _intent_resolution.intent,
                     "confidence": _intent_resolution.confidence,
                     "candidates": [
@@ -554,6 +555,59 @@ class TurnPipelineRunner:
                 tokens_used=_intent_resolution.input_tokens + _intent_resolution.output_tokens,
                 model_used=_intent_resolution.model_used, verdict="pass",
             )
+            # Thread the zone to the engine runtime so it can surface
+            # provenance (metadata["intent_zone"]) to the frontend.
+            ledger.intent_zone = _intent_resolution.zone
+
+            # [S1.5-zone] Hard refuse — off_limits (jailbreak/PII/security) is a
+            # GATE layered on top of any zone. Mirrors the clarify/disambiguate
+            # shortcircuit exactly: a proper persisted assistant message, never
+            # an HTTP error.
+            if _intent_resolution.zone == "off_limits":
+                _refuse_text = (
+                    "I'm not able to help with that request. "
+                    "If you have a question about your platform data, emissions, "
+                    "or data quality, I'm here to help."
+                )
+                total_latency = (time.monotonic() - t0) * 1000
+                await self._write_ledger_row(
+                    turn_id, instance_id, conversation_id, host_user_id,
+                    "final", 5,
+                    {
+                        "total_latency_ms": total_latency,
+                        "total_tokens": total_tokens,
+                        "total_llm_calls": total_llm_calls,
+                        "intent_shortcircuit": "off_limits",
+                    },
+                    total_latency, verdict="pass",
+                )
+                if self.db is not None:
+                    await self.db.commit()
+
+                ledger.final_response = _refuse_text[:500]
+                ledger.total_latency_ms = total_latency
+                ledger.total_tokens = total_tokens
+                ledger.total_llm_calls = total_llm_calls
+
+                response = AgentResponse(
+                    text=_refuse_text,
+                    sources_cited=[],
+                    tools_used=[],
+                    confidence=0.7,
+                    total_tokens=total_tokens,
+                    llm_calls=total_llm_calls,
+                    model="",
+                    response_type="clarification",
+                    confidence_label="medium",
+                )
+                await _broadcast_run(instance_id, "run.completed", {
+                    "run_id": turn_id,
+                    "total_latency_ms": total_latency,
+                    "total_tokens": total_tokens,
+                    "total_llm_calls": total_llm_calls,
+                    "intent_shortcircuit": "off_limits",
+                })
+                return response, ledger
 
             # Confidence ladder short-circuits: ask / offer options instead of
             # guessing. These return before S2/S3 so no hallucinated tool runs.
@@ -892,7 +946,14 @@ class TurnPipelineRunner:
         # [GAP-M7] Salience guard: only surface list_my_capabilities when the
         # user is asking about identity/access, never as a confusion fallback.
         draft_tools = _filter_draft_tools(draft_tools, user_message, salience.domain)
-        if draft_tools:
+        # Zone-aware grounding: the anti-fabrication GROUNDING RULES are for
+        # Zone 1 (platform-grounded) only. Zones concept/real_time/general get
+        # a lighter directive (or the web_research mandate) instead.
+        _is_platform_zone = (
+            _intent_resolution is None             # resolver didn't run → safe default
+            or _intent_resolution.zone in ("platform", "off_limits")
+        )
+        if draft_tools and _is_platform_zone:
             system_prompt = (
                 f"{system_prompt}\n\n"
                 "GROUNDING RULES — follow them exactly:\n"
@@ -968,6 +1029,24 @@ class TurnPipelineRunner:
                 "tool so the app can attach the matching page links as small "
                 "buttons under your reply."
             )
+        elif draft_tools and _intent_resolution is not None:
+            _zone = _intent_resolution.zone
+            if _zone == "real_time":
+                system_prompt = (
+                    f"{system_prompt}\n\n"
+                    "This question requires live information. Use the "
+                    "web_research tool to fetch current data. Always attribute "
+                    "the source in your answer. After answering, offer to connect "
+                    "the findings to the user's platform data if relevant."
+                )
+            elif _zone in ("concept", "general"):
+                system_prompt = (
+                    f"{system_prompt}\n\n"
+                    "Answer this question from your knowledge. No platform tool "
+                    "call is needed. If there is a natural connection to the "
+                    "user's platform data (e.g. their emission factors, DQ rules), "
+                    "offer to show that data after answering."
+                )
 
         # [GAP-3] Resolve anaphora: substitute pronouns with active entity
         from ai.engine.cognition.dialogue.anaphora import AnaphoraResolver

@@ -203,6 +203,9 @@ async def _run_chat(
                 # F3-B — read-only, outcome-language tool trace for the
                 # frontend "Considered…" planning pill (multi-step only).
                 "tool_trace": tool_trace,
+                # S1.5-zone — four-zone intent provenance for the frontend
+                # badge (platform|concept|real_time|general|off_limits).
+                "intent_zone": getattr(ledger, "intent_zone", "platform"),
                 # Wave I3-B — external web sources the answer drew on
                 # ({"title","url","source","retrieved_at"}), independent of
                 # the multi-step tool_trace filter.

@@ -496,6 +496,9 @@ class ChatResponse:
     # F3-B — read-only, outcome-language tool trace ({"step_label", "tool_id",
     # "duration_ms"}) for the frontend "Considered…" planning pill.
     tool_trace: list[dict] = field(default_factory=list)
+    # S1.5-zone — four-zone intent provenance for the frontend badge
+    # (platform|concept|real_time|general|off_limits).
+    intent_zone: str = ""
     # Wave I3-B — external web sources the answer cited ({"title","url","source","retrieved_at"}).
     external_sources: list[dict] = field(default_factory=list)
     # Wave I2-F — code-sandbox result ({"stdout","error","image_b64","table_rows","result"}).

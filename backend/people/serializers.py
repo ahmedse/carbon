@@ -160,6 +160,7 @@ class EmployeeCompensationSerializer(serializers.ModelSerializer):
             'amount', 'currency', 'frequency',
             'effective_start', 'effective_end',
             'source_rule', 'source_plan', 'reason_event', 'reason_note',
+            'source_benefit',
             'is_verified', 'verified_by', 'verified_by_name', 'verified_at',
             'created_at', 'created_by', 'created_by_name',
         ]
@@ -167,7 +168,7 @@ class EmployeeCompensationSerializer(serializers.ModelSerializer):
             'id', 'created_at', 'created_by', 'created_by_name',
             'component_code', 'component_name', 'component_direction',
             'component_is_eosi_base', 'component_is_gosi_base', 'component_sort_order',
-            'verified_by_name',
+            'verified_by_name', 'source_benefit',
         ]
 
 
@@ -225,13 +226,17 @@ class BenefitTypeSerializer(serializers.ModelSerializer):
 
 
 class EmployeeBenefitSerializer(serializers.ModelSerializer):
+    component_code = serializers.CharField(source='component.code', read_only=True, default=None)
+    component_name = serializers.CharField(source='component.name', read_only=True, default=None)
+
     class Meta:
         model = EmployeeBenefit
         fields = [
             'id', 'employee', 'benefit_type', 'monthly_amount',
-            'effective_start', 'effective_end',
+            'effective_start', 'effective_end', 'notes',
+            'reflect_in_salary', 'component', 'component_code', 'component_name',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'component_code', 'component_name']
 
 
 class LoanSerializer(serializers.ModelSerializer):

@@ -183,3 +183,62 @@ def test_build_external_sources_empty_search_is_safe():
         },
     ]
     assert _build_external_sources(completed) == []
+
+
+# ── Live weather (Open-Meteo, keyless) ─────────────────────────────────
+
+def _weather_router(url, params):
+    if "geocoding-api.open-meteo.com" in url:
+        assert params.get("name") == "Cairo", params
+        return _Resp({"results": [
+            {"name": "Cairo", "country": "Egypt", "latitude": 30.04, "longitude": 31.23},
+        ]})
+    if "api.open-meteo.com" in url:
+        return _Resp({"current": {
+            "temperature_2m": 30.9,
+            "apparent_temperature": 31.6,
+            "relative_humidity_2m": 44,
+            "wind_speed_10m": 12.4,
+            "weather_code": 1,
+            "is_day": 0,
+            "time": "2026-09-03T21:00",
+        }})
+    raise AssertionError(f"Unexpected URL/params: {url} {params}")
+
+
+@pytest.mark.asyncio
+async def test_weather_query_returns_live_reading():
+    with patch(
+        "ai.plugins.web_research.httpx.AsyncClient",
+        new=_fake_client_class(_weather_router),
+    ):
+        result = await WebResearch().execute(
+            {"query": "what's the weather in Cairo today?"}, ctx=None
+        )
+
+    assert result["source"] == "external_web"
+    assert result["results"][0]["source"] == "open-meteo"
+    assert result["results"][0]["url"] == "https://open-meteo.com/"
+    w = result["weather"]
+    assert w["location"] == "Cairo"
+    assert w["country"] == "Egypt"
+    assert w["temperature_c"] == 30.9
+    assert w["conditions"] == "mainly clear"
+    assert "30.9°C" in result["results"][0]["snippet"]
+
+
+def test_weather_location_extraction():
+    from ai.plugins.web_research import _extract_weather_location
+
+    assert _extract_weather_location("what's the weather in Cairo today?") == "Cairo"
+    assert _extract_weather_location("how hot is it in New York?") == "New York"
+    assert _extract_weather_location("weather in Tokyo") == "Tokyo"
+    assert _extract_weather_location("forecast for London") == "London"
+
+
+def test_weather_query_detection_ignores_non_weather():
+    from ai.plugins.web_research import _is_weather_query
+
+    assert _is_weather_query("what's the weather in Cairo today?") is True
+    assert _is_weather_query("explain the GHG Protocol") is False
+    assert _is_weather_query("what is 2+2?") is False

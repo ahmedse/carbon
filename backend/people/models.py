@@ -501,6 +501,11 @@ class EmployeeCompensation(models.Model):
         help_text="PersonnelEvent that triggered this change",
     )
     reason_note = models.TextField(blank=True)
+    source_benefit = models.ForeignKey(
+        'EmployeeBenefit', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='compensation_lines',
+        help_text="EmployeeBenefit this line mirrors (benefit → salary reflection)",
+    )
     # Verification seam
     is_verified = models.BooleanField(default=False)
     verified_by = models.ForeignKey(
@@ -536,6 +541,19 @@ class EmployeeBenefit(models.Model):
     monthly_amount = models.DecimalField(max_digits=14, decimal_places=3)
     effective_start = models.DateField()
     effective_end = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    reflect_in_salary = models.BooleanField(
+        default=False,
+        help_text="When True, mirror monthly_amount into the compensation ledger as an earning line.",
+    )
+    component = models.ForeignKey(
+        CompensationComponent,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='benefit_lines',
+        help_text="Earning compensation component this benefit reflects into.",
+    )
 
     class Meta:
         ordering = ['employee', 'benefit_type']

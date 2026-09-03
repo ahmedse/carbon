@@ -651,6 +651,7 @@ class CarbonIntelligence:
                             actions=res.get("actions"),
                             pending_actions=res.get("pending_actions"),
                             tool_trace=res.get("tool_trace"),
+                            intent_zone=res.get("intent_zone", ""),
                             external_sources=res.get("external_sources"),
                             code_result=res.get("code_result"),
                         )
@@ -2424,6 +2425,7 @@ class CarbonIntelligence:
                             actions=res.get("actions"),
                             pending_actions=res.get("pending_actions"),
                             tool_trace=res.get("tool_trace"),
+                            intent_zone=res.get("intent_zone", ""),
                             external_sources=res.get("external_sources"),
                             code_result=res.get("code_result"),
                         )
@@ -2876,6 +2878,7 @@ class CarbonIntelligence:
                 conversation, chat_response.status,
                 chat_response.content,
                 chat_response.follow_up_questions,
+                intent_zone=chat_response.intent_zone,
             )
 
         rules = [
@@ -3607,6 +3610,7 @@ class CarbonIntelligence:
             confidence_label=chat_response.confidence_label,
             honest_uncertainty=chat_response.honest_uncertainty,
             tool_trace=chat_response.tool_trace,
+            intent_zone=chat_response.intent_zone,
             external_sources=chat_response.external_sources,
             code_result=chat_response.code_result,
         )
@@ -3872,6 +3876,7 @@ class CarbonIntelligence:
         confidence_label: str = "",
         honest_uncertainty: bool = False,
         tool_trace: list[dict] | None = None,
+        intent_zone: str = "",
         external_sources: list[dict] | None = None,
         code_result: dict | None = None,
     ) -> dict[str, Any]:
@@ -3896,6 +3901,9 @@ class CarbonIntelligence:
         # F3-B — read-only tool trace for the frontend "Considered…" pill.
         if tool_trace:
             metadata["tool_trace"] = tool_trace
+        # S1.5-zone — four-zone intent provenance for the frontend badge.
+        if intent_zone:
+            metadata["intent_zone"] = intent_zone
         if external_sources:
             metadata["external_sources"] = external_sources
         if code_result:
@@ -4065,6 +4073,8 @@ def _serialize_message(message) -> dict[str, Any]:
         "honest_uncertainty": bool(metadata.get("honest_uncertainty")),
         # F3-B — read-only tool trace for the frontend "Considered…" pill.
         "tool_trace": metadata.get("tool_trace") or [],
+        # S1.5-zone — four-zone intent provenance for the frontend badge.
+        "intent_zone": metadata.get("intent_zone") or "",
         "external_sources": metadata.get("external_sources") or [],
         "code_result": metadata.get("code_result"),
         "provenance": _build_message_provenance(message),

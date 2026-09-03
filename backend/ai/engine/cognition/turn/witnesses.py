@@ -89,6 +89,9 @@ class TurnLedger:
     total_latency_ms: float = 0.0
     total_tokens: int = 0
     total_llm_calls: int = 0
+    # S1.5 — intent zone (platform|concept|real_time|general|off_limits),
+    # threaded to the engine runtime so the frontend can badge provenance.
+    intent_zone: str = "platform"
     # Phase 21-A: prompt/completion split + resolved model for usage attribution.
     prompt_tokens: int = 0
     completion_tokens: int = 0

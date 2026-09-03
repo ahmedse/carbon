@@ -3,8 +3,11 @@
 //
 // Adding a NEW reference list = add one entry here (columns + form + CRUD API).
 // The generic ReferenceDataManager renders whatever this registry declares, so
-// future lists (leave types, contract types, pay grades, …) plug in without
-// new page code. Each list is domain-owned config — NOT MDM master data.
+// future lists plug in without new page code.
+//
+// These lists are People-owned config (NOT MDM master data). Governed enums
+// (leave types, contract types, pay grades, job families, nationalities,
+// employment types) live in MDM's own surface (/catalog/mdm) — see ADR-0027.
 
 import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
 import * as api from '../../api/people';

@@ -470,8 +470,10 @@ describe('AITaskPanel — subagents (I4-F)', () => {
     // Open the dispatch dialog and submit a named subagent.
     fireEvent.click(screen.getByRole('button', { name: 'Dispatch subagent' }));
     const dialog = await screen.findByRole('dialog');
-    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Dedupe auditor' } });
-    fireEvent.change(within(dialog).getByLabelText('Brief / instructions'), {
+    // Use getByRole('textbox') to avoid MUI v7 floating-label htmlFor quirks.
+    const [nameField, briefField] = within(dialog).getAllByRole('textbox');
+    fireEvent.change(nameField, { target: { value: 'Dedupe auditor' } });
+    fireEvent.change(briefField, {
       target: { value: 'Find duplicate rows in the emissions table.' },
     });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Dispatch subagent' }));

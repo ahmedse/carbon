@@ -483,6 +483,12 @@ class Command(BaseCommand):
         for emp_no, kind, eff_date, notes, before_sal, after_sal in EV_DEFS:
             emp = emp_map.get(emp_no)
             if emp:
+                # Idempotent: skip if a re-seed already recorded this event.
+                if PersonnelEvent.objects.filter(
+                    entity_type='Employee', entity_id=emp.pk,
+                    event_kind=kind, effective_date=eff_date,
+                ).exists():
+                    continue
                 before = {'basic_salary': str(before_sal)} if before_sal else {}
                 after = {'basic_salary': str(after_sal)} if after_sal else {}
                 record_event(
@@ -598,6 +604,12 @@ class Command(BaseCommand):
             emp = emp_map.get(emp_no)
             comp = comp_map.get(code)
             if emp and comp:
+                # Append-only ledger: close any pre-existing open row for this
+                # component before materialising, so a repeated seed never
+                # double-counts an earning/deduction.
+                EmployeeCompensation.objects.filter(
+                    employee=emp, component=comp, effective_end__isnull=True,
+                ).update(effective_end=START)
                 EmployeeCompensation.objects.update_or_create(
                     employee=emp, component=comp,
                     defaults={'amount': amount, 'currency': 'KWD', 'frequency': 'monthly',

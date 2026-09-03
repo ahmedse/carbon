@@ -797,11 +797,35 @@ class EmployeeBenefitListCreateView(_GatedListCreateView):
     serializer_class = EmployeeBenefitSerializer
     org_lookup = 'employee__org_unit_id__in'
 
+    def post(self, request):
+        response = super().post(request)
+        if response.status_code == status.HTTP_201_CREATED:
+            benefit = EmployeeBenefit.objects.filter(pk=response.data.get('id')).first()
+            if benefit:
+                CompensationService.reflect_benefit(benefit, user=request.user)
+        return response
+
 
 class EmployeeBenefitDetailView(_GatedDetailView):
     model = EmployeeBenefit
     serializer_class = EmployeeBenefitSerializer
     org_lookup = 'employee__org_unit_id__in'
+
+    def patch(self, request, pk):
+        response = super().patch(request, pk)
+        if response.status_code == status.HTTP_200_OK:
+            benefit = EmployeeBenefit.objects.filter(pk=pk).first()
+            if benefit:
+                CompensationService.reflect_benefit(benefit, user=request.user)
+        return response
+
+    def delete(self, request, pk):
+        benefit = EmployeeBenefit.objects.filter(pk=pk).first()
+        if benefit:
+            # Close any mirrored ledger lines before deleting the benefit.
+            benefit.reflect_in_salary = False
+            CompensationService.reflect_benefit(benefit, user=request.user)
+        return super().delete(request, pk)
 
 
 # Loan (employee-linked)

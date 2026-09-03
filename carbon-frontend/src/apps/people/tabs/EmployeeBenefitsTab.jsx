@@ -10,10 +10,12 @@ import {
   Box,
   Button,
   Chip,
+  FormControlLabel,
   IconButton,
   MenuItem,
   Snackbar,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography,
@@ -35,6 +37,7 @@ import {
   createEmployeeBenefit,
   updateEmployeeBenefit,
   deleteEmployeeBenefit,
+  fetchCompensationComponents,
 } from '../../../api/people';
 import { buildBenefitTypeLabels, formatAmount, formatDate } from '../utils';
 
@@ -43,6 +46,9 @@ const EMPTY_BEN = {
   monthly_amount: '',
   effective_start: '',
   effective_end: '',
+  notes: '',
+  reflect_in_salary: false,
+  component: '',
 };
 
 const tipHeader = (tip) => (params) => (
@@ -66,6 +72,7 @@ export default function EmployeeBenefitsTab({ entityData, additionalProps }) {
 
   const [benefitTypes, setBenefitTypes] = useState([]);
   const [benefitTypeLabels, setBenefitTypeLabels] = useState({});
+  const [components, setComponents] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_BEN });
@@ -91,6 +98,19 @@ export default function EmployeeBenefitsTab({ entityData, additionalProps }) {
         const list = Array.isArray(data) ? data : data?.results || [];
         setBenefitTypes(list);
         setBenefitTypeLabels(buildBenefitTypeLabels(list));
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    let mounted = true;
+    fetchCompensationComponents(token)
+      .then((data) => {
+        if (!mounted) return;
+        const list = Array.isArray(data) ? data : data?.results || [];
+        setComponents(list.filter((c) => c.direction === 'earning'));
       })
       .catch(() => {});
     return () => { mounted = false; };
@@ -129,7 +149,10 @@ export default function EmployeeBenefitsTab({ entityData, additionalProps }) {
       benefit_type: benefit.benefit_type ?? '',
       monthly_amount: benefit.monthly_amount != null ? String(benefit.monthly_amount) : '',
       effective_start: benefit.effective_start ? String(benefit.effective_start).slice(0, 10) : '',
+      notes: benefit.notes ?? '',
       effective_end: benefit.effective_end ? String(benefit.effective_end).slice(0, 10) : '',
+      reflect_in_salary: !!benefit.reflect_in_salary,
+      component: benefit.component ?? '',
     });
     setDialogOpen(true);
   }, []);
@@ -155,6 +178,9 @@ export default function EmployeeBenefitsTab({ entityData, additionalProps }) {
       monthly_amount: String(form.monthly_amount).trim(),
       effective_start: form.effective_start,
       effective_end: form.effective_end ? form.effective_end : null,
+      notes: String(form.notes || '').trim(),
+      reflect_in_salary: !!form.reflect_in_salary,
+      component: form.component ? Number(form.component) : null,
     };
     setSaving(true);
     try {
@@ -226,6 +252,14 @@ export default function EmployeeBenefitsTab({ entityData, additionalProps }) {
       renderCell: (p) => formatDate(p.value),
     },
     {
+      field: 'notes',
+      headerName: t('colNotes'),
+      flex: 1.2,
+      minWidth: 160,
+      renderHeader: tipHeader(t('colNotesTip')),
+      renderCell: (p) => (p.value ? String(p.value) : '—'),
+    },
+    {
       field: '_active',
       headerName: t('colStatus'),
       flex: 0.8,
@@ -236,6 +270,20 @@ export default function EmployeeBenefitsTab({ entityData, additionalProps }) {
           size="small"
           color={p.value ? 'success' : 'default'}
           label={p.value ? t('statusActive') : t('statusInactive')}
+        />
+      ),
+    },
+    {
+      field: 'reflect_in_salary',
+      headerName: t('colReflect'),
+      flex: 0.9,
+      minWidth: 120,
+      renderHeader: tipHeader(t('colReflectTip')),
+      renderCell: (p) => (
+        <Chip
+          size="small"
+          color={p.value ? 'info' : 'default'}
+          label={p.value ? t('reflectYes') : t('reflectNo')}
         />
       ),
     },
@@ -322,6 +370,42 @@ export default function EmployeeBenefitsTab({ entityData, additionalProps }) {
           slotProps={{ inputLabel: { shrink: true } }}
           fullWidth
         />
+        <TextField
+          label={t('colNotes')}
+          name="notes"
+          value={form.notes}
+          onChange={handleChange}
+          multiline
+          rows={2}
+          fullWidth
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={!!form.reflect_in_salary}
+              onChange={(e) => setForm((prev) => ({ ...prev, reflect_in_salary: e.target.checked }))}
+              name="reflect_in_salary"
+            />
+          }
+          label={t('reflectInSalary')}
+        />
+        {form.reflect_in_salary && (
+          <TextField
+            select
+            label={t('salaryComponent')}
+            name="component"
+            value={form.component}
+            onChange={handleChange}
+            fullWidth
+          >
+            <MenuItem value="">{t('salaryComponent')}</MenuItem>
+            {components.map((c) => (
+              <MenuItem key={c.id} value={c.id}>
+                {c.name || c.code}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
       </Stack>
     </SystemDialog>
   );
