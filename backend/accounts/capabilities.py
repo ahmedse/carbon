@@ -458,6 +458,15 @@ AI_MANAGE_CONSOLE = Capability(
     category="admin",
 )
 
+AI_CODE_EXECUTE = Capability(
+    key="ai:code_execute",
+    domain="ai",
+    action="code_execute",
+    label="Execute code in sandbox",
+    description="Run read-only Python/pandas/matplotlib code over a result set in the Pulse sandbox",
+    category="admin",
+)
+
 # ── Dataset Hub capabilities (Phase P1 — trust core) ──────────────
 
 DATAHUB_VIEW = Capability(
@@ -645,6 +654,7 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     # AI (Pulse)
     AI_VIEW_CONSOLE.key: AI_VIEW_CONSOLE,
     AI_MANAGE_CONSOLE.key: AI_MANAGE_CONSOLE,
+    AI_CODE_EXECUTE.key: AI_CODE_EXECUTE,
     # Dataset Hub
     DATAHUB_VIEW.key: DATAHUB_VIEW,
     DATAHUB_INGEST.key: DATAHUB_INGEST,
@@ -749,7 +759,7 @@ IMPLIES: Dict[str, Set[str]] = {
     PEOPLE_MANAGE.key: {PEOPLE_VIEW.key, PEOPLE_VIEW_COMPENSATION.key},
 
     # ── AI admin → view ──
-    AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key},
+    AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key, AI_CODE_EXECUTE.key},
 }
 
 

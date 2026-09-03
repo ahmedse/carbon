@@ -1884,7 +1884,7 @@ The roadmap's Wave I was written before E2 (tool catalog) and Wave H (audit) lan
 | Phase | Goal | Domain | Deps | Status |
 |-------|------|--------|------|--------|
 | I1-B | Platform as MCP server — HTTP discovery + tools + call endpoints | backend | — | DONE ✅ |
-| I2-B | Code execution sandbox (`ai/code_sandbox.py` + `CodeExecuteTool`) | backend | — | — |
+| I2-B | Code execution sandbox (`ai/code_sandbox.py` + `CodeExecuteTool`) | backend | — | DONE ✅ |
 | I2-F | Code-sandbox result rendering (AIMessageBubble image/table) | frontend | I2-B | — |
 | I3-B | Web search tool (`ai:web_search` capability) | backend | — | — |
 | I3-F | External source badge in Inspector | frontend | I3-B | — |
@@ -1977,6 +1977,97 @@ python -m pytest ai/tests/test_mcp_server.py -v --disable-warnings -p no:cachepr
 python manage.py check
 # discovery smoke (requires a running server + a JWT):
 #   curl -s http://127.0.0.1:8009/carbon-api/mcp/ -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## Phase I2-B — Code execution sandbox (backend)
+**Date:** 2026-09-03
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE ✅ (2026-09-03 — 6/6 tests; `manage.py check` clean; `ai:code_execute` registered + implied by `ai:manage_console`)
+**Depends on:** — (plugin registry + capability system are the consumed seams)
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave I §I2 — read the CORRECTIONS below first.
+
+### CORRECTIONS to the I2 roadmap spec (verified against code 2026-09-03)
+1. **There is ALREADY a `SafeExecutor` (RestrictedPython) sandbox** at `ai/engine/skills/sandbox.py`, used by `_invoke_code_snippet` in `ai/engine/agent/tools.py:1315` for `code_snippet` skills. **Do NOT reuse it for I2.** RestrictedPython runs in-process and BLOCKS third-party imports — it cannot run pandas/matplotlib/numpy, which is exactly what I2 requires. I2's `ai/code_sandbox.py` is a NEW **subprocess** sandbox (`subprocess.run` with `-I`, 10s timeout, OS-level restrictions). The two sandboxes coexist: `SafeExecutor` for skill snippets, `CodeSandbox` for data-analysis code.
+2. **Plugin registration seam is `register_builtin_plugins()`** in `ai/plugins/__init__.py` (invoked once from `ai.apps.AIConfig.ready`, idempotent by name). New plugin = new file `ai/plugins/code_execute.py` + ONE `register_plugin(CodeExecuteTool())` line in `register_builtin_plugins()`. Do NOT edit `tools.py`'s static lists (G-C "grow the periphery").
+3. **`ToolPlugin` fields are** (in `ai/engine/agent/plugins.py:79`): `name`, `description`, `input_schema`, `requires_confirmation`, `capability`, `app_identifier`, `capability_claim`, `chat_visible`, `async execute(args, *, ctx)`. `ctx` is a `ToolContext` dataclass (`instance_id`, `conversation_id`, `host_user_id`, `instance_config`, `db`, `host_api`). The `capability` field is DECLARATIVE (exposed in activation/catalog) — host writes are enforced via `ctx.host_api` RBAC; code execution is NOT a host write, so gate it by declaring `capability = "ai:code_execute"` AND registering that key (see #4). The I2 acceptance gate does NOT test capability gating (that's I3); it tests SANDBOX security.
+4. **New capability registration pattern** (`accounts/capabilities.py`): add a `Capability` constant next to `AI_VIEW_CONSOLE`/`AI_MANAGE_CONSOLE` (~line 444-458) → add `AI_CODE_EXECUTE.key: AI_CODE_EXECUTE` to `ALL_CAPABILITIES` (~line 640) → add IMPLIES entry `AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key, AI_CODE_EXECUTE.key}` (~line 758). The `"admin"` group has `"*"` (wildcard) so it inherits automatically. Do NOT add a frontend `capabilities.js` mirror in I2-B (frontend is I2-F).
+5. **Data flow — never DB credentials.** `CodeSandbox.execute(code, data)` passes `data` (the pre-fetched result JSON) via subprocess stdin ONLY. The plugin's `execute(args, *, ctx)` receives `{code, data}` from the planner; `data` defaults to `{}` when absent. The sandbox process gets NO DB connection, NO host API token, NO network.
+
+### Files to Read First
+- `ai/engine/agent/plugins.py` (`ToolPlugin` ABC, `register_plugin`, `ToolContext`)
+- `ai/plugins/__init__.py` (`register_builtin_plugins()` — the registration site)
+- `ai/plugins/web_research.py` (the canonical simple read-only `ToolPlugin` example)
+- `ai/plugins/create_dq_rule.py` (a gated `ToolPlugin` with `capability=` field)
+- `ai/engine/skills/sandbox.py` (the EXISTING RestrictedPython sandbox — for contrast only, do NOT reuse)
+- `accounts/capabilities.py` (`Capability` fields, `ALL_CAPABILITIES`, `IMPLIES`)
+
+### Files to Change
+- `backend/ai/code_sandbox.py` (NEW) — `CodeSandbox.execute(code, data) -> SandboxResult`
+- `backend/ai/plugins/code_execute.py` (NEW) — `CodeExecuteTool(ToolPlugin)`
+- `backend/ai/plugins/__init__.py` — register `CodeExecuteTool()` in `register_builtin_plugins()`
+- `backend/accounts/capabilities.py` — add `AI_CODE_EXECUTE` capability + register + IMPLIES
+- `backend/ai/tests/test_code_sandbox.py` (NEW)
+
+### Contract (exact — do NOT deviate)
+
+**`ai/code_sandbox.py`:**
+```
+CodeSandbox.execute(code: str, data: dict = {}) -> dict:
+    { "stdout": str, "error": str|None, "image_b64": str|None, "table_rows": list[dict]|None, "result": Any|None }
+```
+- Run in a **subprocess**: `subprocess.run([sys.executable, "-I", "-c", WRAPPER], input=json.dumps(data), capture_output=True, text=True, timeout=10)`. Use `-I` (isolated: no PYTHONPATH/user site) but NOT `-S` (pandas/matplotlib/numpy must still import from system site-packages).
+- **WRAPPER prelude** (executed before user code): install `sys.addaudithook` that raises on (a) network — `socket.connect`/`socket.getaddrinfo`/`socket.bind`; (b) file-write — `open` event whose mode contains `w`/`a`/`x`/`+`; (c) subprocess spawn — `os.system`/`subprocess.Popen`/`os.exec*`/`os.spawn*`. Set `matplotlib.use("Agg")` and `import matplotlib.pyplot as plt` before exec. Read `data` from `sys.stdin`. Capture user `print()` output via `contextlib.redirect_stdout` into a `io.StringIO`. Then `exec(user_code)` in a namespace that exposes `data` (and `pd`/`plt` for convenience). On exception, capture the traceback as `error` (fail-visible, never fabricate).
+- **Post-exec:** if `plt.get_fignums()`, render the current figure to an in-memory `BytesIO` PNG and base64-encode → `image_b64`. If the namespace has a sentinel `result` variable: a pandas `DataFrame` → `table_rows = result.to_dict(orient="records")`; a `list[dict]` → `table_rows`; a scalar → `result`. Emit the final dict as a single sentinel-delimited JSON line on stdout (so user `print()` output stays in `stdout` and the result machine-parses cleanly).
+- **10s timeout** → `subprocess.TimeoutExpired` → return `{"error": "Code execution timed out (10s limit).", "stdout": <partial>, ...}`.
+- **Non-negotiables:** never in the Django process; never pass DB creds/connection; never allow network/file-write/subprocess in the sandbox; never let a sandbox crash propagate (return `{"error": ...}`).
+
+**`ai/plugins/code_execute.py` — `CodeExecuteTool(ToolPlugin)`:**
+```
+name = "code.execute"
+description = "Run Python/pandas/matplotlib code over a provided result set and return a chart image, a table, or a scalar. Read-only. Assign the final answer to `result` (a DataFrame for a table, or a scalar)."
+input_schema = { "type": "object", "properties": { "code": {"type": "string"}, "data": {"type": "object"} }, "required": ["code"] }
+requires_confirmation = False          # read-only (RULE_21)
+capability = "ai:code_execute"
+app_identifier = None
+chat_visible = True
+capability_claim = "I can run Python/pandas code over a result set to compute tables and charts."
+async def execute(args, *, ctx): return CodeSandbox.execute(args["code"], args.get("data") or {})
+```
+- `execute` must never raise; wrap the sandbox call and return `{"error": str(exc)}` on failure.
+
+**`accounts/capabilities.py`:**
+```
+AI_CODE_EXECUTE = Capability(key="ai:code_execute", domain="ai", action="code_execute",
+    label="Execute code in sandbox",
+    description="Run read-only Python/pandas/matplotlib code over a result set in the Pulse sandbox",
+    category="admin")
+```
+- `ALL_CAPABILITIES`: add `AI_CODE_EXECUTE.key: AI_CODE_EXECUTE`.
+- `IMPLIES`: `AI_MANAGE_CONSOLE.key: {AI_VIEW_CONSOLE.key, AI_CODE_EXECUTE.key}` (add to the existing `AI_MANAGE_CONSOLE` entry).
+
+### Tests (exact — `ai/tests/test_code_sandbox.py`)
+1. **valid pandas → table** — `code="import pandas as pd; result = pd.DataFrame({'a':[1,2]})"` with `data={}` → `table_rows == [{'a':1},{'a':2}]`, `error is None`.
+2. **timeout** — `code="import time; time.sleep(30)"` → returns `{"error": ...timeout...}` (not an uncaught exception). Use a short patched timeout if the real 10s makes the test slow (monkeypatch the sandbox timeout to ~1s for the test).
+3. **os.system blocked** — `code="import os; os.system('echo hi')"` → error/blocked (audit hook raises), sandbox does NOT execute it.
+4. **network blocked** — `code="import urllib.request; urllib.request.urlopen('http://example.com')"` → error/blocked.
+5. **file-write blocked** — `code="open('/tmp/pulse_should_not_write.txt','w').write('x')"` → error/blocked.
+6. **matplotlib image** — `code="import matplotlib.pyplot as plt; plt.plot([1,2,3]); result = None"` → `image_b64` is a non-empty base64 PNG string.
+
+### DO NOT TOUCH
+- `ai/engine/` (vendored engine), `ai/engine/skills/sandbox.py` (existing SafeExecutor — unrelated)
+- `ai/adapter/*`, `ai/domain/*`, `ai/mcp/*` (Wave I1-B — done)
+- Existing ai API views/urls; `TASK-RESULTS.md` (append only your own entry)
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/backend
+python -m pytest ai/tests/test_code_sandbox.py -v --disable-warnings -p no:cacheprovider
+python manage.py check
+# capability registration sanity (optional):
+#   python -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); django.setup(); from accounts.capabilities import ALL_CAPABILITIES, has_capability; print('ai:code_execute' in ALL_CAPABILITIES)"
 ```
 
 ---

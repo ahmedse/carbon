@@ -20,6 +20,7 @@ def register_builtin_plugins() -> None:
     """Import + register every built-in plugin (idempotent by name)."""
     from ai.engine.agent.plugins import register_plugin
 
+    from .code_execute import CodeExecuteTool
     from .create_dq_rule import CreateDQRule
     from .cross_synthesize import CrossDomainSynthesisTool
     from .list_capabilities import ListCapabilities
@@ -29,6 +30,7 @@ def register_builtin_plugins() -> None:
     from .export_document import ExportDocument
     from .unit_converter import UnitConverter
 
+    register_plugin(CodeExecuteTool())
     register_plugin(CreateDQRule())
     register_plugin(CrossDomainSynthesisTool())
     register_plugin(ListCapabilities())
