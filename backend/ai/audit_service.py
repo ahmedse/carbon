@@ -12,6 +12,7 @@ model or migration is introduced here.
 import logging
 
 from ai.models.core import AuditLog
+from ai.pii_guard import PIIGuard
 
 logger = logging.getLogger("ai.audit")
 
@@ -25,13 +26,15 @@ class AuditService:
         NEVER raises: an audit failure must not break the user's turn.
         """
         try:
+            target_clean = PIIGuard.redact(str(target)) if target is not None else None
+            detail_clean = PIIGuard.redact_dict(detail) if detail else {}
             AuditLog.objects.create(
                 instance_id=instance_id,
                 actor=str(actor),
                 actor_type=actor_type,
                 action=action,
-                target=str(target) if target is not None else None,
-                detail=detail or {},
+                target=target_clean,
+                detail=detail_clean,
                 host_user_id=str(host_user_id) if host_user_id is not None else None,
                 visibility=visibility,
             )

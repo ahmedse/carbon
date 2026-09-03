@@ -5,6 +5,7 @@ from datetime import timedelta
 from ai.engine.core.clock import utcnow
 from ai.engine.llm.router import route_chat
 from ai.engine.memory.long_term import LongTermMemory
+from ai.pii_guard import PIIGuard
 
 logger = logging.getLogger("pulse.auto_memory")
 
@@ -58,7 +59,7 @@ class AutoMemoryExtractor:
             await mem.store_fact(
                 instance_id=instance_id,
                 category=memory_type,
-                content=user_message[:500],
+                content=PIIGuard.redact(user_message[:500]),
                 source="auto_extract",
                 confidence=0.85,
                 host_user_id=host_user_id,

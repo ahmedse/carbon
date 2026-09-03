@@ -30,6 +30,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ai.engine.core.event_bus import events_channel, subscribe
+from ai.pii_guard import PIIGuard
 
 # SSE heartbeat interval (seconds). Keeps proxies/nginx from closing the
 # stream while idle, and bounds the time the generator blocks on an empty
@@ -72,7 +73,7 @@ def _serialize_insight(insight) -> dict:
     return {
         "id": str(insight.id),
         "title": insight.title,
-        "narrative": insight.narrative,
+        "narrative": PIIGuard.redact(insight.narrative or ""),
         "severity": insight.severity,
         "insight_type": insight.insight_type,
         "recommended_actions": _parse_json(insight.recommended_actions_json, []),
@@ -132,6 +133,8 @@ def _insight_stream_frames(user):
                 continue
             payload = frame.get("payload") or {}
             if _frame_visible(user, payload):
+                payload = dict(payload)
+                payload["narrative"] = PIIGuard.redact(payload.get("narrative") or "")
                 q.put(payload)
 
     def _run() -> None:

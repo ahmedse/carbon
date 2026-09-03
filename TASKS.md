@@ -1890,7 +1890,7 @@ The roadmap's Wave I was written before E2 (tool catalog) and Wave H (audit) lan
 | I3-F | External source badge in Inspector | frontend | I3-B | — |
 | I4-B | Subagent dispatch service (`ai/subagent_service.py`) | backend | — | DONE ✅ |
 | I4-F | Subagent result card | frontend | I4-B | — |
-| I5-B | PII server-side gate (`ai/pii_guard.py`) | backend | — | — |
+| I5-B | PII server-side gate (`ai/pii_guard.py`) | backend | — | DONE ✅ |
 
 ---
 
@@ -2354,6 +2354,128 @@ cd /home/ahmed/aast/carbon/backend
 ../.venv/bin/python manage.py check
 # allowlist sanity:
 #   ../.venv/bin/python -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); django.setup(); from ai.subagent_service import SUBAGENT_READONLY_TOOLS, MUTATION_TOOLS_DENIED; print('disjoint=', SUBAGENT_READONLY_TOOLS.isdisjoint(MUTATION_TOOLS_DENIED), 'has_web_research=', 'web_research' in SUBAGENT_READONLY_TOOLS)"
+```
+
+---
+
+## Phase I5-B — PII server-side gate (`ai/pii_guard.py`)
+**Date:** 2026-09-03
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE ✅
+**Depends on:** G1 (`ai/engine/cognition/auto_memory.py`), H1 (`ai/audit_service.py`), `ai/insights_api.py` (SSE delivery)
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave I §I5 — read the CORRECTIONS below first.
+
+### CORRECTIONS (roadmap drift — read before implementing)
+
+1. **There is NO `output_summary` and NO `AIPulseAuditLog` model.** The roadmap §I5 task #3 says "pass `output_summary` through `PIIGuard.redact()` before writing to `AIPulseAuditLog`". Reality: `ai/audit_service.py` is the single append-only seam (Phase H1-B) writing to the reused `AuditLog` model (`ai/models/core.py`). Its `log()` signature is `log(*, action, actor, actor_type, target=None, detail=None, ...)` — `target` is a **string** and `detail` is a **dict**. The PII-bearing "summary" is `detail["content"]` (see `ai/memory_api.py:339` which writes `detail={"content": (fact.content or "")[:200], ...}`). I5-B redacts **`target` (string) and `detail` (recursively, key-level)** inside `AuditService.log()` before `AuditLog.objects.create(...)`.
+2. **The roadmap URL/mount drift from I4-B does NOT apply here.** `insights_api.py` is the correct read layer (`GET /carbon-api/ai/insights/` + `/stream/` SSE). No URL changes.
+3. **`auto_memory.py` stores the RAW user message, not a synthesized fact.** `AutoMemoryExtractor.try_extract` classifies the user message then calls `mem.store_fact(..., content=user_message[:500], ...)`. I5-B redacts `user_message[:500]` (i.e. `PIIGuard.redact(user_message[:500])`) at the `content=` argument — redact **before** write, never block the write.
+4. **Redact, don't drop; redact patterns, not bare numbers.** The guard replaces matches with `[REDACTED:{type}]` and returns the full text (GDPR erasure vs recording: redact). The civil-ID pattern must require **exactly 12 consecutive digits** with digit boundaries (`(?<!\d)\d{12}(?!\d)`) so emission values like `142` or a 6-digit phone number are NEVER redacted. Do NOT use a catch-all `\d+` that eats every number.
+5. **`PIIGuard` is a pure, side-effect-free module.** It imports NOTHING from Django, ORM, or the engine. It is imported by `auto_memory.py` (engine vendored dir), `audit_service.py`, and `insights_api.py` — all of which already sit inside the Django app context, so a plain `from ai.pii_guard import PIIGuard` is safe. No migrations, no models.
+
+### Files to change
+
+- `backend/ai/pii_guard.py` (NEW)
+- `backend/ai/engine/cognition/auto_memory.py` — redact `content=` before `store_fact`
+- `backend/ai/audit_service.py` — redact `target` + `detail` before `AuditLog.objects.create`
+- `backend/ai/insights_api.py` — redact `narrative` in `_serialize_insight` + the SSE frame
+- `backend/ai/tests/test_pii_guard.py` (NEW)
+
+### Out of scope
+
+- `carbon-frontend/src/utils/logger.js` — client-side redaction (D4) is the existing counterpart, do NOT touch.
+- `ai/engine/proactive/delivery.py` — the `insight.new` bus frame PRODUCER. I5-B redacts at the READ boundary (`insights_api.py`), not at publish (the bus frame is internal; redaction happens where it crosses HTTP).
+- `ai/guards.py` / `ai/engine/*` guardrail hooks — no edits.
+- Blocking writes, erasure, or `people/*` model changes — out of scope (this is detection+masking only).
+
+### Spec
+
+**`ai/pii_guard.py` (NEW) — pure module, no Django imports:**
+
+```python
+"""Server-side PII detection + masking (Wave I5-B).
+
+Mirrors the ``logger.js`` client-side redaction (D4) on the server.  Pure,
+side-effect-free: imports nothing from Django, the ORM, or the engine so it can
+be imported from engine vendored code (``auto_memory.py``) and the Django read
+layers alike.
+"""
+import re
+
+# Keys whose values are ALWAYS fully redacted when encountered in a nested
+# structure (dict).  Normalized (lowercased, ``-``/space → ``_``) before matching.
+PII_KEYS = frozenset({
+    "civil_id", "civilid", "national_id", "nationalid", "passport",
+    "passport_no", "passport_number", "email", "email_address", "phone",
+    "phone_number", "mobile", "mobile_number", "nationality",
+    "nationality_code", "date_of_birth", "dob", "full_name",
+    "name_en_given", "name_en_family", "name_ar_given", "name_ar_family",
+    "iban", "bank_account", "account_number", "token", "secret",
+    "password", "api_key", "apikey", "authorization",
+})
+
+# (type, compiled_regex) — ordered; civil_id (12 digits) is matched BEFORE any
+# generic numeric rule so it wins.  Every pattern uses boundaries so it cannot
+# match inside a longer alphanumeric/numeric run.
+_PATTERNS = [
+    ("civil_id", re.compile(r"(?<!\d)\d{12}(?!\d)")),          # Kuwait civil ID: exactly 12 digits
+    ("passport", re.compile(r"(?<![A-Za-z0-9])[A-Za-z]\d{8}(?!\d)")),  # letter + 8 digits
+    ("email", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
+]
+
+
+class PIIGuard:
+    @classmethod
+    def redact(cls, text: str) -> str:
+        # returns text with each matched pattern replaced by [REDACTED:<type>];
+        # non-str inputs pass through unchanged (callers pass str only)
+        ...
+```
+
+- `PIIGuard.redact(text)` — apply each `_PATTERNS` regex in order via `re.sub`, replacing with `[REDACTED:{type}]`. Return the (possibly unchanged) string. Must be idempotent on `None`/non-str (return the input unchanged).
+- `PIIGuard.redact_dict(obj)` — recursively mask:
+  - `str` → `redact(str)`
+  - `dict` → new dict; for each `(k, v)`: normalize `k` = `str(k).strip().lower().replace("-", "_").replace(" ", "_")`; if `k in PII_KEYS` → value = `[REDACTED:{k}]` (key-level mask, no recursion); else recurse into `v`.
+  - `list`/`tuple` → recurse element-wise (preserve type for tuple).
+  - `None`/`bool`/`int`/`float`/other → return as-is.
+  - Do NOT mutate the input in place (return new structures).
+
+**`auto_memory.py`** — import `from ai.pii_guard import PIIGuard` at module top; change the `store_fact` call from `content=user_message[:500]` to `content=PIIGuard.redact(user_message[:500])`. Nothing else changes (classification still uses the raw message — redaction is at the persistence boundary only).
+
+**`audit_service.py`** — import `from ai.pii_guard import PIIGuard`; inside `log()` compute the sanitized values BEFORE `AuditLog.objects.create(...)`:
+```python
+target_clean = PIIGuard.redact(str(target)) if target is not None else None
+detail_clean = PIIGuard.redact_dict(detail) if detail else {}
+```
+then pass `target=target_clean, detail=detail_clean` to `AuditLog.objects.create(...)`. The `try/except` swallow behavior (RULE_21 — never break the turn) is unchanged.
+
+**`insights_api.py`** — import `from ai.pii_guard import PIIGuard`; two redaction points:
+1. `_serialize_insight` (list endpoint): `"narrative": PIIGuard.redact(insight.narrative or "")`.
+2. `_insight_stream_frames` → `_consume`: before `q.put(payload)`, redact the narrative on a COPY (never mutate the shared bus frame): `payload = dict(payload)` then `payload["narrative"] = PIIGuard.redact(payload.get("narrative") or "")`. (The bus frame is shared across subscribers; redact on the outbound copy only.)
+
+### Tests (`ai/tests/test_pii_guard.py` — NEW)
+
+1. `test_redact_civil_id` — `PIIGuard.redact("civil 123456789012 ok")` → contains `[REDACTED:civil_id]`, does NOT contain `123456789012`.
+2. `test_redact_passport` — `PIIGuard.redact("passport A12345678 ok")` → contains `[REDACTED:passport]`.
+3. `test_redact_email` — `PIIGuard.redact("mail me a@b.co")` → contains `[REDACTED:email]`.
+4. `test_redact_preserves_short_numbers` — `PIIGuard.redact("emissions 142 tCO2e, phone 5551234")` → `142` and `5551234` UNCHANGED (no `[REDACTED:civil_id]`).
+5. `test_redact_non_pii_passthrough` — `PIIGuard.redact("normal text about emissions scope 1 and 2")` == same string.
+6. `test_redact_nested_dict_keys` — `PIIGuard.redact_dict({"civil_id": "123456789012", "notes": {"email": "a@b.co", "ok": "fine"}})` → `civil_id` value is `[REDACTED:civil_id]`, `notes.email` is `[REDACTED:email]`, `notes.ok == "fine"`.
+7. `test_redact_dict_does_not_mutate_input` — pass a dict, assert the original dict is unchanged after the call.
+8. `test_auto_memory_redacts_before_store` — monkeypatch `AutoMemoryExtractor`'s `route_chat` classify result to `"context"` and monkeypatch `LongTermMemory.store_fact` to capture kwargs; call `await AutoMemoryExtractor.try_extract("my civil id is 123456789012", "carbon", "1", db)`; assert the captured `content` contains `[REDACTED:civil_id]` and NOT `123456789012`.
+9. `test_audit_service_redacts_detail` — `AuditService.log(action="ai.memory_write", actor=1, host_user_id="1", detail={"content": "civil 123456789012"})`; fetch the created `AuditLog` row; assert `detail["content"]` contains `[REDACTED:civil_id]` and NOT `123456789012`.
+10. `test_serialize_insight_redacts_narrative` — build a `KgProactiveInsight` row (or monkeypatch `_serialize_insight`'s input) with `narrative="civil 123456789012"`; assert the serialized `narrative` contains `[REDACTED:civil_id]`.
+
+> Note: tests 8/9 need Django test DB + pytest-django (already configured); use the existing fixtures in `ai/tests/test_audit_trail.py` / `test_insights_api.py` as the pattern (User, APIClient, AIConversation, etc.).
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/backend
+../.venv/bin/python -m pytest ai/tests/test_pii_guard.py -v --disable-warnings -p no:cacheprovider
+../.venv/bin/python manage.py check
+# regression: existing audit + insights + auto-memory tests still green
+../.venv/bin/python -m pytest ai/tests/test_audit_trail.py ai/tests/test_insights_api.py -v --disable-warnings -p no:cacheprovider
 ```
 
 ---
