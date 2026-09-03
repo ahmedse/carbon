@@ -1885,11 +1885,11 @@ The roadmap's Wave I was written before E2 (tool catalog) and Wave H (audit) lan
 |-------|------|--------|------|--------|
 | I1-B | Platform as MCP server — HTTP discovery + tools + call endpoints | backend | — | DONE ✅ |
 | I2-B | Code execution sandbox (`ai/code_sandbox.py` + `CodeExecuteTool`) | backend | — | DONE ✅ |
-| I2-F | Code-sandbox result rendering (AIMessageBubble image/table) | frontend | I2-B | — |
+| I2-F | Code-sandbox result rendering (AIMessageBubble image/table) | frontend | I2-B | SPEC READY ✅ (RULE_29) |
 | I3-B | Web search tool (`ai:web_search` capability) | backend | — | DONE ✅ |
-| I3-F | External source badge in Inspector | frontend | I3-B | — |
+| I3-F | External source badge in Inspector | frontend | I3-B | SPEC READY ✅ (RULE_29) |
 | I4-B | Subagent dispatch service (`ai/subagent_service.py`) | backend | — | DONE ✅ |
-| I4-F | Subagent result card | frontend | I4-B | — |
+| I4-F | Subagent result card | frontend | I4-B | SPEC READY ✅ (RULE_29) |
 | I5-B | PII server-side gate (`ai/pii_guard.py`) | backend | — | DONE ✅ |
 
 ---
@@ -2476,6 +2476,82 @@ cd /home/ahmed/aast/carbon/backend
 ../.venv/bin/python manage.py check
 # regression: existing audit + insights + auto-memory tests still green
 ../.venv/bin/python -m pytest ai/tests/test_audit_trail.py ai/tests/test_insights_api.py -v --disable-warnings -p no:cacheprovider
+```
+
+---
+
+## Phase I2-F — Code-sandbox result rendering (frontend)
+**Date:** 2026-09-03
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** SPEC READY ✅ — awaiting dispatch (RULE_29 gate complete)
+**Depends on:** I2-B (backend sandbox, DONE) + **I2-F backend seam** (thread `code_result` — see Artifact 6 below; do this BEFORE the frontend component).
+**Full spec (source of truth):** `docs/SCREEN-SPEC-I2-CODE-SANDBOX-RESULT.md` — all 9 RULE_29 artifacts. Build exactly to it.
+
+### Screen Spec — Artifacts 1–9 (RULE_29 gate — COMPLETE)
+> Author: Master Architect (2026-09-03). The frontend worker SHALL NOT code the `code_result` branch until reading `docs/SCREEN-SPEC-I2-CODE-SANDBOX-RESULT.md`. Key contract points:
+> - **Backend seam FIRST (prerequisite):** `backend/ai/engine_runtime.py` add `_build_code_result(completed_tools)` (find `tool_name == "code.execute"`, parse `item["result"]` as the sandbox dict), add `"code_result": _build_code_result(completed_tools)` to the turn `result` dict (~line 208); `backend/ai/intelligence.py` `_build_ai_message` gains `code_result: dict | None = None` param + `if code_result: metadata["code_result"] = code_result` (mirror `external_sources` at 3895–3896); pass `code_result=res.get("code_result")` at call sites 654/2426/3608; `_serialize_message` adds `"code_result": metadata.get("code_result")`.
+> - **Render** in `AIMessageBubble.renderStructuredContent()` as a `code_result` branch: chart = lazy `<img data:image/png;base64,…>` (`alt` + `loading="lazy"`); table = lazy `CarbonDataGrid` (reuse `nl_query_result` `toGridRows`/`toGridColumns`, cap ~10 rows); scalar = `KeyValueOutput`; error = inline `Alert` (no stack trace); "Code used" disclosure = `PlanningHeader` collapse (default collapsed, `dir="ltr"`).
+> - `message.code_result || message.metadata_json?.code_result` — always defensive; absent → render as today (never `return null`).
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm test -- --run        # new <Component>.<scope>.test.jsx green
+npm run lint             # 0 new errors
+npm run build            # clean
+cd /home/ahmed/aast/carbon/backend
+../.venv/bin/python -m pytest ai/tests -q --disable-warnings -p no:cacheprovider
+../.venv/bin/python manage.py check
+```
+
+---
+
+## Phase I3-F — External source badge (frontend)
+**Date:** 2026-09-03
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** SPEC READY ✅ — awaiting dispatch (RULE_29 gate complete)
+**Depends on:** I3-B (web search + `external_sources`, DONE)
+**Full spec (source of truth):** `docs/SCREEN-SPEC-I3-EXTERNAL-SOURCE-BADGE.md` — all 9 RULE_29 artifacts. Build exactly to it.
+
+### Screen Spec — Artifacts 1–9 (RULE_29 gate — COMPLETE)
+> Author: Master Architect (2026-09-03). The frontend worker SHALL NOT code the external badge until reading `docs/SCREEN-SPEC-I3-EXTERNAL-SOURCE-BADGE.md`. Key contract points:
+> - **Data:** `message.external_sources || message.provenance?.external_sources || []` (always a list). Item shape `{title, url, source: "wikipedia"|"duckduckgo"|"external_web", retrieved_at}`. Provider labels: wikipedia → "Wikipedia", duckduckgo → "DuckDuckGo", external_web → "Web search".
+> - **Render** in `ReasoningTrace.jsx` "Sources" section: `ExternalSourceBadge` = `AIGeneratedBadge` pattern (Chip + icon + label `External · {provider} · {formatted retrieved_at}`); title = MUI `Link` `target="_blank" rel="noopener noreferrer"`. Malformed items skipped; no external sources → render as today (zero regression). Do NOT bypass the RULE_23 `LEAK_PATTERN` filter.
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm test -- --run
+npm run lint
+npm run build
+node scripts/check-i18n-keys.js   # 0 missing keys
+```
+
+---
+
+## Phase I4-F — Subagent result card + progress (frontend)
+**Date:** 2026-09-03
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** SPEC READY ✅ — awaiting dispatch (RULE_29 gate complete)
+**Depends on:** I4-B (subagent service + endpoints, DONE)
+**Full spec (source of truth):** `docs/SCREEN-SPEC-I4-SUBAGENT-UI.md` — all 9 RULE_29 artifacts. Build exactly to it.
+
+### Screen Spec — Artifacts 1–9 (RULE_29 gate — COMPLETE)
+> Author: Master Architect (2026-09-03). The frontend worker SHALL NOT code the subagent UI until reading `docs/SCREEN-SPEC-I4-SUBAGENT-UI.md`. Key contract points:
+> - **Transport = POLL (no SSE).** Add `dispatchSubagent` + `getSubagent` to `src/api/aiWorkspace.js` (base `ai/workspace/`). Dispatch `POST conversations/{id}/subagents/` → `201` `serialize_subagent`; then poll `GET conversations/{id}/subagents/{sub_id}/` every ~1.5s (back off after ~5 polls) until `status ∈ {completed, failed}`. Clear the timer on unmount + terminal status (never leak `setInterval`). `404`/`403` → terminal "not found" (do not leak existence).
+> - **Result card** = NEW `src/shell/SubagentResultCard.jsx`, rendered by `AIMessageBubble.renderStructuredContent()` as a `metadata.type === "subagent_result"` branch. Header: `AIGeneratedBadge("Subagent")` + name + status chip; scope via `KeyValueOutput`; summary = `result_summary`; detail = collapsible `result_detail` (`PlanningHeader` collapse, default collapsed); failed → `Alert` with `error`.
+> - **Progress sub-list** = nested under the owning task in `AITaskPanel.jsx` (per `serialize_subagent` name + status chip), never flattened into the parent list. Dispatch trigger = `SystemDialog` form (name + brief + optional scope).
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npm test -- --run
+npm run lint
+npm run build
+node scripts/check-i18n-keys.js   # 0 missing keys
 ```
 
 ---
