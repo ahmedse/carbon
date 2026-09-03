@@ -1863,6 +1863,124 @@ npm run build
 
 ---
 
+## PULSE 0.4 — WAVE I TRACK (External Connectivity)
+
+> **Canonical spec:** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave I — but read the CORRECTIONS below first.
+
+### CORRECTIONS to the Wave I roadmap spec (verified against code 2026-09-03 — do NOT chase the roadmap's stale assumptions)
+
+The roadmap's Wave I was written before E2 (tool catalog) and Wave H (audit) landed. The following ALREADY EXIST and must be REUSED, never duplicated:
+
+1. **Tool metadata + CBAC already exist (E2).** `DomainAIOperations.get_tools() → list[ToolDef]` (fields `id/description/required_capability/is_mutation/domain/input_schema/output_description`) is implemented for all 9 registered domains; `CarbonHostAdapter.get_tool_catalog(user, scope)` already CBAC-filters via `has_capability(user, tool.required_capability)`; `check_tool_catalog` (E2 gate) validates. **I1 READS the registry and filters — it does NOT re-declare any tool.**
+2. **Execution seam already exists.** `call_host_api(api_name)` → `HostAPIExecutor.get_catalog_entry(api_name)` → `CarbonHostExecutor._call_api()` (in-process `_IN_PROCESS_ENDPOINTS` in `ai/host_executor.py`). The MCP `/tools/call/` resolves `tool.id` → `api_name` by stripping the `{domain}.` prefix (e.g. `emissions.list_emission_factors` → `list_emission_factors`), then reuses this executor. **Do NOT build a new HTTP execution path.**
+3. **There is NO uniform `view_capability` attribute on domains.** The roadmap's "only apps whose `view_capability` the user has" assumes a per-domain attribute that does not exist. CBAC is per-tool (`ToolDef.required_capability`). Discovery = iterate `list_domains()`, CBAC-filter each `get_tools()`, and emit a server ONLY for domains with ≥1 accessible tool. A zero-tool server is a thin implementation (RULE_28) — skip it.
+4. **Only 2 of 9 domains expose tools today.** `emissions` (5 read tools, caps `carbon:*`) and `data_product` (2 read + 1 mutation `create_table`, caps `catalog:view`/`dataschema:view`/`dataschema:manage`). The other 7 (`admin`, `mdm`, `finance`, `hr`, `customer`, `people`, `water`) return `[]` from `get_tools()` (advisory/manifest-only). Discovery therefore yields ≤2 servers today. The multi-app guarantee is ARCHITECTURAL (registry-driven): any future domain that returns tools automatically appears. **Do NOT hardcode a single "carbon" server and do NOT fabricate tools for advisory domains.**
+5. **RULE_21 consent reuses the existing pending-execution flow — there is NO 428.** Mutations (`is_mutation=True`, e.g. `data_product.create_table`) call `create_pending_execution` and return `{requires_confirmation: true, execution_id, confirmation_message}` — the SAME shape as `execute_call_host_api` in `ai/engine/agent/tools.py:730`. Consent resolves through the existing `confirm_tool_execution` API. The roadmap's "mutation-without-consent→428" is wrong — mirror the existing 200 `{requires_confirmation: true, execution_id}` contract.
+6. **Audit reuses `AuditLog` + `AuditService` (Wave H), NOT a new `AIPulseAuditLog`.** Log MCP tool calls via `AuditService.log(action="ai.mcp_tool_call", actor=..., host_user_id=...)` with `detail["source"]="mcp_external"`. Reuse `ai/audit_service.py`.
+7. **PII redaction is I5, NOT I1.** The roadmap's I1 test item "PII output never returned without I5 redaction" is out of scope for I1: no `people`/`hr`/`finance`/`customer` tool exists (all return `[]`), so no PII-bearing tool path exists yet. I1 passes tool output through unchanged; I5 wraps it. **Do NOT block I1 on I5** — drop that test assertion from I1 and defer it to I5.
+8. **`app_identifier` ≠ capability domain.** "Carbon" = `emissions` app_identifier, but its tools use `carbon:*` caps; `data_product` tools use `catalog:*`/`dataschema:*`. Do not assume `app_identifier == capability domain`.
+9. **Auth/Scope:** DRF `APIView` + `permission_classes=[IsAuthenticated]` (JWT); CBAC via `accounts.capabilities.has_capability`; Scope/instance via `_carbon_instance_config(user_pk)` + `get_session_factory("carbon")` (the exact pattern at `ai/workspace_api.py:520-535`). Mirror it exactly.
+
+| Phase | Goal | Domain | Deps | Status |
+|-------|------|--------|------|--------|
+| I1-B | Platform as MCP server — HTTP discovery + tools + call endpoints | backend | — | DONE ✅ |
+| I2-B | Code execution sandbox (`ai/code_sandbox.py` + `CodeExecuteTool`) | backend | — | — |
+| I2-F | Code-sandbox result rendering (AIMessageBubble image/table) | frontend | I2-B | — |
+| I3-B | Web search tool (`ai:web_search` capability) | backend | — | — |
+| I3-F | External source badge in Inspector | frontend | I3-B | — |
+| I4-B | Subagent dispatch service (`ai/subagent_service.py`) | backend | — | — |
+| I4-F | Subagent result card | frontend | I4-B | — |
+| I5-B | PII server-side gate (`ai/pii_guard.py`) | backend | — | — |
+
+---
+
+## Phase I1-B — Platform as MCP server (HTTP endpoints)
+**Date:** 2026-09-03
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE ✅ (2026-09-03 — 9/9 tests; `manage.py check` clean; `check_tool_catalog` 8 tools valid across 10 domains)
+**Depends on:** — (E2 tool catalog + Wave H audit are the consumed seams)
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave I §I1 — read the CORRECTIONS in the Wave I header above.
+
+### Context
+The platform already has a fully-populated tool catalog (E2): 9 registered domains, 2 with real tools (`emissions` 5 read, `data_product` 2 read + 1 mutation), each `ToolDef` carrying CBAC metadata, plus an in-process execution seam (`CarbonHostExecutor`) and the Wave H `AuditService`. What is MISSING is the inbound MCP surface: an external MCP client (Claude Desktop, Cursor, etc.) cannot discover or call these tools over HTTP. This phase exposes the platform itself as an MCP server — one server per `app_identifier` with accessible tools, CBAC-filtered per user, RULE_21-gated mutations, and an audit trail tagged `source=mcp_external`.
+
+### Files to Read First
+- `ai/adapter/types.py` (`ToolDef` fields), `ai/domain_protocol.py` (`list_domains()`, `get_domain()`, `DomainAIOperations.get_tools()`)
+- `ai/adapter/carbon.py` (`CarbonHostAdapter.get_tool_catalog()` — the canonical CBAC filter to mirror)
+- `ai/engine/instances/carbon/instance.yaml` (`api_catalog` — `{name, method, path, requires_confirmation}`; the `tool.id → api_name` execution map)
+- `ai/engine/agent/executor.py` (`get_catalog_entry`, `call_api_direct`, `create_pending_execution` contracts)
+- `ai/host_executor.py` (`CarbonHostExecutor`, `_IN_PROCESS_ENDPOINTS`)
+- `ai/workspace_api.py` (lines ~495-545: executor construction + `AuditService.log` pattern)
+- `ai/audit_service.py` (Wave H `AuditService.log` signature), `accounts/capabilities.py` (`has_capability`)
+- `config/urls.py` (how ai URLs are mounted under `/carbon-api/`)
+- `ai/management/commands/check_tool_catalog.py` (E2 gate to reuse)
+
+### Files to Change
+- `backend/ai/mcp/__init__.py` (NEW)
+- `backend/ai/mcp/server_views.py` (NEW) — `McpDiscoveryView`, `McpToolsView`, `McpToolCallView`
+- `backend/ai/mcp/server_urls.py` (NEW)
+- `backend/config/urls.py` — mount `mcp/` at `/carbon-api/mcp/`
+- `backend/ai/tests/test_mcp_server.py` (NEW)
+
+### Contract (exact — do NOT deviate)
+
+**Discovery — `GET /carbon-api/mcp/`** (authenticated):
+```
+200 { "servers": [ { "id", "app_identifier", "name", "description", "tools_url" }, ... ] }
+```
+- Iterate `list_domains()` (all 9 registered); for each, call `get_domain(app_id)().get_tools()` and CBAC-filter via `has_capability(user, tool.required_capability)`.
+- Emit a server entry IFF ≥1 tool survives CBAC. `id` = `app_identifier`; `name` = `app_display_name`; `description` = the domain's `system_prompt_extension` (or a 1-line summary); `tools_url` = `/carbon-api/mcp/{app_identifier}/tools/`.
+- Server order deterministic (sorted by `app_identifier`).
+
+**Tools — `GET /carbon-api/mcp/{app_identifier}/tools/`** (authenticated):
+```
+200 { "tools": [ { "name", "description", "input_schema", "output_description" } ] }
+404 { "detail": "Unknown app_identifier" }   # domain not registered
+```
+- `name` = the full `tool.id` (e.g. `"emissions.list_emission_factors"`); CBAC-filtered identically to discovery.
+- `data_product` mutation tool (`create_table`) IS listed (it's callable; the gate is at call time).
+
+**Call — `POST /carbon-api/mcp/{app_identifier}/tools/call/`** (authenticated):
+Body `{ "tool": "emissions.list_emission_factors", "arguments": { ... } }`.
+- 404 if domain unregistered; 404 if `tool.id` not in that domain's `get_tools()`.
+- 403 if user lacks `tool.required_capability` (`has_capability`).
+- Resolve `api_name` = `tool.id` with `"{domain}."` prefix stripped; look up `get_catalog_entry(api_name)` (from `instance.yaml` `api_catalog`).
+- **Read tool (`is_mutation=False`):** build `CarbonHostExecutor` (exact `workspace_api.py:520` pattern) and `await executor.call_api_direct(method, path, query_params, body)` → `200 { "result": { ... } }`.
+- **Mutation tool (`is_mutation=True`, e.g. `create_table`):** `await executor.create_pending_execution(...)` → `200 { "requires_confirmation": true, "execution_id", "confirmation_message" }`. NEVER execute a mutation directly (RULE_21).
+- Always log via `AuditService.log(action="ai.mcp_tool_call", actor=request.user.pk, host_user_id=user_pk, detail={"source": "mcp_external", "tool": tool.id, "app_identifier": ...})`.
+- 400 on malformed body/missing `tool`; JSON body only.
+
+**Non-negotiables:**
+- Registry-driven (never hardcode `emissions`/`data_product`); a new domain with tools auto-appears.
+- CBAC per-tool (RULE_28 no-thin; no data leakage — never return a tool the user can't call).
+- RULE_21 for mutations (pending execution, never direct write).
+- Reuse `CarbonHostExecutor` (in-process) — no new HTTP client, no loopback.
+
+### Tests (exact — `ai/tests/test_mcp_server.py`)
+1. **discovery one-server-per-app** — a user with all `carbon:*` + `catalog:*` + `dataschema:*` view caps sees exactly 2 servers (`emissions`, `data_product`), each with `id == app_identifier`, non-empty `tools_url`.
+2. **CBAC scoping (corrected from "people sees people not emissions")** — a user with only `carbon:view_console` sees the `emissions` server with EXACTLY 2 tools (`list_emission_factors`, `list_gwp_gases`), NOT the full 5; a user with NO carbon caps sees NO `emissions` server. (The `people` domain has no tools, so it never appears — do not assert a people server.)
+3. **no-capability→403** — calling `data_product.create_table` (cap `dataschema:manage`) without that cap returns 403.
+4. **mutation→pending execution (corrected from 428)** — calling `data_product.create_table` WITH `dataschema:manage` returns 200 `{requires_confirmation: true, execution_id}` and stages a `ToolExecution` in `pending_confirmation` (never executes directly).
+5. **read tool returns live data** — `emissions.list_emission_factors` returns 200 with `{result: ...}` from the in-process handler.
+6. **audit** — every call writes an `AuditLog` row with `action="ai.mcp_tool_call"` and `detail.source == "mcp_external"`.
+7. **unknown domain/tool→404**; malformed body→400.
+
+### DO NOT TOUCH
+- `ai/engine/` (vendored engine), `ai/adapter/*`, `ai/domain/*` (read-only seams)
+- Existing ai API views/urls; `TASK-RESULTS.md` (append only your own entry)
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/backend
+python -m pytest ai/tests/test_mcp_server.py -v --disable-warnings -p no:cacheprovider
+python manage.py check
+# discovery smoke (requires a running server + a JWT):
+#   curl -s http://127.0.0.1:8009/carbon-api/mcp/ -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
 ## AI WORKSPACE TRACK
 
 ---
