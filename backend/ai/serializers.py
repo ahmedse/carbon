@@ -252,3 +252,10 @@ class UserProfileSerializer(serializers.Serializer):
                 f"Unknown model '{value}' — not in the model catalog."
             )
         return model
+
+
+class SubagentDispatchSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=255)
+    brief = serializers.CharField()
+    scope_restriction = serializers.JSONField(required=False, default=dict)
+    tool_budget = serializers.IntegerField(required=False, allow_null=True, min_value=1)

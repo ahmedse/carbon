@@ -1888,7 +1888,7 @@ The roadmap's Wave I was written before E2 (tool catalog) and Wave H (audit) lan
 | I2-F | Code-sandbox result rendering (AIMessageBubble image/table) | frontend | I2-B | — |
 | I3-B | Web search tool (`ai:web_search` capability) | backend | — | DONE ✅ |
 | I3-F | External source badge in Inspector | frontend | I3-B | — |
-| I4-B | Subagent dispatch service (`ai/subagent_service.py`) | backend | — | — |
+| I4-B | Subagent dispatch service (`ai/subagent_service.py`) | backend | — | DONE ✅ |
 | I4-F | Subagent result card | frontend | I4-B | — |
 | I5-B | PII server-side gate (`ai/pii_guard.py`) | backend | — | — |
 
@@ -2198,6 +2198,162 @@ cd /home/ahmed/aast/carbon/backend
 ../.venv/bin/python manage.py check
 # capability registration sanity:
 #   ../.venv/bin/python -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); django.setup(); from accounts.capabilities import ALL_CAPABILITIES, _expand_capabilities, AI_MANAGE_CONSOLE; print('ai:web_search' in ALL_CAPABILITIES, 'ai:web_search' in _expand_capabilities({AI_MANAGE_CONSOLE.key}))"
+```
+
+---
+
+## Phase I4-B — Subagent dispatch service (`ai/subagent_service.py`)
+**Date:** 2026-09-03
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE ✅
+**Depends on:** I1-B (capability system), I3-B (`web_research` read-only tool), worker-dispatch seam (`workers.py`), unified tool definitions (`get_tool_definitions()`)
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave I §I4 — read the CORRECTIONS below first.
+
+### CORRECTIONS to the I4 roadmap spec (verified against code 2026-09-03)
+1. **The roadmap API URL prefix is STALE.** §I4 task #2 proposes `POST /carbon-api/ai/conversations/{id}/subagents/`, but the real conversation base is `/carbon-api/ai/workspace/conversations/{id}/` (mounted at `config/urls.py:89`; there is NO `/carbon-api/ai/conversations/` mount). I4-B adds two `@action` methods to `WorkspaceConversationViewSet` → `POST/GET /carbon-api/ai/workspace/conversations/{id}/subagents/...`, exactly mirroring the existing `confirm_tool_execution` seam (`workspace_api.py:456-540`).
+2. **"Mutation block already exists" is STALE — read-only enforcement is NET-NEW.** `readonly_worker_hook` (`guardrails.py:214`) exists but is DEAD: `is_worker=True` is only ever set in the plan loop (`loop.py:772/914`) where `ExecuteWitness` is built WITHOUT a `hook_pipeline`, so the guardrail branch (`execute.py:218`) never fires. `WorkerPool._get_hook_pipeline()` is built-and-discarded (`workers.py:224`). I4-B does NOT rely on that hook; it enforces read-only **by construction** via an explicit tool allowlist (mutation tools are simply absent from the LLM `tools=` list) — the strongest guarantee. Wiring `readonly_worker_hook` with `is_worker=True` is a tracked follow-up, not part of I4-B.
+3. **Worker dispatch is a SINGLE-shot LLM call, not an execution loop.** `WorkerPool._run_worker` (`workers.py:262-272`) calls `route_chat(..., tools=worker_tools)` once and takes `content` as the artifact; it does NOT execute `tool_calls`. I4-B mirrors this: a subagent is an isolated single-shot read-only `route_chat` turn. Do NOT build a ReAct/plan/`ExecuteWitness` execution loop (out of scope; that's the I4-F "coordinated progress" story which needs the Screen Spec anyway).
+4. **There is NO `AISubagent` model.** I4-B creates it in `ai/models/core.py` (alongside `Run`/`RunStep`; `AppScopeMixin` + `app_label="ai"`; plain string cross-refs, NO `ForeignKey`), exported from `ai/models/__init__.py`. Parent linkage is `parent_conversation_id` = `str(AIConversation.id)` (UUID string).
+5. **Read-only allowlist is authoritative and must stay disjoint from mutation tools.** Define `SUBAGENT_READONLY_TOOLS` in `subagent_service.py` = the 6 `_READONLY_TOOLS` (`guardrails.py:203`) **+ `web_research`** (I3-B). Resolve definitions via `get_tool_definitions()` (`tools.py:1467` — the unified static+plugin+MCP source), filtered by name. Do NOT import/reuse the private `_READONLY_TOOLS` frozenset as the subagent's allowlist — define the subagent's own set so adding/removing read-only tools is explicit. The test asserts the allowlist is disjoint from `MUTATION_TOOLS_DENIED` (below).
+
+### Files to Read First
+- `ai/engine/agent/workers.py` (`WorkerPool._run_worker` 185-333 — the single-shot worker pattern to mirror; `WorkerArtifact` 45-59)
+- `ai/engine/agent/guardrails.py` (`_READONLY_TOOLS` 203, `readonly_worker_hook` 214 — the read-only tool names)
+- `ai/engine/agent/tools.py` (`get_tool_definitions()` 1467 — unified tool definitions)
+- `ai/engine/llm/router.py` (`route_chat` 193 — exact signature + return shape `{content, tool_calls, finish_reason, model, input_tokens, output_tokens, cost_usd}`)
+- `ai/workspace_api.py` (`WorkspaceConversationViewSet`, `confirm_tool_execution` 456-540 — the `@action` + CBAC + `_get_accessible_conversation` + `async_to_sync` seam)
+- `ai/models/core.py` (`Run`/`RunStep` ~360-425 — model style; `from .base import AppScopeMixin, generate_uuid` already imported at top)
+- `ai/models/__init__.py` (the re-export list)
+- `ai/serializers.py` (serializer style — plain `serializers.Serializer`)
+- `ai/intelligence.py` (`_get_accessible_conversation` 1706 — returns `AIConversation | None`, CBAC owner + shared check)
+- `ai/tests/test_tool_trace.py` + `ai/tests/conftest.py` (`make_user`, the `@pytest.mark.django_db` fixture pattern)
+
+### Files to Change
+- `backend/ai/models/core.py` — add `AISubagent` model
+- `backend/ai/models/__init__.py` — export `AISubagent`
+- `backend/ai/migrations/####_aisubagent.py` (NEW — via `makemigrations ai`)
+- `backend/ai/subagent_service.py` (NEW)
+- `backend/ai/serializers.py` — add `SubagentDispatchSerializer`
+- `backend/ai/workspace_api.py` — 2 `@action` methods + `SubagentDispatchSerializer` import + `SubagentService` import
+- `backend/ai/tests/test_subagent_dispatch.py` (NEW)
+
+### Contract (exact — do NOT deviate)
+
+**`ai/models/core.py` — `AISubagent(AppScopeMixin)`:**
+```python
+class AISubagent(AppScopeMixin):
+    """A named user-dispatched read-only subagent (Wave I4-B).
+
+    Runs as an isolated single-shot read-only LLM task. Mutation safety is
+    by construction: the subagent's tool definitions are filtered to a
+    read-only allowlist and tool_calls are never executed.
+    """
+    id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
+    parent_conversation_id = models.TextField(db_index=True)   # AIConversation.id (UUID str)
+    name = models.TextField()
+    brief = models.TextField()
+    scope_restriction = models.JSONField(null=True, blank=True)  # {"tables": [...], "apps": [...]}
+    tool_budget = models.IntegerField(null=True, blank=True)     # per-subagent token budget (informational)
+    tool_allowlist_json = models.JSONField(null=True, blank=True)  # resolved read-only tool names
+    is_worker = models.BooleanField(default=True)
+    status = models.TextField(default="pending")   # pending|running|completed|failed
+    result_summary = models.TextField(null=True, blank=True)
+    result_detail = models.TextField(null=True, blank=True)
+    error = models.TextField(null=True, blank=True)
+    tokens_used = models.IntegerField(default=0)
+    latency_ms = models.FloatField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = "ai"
+        ordering = ["-created_at"]
+```
+- Export `AISubagent` from `ai/models/__init__.py` (add to the `from .core import (...)` list).
+
+**`ai/subagent_service.py` (NEW):**
+```python
+SUBAGENT_READONLY_TOOLS = frozenset({
+    "search_knowledge", "get_entity_details", "query_knowledge_graph",
+    "get_schema_info", "get_relationship_info", "get_table_profile",
+    "web_research",
+})
+
+MUTATION_TOOLS_DENIED = frozenset({
+    "create_dq_rule", "call_host_api", "learn_fact", "forget_fact",
+    "run_ops_workflow", "invoke_skill", "code.execute", "export_document",
+    "delegate_to_workers", "synthesize_worker_results",
+    "plan_task", "edit_plan", "approve_plan",
+})
+```
+- `def resolve_subagent_tool_definitions() -> list[dict]` — `from ai.engine.agent.tools import get_tool_definitions`; return `[td for td in get_tool_definitions() if td["function"]["name"] in SUBAGENT_READONLY_TOOLS]`.
+- `def _build_subagent_messages(name, brief, scope_restriction=None) -> list[dict]` — a `system` message ("You are the '{name}' subagent, a read-only research assistant." + "Task: {brief}" + optional "Scope restriction:" lines) and a `user` message (`brief`).
+- `def serialize_subagent(sub) -> dict` — returns `{id, parent_conversation_id, name, status, is_worker, scope_restriction (or {}), tool_allowlist (or []), result_summary, result_detail, error, tokens_used, latency_ms, created_at (iso or None), completed_at (iso or None)}`.
+- `class SubagentService:`
+  - `async def _invoke_llm(self, sub, messages, tool_defs) -> dict` — `from ai.engine.llm.router import route_chat`; `from ai.engine.core.database import get_session_factory`; `factory = get_session_factory("carbon")`; `async with factory() as db: return await route_chat(task="chat", instance_id="carbon", conversation_id=f"subagent-{sub.id}", messages=messages, tools=tool_defs or None, db=db)`. (Kept async + separate so tests monkeypatch `SubagentService._invoke_llm` with a fake coroutine.)
+  - `def run_subagent(self, subagent_id) -> AISubagent` — load `AISubagent.objects.get(id=subagent_id)`; set `status="running"` + `tool_allowlist_json=sorted(SUBAGENT_READONLY_TOOLS)` (save `update_fields=["status", "tool_allowlist_json"]`); build messages + tool defs; `t0 = time.monotonic()`; `resp = asyncio.run(self._invoke_llm(sub, messages, tool_defs))`; on success set `result_summary = content[:200].strip()`, `result_detail = content[:2000] if len(content) > 200 else content`, `tokens_used = input_tokens + output_tokens`, `status="completed"`; on exception `status="failed"`, `error=str(exc)` (log with `logger.exception`); always `latency_ms=(time.monotonic()-t0)*1000`, `completed_at=timezone.now()`, `sub.save()`, `return sub`. Use `from django.utils import timezone` (CB-04 — tz-aware).
+  - `def dispatch_subagent(self, user, conversation, *, name, brief, scope_restriction=None, tool_budget=None, run_async=True) -> AISubagent` — `AISubagent.objects.create(parent_conversation_id=str(conversation.id), name=name, brief=brief, scope_restriction=scope_restriction, tool_budget=tool_budget, host_user_id=str(user.pk), app_identifier="carbon", visibility="private", status="pending", is_worker=True)`; if `run_async`: `threading.Thread(target=self.run_subagent, args=(sub.id,), daemon=True).start()`; return `sub`.
+  - `def get_subagent(self, user, conversation_id, sub_id) -> AISubagent | None` — `AISubagent.objects.filter(id=sub_id, parent_conversation_id=str(conversation_id)).first()`; return `None` if not found OR `sub.host_user_id not in (None, str(user.pk))` (CBAC owner gate).
+
+**`ai/serializers.py` — `SubagentDispatchSerializer(serializers.Serializer)`:**
+```python
+class SubagentDispatchSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=255)
+    brief = serializers.CharField()
+    scope_restriction = serializers.JSONField(required=False, default=dict)
+    tool_budget = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+```
+
+**`ai/workspace_api.py` — two `@action` methods on `WorkspaceConversationViewSet`:**
+```python
+@action(detail=True, methods=["post"], url_path="subagents", url_name="dispatch-subagent")
+def dispatch_subagent(self, request, pk=None):
+    conversation = self.intelligence._get_accessible_conversation(request.user, pk)
+    if conversation is None:
+        return Response({"error": f"Conversation {pk} not found."}, status=status.HTTP_404_NOT_FOUND)
+    serializer = SubagentDispatchSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    sub = SubagentService().dispatch_subagent(request.user, conversation, **serializer.validated_data)
+    return Response(serialize_subagent(sub), status=status.HTTP_201_CREATED)
+
+@action(detail=True, methods=["get"], url_path=r"subagents/(?P<sub_id>[^/.]+)", url_name="subagent-detail")
+def subagent_detail(self, request, pk=None, sub_id=None):
+    conversation = self.intelligence._get_accessible_conversation(request.user, pk)
+    if conversation is None:
+        return Response({"error": f"Conversation {pk} not found."}, status=status.HTTP_404_NOT_FOUND)
+    sub = SubagentService().get_subagent(request.user, pk, sub_id)
+    if sub is None:
+        return Response({"error": f"Subagent {sub_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+    return Response(serialize_subagent(sub))
+```
+- Import `SubagentDispatchSerializer` from `ai.serializers` (add to the existing import list) and `SubagentService, serialize_subagent` from `ai.subagent_service`.
+
+### Tests (`ai/tests/test_subagent_dispatch.py` — NEW)
+Mirror the fixture pattern (`@pytest.fixture def user(db): return User.objects.create_user(...)` or `make_user` from `ai.tests.conftest`; `AIConversation.objects.create(user=user, ...)`). Use `@pytest.mark.django_db`. 7 tests:
+1. `test_dispatch_creates_worker_subagent` — dispatch with `run_async=False`; assert the row has `is_worker is True`, `status == "pending"`, `host_user_id == str(user.pk)`, `parent_conversation_id == str(conversation.id)`, `app_identifier == "carbon"`.
+2. `test_readonly_allowlist_excludes_all_mutations` — assert `SUBAGENT_READONLY_TOOLS.isdisjoint(MUTATION_TOOLS_DENIED)` and that every name in `MUTATION_TOOLS_DENIED` is NOT in `SUBAGENT_READONLY_TOOLS`.
+3. `test_resolve_subagent_tool_definitions_are_readonly` — `defs = resolve_subagent_tool_definitions()`; assert every `defs[*]["function"]["name"]` is in `SUBAGENT_READONLY_TOOLS`; assert no `MUTATION_TOOLS_DENIED` name appears; assert `"web_research"` is present (I3-B integration).
+4. `test_run_subagent_aggregates_result` — create a pending subagent; `monkeypatch.setattr(SubagentService, "_invoke_llm", <async fake returning {"content": "x"*500, "input_tokens": 10, "output_tokens": 20}>)`; `SubagentService().run_subagent(sub.id)`; assert `status == "completed"`, `result_summary == ("x"*500)[:200].strip()`, `result_detail == ("x"*500)[:2000]`, `tokens_used == 30`, `completed_at is not None`.
+5. `test_run_subagent_failure_marks_failed` — `_invoke_llm` fake raises `RuntimeError("boom")`; assert `status == "failed"` and `error` contains `"boom"`.
+6. `test_get_subagent_is_cbac_scoped` — owner user gets the subagent; a second `User` gets `None`.
+7. `test_serialize_subagent_shape` — `serialize_subagent(sub)` returns the documented keys (at minimum `name`, `status`, `is_worker`, `result_summary`, `tool_allowlist`).
+
+### DO NOT TOUCH
+- `ai/engine/` (vendored engine) — no `guardrails.py`/`workers.py`/`router.py`/`execute.py`/`loop.py` edits. I4-B reads `get_tool_definitions()` and `route_chat` but changes nothing there.
+- `ai/plans_api.py` / `ai/plans_service.py` (the plan/SSE machinery — I4-F may read it, but I4-B must not modify it).
+- `carbon-frontend/*` — `OperationProgress.jsx` nested list + `SubagentResultCard.jsx` are I4-F (BLOCKED on RULE_29 Screen Spec), out of scope here.
+- `TASK-RESULTS.md` (append only your own entry); the `AISubagent` runtime guardrail wiring (`readonly_worker_hook` with `is_worker=True`) — tracked follow-up, not I4-B.
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/backend
+../.venv/bin/python manage.py makemigrations ai   # must emit exactly one migration: ####_aisubagent.py
+../.venv/bin/python manage.py migrate
+../.venv/bin/python -m pytest ai/tests/test_subagent_dispatch.py -v --disable-warnings -p no:cacheprovider
+../.venv/bin/python manage.py check
+# allowlist sanity:
+#   ../.venv/bin/python -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); django.setup(); from ai.subagent_service import SUBAGENT_READONLY_TOOLS, MUTATION_TOOLS_DENIED; print('disjoint=', SUBAGENT_READONLY_TOOLS.isdisjoint(MUTATION_TOOLS_DENIED), 'has_web_research=', 'web_research' in SUBAGENT_READONLY_TOOLS)"
 ```
 
 ---

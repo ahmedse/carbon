@@ -45,11 +45,13 @@ from ai.serializers import (
     MessageListSerializer,
     RetryMessageSerializer,
     SendMessageSerializer,
+    SubagentDispatchSerializer,
     ToolExecutionActionSerializer,
     UserProfileSerializer,
 )
 from accounts.capabilities import has_capability
 from ai.audit_service import AuditService
+from ai.subagent_service import SubagentService, serialize_subagent
 from core.throttling import AIRateThrottle
 
 import logging
@@ -717,6 +719,28 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
             status="completed",
         )
         return Response({"status": "declined"})
+
+    @action(detail=True, methods=["post"], url_path="subagents", url_name="dispatch-subagent")
+    def dispatch_subagent(self, request, pk=None):
+        """Dispatch a named read-only subagent against this conversation."""
+        conversation = self.intelligence._get_accessible_conversation(request.user, pk)
+        if conversation is None:
+            return Response({"error": f"Conversation {pk} not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = SubagentDispatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sub = SubagentService().dispatch_subagent(request.user, conversation, **serializer.validated_data)
+        return Response(serialize_subagent(sub), status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], url_path=r"subagents/(?P<sub_id>[^/.]+)", url_name="subagent-detail")
+    def subagent_detail(self, request, pk=None, sub_id=None):
+        """Return a subagent's status + result (CBAC-scoped to the conversation)."""
+        conversation = self.intelligence._get_accessible_conversation(request.user, pk)
+        if conversation is None:
+            return Response({"error": f"Conversation {pk} not found."}, status=status.HTTP_404_NOT_FOUND)
+        sub = SubagentService().get_subagent(request.user, pk, sub_id)
+        if sub is None:
+            return Response({"error": f"Subagent {sub_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(serialize_subagent(sub))
 
     @action(detail=True, methods=["get"], url_path="export", url_name="export")
     def export(self, request, pk=None):

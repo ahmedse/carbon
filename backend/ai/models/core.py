@@ -792,3 +792,32 @@ class LearningOutcome(AppScopeMixin):
 
     def __str__(self):
         return f"LearningOutcome {self.pattern} ({self.status})"
+
+
+class AISubagent(AppScopeMixin):
+    """A named user-dispatched read-only subagent (Wave I4-B).
+
+    Runs as an isolated single-shot read-only LLM task. Mutation safety is
+    by construction: the subagent's tool definitions are filtered to a
+    read-only allowlist and tool_calls are never executed.
+    """
+    id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
+    parent_conversation_id = models.TextField(db_index=True)   # AIConversation.id (UUID str)
+    name = models.TextField()
+    brief = models.TextField()
+    scope_restriction = models.JSONField(null=True, blank=True)  # {"tables": [...], "apps": [...]}
+    tool_budget = models.IntegerField(null=True, blank=True)     # per-subagent token budget (informational)
+    tool_allowlist_json = models.JSONField(null=True, blank=True)  # resolved read-only tool names
+    is_worker = models.BooleanField(default=True)
+    status = models.TextField(default="pending")   # pending|running|completed|failed
+    result_summary = models.TextField(null=True, blank=True)
+    result_detail = models.TextField(null=True, blank=True)
+    error = models.TextField(null=True, blank=True)
+    tokens_used = models.IntegerField(default=0)
+    latency_ms = models.FloatField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = "ai"
+        ordering = ["-created_at"]

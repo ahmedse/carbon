@@ -19,6 +19,7 @@ from .core import (
     Agent,
     AgentHandoff,
     AIAnomalyWatch,
+    AISubagent,
     AuditLog,
     CognitionSweepRun,
     Conversation,
