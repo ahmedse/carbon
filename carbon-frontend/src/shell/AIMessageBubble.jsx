@@ -1134,6 +1134,7 @@ function AIMessageBubble({
           actions={navigateActions}
           pendingActions={pendingActions}
           createdAt={message.created_at}
+          externalSources={message.external_sources || provenancePayload?.external_sources || []}
         />
       )}
 

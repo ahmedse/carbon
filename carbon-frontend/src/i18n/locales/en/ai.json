@@ -20,6 +20,10 @@
   "modeAgent": "Agent",
   "closePulse": "Close Pulse",
   "closePulseShortcut": "Close Pulse (Ctrl+\\)",
+  "external": "External",
+  "source_wikipedia": "Wikipedia",
+  "source_duckduckgo": "DuckDuckGo",
+  "source_external_web": "Web search",
   "memory": {
     "episodes": "Episodes",
     "facts": "Facts",

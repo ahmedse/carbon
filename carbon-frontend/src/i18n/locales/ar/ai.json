@@ -20,6 +20,10 @@
   "modeAgent": "وكيل",
   "closePulse": "إغلاق Pulse",
   "closePulseShortcut": "إغلاق Pulse (Ctrl+\\)",
+  "external": "خارجي",
+  "source_wikipedia": "ويكيبيديا",
+  "source_duckduckgo": "DuckDuckGo",
+  "source_external_web": "بحث الويب",
   "memory": {
     "episodes": "الأحداث",
     "facts": "الحقائق",

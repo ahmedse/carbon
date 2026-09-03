@@ -4,10 +4,12 @@
 // only (RULE_23 — never engine_turn_id, raw guard_results, S2/S4, token
 // counts, or latency). Theme tokens only (RULE_8). Keyboard-complete via a
 // real <button> (Enter/Space toggle), aria-expanded on the trigger.
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, IconButton, Paper, Stack, Typography } from '@mui/material';
+import { Box, Chip, IconButton, Link, Paper, Stack, Typography } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
+import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../i18n/useLanguage';
 
 // RULE_23 — drop any line that leaks engine internals before rendering.
@@ -39,8 +41,20 @@ function formatFreshness(createdAt) {
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function ReasoningTrace({ lines = [], actions = [], pendingActions = [], createdAt = null }) {
+// RULE_29 — external web citations: map a provider tag to its localized label.
+const PROVIDER_LABEL_KEYS = {
+  wikipedia: 'source_wikipedia',
+  duckduckgo: 'source_duckduckgo',
+  external_web: 'source_external_web',
+};
+
+function providerLabel(source, t) {
+  return t(PROVIDER_LABEL_KEYS[source] || 'source_external_web');
+}
+
+function ReasoningTrace({ lines = [], actions = [], pendingActions = [], createdAt = null, externalSources = [] }) {
   const { isRtl } = useLanguage();
+  const { t } = useTranslation('ai');
   const [open, setOpen] = useState(false);
 
   const sources = (Array.isArray(lines) ? lines : []).filter(isOutcomeLine);
@@ -49,6 +63,30 @@ function ReasoningTrace({ lines = [], actions = [], pendingActions = [], created
     ...(Array.isArray(pendingActions) ? pendingActions : []).map(pendingLabel),
   ].filter(Boolean);
   const freshness = formatFreshness(createdAt);
+
+  // External sources are already provenance-safe; validate defensively and
+  // build the localized badge label + link text once (keyed on the prop).
+  const externalSourceItems = useMemo(() => {
+    const list = Array.isArray(externalSources) ? externalSources : [];
+    const items = [];
+    for (const item of list) {
+      if (!item || typeof item !== 'object') continue;
+      const title = typeof item.title === 'string' ? item.title.trim() : '';
+      const url = typeof item.url === 'string' ? item.url.trim() : '';
+      if (!title && !url) continue; // malformed — nothing to render
+      if (!url) continue; // no URL to link to — cannot render a citation
+      const label = providerLabel(item.source, t);
+      const date = formatFreshness(item.retrieved_at);
+      const badgeLabel = `${t('external')} · ${label}${date ? ` · ${date}` : ''}`;
+      items.push({
+        key: `${url}::${title || url}`,
+        linkText: title || url,
+        url,
+        badgeLabel,
+      });
+    }
+    return items;
+  }, [externalSources, t]);
 
   return (
     <Box
@@ -90,7 +128,7 @@ function ReasoningTrace({ lines = [], actions = [], pendingActions = [], created
           }}
         >
           <Stack spacing={1}>
-            {sources.length > 0 && (
+            {(sources.length > 0 || externalSourceItems.length > 0) && (
               <Box>
                 <Typography
                   variant="caption"
@@ -103,6 +141,43 @@ function ReasoningTrace({ lines = [], actions = [], pendingActions = [], created
                     {line}
                   </Typography>
                 ))}
+                {externalSourceItems.length > 0 && (
+                  <Box dir="ltr">
+                    {externalSourceItems.map((item) => (
+                      <Stack
+                        key={item.key}
+                        direction="row"
+                        spacing={0.75}
+                        alignItems="center"
+                        sx={{ mt: 0.25 }}
+                      >
+                        <Link
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          component="a"
+                          variant="caption"
+                          sx={{ display: 'block', wordBreak: 'break-word', flexGrow: 1 }}
+                        >
+                          {item.linkText}
+                        </Link>
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color="default"
+                          icon={
+                            <PublicOutlinedIcon
+                              sx={{ fontSize: 14, color: 'text.secondary' }}
+                              aria-hidden="true"
+                            />
+                          }
+                          label={item.badgeLabel}
+                          aria-label={item.badgeLabel}
+                        />
+                      </Stack>
+                    ))}
+                  </Box>
+                )}
               </Box>
             )}
 
@@ -147,6 +222,7 @@ ReasoningTrace.propTypes = {
   actions: PropTypes.array,
   pendingActions: PropTypes.array,
   createdAt: PropTypes.string,
+  externalSources: PropTypes.array,
 };
 
 export default ReasoningTrace;
