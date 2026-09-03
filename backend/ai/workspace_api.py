@@ -720,6 +720,15 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
         )
         return Response({"status": "declined"})
 
+    @action(detail=True, methods=["get"], url_path="subagents", url_name="list-subagents")
+    def list_subagents(self, request, pk=None):
+        """List this conversation's subagents (CBAC-scoped), newest first."""
+        conversation = self.intelligence._get_accessible_conversation(request.user, pk)
+        if conversation is None:
+            return Response({"error": f"Conversation {pk} not found."}, status=status.HTTP_404_NOT_FOUND)
+        subs = SubagentService().list_subagents(request.user, pk)
+        return Response([serialize_subagent(s) for s in subs])
+
     @action(detail=True, methods=["post"], url_path="subagents", url_name="dispatch-subagent")
     def dispatch_subagent(self, request, pk=None):
         """Dispatch a named read-only subagent against this conversation."""

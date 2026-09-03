@@ -88,6 +88,21 @@ def test_get_subagent_is_cbac_scoped(user, conversation):
     assert SubagentService().get_subagent(other, conversation.id, sub.id) is None
 
 
+def test_list_subagents_is_cbac_scoped_and_newest_first(user, conversation):
+    SubagentService().dispatch_subagent(
+        user, conversation, name="auditor", brief="audit DQ rules", run_async=False
+    )
+    SubagentService().dispatch_subagent(
+        user, conversation, name="researcher", brief="survey sources", run_async=False
+    )
+    subs = SubagentService().list_subagents(user, conversation.id)
+    assert [s.name for s in subs] == ["researcher", "auditor"]
+
+    # Other user cannot see them (CBAC host_user_id scoping).
+    other = User.objects.create_user(username="other-list", password="x")
+    assert SubagentService().list_subagents(other, conversation.id) == []
+
+
 def test_serialize_subagent_shape(user, conversation):
     sub = SubagentService().dispatch_subagent(
         user, conversation, name="auditor", brief="audit DQ rules", run_async=False

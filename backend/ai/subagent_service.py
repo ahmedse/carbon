@@ -129,3 +129,14 @@ class SubagentService:
         if sub.host_user_id not in (None, str(user.pk)):
             return None
         return sub
+
+    def list_subagents(self, user, conversation_id) -> list[AISubagent]:
+        """Return this conversation's subagents (CBAC-scoped), newest first."""
+        from django.db.models import Q
+
+        return list(
+            AISubagent.objects.filter(
+                Q(parent_conversation_id=str(conversation_id))
+                & (Q(host_user_id__isnull=True) | Q(host_user_id=str(user.pk)))
+            ).order_by("-created_at")
+        )

@@ -8,23 +8,26 @@
 
 **Story:** As an AI-workspace user, when I dispatch a named subagent for a complex read-only task,
 I want to watch its individual progress nested under the parent task and see its result summary as
-a distinct card in the conversation — so I know what each subagent did and what it found.
+a distinct card in the task panel — so I know what each subagent did and what it found.
 
 **Acceptance (Given/When/Then):**
 
 - **Dispatch:** Given a conversation and a subagent `{name, brief}` (optionally `scope_restriction`),
   when I dispatch it, then `POST …/subagents/` returns the created subagent (`status="pending"`,
-  `is_worker=true`) and the UI immediately shows a `SubagentResultCard` in the conversation.
+  `is_worker=true`) and the UI immediately shows a `SubagentResultCard` in the task panel.
 - **Progress:** Given a dispatched subagent, when it runs, then the card reflects
   `pending → running → completed|failed` (via polling, no new SSE) with a status indicator.
 - **Result:** Given `status="completed"`, then the card shows `name`, `scope_restriction` (if any),
   `result_summary` (first 200 chars) and an expandable `result_detail` (up to 2000 chars).
 - **Failure:** Given `status="failed"`, then the card shows the `error` string (friendly, not a
   stack trace) with a distinct failed state.
-- **Nested progress:** Given a parent task/plan that dispatches subagents, then the owning task's
-  progress shows a `subagents` sub-list of nested items (each: name + status), never flattened
-  into the parent list.
-- **No subagents:** Given a task/conversation with no subagents, then rendering is exactly as today
+- **Nested progress:** Given a conversation that dispatches subagents, then the task panel shows a
+  `subagents` sub-list of nested items (each: name + status), never flattened into the run-steps
+  list. Subagents are conversation-scoped (no step/plan link exists on `AISubagent`), so they nest
+  under the panel's "Subagents" section — NOT under an individual `StepCard`.
+- **Hydration:** Given a conversation with previously-dispatched subagents, then on open the panel
+  lists them via `GET …/subagents/` (newest first).
+- **No subagents:** Given a conversation with no subagents, then rendering is exactly as today
   (zero regression).
 
 ---
@@ -32,14 +35,14 @@ a distinct card in the conversation — so I know what each subagent did and wha
 ## Artifact 2 — Journey Map
 
 ```
-Conversation / Task panel → dispatch subagent (name + brief [+ scope])
+Task panel (AITaskPanel) → dispatch subagent (name + brief [+ scope])
    └─ POST …/subagents/ → 201 subagent (pending, is_worker)
-        └─ render SubagentResultCard (optimistic "running")
+        └─ render SubagentResultCard in the "Subagents" section (optimistic "running")
              └─ poll GET …/subagents/{id}/ every ~1.5s
                   ├─ running  → status chip "Running" (spinner)
                   ├─ completed → result_summary + expandable result_detail
                   └─ failed    → error (friendly), failed chip
-   Parent task (AITaskPanel) → subagents sub-list of nested items under the owning step/task
+   On panel open → GET …/subagents/ hydrates the section (newest first)
 ```
 Friction points: (1) poll must stop when the card unmounts or the subagent reaches a terminal
 state (`completed`/`failed`) — never leak a setInterval; (2) poll interval ~1.5s, back off after
@@ -50,13 +53,17 @@ separate backend follow-up, out of I4-F scope).
 
 ## Artifact 3 — IA Placement
 
-- **Result card:** in the conversation message flow — rendered by `AIMessageBubble` via
-  `renderStructuredContent()` as a new `metadata.type === "subagent_result"` branch (sibling to
-  `InvestigationCard`/`ReportDraftCard`). Host is `AIConversationView.jsx` (messages → bubbles).
-- **Progress sub-list:** inside the owning task in `AITaskPanel.jsx` (the `StepCard` body, after
-  `StepOutputRenderer`/artifacts), not a new route.
-- **Dispatch trigger:** a small "Dispatch subagent" affordance in `AITaskPanel` (ONE button/action),
-  opening a `SystemDialog` form (name + brief + optional scope). **Not** a new sidebar item.
+- **Result card:** in the task panel (`AITaskPanel.jsx`), inside a dedicated "Subagents" section,
+  rendered by the NEW `SubagentResultCard.jsx`. **Not** in `AIMessageBubble`: I4-B stores the
+  subagent result only on the `AISubagent` row and creates **no** `AIMessage` with
+  `metadata.type === "subagent_result"` — so a conversation-message branch would never fire.
+  (A future backend message seam is explicitly out of I4-F scope.)
+- **Progress sub-list:** the "Subagents" section in `AITaskPanel.jsx` (below the run-steps /
+  plan detail), not a new route. Each item is a full `SubagentResultCard` (name + status +
+  result_summary + expandable detail), nested under the section heading.
+- **Dispatch trigger:** a small "Dispatch subagent" affordance in `AITaskPanel` (ONE button/action
+  in the selected-plan header actions row), opening a `SystemDialog` form (name + brief + optional
+  scope). **Not** a new sidebar item.
 
 ---
 
@@ -70,21 +77,22 @@ SubagentResultCard  (NEW: carbon-frontend/src/shell/SubagentResultCard.jsx)
  ├─ Detail  → collapsible (PlanningHeader-style) → result_detail (<pre dir="ltr"> if raw)
  └─ Error   → Alert (severity="error") when status==="failed"
 
-AITaskPanel StepCard
- └─ (if step.subagents?.length) subagents Stack
-      └─ per subagent: nested item (name + status chip + result_summary)
+AITaskPanel (Run tab, selected-plan detail)
+ └─ "Subagents" section (below run steps / plan detail)
+      ├─ header: section title + "Dispatch subagent" Button (opens SystemDialog form)
+      └─ per subagent: <SubagentResultCard key={id} subagent={s} /> (nested, never flattened)
 ```
 
 **Reuse audit (mandatory):**
-- [x] Status chip = existing `AITaskPanel` `StatusChip`/`StepStatusIcon` pattern (pending/running/
-      completed/failed) — do NOT invent a new one.
+- [x] Status chip = existing `AITaskPanel` `STEP_STATUS_ICON`/`StepStatusIcon` pattern
+      (pending/running/completed/failed) — do NOT invent a new one.
 - [x] Badge = `AIGeneratedBadge` (`src/shell/AIGeneratedBadge.jsx`).
 - [x] Key/value + raw = `StepOutputRenderer.jsx` `KeyValueOutput`/`RawJson`.
 - [x] Collapse = `PlanningHeader` pattern (Button + chevron + `aria-expanded`, default collapsed).
 - [x] Dialog = `SystemDialog` (`src/components/SystemDialog.jsx`) — never raw Drawer.
 - [x] Feedback = `useNotification().notify`/`notifyFromError` for dispatch errors.
-- [x] API = `src/api/aiWorkspace.js` — add `dispatchSubagent` + `getSubagent` (via `apiFetch`,
-      base `ai/workspace/`). No raw fetch.
+- [x] API = `src/api/aiWorkspace.js` — add `dispatchSubagent` + `getSubagent` + `listSubagents`
+      (via `apiFetch`, base `ai/workspace/`). No raw fetch.
 
 ---
 
@@ -104,7 +112,7 @@ AITaskPanel StepCard
 | State | Rendering |
 |-------|-----------|
 | `empty` | No `subagents` → render exactly as today |
-| `loaded` | Nested subagent items under the owning step |
+| `loaded` | Nested `SubagentResultCard`s under the "Subagents" section |
 | `partial` | Per-subagent status (some running, some done) |
 
 ### Component (interaction)
@@ -126,6 +134,7 @@ All via `apiFetch`, base `ai/workspace/` (mirror existing `aiWorkspace.js` `BASE
 |----|----------|---------|----------|
 | Dispatch | POST `conversations/{id}/subagents/` | `{ name, brief, scope_restriction?, tool_budget? }` | `201` `serialize_subagent` |
 | Status | GET `conversations/{id}/subagents/{sub_id}/` | — | `serialize_subagent` |
+| List | GET `conversations/{id}/subagents/` | — | `200` `[serialize_subagent, …]` (newest first) |
 
 `serialize_subagent` (from `backend/ai/subagent_service.py`):
 ```jsonc
@@ -190,7 +199,7 @@ All via `apiFetch`, base `ai/workspace/` (mirror existing `aiWorkspace.js` `BASE
 - Leaking a `setInterval` on unmount / terminal status.
 - Rendering `error` as a stack trace; rendering raw ISO `created_at`.
 - Raw `Drawer` instead of `SystemDialog` for dispatch.
-- Flattening subagents into the parent list (must nest under the owning task).
+- Flattening subagents into the run-steps list (must nest under the "Subagents" section).
 - Hardcoded English strings not `t()`-wrapped.
 
 *Source: `docs/SCREEN-SPEC-I4-SUBAGENT-UI.md` — authored by Master Architect under RULE_29.*

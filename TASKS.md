@@ -2295,6 +2295,7 @@ MUTATION_TOOLS_DENIED = frozenset({
   - `def run_subagent(self, subagent_id) -> AISubagent` — load `AISubagent.objects.get(id=subagent_id)`; set `status="running"` + `tool_allowlist_json=sorted(SUBAGENT_READONLY_TOOLS)` (save `update_fields=["status", "tool_allowlist_json"]`); build messages + tool defs; `t0 = time.monotonic()`; `resp = asyncio.run(self._invoke_llm(sub, messages, tool_defs))`; on success set `result_summary = content[:200].strip()`, `result_detail = content[:2000] if len(content) > 200 else content`, `tokens_used = input_tokens + output_tokens`, `status="completed"`; on exception `status="failed"`, `error=str(exc)` (log with `logger.exception`); always `latency_ms=(time.monotonic()-t0)*1000`, `completed_at=timezone.now()`, `sub.save()`, `return sub`. Use `from django.utils import timezone` (CB-04 — tz-aware).
   - `def dispatch_subagent(self, user, conversation, *, name, brief, scope_restriction=None, tool_budget=None, run_async=True) -> AISubagent` — `AISubagent.objects.create(parent_conversation_id=str(conversation.id), name=name, brief=brief, scope_restriction=scope_restriction, tool_budget=tool_budget, host_user_id=str(user.pk), app_identifier="carbon", visibility="private", status="pending", is_worker=True)`; if `run_async`: `threading.Thread(target=self.run_subagent, args=(sub.id,), daemon=True).start()`; return `sub`.
   - `def get_subagent(self, user, conversation_id, sub_id) -> AISubagent | None` — `AISubagent.objects.filter(id=sub_id, parent_conversation_id=str(conversation_id)).first()`; return `None` if not found OR `sub.host_user_id not in (None, str(user.pk))` (CBAC owner gate).
+  - `def list_subagents(self, user, conversation_id) -> list[AISubagent]` — `AISubagent.objects.filter(Q(parent_conversation_id=str(conversation_id)) & (Q(host_user_id__isnull=True) | Q(host_user_id=str(user.pk)))).order_by("-created_at")` (CBAC owner gate, newest first). Added in the I4-F seam backfill — the I4-F panel needs this to hydrate the "Subagents" section.
 
 **`ai/serializers.py` — `SubagentDispatchSerializer(serializers.Serializer)`:**
 ```python
@@ -2317,6 +2318,14 @@ def dispatch_subagent(self, request, pk=None):
     sub = SubagentService().dispatch_subagent(request.user, conversation, **serializer.validated_data)
     return Response(serialize_subagent(sub), status=status.HTTP_201_CREATED)
 
+@action(detail=True, methods=["get"], url_path="subagents", url_name="list-subagents")
+def list_subagents(self, request, pk=None):
+    conversation = self.intelligence._get_accessible_conversation(request.user, pk)
+    if conversation is None:
+        return Response({"error": f"Conversation {pk} not found."}, status=status.HTTP_404_NOT_FOUND)
+    subs = SubagentService().list_subagents(request.user, pk)
+    return Response([serialize_subagent(s) for s in subs])
+
 @action(detail=True, methods=["get"], url_path=r"subagents/(?P<sub_id>[^/.]+)", url_name="subagent-detail")
 def subagent_detail(self, request, pk=None, sub_id=None):
     conversation = self.intelligence._get_accessible_conversation(request.user, pk)
@@ -2330,14 +2339,15 @@ def subagent_detail(self, request, pk=None, sub_id=None):
 - Import `SubagentDispatchSerializer` from `ai.serializers` (add to the existing import list) and `SubagentService, serialize_subagent` from `ai.subagent_service`.
 
 ### Tests (`ai/tests/test_subagent_dispatch.py` — NEW)
-Mirror the fixture pattern (`@pytest.fixture def user(db): return User.objects.create_user(...)` or `make_user` from `ai.tests.conftest`; `AIConversation.objects.create(user=user, ...)`). Use `@pytest.mark.django_db`. 7 tests:
+Mirror the fixture pattern (`@pytest.fixture def user(db): return User.objects.create_user(...)` or `make_user` from `ai.tests.conftest`; `AIConversation.objects.create(user=user, ...)`). Use `@pytest.mark.django_db`. 8 tests:
 1. `test_dispatch_creates_worker_subagent` — dispatch with `run_async=False`; assert the row has `is_worker is True`, `status == "pending"`, `host_user_id == str(user.pk)`, `parent_conversation_id == str(conversation.id)`, `app_identifier == "carbon"`.
 2. `test_readonly_allowlist_excludes_all_mutations` — assert `SUBAGENT_READONLY_TOOLS.isdisjoint(MUTATION_TOOLS_DENIED)` and that every name in `MUTATION_TOOLS_DENIED` is NOT in `SUBAGENT_READONLY_TOOLS`.
 3. `test_resolve_subagent_tool_definitions_are_readonly` — `defs = resolve_subagent_tool_definitions()`; assert every `defs[*]["function"]["name"]` is in `SUBAGENT_READONLY_TOOLS`; assert no `MUTATION_TOOLS_DENIED` name appears; assert `"web_research"` is present (I3-B integration).
 4. `test_run_subagent_aggregates_result` — create a pending subagent; `monkeypatch.setattr(SubagentService, "_invoke_llm", <async fake returning {"content": "x"*500, "input_tokens": 10, "output_tokens": 20}>)`; `SubagentService().run_subagent(sub.id)`; assert `status == "completed"`, `result_summary == ("x"*500)[:200].strip()`, `result_detail == ("x"*500)[:2000]`, `tokens_used == 30`, `completed_at is not None`.
 5. `test_run_subagent_failure_marks_failed` — `_invoke_llm` fake raises `RuntimeError("boom")`; assert `status == "failed"` and `error` contains `"boom"`.
 6. `test_get_subagent_is_cbac_scoped` — owner user gets the subagent; a second `User` gets `None`.
-7. `test_serialize_subagent_shape` — `serialize_subagent(sub)` returns the documented keys (at minimum `name`, `status`, `is_worker`, `result_summary`, `tool_allowlist`).
+7. `test_list_subagents_is_cbac_scoped_and_newest_first` — dispatch two subagents; assert `list_subagents` returns them newest-first; assert a second `User` gets `[]`.
+8. `test_serialize_subagent_shape` — `serialize_subagent(sub)` returns the documented keys (at minimum `name`, `status`, `is_worker`, `result_summary`, `tool_allowlist`).
 
 ### DO NOT TOUCH
 - `ai/engine/` (vendored engine) — no `guardrails.py`/`workers.py`/`router.py`/`execute.py`/`loop.py` edits. I4-B reads `get_tool_definitions()` and `route_chat` but changes nothing there.
@@ -2541,9 +2551,9 @@ node scripts/check-i18n-keys.js   # 0 missing keys
 
 ### Screen Spec — Artifacts 1–9 (RULE_29 gate — COMPLETE)
 > Author: Master Architect (2026-09-03). The frontend worker SHALL NOT code the subagent UI until reading `docs/SCREEN-SPEC-I4-SUBAGENT-UI.md`. Key contract points:
-> - **Transport = POLL (no SSE).** Add `dispatchSubagent` + `getSubagent` to `src/api/aiWorkspace.js` (base `ai/workspace/`). Dispatch `POST conversations/{id}/subagents/` → `201` `serialize_subagent`; then poll `GET conversations/{id}/subagents/{sub_id}/` every ~1.5s (back off after ~5 polls) until `status ∈ {completed, failed}`. Clear the timer on unmount + terminal status (never leak `setInterval`). `404`/`403` → terminal "not found" (do not leak existence).
-> - **Result card** = NEW `src/shell/SubagentResultCard.jsx`, rendered by `AIMessageBubble.renderStructuredContent()` as a `metadata.type === "subagent_result"` branch. Header: `AIGeneratedBadge("Subagent")` + name + status chip; scope via `KeyValueOutput`; summary = `result_summary`; detail = collapsible `result_detail` (`PlanningHeader` collapse, default collapsed); failed → `Alert` with `error`.
-> - **Progress sub-list** = nested under the owning task in `AITaskPanel.jsx` (per `serialize_subagent` name + status chip), never flattened into the parent list. Dispatch trigger = `SystemDialog` form (name + brief + optional scope).
+> - **Transport = POLL (no SSE).** Add `dispatchSubagent` + `getSubagent` + `listSubagents` to `src/api/aiWorkspace.js` (base `ai/workspace/`). Dispatch `POST conversations/{id}/subagents/` → `201` `serialize_subagent`; then poll `GET conversations/{id}/subagents/{sub_id}/` every ~1.5s (back off after ~5 polls) until `status ∈ {completed, failed}`. Clear the timer on unmount + terminal status (never leak `setInterval`). `404`/`403` → terminal "not found" (do not leak existence). Hydrate on open via `GET conversations/{id}/subagents/` (newest first).
+> - **Result card** = NEW `src/shell/SubagentResultCard.jsx`, rendered inside `AITaskPanel.jsx` in a dedicated "Subagents" section (NOT `AIMessageBubble`: I4-B stores the result only on `AISubagent` and creates no `metadata.type === "subagent_result"` message). Header: `AIGeneratedBadge("Subagent")` + name + status chip; scope via `KeyValueOutput`; summary = `result_summary`; detail = collapsible `result_detail` (`PlanningHeader` collapse, default collapsed); failed → `Alert` with `error`.
+> - **Progress sub-list** = the "Subagents" section in `AITaskPanel.jsx` (below run steps / plan detail). Subagents are conversation-scoped (no step/plan link on `AISubagent`), so they nest under the section heading — NOT under an individual `StepCard`, and never flattened into `runSteps`. Dispatch trigger = `SystemDialog` form (name + brief + optional scope).
 
 ### Verification Gate (Master runs)
 ```bash
