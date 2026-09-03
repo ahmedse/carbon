@@ -1887,7 +1887,7 @@ The roadmap's Wave I was written before E2 (tool catalog) and Wave H (audit) lan
 | I2-B | Code execution sandbox (`ai/code_sandbox.py` + `CodeExecuteTool`) | backend | — | DONE ✅ |
 | I2-F | Code-sandbox result rendering (AIMessageBubble image/table) | frontend | I2-B | DONE ✅ |
 | I3-B | Web search tool (`ai:web_search` capability) | backend | — | DONE ✅ |
-| I3-F | External source badge in Inspector | frontend | I3-B | SPEC READY ✅ (RULE_29) |
+| I3-F | External source badge in Inspector | frontend | I3-B | DONE ✅ |
 | I4-B | Subagent dispatch service (`ai/subagent_service.py`) | backend | — | DONE ✅ |
 | I4-F | Subagent result card | frontend | I4-B | SPEC READY ✅ (RULE_29) |
 | I5-B | PII server-side gate (`ai/pii_guard.py`) | backend | — | DONE ✅ |
@@ -2511,7 +2511,7 @@ cd /home/ahmed/aast/carbon/backend
 **Date:** 2026-09-03
 **Worker Role:** frontend-worker
 **Recommended Model:** DeepSeek V4-Flash (RULE_24)
-**Status:** SPEC READY ✅ — awaiting dispatch (RULE_29 gate complete)
+**Status:** DONE ✅ (`f16785e`)
 **Depends on:** I3-B (web search + `external_sources`, DONE)
 **Full spec (source of truth):** `docs/SCREEN-SPEC-I3-EXTERNAL-SOURCE-BADGE.md` — all 9 RULE_29 artifacts. Build exactly to it.
 
