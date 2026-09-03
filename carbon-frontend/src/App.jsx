@@ -107,6 +107,7 @@ const LearningFlywheelPanel = React.lazy(() => import("./pages/admin/ai/Learning
 const MonitoringPanel = React.lazy(() => import("./pages/admin/ai/MonitoringPanel"));
 const OutputQualityPanel = React.lazy(() => import("./pages/admin/ai/OutputQualityPanel"));
 const AuditPanel = React.lazy(() => import("./pages/admin/ai/AuditPanel"));
+const WatchesPanel = React.lazy(() => import("./pages/admin/ai/WatchesPanel"));
 const AILogsPanel = React.lazy(() => import("./pages/admin/ai/AILogsPanel"));
 const AgentTopologyPanel = React.lazy(() => import("./pages/admin/ai/AgentTopologyPanel"));
 const RunTimelinePanel = React.lazy(() => import("./pages/admin/ai/RunTimelinePanel"));
@@ -405,6 +406,7 @@ export default function App() {
                 <Route path="/admin/ai/monitoring" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><MonitoringPanel /></AdminRoute>} />
                 <Route path="/admin/ai/output-quality" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><OutputQualityPanel /></AdminRoute>} />
                 <Route path="/admin/ai/audit" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AuditPanel /></AdminRoute>} />
+                <Route path="/admin/ai/watches" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><WatchesPanel /></AdminRoute>} />
                 <Route path="/admin/ai/logs" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AILogsPanel /></AdminRoute>} />
                 <Route path="/admin/ai/topology" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><AgentTopologyPanel /></AdminRoute>} />
                 <Route path="/admin/ai/runs" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><RunTimelinePanel /></AdminRoute>} />

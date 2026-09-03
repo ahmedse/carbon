@@ -1560,6 +1560,309 @@ python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider | tail
 
 ---
 
+## PULSE 0.3 — WAVE H TRACK (Pulse Console · observability)
+
+> **Canonical spec:** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave H — but read the CORRECTIONS below first.
+
+### CORRECTIONS to the Wave H roadmap spec (verified against code 2026-09-02 — do NOT chase the roadmap's stale paths)
+
+The roadmap's Wave H was written before the observability layer landed. The following ALREADY EXIST and must be REUSED, never duplicated:
+
+1. **`AuditLog` model already exists** (`ai/models/core.py:228` — `actor/actor_type/action/target/detail/created_at`), and is already written for `memory.forget` (`ai/memory_api.py:294`). `ToolExecution`, `LLMCallLog`, `SkillAdmissionLog`, `TurnLedgerRow` also already exist and are written at runtime. **Do NOT create a new `AIPulseAuditLog` model** — the roadmap's H1 "ADD AIPulseAuditLog" is duplicate work. Reuse `AuditLog` with a namespaced `action` (e.g. `ai.tool_call`, `ai.consent_approved`, `ai.consent_declined`, `ai.memory_write`) + rich fields in the existing `detail` JSONField.
+2. **The admin AI console already exists** — `carbon-frontend/src/pages/admin/ai/*` (26 panels): `PulseOverviewPage`, `AuditPanel`, `BudgetUsagePanel`, `ToolsPanel`, `SkillsPanel`, `SkillLearningPanel`, `MonitoringPanel`, `OutputQualityPanel`, `AILogsPanel`, etc. Mounted on `/admin/ai/*` routes in `App.jsx`. **Do NOT build a new `/ai/console` route** — the roadmap's H2 "ADD PulseConsolePage" is duplicate work. The gap is the *audit viewer's filtering/export*, not the console itself.
+3. **The audit read panel already exists** — `AuditPanel.jsx` → `PulseDataPanel dataKey="audit"` → `/carbon-api/ai/pulse/data/audit/` → `PANEL_REGISTRY["audit"] = [AuditLog]` in `observability_api.py:108`. It renders `filterable: false` (no filters/pagination/CSV). The gap is a richer, filterable audit API + viewer.
+4. **Proactive triggers already exist** (engine KG) — `KgProactiveTrigger` + `ai/engine/proactive/trigger_registry.py` + `trigger_evaluator.py` (categories `threshold/trend/correlation`, cooldown, recipients). Seeded from domain packs, NOT user-configurable. The gap is the Django `AIAnomalyWatch` model + user CRUD + a `run_user_watches` hook in the scheduled loop.
+5. **Capabilities:** only `ai:view_console` and `ai:manage_console` exist (`accounts/capabilities.py:443/452`; mirrored in `carbon-frontend/src/capabilities.js:77`). There is NO `ai:view_audit` / `ai:manage_insights` / `ai:view_insights`. **Do NOT add new capabilities** — gate on `ai:manage_console` (writes/admin) + `ai:view_console` (reads).
+6. **Proactive scheduler seam:** the cognition loop calls `run_proactive_evaluation` at `ai/engine/cognition/loop.py:260` (via `run_cognition_loop.py`). `run_user_watches` must be invoked here (or inside `run_proactive_evaluation`), NOT on the request cycle.
+7. **Audit write seam must live in the Django layer (`ai/*.py`), NOT `ai/engine/`** (the engine is vendored/stateless). Tool-call completion returns to `ai/intelligence.py` (`tool_trace=res.get("tool_trace")` at lines ~652 and ~2407); consent resolves in `ai/workspace_api.py confirm_tool_execution` (~line 444); memory writes in `ai/memory_api.py`.
+8. **H3-B `kpi_expression` is natural language — it CANNOT be mechanically evaluated.** The roadmap says "evaluate through the existing `trigger_evaluator`", but `trigger_evaluator.evaluate_triggers` only consumes STRUCTURED conditions (table/column/operator/aggregation), NOT free text. To keep H3-B safe + non-thin, `AIAnomalyWatch` MUST carry a structured `condition` JSONField (`{table, column, operator, aggregation}`) that maps 1:1 onto `trigger_evaluator._query_aggregation()` + `_compare()`. `kpi_expression` stays as the human-readable label (used in the insight title/narrative). NEVER eval/exec the natural-language string. Table/column are passed through the existing `_qi()` identifier-quoter; operator/aggregation are allowlisted.
+
+| Phase | Goal | Domain | Deps | Status |
+|-------|------|--------|------|--------|
+| H1-B | AI action audit writes + filterable audit API | backend | — | DONE ✅ |
+| H2-F | Audit viewer (filters + CSV export) | frontend | H1-B | DONE ✅ |
+| H3-B | User-configurable anomaly watches (model + CRUD + loop) | backend | — | DONE ✅ |
+| H3-F | Watches UI in admin AI console | frontend | H3-B | DONE ✅ |
+
+---
+
+## Phase H1-B — AI action audit writes + filterable audit API
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE ✅ (2026-09-02 — 7/7 audit tests; `pytest ai` 1315 passed; `makemigrations --check` clean)
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave H §H1 — read the CORRECTIONS in the Wave H header above.
+
+### Context
+The `AuditLog` model exists and the `AuditPanel` read layer exists, but AI-initiated state changes are NOT written: only `memory.forget` writes an `AuditLog` row today. Tool calls, consent decisions (RULE_21), and memory writes happen with no immutable audit trail — the GOFSCO/KOC compliance gap. Fix = a write-only `AuditService.log()` helper + wire it into the three Django-layer seams + expose a filterable admin read API.
+
+### Files to Read First
+- `ai/models/core.py` (existing `AuditLog` at line 228 — reuse it, do NOT add a model)
+- `ai/memory_api.py` (the existing `AuditLog.objects.create(...)` pattern at line ~294 — copy this shape)
+- `ai/intelligence.py` (tool-call completion: `tool_trace=res.get("tool_trace")` at ~652 and ~2407; `completed_tools` surfaced via `_extract_tool_actions`)
+- `ai/workspace_api.py` (`confirm_tool_execution` ~line 444 — the RULE_21 consent resolution seam)
+- `ai/observability_api.py` (the redaction regex for `token|secret|password|api_key` — reuse it in the audit serializer)
+- `accounts/capabilities.py` (`AI_MANAGE_CONSOLE`), `accounts/permissions.py` (existing CBAC permission classes)
+- `config/urls.py` (how `ai.*_urls` are included — add `audit_urls`)
+
+### Files to Change
+- `backend/ai/audit_service.py` (NEW) — `AuditService.log(...)` write-only helper (see contract)
+- `backend/ai/audit_api.py` (NEW) — `GET /carbon-api/ai/audit/` admin-only, paginated, filterable
+- `backend/ai/audit_urls.py` (NEW) — `path("", AuditListView.as_view(), ...)`
+- `backend/config/urls.py` — add `path(f'{api_prefix}/ai/audit/', include('ai.audit_urls'))`
+- `backend/ai/intelligence.py` — call `AuditService.log(...)` after tool-call completion in BOTH the `chat` done path and the `run_tool`/`_run_chat` completion path (one row per completed tool)
+- `backend/ai/workspace_api.py` — call `AuditService.log(...)` in `confirm_tool_execution` for both approve and decline branches
+- `backend/ai/memory_api.py` — call `AuditService.log(...)` in the fact-write path (`action="ai.memory_write"`); `memory.forget` already logs
+- `backend/ai/tests/test_audit_trail.py` (NEW)
+
+### Contract (exact — do NOT deviate)
+- `AuditService.log(*, action, actor, actor_type="user", target=None, detail=None, instance_id="carbon", host_user_id=None, visibility="private")` — wraps `AuditLog.objects.create(...)`; **never raises** (swallow+`logging.getLogger("ai.audit").exception` on failure so audit never breaks the user turn); `detail` is a `dict` (JSON). No update/delete methods — append-only by construction.
+- `action` namespaces: `ai.tool_call` (detail: `{tool_id, domain, confidence, cost_cents}`), `ai.consent_approved` (detail: `{tool_id, consent_token}`), `ai.consent_declined` (detail: `{tool_id, reason}`), `ai.memory_write` (detail: `{category, confidence, content[:200]}`).
+- `AuditListView` (DRF `APIView` GET-only): admin-only via `ai:manage_console` (non-admin → 403). Query params: `action`, `actor`, `start`, `end` (ISO dates). Paginated (`page`/`page_size`, default 50). Response rows serialize `id, timestamp(created_at), actor, action, target, detail` — `detail` MUST be recursively redacted for `token|secret|password|api_key` keys (reuse the regex from `observability_api.py`) and any string value truncated to 200 chars. No POST/PUT/PATCH/DELETE on the view (405 by construction).
+- `intelligence.py` tool-call hook: after the `done`/completion frame builds `tool_trace`/`completed_tools`, iterate the tools and write one `AuditLog` row per tool with `actor=str(user.pk)`, `host_user_id=str(user.pk)`. Skip when the tool list is empty.
+- `workspace_api.py` hook: in `confirm_tool_execution`, write `ai.consent_approved` when the confirmation is accepted, `ai.consent_declined` when rejected.
+
+### DO NOT TOUCH
+- `ai/observability_api.py`, `ai/ops_api.py`, `ai/ops_urls.py` (they keep working alongside)
+- `ai/engine/**` (audit writes live in the Django layer only)
+- Any model other than writing rows to the existing `AuditLog` (NO new model, NO new migration)
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_audit_trail.py -v --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python manage.py makemigrations --check --dry-run   # → "No changes detected" (no new model)
+```
+
+---
+
+## Phase H2-F — Audit viewer (filters + CSV export)
+**Date:** 2026-09-02
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE ✅ (2026-09-02 — 8/8 vitest; eslint clean; build clean)
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave H §H2 — read the CORRECTIONS in the Wave H header above.
+
+### Context
+The admin AI console already exists (`/admin/ai/*`) and `AuditPanel.jsx` already renders `AuditLog` rows — but via the generic `PulseDataPanel` (`filterable: false`): no date-range/action/domain filters, no pagination, no CSV export. H1-B adds a filterable `GET /carbon-api/ai/audit/`. This phase upgrades the audit panel to consume it, with filters + CSV export + click-to-expand. Do NOT build a new `/ai/console` route.
+
+### Files to Read First
+- `carbon-frontend/src/pages/admin/ai/AuditPanel.jsx` (currently `PulseDataPanel dataKey="audit"` — replace its body)
+- `carbon-frontend/src/pages/admin/ai/PulseDataPanel.jsx` (how the generic panel renders; `filterable: false` today)
+- `carbon-frontend/src/api/aiPulse.js` (`getPulseData`) + `carbon-frontend/src/api/api.js` (`apiFetch`, RULE_10)
+- `carbon-frontend/src/capabilities.js` (`AI_MANAGE_CONSOLE`, `hasCap`, `expandCapabilities`)
+- `carbon-frontend/src/__tests__/` (existing admin-ai panel test style)
+
+### Files to Change
+- `carbon-frontend/src/api/aiPulse.js` — add `getAuditTrail(token, { action, actor, start, end, page, pageSize })` (GET `/ai/audit/`)
+- `carbon-frontend/src/pages/admin/ai/AuditPanel.jsx` — replace with a real audit viewer (see contract)
+- `carbon-frontend/src/__tests__/AuditPanel.test.jsx` (NEW)
+
+### Contract (exact — do NOT deviate)
+- `AuditPanel.jsx`: paginated MUI `Table` (columns: timestamp, actor, action, target, cost/confidence if present); filter bar (action-type select, date-range pickers, actor text) driving query params; **CSV export** button (client-side, downloads the *filtered current page/result set* as CSV, never PII); click row → expand `detail` (redacted JSON). Manual refresh (no auto-polling). Empty state + error state (honest copy, RULE_23). Admin-gated (non-admin → redirect/403 — reuse `hasCap(expandCapabilities(caps), AI_MANAGE_CONSOLE)`).
+- RULE_8 theme tokens only; RULE_10 `apiFetch` only (no raw `fetch`); RULE_16 wrap in `PageContainer`; keyboard-accessible; `prefers-reduced-motion` respected. No hardcoded hex, no inline sx.
+- User column shows username (never civil ID/contact). `detail` values already redacted server-side — do not re-render raw secrets.
+
+### DO NOT TOUCH
+- `AIWorkspace.jsx` / `AIWorkspacePage.jsx` (Operator/Analyst home — separate room)
+- Other admin-ai panels (`PulseOverviewPage`, `BudgetUsagePanel`, `ToolsPanel`, `SkillsPanel`)
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/AuditPanel.test.jsx --reporter=verbose
+npm run lint
+npm run build
+```
+
+---
+
+## Phase H3-B — User-configurable anomaly watches (model + CRUD + loop)
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE ✅ (2026-09-03 — 9/9 watches tests; `pytest ai` 1323 passed + 1 flaky live-LLM test `test_intelligence_live.py` unrelated to H3-B; migration `0024_anomaly_watch` added)
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave H §H3 — read the CORRECTIONS in the Wave H header above.
+
+### Context
+The proactive loop fires on system-defined `KgProactiveTrigger`s. Users cannot say "watch THIS KPI for ME". Gap = a Django `AIAnomalyWatch` model + user CRUD + a `run_user_watches` hook evaluated on the existing scheduler (never on the request cycle).
+
+### Files to Read First
+- `ai/models/core.py` (existing models + `AppScopeMixin` pattern)
+- `ai/engine/proactive/loop.py` (`run_proactive_evaluation`), `ai/engine/proactive/trigger_evaluator.py` (`evaluate_triggers`, `TriggerResult`), `ai/engine/proactive/delivery.py` (`deliver_insight`), `ai/engine/cognition/loop.py` (`run_proactive_evaluation` call site ~line 260)
+- `ai/insights_api.py` + `ai/insights_urls.py` (existing insight read pattern)
+- `accounts/capabilities.py` (`AI_MANAGE_CONSOLE` / `AI_VIEW_CONSOLE`), `config/urls.py`
+
+### Files to Change
+- `backend/ai/models/core.py` — add `AIAnomalyWatch(AppScopeMixin)` model (+ migration)
+- `backend/ai/watches_api.py` (NEW) — CRUD (see contract)
+- `backend/ai/watches_urls.py` (NEW)
+- `backend/config/urls.py` — add `path(f'{api_prefix}/ai/watches/', include('ai.watches_urls'))`
+- `backend/ai/engine/proactive/user_watches.py` (NEW) — `async def run_user_watches(db, instance)` (see contract)
+- `backend/ai/engine/cognition/loop.py` — invoke `run_user_watches` after `run_proactive_evaluation`
+- `backend/ai/tests/test_anomaly_watches.py` (NEW)
+
+### Contract (exact — do NOT deviate)
+- `AIAnomalyWatch` fields: `user` (FK `settings.AUTH_USER_MODEL`, on_delete CASCADE), `instance_id` (TextField db_index), `name` (TextField), `kpi_expression` (TextField — plain English label, NOT executed), `condition` (JSONField null/blank — the machine-evaluable spec `{table, column, operator, aggregation}`, see CORRECTION #8), `threshold` (FloatField), `comparison_window_days` (IntegerField default 30), `recipients` (M2M to `settings.AUTH_USER_MODEL`, related_name `+`), `enabled` (BooleanField default True), `last_fired_at` (DateTimeField null blank), `fire_count` (IntegerField default 0). `AppScopeMixin` + `Meta.app_label = "ai"`.
+- CRUD API: `GET /carbon-api/ai/watches/` (list own + `ai:view_console`), `POST /carbon-api/ai/watches/` (create, `ai:manage_console`), `PATCH /carbon-api/ai/watches/{id}/` (update own, `ai:manage_console`), `DELETE /carbon-api/ai/watches/{id}/` (`ai:manage_console`). Serializer whitelists the fields; `recipients` as a list of user ids.
+- `run_user_watches(db, instance)`: load all `enabled` watches for the instance; for each, import + call `trigger_evaluator._query_aggregation(instance.host_db_url, table, column, aggregation)` and `trigger_evaluator._compare(measured, operator, threshold)` from the watch's `condition` JSON (whitelisted keys only: `table`/`column`/`operator`/`aggregation`; operator ∈ `> < >= <= == !=`, aggregation ∈ `latest avg max min count`). NEVER raw SQL/Python eval — `kpi_expression` is a label, `condition` table/column go through `_qi()` identifier-quoting. If `measured` crosses `threshold`, call `deliver_insight(db, instance_id, {...})` (title includes `kpi_expression`) + set `last_fired_at`/increment `fire_count`. Per-watch try/except — never raises the whole loop. Missing/invalid `condition` → skip + `logger.warning`. Runs on the scheduler (every 15 min max), not per request.
+- `cognition/loop.py`: call `run_user_watches` in the same `_for_each_instance(...)` pass as `run_proactive_evaluation`; keep it fire-and-forget guarded.
+
+### DO NOT TOUCH
+- System-defined `KgProactiveTrigger` paths (`trigger_registry.py`, `trigger_evaluator.py`'s existing trigger loop)
+- The insights SSE delivery internals (`ai/insights_api.py` stream)
+- `ai/engine/proactive/loop.py` `run_proactive_evaluation` body (add a separate `user_watches.py`, call it from `cognition/loop.py`)
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/backend
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai/tests/test_anomaly_watches.py -v --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python -m pytest ai -q --maxfail=5 --disable-warnings -p no:cacheprovider
+/home/ahmed/aast/carbon/.venv/bin/python manage.py migrate --check
+```
+
+---
+
+## Phase H3-F — Watches UI in admin AI console
+**Date:** 2026-09-02
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash (RULE_24)
+**Status:** DONE ✅ (2026-09-03 — 6/6 vitest; eslint clean (6 pre-existing errors are all in out-of-scope `apps/people/*`); build clean)
+**Full spec (source of truth):** `docs/pulse/PULSE-0.3-ROADMAP.md` Wave H §H3 step 4 — additive to H2, read the CORRECTIONS in the Wave H header above.
+
+### Screen Spec — Artifacts 1–9 (RULE_29 gate — this MUST be complete before any code)
+> Author: Master Architect (2026-09-03). The frontend worker SHALL NOT code `WatchesPanel.jsx` until every artifact below exists. Build exactly to this spec; report back any discrepancy.
+
+#### Artifact 1 — User story + acceptance criteria
+**Story:** As an admin AI operator, I want to create and manage anomaly watches (KPI thresholds evaluated against host data), so that the platform proactively alerts me and my recipients when a metric crosses a boundary.
+**Acceptance:**
+- **Happy:** open Watches panel → click "New watch" → fill name/KPI/condition/threshold/window/recipients → Save → success toast, row appears in table.
+- **Empty (no data):** list returns 0 rows → honest empty state: "No anomaly watches yet — create your first watch" + primary "New watch" action.
+- **Error:** fetch fails → human message + Retry (no dead end). Never fabricate rows.
+- **Permission:** no `ai:manage_console` → read-only list (if `ai:view_console`) or forbidden message; hide "New watch"/edit/delete affordances.
+- **Validation:** malformed `condition` (bad operator/aggregation/extra keys) → server 400 → inline field error, form stays open.
+- **Delete:** requires explicit confirm (ConfirmDialog), then row removed + success toast.
+
+#### Artifact 2 — Journey / workflow
+`Admin AI console sidebar → "Anomaly Watches" (route /admin/ai/watches)` → list (server-paginated) → **New watch** → `WatchDialog` (SystemDialog) → fill form → **Save** (submitting spinner) → success toast + list refetch → row visible. Edit = same dialog prefilled; Delete = ConfirmDialog → 204 → refetch.
+- **Friction/drop-off:** recipients multi-select depends on `fetchUsers(token)`; if user list fetch fails, multi-select shows an empty/disabled state with honest copy (does not block saving a watch with no recipients).
+
+#### Artifact 3 — IA placement
+- Route `/admin/ai/watches`, lazy-loaded in `App.jsx` under the existing `/admin/ai/*` admin-ai namespace (sibling of `AuditPanel`, `ToolsPanel`, `SkillsPanel`).
+- Sidebar entry: add a "Watches" item alongside the existing admin-ai panel list; reuse `studioFromPath()` (RULE_15/22) only if a new bare namespace is introduced — otherwise reuse the existing admin-ai sidebar registration.
+
+#### Artifact 4 — Screen/composition spec (primitives first — REUSE, never invent)
+```
+PageContainer
+ └─ PageHeader (title "Anomaly Watches", ONE primary action = "New watch" top-right)
+ └─ WatchTable  ← data source: listWatches(token, {page, pageSize})
+ │    Mirror AuditPanel.jsx table pattern: MUI Table + TablePagination (SERVER-side
+ │    pagination — API is DRF-paginated page_size=20, max 100)
+ │    columns: name | threshold | window (days) | enabled | last_fired_at | fire_count | actions
+ │    states: loading | empty | error | loaded | forbidden | partial
+ └─ WatchDialog  ← SystemDialog (NOT raw Drawer/Dialog)
+      props: open, initialValues (null=create, object=edit), onSubmit
+      fields: name, kpi_expression (label), condition {table,column,operator(select),aggregation(select)},
+              threshold (number), comparison_window_days (number), recipients (Autocomplete multiple via fetchUsers), enabled (Switch)
+      states: idle | submitting | error | success
+      data source: createWatch / updateWatch
+ └─ ConfirmDialog (for delete)  ← built on SystemDialog, replaces window.confirm
+```
+**Reuse audit (non-negotiable):**
+- [x] `PageContainer` (`src/components/layout/PageContainer`) — RULE_16
+- [x] `SystemDialog` (`src/components/SystemDialog`) — modal primitive; NEVER raw Drawer/Dialog
+- [x] `ConfirmDialog` (`src/components/ConfirmDialog`) — for delete confirm
+- [x] `useDocumentTitle`, `useAuth`, `hasCap/expandCapabilities`, `AI_MANAGE_CONSOLE`/`AI_VIEW_CONSOLE` (`src/capabilities.js`)
+- [x] `apiFetch` (`src/api/api`) — RULE_10, NEVER raw fetch
+- [x] `fetchUsers` (`src/api/users`) — recipients multi-select
+- [x] Table pattern reuses the H2-F `AuditPanel.jsx` table+`TablePagination` shape (do not re-invent)
+
+#### Artifact 5 — Complete state matrix
+**Page (`WatchesPanel`):**
+| State | Rendering |
+|-------|-----------|
+| `idle` | nothing yet |
+| `loading` | skeleton/spinner — never blank |
+| `loading-empty` | skeleton then empty state |
+| `empty` | "No anomaly watches yet — create your first watch" + primary action |
+| `loaded` | table of watches |
+| `partial` | loaded rows + non-blocking warning |
+| `error` | human message + **Retry** action |
+| `forbidden` | "requires the ai:manage_console capability" (read-only list if ai:view_console present) |
+| `stale` | keep rows + subtle refresh indicator |
+
+**Component:**
+- Table rows: `default`/`hover`/`selected`; row actions `disabled` when no `ai:manage_console`.
+- `New watch` button: `default`/`hover`/`focus-visible`/`disabled`.
+- `WatchDialog`: `open`/`submitting` (Save button disabled + progress)/`error` (inline field errors, aria-live)/`success` (close + toast).
+- `enabled` Switch: `checked`/`unchecked`/`disabled`.
+- Delete ConfirmDialog: `open`/`submitting`/`success`.
+
+#### Artifact 6 — Data contract (matches `backend/ai/watches_api.py` EXACTLY)
+- `GET ai/watches/?page=&page_size=` → DRF paginated `{count, next, previous, results:[...]}` (page_size default 20, max 100). Row: `{id, name, kpi_expression, condition: {table, column, operator, aggregation} | null, threshold, comparison_window_days, enabled, last_fired_at, fire_count, recipients: number[], instance_id}` (note: no `user` field in the payload).
+- `POST ai/watches/` → `201` row | `400` `{field: [errors]}` (DRF) | `403` `{detail}` when missing `ai:manage_console`.
+- `PATCH ai/watches/{id}/` → `200` row | `400` | `404` `{detail:"Not found."}`.
+- `DELETE ai/watches/{id}/` → `204` | `404`.
+- `recipients` = list of user ids; options sourced from `fetchUsers(token)`.
+- `condition` whitelist: keys ∈ `{table,column,operator,aggregation}`; operator ∈ `< <= > >= == !=`; aggregation ∈ `latest avg max min count`. `kpi_expression` is a natural-language LABEL only.
+- 403 semantics: read list is allowed for `ai:view_console`; writes (create/patch/delete) require `ai:manage_console` — UI hides write affordances and shows an honest message otherwise.
+
+#### Artifact 7 — A11y (WCAG AA)
+- [x] All controls keyboard-reachable; visible `focus-visible`.
+- [x] Icon buttons have `aria-label` (refresh, edit, delete).
+- [x] Every form field has a `<label>`; field errors announced via `aria-live="polite"` / `error` text.
+- [x] `enabled` status = Switch + text label, never color alone.
+- [x] `last_fired_at` shown as text (not color); `fire_count` numeric.
+- [x] Dialog uses `SystemDialog` (focus-trapped modal, ESC to close).
+- [x] Table headers are `<th>` scoped; delete button name is unique ("Delete {name}").
+
+#### Artifact 8 — Performance envelope
+- [x] Route lazy-loaded (`React.lazy`) in `App.jsx`.
+- [x] Server-side pagination (page_size 20, max 100) — never render hundreds of rows client-side.
+- [x] Columns/callback handlers memoized (`useMemo`/`useCallback`); no inline object/array props that bust `React.memo`.
+- [x] Recipients search debounced (250–400ms) via Autocomplete; no fetch-per-keystroke.
+- [x] No N+1: one list call + one user-list call (fetched once on dialog open).
+- [x] Web Vitals: LCP < 2.5s, INP < 200ms, CLS < 0.1; route chunk < ~250 KB gzip (no new deps).
+
+#### Artifact 9 — i18n / RTL plan
+- [x] Every user-facing string via `useTranslation('ai')` (new `watches.*` namespace) or `useTranslation('common')` (reuse `save`/`cancel`/`delete`/`retry`/`loading`).
+- [x] Add keys to BOTH `src/i18n/locales/en/ai.json` and `src/i18n/locales/ar/ai.json` under `watches: { title, newWatch, editWatch, name, kpiExpression, conditionTable, conditionColumn, operator, aggregation, threshold, comparisonWindowDays, recipients, enabled, lastFiredAt, fireCount, noWatches, createFirstWatch, deleteConfirmTitle, deleteConfirmBody, saved, deleted, requiresManageConsole }`.
+- [x] Directional icons (chevrons) mirrored in RTL.
+- [x] Numeric/identifier values (`threshold`, `fire_count`, `last_fired_at`, user ids) rendered `dir="ltr"`.
+
+### Context
+H3-B exposes the watch CRUD API. This phase adds a "Watches" panel to the existing admin AI console with a create/edit form. Do NOT build a new route — add a panel alongside the existing `src/pages/admin/ai/*` set.
+
+### Files to Read First
+- `carbon-frontend/src/pages/admin/ai/` (panel pattern — e.g. `BudgetUsagePanel.jsx`, `ToolsPanel.jsx`)
+- `carbon-frontend/src/api/aiPulse.js` + `api.js` (`apiFetch`)
+- `carbon-frontend/src/capabilities.js` (`AI_MANAGE_CONSOLE`/`AI_VIEW_CONSOLE`), `App.jsx` (how admin-ai panels are lazily mounted + routed)
+- `carbon-frontend/src/__tests__/` (admin-ai panel test style)
+
+### Files to Change
+- `carbon-frontend/src/api/aiPulse.js` — add `listWatches`, `createWatch`, `updateWatch`, `deleteWatch`
+- `carbon-frontend/src/pages/admin/ai/WatchesPanel.jsx` (NEW) — list + create/edit form (KPI name, threshold, window days, recipients multi-select, enabled toggle)
+- `carbon-frontend/src/App.jsx` — register `WatchesPanel` route (lazy, admin-guarded) in the existing `/admin/ai/*` namespace
+- `carbon-frontend/src/__tests__/WatchesPanel.test.jsx` (NEW)
+
+### Contract (exact — do NOT deviate)
+- `WatchesPanel.jsx`: table of watches (name, threshold, window, enabled, last_fired_at, fire_count) + "New watch" dialog/form (KPI name text, `condition` table/column text + operator select + aggregation select, threshold number, window-days number, recipients multi-select, enabled switch). Create/update gated on `ai:manage_console`; delete requires confirm. Honest empty/error states (RULE_23). RULE_8 tokens, RULE_10 `apiFetch`, RULE_16 `PageContainer`, keyboard-accessible, `prefers-reduced-motion`. No raw `fetch`, no hardcoded hex.
+- Add the route in `App.jsx` under the existing admin-ai namespace; wire `studioFromPath()` in `Shell.jsx` if a new bare namespace is introduced (RULE_15/22) — otherwise reuse the existing admin-ai sidebar entry.
+
+### DO NOT TOUCH
+- Other admin-ai panels; `AIWorkspace`; `backend/**`
+
+### Verification Gate (Master runs)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+npx vitest run src/__tests__/WatchesPanel.test.jsx --reporter=verbose
+npm run lint
+npm run build
+```
+
+---
+
 ## AI WORKSPACE TRACK
 
 ---
@@ -9537,3 +9840,141 @@ npx vitest run src/__tests__/PeoplePages.test.jsx
 npm run build
 ```
 Report: lint 0 errors; vitest green; build clean.
+
+---
+
+## Phase NIR-7A — Backend: Compensation ledger remediation (service, authz, migration, admin, tests)
+
+**Date:** 2026-09-02
+**Worker Role:** backend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Depends on:** (none — remediates unphased compensation work)
+**Canonical spec:** `ADR-0029` (`.ai-toolkit/decisions/0029-compensation-ledger.md`)
+
+### Objective
+Repair the compensation ledger to the toolkit contracts: business logic out of the
+view into a service, correct write authorization, `basic_salary`→ledger data
+migration, admin registration, and test coverage. No API shape change.
+
+### Scope
+1. **New service** `backend/people/compensation_service.py` — `CompensationService`
+   with:
+   - `current_lines(employee, as_of=None)` → QuerySet of open/effective rows.
+   - `ledger_totals(employee, as_of=None)` → `{'monthly_earnings', 'monthly_deductions',
+     'net_monthly'}` using `QuerySet.aggregate(Sum('amount'))` filtered by
+     `component__direction` (DB `Decimal`-exact; **no `float()`**).
+   - `append_line(employee, *, component, amount, currency, frequency, effective_start,
+     effective_end=None, source_rule=None, source_plan=None, reason_event=None,
+     reason_note='', user)` → inside `transaction.atomic()`: close the prior open row
+     for the same component, create the new row, emit `chronicle.record_event` +
+     `catalog.audit_utils.emit_governance_event`. Returns the new row.
+   - `verify_line(line, *, verified_by)` → set `is_verified`, `verified_by`,
+     `verified_at=timezone.now()`; emit a chronicle event.
+2. **Thin views** in `backend/people/views.py`:
+   - `EmployeeCompensationView.get()` → call service; keep the exact response envelope
+     (`employee_id`, `as_of`, `revealed_by`, `totals`, `current`, `history`, `basic_salary`
+     legacy scalar).
+   - `EmployeeCompensationView.post()` → call `append_line`, return the serialized row.
+   - `EmployeeCompensationVerifyView` → call `verify_line`.
+   - Remove the inner `can_view_compensation` checks from `post()` and the verify view
+     (write is `people:manage` via `PeopleAccess`); keep the GET reveal gated on
+     `can_view_compensation`.
+   - Move `from django.db.models import Q` to the module top.
+3. **Data migration** — add `backend/people/migrations/0010_backfill_compensation_basic.py`
+   that seeds a `basic` component ledger row per employee with `basic_salary > 0`
+   (`effective_start = join_date or today`, open-ended, `reason_note` as per ADR). Ensure
+   the `basic` `CompensationComponent` exists first (idempotent `get_or_create`).
+4. **Admin** — register `CompensationComponent`, `CompensationPlan`, `EmployeeCompensation`
+   in `backend/people/admin.py` (list_display + list_filter + search_fields + readonly
+   created_at/verified_at).
+5. **Tests** — new `backend/people/tests/test_compensation.py`:
+   - model: ordering, `str`, effective-dated current-line resolution.
+   - service: `append_line` closes the prior open row; `ledger_totals` sums
+     earnings/deductions correctly (Decimal).
+   - API: GET 403 without `people:view_compensation`; POST 403 without `people:manage`;
+     POST appends and closes previous; verify endpoint requires manage; org scoping
+     (RULE_12) — cannot reveal another org's employee.
+
+### DO NOT TOUCH
+- `backend/people/models.py` (fields already correct; only the `basic_salary` docstring
+  note may be clarified — do NOT add/remove fields).
+- `backend/people/urls.py` (routes already correct).
+- `carbon-frontend/**`.
+- The calculation engine (`backend/people/calculation_engine.py`) and
+  `backend/people/services.py` `CalculationService` (leave `basic_salary` usage as-is).
+
+### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon
+source .venv/bin/activate
+./.ai-toolkit/scripts/verify.sh backend
+./.ai-toolkit/scripts/verify.sh antipatterns
+cd backend && /home/ahmed/aast/carbon/.venv/bin/python -m pytest people -q
+```
+Report: verify.sh clean; antipatterns clean; `pytest people` all green (existing 120 +
+new compensation tests). Worker appends a `## [date] Backend Worker — Phase NIR-7A`
+entry to `TASK-RESULTS.md` with terminal proof.
+
+---
+
+## Phase NIR-7B — Frontend: Compensation pay tab remediation (SystemDialog, tokens, i18n)
+
+**Date:** 2026-09-02
+**Worker Role:** frontend-worker
+**Recommended Model:** DeepSeek V4-Flash
+**Status:** READY
+**Depends on:** NIR-7A (API envelope is unchanged; can proceed in parallel)
+**Canonical spec:** `docs/SCREEN-SPEC-COMPENSATION-LEDGER.md` (RULE_29 Screen Spec Gate —
+authoritative) + `ADR-0029` + `.ai-toolkit/shared/frontend-ready.md`,
+`.ai-toolkit/shared/compact-ui.md`, `.ai-toolkit/shared/design-system.md`
+
+### Objective
+Rewrite `carbon-frontend/src/apps/people/tabs/EmployeePayTab.jsx` to comply with
+compact-ui/design-system and i18n contracts. No behavior regression. **This is the
+first view coded under RULE_29 — the Screen Spec above is the source of truth for the
+composition tree (Artifact 4), the complete state matrix (Artifact 5), and the data
+contract (Artifact 6). Read it before touching the file.**
+
+### Scope
+1. **SystemDialog, not Drawer** — replace the raw MUI `Drawer` `AddCompLineDrawer`
+   with the existing `SystemDialog` component (`src/components/SystemDialog.jsx`),
+   matching sibling pages (`EmployeesPage`, `BenefitsPage`).
+2. **Theme tokens / variants** — remove all raw `fontSize:'Xrem'`, `height`, `width`,
+   `bgcolor` literals; use MUI `variant`/`color`/`sx` via theme tokens (spacing
+   scale, palette). Define chip variants via `MuiChip` theme overrides if needed
+   rather than inline `sx` per chip. No inline `style={}`.
+3. **i18n parity** — wrap every user-facing string in `t()`; add missing keys to
+   `en` and `ar` locale files (`src/i18n/locales/people.*`); run parity check.
+   Cover: "Verified"/"Pending", "Earning"/"Deduction", "Open"/"Closed", column
+   headers, buttons ("Add Component", "Add First Component", "Cancel", "Add"),
+   labels ("Component", "Amount", "Currency", "Frequency", "Monthly", "Annual",
+   "Effective Start", "Reason / Note"), and the protected-data notice.
+4. **Complete state handling (per Screen Spec Artifact 5)** — implement the FULL state
+   matrix, not just four states:
+   - Page: `loading` = skeleton (not spinner), `empty` = `EmptyState` + "Add First
+     Component" (manage only), `error` = `Alert` with a Retry action, `loaded` = ledger,
+     `forbidden` (403) = protected-data notice (no amounts), `partial` = loaded lines +
+     non-blocking warning, `stale` = keep data + subtle progress during refresh after add.
+   - Form dialog: `submitting` (button disabled + progress), `error` (inline field,
+     form preserved — do NOT clear on validation error), `success` (toast → close).
+   - Remove `if (!ledger) return null`.
+5. **Remove dead code** — delete unused `revealEmployeeCompensation` (in
+   `src/api/people.js`) and the hand-rolled `EARNING_TYPES`/`DEDUCTION_TYPES`/`isEarning`
+   classifier; use `component_direction` from the API response.
+
+### DO NOT TOUCH
+- `backend/**`
+- The API response contract / `src/api/people.js` fetch functions (only remove the
+  unused `revealEmployeeCompensation` export).
+
+### Verification Gate (Worker runs + reports output)
+```bash
+cd /home/ahmed/aast/carbon/carbon-frontend
+node scripts/check-i18n-keys.js
+npm run lint
+npm run build
+```
+Report: i18n parity clean (0 missing keys); lint 0 errors; build clean. Worker appends
+a `## [date] Frontend Worker — Phase NIR-7B` entry to `TASK-RESULTS.md` with terminal
+proof.

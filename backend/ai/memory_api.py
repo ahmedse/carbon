@@ -40,6 +40,7 @@ from rest_framework.views import APIView
 from accounts.ai_scoping import scope_ai_queryset
 from accounts.capabilities import has_capability
 from accounts.rbac_utils import user_is_global_admin
+from ai.audit_service import AuditService
 from ai.models import AIUserProfile, AuditLog, MemoryEpisodic, MemoryLongTerm
 from ai.usage_service import AIUsage
 
@@ -334,6 +335,18 @@ class MemoryFactUpdateView(_MemoryBaseView):
             return Response({"detail": "content is required."}, status=status.HTTP_400_BAD_REQUEST)
         fact.content = str(content).strip()
         fact.save(update_fields=["content"])
+        # Phase H1-B — append-only audit trail: record the fact write.
+        AuditService.log(
+            action="ai.memory_write",
+            actor=request.user.pk,
+            host_user_id=str(request.user.pk),
+            target=str(fact.pk),
+            detail={
+                "category": fact.category,
+                "confidence": fact.confidence,
+                "content": (fact.content or "")[:200],
+            },
+        )
         return Response({"id": fact.pk, "content": fact.content})
 
 

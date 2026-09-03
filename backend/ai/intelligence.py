@@ -26,6 +26,7 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
 from ai.engine_runtime import dispatch_task, get_task
+from ai.audit_service import AuditService
 from ai.protocol import (
     AIProvider,
     AnomalyDetectRequest,
@@ -658,6 +659,22 @@ class CarbonIntelligence:
                         }
                         if usage:
                             done_frame["usage"] = usage
+                        # Phase H1-B — append-only audit trail: record each
+                        # completed tool call (RULE_21 — recording only).
+                        for _tool in (res.get("tool_trace") or []):
+                            _tool_id = _tool.get("tool_id") or _tool.get("tool_name")
+                            if not _tool_id:
+                                continue
+                            AuditService.log(
+                                action="ai.tool_call",
+                                actor=user.pk,
+                                host_user_id=str(user.pk),
+                                target=str(_tool_id),
+                                detail={
+                                    "tool_id": _tool_id,
+                                    "duration_ms": _tool.get("duration_ms"),
+                                },
+                            )
                         yield done_frame
                         return
             else:
@@ -2413,6 +2430,22 @@ class CarbonIntelligence:
                         }
                         if usage:
                             done_frame["usage"] = usage
+                        # Phase H1-B — append-only audit trail: record each
+                        # completed tool call (RULE_21 — recording only).
+                        for _tool in (res.get("tool_trace") or []):
+                            _tool_id = _tool.get("tool_id") or _tool.get("tool_name")
+                            if not _tool_id:
+                                continue
+                            AuditService.log(
+                                action="ai.tool_call",
+                                actor=user.pk,
+                                host_user_id=str(user.pk),
+                                target=str(_tool_id),
+                                detail={
+                                    "tool_id": _tool_id,
+                                    "duration_ms": _tool.get("duration_ms"),
+                                },
+                            )
                         yield done_frame
                         return
             else:

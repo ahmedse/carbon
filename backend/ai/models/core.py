@@ -10,6 +10,7 @@ engine's string-UUID references) — no Django ``ForeignKey`` is introduced, so
 the migration namespace stays simple and the layer stays relocatable.
 """
 
+from django.conf import settings
 from django.db import models
 
 from .base import AppScopeMixin, generate_uuid
@@ -237,6 +238,45 @@ class AuditLog(AppScopeMixin):
 
     class Meta:
         app_label = "ai"
+
+
+class AIAnomalyWatch(AppScopeMixin):
+    """A user-configurable anomaly watch (Phase H3-B).
+
+    ``kpi_expression`` is a natural-language LABEL (never executed). The
+    machine-evaluable ``condition`` spec (``table`` / ``column`` /
+    ``operator`` / ``aggregation``) is evaluated exclusively through the
+    read-only host aggregation helper in ``ai.engine.proactive``.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="anomaly_watches",
+    )
+    instance_id = models.TextField(db_index=True)
+    name = models.TextField()
+    kpi_expression = models.TextField()
+    condition = models.JSONField(null=True, blank=True, default=dict)
+    threshold = models.FloatField()
+    comparison_window_days = models.IntegerField(default=30)
+    recipients = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="+",
+        blank=True,
+    )
+    enabled = models.BooleanField(default=True)
+    last_fired_at = models.DateTimeField(null=True, blank=True)
+    fire_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "ai"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.instance_id})"
 
 
 class OpsRun(AppScopeMixin):

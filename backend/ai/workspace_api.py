@@ -49,6 +49,7 @@ from ai.serializers import (
     UserProfileSerializer,
 )
 from accounts.capabilities import has_capability
+from ai.audit_service import AuditService
 from core.throttling import AIRateThrottle
 
 import logging
@@ -537,6 +538,18 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Phase H1-B — append-only audit trail: record the accepted consent.
+        AuditService.log(
+            action="ai.consent_approved",
+            actor=request.user.pk,
+            host_user_id=user_pk,
+            target=str(execution_id),
+            detail={
+                "tool_id": execution.tool_name,
+                "consent_token": execution_id,
+            },
+        )
+
         # Persist the confirmed outcome as a grounded assistant message so the
         # confirmation survives reloads.  Memory writes (learn_fact/forget_fact)
         # produce a truthful message with no navigate action — they are not DQ
@@ -683,6 +696,18 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 {"error": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Phase H1-B — append-only audit trail: record the declined consent.
+        AuditService.log(
+            action="ai.consent_declined",
+            actor=request.user.pk,
+            host_user_id=user_pk,
+            target=str(execution_id),
+            detail={
+                "tool_id": execution.tool_name,
+                "reason": "user_declined",
+            },
+        )
 
         # Sync context (no event loop) — safe for direct ORM writes.
         self.intelligence._save_assistant_message(

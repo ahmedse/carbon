@@ -38,7 +38,7 @@ verified, non-duplicated work.
 | **Roles** | `roles/*` | WHO does the work + their limits |
 | **Rules** | `shared/base-rules.md` | HOW everyone must behave |
 | **Patterns** | `shared/design-patterns.md` | HOW we compose objects (14/23 GoF) |
-| **Contracts** | `shared/{api-contract,security,data-layer,config,design-system,logging,testing,git-workflow,qa-framework}.md` | The RIGHT way per concern |
+| **Contracts** | `shared/{api-contract,security,data-layer,config,design-system,frontend-ready,logging,testing,git-workflow,qa-framework}.md` | The RIGHT way per concern |
 | **Registry** | `registry/*` (generated) | WHAT already exists (anti-duplication) |
 | **Decisions** | `decisions/*` | WHY it's built this way (ADRs) |
 | **Troubleshooting** | `troubleshooting/*` | Known bugs + incident runbook |

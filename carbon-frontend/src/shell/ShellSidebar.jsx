@@ -53,6 +53,7 @@ import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import SchemaIcon from '@mui/icons-material/Schema';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import SearchIcon from '@mui/icons-material/Search';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
@@ -192,6 +193,7 @@ function getSidebarItems(studioId) {
         { type: 'group', label: 'Observability' },
         { label: 'Monitoring', path: '/admin/ai/monitoring', icon: MonitorHeartIcon, role: 'admin' },
         { label: 'Output Quality', path: '/admin/ai/output-quality', icon: TrendingDownIcon, role: 'admin' },
+        { label: 'Watches', path: '/admin/ai/watches', icon: NotificationsActiveIcon, role: 'admin' },
         { label: 'Audit Trail', path: '/admin/ai/audit', icon: HistoryIcon, role: 'admin' },
         { label: 'Run Timeline', path: '/admin/ai/runs', icon: TimelineIcon, role: 'admin' },
         { label: 'Logs', path: '/admin/ai/logs', icon: ArticleIcon, role: 'admin' },

@@ -96,6 +96,8 @@ urlpatterns = [
     path(f'{api_prefix}/ai/pulse/', include('ai.ops_urls')),
     path(f'{api_prefix}/ai/insights/', include('ai.insights_urls')),
     path(f'{api_prefix}/ai/operations/', include('ai.progress_urls')),
+    path(f'{api_prefix}/ai/audit/', include('ai.audit_urls')),
+    path(f'{api_prefix}/ai/watches/', include('ai.watches_urls')),
     path(f'{api_prefix}/', include('evidence.urls')),
 ]
 

@@ -258,7 +258,13 @@ async def _run_preference_learning():
 async def _run_proactive_eval():
     """Evaluate proactive triggers — detect noteworthy conditions."""
     from ai.engine.proactive.loop import run_proactive_evaluation
-    await _tracked("proactive_eval", lambda: _for_each_instance(run_proactive_evaluation))
+    from ai.engine.proactive.user_watches import run_user_watches
+
+    async def _both(db, instance):
+        await run_proactive_evaluation(db, instance)
+        await run_user_watches(db, instance)
+
+    await _tracked("proactive_eval", lambda: _for_each_instance(_both))
 
 
 # ── PR-14: Distillation / promotion / decay ──────────────────────────────
