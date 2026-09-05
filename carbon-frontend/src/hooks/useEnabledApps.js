@@ -54,7 +54,9 @@ export function useEnabledApps() {
       }
     }).catch((err) => {
       if (!cancelled) {
-        // On error, fall back to showing all apps
+        // On error, keep the app list unknown → fail-closed (hide domain apps).
+        // Never fall back to showing all apps: on a multi-brand instance that
+        // would leak other brands' domain apps (ADR-0015).
         cachedPromise = null;
         setError(err.message);
         setLoading(false);
@@ -64,9 +66,14 @@ export function useEnabledApps() {
     return () => { cancelled = true; };
   }, []);
 
-  /** Returns true if an app_id is enabled (defaults to true if not loaded yet). */
+  /**
+   * Returns true if an app_id is enabled.
+   * FAIL-CLOSED: while the brand-scoped app list is still loading (or if the
+   * fetch failed), returns false so unrelated domain apps are hidden — never
+   * flashed — on a per-brand instance (ADR-0015).
+   */
   const isAppEnabled = (appId) => {
-    if (!cachedApps) return true; // not loaded yet → show all
+    if (!cachedApps) return false; // not loaded yet → hide (fail-closed)
     const config = cachedApps.find((a) => a.app_id === appId);
     // Apps omitted by the brand-scoped endpoint are not installed for this
     // instance — hide them instead of defaulting to enabled.
