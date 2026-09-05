@@ -57,7 +57,8 @@ import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import SearchIcon from '@mui/icons-material/Search';
 import { useAuth } from '../auth/AuthContext';
 import { APP_REGISTRY } from '../apps/registry';
-import { can } from '../authz';
+import { can, hasAppAccess } from '../authz';
+import { useEnabledApps } from '../hooks/useEnabledApps';
 import { MENU_ITEM_CAPABILITIES } from '../capabilities';
 import { useTranslation } from 'react-i18next';
 import { shellLabel, STUDIO_TITLE_KEYS } from '../i18n/shellLabels';
@@ -103,7 +104,7 @@ const PEOPLE_ITEM_ICONS = {
 };
 
 // Define sidebar content per studio
-function getSidebarItems(studioId) {
+function getSidebarItems(studioId, helpApps = []) {
   switch (studioId) {
     case 'home':
       return [
@@ -209,6 +210,17 @@ function getSidebarItems(studioId) {
       return [
         { label: 'Documentation', path: '/help', icon: DashboardIcon },
         { label: 'Feedback', path: '/feedback', icon: AssessmentIcon },
+        ...(helpApps.length > 0
+          ? [
+              { type: 'divider' },
+              { type: 'group', label: 'App Help' },
+              ...helpApps.map(app => ({
+                label: `${app.name} Help`,
+                path: `/help/${app.id}`,
+                icon: MenuBookIcon,
+              })),
+            ]
+          : []),
       ];
     
     case 'apps':
@@ -312,6 +324,7 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
   const { t } = useTranslation('shell');
   const { currentPerspective: _currentPerspective, availablePerspectives, isGlobalAdminFlag, userCapabilities, context, user } = useAuth();
   const location = useLocation();
+  const { isAppEnabled } = useEnabledApps();
 
   // Build unified auth context for can() calls
   const authCtx = useMemo(() => ({
@@ -321,8 +334,19 @@ export function ShellSidebar({ activeStudio, onNavigate, onCollapse }) {
     modules: context?.modules || [],
   }), [availablePerspectives, isGlobalAdminFlag, userCapabilities, context]);
 
+  // Per-app help links (Help studio) — only for apps the admin enabled AND the user can access.
+  const helpApps = useMemo(() => {
+    if (activeStudio !== 'help') return [];
+    return APP_REGISTRY
+      .filter(m =>
+        isAppEnabled(m.id) &&
+        hasAppAccess(m.id, user, { perspectives: availablePerspectives, capabilities: userCapabilities, modules: context?.modules })
+      )
+      .map(m => ({ id: m.id, name: m.name }));
+  }, [activeStudio, isAppEnabled, user, availablePerspectives, userCapabilities, context]);
+
   // Filter items based on capability-based access (CBAC)
-  let items = getSidebarItems(activeStudio);
+  let items = getSidebarItems(activeStudio, helpApps);
   const titleKey = STUDIO_TITLE_KEYS[activeStudio];
   const title = titleKey ? t(titleKey) : getStudioTitle(activeStudio);
 

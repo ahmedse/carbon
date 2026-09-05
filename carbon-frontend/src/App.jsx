@@ -38,6 +38,7 @@ import CatalogRoute from "./components/CatalogRoute";
 const DataEntryPage = React.lazy(() => import("./pages/DataEntryPage"));
 const DataHubHome = React.lazy(() => import("./pages/DataHubHome"));
 const Help = React.lazy(() => import("./pages/Help"));
+const AppHelp = React.lazy(() => import("./pages/AppHelp"));
 const Feedback = React.lazy(() => import("./pages/Feedback"));
 const ModuleLandingPage = React.lazy(() => import("./pages/ModuleLandingPage"));
 const ScopeInfoPage = React.lazy(() => import("./pages/ScopeInfoPage"));
@@ -214,6 +215,7 @@ export default function App() {
                   <Route element={<RequireContext />}>
                     <Route element={<RootLayout />}>
                 <Route path="help" element={<Help />} />
+                <Route path="help/:appId" element={<AppHelp />} />
                 <Route path="feedback" element={<Feedback />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 {/* Settings sub-nav aliases — sidebar links Profile/Preferences to the tabbed Settings page. RULE_22. */}
