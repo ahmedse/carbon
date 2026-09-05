@@ -68,7 +68,9 @@ export function useEnabledApps() {
   const isAppEnabled = (appId) => {
     if (!cachedApps) return true; // not loaded yet → show all
     const config = cachedApps.find((a) => a.app_id === appId);
-    return config ? config.is_enabled : true; // unknown apps are enabled by default
+    // Apps omitted by the brand-scoped endpoint are not installed for this
+    // instance — hide them instead of defaulting to enabled.
+    return config ? config.is_enabled : false;
   };
 
   return { apps, loading, error, isAppEnabled };
