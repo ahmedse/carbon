@@ -79,9 +79,15 @@ DATASCHEMA_UPLOAD_PATH = get_env("DATASCHEMA_UPLOAD_PATH", "dataschema_uploads/"
 # ── Platform App Registry (bootstrap_platform syncs these to DB) ──
 # Mirrors frontend manifests in carbon-frontend/src/apps/*/manifest.js
 # Used by AppManifestService.load_manifests() for runtime resolution.
+#
+# kind: "domain" = per-instance business app (visibility gated by the brand's
+#        BRAND_APP_PRESETS below — only the brand's own apps appear).
+#        "core" = platform capability (catalog/mdm/dq/connections/…), always
+#        available in every instance and gated separately by RBAC.
 APP_REGISTRY = [
     {
         "id": "carbon",
+        "kind": "domain",
         "name": "Carbon Footprint",
         "version": "1.0.0",
         "description": "GHG emissions tracking, reporting, and analysis",
@@ -96,6 +102,7 @@ APP_REGISTRY = [
     },
     {
         "id": "catalog",
+        "kind": "core",
         "name": "Data Catalog",
         "version": "1.0.0",
         "description": "Data product catalog, metadata, governance policies",
@@ -106,6 +113,7 @@ APP_REGISTRY = [
     },
     {
         "id": "mdm",
+        "kind": "core",
         "name": "Master Data Management",
         "version": "1.0.0",
         "description": "Org units, reference data, hierarchy management",
@@ -113,6 +121,7 @@ APP_REGISTRY = [
     },
     {
         "id": "dq",
+        "kind": "core",
         "name": "Data Quality",
         "version": "1.0.0",
         "description": "Data quality rules, profiling, dashboards",
@@ -123,6 +132,7 @@ APP_REGISTRY = [
     },
     {
         "id": "connections",
+        "kind": "core",
         "name": "Connections",
         "version": "1.0.0",
         "description": "External data sources and connection management",
@@ -130,6 +140,7 @@ APP_REGISTRY = [
     },
     {
         "id": "importexport",
+        "kind": "core",
         "name": "Import / Export",
         "version": "1.0.0",
         "description": "Data import and export job management",
@@ -137,6 +148,7 @@ APP_REGISTRY = [
     },
     {
         "id": "dataschema",
+        "kind": "core",
         "name": "Data Schema",
         "version": "1.0.0",
         "description": "Data table and field schema management",
@@ -144,6 +156,7 @@ APP_REGISTRY = [
     },
     {
         "id": "stub",
+        "kind": "domain",
         "name": "Isolation Stub",
         "version": "0.0.1",
         "description": "Placeholder app proving per-instance app isolation (disabled by default)",
@@ -151,6 +164,7 @@ APP_REGISTRY = [
     },
     {
         "id": "people",
+        "kind": "domain",
         "name": "People & Payroll",
         "version": "0.1.0",
         "description": "HRMS wedge: employee master, payroll, leave, EOSI, GOSI, WPS (Nibras)",
@@ -158,6 +172,7 @@ APP_REGISTRY = [
     },
     {
         "id": "healthy",
+        "kind": "domain",
         "name": "Healthy Foods Factory",
         "version": "1.0.0",
         "description": "Legacy ERP analytics: rep health, load-out demand, AR aging",
@@ -475,36 +490,26 @@ PLATFORM_TITLE = f"{INSTANCE_NAME} · {PLATFORM_NAME}" if INSTANCE_NAME else PLA
 # Frontend counterpart: VITE_BRAND → src/brands/*.js. Keep ids in sync.
 DJANGO_BRAND = get_env("DJANGO_BRAND", "aastmt")
 
-# Per-brand domain-app enablement preset. Applied by
-# accounts/management/commands/bootstrap_platform.py when seeding
-# PlatformAppConfig. Core apps (catalog/mdm/dq/connections/importexport/
-# dataschema) stay enabled in every instance — they are platform capabilities
-# gated separately by RBAC. The enabled set is intentionally OPEN: add future
-# app ids per brand as they land (e.g. tectona grows beyond 'healthy').
+# Per-brand domain-app preset. The KEYS of each brand's entry declare which
+# domain apps are INSTALLED for that brand (only these appear in the admin
+# "Registered Apps" page and home portal); the boolean value is their default
+# enablement. Applied by accounts/management/commands/bootstrap_platform.py
+# when seeding PlatformAppConfig. Core apps (catalog/mdm/dq/connections/
+# importexport/dataschema) stay enabled in every instance — they are platform
+# capabilities gated separately by RBAC, so they are NOT listed here. The set
+# is intentionally OPEN: add future app ids per brand as they land.
 BRAND_APP_PRESETS = {
     "aastmt": {
         "carbon": True,
-        "people": False,
-        "healthy": False,
-        "stub": False,
     },
     "nibras": {
-        "carbon": False,
         "people": True,
-        "healthy": False,
-        "stub": False,
     },
     "medos": {
-        "carbon": False,
-        "people": False,
-        "healthy": False,
-        "stub": False,
+        # Medical/clinical instance — no first-party domain apps yet.
     },
     "tectona": {
-        "carbon": False,
-        "people": False,
         "healthy": True,   # + future first-party AI apps (open set)
-        "stub": False,
     },
 }
 

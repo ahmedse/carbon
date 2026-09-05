@@ -5,6 +5,7 @@ from rest_framework import status, viewsets
 from rest_framework.permissions import BasePermission, IsAuthenticated, IsAdminUser
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
+from django.conf import settings
 from django.contrib.auth.models import Group
 from drf_spectacular.utils import extend_schema
 from .models import User, ScopedRole, RoleAssignmentAuditLog, PlatformAppConfig
@@ -548,19 +549,31 @@ def platform_apps(request, app_id=None):
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
 
-    # GET: return all apps merged with DB config (auto-creates missing records)
+    # GET: return this brand's apps merged with DB config (auto-creates missing records).
+    # Domain apps are filtered to the current brand's installed set (BRAND_APP_PRESETS);
+    # core apps always appear. This keeps carbon/healthy/stub out of a Nibras instance.
+    brand = getattr(settings, "DJANGO_BRAND", "aastmt")
+    brand_domain_apps = set(
+        getattr(settings, "BRAND_APP_PRESETS", {}).get(brand, {}).keys()
+    )
+
     manifests = AppManifestService.load_manifests()
     configs = {c.app_id: c for c in PlatformAppConfig.objects.all()}
 
     result = []
     for manifest in manifests:
         app_id = manifest['id']
+        kind = manifest.get('kind', 'core')
+        if kind == 'domain' and app_id not in brand_domain_apps:
+            continue  # not installed for this brand — omit entirely
+
         config = configs.get(app_id)
         if not config:
             config = PlatformAppConfig.objects.create(app_id=app_id, is_enabled=True)
         result.append({
             'id': config.id,
             'app_id': app_id,
+            'kind': kind,
             'name': manifest.get('name', app_id),
             'version': manifest.get('version', '1.0.0'),
             'is_enabled': config.is_enabled,

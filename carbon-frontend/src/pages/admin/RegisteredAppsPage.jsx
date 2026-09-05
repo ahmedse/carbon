@@ -46,46 +46,67 @@ export default function RegisteredAppsPage() {
   if (loading) return <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress /></Box>;
   if (error) return <Box sx={{ p: 3 }}><Alert severity="error">Failed to load apps: {error}</Alert></Box>;
 
+  const domainApps = apps.filter((a) => a.kind === 'domain');
+  const coreApps = apps.filter((a) => a.kind !== 'domain');
+
+  const renderCard = (app) => (
+    <Grid size={{ xs: 12, md: 6, lg: 4 }} key={app.app_id}>
+      <Card sx={{ borderTop: 4, borderColor: app.is_enabled ? 'success.dark' : 'text.disabled' }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+            <Typography variant='h6'>{app.name}</Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={app.is_enabled}
+                  onChange={() => handleToggle(app.app_id, app.is_enabled)}
+                  color="success"
+                />
+              }
+              label={app.is_enabled ? 'Enabled' : 'Disabled'}
+              labelPlacement="start"
+            />
+          </Box>
+          <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>
+            {app.description || 'No description'}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Chip label={`v${app.version}`} size='small' />
+            <Chip label={app.app_id} size='small' variant='outlined' />
+            {(app.roles || []).map(r => (
+              <Chip key={r.key} label={r.label} size='small' variant='outlined' color='primary' />
+            ))}
+          </Box>
+        </CardContent>
+      </Card>
+    </Grid>
+  );
+
+  const renderSection = (title, subtitle, list) => (
+    <Box sx={{ mb: 4 }}>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 0.5 }}>
+        <Typography variant='h6' fontWeight={700}>{title}</Typography>
+        <Chip label={list.length} size='small' variant='outlined' />
+      </Box>
+      <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>{subtitle}</Typography>
+      {list.length === 0 ? (
+        <Alert severity="info" sx={{ maxWidth: 520 }}>
+          None installed for this instance.
+        </Alert>
+      ) : (
+        <Grid container spacing={3}>{list.map(renderCard)}</Grid>
+      )}
+    </Box>
+  );
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant='h5' fontWeight={700} gutterBottom>Registered Apps</Typography>
       <Alert severity='info' sx={{ mb: 3 }}>
-        Enable or disable domain apps for the platform. Disabled apps are hidden from the home portal and activity bar for all users.
+        Domain apps are this instance&apos;s business applications; core apps are shared platform capabilities. Disabled apps are hidden from the home portal and activity bar for all users.
       </Alert>
-      <Grid container spacing={3}>
-        {apps.map((app) => (
-          <Grid size={{ xs: 12, md: 6, lg: 4 }} key={app.app_id}>
-            <Card sx={{ borderTop: 4, borderColor: app.is_enabled ? 'success.dark' : 'text.disabled' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                  <Typography variant='h6'>{app.name}</Typography>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={app.is_enabled}
-                        onChange={() => handleToggle(app.app_id, app.is_enabled)}
-                        color="success"
-                      />
-                    }
-                    label={app.is_enabled ? 'Enabled' : 'Disabled'}
-                    labelPlacement="start"
-                  />
-                </Box>
-                <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>
-                  {app.description || 'No description'}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  <Chip label={`v${app.version}`} size='small' />
-                  <Chip label={app.app_id} size='small' variant='outlined' />
-                  {(app.roles || []).map(r => (
-                    <Chip key={r.key} label={r.label} size='small' variant='outlined' color='primary' />
-                  ))}
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
+      {renderSection('Domain Apps', 'Business applications enabled for this instance.', domainApps)}
+      {renderSection('Core Platform Apps', 'Shared platform capabilities (catalog, MDM, DQ, connections, import/export, schema).', coreApps)}
       {apps.length === 0 && (
         <Alert severity="warning">No apps registered. Add manifests to the APP_REGISTRY.</Alert>
       )}
