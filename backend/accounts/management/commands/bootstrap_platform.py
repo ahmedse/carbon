@@ -22,6 +22,8 @@ from accounts.constants import (
     VIEWERS_GROUP, AUDITORS_GROUP, CARBON_DATA_OWNERS_GROUP,
     CARBON_ANALYSTS_GROUP, CARBON_LEAD_GROUP, CATALOG_LEAD_GROUP,
     MDM_LEAD_GROUP, DQ_LEAD_GROUP, DATAHUB_LEAD_GROUP, TURNKEY_LEAD_GROUP,
+    PEOPLE_LEAD_GROUP, PEOPLE_DATA_OWNERS_GROUP, PEOPLE_ANALYSTS_GROUP,
+    GROUP_BRAND_SCOPE,
     PROTECTED_GROUPS,
     DOMAIN_LEAD_GROUPS,
 )
@@ -72,6 +74,21 @@ GROUP_DEFS = {
         "app",
         "TurnKey domain lead — manage model links, predictions, and drift alerts within org scope",
         True, True,
+    ),
+    PEOPLE_LEAD_GROUP: (
+        "app",
+        "People domain lead — manage employees, compliance rules, and payroll runs within org scope",
+        True, True,
+    ),
+    PEOPLE_DATA_OWNERS_GROUP: (
+        "app",
+        "People data owners — create and update employee, position, and payroll records for assigned org units",
+        False, True,
+    ),
+    PEOPLE_ANALYSTS_GROUP: (
+        "app",
+        "People analysts — cross-org read-only visibility into HR and payroll data",
+        False, False,
     ),
 
     # ── Data roles ──
@@ -145,10 +162,27 @@ class Command(BaseCommand):
     # ── Groups + Metadata ────────────────────────────────────────────────────
 
     def _bootstrap_groups(self):
+        brand = getattr(settings, "DJANGO_BRAND", "aastmt")
         created = 0
         updated = 0
+        removed = 0
 
+        # 1) Self-clean: drop groups brand-scoped to OTHER instances. This lets a
+        #    Nibras DB that previously bootstrapped carbon/turnkey/datahub groups
+        #    shed them on the next deploy (idempotent, safe to re-run).
+        for group_name, brands in GROUP_BRAND_SCOPE.items():
+            if brands is not None and brand not in brands:
+                qs = Group.objects.filter(name=group_name)
+                if qs.exists():
+                    qs.delete()  # cascades ScopedRole + GroupMetadata
+                    removed += 1
+
+        # 2) Create/update the groups that belong to this brand.
         for group_name, (category, description, is_protected, is_scoped) in GROUP_DEFS.items():
+            brands = GROUP_BRAND_SCOPE.get(group_name)
+            if brands is not None and brand not in brands:
+                continue  # not installed for this brand
+
             group, was_created = Group.objects.get_or_create(name=group_name)
 
             meta, _ = GroupMetadata.objects.update_or_create(
@@ -169,13 +203,13 @@ class Command(BaseCommand):
                 updated += 1
 
         self.stdout.write(
-            f"  Groups: {created} created, {updated} up-to-date "
-            f"({len(GROUP_DEFS)} total)"
+            f"  Groups: {created} created, {updated} up-to-date, {removed} removed "
+            f"(brand={brand})"
         )
 
     def _app_id_for_group(self, group_name: str) -> str:
         """Derive app_id from group name: carbon_lead → carbon, catalog_lead → catalog."""
-        for prefix in ("carbon", "catalog", "mdm", "dq", "connections", "importexport", "dataschema"):
+        for prefix in ("carbon", "catalog", "mdm", "dq", "connections", "importexport", "dataschema", "people"):
             if group_name.startswith(prefix):
                 return prefix
         if group_name in (ADMIN_GROUP, ADMINS_GROUP):

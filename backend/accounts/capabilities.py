@@ -830,6 +830,17 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
         TURNKEY_MANAGE.key,
     },
 
+    # ── People & Payroll (Nibras) ──
+    "people_lead": {
+        PEOPLE_MANAGE.key,
+    },
+    "people_data_owners_group": {
+        PEOPLE_MANAGE.key,
+    },
+    "people_analysts_group": {
+        PEOPLE_VIEW.key,
+    },
+
     # ── Data Owners (org-scoped write) ──
     "dataowners_group": {
         CARBON_ENTER_DATA.key,

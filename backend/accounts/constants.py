@@ -11,6 +11,8 @@ VIEWERS_GROUP = "viewers_group"
 AUDITORS_GROUP = "auditors_group"
 CARBON_DATA_OWNERS_GROUP = "carbon_data_owners_group"
 CARBON_ANALYSTS_GROUP = "carbon_analysts_group"
+PEOPLE_DATA_OWNERS_GROUP = "people_data_owners_group"
+PEOPLE_ANALYSTS_GROUP = "people_analysts_group"
 
 # Alias for backward compatibility — "admin" is the bare Django group
 ADMIN_GROUP = "admin"
@@ -25,8 +27,9 @@ MDM_LEAD_GROUP = "mdm_lead"
 DQ_LEAD_GROUP = "dq_lead"
 DATAHUB_LEAD_GROUP = "datahub_lead"
 TURNKEY_LEAD_GROUP = "turnkey_lead"
+PEOPLE_LEAD_GROUP = "people_lead"
 
-DOMAIN_LEAD_GROUPS = {CARBON_LEAD_GROUP, CATALOG_LEAD_GROUP, MDM_LEAD_GROUP, DQ_LEAD_GROUP, DATAHUB_LEAD_GROUP, TURNKEY_LEAD_GROUP}
+DOMAIN_LEAD_GROUPS = {CARBON_LEAD_GROUP, CATALOG_LEAD_GROUP, MDM_LEAD_GROUP, DQ_LEAD_GROUP, DATAHUB_LEAD_GROUP, TURNKEY_LEAD_GROUP, PEOPLE_LEAD_GROUP}
 
 # ── Role classification sets ───────────────────────────────────────
 # Roles that confer full platform administration (global only).
@@ -40,6 +43,8 @@ VISIBILITY_ROLES = {
     AUDITORS_GROUP,
     VIEWERS_GROUP,
     ANALYSTS_GROUP,
+    PEOPLE_DATA_OWNERS_GROUP,
+    PEOPLE_ANALYSTS_GROUP,
     *DOMAIN_LEAD_GROUPS,
 }
 
@@ -47,7 +52,7 @@ VISIBILITY_ROLES = {
 # Note: a user who holds BOTH a read-only role AND a write role (e.g. dataowners_group)
 # is NOT blocked; this set is used to deny write when the user's ONLY qualifying role
 # is read-only.
-READ_ONLY_ROLES = {VIEWERS_GROUP, ANALYSTS_GROUP}
+READ_ONLY_ROLES = {VIEWERS_GROUP, ANALYSTS_GROUP, PEOPLE_ANALYSTS_GROUP}
 
 # ── Protected groups (cannot be deleted via the GroupViewSet) ──────
 PROTECTED_GROUPS = {
@@ -61,6 +66,9 @@ PROTECTED_GROUPS = {
     DQ_LEAD_GROUP,
     DATAHUB_LEAD_GROUP,
     TURNKEY_LEAD_GROUP,
+    PEOPLE_LEAD_GROUP,
+    PEOPLE_DATA_OWNERS_GROUP,
+    PEOPLE_ANALYSTS_GROUP,
 }
 
 # ── Convenience: all canonical group names as a flat set ───────────
@@ -72,5 +80,22 @@ ALL_CANONICAL_GROUPS = {
     AUDITORS_GROUP,
     CARBON_DATA_OWNERS_GROUP,
     CARBON_ANALYSTS_GROUP,
+    PEOPLE_DATA_OWNERS_GROUP,
+    PEOPLE_ANALYSTS_GROUP,
     *DOMAIN_LEAD_GROUPS,
+}
+
+# ── Brand-scoped group installation (ADR-0015 multi-instance) ──────
+# Which brands each group is installed for. A group NOT listed here (or None)
+# is installed in EVERY brand. Domain-specific groups are scoped to their own
+# brand so a Nibras instance never boots carbon/turnkey/datahub groups.
+GROUP_BRAND_SCOPE = {
+    CARBON_LEAD_GROUP: {"aastmt"},
+    CARBON_DATA_OWNERS_GROUP: {"aastmt"},
+    CARBON_ANALYSTS_GROUP: {"aastmt"},
+    DATAHUB_LEAD_GROUP: {"aastmt"},
+    TURNKEY_LEAD_GROUP: {"aastmt"},
+    PEOPLE_LEAD_GROUP: {"nibras"},
+    PEOPLE_DATA_OWNERS_GROUP: {"nibras"},
+    PEOPLE_ANALYSTS_GROUP: {"nibras"},
 }
