@@ -93,3 +93,25 @@ class TestToolResultSummary:
         first = _build_tool_result_summary(tools)
         second = _build_tool_result_summary(tools)
         assert first == second
+
+    def test_no_match_result_renders_clarification(self):
+        summary = _build_tool_result_summary([
+            {"tool_name": "get_weather",
+             "result": {"status": "no_match", "reason": "unresolved_location",
+                        "hint": "north coast egypt", "candidates": []}},
+        ])
+        assert "I couldn't resolve" in summary
+        assert "north coast egypt" in summary
+        # The tri-state dict must never be dumped as key=value prose.
+        assert "status" not in summary
+        assert "no_match" not in summary
+
+    def test_no_match_json_envelope_renders_clarification(self):
+        result_str = ('{"status_code": 200, "data": {"status": "no_match", '
+                      '"reason": "unresolved_location", "hint": "north coast"}}')
+        summary = _build_tool_result_summary([
+            {"tool_name": "get_weather", "result": result_str},
+        ])
+        assert "I couldn't resolve" in summary
+        assert "north coast" in summary
+        assert "no_match" not in summary

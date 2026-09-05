@@ -4,6 +4,38 @@ AI Workspace serializers — request/response shapes for the workspace API.
 
 from rest_framework import serializers
 
+from ai.models.core import WorkObjective
+
+
+class WorkObjectiveSerializer(serializers.ModelSerializer):
+    """Serializes a durable work objective (Pulse v2 Phase 8).
+
+    Read-only for everything except ``status`` — the panel may mark an
+    objective complete but never edit its content.
+    """
+
+    class Meta:
+        model = WorkObjective
+        fields = [
+            "id",
+            "title",
+            "description",
+            "status",
+            "latest_summary",
+            "pending_question",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "title",
+            "description",
+            "latest_summary",
+            "pending_question",
+            "created_at",
+            "updated_at",
+        ]
+
 
 class CreateConversationSerializer(serializers.Serializer):
     # Manifest-driven: accepted values are the core types plus every task type

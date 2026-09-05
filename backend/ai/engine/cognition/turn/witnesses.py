@@ -110,3 +110,6 @@ class TurnLedger:
     # C1 — adaptive reasoning lane: records any escalation to the reason model.
     # {trigger, from_model, to_model, verdict_before, verdict_after}
     reason_escalation: dict | None = None
+    # Pulse v2 Phase 7 — post-result verification outcome.
+    verification_passed: bool | None = None
+    verification_unsupported: list = field(default_factory=list)

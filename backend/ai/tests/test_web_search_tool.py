@@ -234,6 +234,32 @@ def test_weather_location_extraction():
     assert _extract_weather_location("how hot is it in New York?") == "New York"
     assert _extract_weather_location("weather in Tokyo") == "Tokyo"
     assert _extract_weather_location("forecast for London") == "London"
+    assert _extract_weather_location("what's the weather in north coast egypt today?") == "north coast egypt"
+
+
+def _weather_region_router(url, params):
+    if "geocoding-api.open-meteo.com" in url:
+        # A region like "north coast egypt" resolves to NO place → empty.
+        assert params.get("name") == "north coast egypt", params
+        return _Resp({"results": []})
+    # Any other endpoint (forecast, wikipedia, duckduckgo) means fall-through —
+    # which must NOT happen for a weather no_match.
+    raise AssertionError(f"Fall-through detected (should be no_match): {url} {params}")
+
+
+@pytest.mark.asyncio
+async def test_weather_region_returns_no_match():
+    with patch(
+        "ai.plugins.web_research.httpx.AsyncClient",
+        new=_fake_client_class(_weather_region_router),
+    ):
+        result = await WebResearch().execute(
+            {"query": "what's the weather in north coast egypt today?"}, ctx=None
+        )
+
+    assert result["status"] == "no_match"
+    assert result["hint"] == "north coast egypt"
+    assert "results" not in result  # no Wikipedia/DDG fall-through
 
 
 def test_weather_query_detection_ignores_non_weather():
@@ -242,3 +268,252 @@ def test_weather_query_detection_ignores_non_weather():
     assert _is_weather_query("what's the weather in Cairo today?") is True
     assert _is_weather_query("explain the GHG Protocol") is False
     assert _is_weather_query("what is 2+2?") is False
+
+
+# ── Weather follow-through (WEATHER-FT) ────────────────────────────────────
+
+def test_pending_weather_rewrite_triggers_weather_query():
+    """A bare location reply ('El Alamein, Egypt') after a pending_weather
+    focus becomes 'weather in El Alamein, Egypt', which passes _is_weather_query."""
+    from ai.plugins.web_research import _is_weather_query
+
+    bare_location = "El Alamein, Egypt"
+    assert not _is_weather_query(bare_location), "Bare location must NOT match before rewrite"
+
+    rewritten = f"weather in {bare_location}"
+    assert _is_weather_query(rewritten), "Rewritten query must match _is_weather_query"
+
+
+def test_normalize_weather_location_corrects_typo():
+    """The location normalizer corrects a misspelled place into a
+    geocoder-ready 'City, Country' via the LLM."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock
+
+    from ai.engine.cognition.turn.runner import _normalize_weather_location
+
+    with patch(
+        "ai.engine.llm.router.route_chat",
+        new=AsyncMock(return_value={"content": "El Alamein, Egypt", "input_tokens": 10, "output_tokens": 4, "model": "test"}),
+    ):
+        out = asyncio.run(
+            _normalize_weather_location(
+                instance_id="inst",
+                conversation_id="conv",
+                original_question="weather in northcost egypt?",
+                user_reply="alamien",
+            )
+        )
+    assert out == "El Alamein, Egypt"
+
+
+def test_normalize_weather_location_uses_conversation_context():
+    """The normalizer threads recent turns (the assistant's clarification with
+    its offered candidates) into the LLM prompt so a typo'd reply resolves from
+    context, not a blind guess."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock
+
+    from ai.engine.cognition.turn.runner import _normalize_weather_location
+
+    captured = {}
+
+    async def _fake_route_chat(**kwargs):
+        captured["messages"] = kwargs.get("messages")
+        return {"content": "El Alamein, Egypt", "input_tokens": 10, "output_tokens": 4, "model": "test"}
+
+    history = [
+        {"role": "user", "content": "tell me abt the todays weather in northcost egypt?"},
+        {"role": "assistant", "content": "Could you clarify which location? For example: El Alamein, Marsa Matruh, Alexandria"},
+    ]
+
+    with patch("ai.engine.llm.router.route_chat", new=AsyncMock(side_effect=_fake_route_chat)):
+        out = asyncio.run(
+            _normalize_weather_location(
+                instance_id="inst",
+                conversation_id="conv",
+                original_question="tell me abt the todays weather in northcost egypt?",
+                user_reply="alamien",
+                conversation_history=history,
+            )
+        )
+
+    assert out == "El Alamein, Egypt"
+    user_prompt = captured["messages"][-1]["content"]
+    assert "El Alamein" in user_prompt
+    assert "Marsa Matruh" in user_prompt
+    assert "alamien" in user_prompt
+
+
+def test_normalize_weather_location_falls_back_on_error():
+    """When the LLM call fails, normalization returns the raw reply unchanged
+    (never blocks the turn)."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock
+
+    from ai.engine.cognition.turn.runner import _normalize_weather_location
+
+    with patch(
+        "ai.engine.llm.router.route_chat",
+        new=AsyncMock(side_effect=RuntimeError("llm down")),
+    ):
+        out = asyncio.run(
+            _normalize_weather_location(
+                instance_id="inst",
+                conversation_id="conv",
+                original_question="weather?",
+                user_reply="Cairo",
+            )
+        )
+    assert out == "Cairo"
+
+
+def test_normalize_weather_location_rejects_sentence_like_output():
+    """A sentence-like LLM response (>60 chars) is rejected → raw reply kept."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock
+
+    from ai.engine.cognition.turn.runner import _normalize_weather_location
+
+    long_junk = "I think you probably mean a city somewhere on the north coast of Egypt near"
+    with patch(
+        "ai.engine.llm.router.route_chat",
+        new=AsyncMock(return_value={"content": long_junk, "input_tokens": 10, "output_tokens": 4, "model": "test"}),
+    ):
+        out = asyncio.run(
+            _normalize_weather_location(
+                instance_id="inst",
+                conversation_id="conv",
+                original_question="weather?",
+                user_reply="alamien",
+            )
+        )
+    assert out == "alamien"
+
+
+def test_normalize_weather_question_resolves_full_question_to_place():
+    """A full weather question (greeting + typo + region + trailing suitability
+    sub-question) resolves to a single geocoder-ready 'City, Country'."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock
+
+    from ai.engine.cognition.turn.runner import _normalize_weather_question
+
+    with patch(
+        "ai.engine.llm.router.route_chat",
+        new=AsyncMock(return_value={"content": "El Alamein, Egypt", "input_tokens": 10, "output_tokens": 4, "model": "test"}),
+    ):
+        out = asyncio.run(
+            _normalize_weather_question(
+                instance_id="inst",
+                conversation_id="conv",
+                question="hi, what is the weather in north cost egypt toay, is it suitable for beach swiming ?",
+            )
+        )
+    assert out == "El Alamein, Egypt"
+
+
+def test_normalize_weather_question_falls_back_on_error():
+    """When the LLM call fails, normalization falls back to the regex extractor
+    (never blocks the turn)."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock
+
+    from ai.engine.cognition.turn.runner import _normalize_weather_question
+
+    with patch(
+        "ai.engine.llm.router.route_chat",
+        new=AsyncMock(side_effect=RuntimeError("llm down")),
+    ):
+        out = asyncio.run(
+            _normalize_weather_question(
+                instance_id="inst",
+                conversation_id="conv",
+                question="weather in Cairo today?",
+            )
+        )
+    # The regex fallback strips 'weather in' + 'today' → 'Cairo'.
+    assert "Cairo" in out
+
+
+def test_synthesize_tool_results_marks_clarification_and_hints():
+    """_synthesize_tool_results returns is_clarification + clarification_hints
+    when no_match results are present and no usable results exist."""
+    import asyncio
+    import json
+    from unittest.mock import patch, AsyncMock
+
+    from ai.engine.cognition.turn.runner import _synthesize_tool_results
+    from ai.engine.core.resolution import no_match
+
+    nm_result = no_match("unresolved_location", hint="north coast egypt")
+    completed_tools = [
+        {
+            "tool_name": "web_research",
+            "result": json.dumps(nm_result),
+            "error": None,
+            "requires_confirmation": False,
+        }
+    ]
+
+    mock_clarify = {"text": "Which location do you mean?", "tokens": 50, "model": "test"}
+
+    with patch(
+        "ai.engine.cognition.turn.runner._clarify_no_matches",
+        new=AsyncMock(return_value=mock_clarify),
+    ):
+        result = asyncio.run(
+            _synthesize_tool_results(
+                instance_id="inst",
+                conversation_id="conv",
+                user_message="what's the weather on the north coast egypt?",
+                completed_tools=completed_tools,
+                draft_text="",
+                model="test",
+            )
+        )
+
+    assert result is not None
+    assert result["text"] == "Which location do you mean?"
+    assert result.get("is_clarification") is True
+    assert "north coast egypt" in result.get("clarification_hints", [])
+    assert result.get("clarification_user_message") == "what's the weather on the north coast egypt?"
+
+
+def test_synthesize_tool_results_no_clarification_marker_on_usable():
+    """When tool results are usable (no no_match), is_clarification is absent."""
+    import asyncio
+    import json
+    from unittest.mock import patch, AsyncMock
+
+    from ai.engine.cognition.turn.runner import _synthesize_tool_results
+
+    completed_tools = [
+        {
+            "tool_name": "web_research",
+            "result": {"results": [{"title": "Cairo weather", "snippet": "30°C", "url": "http://x.com"}]},
+            "error": None,
+            "requires_confirmation": False,
+        }
+    ]
+
+    mock_synth = {"text": "Cairo is 30°C and sunny.", "tokens": 40, "model": "test"}
+
+    with patch(
+        "ai.engine.llm.router.route_chat",
+        new=AsyncMock(return_value={"content": "Cairo is 30°C and sunny.", "input_tokens": 20, "output_tokens": 20, "model": "test"}),
+    ):
+        result = asyncio.run(
+            _synthesize_tool_results(
+                instance_id="inst",
+                conversation_id="conv",
+                user_message="weather in Cairo",
+                completed_tools=completed_tools,
+                draft_text="",
+                model="test",
+            )
+        )
+
+    # Regardless of synthesis success, is_clarification must NOT be set
+    if result is not None:
+        assert not result.get("is_clarification")

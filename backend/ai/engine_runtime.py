@@ -25,6 +25,8 @@ import types
 import uuid
 from typing import Any
 
+from ai.engine.core.resolution import payload_status
+
 logger = logging.getLogger("carbon.ai.engine_runtime")
 
 # Task types the engine advertises (mirrors the retired Pulse task API).
@@ -191,6 +193,32 @@ async def _run_chat(
                 or response.response_type == "clarification"
             )
 
+        # Phase 5 — conservation of confidence: an emitted answer may never
+        # claim confidence higher than min(inputs). ``min_input_conf`` is the
+        # floor of the RESOLVED tool results' confidence (None = no resolved
+        # numeric input → no constraint); ``answer_conf`` is the draft's
+        # self-reported float. When the draft amplifies input confidence we
+        # cap the surfaced confidence and downgrade the posture — the
+        # "confidence-amplifying-junction detector" (RULE_23, no raw floats).
+        min_input_conf = _min_input_confidence(completed_tools)
+        answer_conf = (
+            float(getattr(_draft, "confidence", None))
+            if _draft is not None and getattr(_draft, "confidence", None) is not None
+            else None
+        )
+        conserved_conf, confidence_violated = _conserved_confidence(
+            answer_conf, min_input_conf
+        )
+        if confidence_violated:
+            logger.warning(
+                "[chat] confidence-amplifying junction: answer %.2f > "
+                "min(inputs) %.2f — capping surfaced confidence",
+                answer_conf,
+                min_input_conf,
+            )
+            confidence_label = _confidence_label(conserved_conf)
+            honest_uncertainty = True
+
         return {
             "status": "completed",
             "task_id": task_id,
@@ -222,6 +250,12 @@ async def _run_chat(
                 # for the frontend confidence indicator + honest-uncertainty state.
                 "confidence_label": confidence_label,
                 "honest_uncertainty": honest_uncertainty,
+                # Phase 5 — floor of the resolved tool inputs' confidence
+                # (None = no resolved numeric input, i.e. no constraint).
+                "min_input_confidence": min_input_conf,
+                # Phase 5 — True when the draft amplified input confidence and
+                # was capped (a confidence-amplifying junction was detected).
+                "confidence_conserved": confidence_violated,
                 # Phase 21-A: surface per-turn usage so the workspace layer
                 # can persist it on the generation at completion (cost is
                 # computed from the ModelCatalog, never here).
@@ -262,6 +296,54 @@ async def _record_truthfulness_gate(db, ledger, anti_flags: list[str]) -> None:
         )
     except Exception as exc:  # pragma: no cover — best-effort observability
         logger.warning("Failed to record truthfulness gate flags: %s", exc)
+
+
+def _min_input_confidence(completed_tools: list[dict]) -> float | None:
+    """Minimum ``confidence`` across RESOLVED tool results, else None.
+
+    Only ``resolved`` results carry a confidence value; ``no_match`` and
+    ``error`` results impose no confidence (they are escalated or reported,
+    never a source of belief). Returns ``None`` when no resolved tool result
+    carries a numeric confidence — i.e. "no constraint", which is DIFFERENT
+    from a constraint of 1.0.
+    """
+    collected: list[float] = []
+    for tr in completed_tools or []:
+        raw = tr.get("result")
+        if payload_status(raw) != "resolved":
+            continue
+        data = raw
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except (TypeError, ValueError):
+                continue
+        if isinstance(data, dict) and "status_code" in data and "data" in data:
+            data = data["data"]
+        if isinstance(data, dict):
+            c = data.get("confidence")
+            if isinstance(c, (int, float)) and not isinstance(c, bool):
+                collected.append(float(c))
+    if not collected:
+        return None
+    return min(collected)
+
+
+def _conserved_confidence(
+    answer_conf: float | None, min_input_conf: float | None
+) -> tuple[float | None, bool]:
+    """Cap an emitted confidence at min(inputs); return (capped, violated).
+
+    ``violated=True`` means the answer was amplifying input confidence and was
+    capped — the caller logs a WARNING and downgrades the surface posture.
+    """
+    if min_input_conf is None:
+        return (answer_conf, False)
+    if answer_conf is None:
+        return (min_input_conf, False)
+    if answer_conf > min_input_conf:
+        return (min_input_conf, True)
+    return (answer_conf, False)
 
 
 def _confidence_label(score: float | None) -> str:

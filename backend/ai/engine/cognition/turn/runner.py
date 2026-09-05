@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timezone
 
 from ai.engine.core.config import get_settings
+from ai.engine.core.resolution import payload_status
 from ai.engine.cognition.turn.witnesses import (
     TurnLedger,
 )
@@ -198,6 +199,237 @@ _DELIVERY_SYNTHESIS = {
 }
 
 
+def _no_match_hints(no_matches: list[dict]) -> list[str]:
+    """Extract unique, non-empty hints from ``no_match`` tool results."""
+    import json as _json
+
+    hints: list[str] = []
+    for tr in no_matches or []:
+        raw = tr.get("result")
+        data = raw
+        if isinstance(data, str):
+            try:
+                data = _json.loads(data)
+            except (TypeError, ValueError):
+                data = raw
+        if isinstance(data, dict) and "status_code" in data and "data" in data:
+            data = data["data"]
+        if not isinstance(data, dict):
+            continue
+        hint = str(data.get("hint") or "").strip() or str(data.get("reason") or "").strip()
+        if hint and hint not in hints:
+            hints.append(hint)
+    return hints
+
+
+async def _normalize_weather_location(
+    *,
+    instance_id: str,
+    conversation_id: str,
+    original_question: str,
+    user_reply: str,
+    conversation_history: list[dict] | None = None,
+    model: str | None = None,
+) -> str:
+    """LLM-normalize a location answer into a geocoder-ready ``City, Country``.
+
+    Open-Meteo's keyless geocoder is an exact-match gazetteer: it fails on
+    typos ("alamien") and region names ("north coast egypt"). This uses the
+    LLM's geographic knowledge — *grounded in the conversation so far* — to
+    resolve the user's short reply to the exact place they meant. The most
+    important context is the assistant's own prior clarifying question (which
+    typically listed the candidate cities the user is now choosing between),
+    so recent turns are threaded into the prompt. Corrects spelling and
+    resolves a region to its most prominent city. Falls back to the raw reply
+    on any failure (never blocks the turn).
+    """
+    from ai.engine.llm.router import route_chat
+
+    system = (
+        "The user is answering the assistant's previous clarifying question "
+        "about a location for a weather lookup. Using the conversation so far "
+        "— ESPECIALLY any candidate places the assistant already offered — "
+        "resolve the user's short reply to the single place they meant. "
+        "Correct spelling. If the reply names a region rather than a city, "
+        "pick its single most prominent city. Reply with ONLY 'City, Country' "
+        "— no other words, no explanation."
+    )
+
+    # Thread the recent turns (the pending question + the assistant's
+    # clarification with its offered candidates) so the model resolves the
+    # reply IN CONTEXT instead of guessing in a vacuum.
+    transcript_lines: list[str] = []
+    for turn in (conversation_history or [])[-6:]:
+        role = (turn.get("role") or "").strip() or "user"
+        content = (turn.get("content") or "").strip()
+        if content:
+            transcript_lines.append(f"{role}: {content}")
+    transcript = "\n".join(transcript_lines)
+
+    user_parts = []
+    if transcript:
+        user_parts.append(f"Conversation so far:\n{transcript}")
+    user_parts.append(f"Original weather question: {original_question}")
+    user_parts.append(f"User's location answer: {user_reply}")
+    user_parts.append("Canonical 'City, Country':")
+    user = "\n".join(user_parts)
+
+    try:
+        result = await route_chat(
+            task="cognition",
+            instance_id=instance_id,
+            conversation_id=f"geo-{conversation_id}",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.0,
+            model=model,
+            tools=None,
+        )
+    except Exception:
+        logger.warning("Weather location normalization failed", exc_info=True)
+        return user_reply
+
+    text = (result.get("content") or "").strip().splitlines()[0].strip()
+    text = text.strip(" .\"'`")
+    # Sanity guard: a place name is short. Anything sentence-like → keep raw.
+    if not text or len(text) > 60:
+        return user_reply
+    return text
+
+
+async def _normalize_weather_question(
+    *,
+    instance_id: str,
+    conversation_id: str,
+    question: str,
+    conversation_history: list[dict] | None = None,
+    model: str | None = None,
+) -> str:
+    """LLM-extract the canonical ``City, Country`` from a FULL weather question.
+
+    The question can carry a greeting ("hi"), a misspelling ("toay"), a region
+    name ("north cost egypt"), or a trailing advisory sub-question ("is it
+    suitable for beach swimming?"). The LLM's geographic knowledge resolves all
+    of that to the single place the user means. Falls back to the deterministic
+    regex extractor on any failure (never blocks the turn).
+    """
+    from ai.engine.llm.router import route_chat
+    from ai.plugins.web_research import _extract_weather_location
+
+    system = (
+        "Extract the single place the user is asking about for a weather lookup. "
+        "Ignore greetings, misspellings, and any trailing question (e.g. 'is it "
+        "suitable for beach swimming?'). Correct the spelling of the place name. "
+        "If the place is a REGION rather than a city (e.g. 'north coast egypt', "
+        "'the south of france'), resolve it to its single most prominent city. "
+        "Reply with ONLY 'City, Country' — no other words, no explanation."
+    )
+
+    transcript_lines: list[str] = []
+    for turn in (conversation_history or [])[-6:]:
+        role = (turn.get("role") or "").strip() or "user"
+        content = (turn.get("content") or "").strip()
+        if content:
+            transcript_lines.append(f"{role}: {content}")
+    transcript = "\n".join(transcript_lines)
+
+    user_parts = []
+    if transcript:
+        user_parts.append(f"Conversation so far:\n{transcript}")
+    user_parts.append(f"Weather question: {question}")
+    user_parts.append("Canonical 'City, Country':")
+    user = "\n".join(user_parts)
+
+    try:
+        result = await route_chat(
+            task="cognition",
+            instance_id=instance_id,
+            conversation_id=f"geo-q-{conversation_id}",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.0,
+            model=model,
+            tools=None,
+        )
+    except Exception:
+        logger.warning("Weather question normalization failed", exc_info=True)
+        return _extract_weather_location(question)
+
+    text = (result.get("content") or "").strip().splitlines()[0].strip()
+    text = text.strip(" .\"'`")
+    if not text or len(text) > 60:
+        # LLM returned something unusable — fall back to the regex extractor.
+        return _extract_weather_location(question)
+    return text
+
+
+async def _clarify_no_matches(
+    *,
+    instance_id: str,
+    conversation_id: str,
+    user_message: str,
+    hints: list[str],
+    model: str | None = None,
+) -> dict | None:
+    """Route a ``no_match`` escalation into ONE disambiguating question."""
+    from ai.engine.llm.router import route_chat
+
+    hints_text = ", ".join(hints) if hints else "your request"
+    system = (
+        "The assistant attempted to answer the user's question but could not "
+        f"resolve these entities: {hints_text}. "
+        "Write ONE short, specific disambiguating question asking the user "
+        "which entity they meant. You MAY suggest 2-3 concrete normalised "
+        "candidates (e.g. cities) as a short bullet list, but ALWAYS ask the "
+        "user to confirm which one they meant. Do NOT fabricate data. Do NOT "
+        "answer as if you found results. Do NOT mention tools, APIs, or "
+        "fetching."
+    )
+    try:
+        result = await route_chat(
+            task="cognition",
+            instance_id=instance_id,
+            conversation_id=f"clarify-{conversation_id}",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"User's question: {user_message}"},
+            ],
+            temperature=0.3,
+            model=model,
+            tools=None,
+        )
+    except Exception:
+        logger.warning("No-match clarification LLM call failed", exc_info=True)
+        return None
+
+    text = (result.get("content") or "").strip()
+    if not text:
+        return None
+
+    tokens = int(result.get("input_tokens", 0) or 0) + int(result.get("output_tokens", 0) or 0)
+    return {"text": text, "tokens": tokens, "model": result.get("model", "")}
+
+
+def _append_evidence_footer(synthesized: str, usable: list[dict]) -> str:
+    """Append a source footer citing the tools that grounded the answer."""
+    if not synthesized or not usable:
+        return synthesized
+    sources: list[str] = []
+    for tr in usable:
+        name = (tr.get("tool_name") or "").strip()
+        if name and name not in sources:
+            sources.append(name)
+    if not sources:
+        return synthesized
+    import datetime
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return synthesized + f"\n\n---\n*Sources: {', '.join(sources)} — retrieved {ts}*"
+
+
 async def _synthesize_tool_results(
     *,
     instance_id: str,
@@ -214,10 +446,16 @@ async def _synthesize_tool_results(
     a short "promise to fetch" (the common tool-only turn where the model
     writes "I'll fetch …" and the fetched data is otherwise discarded).
 
+    ``no_match`` results are never data: they are escalated — either into a
+    single disambiguating question (when nothing usable remains) or into an
+    honesty directive appended to the synthesis prompt (when usable data also
+    exists) — instead of being handed to the LLM as if they were found values.
+
     Returns ``{"text", "tokens", "model"}`` on success, or ``None`` when
     synthesis is unnecessary or the call fails (callers keep the original).
     """
     usable: list[dict] = []
+    no_matches: list[dict] = []
     for tr in completed_tools or []:
         if tr.get("error"):
             continue
@@ -225,7 +463,31 @@ async def _synthesize_tool_results(
             continue
         if tr.get("result") is None:
             continue
+        if payload_status(tr.get("result")) == "no_match":
+            no_matches.append(tr)
+            continue
         usable.append(tr)
+
+    hints = _no_match_hints(no_matches)
+
+    # Precedence 1: nothing usable but some no_match → the tool could not
+    # resolve the user's entities. Ask ONE clarifying question instead of
+    # falling through to the deterministic summary with a raw no_match payload
+    # (which would otherwise read like city-history-as-weather). This fires
+    # even when the draft prose is non-empty (a bare "I'll fetch …" promise).
+    if no_matches and not usable:
+        result = await _clarify_no_matches(
+            instance_id=instance_id,
+            conversation_id=conversation_id,
+            user_message=user_message,
+            hints=hints,
+            model=model,
+        )
+        if result is not None:
+            result["is_clarification"] = True
+            result["clarification_hints"] = hints
+            result["clarification_user_message"] = user_message
+        return result
 
     if not usable:
         return None
@@ -271,6 +533,17 @@ async def _synthesize_tool_results(
         "has no matching rows, say so plainly."
     )
 
+    # Precedence 2: usable data exists but some entities were unresolved —
+    # synthesize from the usable data, but be honest about the gaps rather
+    # than inventing values for the entities the tool could not resolve.
+    if hints:
+        system += (
+            "\nNote: the tool could not resolve these entities: "
+            + ", ".join(hints)
+            + ". If your answer would depend on them, say so and ask the "
+            "user to clarify — do NOT invent values for them."
+        )
+
     try:
         result = await route_chat(
             task="cognition",
@@ -297,6 +570,9 @@ async def _synthesize_tool_results(
     synthesized = (result.get("content") or "").strip()
     if not synthesized:
         return None
+
+    # Phase 4: cite which tools grounded the answer.
+    synthesized = _append_evidence_footer(synthesized, usable)
 
     tokens = int(result.get("input_tokens", 0) or 0) + int(result.get("output_tokens", 0) or 0)
     return {"text": synthesized, "tokens": tokens, "model": result.get("model", "")}
@@ -499,6 +775,39 @@ class TurnPipelineRunner:
         from ai.engine.learning.preferences import PreferenceClassifier, get_session_preference_store
 
         _wm = get_working_memory()
+
+        # [WEATHER-FT] If the previous turn stored a pending weather intent,
+        # and the user's current message looks like a bare location answer
+        # (no weather keywords), rewrite it so the weather tool re-fires.
+        from ai.plugins.web_research import _is_weather_query as _is_wq
+        _wm_focus_now = _wm.get_focus(conversation_id)
+        _is_weather_rewrite_turn = False
+        if (
+            _wm_focus_now is not None
+            and _wm_focus_now.entity_type == "pending_weather"
+            and not _is_wq(user_message)
+        ):
+            _pending_weather_query = _wm_focus_now.entity
+            # Normalize the location answer (correct typos, region → city) so the
+            # keyless exact-match geocoder resolves it instead of no-matching.
+            # Grounded in the conversation so far (the assistant's prior
+            # clarification listed the candidate cities the user is choosing).
+            _normalized_location = await _normalize_weather_location(
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                original_question=_pending_weather_query,
+                user_reply=user_message.strip(),
+                conversation_history=conversation_history,
+                model=model,
+            )
+            user_message = f"weather in {_normalized_location}"
+            logger.info(
+                "[WEATHER-FT] Rewrote bare location reply to: %r", user_message
+            )
+            _is_weather_rewrite_turn = True
+            # Clear the pending intent — it's been consumed.
+            _wm.set_focus(conversation_id, user_message, "weather_resolution")
+
         _entity = EntityExtractor().extract(user_message)
         if _entity:
             _wm.set_focus(conversation_id, _entity.name, _entity.entity_type)
@@ -611,7 +920,9 @@ class TurnPipelineRunner:
 
             # Confidence ladder short-circuits: ask / offer options instead of
             # guessing. These return before S2/S3 so no hallucinated tool runs.
-            if _intent_resolution.action in ("clarify", "disambiguate"):
+            # [WEATHER-FT] Skip the shortcircuit if this turn is a pending-weather
+            # resolution — let the rewritten message reach tool execution instead.
+            if _intent_resolution.action in ("clarify", "disambiguate") and not _is_weather_rewrite_turn:
                 if _intent_resolution.action == "clarify":
                     _short_text = _intent_resolution.clarification or (
                         "Could you clarify what you'd like me to look up?"
@@ -662,6 +973,14 @@ class TurnPipelineRunner:
                     "total_llm_calls": total_llm_calls,
                     "intent_shortcircuit": _intent_resolution.action,
                 })
+                # [WEATHER-FT] Store pending_weather so the next turn (location
+                # confirmation) re-routes into web_research._weather.
+                if _is_wq(user_message):
+                    _wm.set_focus(conversation_id, user_message, "pending_weather")
+                    logger.info(
+                        "[WEATHER-FT] Intent shortcircuit — stored pending_weather: %r",
+                        user_message,
+                    )
                 return response, ledger
 
         # S2 — Retrieval
@@ -781,6 +1100,137 @@ class TurnPipelineRunner:
                 "total_tokens": total_tokens,
                 "total_llm_calls": total_llm_calls,
                 "fan_out_path": True,
+            })
+            return response, ledger
+
+        # ── Pulse v2 Phase 1: adaptive ReAct loop gate (before PR-20) ─────
+        # The pulse loop is the default path for TOOL-BEARING chat turns: it
+        # runs a single-step plan through ReActLoop so the _observe stage can
+        # synthesize a grounded answer from a successfully executed tool. PR-20
+        # (KG multi-step) takes precedence when enabled.
+        #
+        # It must NOT fire for general/concept/real_time reasoning turns or
+        # when the intent resolver failed (zone unknown) — those belong to the
+        # single-pass path, which owns zone-aware grounding, knowledge-gap
+        # escalation, and confidence surfacing. Only a positive "platform"
+        # zone (tool-bearing) routes here; otherwise we would waste an LLM
+        # draft and corrupt the single-pass "first draft" semantics (which
+        # reason-lane escalation and confidence surfacing depend on).
+        pulse_loop_result = None
+        _pulse_is_platform_zone = (
+            _intent_resolution is not None
+            and _intent_resolution.zone in ("platform", "off_limits")
+        )
+        if (
+            settings.PULSE_LOOP_ENABLED
+            and self.db is not None
+            and self._draft_tools
+            and not settings.KG_MULTI_STEP_ENABLED
+            and _pulse_is_platform_zone
+        ):
+            try:
+                pulse_loop_result = await self._try_pulse_loop(
+                    instance_id=instance_id, conversation_id=conversation_id,
+                    user_message=user_message, host_user_id=host_user_id,
+                    page_context=page_context, conversation_history=conversation_history,
+                    instance_config=instance_config, user_info=user_info,
+                    retrieval=retrieval, progress_callback=progress_callback,
+                    stream_callback=stream_callback, turn_id=turn_id,
+                )
+            except Exception:
+                logger.exception("[%s] Pulse loop attempt failed; falling back to single-pass", turn_id[:8])
+
+        if pulse_loop_result is not None:
+            # ── ReAct path: skip S3→S5 single-pass, go straight to S6 ──────
+            final_text = pulse_loop_result.final_response
+            total_tokens = 0  # ReAct loop tracks its own token usage
+            total_llm_calls = pulse_loop_result.replans_used + len(pulse_loop_result.step_results)
+
+            for i, sr in enumerate(pulse_loop_result.step_results):
+                await self._write_ledger_row(
+                    turn_id, instance_id, conversation_id, host_user_id,
+                    f"react_step_{i}", 2 + i,
+                    {
+                        "step_id": sr.step_id,
+                        "intent": sr.intent,
+                        "critic_verdict": sr.critic_verdict,
+                        "executed": sr.executed,
+                        "error": sr.error,
+                    },
+                    0.0,  # latency tracked per-step in ReActLoop
+                    verdict=sr.critic_verdict,
+                    flags=sr.critic_flags,
+                )
+
+            logger.info(
+                "TurnPipelineRunner: ReAct loop complete steps=%d replans=%d succeeded=%s",
+                len(pulse_loop_result.step_results), pulse_loop_result.replans_used, pulse_loop_result.succeeded,
+            )
+
+            # S6 — Final ledger summary
+            s6_start = time.monotonic()
+            total_latency = (time.monotonic() - t0) * 1000
+            s6_latency = (time.monotonic() - s6_start) * 1000
+            await self._write_ledger_row(
+                turn_id, instance_id, conversation_id, host_user_id,
+                "final", 5,
+                {
+                    "total_latency_ms": total_latency,
+                    "total_tokens": total_tokens,
+                    "total_llm_calls": total_llm_calls,
+                    "critic_verdict": "pass" if pulse_loop_result.succeeded else "veto",
+                    "pulse_loop_path": True,
+                },
+                s6_latency, verdict="pass" if pulse_loop_result.succeeded else "veto",
+            )
+            await self.db.commit()
+
+            # P4.1: Write trajectory (fire-and-forget, own session)
+            _ = asyncio.ensure_future(_write_trajectory_own_session(turn_id))
+            asyncio.ensure_future(AutoMemoryExtractor.try_extract(
+                user_message=user_message,
+                instance_id=instance_id,
+                host_user_id=host_user_id,
+                db_session=self.db,
+            ))
+
+            # Populate completed_tools so _run_chat's surfacing layer fires on ReAct turns
+            _react_completed_tools = [
+                {
+                    "tool_name": getattr(sr, "tool_name", None) or f"react_step_{i}",
+                    "result":    sr.tool_result if hasattr(sr, "tool_result") else (sr.tool_output if hasattr(sr, "tool_output") else {}),
+                    "error":     sr.error if hasattr(sr, "error") else None,
+                    "latency_ms": sr.latency_ms if hasattr(sr, "latency_ms") else 0.0,
+                    "guardrail_flags": sr.critic_flags if hasattr(sr, "critic_flags") else [],
+                }
+                for i, sr in enumerate(pulse_loop_result.step_results)
+                if getattr(sr, "executed", True)
+            ]
+            if ledger.execution is not None:
+                ledger.execution.completed_tools = _react_completed_tools
+            else:
+                from types import SimpleNamespace
+                ledger.execution = SimpleNamespace(completed_tools=_react_completed_tools)
+
+            ledger.final_response = final_text[:500]
+            ledger.total_latency_ms = total_latency
+            ledger.total_tokens = total_tokens
+            ledger.total_llm_calls = total_llm_calls
+
+            response = AgentResponse(
+                text=final_text,
+                sources_cited=[],
+                tools_used=[],
+                confidence=0.8 if pulse_loop_result.succeeded else 0.3,
+                total_tokens=total_tokens,
+                llm_calls=total_llm_calls,
+                model="",
+            )
+            await _broadcast_run(instance_id, "run.completed", {
+                "run_id": turn_id,
+                "total_latency_ms": total_latency,
+                "total_tokens": total_tokens,
+                "total_llm_calls": total_llm_calls,
             })
             return response, ledger
 
@@ -940,6 +1390,23 @@ class TurnPipelineRunner:
             instance_id=instance_id,
         )
 
+        # ── Pulse v2 Phase 6: inject Carbon business context ──────────────
+        # Fetch the platform's actual reporting period, emission factors, and
+        # DQ-rule count and append them so the LLM answers with real values
+        # rather than generic world knowledge. Never fails the turn.
+        if settings.PULSE_CARBON_CONTEXT_ENABLED:
+            try:
+                from ai.context.carbon_context import CarbonContextAssembler
+                _carbon_context = await CarbonContextAssembler().assemble(
+                    app_identifier=config.get("app_identifier"),
+                )
+                if _carbon_context:
+                    system_prompt = f"{system_prompt}\n{_carbon_context}"
+            except Exception:
+                logger.warning(
+                    f"[{turn_id[:8]}] Carbon context assembly failed", exc_info=True
+                )
+
         # Tool-aware drafting: when an executor is wired, expose the curated
         # tool set to the LLM and append the anti-fabrication grounding rules.
         draft_tools = self._draft_tools if self.executor is not None else None
@@ -1029,24 +1496,6 @@ class TurnPipelineRunner:
                 "tool so the app can attach the matching page links as small "
                 "buttons under your reply."
             )
-        elif draft_tools and _intent_resolution is not None:
-            _zone = _intent_resolution.zone
-            if _zone == "real_time":
-                system_prompt = (
-                    f"{system_prompt}\n\n"
-                    "This question requires live information. Use the "
-                    "web_research tool to fetch current data. Always attribute "
-                    "the source in your answer. After answering, offer to connect "
-                    "the findings to the user's platform data if relevant."
-                )
-            elif _zone in ("concept", "general"):
-                system_prompt = (
-                    f"{system_prompt}\n\n"
-                    "Answer this question from your knowledge. No platform tool "
-                    "call is needed. If there is a natural connection to the "
-                    "user's platform data (e.g. their emission factors, DQ rules), "
-                    "offer to show that data after answering."
-                )
 
         # [GAP-3] Resolve anaphora: substitute pronouns with active entity
         from ai.engine.cognition.dialogue.anaphora import AnaphoraResolver
@@ -1304,6 +1753,53 @@ class TurnPipelineRunner:
         _draft_text_was_empty = not (critic.rewritten_text or draft.text or "").strip()
         final_text = critic.rewritten_text if critic.rewritten_text else draft.text
 
+        # [WEATHER-DETERMINISTIC] Guarantee live weather for weather queries.
+        # Deep fix: the intent classifier's ``zone`` is an LLM guess that
+        # frequently mislabels "weather in X" (especially with a greeting + a
+        # trailing suitability question) as general/concept, which injects
+        # "answer from knowledge, no tool call" and the draft replies "I can't
+        # fetch weather data". The web_research plugin ships an authoritative
+        # ``_is_weather_query`` detector — wire it into routing so a live
+        # weather request ALWAYS reaches the weather tool, independent of the
+        # draft LLM's tool choice. This is a routing-layer fix, not a regex
+        # patch on the user's phrasing.
+        if self.executor is not None and _is_wq(_resolved_user_message):
+            _has_weather_call = any(
+                (tc.get("function") or {}).get("name") == "web_research"
+                for tc in (draft.tool_calls or [])
+            )
+            if not _has_weather_call:
+                import json as _json
+                _place = await _normalize_weather_question(
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    question=_resolved_user_message,
+                    conversation_history=conversation_history,
+                    model=model,
+                )
+                draft = _dc.replace(
+                    draft,
+                    tool_calls=[{
+                        "id": f"call_weather_{turn_id[:8]}",
+                        "function": {
+                            "name": "web_research",
+                            "arguments": _json.dumps({"query": f"weather in {_place}"}),
+                        },
+                    }],
+                    text="",  # clear "I can't fetch weather" prose → synthesis writes the live answer
+                    confidence=0.6,
+                )
+                # Force the synthesis path (empty text < 300 chars) and mark
+                # the turn as tool-backed so the deterministic summary fallback
+                # also applies if LLM synthesis is unavailable.
+                final_text = ""
+                _draft_text_was_empty = True
+                ledger.intent_zone = "real_time"
+                logger.info(
+                    "[WEATHER-DETERMINISTIC] Forced web_research for %r -> %r",
+                    _resolved_user_message, _place,
+                )
+
         # S5 — Execute (real parallel tool dispatch + streaming)
         s5_start = time.monotonic()
         await _broadcast_run(instance_id, "run.step.started", {
@@ -1380,6 +1876,21 @@ class TurnPipelineRunner:
                 "[%s] Tool-result synthesis — final answer written from %d tool result(s) (%d tokens)",
                 turn_id[:8], len(execution.completed_tools), int(_synth.get("tokens") or 0),
             )
+            # [WEATHER-FT] If this was a no_match clarification for a weather
+            # query, store pending_weather so the next user turn (a bare
+            # location confirmation) is re-routed into web_research._weather.
+            if _synth.get("is_clarification"):
+                _clarif_msg = _synth.get("clarification_user_message") or _resolved_user_message
+                from ai.plugins.web_research import _is_weather_query as _is_wq2
+                # Loop guard: if this turn was ALREADY a normalization retry and
+                # still no-matched, clarify once but do NOT re-arm pending_weather
+                # (otherwise a stubbornly-unresolvable place loops forever).
+                if _is_wq2(_clarif_msg) and not _is_weather_rewrite_turn:
+                    _wm.set_focus(conversation_id, _clarif_msg, "pending_weather")
+                    logger.info(
+                        "[WEATHER-FT] Stored pending_weather intent for conv %s: %r",
+                        conversation_id[:8], _clarif_msg,
+                    )
         elif _draft_text_was_empty and execution.completed_tools:
             from ai.engine.cognition.turn.execute import _build_tool_result_summary
             injected = _build_tool_result_summary(execution.completed_tools)
@@ -1388,6 +1899,38 @@ class TurnPipelineRunner:
                 logger.info(
                     "[%s] Tool-only response — injected tool results as text (draft was empty, %d tools executed)",
                     turn_id[:8], len(execution.completed_tools),
+                )
+
+        # ── Pulse v2 Phase 7: post-result verification ───────────────────
+        # When enabled and tools actually ran, verify that the synthesized
+        # answer's factual claims are supported by the tool results. Fail-open:
+        # any error leaves the answer untouched. Corrects the text in place.
+        if settings.PULSE_VERIFY_ENABLED and execution.completed_tools and final_text:
+            try:
+                from ai.engine.cognition.turn.verify import VerificationWitness
+                from ai.engine.llm.router import model_for_profile
+                _vw = VerificationWitness()
+                _vr = await _vw.verify(
+                    answer=final_text,
+                    tool_results=execution.completed_tools,
+                    user_message=_resolved_user_message,
+                    instance_id=instance_id,
+                    conversation_id=conversation_id,
+                    model=model_for_profile("verify") or draft.model_used or model,
+                )
+                if not _vr.passed and _vr.corrected_text:
+                    final_text = _vr.corrected_text
+                    logger.info(
+                        "[%s] Verification corrected answer: unsupported=%s",
+                        turn_id[:8], _vr.unsupported_claims,
+                    )
+                total_tokens += _vr.tokens_used
+                total_llm_calls += 1
+                ledger.verification_passed = _vr.passed
+                ledger.verification_unsupported = _vr.unsupported_claims
+            except Exception:
+                logger.warning(
+                    "[%s] Verification step failed", turn_id[:8], exc_info=True
                 )
 
         # S6 — Final ledger summary
@@ -1413,6 +1956,8 @@ class TurnPipelineRunner:
                 "total_tokens": total_tokens,
                 "total_llm_calls": total_llm_calls,
                 "critic_verdict": critic.verdict,
+                "verification_passed": ledger.verification_passed,
+                "verification_unsupported": ledger.verification_unsupported,
             },
             s6_latency, verdict=critic.verdict,
         )
@@ -1504,6 +2049,136 @@ class TurnPipelineRunner:
             verdict=verdict,
             flags=flags,
         )
+
+    async def _try_pulse_loop(
+        self,
+        instance_id,
+        conversation_id,
+        user_message,
+        host_user_id,
+        page_context,
+        conversation_history,
+        instance_config,
+        user_info,
+        retrieval,
+        progress_callback,
+        stream_callback,
+        turn_id,
+    ):
+        """Pulse v2 Phase 1: run the adaptive ReAct loop for tool-bearing turns.
+
+        Builds a single-step plan by hand (no SkillAwarePlanner / decompose) and
+        hands it to ReActLoop, whose ``_observe`` stage synthesizes a grounded
+        answer from the executed tool result. Returns ReActResult or None (None
+        means "fall through to single-pass S3→S5").
+        """
+        try:
+            from ai.engine.cognition.plan.planner import Plan, PlanStep, PlanPhase
+            from ai.engine.cognition.plan.loop import ReActLoop
+            from ai.engine.cognition.turn.draft import DraftWitness
+            from ai.engine.cognition.turn.critic import CriticWitness
+            from ai.engine.llm.prompts import build_chat_prompt
+
+            # Hand-built single-step plan — the tool wiring in _execute_step
+            # keys off plan_source == "single_step".
+            plan = Plan(
+                pattern="single_step",
+                steps=[PlanStep(
+                    step_id=0,
+                    intent=user_message,
+                    tool_name=None,
+                    tool_args={},
+                    depends_on=[],
+                    is_mutation=False,
+                    agent_role="orchestrator",
+                )],
+                synthesis_instruction="Answer the user directly using any tool results.",
+                source="single_step",
+                phases=[PlanPhase(
+                    phase_id=0,
+                    name="main",
+                    strategy="sequential",
+                    step_ids=[0],
+                )],
+            )
+
+            # Build system prompt — LLM-synthesized (mirrors _try_multi_step_plan).
+            config = instance_config or {}
+            system_prompt = await build_chat_prompt(
+                instance_name=config.get("display_name", "Unknown System"),
+                system_description=config.get("description", ""),
+                relevant_knowledge=(
+                    retrieval.knowledge_chunks[0]["content"]
+                    if retrieval.knowledge_chunks else "No knowledge loaded yet."
+                ),
+                relevant_memories=(
+                    retrieval.memory_chunks[0]["content"]
+                    if retrieval.memory_chunks else "No memories available."
+                ),
+                page_context=page_context or "unknown",
+                user_info=user_info,
+                persona=config.get("persona"),
+                api_catalog=config.get("api_catalog"),
+                navigation_routes=config.get("navigation_routes"),
+                domain_topics=config.get("domain_topics"),
+                instance_config=config,
+                conversation_id=conversation_id,
+                instance_id=instance_id,
+            )
+
+            draft_witness = DraftWitness(
+                llm_client=self.llm_client,
+                knowledge_store=self.knowledge_store,
+                memory_manager=self.memory_manager,
+                executor=self.executor,
+            )
+            critic_witness = CriticWitness()
+
+            loop = ReActLoop(
+                draft_witness=draft_witness,
+                critic_witness=critic_witness,
+                llm_client=self.llm_client,
+                knowledge_store=self.knowledge_store,
+                memory_manager=self.memory_manager,
+                db=self.db,
+            )
+
+            react_result = await loop.run(
+                plan=plan,
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                user_message=user_message,
+                system_prompt=system_prompt,
+                conversation_history=conversation_history,
+                instance_config=instance_config,
+                user_info=user_info,
+                retrieval=retrieval,
+                progress_callback=progress_callback,
+                stream_callback=stream_callback,
+                host_user_id=host_user_id,
+            )
+
+            # Only claim the pulse-loop path when a tool actually executed
+            # successfully (tool_output is non-empty); otherwise fall back to
+            # single-pass S3→S5. NOTE: ``sr.executed`` is True even when the
+            # draft selected zero tools (it only records that the execute
+            # witness ran), so it is NOT a reliable "tool was used" signal.
+            if not any(
+                sr.tool_output and not sr.error for sr in react_result.step_results
+            ):
+                logger.debug(
+                    "TurnPipelineRunner: pulse loop ran no successful tool step; "
+                    "falling back to single-pass"
+                )
+                return None
+
+            return react_result
+        except Exception:  # noqa: BLE001 - pulse loop is best-effort, never fatal
+            logger.exception(
+                "[%s] Pulse loop attempt failed; falling back to single-pass",
+                turn_id[:8],
+            )
+            return None
 
     async def _try_multi_step_plan(
         self,

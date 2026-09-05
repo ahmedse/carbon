@@ -12,6 +12,7 @@ import logging
 import time
 
 from ai.engine.cognition.turn.witnesses import ExecutionResult
+from ai.engine.core.resolution import payload_status
 
 logger = logging.getLogger("pulse.cognition.turn.execute")
 
@@ -111,6 +112,11 @@ class ExecuteWitness:
                         await _broadcast_single_tool_event("tool.failed", self.run_id, self.instance_id, tool_name, tc_id, error=error_msg)
                     else:
                         completed_tools.append(result)
+                        await self._register_evidence(
+                            tool_name=tool_name,
+                            tool_args=_parse_tool_args(tc),
+                            tool_result=result,
+                        )
                         if isinstance(result, dict):
                             if "latency_ms" in result:
                                 per_tool_latency_ms[tool_name] = result["latency_ms"]
@@ -137,6 +143,12 @@ class ExecuteWitness:
                 if isinstance(result, dict) and "tool_call_id" not in result:
                     result["tool_call_id"] = tc_id
                 completed_tools.append(result)
+                if isinstance(result, dict) and not result.get("error"):
+                    await self._register_evidence(
+                        tool_name=tool_name,
+                        tool_args=_parse_tool_args(tc),
+                        tool_result=result,
+                    )
                 if isinstance(result, dict) and "latency_ms" in result:
                     per_tool_latency_ms[tool_name] = result["latency_ms"]
 
@@ -177,6 +189,85 @@ class ExecuteWitness:
             execution_latency_ms=elapsed,
             per_tool_latency_ms=per_tool_latency_ms,
         )
+
+    async def _register_evidence(
+        self,
+        *,
+        tool_name: str,
+        tool_args: dict,
+        tool_result: dict,
+    ) -> None:
+        """Write an EvidenceRecord row for a successfully executed tool call.
+
+        Silently no-ops on any error — evidence recording must never fail a turn.
+        ``no_match`` and confirmation-gated tool results are not evidence.
+        """
+        import json as _json
+        from asgiref.sync import sync_to_async
+        from ai.models.core import EvidenceRecord
+
+        try:
+            raw = tool_result.get("result")
+            # no_match is an escalation signal, never evidence of data.
+            if payload_status(raw) == "no_match":
+                return
+            # Confirmation-gated tools (create_dq_rule, …) stage proposals,
+            # which are not evidence.
+            if _tool_requires_confirmation(tool_name):
+                return
+            if tool_result.get("error") or raw is None:
+                return
+
+            # Parse the JSON-string result back into structured content.
+            content = raw
+            if isinstance(raw, str):
+                try:
+                    content = _json.loads(raw)
+                except (TypeError, ValueError):
+                    content = {"raw": raw[:2000]}
+            if not isinstance(content, (dict, list)):
+                content = {"raw": str(content)[:2000]}
+
+            source_map = {
+                "web_research": "web_search",
+                "search_knowledge": "knowledge_graph",
+                "get_entity_details": "carbon_api",
+                "call_host_api": "carbon_api",
+            }
+            source_type = source_map.get(tool_name, "carbon_api")
+            args = tool_args or {}
+            source_id = args.get("query") or args.get("endpoint") or tool_name
+
+            ctx = self.hook_ctx_defaults or {}
+            instance_id = ctx.get("instance_id") or self.instance_id or ""
+            conversation_id = ctx.get("conversation_id") or ""
+            host_user_id = ctx.get("host_user_id") or ""
+            turn_id = ctx.get("run_id") or self.run_id or ""
+
+            await sync_to_async(EvidenceRecord.objects.create, thread_sensitive=True)(
+                instance_id=instance_id,
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+                host_user_id=host_user_id,
+                source_type=source_type,
+                source_identifier=str(source_id)[:500],
+                query_description=_json.dumps(args, ensure_ascii=False, default=str)[:2000],
+                content_json=content,
+                coverage="unknown",
+            )
+        except Exception:
+            logger.warning("EvidenceRecord write failed for %s", tool_name, exc_info=True)
+
+
+def _parse_tool_args(tool_call: dict) -> dict:
+    """Extract tool arguments from a tool-call dict (JSON string or object)."""
+    args = tool_call.get("function", {}).get("arguments", "{}")
+    if isinstance(args, str):
+        try:
+            return json.loads(args)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    return args if isinstance(args, dict) else {}
 
 
 def _split_by_dependencies(tool_calls: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -513,7 +604,18 @@ def _build_tool_result_summary(completed_tools: list[dict]) -> str:
         tool_name = tool_result.get("tool_name", "unknown")
         result_data = _normalize(tool_result.get("result", {}))
         error = tool_result.get("error")
-        if error:
+        # no_match is an escalation signal, never data — render an honest
+        # clarification, never the raw `status=no_match, reason=..., hint=...`.
+        if payload_status(tool_result.get("result")) == "no_match":
+            hint = ""
+            if isinstance(result_data, dict):
+                hint = str(result_data.get("hint") or "").strip()
+            if not hint:
+                hint = "your request"
+            tool_summaries.append(
+                f'**{tool_name}**: I couldn\'t resolve "{hint}". Could you clarify what you meant?'
+            )
+        elif error:
             tool_summaries.append(f"**{tool_name}**: Error — {error}")
         elif isinstance(result_data, dict):
             items = list(result_data.items())[:10]

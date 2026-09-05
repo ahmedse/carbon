@@ -215,6 +215,25 @@ class Settings(BaseSettings):
     KG_MULTI_STEP_CONFIRM_THRESHOLD: int = 4  # ask user confirmation above this many steps
     KG_MULTI_STEP_PARALLEL: bool = True       # execute independent steps in parallel
 
+    # ── Pulse Loop (Phase 1 — observation-driven adaptive loop) ──
+    PULSE_LOOP_ENABLED: bool = True
+    PULSE_LOOP_MAX_STEPS: int = 6
+    PULSE_LOOP_MAX_TOKENS: int = 8000
+
+    # ── Pulse v2 Phase 6 — Carbon business context injection ──
+    PULSE_CARBON_CONTEXT_ENABLED: bool = True
+
+    # ── Pulse v2 Phase 7 — post-result verification (opt-in) ──
+    PULSE_VERIFY_ENABLED: bool = False
+
+    # ── Pulse v2 Phase 9 — model policy / turn profiles ──
+    # Strong model for multi-hop investigation turns. Empty = use the instance
+    # default model (profile "interactive").
+    LLM_INVESTIGATE_MODEL: str = ""
+    # Model for post-result verification turns. Empty = fall back to the
+    # investigate model, then to the instance default.
+    LLM_VERIFY_MODEL: str = ""
+
     # ── Host API Call Discipline (N1) ──
     API_DISCIPLINE_ENABLED: bool = False      # route call_host_api GETs through validate→execute→retry
     API_MAX_RETRIES: int = 1                  # max error-driven API retries (transient / param repair)

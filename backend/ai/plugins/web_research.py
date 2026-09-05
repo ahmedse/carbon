@@ -33,6 +33,7 @@ from urllib.parse import quote
 import httpx
 
 from ai.engine.agent.plugins import ToolPlugin
+from ai.engine.core.resolution import error, is_resolved, no_match, resolved
 
 logger = logging.getLogger("carbon.ai.plugins.web_research")
 
@@ -108,45 +109,35 @@ def _is_weather_query(query: str) -> bool:
 def _extract_weather_location(query: str) -> str:
     """Pull the place name out of a weather question.
 
-    Handles the common phrasings so "what's the weather in Cairo today?"
-    → "Cairo", "how hot is it in New York?" → "New York". Falls back to a
-    best-effort strip when no known pattern matches.
+    Handles the common phrasings and LLM-drafted variations (including
+    without prepositions or with extra keywords) so the exact-match Open-Meteo
+    geocoder receives the clean location name.
     """
     q = (query or "").strip()
-    q = re.sub(r"^(?:what'?s|what is|whats|how'?s|how is|tell me)\s+", "", q, flags=re.I)
-    q = re.sub(
-        r"^(?:the\s+)?(?:current\s+)?(?:weather|forecast|temperature|temp)\s+"
-        r"(?:like\s+)?(?:in|for|at)\s+",
-        "",
-        q,
-        flags=re.I,
-    )
-    q = re.sub(
-        r"^how\s+(?:hot|cold|warm|cool)\s+is\s+it\s+(?:in|at)\s+",
-        "",
-        q,
-        flags=re.I,
-    )
-    # Strip trailing punctuation BEFORE the time-word strip so "today?" →
-    # "today" (otherwise the "?" blocks the end-anchored match).
+    # Handle more specific phrase patterns first
+    q = re.sub(r"\bhow\s+(?:hot|cold|warm|cool)\s+is\s+it\b", "", q, flags=re.I)
+    q = re.sub(r"\bis\s+it\s+(?:raining|snowing|sunny|cloudy|windy|rainy)\b", "", q, flags=re.I)
+    # Conversational prefix and general keywords second
+    q = re.sub(r"^(?:what'?s|what is|whats|how'?s|how is|how|tell me|give me|show me|check|get|find)\s+", "", q, flags=re.I)
+    q = re.sub(r"\b(?:weather|forecast|temperature|temp|current|conditions|report|info)\b", "", q, flags=re.I)
+    q = re.sub(r"\b(?:today|tonight|tomorrow|now|right\s+now|this\s+week|currently|at\s+the\s+moment)\b", "", q, flags=re.I)
+    q = re.sub(r"\b(?:like|in|for|at|of|near|around|like|the)\s+", " ", q, flags=re.I)
+    q = re.sub(r"\s+(?:like|in|for|at|of|near|around|like|the)\b", " ", q, flags=re.I)
+    q = re.sub(r"\s+", " ", q)
     q = q.strip(" .,;!?")
-    q = re.sub(
-        r"\s+(?:today|tonight|tomorrow|now|right now|this week|currently|at the moment)\s*$",
-        "",
-        q,
-        flags=re.I,
-    )
+    q = re.sub(r"^(?:in|for|at|of|near|around|the)\s+", "", q, flags=re.I)
+    q = re.sub(r"\s+(?:in|for|at|of|near|around|the)$", "", q, flags=re.I)
     return q.strip(" .,;!?")
 
 
 class WebResearch(ToolPlugin):
     name = "web_research"
     description = (
-        "Search the open internet (keyless) or fetch a specific web page. "
-        "Use it to research topics, standards, protocols, or systems that are "
-        "not in the internal knowledge base — e.g. 'research the top carbon "
-        "footprint standards (GHG Protocol, ISO 14064, PAS 2050)'. Returns "
-        "ranked results with titles, URLs and snippets you can cite."
+        "Search the web for real-time information including: current weather and "
+        "forecasts for any city or region, today's news, live exchange rates, "
+        "current sports scores, and any other information that changes daily. "
+        "Use this tool whenever the user asks about conditions RIGHT NOW or "
+        "TODAY. You can also fetch a specific web page by its URL."
     )
     input_schema: dict[str, Any] = {
         "type": "object",
@@ -197,10 +188,12 @@ class WebResearch(ToolPlugin):
                     return await self._fetch(client, url)
                 if _is_weather_query(query):
                     weather = await self._weather(client, query)
-                    if weather is not None:
-                        return weather
-                    # Location couldn't be resolved — fall back to search so
-                    # the user still gets something rather than a refusal.
+                    if is_resolved(weather):
+                        return weather["data"]
+                    # no_match / error: surface the failure to the caller.
+                    # NEVER fall through to generic search — that would answer
+                    # a different question (UP-0011).
+                    return weather
                 return await self._search(client, query, max_results)
         except httpx.HTTPError as exc:
             logger.warning("web_research network error: %s", exc)
@@ -232,17 +225,17 @@ class WebResearch(ToolPlugin):
             "retrieved_at": _now_iso(),
         }
 
-    async def _weather(self, client: httpx.AsyncClient, query: str) -> dict | None:
+    async def _weather(self, client: httpx.AsyncClient, query: str) -> dict:
         """Live weather via Open-Meteo (keyless — no API key, RULE_20).
 
-        Returns ``None`` when the location can't be geocoded (caller falls back
-        to a generic web search). A geocoded-but-failed forecast returns an
-        explicit ``error`` result so the drafting witness reports the failure
-        honestly instead of fabricating a reading.
+        Returns a tri-state result: ``resolved`` on success, ``no_match`` when
+        the location is missing/unresolvable (the caller must escalate, never
+        fall through), and ``error`` on a fetch failure so the drafting witness
+        reports it honestly instead of fabricating a reading.
         """
         location = _extract_weather_location(query)
         if not location:
-            return None
+            return no_match("missing_location", hint=query)
 
         # 1) Geocode the place name → lat/lon.
         try:
@@ -254,15 +247,15 @@ class WebResearch(ToolPlugin):
             matches = (g.json().get("results") or [])
         except httpx.HTTPError as exc:
             logger.warning("web_research geocoding error: %s", exc)
-            return None
+            return error("geocode_http_error", detail=str(exc))
 
         if not matches:
-            return None
+            return no_match("unresolved_location", hint=location)
         top = matches[0]
         lat = top.get("latitude")
         lon = top.get("longitude")
         if lat is None or lon is None:
-            return None
+            return no_match("unresolved_location", hint=location)
         name = (top.get("name") or location).strip() or location
         country = (top.get("country") or "").strip()
 
@@ -284,13 +277,7 @@ class WebResearch(ToolPlugin):
             current = (w.json().get("current") or {})
         except httpx.HTTPError as exc:
             logger.warning("web_research forecast error: %s", exc)
-            return {
-                "query": query,
-                "results": [],
-                "error": f"Could not fetch current weather for {name}: {exc}",
-                "source": "external_web",
-                "retrieved_at": _now_iso(),
-            }
+            return error("forecast_http_error", detail=str(exc))
 
         code = int(current.get("weather_code") or 0)
         conditions = _WEATHER_CODES.get(code, "unknown conditions")
@@ -327,20 +314,24 @@ class WebResearch(ToolPlugin):
             "timezone": current.get("timezone"),
         }
 
-        return {
-            "query": query,
-            "results": [{
-                "title": f"Current weather in {place}",
-                "url": "https://open-meteo.com/",
-                "snippet": snippet,
-                "source": "open-meteo",
+        return resolved(
+            {
+                "query": query,
+                "results": [{
+                    "title": f"Current weather in {place}",
+                    "url": "https://open-meteo.com/",
+                    "snippet": snippet,
+                    "source": "open-meteo",
+                    "retrieved_at": retrieved_at,
+                }],
+                "weather": weather,
+                "count": 1,
+                "source": "external_web",
                 "retrieved_at": retrieved_at,
-            }],
-            "weather": weather,
-            "count": 1,
-            "source": "external_web",
-            "retrieved_at": retrieved_at,
-        }
+            },
+            confidence=1.0,
+            source="open-meteo",
+        )
 
     async def _search(self, client: httpx.AsyncClient, query: str, max_results: int) -> dict:
         results: list[dict] = []

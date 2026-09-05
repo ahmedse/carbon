@@ -483,6 +483,89 @@ class RunSchedule(models.Model):
         ordering = ["next_run_at"]
 
 
+class WorkObjective(AppScopeMixin):
+    """A user's durable objective that may span multiple conversations and runs.
+
+    Created when the user explicitly asks Pulse to "save" or "continue later".
+    Not created automatically for every turn.
+    """
+
+    STATUS_CHOICES = [
+        ("open", "Open"),
+        ("in_progress", "In Progress"),
+        ("waiting_for_user", "Waiting for User"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
+    instance_id = models.TextField(db_index=True)
+    conversation_id = models.TextField(db_index=True)  # originating conversation
+    title = models.TextField()
+    description = models.TextField()
+    acceptance_criteria = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default="open")
+    latest_run_id = models.TextField(null=True, blank=True)  # last Run.id
+    latest_summary = models.TextField(blank=True, default="")  # what we found so far
+    pending_question = models.TextField(blank=True, default="")  # question blocking progress
+    evidence_json = models.JSONField(default=list)  # list of {source, content, retrieved_at}
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "ai"
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["instance_id", "host_user_id", "status"]),
+        ]
+
+
+class EvidenceRecord(AppScopeMixin):
+    """A retrieved piece of evidence backing an AI claim.
+
+    Created by the execute witness when a tool returns real data. Linked from
+    WorkObjective.evidence_json and from AIMessage.metadata_json (evidence_ids).
+    """
+
+    SOURCE_TYPES = [
+        ("carbon_api", "Carbon Platform API"),
+        ("web_search", "Web Search"),
+        ("knowledge_graph", "Knowledge Graph"),
+        ("memory", "Agent Memory"),
+    ]
+
+    COVERAGE_TYPES = [
+        ("complete", "Complete for scope"),
+        ("partial", "Partial"),
+        ("sampled", "Sampled"),
+        ("unknown", "Unknown"),
+    ]
+
+    id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
+    instance_id = models.TextField(db_index=True)
+    conversation_id = models.TextField(db_index=True)
+    turn_id = models.TextField(db_index=True)  # TurnPipelineRunner turn_id (== run_id)
+    objective_id = models.TextField(null=True, blank=True, db_index=True)  # WorkObjective.id
+
+    source_type = models.CharField(max_length=30, choices=SOURCE_TYPES)
+    source_identifier = models.TextField()   # endpoint path, URL, or tool name
+    query_description = models.TextField()   # serialized tool args
+    content_json = models.JSONField()        # the actual retrieved data
+    coverage = models.CharField(max_length=20, choices=COVERAGE_TYPES, default="unknown")
+    limitations = models.TextField(blank=True, default="")
+    retrieved_at = models.DateTimeField(auto_now_add=True)
+    valid_from = models.DateTimeField(null=True, blank=True)
+    valid_to = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = "ai"
+        ordering = ["-retrieved_at"]
+        indexes = [
+            models.Index(fields=["instance_id", "conversation_id", "turn_id"]),
+            models.Index(fields=["objective_id"]),
+        ]
+
+
 class Trajectory(AppScopeMixin):
     id = models.CharField(max_length=36, primary_key=True, default=generate_uuid)
     run_id = models.TextField(db_index=True)

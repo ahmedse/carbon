@@ -11,10 +11,12 @@ import time
 from dataclasses import asdict, dataclass, field
 
 from ai.engine.core.clock import utcnow
+from ai.engine.core.resolution import payload_status
 from ai.store import first
 
 from ai.engine.cognition.plan.planner import Plan, PlanStep
 from ai.engine.cognition.turn.witnesses import CriticVerdict, DraftResult, RetrievalResult
+from ai.engine.llm.router import model_for_profile
 
 logger = logging.getLogger("pulse.cognition.plan.loop")
 
@@ -42,6 +44,17 @@ def _tool_requires_confirmation(tool_name: str) -> bool:
         return False
 
 
+# Pulse v2 Phase 5: read-only tools the loop may auto-chain for multi-hop
+# reasoning. Mutation/planning tools are deliberately excluded — an automatic
+# follow-up must never write state or trigger a consent gate without the user.
+_ALLOWED_FOLLOWUP_TOOLS = frozenset({
+    "web_research",
+    "get_entity_details",
+    "search_knowledge",
+    "call_host_api",
+})
+
+
 # ── Dataclasses ────────────────────────────────────────────────────────────────
 
 def _phase_name(plan, phase_id: int) -> str:
@@ -50,6 +63,20 @@ def _phase_name(plan, phase_id: int) -> str:
         if p.phase_id == phase_id and p.name:
             return p.name
     return f"Phase {phase_id + 1}"
+
+
+@dataclass
+class ObservationResult:
+    """Pulse v2 Phase 5 — structured observation of a step's tool result.
+
+    ``answer`` is the grounded final answer (or an interim one); when the
+    model concludes it needs another read-only tool, ``needs_followup`` is
+    True and ``followup_tool``/``followup_args`` name the next step.
+    """
+    answer: str | None = None
+    needs_followup: bool = False
+    followup_tool: str | None = None
+    followup_args: dict | None = None
 
 
 @dataclass
@@ -67,6 +94,8 @@ class StepResult:
     # P1.3: consent pause
     paused: bool = False
     confirmation_token: str | None = None
+    # Pulse v2 Phase 5: read-only follow-up requested by the observation.
+    followup: ObservationResult | None = None
 
 
 @dataclass
@@ -273,6 +302,15 @@ class ReActLoop:
         remaining = [
             s for s in plan.steps if s.step_id not in completed_ids
         ]
+
+        # Pulse v2 Phase 5: multi-hop follow-up budget + next-step id counter.
+        followup_steps_used = 0
+        _next_step_id = max((s.step_id for s in plan.steps), default=-1) + 1
+        try:
+            from ai.engine.core.config import get_settings
+            _max_followup_steps = int(get_settings().PULSE_LOOP_MAX_STEPS)
+        except Exception:  # noqa: BLE001 - settings read must never break the run
+            _max_followup_steps = 6
 
         # ── Phase bookkeeping (workflow stages) ───────────────────────────
         # plan.phases gives each step a stage. Phases run in order (phase i
@@ -493,6 +531,33 @@ class ReActLoop:
                 completed_ids.add(step.step_id)
                 if result.draft_text:
                     step_contexts[step.step_id] = result.draft_text
+
+                # ── Pulse v2 Phase 5: inject a read-only follow-up step ────
+                # When the observation concluded more data is needed and named
+                # an allowed read-only tool, append a new step so the loop
+                # fetches it automatically (multi-hop) — no new user message.
+                if self._should_inject_followup(
+                    result, followup_steps_used, _max_followup_steps
+                ):
+                    followup_steps_used += 1
+                    _fu = result.followup
+                    _fid = _next_step_id
+                    _next_step_id += 1
+                    _followup_step = PlanStep(
+                        step_id=_fid,
+                        intent=f"Fetch {_fu.followup_tool} to complete the answer",
+                        tool_name=_fu.followup_tool,
+                        tool_args=_fu.followup_args or {},
+                        is_mutation=False,
+                        depends_on=[step.step_id],
+                        agent_role="orchestrator",
+                    )
+                    plan.steps.append(_followup_step)
+                    remaining.append(_followup_step)
+                    logger.info(
+                        "ReActLoop: multi-hop follow-up step=%d tool=%s (%d/%d)",
+                        _fid, _fu.followup_tool, followup_steps_used, _max_followup_steps,
+                    )
 
                 # ── Phase completed? (all steps in the phase are done) ──
                 # Runs AFTER completed_ids.update so single-step phases fire.
@@ -850,6 +915,30 @@ class ReActLoop:
                     )
                     return result
 
+            # ── Pulse v2 Phase 1: observe — synthesize a grounded answer from a
+            #    successfully executed tool result (draft→critic→execute→observe).
+            #    Phase 5: the observation may also request a read-only follow-up.
+            if result.tool_output and not result.error and not result.paused:
+                _prior = ""
+                if step.depends_on:
+                    _deps = [
+                        step_contexts[d] for d in step.depends_on
+                        if step_contexts.get(d)
+                    ]
+                    _prior = "\n\n".join(_deps)
+                _obs = await self._observe(
+                    step=step, tool_output=result.tool_output, user_message=user_message,
+                    system_prompt=system_prompt, conversation_history=conversation_history,
+                    instance_config=instance_config, user_info=user_info, dw=dw,
+                    prior_context=_prior,
+                    model=model_for_profile("investigate") if _prior else None,
+                )
+                if _obs:
+                    if _obs.answer:
+                        result.draft_text = _obs.answer
+                    if _obs.needs_followup and _obs.followup_tool:
+                        result.followup = _obs
+
             # ── Flight Director: on_step_completed + bounded fidelity re-run ─
             # Additive supervisor. Read-only/idempotent steps may be re-run
             # ONCE when the worker's declared tool calls outnumber what actually
@@ -954,6 +1043,135 @@ class ReActLoop:
             }
 
         return result
+
+    async def _observe(
+        self,
+        *,
+        step: PlanStep,
+        tool_output,
+        user_message: str,
+        system_prompt: str,
+        conversation_history: list[dict] | None,
+        instance_config: dict | None,
+        user_info: dict | None,
+        dw,
+        prior_context: str = "",
+        model: str | None = None,
+    ) -> ObservationResult | None:
+        """Pulse v2 Phase 1+5 — observe a tool result and decide next action.
+
+        After a step's tool executes successfully, ask the draft witness for a
+        grounded answer. Phase 5: the model may instead (or also) request ONE
+        more read-only tool call to complete a multi-hop answer. Confirmation
+        proposals (the consent gate owns them) and ``no_match`` payloads (the
+        escalation/clarification path owns them) are never synthesized.
+        """
+        result_raw = tool_output.get("result") if isinstance(tool_output, dict) else tool_output
+
+        # Confirmation proposal → never synthesize; the consent gate owns this.
+        _parsed = result_raw
+        if isinstance(_parsed, str):
+            try:
+                _parsed = json.loads(_parsed)
+            except (TypeError, ValueError):
+                _parsed = None
+        if isinstance(_parsed, dict) and _parsed.get("requires_confirmation"):
+            return None
+
+        # no_match → never synthesize; escalation/clarification owns this.
+        if payload_status(result_raw) == "no_match":
+            return None
+
+        tool_name = tool_output.get("tool_name", "tool") if isinstance(tool_output, dict) else "tool"
+        result_text = result_raw if isinstance(result_raw, str) else json.dumps(
+            result_raw, ensure_ascii=False, default=str,
+        )
+        result_text = result_text[:4000]
+
+        prior_block = ""
+        if prior_context and prior_context.strip():
+            prior_block = f"\n\nPrior step results:\n{prior_context.strip()}\n"
+
+        observation_prompt = (
+            f"TOOL RESULT from {tool_name}:\n{result_text}\n"
+            f"{prior_block}"
+            f"Original question: {user_message}\n\n"
+            "Decide whether the tool result above (plus any prior results) "
+            "fully answers the original question, or whether you need ONE more "
+            "tool call to complete it.\n"
+            "Reply with ONLY a JSON object — no prose, no markdown fences:\n"
+            '{"answer": "final or interim answer text", "needs_followup": false, '
+            '"followup_tool": null, "followup_args": null}\n'
+            "Rules:\n"
+            "- If it fully answers the question, set needs_followup=false and "
+            "write the final grounded answer in answer.\n"
+            "- If you need another tool, set needs_followup=true, write a short "
+            "interim answer (may be empty), set followup_tool to one of: "
+            + ", ".join(sorted(_ALLOWED_FOLLOWUP_TOOLS))
+            + ", and set followup_args to that tool's arguments.\n"
+            "- Ground your answer ONLY in the given results — never invent data."
+        )
+
+        obs_draft = await dw.draft(
+            instance_id="",
+            conversation_id="",
+            user_message=observation_prompt,
+            system_prompt=system_prompt,
+            conversation_history=conversation_history,
+            instance_config=instance_config,
+            user_info=user_info,
+            tools=None,
+            model=model,
+        )
+
+        text = (obs_draft.text or "").strip()
+        if not text:
+            return None
+
+        # Phase 5: parse the structured JSON decision when the model complied.
+        try:
+            _decision = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            _decision = None
+        if isinstance(_decision, dict):
+            answer = (_decision.get("answer") or "").strip() or None
+            needs_followup = bool(_decision.get("needs_followup"))
+            followup_tool = (_decision.get("followup_tool") or "").strip() or None
+            followup_args = _decision.get("followup_args")
+            followup_args = followup_args if isinstance(followup_args, dict) else None
+            if answer or needs_followup:
+                return ObservationResult(
+                    answer=answer,
+                    needs_followup=needs_followup,
+                    followup_tool=followup_tool,
+                    followup_args=followup_args,
+                )
+
+        # Fallback (Phase 1 behavior): plain prose = a grounded final answer.
+        if len(text) > 20:
+            return ObservationResult(answer=text, needs_followup=False)
+        return None
+
+    def _should_inject_followup(
+        self,
+        result: StepResult | None,
+        followup_steps_used: int,
+        max_steps: int,
+    ) -> bool:
+        """Pulse v2 Phase 5 guard — decide whether a follow-up may be injected.
+
+        Bounds the number of auto-chained read-only steps (``max_steps``) and
+        rejects anything outside the allow-list (mutations and planning tools
+        included). Kept as a method so the budget/allow-list logic is testable
+        without a full ReActLoop run.
+        """
+        return bool(
+            result
+            and result.followup
+            and result.followup.needs_followup
+            and result.followup.followup_tool in _ALLOWED_FOLLOWUP_TOOLS
+            and followup_steps_used < max_steps
+        )
 
     def _build_step_prompt(
         self, step: PlanStep, user_message: str, system_prompt: str,

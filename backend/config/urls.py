@@ -86,6 +86,7 @@ urlpatterns = [
     path(f'{api_prefix}/healthy/', include('healthy.urls')),
     path(f'{api_prefix}/people/', include('people.urls')),
     path(f'{api_prefix}/ai/workspace/', include('ai.workspace_urls')),
+    path(f'{api_prefix}/ai/work-objectives/', include('ai.work_objectives_urls')),
     path(f'{api_prefix}/ai/plans/', include('ai.plans_urls')),
     path(f'{api_prefix}/ai/catalog/', include('ai.catalog_urls')),
     path(f'{api_prefix}/ai/runs/', include('ai.durable_urls')),
@@ -97,6 +98,7 @@ urlpatterns = [
     path(f'{api_prefix}/ai/operations/', include('ai.progress_urls')),
     path(f'{api_prefix}/ai/audit/', include('ai.audit_urls')),
     path(f'{api_prefix}/ai/watches/', include('ai.watches_urls')),
+    path(f'{api_prefix}/mcp/', include('ai.mcp.server_urls')),
     path(f'{api_prefix}/', include('evidence.urls')),
 ]
 

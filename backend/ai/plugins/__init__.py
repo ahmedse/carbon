@@ -28,6 +28,8 @@ def register_builtin_plugins() -> None:
     from .plan_lifecycle import ApprovePlan, EditPlan
     from .web_research import WebResearch
     from .export_document import ExportDocument
+    from .save_work_objective import SaveWorkObjective
+    from .get_work_objectives import GetWorkObjectives
     from .unit_converter import UnitConverter
 
     register_plugin(CodeExecuteTool())
@@ -39,4 +41,6 @@ def register_builtin_plugins() -> None:
     register_plugin(ApprovePlan())
     register_plugin(WebResearch())
     register_plugin(ExportDocument())
+    register_plugin(SaveWorkObjective())
+    register_plugin(GetWorkObjectives())
     register_plugin(UnitConverter())

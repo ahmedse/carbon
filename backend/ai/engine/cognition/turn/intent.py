@@ -95,6 +95,7 @@ class IntentResolution:
     candidates: list[IntentCandidate] = field(default_factory=list)
     confidence: float = 0.0           # top-candidate confidence (0.0 when none)
     needs_host_data: bool = False     # True when a GET endpoint should be called
+    needs_live_evidence: bool = False  # True = model should call a live/real-time tool
     zone: str = "platform"            # platform|concept|real_time|general|off_limits
     clarification: str = ""           # question to ask (action == "clarify")
     options: list[str] = field(default_factory=list)  # options (action == "disambiguate")
@@ -177,6 +178,10 @@ def _build_system_prompt(labels: list[dict]) -> str:
         "- If the user is greeting, chatting, or asking general knowledge that "
         "  needs NO system data, action = \"answer\" with `endpoint` = null.",
         "- Confidence must be a number 0.0–1.0.",
+        "- Set `needs_live_evidence` to true if the answer requires live data "
+        "the LLM cannot know from training (current weather, live sensor "
+        "readings, today's news, real-time exchange rates). false for "
+        "everything else.",
         "- Set `delivery` to what the user wants DONE with the data: `list` "
         "  (enumerate every record — \"show me ALL\", \"list them\"), `lookup` "
         "  (one specific value), `explain` (understand what this is / how it "
@@ -203,7 +208,8 @@ def _build_system_prompt(labels: list[dict]) -> str:
         "",
         "Respond with ONLY valid JSON matching exactly this shape:",
         '{"action":"answer","endpoint":"list_gwp_gases","confidence":0.95,'
-        '"delivery":"explain","zone":"platform","clarification":null,"options":null}',
+        '"delivery":"explain","zone":"platform","needs_live_evidence":false,'
+        '"clarification":null,"options":null}',
     ]
     return "\n".join(lines)
 
@@ -278,6 +284,7 @@ def _to_resolution(data: dict) -> IntentResolution:
     options = [str(o) for o in (data.get("options") or []) if str(o).strip()]
     clarification = str(data.get("clarification") or "").strip()
     needs_host_data = bool(data.get("needs_host_data")) or bool(candidates)
+    needs_live_evidence = bool(data.get("needs_live_evidence"))
 
     delivery = str(data.get("delivery") or "explain").lower()
     if delivery not in _DELIVERY_MODES:
@@ -300,6 +307,7 @@ def _to_resolution(data: dict) -> IntentResolution:
         candidates=candidates,
         confidence=confidence,
         needs_host_data=needs_host_data,
+        needs_live_evidence=needs_live_evidence,
         zone=zone,
         clarification=clarification,
         options=options,

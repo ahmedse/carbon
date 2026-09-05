@@ -62,6 +62,36 @@ def get_model_for_task(task: str) -> str:
     return _load_task_model_map().get(task, get_settings().LLM_MODEL)
 
 
+# ── Turn profile → model (Pulse v2 Phase 9 — model policy) ───────────────────
+
+def model_for_profile(profile: str | None) -> str | None:
+    """Map a turn profile to an explicit model override, or None for default.
+
+    Profiles (Pulse v2 Phase 9):
+      - "interactive" → instance default (always None — the default model).
+      - "investigate" → ``LLM_INVESTIGATE_MODEL`` when configured, else None
+        (falls back to the instance default).
+      - "verify"      → ``LLM_VERIFY_MODEL`` when configured, else the
+        investigate model, else None (instance default).
+
+    Returns None when no explicit model is configured for the profile, which
+    callers interpret as "use the default model" (so an unset strong model
+    silently degrades to the default rather than erroring).
+    """
+    if not profile or profile == "interactive":
+        return None
+
+    settings = get_settings()
+
+    if profile == "investigate":
+        return settings.LLM_INVESTIGATE_MODEL or None
+
+    if profile == "verify":
+        return settings.LLM_VERIFY_MODEL or settings.LLM_INVESTIGATE_MODEL or None
+
+    return None
+
+
 # ── Cost estimation ──────────────────────────────────────────────────────────
 
 _COST_CACHE: dict[str, dict[str, float]] | None = None

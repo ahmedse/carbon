@@ -101,6 +101,126 @@ def test_confidence_label_mapping():
     assert _confidence_label(0.2) == "uncertain"
 
 
+# ── 1b. Conservation of confidence helpers (unit) ──────────────────────────
+
+
+def test_min_input_confidence_resolved_dict():
+    from ai.engine_runtime import _min_input_confidence
+
+    assert (
+        _min_input_confidence(
+            [
+                {
+                    "tool_name": "web_research",
+                    "result": {"status": "resolved", "confidence": 0.7},
+                }
+            ]
+        )
+        == 0.7
+    )
+
+
+def test_min_input_confidence_json_string():
+    from ai.engine_runtime import _min_input_confidence
+
+    assert (
+        _min_input_confidence(
+            [
+                {
+                    "tool_name": "web_research",
+                    "result": '{"status": "resolved", "confidence": 0.5}',
+                }
+            ]
+        )
+        == 0.5
+    )
+
+
+def test_min_input_confidence_host_envelope():
+    from ai.engine_runtime import _min_input_confidence
+
+    assert (
+        _min_input_confidence(
+            [
+                {
+                    "tool_name": "web_research",
+                    "result": {
+                        "status_code": 200,
+                        "data": {"status": "resolved", "confidence": 0.4},
+                    },
+                }
+            ]
+        )
+        == 0.4
+    )
+
+
+def test_min_input_confidence_ignores_no_match_and_error():
+    from ai.engine_runtime import _min_input_confidence
+
+    results = [
+        {
+            "tool_name": "web_research",
+            "result": {"status": "no_match", "reason": "x", "hint": "h"},
+        },
+        {
+            "tool_name": "web_research",
+            "result": {"status": "error", "cause": "boom"},
+        },
+        {
+            "tool_name": "web_research",
+            "result": {"status": "resolved", "confidence": 0.6},
+        },
+    ]
+    assert _min_input_confidence(results) == 0.6
+
+
+def test_min_input_confidence_none_when_no_resolved():
+    from ai.engine_runtime import _min_input_confidence
+
+    results = [
+        {
+            "tool_name": "web_research",
+            "result": {"status": "no_match", "reason": "x", "hint": "h"},
+        },
+        {
+            "tool_name": "web_research",
+            "result": {"status": "error", "cause": "boom"},
+        },
+    ]
+    assert _min_input_confidence(results) is None
+
+
+def test_min_input_confidence_empty_list_none():
+    from ai.engine_runtime import _min_input_confidence
+
+    assert _min_input_confidence([]) is None
+
+
+def test_conserved_confidence_no_constraint():
+    from ai.engine_runtime import _conserved_confidence
+
+    assert _conserved_confidence(0.9, None) == (0.9, False)
+
+
+def test_conserved_confidence_caps_amplification():
+    from ai.engine_runtime import _conserved_confidence
+
+    assert _conserved_confidence(0.9, 0.6) == (0.6, True)
+
+
+def test_conserved_confidence_no_violation():
+    from ai.engine_runtime import _conserved_confidence
+
+    assert _conserved_confidence(0.5, 0.6) == (0.5, False)
+
+
+def test_conserved_confidence_none_answer():
+    from ai.engine_runtime import _conserved_confidence
+
+    assert _conserved_confidence(None, 0.6) == (0.6, False)
+
+
 # ── 2. Honest-uncertainty turn → flag + label (integration) ────────────────
 
 
@@ -250,6 +370,110 @@ def test_clarify_shortcircuit_surfaces_label_and_honest_flag(
     assert result["honest_uncertainty"] is True
     assert result["confidence_label"] == "medium"
     assert "Are you asking" in (result.get("content") or "")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_weather_clarify_stores_pending_weather_focus(
+    monkeypatch, django_store, single_pass, stub_llm
+):
+    """WEATHER-FT turn 1: a weather query that the intent resolver clarifies
+    must seed ``pending_weather`` in working memory so the next turn (a bare
+    location confirmation) can re-route into the weather tool."""
+    _set_reason_model(monkeypatch, reason="", escalation="")
+
+    from ai.engine.cognition.turn.intent import IntentResolution, IntentResolver
+    from ai.engine.memory.working import get_working_memory
+
+    async def _fake_resolve(self, **kwargs):
+        return IntentResolution(
+            action="clarify",
+            delivery="explain",
+            intent="",
+            candidates=[],
+            confidence=0.0,
+            clarification="Which location in North Coast Egypt do you mean?",
+            options=[],
+            input_tokens=5,
+            output_tokens=3,
+            model_used="gpt-4o",
+        )
+
+    monkeypatch.setattr(IntentResolver, "resolve", _fake_resolve)
+
+    conv_id = "conv-weather-ft-1"
+    _wm = get_working_memory()
+    _wm.clear(conv_id)
+
+    from ai.engine_runtime import dispatch_task
+
+    data = dispatch_task(
+        "chat",
+        {
+            "message": "tell me abt the todays weather in northcost egypt?",
+            "conversation_history": {"conversation_id": conv_id, "messages": []},
+        },
+        instance_id="carbon",
+    )
+
+    assert data.get("status") == "completed", data
+    focus = _wm.get_focus(conv_id)
+    assert focus is not None, "expected pending_weather focus to be stored"
+    assert focus.entity_type == "pending_weather"
+    assert "weather" in focus.entity.lower()
+    _wm.clear(conv_id)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_weather_followthrough_suppresses_second_clarification(
+    monkeypatch, django_store, single_pass, stub_llm
+):
+    """WEATHER-FT turn 2: with a ``pending_weather`` focus already set, a bare
+    location reply is rewritten to a weather query and the intent-resolver
+    clarify/disambiguate short-circuit is SUPPRESSED — never a second
+    'which one did you mean?' clarification."""
+    _set_reason_model(monkeypatch, reason="", escalation="")
+
+    from ai.engine.cognition.turn.intent import IntentResolution, IntentResolver
+    from ai.engine.memory.working import get_working_memory
+
+    async def _fake_resolve(self, **kwargs):
+        # The resolver WOULD disambiguate — the rewrite-turn guard must skip it.
+        return IntentResolution(
+            action="disambiguate",
+            delivery="explain",
+            intent="",
+            candidates=[],
+            confidence=0.4,
+            clarification="",
+            options=["El Alamein, Egypt", "El Alamein, Libya"],
+            input_tokens=5,
+            output_tokens=3,
+            model_used="gpt-4o",
+        )
+
+    monkeypatch.setattr(IntentResolver, "resolve", _fake_resolve)
+
+    conv_id = "conv-weather-ft-2"
+    _wm = get_working_memory()
+    _wm.set_focus(conv_id, "weather in northcost egypt", "pending_weather")
+
+    from ai.engine_runtime import dispatch_task
+
+    data = dispatch_task(
+        "chat",
+        {
+            "message": "El Alamein",
+            "conversation_history": {"conversation_id": conv_id, "messages": []},
+        },
+        instance_id="carbon",
+    )
+
+    assert data.get("status") == "completed", data
+    content = (data["result"].get("content") or "").lower()
+    # The disambiguation short-circuit text must NOT appear — suppression worked.
+    assert "which do you mean" not in content
+    assert "el alamein, libya" not in content
+    _wm.clear(conv_id)
 
 
 @pytest.mark.django_db(transaction=True)

@@ -1373,3 +1373,34 @@ export function getSubagent(token, conversationId, subId) {
 export function listSubagents(token, conversationId) {
   return apiFetch(`${BASE}conversations/${conversationId}/subagents/`, { token });
 }
+
+// ── Work Objectives (Pulse v2 Phase 8) ───────────────────────────────────────
+// Saved investigation objectives the user can see and resume. Uses the
+// authenticated user's token from localStorage (apiFetch auto-injects).
+
+const WORK_OBJECTIVES_BASE = 'ai/work-objectives/';
+
+/**
+ * List the current user's saved work objectives.
+ * @param {object} [params]
+ * @param {string} [params.statusFilter] - "open" (default), a specific status,
+ *   or "all" to include completed/cancelled.
+ * @returns {Promise<Array|{results: Array}>} objectives (top-level array or DRF page)
+ */
+export function getWorkObjectives({ statusFilter = 'open' } = {}) {
+  const params = new URLSearchParams({ status_filter: statusFilter });
+  return apiFetch(`${WORK_OBJECTIVES_BASE}?${params}`);
+}
+
+/**
+ * Update a work objective's status (e.g. mark complete).
+ * @param {string} objectiveId
+ * @param {string} status - "open" | "in_progress" | "waiting_for_user" | "completed" | "cancelled"
+ * @returns {Promise<object>} the updated objective
+ */
+export function updateObjectiveStatus(objectiveId, status) {
+  return apiFetch(`${WORK_OBJECTIVES_BASE}${objectiveId}/`, {
+    method: 'PATCH',
+    body: { status },
+  });
+}
