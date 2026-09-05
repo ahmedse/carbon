@@ -10,6 +10,7 @@ import 'allotment/dist/style.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../i18n/useLanguage';
+import { PLATFORM_TITLE } from '../config/branding';
 import { useShellState } from './useShellState';
 import { ActivityBar } from './ActivityBar';
 import { ShellSidebar } from './ShellSidebar';
@@ -220,7 +221,7 @@ function NotesShortcutHandler({ toggleOpen }) {
         overflow: 'hidden',
       }}
       role="application"
-      aria-label={t('ui.ariaAppLabel')}
+      aria-label={PLATFORM_TITLE}
     >
       {/* Header */}
       <HeaderEnhanced />
