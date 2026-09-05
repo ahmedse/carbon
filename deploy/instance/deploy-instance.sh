@@ -21,8 +21,9 @@ die() { echo -e "${RED}✗${NC}  $*" >&2; exit 1; }
 [[ -f "$ENV_FILE" ]] || die "Missing $ENV_FILE — copy deploy/$INSTANCE/.env there first"
 grep -q "CHANGE_ME" "$ENV_FILE" && die "$ENV_FILE still has CHANGE_ME placeholders"
 
-set -a; source "$ENV_FILE"; set +a
-for v in INSTANCE DOMAIN BACKEND_PORT DB_NAME DB_USER DB_PASSWORD DJANGO_SECRET_KEY; do
+ENV_FILE_ABS="$ENV_FILE"  # absolute path survives the source below (env file redefines ENV_FILE as a compose-relative path)
+set -a; source "$ENV_FILE_ABS"; set +a
+for v in INSTANCE DOMAIN BACKEND_PORT DB_NAME DB_USER DB_PASSWORD SECRET_KEY FERNET_KEY TURNKEY_CALLBACK_SECRET; do
   [[ -n "${!v}" ]] || die "$v is not set in $ENV_FILE"
 done
 ok "Instance=$INSTANCE  domain=$DOMAIN  port=$BACKEND_PORT  db=$DB_NAME"
@@ -54,8 +55,8 @@ fi
 
 # ── Build & start backend ─────────────────────────────────────────
 ok "Building ${INSTANCE}-backend"
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build --no-cache
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
+docker compose --env-file "$ENV_FILE_ABS" -f "$COMPOSE_FILE" build --no-cache
+docker compose --env-file "$ENV_FILE_ABS" -f "$COMPOSE_FILE" up -d
 
 # ── Migrate + per-instance app activation ─────────────────────────
 ok "Migrating"
