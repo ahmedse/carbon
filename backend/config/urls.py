@@ -24,7 +24,6 @@ IS_DEVELOPMENT = getattr(settings, "IS_DEVELOPMENT", False)
 
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
     path(f'{api_prefix}/health/', health_check),
     path(f'{api_prefix}/health/metrics/', metrics_view),
     # EPH-6A: full Prometheus registry export (generate_latest)
@@ -98,9 +97,17 @@ urlpatterns = [
     path(f'{api_prefix}/ai/operations/', include('ai.progress_urls')),
     path(f'{api_prefix}/ai/audit/', include('ai.audit_urls')),
     path(f'{api_prefix}/ai/watches/', include('ai.watches_urls')),
-    path(f'{api_prefix}/mcp/', include('ai.mcp.server_urls')),
     path(f'{api_prefix}/', include('evidence.urls')),
 ]
+
+# ── Django admin (ADR-0015 — primary platform brand only) ─────────────────
+# Mounted ONLY when settings.ADMIN_ENABLED is True (default: brand 'aastmt').
+# Per-brand instances (nibras/medos/tectona) have this URL absent entirely, so
+# /admin/ returns 404 instead of leaking the raw Django admin + all
+# site-registered models. django.contrib.admin stays in INSTALLED_APPS so
+# admin.site registrations and LogEntry (health check) keep working.
+if getattr(settings, "ADMIN_ENABLED", True):
+    urlpatterns.insert(0, path('admin/', admin.site.urls))
 
 # ── OpenAPI schema + docs (ADR 0003 — drf-spectacular) ──────────────────
 # NOT dev-gated: drf-spectacular is import-safe in every environment, so the

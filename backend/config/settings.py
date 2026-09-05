@@ -520,6 +520,19 @@ BRAND_APP_PRESETS = {
     },
 }
 
+# ── Django admin exposure (ADR-0015 multi-instance) ──────────────────────
+# The raw Django admin (/admin/) is a PLATFORM-level ops surface. Because
+# admin.py modules register EVERY model site-wide (carbon/healthy/mdm/…),
+# mounting it on a per-brand instance would leak cross-domain models into
+# that instance. Expose it ONLY on the primary platform brand(s) listed here.
+# Per-brand instances (nibras/medos/tectona) manage users/groups/apps through
+# the in-app Platform UI instead — never the raw admin.
+ADMIN_ENABLED_BRANDS = {
+    b.strip() for b in get_env("DJANGO_ADMIN_BRANDS", "aastmt").split(",")
+    if b.strip()
+}
+ADMIN_ENABLED = DJANGO_BRAND in ADMIN_ENABLED_BRANDS
+
 # ── Phase 1.1: Email defaults (overridden at runtime by EmailConfig model) ─
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = get_env(
