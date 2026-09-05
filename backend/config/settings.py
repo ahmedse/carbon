@@ -167,8 +167,15 @@ APP_REGISTRY = [
         "kind": "domain",
         "name": "People & Payroll",
         "version": "0.1.0",
-        "description": "HRMS wedge: employee master, payroll, leave, EOSI, GOSI, WPS (Nibras)",
-        "roles": [],
+        "description": "Nibras HR & payroll — employees, compliance, and payroll runs",
+        "roles": [
+            {"key": "people:admin", "label": "People Admin", "scoped": False,
+             "description": "Manage employees, compliance rules, and payroll runs"},
+            {"key": "people:data_owner", "label": "Data Owner", "scoped": True,
+             "description": "CRUD on assigned org-unit records"},
+            {"key": "people:analyst", "label": "Analyst", "scoped": False,
+             "description": "Read-only, cross-org visibility"},
+        ],
     },
     {
         "id": "healthy",

@@ -422,11 +422,22 @@ def role_registry(request):
     if not user_is_global_admin(request.user) and not request.user.is_superuser:
         return Response({'detail': 'You do not have permission to access this endpoint.'}, status=403)
 
+    # Brand-scope domain apps so a Nibras instance only sees its own apps' roles
+    # (carbon/healthy/stub stay out), mirroring platform_apps below.
+    brand = getattr(settings, "DJANGO_BRAND", "aastmt")
+    brand_domain_apps = set(
+        getattr(settings, "BRAND_APP_PRESETS", {}).get(brand, {}).keys()
+    )
+
     role_data = []
     for app_manifest in AppManifestService.load_manifests():
+        app_id = app_manifest.get('id')
+        kind = app_manifest.get('kind', 'core')
+        if kind == 'domain' and app_id not in brand_domain_apps:
+            continue  # not installed for this brand — omit entirely
         role_data.append({
-            'id': app_manifest.get('id'),
-            'name': app_manifest.get('name', app_manifest.get('id')),
+            'id': app_id,
+            'name': app_manifest.get('name', app_id),
             'version': app_manifest.get('version', '1.0.0'),
             'roles': app_manifest.get('roles', []),
         })
@@ -576,6 +587,7 @@ def platform_apps(request, app_id=None):
             'kind': kind,
             'name': manifest.get('name', app_id),
             'version': manifest.get('version', '1.0.0'),
+            'description': manifest.get('description', ''),
             'is_enabled': config.is_enabled,
             'display_order': config.display_order,
             'roles': manifest.get('roles', []),
