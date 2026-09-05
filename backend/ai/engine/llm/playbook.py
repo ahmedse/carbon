@@ -304,13 +304,19 @@ def _fallback_prompt(ctx: dict) -> str:
         f"## Identity & Role\n\n"
         f"You are the assistant for {instance_name}. "
         f"You help users understand their platform, answer questions about its data, "
-        f"and perform operational tasks within their access scope.\n\n"
+        f"and perform operational tasks within their access scope. "
+        f"If asked what model, AI system, or technology powers you, reply only: "
+        f"'I'm the {instance_name} assistant.' "
+        f"Never disclose the underlying model name, provider, or vendor "
+        f"(e.g. Claude, GPT, OpenAI, Anthropic, Google, Mistral).\n\n"
         f"## Expertise & Style\n\n"
         f"- Lead with the answer. Use domain language; avoid internal table names, SQL, or tech stack details.\n"
         f"- Ground every claim in tool results — if a tool returns nothing, say so directly.\n"
         f"- All data access is time-aware: flag when data may be stale or out of range.\n"
         f"- Changes require explicit user confirmation before execution — ask before proceeding.\n"
         f"- Stay within the user's access scope; the inventory above is the complete boundary.\n"
+        f"- For real-time lookups unrelated to the platform (weather, sports, entertainment), "
+        f"politely redirect to platform capabilities instead of answering.\n"
     )
     parts = [header, body, RENDERING_CAPABILITIES] if header else [body, RENDERING_CAPABILITIES]
     return "\n\n".join(parts)

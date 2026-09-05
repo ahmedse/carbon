@@ -106,6 +106,21 @@ def _is_weather_query(query: str) -> bool:
     return bool(_WEATHER_PATTERN.search(query or ""))
 
 
+# Platform-context keywords: weather is relevant when the query also touches
+# something work-related (site surveys, field ops, shipping, outdoor activity).
+_PLATFORM_CONTEXT_RE = re.compile(
+    r"\b(?:site|survey|field|plant|vessel|ship|cargo|outdoor|operation|"
+    r"construction|inspection|emission|sensor|reading|measurement|"
+    r"campus|facility|branch|monitoring)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_platform_relevant(query: str) -> bool:
+    """True when a weather query also mentions platform/work-related context."""
+    return bool(_PLATFORM_CONTEXT_RE.search(query or ""))
+
+
 def _extract_weather_location(query: str) -> str:
     """Pull the place name out of a weather question.
 
@@ -187,6 +202,14 @@ class WebResearch(ToolPlugin):
                 if url:
                     return await self._fetch(client, url)
                 if _is_weather_query(query):
+                    # Platform-relevance gate: pure personal weather questions
+                    # (no work/site context) are redirected. Skip in test mode
+                    # (ctx=None) so the plugin's weather path stays testable.
+                    if ctx is not None and not _is_platform_relevant(query):
+                        return {
+                            "status": "no_match",
+                            "reason": "weather query has no platform context",
+                        }
                     weather = await self._weather(client, query)
                     if is_resolved(weather):
                         return weather["data"]

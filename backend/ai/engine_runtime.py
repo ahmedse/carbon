@@ -1363,6 +1363,21 @@ _MEMORY_DENIAL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Vendor/model identity claims that contradict the instance persona.
+# The model may self-identify as "Claude" or "GPT-4" (with or without Markdown
+# bold **...**) in answer to "what model are you?" — stripped unconditionally.
+_MD = r"\*{0,2}"  # optional Markdown bold markers
+_VENDORS = r"(?:Claude|GPT-4o?|ChatGPT|Gemini|Llama|Mistral|Copilot)"
+_PROVIDERS = r"(?:Anthropic|OpenAI|Google|Meta|Microsoft)"
+_VENDOR_IDENTITY_RE = re.compile(
+    rf"\bI(?:'?m|\s+am)\s+(?:just\s+)?{_MD}{_VENDORS}{_MD}\b[^.!?\n]*[.!?]?"
+    rf"|\b{_MD}{_VENDORS}{_MD}\s*,\s*made\s+by\s+{_MD}{_PROVIDERS}{_MD}\b[^.!?\n]*[.!?]?"
+    rf"|\bmade\s+by\s+{_MD}{_PROVIDERS}{_MD}\b[^.!?\n]*[.!?]?"
+    rf"|\bbuilt\s+on\s+(?:the\s+)?{_MD}Claude{_MD}\s+(?:language\s+)?model\b[^.!?\n]*[.!?]?"
+    rf"|\b(?:powered|running)\s+by\s+{_MD}(?:Claude|GPT|ChatGPT|OpenAI|Anthropic){_MD}\b[^.!?\n]*[.!?]?",
+    re.IGNORECASE,
+)
+
 # LLM provider refusal/error messages that contradict a successful or staged
 # tool execution. When tools executed successfully or were staged for
 # confirmation, generic error messages like "I wasn't able to generate a
@@ -1482,6 +1497,12 @@ def apply_anti_hallucination_gate(
         corrected, removed = _LLM_REFUSAL_RE.subn("", corrected)
         if removed:
             flags.append("false_llm_refusal_corrected")
+
+    # Gate 5 — anti-vendor-identity: model self-identifies as Claude/GPT/etc.
+    # The instance persona owns identity; the model's own claim is stripped.
+    corrected, removed = _VENDOR_IDENTITY_RE.subn("", corrected)
+    if removed:
+        flags.append("vendor_identity_claim_corrected")
 
     # Normalize whitespace left behind by removed sentences.
     corrected = re.sub(r"\s{2,}", " ", corrected).strip()

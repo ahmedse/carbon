@@ -6,10 +6,22 @@ BE-02-2: Added valid_from/valid_to temporal validity, supersede_fact(),
 and write-path semantic dedup + contradiction detection.
 """
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 
 from ai.engine.core.clock import utcnow
+
+# Patterns that indicate the content is LLM noise rather than a real fact.
+# Applied in store_fact() before any DB/vector write.
+_MEMORY_NOISE_RE = re.compile(
+    r"^(?:hello|hi|hey|yes|no|ok|okay|sure|thanks|thank you|you'?re welcome)[!.,]?$"
+    r"|chat failed:"
+    r"|connection error"
+    r"|you'?re working on a workspace"
+    r"|how can i (?:assist|help) you",
+    re.IGNORECASE,
+)
 
 from ai.store import first, scope_q
 
@@ -62,6 +74,13 @@ class LongTermMemory:
         """
         fact_id = generate_uuid()
         effective_visibility = visibility if host_user_id else "shared"
+
+        # Reject noise before any write: error strings, generic greetings, or
+        # very short content that carries no durable information.
+        stripped = content.strip()
+        if len(stripped) < 15 or _MEMORY_NOISE_RE.search(stripped):
+            logger.debug("store_fact: rejected noise content (%r)", stripped[:80])
+            return fact_id  # return a valid-looking id; nothing was stored
 
         # ── Step 1: Semantic dedup ──────────────────────────────────────────
         try:
