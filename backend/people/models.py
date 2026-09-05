@@ -133,7 +133,10 @@ class Employee(models.Model):
     )
     nationality = models.CharField(max_length=100, blank=True)
     basic_salary = models.DecimalField(max_digits=14, decimal_places=3)
-    join_date = models.DateField(help_text="Service start date")
+    join_date = models.DateField(
+        null=True, blank=True,
+        help_text="Service start date (null = unknown, e.g. bulk ERP import)",
+    )
     rotation = models.CharField(
         max_length=32, blank=True,
         help_text="Config label only (e.g. '1/1'), NOT calculation logic",

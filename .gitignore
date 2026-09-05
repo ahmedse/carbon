@@ -176,6 +176,10 @@ logs/
 indexed_src/
 backend/.env.carbon
 
+# GOFSCO / Nibras employee data (PII — civil IDs, emails, salary) — never commit
+raw/GOFSCO app/20260905/
+raw/GOFSCO app/*/_extracted/
+
 # Windows Mark-of-the-Web (downloaded-file) artifacts
 *Zone.Identifier
 ~

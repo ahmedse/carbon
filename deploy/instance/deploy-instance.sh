@@ -27,6 +27,14 @@ for v in INSTANCE DOMAIN BACKEND_PORT DB_NAME DB_USER DB_PASSWORD DJANGO_SECRET_
 done
 ok "Instance=$INSTANCE  domain=$DOMAIN  port=$BACKEND_PORT  db=$DB_NAME"
 
+# ── Port collision guard (two instances must never share a port) ──
+if command -v ss &>/dev/null && ss -ltn 2>/dev/null | grep -qE ":${BACKEND_PORT}\\b"; then
+  die "Port $BACKEND_PORT is already in use — pick a free BACKEND_PORT in $ENV_FILE"
+fi
+if command -v docker &>/dev/null && docker ps --format '{{.Ports}}' 2>/dev/null | grep -qE ":${BACKEND_PORT}->"; then
+  die "Port $BACKEND_PORT is published by another container — pick a free BACKEND_PORT"
+fi
+
 # ── Host PostgreSQL — OWN database per instance ───────────────────
 if sudo -u postgres psql -lqt | cut -d'|' -f1 | grep -qw "$DB_NAME"; then
   ok "Database '$DB_NAME' already exists"

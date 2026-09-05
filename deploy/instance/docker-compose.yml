@@ -25,12 +25,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ${INSTANCE}_static:/static
-      - ${INSTANCE}_media:/media
-      - ${INSTANCE}_uploads:/app/dataschema_uploads
-      - ${INSTANCE}_evidence:/app/mediafiles/evidence
-      - ${INSTANCE}_exports:/app/mediafiles/exports
-      - ${INSTANCE}_imports:/app/mediafiles/imports
+      - static:/static
+      - media:/media
+      - uploads:/app/dataschema_uploads
+      - evidence:/app/mediafiles/evidence
+      - exports:/app/mediafiles/exports
+      - imports:/app/mediafiles/imports
     ports:
       - "${BACKEND_PORT:-8002}:8000"
     healthcheck:
@@ -41,9 +41,15 @@ services:
       start_period: 40s
 
 volumes:
-  ${INSTANCE}_static:
-  ${INSTANCE}_media:
-  ${INSTANCE}_uploads:
-  ${INSTANCE}_evidence:
-  ${INSTANCE}_exports:
-  ${INSTANCE}_imports:
+  static:
+    name: ${INSTANCE}_static
+  media:
+    name: ${INSTANCE}_media
+  uploads:
+    name: ${INSTANCE}_uploads
+  evidence:
+    name: ${INSTANCE}_evidence
+  exports:
+    name: ${INSTANCE}_exports
+  imports:
+    name: ${INSTANCE}_imports

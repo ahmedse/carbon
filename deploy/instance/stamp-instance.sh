@@ -21,7 +21,9 @@ mkdir -p "$DEST"
 
 cp "$TPL/docker-compose.yml"  "$DEST/docker-compose.yml"
 cp "$TPL/deploy-instance.sh"  "$DEST/deploy-instance.sh"
-chmod +x "$DEST/deploy-instance.sh"
+cp "$TPL/auto-deploy.sh"      "$DEST/auto-deploy.sh"
+cp "$TPL/setup-auto-deploy.sh" "$DEST/setup-auto-deploy.sh"
+chmod +x "$DEST/deploy-instance.sh" "$DEST/auto-deploy.sh" "$DEST/setup-auto-deploy.sh"
 
 sed -e "s/^INSTANCE=.*/INSTANCE=${INSTANCE}/" \
     -e "s|^ENV_FILE=.*|ENV_FILE=../../backend/.env.${INSTANCE}|" \
@@ -33,3 +35,5 @@ echo "Next steps:"
 echo "  1. Edit  $DEST/.env  (domain, DB creds, secret key, APP_ACTIVE_SLUGS)"
 echo "  2. Copy  cp $DEST/.env  $ROOT/backend/.env.$INSTANCE"
 echo "  3. Deploy bash $DEST/deploy-instance.sh $INSTANCE"
+echo "  4. Auto  sudo bash $DEST/setup-auto-deploy.sh $INSTANCE /srv/$INSTANCE <port> <user>"
+echo "     (polls for ${INSTANCE}-v* tags every 2 min — see README)"
