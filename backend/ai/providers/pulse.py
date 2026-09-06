@@ -51,6 +51,7 @@ from ai.engine_runtime import (
     dispatch_task_stream,
     list_modules,
 )
+from ai.instance_registry import resolve_instance_id
 
 logger = logging.getLogger("carbon.ai.pulse_provider")
 
@@ -79,7 +80,7 @@ class PulseProvider(AIProvider):
     """
 
     def __init__(self) -> None:
-        self._instance_id = "carbon"
+        self._instance_id = resolve_instance_id()
 
     # ── properties ────────────────────────────────────────────────────
 
@@ -480,6 +481,8 @@ class PulseProvider(AIProvider):
             payload["temperature"] = request.temperature
         if request.scope is not None and request.scope.user_identifier:
             payload["host_user_id"] = str(request.scope.user_identifier)
+        if request.scope is not None and request.scope.app_identifier:
+            payload["app_identifier"] = request.scope.app_identifier
         if request.conversation is not None:
             payload["conversation_history"] = {
                 "conversation_id": request.conversation.conversation_id,
@@ -495,7 +498,7 @@ class PulseProvider(AIProvider):
         """
         payload = self._chat_payload(request)
 
-        data = dispatch_task(T_CHAT, payload, timeout=15)
+        data = dispatch_task(T_CHAT, payload, timeout=15, instance_id=self._instance_id)
 
         if data.get("status") == "completed":
             result = data.get("result") or {}
@@ -531,7 +534,7 @@ class PulseProvider(AIProvider):
         """
         payload = self._chat_payload(request)
 
-        yield from dispatch_task_stream(T_CHAT, payload)
+        yield from dispatch_task_stream(T_CHAT, payload, instance_id=self._instance_id)
 
 
     def run_tool_stream(

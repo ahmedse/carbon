@@ -35,11 +35,13 @@ from typing import Any
 from django.conf import settings
 from django.utils import timezone
 
+from ai.instance_registry import resolve_instance_id
+
 logger = logging.getLogger("carbon.ai.flight_director")
 
 # Engine instance namespace for playbook rows — matches
-# ``ai.plans_service.PLAN_INSTANCE_ID`` (single-tenant Carbon).
-_PLAYBOOK_INSTANCE_ID = "carbon"
+# ``ai.plans_service.PLAN_INSTANCE_ID`` (brand-resolved).
+_PLAYBOOK_INSTANCE_ID = resolve_instance_id()
 
 # Reference arg keys whose values are host entity ids the director validates.
 _REFERENCE_ARG_KEYS = (

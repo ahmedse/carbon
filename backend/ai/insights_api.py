@@ -30,6 +30,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ai.engine.core.event_bus import events_channel, subscribe
+from ai.instance_registry import resolve_default_app_identifier
 from ai.pii_guard import PIIGuard
 
 # SSE heartbeat interval (seconds). Keeps proxies/nginx from closing the
@@ -95,7 +96,7 @@ def _frame_visible(user, frame: dict) -> bool:
     from accounts.constants import ADMIN_ROLES
     from accounts.rbac_utils import get_allowed_org_unit_ids, user_is_global_admin
 
-    if frame.get("app_identifier") != "carbon":
+    if frame.get("app_identifier") != resolve_default_app_identifier():
         return False
     if user.is_superuser or user_is_global_admin(user):
         return True

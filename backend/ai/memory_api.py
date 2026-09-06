@@ -41,6 +41,7 @@ from accounts.ai_scoping import scope_ai_queryset
 from accounts.capabilities import has_capability
 from accounts.rbac_utils import user_is_global_admin
 from ai.audit_service import AuditService
+from ai.instance_registry import resolve_instance_id
 from ai.models import AIUserProfile, AuditLog, MemoryEpisodic, MemoryLongTerm
 from ai.usage_service import AIUsage
 
@@ -293,7 +294,7 @@ class MemoryFactDeleteView(_MemoryBaseView):
             deleted, _by_model = lineage.delete()
             # Audit every forget (who/when/what) — legal requirement.
             AuditLog.objects.create(
-                instance_id="carbon",
+                instance_id=resolve_instance_id(),
                 actor=str(request.user.pk),
                 actor_type="user",
                 action="memory.forget",

@@ -27,11 +27,15 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
+from ai.instance_registry import resolve_default_app_identifier
+
 logger = logging.getLogger("carbon.ai.store")
 
 # Canonical CBAC partitioning scope. Every Store query injects these filters
 # so no engine data ever leaks across app / org-unit / user boundaries.
-DEFAULT_APP_IDENTIFIER = "carbon"
+# Brand-aware: a Nibras deployment defaults new rows to its own app
+# ("people"), never Carbon's.
+DEFAULT_APP_IDENTIFIER = resolve_default_app_identifier()
 DEFAULT_VISIBILITY = "private"
 
 

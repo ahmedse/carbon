@@ -143,7 +143,15 @@ class CarbonHostExecutor(HostAPIExecutor):
 
         body = body or {}
         operation = body.get("operation", "learn")
-        instance_id = body.get("instance_id") or "carbon"
+        # Scope memory facts to the active instance partition. The engine stamps
+        # the instance_id on the body, but fall back to the executor's resolved
+        # instance config so a Nibras fact can never land in the Carbon memory
+        # partition (and vice-versa).
+        instance_id = (
+            body.get("instance_id")
+            or (self.instance_config or {}).get("instance_id")
+            or "carbon"
+        )
         ltm = LongTermMemory(self.db)
 
         if operation == "forget":

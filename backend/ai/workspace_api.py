@@ -455,9 +455,10 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
         """
         from asgiref.sync import async_to_sync
 
-        from ai.engine_runtime import _carbon_instance_config
+        from ai.engine_runtime import _instance_config
         from ai.engine.core.database import get_session_factory
         from ai.host_executor import CarbonHostExecutor
+        from ai.instance_registry import resolve_instance_id
         from ai.serializers import ToolExecutionActionSerializer
 
         serializer = ToolExecutionActionSerializer(data=request.data)
@@ -513,8 +514,9 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
             execution.input_params = json.dumps(input_params)
             execution.save(update_fields=["input_params"])
 
-        instance_config = _carbon_instance_config(user_pk)
-        factory = get_session_factory("carbon")
+        instance_id = resolve_instance_id()
+        instance_config = _instance_config(instance_id, user_pk)
+        factory = get_session_factory(instance_id)
 
         def _run():
             async def _confirm():
@@ -522,7 +524,7 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                     executor = CarbonHostExecutor(
                         db=db,
                         instance_config=instance_config,
-                        user_token=f"inproc:carbon:{user_pk}",
+                        user_token=f"inproc:{instance_id}:{user_pk}",
                         host_user_id=user_pk,
                     )
                     return await executor.confirm_execution(
@@ -633,9 +635,10 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
         """Decline a staged tool execution — nothing is written."""
         from asgiref.sync import async_to_sync
 
-        from ai.engine_runtime import _carbon_instance_config
+        from ai.engine_runtime import _instance_config
         from ai.engine.core.database import get_session_factory
         from ai.host_executor import CarbonHostExecutor
+        from ai.instance_registry import resolve_instance_id
         from ai.serializers import ToolExecutionActionSerializer
 
         serializer = ToolExecutionActionSerializer(data=request.data)
@@ -673,15 +676,16 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        factory = get_session_factory("carbon")
+        instance_id = resolve_instance_id()
+        factory = get_session_factory(instance_id)
 
         def _run():
             async def _decline():
                 async with factory() as db:
                     executor = CarbonHostExecutor(
                         db=db,
-                        instance_config=_carbon_instance_config(user_pk),
-                        user_token=f"inproc:carbon:{user_pk}",
+                        instance_config=_instance_config(instance_id, user_pk),
+                        user_token=f"inproc:{instance_id}:{user_pk}",
                         host_user_id=user_pk,
                     )
                     await executor.decline_execution(

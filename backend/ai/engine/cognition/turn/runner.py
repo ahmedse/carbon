@@ -1394,7 +1394,11 @@ class TurnPipelineRunner:
         # Fetch the platform's actual reporting period, emission factors, and
         # DQ-rule count and append them so the LLM answers with real values
         # rather than generic world knowledge. Never fails the turn.
-        if settings.PULSE_CARBON_CONTEXT_ENABLED:
+        # Scope-isolation gate: this is Carbon-platform business context, so it
+        # is injected ONLY for the Carbon instance. A Nibras (People & Payroll)
+        # turn must never receive reporting-period / emission-factor / DQ-rule
+        # context — that would leak another domain's data into the answer.
+        if settings.PULSE_CARBON_CONTEXT_ENABLED and instance_id == "carbon":
             try:
                 from ai.context.carbon_context import CarbonContextAssembler
                 _carbon_context = await CarbonContextAssembler().assemble(

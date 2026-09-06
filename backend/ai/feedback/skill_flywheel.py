@@ -28,10 +28,12 @@ import asyncio
 import concurrent.futures
 import logging
 
+from ai.instance_registry import resolve_instance_id
+
 logger = logging.getLogger("carbon.ai.feedback.skill_flywheel")
 
 # Engine instance namespace — must match ``ai.plans_service.PLAN_INSTANCE_ID``.
-PLAN_INSTANCE_ID = "carbon"
+PLAN_INSTANCE_ID = resolve_instance_id()
 
 # Terminal run states — the flywheel only fires after the run is final, so
 # the retry loop never double-feeds mid-flight.

@@ -8,6 +8,7 @@ import time
 
 from django.utils import timezone
 
+from ai.instance_registry import resolve_default_app_identifier, resolve_instance_id
 from ai.models import AISubagent
 
 SUBAGENT_READONLY_TOOLS = frozenset({
@@ -70,11 +71,12 @@ class SubagentService:
     async def _invoke_llm(self, sub, messages, tool_defs) -> dict:
         from ai.engine.llm.router import route_chat
         from ai.engine.core.database import get_session_factory
-        factory = get_session_factory("carbon")
+        instance_id = resolve_instance_id()
+        factory = get_session_factory(instance_id)
         async with factory() as db:
             return await route_chat(
                 task="chat",
-                instance_id="carbon",
+                instance_id=instance_id,
                 conversation_id=f"subagent-{sub.id}",
                 messages=messages,
                 tools=tool_defs or None,
@@ -113,7 +115,7 @@ class SubagentService:
             scope_restriction=scope_restriction,
             tool_budget=tool_budget,
             host_user_id=str(user.pk),
-            app_identifier="carbon",
+            app_identifier=resolve_default_app_identifier(),
             visibility="private",
             status="pending",
             is_worker=True,

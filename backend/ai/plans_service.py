@@ -42,10 +42,12 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
+from ai.instance_registry import resolve_instance_id
+
 logger = logging.getLogger("carbon.ai.plans_service")
 
 # Engine instance namespace (mirrors the chat/action paths).
-PLAN_INSTANCE_ID = "carbon"
+PLAN_INSTANCE_ID = resolve_instance_id()
 
 # Run statuses this service owns (superset of the engine's status set).
 STATUS_DISCOVERING = "discovering"

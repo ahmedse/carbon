@@ -11,6 +11,7 @@ model or migration is introduced here.
 
 import logging
 
+from ai.instance_registry import resolve_instance_id
 from ai.models.core import AuditLog
 from ai.pii_guard import PIIGuard
 
@@ -20,7 +21,7 @@ logger = logging.getLogger("ai.audit")
 class AuditService:
     @staticmethod
     def log(*, action, actor, actor_type="user", target=None, detail=None,
-            instance_id="carbon", host_user_id=None, visibility="private"):
+            instance_id=None, host_user_id=None, visibility="private"):
         """Write-only audit log. Append-only by construction — no update/delete.
 
         NEVER raises: an audit failure must not break the user's turn.
@@ -29,7 +30,7 @@ class AuditService:
             target_clean = PIIGuard.redact(str(target)) if target is not None else None
             detail_clean = PIIGuard.redact_dict(detail) if detail else {}
             AuditLog.objects.create(
-                instance_id=instance_id,
+                instance_id=instance_id or resolve_instance_id(),
                 actor=str(actor),
                 actor_type=actor_type,
                 action=action,

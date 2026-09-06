@@ -1,3 +1,12 @@
+import os
+
+# Defense-in-depth brand pin. The authoritative override lives in
+# ``_testbrand.py`` (loaded via ``-p _testbrand`` in pytest.ini) because
+# pytest-django force-imports Django settings before conftest bodies run.
+# This setdefault is harmless if the plugin already ran, and covers direct
+# conftest usage without the addopts.
+os.environ.setdefault("DJANGO_BRAND", "aastmt")
+
 import pytest
 from django.conf import settings as django_settings
 from django.contrib.auth import get_user_model

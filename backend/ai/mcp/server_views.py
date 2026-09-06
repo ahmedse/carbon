@@ -28,8 +28,9 @@ from ai.audit_service import AuditService
 from ai.domain_protocol import get_domain, has_domain, list_domains
 from ai.engine.core.database import get_session_factory
 from ai.engine.core.exceptions import ToolExecutionError
-from ai.engine_runtime import _carbon_instance_config
+from ai.engine_runtime import _instance_config
 from ai.host_executor import CarbonHostExecutor
+from ai.instance_registry import resolve_instance_id
 
 logger = logging.getLogger("carbon.ai.mcp")
 
@@ -153,8 +154,9 @@ class McpToolCallView(APIView):
         api_name = tool.id[len(tool.domain) + 1:]
 
         user_pk = str(request.user.pk)
-        instance_config = _carbon_instance_config(user_pk)
-        factory = get_session_factory("carbon")
+        instance_id = resolve_instance_id()
+        instance_config = _instance_config(instance_id, user_pk)
+        factory = get_session_factory(instance_id)
 
         def _run():
             async def _call():
@@ -162,7 +164,7 @@ class McpToolCallView(APIView):
                     executor = CarbonHostExecutor(
                         db=db,
                         instance_config=instance_config,
-                        user_token=f"inproc:carbon:{user_pk}",
+                        user_token=f"inproc:{instance_id}:{user_pk}",
                         host_user_id=user_pk,
                     )
                     entry = executor.get_catalog_entry(api_name)

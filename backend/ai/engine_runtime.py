@@ -26,6 +26,7 @@ import uuid
 from typing import Any
 
 from ai.engine.core.resolution import payload_status
+from ai.instance_registry import default_app_for_instance, resolve_instance_id
 
 logger = logging.getLogger("carbon.ai.engine_runtime")
 
@@ -108,7 +109,9 @@ async def _run_chat(
     )
     history_messages = conversation.get("messages") or []
 
-    instance_config = _carbon_instance_config(host_user_id)
+    instance_config = _instance_config(
+        instance_id, host_user_id, app_identifier=payload.get("app_identifier")
+    )
     user_info = _build_chat_user_info(host_user_id)
 
     factory = get_session_factory(instance_id)
@@ -116,7 +119,7 @@ async def _run_chat(
         executor = CarbonHostExecutor(
             db=db,
             instance_config=instance_config,
-            user_token=f"inproc:carbon:{host_user_id}" if host_user_id else None,
+            user_token=f"inproc:{instance_id}:{host_user_id}" if host_user_id else None,
             host_user_id=host_user_id,
         )
         runner = TurnPipelineRunner(db=db, executor=executor)
@@ -367,12 +370,24 @@ def _confidence_label(score: float | None) -> str:
 # ── Chat tool-action surfacing (Sprint "fly to rule detail") ──────────────
 
 
-def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
-    """Thin loader — all domain knowledge lives in instances/carbon/instance.yaml.
+def _instance_config(
+    instance_id: str,
+    host_user_id: str | None = None,
+    *,
+    app_identifier: str | None = None,
+) -> dict[str, Any]:
+    """Load the per-instance config (persona/api_catalog/domain_topics).
 
-    The engine core (cognition/, memory/, learning/) never imports from here.
-    To bootstrap Pulse for a new project: replace instances/carbon/instance.yaml
-    with instances/<project>/instance.yaml and point this loader at the new name.
+    All domain knowledge lives in ``instances/<instance_id>/instance.yaml`` —
+    the engine core (cognition/, memory/, learning/) never imports from here.
+    This loader is brand-aware: ``instance_id`` is the resolved engine instance
+    (``carbon`` for AASTMT, ``nibras`` for People & Payroll, …) so each brand's
+    persona, domain topics, and host API catalog are strictly its own.
+
+    ``app_identifier`` scopes the config to the active domain app within the
+    instance (falls back to the brand's default app). A missing instance.yaml
+    falls back to ``carbon`` so an unknown instance never crashes the turn —
+    host RBAC remains the backstop.
     """
     from asgiref.sync import sync_to_async
 
@@ -398,14 +413,23 @@ def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
 
     from ai.engine.core.archetypes import load_instance_config
 
-    # All Carbon-specific config (persona, api_catalog, navigation_routes,
-    # domain_topics) is declared in instances/carbon/instance.yaml — not here.
-    config: dict[str, Any] = load_instance_config("carbon")
+    config: dict[str, Any] = load_instance_config(instance_id)
+    if not config and instance_id != "carbon":
+        # Unknown/new instance: fall back to the Carbon config rather than
+        # failing the turn (host RBAC still gates execution).
+        config = load_instance_config("carbon") or {}
 
     # Runtime-only fields that cannot live in a static file.
+    config["instance_id"] = instance_id
     config["display_name"] = config.get("display_name") or _platform_display_name()
     config["host_user_id"] = host_user_id
     config["user_access"] = user_access
+    # Scope the config to the active domain app; default to the instance's app.
+    config["app_identifier"] = (
+        app_identifier
+        or config.get("app_identifier")
+        or default_app_for_instance(instance_id)
+    )
 
     # E2: CBAC-filter the api_catalog so the LLM-facing "Available Host API
     # Endpoints" list (and the executor's catalog) only expose domain endpoints
@@ -416,6 +440,11 @@ def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
     )
 
     return config
+
+
+def _carbon_instance_config(host_user_id: str | None = None) -> dict[str, Any]:
+    """Backward-compat wrapper — resolve the Carbon (AASTMT) instance config."""
+    return _instance_config("carbon", host_user_id)
 
 
 def _cbac_filter_api_catalog(api_catalog: list, host_user_id: str | None) -> list:
@@ -3377,8 +3406,9 @@ _TASK_HANDLERS: dict[str, Any] = {
 }
 
 
-def list_modules(instance_id: str = "carbon") -> dict[str, Any]:
+def list_modules(instance_id: str | None = None) -> dict[str, Any]:
     """Return the modules the in-process engine advertises."""
+    instance_id = instance_id or resolve_instance_id()
     return {"modules": [{"type": m} for m in MODULES]}
 
 
@@ -3386,7 +3416,7 @@ def dispatch_task(
     task_type: str,
     payload: dict[str, Any],
     *,
-    instance_id: str = "carbon",
+    instance_id: str | None = None,
     timeout: int | None = None,
 ) -> dict[str, Any]:
     """Dispatch a task in-process.
@@ -3397,6 +3427,7 @@ def dispatch_task(
          "task_id": str,
          "result": {...} | "error": {"code": str, "message": str}}
     """
+    instance_id = instance_id or resolve_instance_id()
     if task_type not in MODULES:
         return {
             "status": "pulse_unavailable",
@@ -3448,7 +3479,7 @@ def dispatch_task(
         }
 
 
-def dispatch_task_stream(task_type: str, payload: dict[str, Any], *, instance_id: str = "carbon"):
+def dispatch_task_stream(task_type: str, payload: dict[str, Any], *, instance_id: str | None = None):
     """Stream a ``chat`` turn as ``(kind, value)`` tuples from a background thread.
 
     The engine's turn runner is async and yields text deltas through an async
@@ -3462,6 +3493,7 @@ def dispatch_task_stream(task_type: str, payload: dict[str, Any], *, instance_id
         ("done", result)  — terminal success (same dict shape ``chat()`` reads)
         ("error", message, {"error_kind": "transient"|"permanent"}) — terminal failure
     """
+    instance_id = instance_id or resolve_instance_id()
     if task_type != "chat":
         yield "error", f"streaming not supported for {task_type!r}"
         return
@@ -3596,13 +3628,13 @@ async def _run_action_stream(
         "verbosity": verbosity,
     }
 
-    instance_config = _carbon_instance_config(host_user_id)
+    instance_config = _instance_config(instance_id, host_user_id)
     factory = get_session_factory(instance_id)
     async with factory() as db:
         executor = CarbonHostExecutor(
             db=db,
             instance_config=instance_config,
-            user_token=f"inproc:carbon:{host_user_id}" if host_user_id else None,
+            user_token=f"inproc:{instance_id}:{host_user_id}" if host_user_id else None,
             host_user_id=host_user_id,
         )
         executors = await get_tool_executors()
@@ -3820,7 +3852,7 @@ async def _run_action_stream(
 def dispatch_action_stream(
     payload: dict[str, Any],
     *,
-    instance_id: str = "carbon",
+    instance_id: str | None = None,
 ):
     """Stream an agent/tool action run as ``(kind, value)`` tuples.
 
@@ -3849,6 +3881,7 @@ def dispatch_action_stream(
     ``tool_end{status:"stopped"}`` + ``turn_end{status:"stopped"}`` — never
     ``error``, never leaves the conversation stuck in ``working``.
     """
+    instance_id = instance_id or resolve_instance_id()
     q: queue.Queue = queue.Queue()
 
     async def _collect():

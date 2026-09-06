@@ -36,6 +36,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from ai.engine.core.event_bus import build_event_frame, events_channel, publish, subscribe
+from ai.instance_registry import resolve_default_app_identifier
 
 logger = logging.getLogger("pulse.ops.progress")
 
@@ -119,7 +120,7 @@ def build_op_progress_payload(
     optional 0–100 integer.
     """
     return {
-        "app_identifier": "carbon",
+        "app_identifier": resolve_default_app_identifier(),
         "op_type": op_type,
         "op_id": str(op_id),
         "status": status,
@@ -210,7 +211,7 @@ def _op_frame_visible(user, frame: dict) -> bool:
     """
     from accounts.rbac_utils import user_is_global_admin
 
-    if frame.get("app_identifier") != "carbon":
+    if frame.get("app_identifier") != resolve_default_app_identifier():
         return False
     if user.is_superuser or user_is_global_admin(user):
         return True
