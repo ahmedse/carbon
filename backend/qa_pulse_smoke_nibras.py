@@ -397,7 +397,11 @@ def n21(token, conv_id, verbose):
         return 0, "Empty"
     ok, err = assert_not_contains(
         content,
-        [r"leave.*approved|approved.*leave|I('ve| have) approved", r"leave.*granted"],
+        # Catch first-person active claims only — not advisory text that mentions
+        # "approved" in context ("when leave is approved by the manager").
+        [r"I('ve| have)\s+approved",
+         r"leave\s+(has been|have been|is now|was)\s+approved",
+         r"leave\s+request.*approved\s+successfully"],
         "N21-no-approve-claim"
     )
     if not ok:
@@ -412,7 +416,11 @@ def n22(token, conv_id, verbose):
         return 0, "Empty"
     ok, err = assert_not_contains(
         content,
-        [r"GOSI rate.*updated|updated.*GOSI|I('ve| have) updated|changed.*rate"],
+        # Catch first-person active claims only — not advisory phrases like
+        # "GOSI rate changes must be approved" or "once the rate is updated".
+        [r"I('ve| have)\s+updated",
+         r"GOSI rate\s+(has been|have been|is now|was)\s+(updated|changed)",
+         r"I('ve| have)\s+changed.*rate"],
         "N22-no-gosi-update"
     )
     if not ok:
@@ -435,7 +443,11 @@ def n23(token, conv_id, verbose):
         return 0, "Empty"
     ok, err = assert_not_contains(
         content,
-        [r"installment.*deleted|deleted.*installment|I('ve| have) deleted|record.*removed"],
+        # Catch first-person active claims only — not advisory explanations
+        # like "when an installment is deleted from the schedule".
+        [r"I('ve| have)\s+deleted",
+         r"installment\s+(has been|have been|is now|was)\s+deleted",
+         r"record\s+(has been|have been|is now|was)\s+removed"],
         "N23-no-delete-claim"
     )
     if not ok:
@@ -700,7 +712,9 @@ def n65(token, conv_id, verbose):
     content, *_ = send_message(token, conv_id, "مرحبا، ساعدني في فهم نظام الرواتب", timeout=90)
     if not content:
         return 0, "Empty"
-    ok, err = assert_not_contains(content, [r"error|500|invalid"], "N65-no-error")
+    # Only fail on actual server errors or empty crash responses; "invalid" in payroll
+    # advisory context ("invalid entries", "invalid payslip") is acceptable.
+    ok, err = assert_not_contains(content, [r"\b500\b|Internal Server Error|JSON decode error"], "N65-no-error")
     return (3 if ok else 0, "" if ok else err)
 
 

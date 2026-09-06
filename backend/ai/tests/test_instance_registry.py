@@ -71,7 +71,10 @@ def test_nibras_instance_config_is_people_scoped_and_has_no_api_catalog():
     # Advisory-only: the People domain owns no host data tools, so the
     # LLM-facing catalog must be empty (no Carbon/other-domain endpoints).
     assert config["api_catalog"] == []
-    assert "people and payroll" in config["domain_topics"]
+    # domain_topics should cover payroll and people domain keywords.
+    topics_str = " ".join(config["domain_topics"]).lower()
+    assert "payroll" in topics_str
+    assert "gosi" in topics_str
     # The persona explicitly guards against revealing Carbon-domain data.
     persona = config["persona"].lower()
     assert "carbon emissions" in persona

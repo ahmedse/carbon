@@ -92,6 +92,7 @@ async def build_chat_prompt(
     )
 
     # ── Assemble instance-specific prompt from PlaybookBlocks ──────────────
+    _cfg = instance_config or {}
     runtime_ctx = {
         "instance_name": instance_name,
         "current_datetime": current_datetime,
@@ -99,6 +100,9 @@ async def build_chat_prompt(
         "page_context": page_context,
         "relevant_knowledge": relevant_knowledge,
         "relevant_memories": relevant_memories,
+        # YAML persona/domain_facts used by _fallback_prompt when no PlaybookBlocks exist.
+        "instance_persona": (_cfg.get("persona") or "").strip(),
+        "domain_facts": (_cfg.get("domain_facts") or "").strip(),
     }
 
     if instance_id:
